@@ -624,6 +624,60 @@ fn a_parked_activitys_registers_survive_the_activity_that_wakes_it() {
     );
 }
 
+/// A pinned wait sets its activity aside while the activity it waits on runs
+/// on the same Rust stack: the values the pinned activity's registers hold
+/// survive that activity's allocations, with a collection at every
+/// allocation.
+#[test]
+fn a_pinned_activitys_registers_survive_the_activity_its_wait_runs() {
+    let program = concat!(
+        "m = .message~new(.j~new, 'SECOND')\n",
+        "m~start\n",
+        "a = .array~of(2, 1)\n",
+        "a~sortWith(.c~new(m))\n",
+        "say a~toString('L', ',')\n",
+        "::class c\n",
+        "::method init\n",
+        "  expose m\n",
+        "  use arg m\n",
+        "::method compare\n",
+        "  expose m\n",
+        "  use arg l, r\n",
+        "  p = 'aaaaaaaaaaaaaaaa'\n",
+        "  q = 'bbbbbbbbbbbbbbbb'\n",
+        "  say (p || q) || m~result\n",
+        "  return l - r\n",
+        "::class j\n",
+        "::method second\n",
+        "  s = ''\n",
+        "  do i = 1 to 20\n",
+        "    s = s || 'eeeeeeeeeeeeeeee'\n",
+        "  end\n",
+        "  return length(s)\n",
+    );
+    let expected = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb320\n1,2\n";
+    let stress = run_program_collect_every_alloc(
+        "<pinned-activity-rooting>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(
+        stress.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        expected,
+        "a pinned activity lost a value under collect-on-every-allocation"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
 /// A running activation's `RexxContext` survives a collection, with one at
 /// every allocation between the two sends that reach it.
 #[test]

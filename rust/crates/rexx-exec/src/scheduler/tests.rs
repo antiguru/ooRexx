@@ -59,29 +59,24 @@ fn a_completed_message_wakes_its_waiters_in_the_order_they_parked() {
     );
 }
 
-/// A wait under a Rust frame that pins the activity is refused, loudly and
-/// with no owner, and nothing after it runs.
+/// A wait under a Rust frame that pins the activity runs the activity it
+/// waits on from that frame, and goes on with its answer.
 #[test]
-fn a_wait_under_a_pinned_frame_is_refused() {
+fn a_pinned_wait_runs_the_activity_it_waits_on() {
     let outcome = run("m = .message~new('abc', 'length')\n\
          t = .k~new~start('SEND', m)\n\
-         a = .array~of(2, 1)\na~sortWith(.c~new(m))\nsay 'sorted'\n\
+         a = .array~of(2, 1)\na~sortWith(.c~new(m))\nsay 'sorted' a~toString('L', ',')\n\
          ::class k\n::method send\n  use arg m\n  m~send\n\
          ::class c\n::method init\n  expose m\n  use arg m\n\
          ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n");
-    assert_eq!(outcome.exit_code, 120);
-    assert_eq!(stdout(&outcome), "");
-    assert_eq!(
-        stderr(&outcome),
-        "rexx-exec: a wait inside a frame that pins its activity is not implemented\n"
-    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "3\nsorted 1,2\n");
 }
 
-/// A wait under each kind of pinning frame a program can open is refused as
-/// pinned, through the pin depth every build counts; a started activity sends
-/// the message, so the wait itself could end.
+/// A pinned wait under each kind of pinning frame a program can open runs
+/// the started activity that ends it.
 #[test]
-fn a_wait_under_each_pinning_frame_is_refused_as_pinned() {
+fn a_pinned_wait_completes_under_each_pinning_frame() {
     const SETUP: &str = "m = .message~new('abc', 'length')\n.local~m = m\n\
                          t = .s~new~start('SEND', m)\n";
     const CLASSES: &str = "::class s\n::method send\n  use arg m\n  m~send\n\
@@ -93,7 +88,7 @@ fn a_wait_under_each_pinning_frame_is_refused_as_pinned() {
         ("NestedLoop", "do label l\n  say .m~result\nend\n"),
         (
             "LoopHeader",
-            "do i = 1 to 2 while f()\nend\nexit\nf: return .m~result\n",
+            "do i = 1 to 2 while f()\nend\nsay i\nexit\nf: return .m~result = 3\n",
         ),
         (
             "TrapHandler",
@@ -107,10 +102,7 @@ fn a_wait_under_each_pinning_frame_is_refused_as_pinned() {
         ),
     ] {
         let outcome = run(&format!("{SETUP}{program}{CLASSES}"));
-        if outcome.exit_code != 120
-            || stderr(&outcome)
-                != "rexx-exec: a wait inside a frame that pins its activity is not implemented\n"
-        {
+        if outcome.exit_code != 0 || stdout(&outcome) != "3\n" {
             wrong.push(format!(
                 "{kind}: rc {} {:?} {:?}",
                 outcome.exit_code,
@@ -120,6 +112,45 @@ fn a_wait_under_each_pinning_frame_is_refused_as_pinned() {
         }
     }
     assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// A pinned wait whose answer only an activity pinned below it can give is
+/// refused, loudly and with no owner: the started activity waits inside a
+/// comparator on a message main sends after its own pinned wait ends, and
+/// main is ready below it.
+#[test]
+fn an_inverted_pinned_wait_is_refused() {
+    let outcome = run(
+        "m1 = .message~new('abc', 'length')\nm2 = .message~new('de', 'length')\n\
+         t = .s~new~start('RUN', m1, m2)\n\
+         a = .array~of(2, 1)\na~sortWith(.c~new(m1))\nsay 'main sorted'\nm2~send\nsay t~result\n\
+         ::class s\n::method run\n  use arg m1, m2\n  m1~send\n\
+         \x20 b = .array~of(2, 1)\n  b~sortWith(.c~new(m2))\n  return 'done'\n\
+         ::class c\n::method init\n  expose m\n  use arg m\n\
+         ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n",
+    );
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(stdout(&outcome), "");
+    assert_eq!(
+        stderr(&outcome),
+        "rexx-exec: a pinned wait for a message's completion that only an activity pinned \
+         below it can end is not implemented\n"
+    );
+}
+
+/// A pinned wait nothing left to run can end is refused as such.
+#[test]
+fn a_pinned_wait_nothing_can_end_is_refused() {
+    let outcome = run(
+        "m = .message~new('abc', 'length')\na = .array~of(2, 1)\na~sortWith(.c~new(m))\n\
+         ::class c\n::method init\n  expose m\n  use arg m\n\
+         ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n",
+    );
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(
+        stderr(&outcome),
+        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
+    );
 }
 
 /// A started activity whose wait nothing can end is refused at the program's

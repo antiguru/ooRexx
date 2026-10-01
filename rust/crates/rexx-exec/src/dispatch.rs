@@ -2312,7 +2312,8 @@ impl Interp {
     }
 
     /// Answers a park for `reason`, whose continuation is `resume` on
-    /// `receiver`, or refuses it where a Rust frame pins the activity.
+    /// `receiver`. Where a Rust frame pins the activity, the wait runs the
+    /// other activities here and the continuation's answer is the native's.
     pub(crate) fn park_native(
         &mut self,
         reason: crate::scheduler::ParkReason,
@@ -2320,7 +2321,14 @@ impl Interp {
         receiver: ObjRef,
     ) -> Result<NativeStarted, Failure> {
         if self.activity.pin_depth > 0 {
-            return Err(Loud::pinned_park().into());
+            let frame = self.roots.activity_mut().push_frame();
+            self.roots.activity_mut().push_temp(receiver);
+            let sent = match self.pinned_wait(reason) {
+                None => resume(self, receiver),
+                Some(failure) => Err(failure),
+            };
+            self.roots.activity_mut().pop_frame(frame);
+            return sent.map(NativeStarted::Ran);
         }
         self.activity.native_park = Some(Box::new(NativePark {
             reason,

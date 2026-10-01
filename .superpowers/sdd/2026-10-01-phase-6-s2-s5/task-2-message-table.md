@@ -1,41 +1,39 @@
 # Task 2 table: base/class/Message
 
-Produced at the Task 2 tree (uncommitted state before the first Task 2 commit), by
-`REXX_GROUP_TABLE=<file> REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --test concurrency_tests the_outcome_table -- --nocapture`,
-the Task 1 command, raw output in `task-2-message-table.raw.md`. Delta columns against `task-1-message-table.md`.
+Produced at the Task 2 fix round 1 tree (before its commit) by `REXX_GROUP_TABLE=<file> REXX_OBJECT_TABLE=<file> REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --test concurrency_tests the_outcome_table -- --nocapture` (concurrency_tests.rs, module group_runs). Raw output in `task-2-message-table.raw.md`. Task 1 baseline: pass 35, refused 33.
 
-Summary: pass 39, refused 29 (Task 1: pass 35, refused 33)
+Summary: pass 49, refused 19
 
 Refusal messages:
 
-- 11 x a wait inside a frame that pins its activity is not implemented
 - 7 x method "REPLYWITH" of class "Message" is not implemented (Phase 9)
 - 6 x method "REPLY" of class "Message" is not implemented (Phase 9)
 - 2 x method "MAKEARRAY" of class "Object" is not implemented (Phase 9)
 - 1 x method "HALT" of class "Message" is not implemented (Phase 9)
 - 1 x method "NOTIFY" of class "Message" is not implemented (Phase 9)
 - 1 x method "TARGET" of class "Message" is not implemented (Phase 9)
+- 1 x method "HASRESULT" of class "Message" is not implemented (Phase 9)
 
-Changed rows:
+Changed rows against task-1-message-table.md:
 
-| test | Task 1 | Task 2 |
+| test | Task 1 | now |
 |---|---|---|
-| TEST_START | refused method "START" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
+| TEST_START | refused method "START" of class "Message" is not implemented (Phase 9) | refused method "HASRESULT" of class "Message" is not implemented (Phase 9) |
 | TEST_STARTWITH_NOT_ARRAY | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | refused method "MAKEARRAY" of class "Object" is not implemented (Phase 9) |
 | TEST_STARTWITH_NO_ARRAY | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
-| TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
-| TEST_STARTWITH_OVERRIDE_CONTEXT | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
-| TEST_STARTWITH_OVERRIDE_FROM_NONSELF | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
-| TEST_STARTWITH_OVERRIDE_NOT_FOUND | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
+| TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
+| TEST_STARTWITH_OVERRIDE_CONTEXT | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
+| TEST_STARTWITH_OVERRIDE_FROM_NONSELF | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
+| TEST_STARTWITH_OVERRIDE_NOT_FOUND | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
 | TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
-| TEST_STARTWITH_OVERRIDE_NO_METHOD | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
+| TEST_STARTWITH_OVERRIDE_NO_METHOD | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
 | TEST_STARTWITH_TOO_MANY | refused method "STARTWITH" of class "Message" is not implemented (Phase 9) | pass  |
-| TEST_START_OVERRIDE_AMONG_MIXINCLASSES | refused method "START" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
-| TEST_START_OVERRIDE_CONTEXT | refused method "START" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
-| TEST_START_OVERRIDE_FROM_NONSELF | refused method "START" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
-| TEST_START_OVERRIDE_NOT_FOUND | refused method "START" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
+| TEST_START_OVERRIDE_AMONG_MIXINCLASSES | refused method "START" of class "Message" is not implemented (Phase 9) | pass  |
+| TEST_START_OVERRIDE_CONTEXT | refused method "START" of class "Message" is not implemented (Phase 9) | pass  |
+| TEST_START_OVERRIDE_FROM_NONSELF | refused method "START" of class "Message" is not implemented (Phase 9) | pass  |
+| TEST_START_OVERRIDE_NOT_FOUND | refused method "START" of class "Message" is not implemented (Phase 9) | pass  |
 | TEST_START_OVERRIDE_NOT_NON_SCOPE | refused method "START" of class "Message" is not implemented (Phase 9) | pass  |
-| TEST_START_OVERRIDE_NO_METHOD | refused method "START" of class "Message" is not implemented (Phase 9) | refused a wait inside a frame that pins its activity is not implemented |
+| TEST_START_OVERRIDE_NO_METHOD | refused method "START" of class "Message" is not implemented (Phase 9) | pass  |
 
 Full table:
 
@@ -90,22 +88,22 @@ Full table:
 | TEST_SEND_OVERRIDE_NOT_FOUND | pass |  |
 | TEST_SEND_OVERRIDE_NOT_NON_SCOPE | pass |  |
 | TEST_SEND_OVERRIDE_NO_METHOD | pass |  |
-| TEST_START | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_START | refused | method "HASRESULT" of class "Message" is not implemented (Phase 9) |
 | TEST_STARTWITH_NOT_ARRAY | refused | method "MAKEARRAY" of class "Object" is not implemented (Phase 9) |
 | TEST_STARTWITH_NO_ARRAY | pass |  |
-| TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | refused | a wait inside a frame that pins its activity is not implemented |
-| TEST_STARTWITH_OVERRIDE_CONTEXT | refused | a wait inside a frame that pins its activity is not implemented |
-| TEST_STARTWITH_OVERRIDE_FROM_NONSELF | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass |  |
+| TEST_STARTWITH_OVERRIDE_CONTEXT | pass |  |
+| TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass |  |
 | TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass |  |
-| TEST_STARTWITH_OVERRIDE_NOT_FOUND | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass |  |
 | TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass |  |
-| TEST_STARTWITH_OVERRIDE_NO_METHOD | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_STARTWITH_OVERRIDE_NO_METHOD | pass |  |
 | TEST_STARTWITH_TOO_MANY | pass |  |
-| TEST_START_OVERRIDE_AMONG_MIXINCLASSES | refused | a wait inside a frame that pins its activity is not implemented |
-| TEST_START_OVERRIDE_CONTEXT | refused | a wait inside a frame that pins its activity is not implemented |
-| TEST_START_OVERRIDE_FROM_NONSELF | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass |  |
+| TEST_START_OVERRIDE_CONTEXT | pass |  |
+| TEST_START_OVERRIDE_FROM_NONSELF | pass |  |
 | TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass |  |
-| TEST_START_OVERRIDE_NOT_FOUND | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_START_OVERRIDE_NOT_FOUND | pass |  |
 | TEST_START_OVERRIDE_NOT_NON_SCOPE | pass |  |
-| TEST_START_OVERRIDE_NO_METHOD | refused | a wait inside a frame that pins its activity is not implemented |
+| TEST_START_OVERRIDE_NO_METHOD | pass |  |
 | TEST_SUPER_OVERRIDE | refused | method "REPLY" of class "Message" is not implemented (Phase 9) |

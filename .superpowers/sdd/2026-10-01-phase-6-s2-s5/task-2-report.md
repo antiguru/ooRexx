@@ -148,3 +148,95 @@ Round 2 at 9326d7e4c: G1-G8 all exit 0, finished 2026-10-01T16:24:39+02:00, tree
    new prologue are Task 26's named risks.
 5. A park refused after `Message~result` issued its `MessageId` leaves that id in the message-id table until the
    message completes (no waiter is registered, so nothing wakes wrongly).
+
+## Fix round 1 (ruling P23: the pinned wait lands now)
+
+Status: DONE_WITH_CONCERNS (see the round's concerns at the end).
+
+### What changed
+
+- `park_native` (dispatch.rs): a park reached with the pin depth above zero no longer refuses. It runs
+  `Interp::pinned_wait(reason)` on the pinned activity's own stack and then the native's continuation half
+  (`resume(self, receiver)`), answering `NativeStarted::Ran`, so the callers above it (the primitive methods
+  between it and the pinning frame) finish synchronously as before. The receiver is rooted as a temp across the
+  wait.
+- `pinned_wait` (scheduler.rs): registers the waiter (`park`), runs `run_others`, and answers `None` on the wake.
+  `run_others` now keeps a stack of loop owners (`Activities::owners`): every activity whose loop is on the Rust
+  stack (main's root wait, the program-end drain, each pinned wait). A ready owner other than the loop's own is
+  set aside ("buried": its continuation is below this loop) and put back at the front of the ready queue when the
+  loop returns, so its own loop resumes it. When nothing runnable is ready: if a buried owner is ready the wait is
+  inverted and refused, `Loud::inverted_wait` ("a pinned wait for a message's completion that only an activity
+  pinned below it can end is not implemented", owner none), counted by the pinning build in
+  `PinReport::inverted` keyed by park kind and pinned frames; otherwise `Loud::unsatisfiable_wait`, as at the
+  root. Nothing is ever in flight in S2 (no inbox before S4), so "nothing in flight" holds trivially. A refused or
+  failed wait withdraws the activity from the waiters (`cancel_wait`), at the root too.
+- `Loud::pinned_park` is removed (no producer left).
+
+### Rulings this round
+
+- R10. The refusal names the park kind ("a message's completion"), not the pinned re-entry kind: the kind stack
+  exists only in the `pinning` build, and a message that differs between builds would fork the tests. The pinning
+  report keys the count by both (`ParkKind`, pinned frames).
+- R11. "Inverted" is decided by the ready queue: nothing this loop can run is ready and an owner buried below it is.
+  Nothing ready and nothing buried is a plain deadlock, refused as the root's unsatisfiable wait.
+- R12. The Object group's gate run covers the tests whose name holds START only: `TEST_UNINIT` and
+  `TEST_UNINIT_CLASS` each peak at 3.6 GB in this crate (single-test runs under `/usr/bin/time`), and the whole
+  group at once OOM-killed the 8 GB cap twice. The two table tests also run one at a time (a mutex), since both at
+  once outgrew the cap. Not measured whether the 3.6 GB is new to this task.
+
+### How no RegFrame or arena borrow of the pinned activity is live across its swap (P14, D-U4)
+
+The pinned activity's Rust frames below the wait do hold `RegFrame`s (the drive levels between the scheduler and
+the pinning frame). What the swap moves is not the arena: `switch_to` swaps the `ActivityRoots` value, whose
+`frames` field is an `Rc<FrameArena>` handle; the `FrameArena` itself, its block list and its blocks stay in the
+`Rc` allocation and never move (frame.rs property 1). Each live `RegFrame<'a>` borrows the arena through the
+driver's own local `Rc` clone (`let arena = self.roots.activity().frames()` in `drive_from`), not through `self`
+or `self.roots`, so the borrow checker already rules out a `RegFrame` borrowing anything `switch_to` moves, and the
+clone keeps the allocation alive whatever the swap does. During the nested loop nothing reserves, releases or
+parks in the pinned arena: every other activity drives its own arena (one `Rc<FrameArena>` per `ActivityRoots`,
+D-U4), and the collector reads the pinned arena only through `Activities::object_roots` (`FrameArena::iter`, a
+shared read, the same read a collection makes while the activity runs). The inline `Activity` swap is sound for the
+reason P13 gives: nothing holds a Rust reference into it across a call that takes `&mut Interp`. The pinned
+activity is swapped back in before `pinned_wait` returns, so every pinned frame resumes against its own
+`Activity` and `ActivityRoots`.
+
+### Tests this round
+
+| test | evidence |
+|---|---|
+| `scheduler::tests::a_pinned_wait_runs_the_activity_it_waits_on` (sort comparator waits on a message a started activity sends; `3`, `sorted 1,2`, as the oracle, probe `j2_pinned_sent.rex`) | nested loop mutated off (`pinned_wait` skips `run_others`): red |
+| `scheduler::tests::a_pinned_wait_completes_under_each_pinning_frame` (Interpret, NestedLoop, LoopHeader, TrapHandler, Unknown, Operator, Program) | nested loop off: red |
+| `scheduler::tests::an_inverted_pinned_wait_is_refused` (probe `p_inverted.rex`; the oracle prints `3`, `main sorted`, `2`, `done`) | nested loop off: red (wrong refusal); buried-owner check off: red |
+| `scheduler::tests::a_pinned_wait_nothing_can_end_is_refused` | |
+| `measured::an_inverted_wait_is_counted_with_its_frames` (pinning build, G8) | |
+| `collect_stress::a_pinned_activitys_registers_survive_the_activity_its_wait_runs` | idle `ActivityRoots` rooting removed: red |
+| `group_runs::the_outcome_table_of_the_message_group` now asserts every START test passes except `TEST_START` (`HASRESULT`), `TEST_HALT_START` (`HALT`), `TEST_STARTWITH_NOT_ARRAY` (`MAKEARRAY`), each held to its refusal | nested loop off: red |
+| `group_runs::the_outcome_table_of_the_object_group` (new): every Object START test passes | nested loop off: red, listing `TESTSTART01`, `TESTSTARTWITH01` and the others |
+
+Superseded: `a_wait_under_a_pinned_frame_is_refused` and `a_wait_under_each_pinning_frame_is_refused_as_pinned`
+(the refusal they held is gone).
+
+### Tables
+
+`task-2-message-table.md` (fresh): pass 49, refused 19 (Task 1: 35 / 33). Every refusal names a Phase 9 method;
+none is a wait. `task-2-object-table.md` (new): the 40 Object START tests, all pass, including the 14 the
+S1 pinning report lists as passing with a `MessageResult` arrival.
+
+### refusal-sites.tsv
+
+Re-derived: `pinned_park` gone, `inverted_wait` added (body surface: constructed in scheduler.rs), a line moved.
+
+### Bench
+
+Not re-run this round: the change is confined to `park_native`'s pinned branch and the scheduler loop, neither on
+a path a bench program reaches (no bench program starts an activity).
+
+### Concerns this round
+
+1. The pinned wait has no slice deferral (Task 4) and no inbox (S4): a pinned waiter whose wait an off-baton
+   completion would end does not exist yet.
+2. A buried owner that is ready waits for its own loop; if the inner loop's activities then block for ever, the
+   refusal is the inverted one even where the oracle would also have deadlocked; the oracle's 98.905 deadlock
+   detection is later work.
+3. The Object gate run omits the two UNINIT tests for memory (R12).
+4. Concerns 2-5 of the first round stand.

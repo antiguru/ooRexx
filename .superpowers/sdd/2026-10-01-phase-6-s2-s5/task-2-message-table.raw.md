@@ -47,22 +47,22 @@ TEST_SEND_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass
 TEST_SEND_OVERRIDE_NOT_FOUND	pass	
 TEST_SEND_OVERRIDE_NOT_NON_SCOPE	pass	
 TEST_SEND_OVERRIDE_NO_METHOD	pass	
-TEST_START	refused	a wait inside a frame that pins its activity is not implemented
+TEST_START	refused	method "HASRESULT" of class "Message" is not implemented (Phase 9)
 TEST_STARTWITH_NOT_ARRAY	refused	method "MAKEARRAY" of class "Object" is not implemented (Phase 9)
 TEST_STARTWITH_NO_ARRAY	pass	
-TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES	refused	a wait inside a frame that pins its activity is not implemented
-TEST_STARTWITH_OVERRIDE_CONTEXT	refused	a wait inside a frame that pins its activity is not implemented
-TEST_STARTWITH_OVERRIDE_FROM_NONSELF	refused	a wait inside a frame that pins its activity is not implemented
+TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES	pass	
+TEST_STARTWITH_OVERRIDE_CONTEXT	pass	
+TEST_STARTWITH_OVERRIDE_FROM_NONSELF	pass	
 TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass	
-TEST_STARTWITH_OVERRIDE_NOT_FOUND	refused	a wait inside a frame that pins its activity is not implemented
+TEST_STARTWITH_OVERRIDE_NOT_FOUND	pass	
 TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE	pass	
-TEST_STARTWITH_OVERRIDE_NO_METHOD	refused	a wait inside a frame that pins its activity is not implemented
+TEST_STARTWITH_OVERRIDE_NO_METHOD	pass	
 TEST_STARTWITH_TOO_MANY	pass	
-TEST_START_OVERRIDE_AMONG_MIXINCLASSES	refused	a wait inside a frame that pins its activity is not implemented
-TEST_START_OVERRIDE_CONTEXT	refused	a wait inside a frame that pins its activity is not implemented
-TEST_START_OVERRIDE_FROM_NONSELF	refused	a wait inside a frame that pins its activity is not implemented
+TEST_START_OVERRIDE_AMONG_MIXINCLASSES	pass	
+TEST_START_OVERRIDE_CONTEXT	pass	
+TEST_START_OVERRIDE_FROM_NONSELF	pass	
 TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass	
-TEST_START_OVERRIDE_NOT_FOUND	refused	a wait inside a frame that pins its activity is not implemented
+TEST_START_OVERRIDE_NOT_FOUND	pass	
 TEST_START_OVERRIDE_NOT_NON_SCOPE	pass	
-TEST_START_OVERRIDE_NO_METHOD	refused	a wait inside a frame that pins its activity is not implemented
+TEST_START_OVERRIDE_NO_METHOD	pass	
 TEST_SUPER_OVERRIDE	refused	method "REPLY" of class "Message" is not implemented (Phase 9)

@@ -689,10 +689,14 @@ impl Loud {
         }
     }
 
-    /// A wait with a Rust frame between the scheduler and the running driver.
-    fn pinned_park() -> Loud {
+    /// A pinned wait for `what` that only an activity pinned below it can end
+    /// (spec 2026-09-29 section 2.6, an inverted wait).
+    fn inverted_wait(what: &str) -> Loud {
         Loud {
-            message: owned_message("a wait inside a frame that pins its activity", None),
+            message: owned_message(
+                &format!("a pinned wait for {what} that only an activity pinned below it can end"),
+                None,
+            ),
         }
     }
 

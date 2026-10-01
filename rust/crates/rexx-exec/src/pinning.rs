@@ -81,6 +81,19 @@ macro_rules! park_point {
     ($interp:expr, $kind:expr) => {};
 }
 
+/// Records an inverted wait for the park reason `$reason`.
+#[cfg(feature = "pinning")]
+macro_rules! inverted_wait {
+    ($interp:expr, $reason:expr) => {
+        $interp.pinning.inverted(&$interp.activity.pins, $reason)
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! inverted_wait {
+    ($interp:expr, $reason:expr) => {};
+}
+
 #[cfg(feature = "pinning")]
 pub use counter::{ParkKind, PinKind, PinReport};
 #[cfg(feature = "pinning")]
@@ -171,6 +184,8 @@ mod counter {
     #[derive(Clone, Debug, Default)]
     pub struct PinReport {
         pub parks: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
+        /// Inverted pinned waits refused, keyed as `parks` is.
+        pub inverted: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Frames still pushed when the report was taken; zero unless a push
         /// has no matching pop.
         pub unbalanced: usize,
@@ -213,9 +228,26 @@ mod counter {
                 .or_default() += 1;
         }
 
+        pub(crate) fn inverted(&self, pins: &PinStack, reason: crate::scheduler::ParkReason) {
+            let kind = match reason {
+                crate::scheduler::ParkReason::Guard => ParkKind::GuardOn,
+                crate::scheduler::ParkReason::MessageResult(_) => ParkKind::MessageResult,
+            };
+            let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
+            frames.dedup();
+            *self
+                .report
+                .borrow_mut()
+                .inverted
+                .entry((kind, frames))
+                .or_default() += 1;
+        }
+
         /// Forgets the arrivals so far, keeping the frames pushed.
         pub(crate) fn reset(&self) {
-            self.report.borrow_mut().parks.clear();
+            let mut report = self.report.borrow_mut();
+            report.parks.clear();
+            report.inverted.clear();
         }
 
         pub(crate) fn take(&self, pins: &PinStack) -> PinReport {

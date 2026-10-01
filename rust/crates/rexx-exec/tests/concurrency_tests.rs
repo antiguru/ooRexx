@@ -822,6 +822,28 @@ mod measured {
         );
     }
 
+    /// An inverted pinned wait is counted under the frames that pinned it.
+    #[test]
+    fn an_inverted_wait_is_counted_with_its_frames() {
+        let report = report_of(
+            "m1 = .message~new('abc', 'length')\nm2 = .message~new('de', 'length')\n\
+             t = .s~new~start('RUN', m1, m2)\n\
+             a = .array~of(2, 1)\na~sortWith(.c~new(m1))\nm2~send\n\
+             ::class s\n::method run\n  use arg m1, m2\n  m1~send\n\
+             \x20 b = .array~of(2, 1)\n  b~sortWith(.c~new(m2))\n\
+             ::class c\n::method init\n  expose m\n  use arg m\n\
+             ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n",
+        );
+        let inverted: Vec<_> = report.inverted.iter().collect();
+        assert!(
+            inverted.len() == 1
+                && inverted[0].0.0 == ParkKind::MessageResult
+                && inverted[0].0.1.contains(&PinKind::SortComparator)
+                && *inverted[0].1 == 1,
+            "{report:?}"
+        );
+    }
+
     #[test]
     fn an_unimplemented_wait_is_a_park_point() {
         let report = report_of(".message~new(1, 'X')~wait\n");
@@ -1001,13 +1023,24 @@ mod group_runs {
     use std::path::{Path, PathBuf};
 
     use super::group_runner::{
-        GATE_ENV, Outcome, SwitchMode, excerpt, first_difference, gate_mode, group_file, masked,
-        reaching_rxapi, run_tests, source_test_names, test_names,
+        GATE_ENV, Outcome, SwitchMode, TestResult, excerpt, first_difference, gate_mode,
+        group_file, masked, reaching_rxapi, run_tests, source_test_names, test_names,
     };
     use super::support::oracle;
 
-    /// Where the table is written when set, for the SDD record.
+    /// Where the Message table is written when set, for the SDD record.
     const TABLE_ENV: &str = "REXX_GROUP_TABLE";
+
+    /// Where the Object table is written when set.
+    const OBJECT_TABLE_ENV: &str = "REXX_OBJECT_TABLE";
+
+    /// The Message start tests that do not pass, each with the method its
+    /// refusal names.
+    const MESSAGE_START_REFUSED: &[(&str, &str)] = &[
+        ("TEST_START", "HASRESULT"),
+        ("TEST_HALT_START", "HALT"),
+        ("TEST_STARTWITH_NOT_ARRAY", "MAKEARRAY"),
+    ];
 
     fn scratch(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -1079,16 +1112,26 @@ mod group_runs {
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }
 
-    #[test]
-    fn the_outcome_table_of_the_message_group() {
-        if !gate_mode() {
-            eprintln!("group_runs: skipped without {GATE_ENV}");
-            return;
-        }
+    /// Runs every test of `group` on both sides and answers the outcomes,
+    /// with the table written to the file `table_env` names where set.
+    fn outcome_table(
+        name: &str,
+        dir: &str,
+        group: &str,
+        table_env: &str,
+        chosen: impl Fn(&str) -> bool,
+    ) -> Vec<TestResult> {
+        // One group at a time: two at once outgrow the gate's memory cap.
+        static ONE_GROUP: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _one = ONE_GROUP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let oracle = oracle::locate();
-        let run = scratch("message-table");
-        let (dir, group) = ("base/class", "Message");
-        let tests = source_test_names(dir, group);
+        let run = scratch(name);
+        let tests: Vec<String> = source_test_names(dir, group)
+            .into_iter()
+            .filter(|test| chosen(test))
+            .collect();
         let results = run_tests(&oracle, &run, dir, group, &tests, SwitchMode::None, None);
         let mut table = String::new();
         for row in &results {
@@ -1108,10 +1151,61 @@ mod group_runs {
             ));
         }
         eprintln!("{table}");
-        if let Some(path) = std::env::var_os(TABLE_ENV) {
+        if let Some(path) = std::env::var_os(table_env) {
             fs::write(path, &table).expect("cannot write the table");
         }
         assert_eq!(results.len(), tests.len());
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+        results
+    }
+
+    /// The start tests of `results` that neither pass nor are refused as
+    /// `refused` says.
+    fn not_passing(results: &[TestResult], refused: &[(&str, &str)]) -> Vec<String> {
+        results
+            .iter()
+            .filter(|row| row.test.to_ascii_uppercase().contains("START"))
+            .filter(|row| match &row.outcome {
+                Outcome::Pass => false,
+                Outcome::Refused { message, .. } => !refused.iter().any(|(test, method)| {
+                    row.test.eq_ignore_ascii_case(test)
+                        && message.contains(&format!("method \"{method}\""))
+                }),
+                _ => true,
+            })
+            .map(|row| format!("{} {}", row.test, row.outcome.label()))
+            .collect()
+    }
+
+    #[test]
+    fn the_outcome_table_of_the_message_group() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let results = outcome_table("message-table", "base/class", "Message", TABLE_ENV, |_| {
+            true
+        });
+        let failing = not_passing(&results, MESSAGE_START_REFUSED);
+        assert!(failing.is_empty(), "not passing: {failing:?}");
+    }
+
+    #[test]
+    fn the_outcome_table_of_the_object_group() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        // The start tests only: `TEST_UNINIT` and `TEST_UNINIT_CLASS` each
+        // reach 3.6 GB in this crate, and two at once outgrow the gate's cap.
+        let results = outcome_table(
+            "object-table",
+            "base/class",
+            "Object",
+            OBJECT_TABLE_ENV,
+            |test| test.to_ascii_uppercase().contains("START"),
+        );
+        let failing = not_passing(&results, &[]);
+        assert!(failing.is_empty(), "not passing: {failing:?}");
     }
 }
