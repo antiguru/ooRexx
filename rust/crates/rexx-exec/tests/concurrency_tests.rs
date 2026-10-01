@@ -533,8 +533,20 @@ mod measured {
 
     use super::{derive, worktree};
 
+    /// Runs `source` in a directory holding the external routine `extf.rex`.
     fn report_of(source: &str) -> PinReport {
-        let outcome = run_program("probe.rex", source.as_bytes().to_vec(), Invocation::none());
+        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pinning-probes");
+        fs::create_dir_all(&dir).expect("the probe directory");
+        fs::write(
+            dir.join("extf.rex"),
+            "use arg n\nif n >= 3 then do\n  call SysSleep 0\n  return 'ok'\nend\nreturn extf(n + 1)\n",
+        )
+        .expect("the external routine");
+        let outcome = run_program(
+            "probe.rex",
+            source.as_bytes().to_vec(),
+            Invocation::none().with_directory(dir),
+        );
         assert_eq!(outcome.pinning.unbalanced, 0, "a pinned frame left pushed");
         outcome.pinning
     }
@@ -635,6 +647,10 @@ mod measured {
         (
             "TreeSend",
             ".c~new~~m\n::class c\n::method m\n  call SysSleep 0\n",
+        ),
+        (
+            "Program",
+            "say f(0)\n::routine f\n  use arg n\n  return extf(n + 1)\n",
         ),
         ("OpExec", "interpret 'call SysSleep 0'\n"),
         ("Interpret", "interpret 'call SysSleep 0'\n"),

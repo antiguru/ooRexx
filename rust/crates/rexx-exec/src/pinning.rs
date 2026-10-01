@@ -102,6 +102,7 @@ mod counter {
         TreeEval,
         TreeSend,
         OpExec,
+        Program,
         /// A native method that runs Rexx, by message name.
         Native(Box<str>),
     }

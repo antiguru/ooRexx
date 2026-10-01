@@ -2217,7 +2217,12 @@ impl Interp {
         // `exit 5`, and a bare `return` there exits 0. `Ended` keeps the two
         // apart because a *callee* has to tell them apart, not because the
         // program's own exit value ever depends on which arrived.
-        let exit = self.run_activation().map(Ended::value);
+        let exit = pinned!(
+            self,
+            nested.then_some(crate::pinning::PinKind::Program),
+            self.run_activation()
+        )
+        .map(Ended::value);
         if called {
             if let Err(failure) = &exit {
                 self.capture_activation_frame(failure);
