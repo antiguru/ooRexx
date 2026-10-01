@@ -1,6 +1,9 @@
 # Task 2 report: activity table, scheduler, started messages, pin depth
 
-Status: see the end of this file. Implementer s2-t2, base cd35a48ad (checked `git rev-parse HEAD` first).
+Status: DONE_WITH_CONCERNS. Implementer s2-t2, base cd35a48ad (checked `git rev-parse HEAD` first).
+
+Commits: 1a7f030cb (the task), 9326d7e4c (SOURCELINE expectations for the new corpus programs), and the
+commit carrying this report's final form.
 
 ## What landed
 
@@ -119,3 +122,29 @@ failure each, `rexx-parse --test sourceline_oracle`: the new corpus programs had
 Generated with the module comment's oracle script (scratchpad `t2/srcl/srclines.rex`; oracle counts equal each
 file's line count), committed in the fix commit. While G8 ran, those eight untracked files were written into the
 tree (rexx-parse test data, not read by G8); recorded here as a breach of the frozen-tree rule.
+
+Round 2 at 9326d7e4c: G1-G8 all exit 0, finished 2026-10-01T16:24:39+02:00, tree clean at the end (status file
+`gates/status.txt`; round 1's is kept as `gates-round1/status.txt`).
+
+## Concerns
+
+1. **ooTest rows that passed at S1 now refuse, until Task 5.** Every ooTest test body runs under a pinning frame
+   (measured with the pinning build on Message `TEST_START`: the park's frames are `[Program]`, the nested program
+   the driver chain enters). A synchronous `~start` used to complete before `~result` read it; now `~result` parks,
+   meets the pin depth and refuses. Measured on this tree: all 14 `base/class/Object.testGroup` tests the S1 pinning
+   report lists as `pass` with a `MessageResult` arrival (`TESTSTART01`, `TESTSTARTWITH01`, the `_NO_METHOD`,
+   `_OVERRIDE`, `_OVERRIDE_CONTEXT`, `_OVERRIDE_NOT_FOUND`, `_OVERRIDE_FROM_NONSELF`, `_OVERRIDE_AMONG_MIXINCLASSES`
+   rows of both `start` and `startWith`) end rc 120 with the pinned refusal; enumeration command:
+   `grep -E '^\| [^|]+ \| pass, rc 0 \| (MessageResult|MessageWait) \|' docs/superpowers/plans/phase-6-pinning.md`.
+   No gate covers them. The Message group's 11 pinned rows are the same cause. Task 5's pinned wait is the owner.
+   The S1 doc's per-test table shows no `Program` frame anywhere, which disagrees with today's measurement; not
+   investigated.
+2. The re-raise report of `~result` over a failed started send differs from the oracle's (the oracle repeats the
+   started method's failing clause; this crate names `RESULT` and the calling clause). Base differed too, differently.
+3. Guard locks are absent (S3), so two started methods on one object run where the oracle deadlocks (probe
+   `k_chain.rex`: oracle 98.905, this crate answers).
+4. Performance is unmeasured (per the global constraints): the pin-depth increment and decrement at every pinned
+   site in every build, the `native_park` test on `Exit::Parked` and in `begin_send_op`'s lend, and `drive_from`'s
+   new prologue are Task 26's named risks.
+5. A park refused after `Message~result` issued its `MessageId` leaves that id in the message-id table until the
+   message completes (no waiter is registered, so nothing wakes wrongly).
