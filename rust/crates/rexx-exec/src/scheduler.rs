@@ -11,7 +11,8 @@
 
 //! The scheduler seam (spec 2026-09-29 section 2.1) and the activity table:
 //! the running activity sits inline on `Interp`, every other one boxed here,
-//! and a switch swaps the two only where a driver has exited.
+//! and a switch swaps the two where a driver has exited or, for a pinned
+//! wait, inside the Rust frames that pin the outgoing activity.
 
 use std::collections::VecDeque;
 
@@ -60,8 +61,10 @@ pub(crate) enum ParkReason {
         expect(dead_code, reason = "constructed only by the test-only arm")
     )]
     Guard,
-    /// Until the message's send completes.
+    /// `~result`, until the message's send completes.
     MessageResult(MessageId),
+    /// `~wait`, until the message's send completes.
+    MessageWait(MessageId),
 }
 
 impl ParkReason {
@@ -69,7 +72,7 @@ impl ParkReason {
     fn waits_for(self) -> &'static str {
         match self {
             ParkReason::Guard => "a guard",
-            ParkReason::MessageResult(_) => "a message's completion",
+            ParkReason::MessageResult(_) | ParkReason::MessageWait(_) => "a message's completion",
         }
     }
 }
@@ -110,6 +113,10 @@ pub(crate) struct Activities {
     /// The activities whose loops of [`Interp::run_others`] are on the Rust
     /// stack, outermost first.
     owners: Vec<ActivityId>,
+    /// Ready owners a loop could not run, each with the index in `owners` of
+    /// the loop that set it aside; it goes back to the ready queue when that
+    /// loop returns.
+    set_aside: Vec<(ActivityId, usize)>,
     message_ids: FxHashMap<ObjRef, MessageId>,
     next_message: u32,
     /// The parked activities waiting on each message, in the order they
@@ -128,6 +135,7 @@ impl Activities {
             free: Vec::new(),
             ready: VecDeque::new(),
             owners: Vec::new(),
+            set_aside: Vec::new(),
             message_ids: FxHashMap::default(),
             next_message: 0,
             waiters: FxHashMap::default(),
@@ -162,8 +170,8 @@ impl Activities {
 enum Waited {
     /// The activity it set aside is ready.
     Woken,
-    /// Nothing it can run is ready; `inverted` where an activity whose Rust
-    /// frames lie below it is.
+    /// Nothing it can run is ready; `inverted` where a loop enclosing it set
+    /// a ready activity aside.
     Blocked { inverted: bool },
 }
 
@@ -214,7 +222,7 @@ impl Scheduler for Interp {
     fn park(&mut self, reason: ParkReason) {
         match reason {
             ParkReason::Guard => {}
-            ParkReason::MessageResult(id) => {
+            ParkReason::MessageResult(id) | ParkReason::MessageWait(id) => {
                 let running = self.activities.running;
                 self.activities.waiters.entry(id).or_default().push(running);
             }
@@ -272,9 +280,9 @@ impl Interp {
 
     /// A wait for `reason` with Rust frames between the scheduler and the
     /// running driver (spec 2026-09-29 section 2.6): the other activities run
-    /// on this stack until the running one is woken. Refused where nothing
-    /// can run and an activity pinned below this one is ready, so only it
-    /// could end the wait.
+    /// on this stack until the running one is woken. Where nothing can run,
+    /// the refusal is an inverted wait if a loop enclosing this one set a
+    /// ready activity aside, and a wait nothing can end otherwise.
     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
         self.park(reason);
         let failure = match self.run_others() {
@@ -296,6 +304,16 @@ impl Interp {
         for waiters in self.activities.waiters.values_mut() {
             waiters.retain(|waiter| *waiter != running);
         }
+    }
+
+    /// [`Interp::run_started_activities`] until it has nothing left to run,
+    /// with each failure it answered on the way, in order.
+    pub(crate) fn run_started_to_end(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
+        let mut failures = Vec::new();
+        while let Err(failure) = self.run_started_activities() {
+            failures.push((failure, Vec::new()));
+        }
+        failures
     }
 
     /// Runs every started activity to its end, for the end of the program.
@@ -327,30 +345,30 @@ impl Interp {
     /// Runs ready activities with the running one set aside, until it is
     /// ready again or nothing can run. It is running again on return. An
     /// activity whose Rust frames lie below this loop, another loop's owner,
-    /// is not run here: it stays ready for its own loop.
+    /// is not run here: it is set aside and goes back to the ready queue for
+    /// its own loop when this one returns.
     fn run_others(&mut self) -> Result<Waited, Failure> {
         let me = self.activities.running;
+        let level = self.activities.owners.len();
         self.activities.owners.push(me);
-        let mut buried = Vec::new();
-        let waited = self.run_others_from(me, &mut buried);
-        for activity in buried.into_iter().rev() {
-            self.activities.ready.push_front(activity);
+        let waited = self.run_others_from(me, level);
+        let table = &mut self.activities;
+        let mine = table
+            .set_aside
+            .iter()
+            .position(|(_, by)| *by >= level)
+            .unwrap_or(table.set_aside.len());
+        for (activity, _) in table.set_aside.drain(mine..).rev() {
+            table.ready.push_front(activity);
         }
-        self.activities.owners.pop();
+        table.owners.pop();
         waited
     }
 
-    /// [`Interp::run_others`]' loop, with the ready owners it set aside
-    /// gathered in `buried`.
-    fn run_others_from(
-        &mut self,
-        me: ActivityId,
-        buried: &mut Vec<ActivityId>,
-    ) -> Result<Waited, Failure> {
-        let Some(next) = self.next_runnable(me, buried) else {
-            return Ok(Waited::Blocked {
-                inverted: !buried.is_empty(),
-            });
+    /// [`Interp::run_others`]' loop, the one at `level` of the stack.
+    fn run_others_from(&mut self, me: ActivityId, level: usize) -> Result<Waited, Failure> {
+        let Some(next) = self.next_runnable(me, level) else {
+            return Ok(self.blocked(level));
         };
         if next == me {
             return Ok(Waited::Woken);
@@ -364,34 +382,36 @@ impl Interp {
                 self.switch_to(me, ended);
                 return Err(failure);
             }
-            match self.next_runnable(me, buried) {
+            match self.next_runnable(me, level) {
                 Some(ready) if ready != me => self.switch_to(ready, ended),
                 woken => {
                     self.switch_to(me, ended);
                     return Ok(match woken {
                         Some(_) => Waited::Woken,
-                        None => Waited::Blocked {
-                            inverted: !buried.is_empty(),
-                        },
+                        None => self.blocked(level),
                     });
                 }
             }
         }
     }
 
-    /// The next ready activity this loop can run, or `me`; another loop's
-    /// owner goes to `buried`.
-    fn next_runnable(
-        &mut self,
-        me: ActivityId,
-        buried: &mut Vec<ActivityId>,
-    ) -> Option<ActivityId> {
+    /// The loop at `level` has nothing to run: inverted where a loop
+    /// enclosing it set a ready activity aside.
+    fn blocked(&self, level: usize) -> Waited {
+        Waited::Blocked {
+            inverted: self.activities.set_aside.iter().any(|(_, by)| *by < level),
+        }
+    }
+
+    /// The next ready activity the loop at `level` can run, or `me`; another
+    /// loop's owner is set aside.
+    fn next_runnable(&mut self, me: ActivityId, level: usize) -> Option<ActivityId> {
         loop {
             let ready = self.activities.ready.pop_front()?;
             if ready == me || !self.activities.owners.contains(&ready) {
                 return Some(ready);
             }
-            buried.push(ready);
+            self.activities.set_aside.push((ready, level));
         }
     }
 
@@ -482,14 +502,16 @@ impl Interp {
     #[cold]
     pub(crate) fn refuse_unrooted_park(&mut self) -> Failure {
         self.activity.native_park = None;
-        Loud::op_not_driven("a park off its activity's root").into()
+        Loud::scheduler_inconsistency("a wait outside every root driver and pinned frame").into()
     }
 
     /// The running activity's park, resumed now that it has woken.
     fn resume_parked(&mut self, failure: Option<Failure>) -> Result<Option<ObjRef>, Failure> {
         match self.activity.native_park.take() {
             Some(park) => self.resume_native_park(*park, failure),
-            None => Err(Loud::op_not_driven("a wake with no park").into()),
+            None => {
+                Err(Loud::scheduler_inconsistency("a woken activity with no wait recorded").into())
+            }
         }
     }
 

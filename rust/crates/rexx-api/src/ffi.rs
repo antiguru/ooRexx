@@ -571,6 +571,21 @@ impl ThreadContext {
         unsafe { (&raw mut (*raw).thread).cast() }
     }
 
+    /// `InterpreterVersion`, called through the instance this context links,
+    /// as an extension that kept the instance pointer calls it.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn interpreter_version_through_instance(&self) -> usize {
+        let thread = self.pointer();
+        // SAFETY: `thread` addresses this live allocation, whose `instance`
+        // link and that instance's table `new` filled; `InterpreterVersion`
+        // reads nothing through the instance it is handed.
+        unsafe {
+            let instance = (*thread).instance;
+            ((*(*instance).functions).InterpreterVersion)(instance)
+        }
+    }
+
     /// Runs `body` with `activation` as the innermost native call, and puts
     /// back the call that was innermost before, however `body` ends.
     ///

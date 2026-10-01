@@ -1,6 +1,6 @@
 # Task 2 table: base/class/Object, start tests
 
-Produced at the Task 2 fix round 1 tree (before its commit) by `REXX_GROUP_TABLE=<file> REXX_OBJECT_TABLE=<file> REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --test concurrency_tests the_outcome_table -- --nocapture` (concurrency_tests.rs, module group_runs). The run takes the tests whose name holds START: `TEST_UNINIT` and `TEST_UNINIT_CLASS` each reach 3.6 GB in this crate (measured, `/usr/bin/time` over a single-test run), and two at once outgrow the gate's 8 GB cap. Raw output in `task-2-object-table.raw.md`. The S1 pinning report lists 14 of these as `pass` with a `MessageResult` arrival; all pass again.
+Produced at the Task 2 fix round 1 tree (before its commit) by `REXX_GROUP_TABLE=<file> REXX_OBJECT_TABLE=<file> REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --test concurrency_tests the_outcome_table -- --nocapture` (concurrency_tests.rs, module group_runs). The run takes the tests whose name holds START: `TEST_UNINIT` and `TEST_UNINIT_CLASS` allocate until the memory cap stops them (the reviewer measured the same peak on the base under each cap), and two at once outgrow the gate's 8 GB cap. Raw output in `task-2-object-table.raw.md`. The S1 pinning report lists 14 of these as `pass` with a `MessageResult` arrival; all pass again.
 
 Summary: pass 40
 

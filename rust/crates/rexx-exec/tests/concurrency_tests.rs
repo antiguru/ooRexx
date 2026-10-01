@@ -654,6 +654,14 @@ mod measured {
             "say f(0)\n::routine f\n  use arg n\n  return extf(n + 1)\n",
         ),
         ("OpExec", "interpret 'call SysSleep 0'\n"),
+        (
+            "DeferredReply",
+            "say .c~new~m\n::class c\n::method m\n  reply 1\n  call SysSleep 0\n",
+        ),
+        (
+            "Uninit",
+            "u = .c~new\n::class c\n::method uninit\n  call SysSleep 0\n",
+        ),
         ("Interpret", "interpret 'call SysSleep 0'\n"),
         (
             "OutputWrapper",
@@ -822,26 +830,47 @@ mod measured {
         );
     }
 
-    /// An inverted pinned wait is counted under the frames that pinned it.
+    /// `s1` waits pinned on `m1`; `s3` wakes main, which `s1`'s loop sets
+    /// aside; `s2` then waits pinned on `m2` with `$WAIT`, which only main
+    /// would send.
+    const HIDDEN_INVERSION: &str = "c = .w~new\n\
+        m0 = .message~new(c, 'val', 'I', 0)\nm1 = .message~new(c, 'val', 'I', 1)\n\
+        m2 = .message~new(c, 'val', 'I', 2)\nc~start('s1', m0, m1, m2)\n\
+        say 'main got' m0~result\nm2~send\n\
+        ::class w\n::method val unguarded; use arg x; return x*10\n\
+        ::method s1 unguarded\n  use arg m0, m1, m2\n  .w~new~start('s3', m0, m1, m2)\n\
+        \x20 interpret 'say m1~result'\n\
+        ::method s3 unguarded\n  use arg m0, m1, m2\n  m0~send\n  .w~new~start('s2', m1, m2)\n\
+        ::method s2 unguarded\n  use arg m1, m2\n  interpret '$WAIT'\n  m1~send\n";
+
+    /// An inverted pinned wait is counted under its own park kind and the
+    /// frames that pinned it; a deadlock whose only ready activity the
+    /// refusing loop set aside is not counted.
     #[test]
-    fn an_inverted_wait_is_counted_with_its_frames() {
+    fn an_inverted_wait_is_counted_with_its_kind_and_frames() {
+        for (wait, kind) in [
+            ("say m2~result", ParkKind::MessageResult),
+            ("m2~wait", ParkKind::MessageWait),
+        ] {
+            let report = report_of(&HIDDEN_INVERSION.replace("$WAIT", wait));
+            let inverted: Vec<_> = report.inverted.iter().collect();
+            assert!(
+                inverted.len() == 1
+                    && inverted[0].0.0 == kind
+                    && inverted[0].0.1.contains(&PinKind::Interpret)
+                    && *inverted[0].1 == 1,
+                "{wait}: {report:?}"
+            );
+        }
         let report = report_of(
-            "m1 = .message~new('abc', 'length')\nm2 = .message~new('de', 'length')\n\
-             t = .s~new~start('RUN', m1, m2)\n\
-             a = .array~of(2, 1)\na~sortWith(.c~new(m1))\nm2~send\n\
-             ::class s\n::method run\n  use arg m1, m2\n  m1~send\n\
-             \x20 b = .array~of(2, 1)\n  b~sortWith(.c~new(m2))\n\
-             ::class c\n::method init\n  expose m\n  use arg m\n\
-             ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n",
+            "c = .w~new\nm1 = .message~new(c, 'val', 'I', 1)\nm2 = .message~new(c, 'val', 'I', 2)\n\
+             c~start('s1', m1, m2)\ninterpret 'say m1~result'\n\
+             ::class w\n::method val unguarded; use arg x; return x*10\n\
+             ::method s1 unguarded\n  use arg m1, m2\n  .w~new~start('s2', m1)\n\
+             \x20 interpret 'say m2~result'\n\
+             ::method s2 unguarded\n  use arg m1\n  m1~send\n",
         );
-        let inverted: Vec<_> = report.inverted.iter().collect();
-        assert!(
-            inverted.len() == 1
-                && inverted[0].0.0 == ParkKind::MessageResult
-                && inverted[0].0.1.contains(&PinKind::SortComparator)
-                && *inverted[0].1 == 1,
-            "{report:?}"
-        );
+        assert!(report.inverted.is_empty(), "{report:?}");
     }
 
     #[test]
@@ -1015,8 +1044,9 @@ mod measured {
     }
 }
 
-/// The both-sides group runner: its self-test, and the outcome table of
-/// `base/class/Message`'s tests. Gate-only.
+/// The both-sides group runner: its self-test, and the outcome tables of
+/// `base/class/Message`'s tests and of `base/class/Object`'s start tests.
+/// Gate-only.
 mod group_runs {
     use std::collections::BTreeSet;
     use std::fs;
@@ -1196,8 +1226,9 @@ mod group_runs {
             eprintln!("group_runs: skipped without {GATE_ENV}");
             return;
         }
-        // The start tests only: `TEST_UNINIT` and `TEST_UNINIT_CLASS` each
-        // reach 3.6 GB in this crate, and two at once outgrow the gate's cap.
+        // The start tests only: `TEST_UNINIT` and `TEST_UNINIT_CLASS`
+        // allocate until the memory cap stops them, on the base as here, and
+        // two at once outgrow the gate's.
         let results = outcome_table(
             "object-table",
             "base/class",

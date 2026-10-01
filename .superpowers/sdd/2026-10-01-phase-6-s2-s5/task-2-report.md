@@ -74,7 +74,7 @@ scratchpad `t2/probes/` + `t2/run/`.
 | `Message~start`/`~startWith` | corpus `message_start.rex` | Loud `START` (Phase 9) rc 120 | oracle-identical |
 | wait inside a stackless callee level | corpus `started_waits_inside_a_call.rex` | Loud unsent (sync start reaches the unsent message) | oracle-identical |
 | started message whose send is `RESULT` | corpus `started_result_message.rex` | Loud unsent | oracle-identical |
-| traceback at once | corpus `started_raises.rex` | no traceback (stderr empty) | oracle-identical |
+| traceback at once | corpus `started_raises.rex` | Loud `WAIT` of `Message` (Phase 9), rc 120 (corrected in fix round 2) | oracle-identical |
 | unwaited SAY (order fixed by the oracle) | corpus `started_unwaited_says.rex` | `started` (not red; witness only) | oracle-identical |
 | SAY after main's last line | `scheduler::tests::a_started_method_nothing_waits_on_runs_after_mains_last_line` | base order `started`/`main done` | `main done`/`started` |
 | waiters wake in park order | `scheduler::tests::a_completed_message_wakes_its_waiters_in_the_order_they_parked` | base: unsent refusal | passes |
@@ -179,10 +179,7 @@ Status: DONE_WITH_CONCERNS (see the round's concerns at the end).
   report keys the count by both (`ParkKind`, pinned frames).
 - R11. "Inverted" is decided by the ready queue: nothing this loop can run is ready and an owner buried below it is.
   Nothing ready and nothing buried is a plain deadlock, refused as the root's unsatisfiable wait.
-- R12. The Object group's gate run covers the tests whose name holds START only: `TEST_UNINIT` and
-  `TEST_UNINIT_CLASS` each peak at 3.6 GB in this crate (single-test runs under `/usr/bin/time`), and the whole
-  group at once OOM-killed the 8 GB cap twice. The two table tests also run one at a time (a mutex), since both at
-  once outgrew the cap. Not measured whether the 3.6 GB is new to this task.
+- R12. Withdrawn in fix round 2 (its 3.6 GB figure was the memory cap, not a property of the tests).
 
 ### How no RegFrame or arena borrow of the pinned activity is live across its swap (P14, D-U4)
 
@@ -238,7 +235,7 @@ a path a bench program reaches (no bench program starts an activity).
 2. A buried owner that is ready waits for its own loop; if the inner loop's activities then block for ever, the
    refusal is the inverted one even where the oracle would also have deadlocked; the oracle's 98.905 deadlock
    detection is later work.
-3. The Object gate run omits the two UNINIT tests for memory (R12).
+3. The Object gate run omits the two UNINIT tests: they allocate until the memory cap stops them, on the base too.
 4. Concerns 2-5 of the first round stand.
 
 ### Gates this round
@@ -246,3 +243,64 @@ a path a bench program reaches (no bench program starts an activity).
 At 66368f3a7: G1-G8 all exit 0, finished 2026-10-01T17:02:14+02:00, tree clean; both `group_runs` table tests
 ran and passed in G4 (release) and G6 (debug). Commits this round: 66368f3a7 (the fix), and the commit carrying
 this section.
+
+## Fix round 2 (review task-2-review.md)
+
+### I1: the replied body and UNINIT are pinned frames
+
+`Interp::resume_reply` runs its body under `pinned!(PinKind::DeferredReply)` and `Interp::run_one_uninit` sends
+`UNINIT` under `pinned!(PinKind::Uninit)`, both new kinds, each with a `FRAME_PROBES` case (`SysSleep` in a replied
+body, in an `UNINIT`) and a row in `phase-6-pinning.md`'s frame table (whose stale `Native` row, naming
+`RESULT`/`WAIT` as excepted run halves, is corrected too). A `~result`/`~wait` there is now a pinned wait. Corpus
+witnesses `started_waited_in_a_replied_body.rex` (the review's `e2_reply`) and `started_waited_in_uninit.rex`
+(`e4_uninit_wait`), oracle-identical, listed in `phase-8.txt`, SOURCELINE files generated. Red before: with the
+two `pinned!` wrappers removed, both end rc 120 with the unrooted-park refusal (run on a rebuilt `rexx-run`). The
+review's `e3`, `e5`, `e6` are oracle-identical too. The unrooted-park refusal and its siblings no longer go through
+`op_not_driven`: `Loud::scheduler_inconsistency` renders "the scheduler found a wait outside every root driver and
+pinned frame", "... a woken activity with no wait recorded", "... a wait parked at an op that is not a send".
+
+### I2: inverted is classified over the whole loop stack
+
+Set-aside owners live on `Activities::set_aside`, each tagged with the stack index of the loop that set it aside,
+and go back to the ready queue when that loop returns. A loop with nothing to run reports `inverted` iff a loop
+strictly enclosing it set a ready activity aside; otherwise the wait is the unsatisfiable one. The label, the
+`PinReport::inverted` count and the refusal all follow that one decision. `~wait` now parks with its own reason,
+`ParkReason::MessageWait`, so its inverted wait counts under `ParkKind::MessageWait`.
+
+- R13. "Enclosing" is read strictly, as the ruling's two witnesses require: in `p15_hidden_inversion` main was set
+  aside by `s1`'s loop, which encloses the refusing `s2` loop (inverted, counted); in `p3_buried_deadlock` main was
+  set aside by the refusing loop itself (not inverted: "nothing left", not counted).
+
+Concern on R13: the two shapes differ only in which loop happened to pop the woken owner, not in whether the wait
+could end. My fix-round-1 witness (main pinned in a comparator waits on `m1`; a started activity sends `m1`, then
+waits pinned on `m2`, which main sends after its comparator returns; the oracle completes) has `p3`'s shape and is
+now refused as "nothing left to run" although main is ready below it. It is no longer a test; `p3` is.
+
+Witnesses: `scheduler::tests::an_inverted_pinned_wait_is_refused` (p15), `a_deadlock_with_a_buried_activity_ready_is_not_an_inverted_wait`
+(p3); pinning build `measured::an_inverted_wait_is_counted_with_its_kind_and_frames` (p15 with `~result` counts
+once under `MessageResult`, with `~wait` once under `MessageWait`, both with `Interpret` among the frames; p3
+counts nothing). Mutation: classifying per loop again (`*by == level`) turns both scheduler tests red.
+
+### Minors
+
+- M1: the 3.6 GB sentence in concurrency_tests.rs now says the UNINIT tests allocate until the cap stops them, on
+  the base as here (the reviewer's measurement); R12 withdrawn; the Object table's note corrected.
+- M2: scheduler.rs module doc says a switch happens where a driver has exited or, for a pinned wait, inside the
+  Rust frames that pin the outgoing activity; `pinned_wait`'s doc states the R13 rule.
+- M3: see I1.
+- M5: see I2.
+- M6: `an_ended_activitys_thread_context_is_kept` now also calls `InterpreterVersion` through the retired
+  context's instance after the started activity has ended (`ThreadContext::interpreter_version_through_instance`,
+  a `#[doc(hidden)]` rexx-api member with its `SAFETY` note in ffi.rs), answering 328448.
+- M7: `execute` reports every failure the program-end drains answer, in order, through one
+  `report_late_failures` shared with the deferred replies (a refusal on its own line and in the status, a condition
+  as its traceback, a deadline left to the guard below); `run_started_to_end` keeps draining after a failing
+  activity, so none is left unrun.
+- M8: the `group_runs` module doc names both tables.
+- M9: the `started_raises.rex` base evidence corrected in the first table (base: the `WAIT` refusal, rc 120).
+- M4 (nested pinned-loop depth guard): not this round, per the ruling.
+
+### refusal-sites.tsv
+
+Re-derived: `scheduler_inconsistency` added (body+ir, off the send surface); `inverted_wait` and
+`reply_inside_construct` lines moved.

@@ -294,7 +294,9 @@ Pinned frames:
 | TreeSend | `Op::Message` |
 | OpExec | `Op::Exec` |
 | Program | `Interp::run_loaded` under a running activation |
-| Native | `Interp::invoke`'s native and implemented-external arms, except the park points `RESULT`, `WAIT`, `ACQUIRE` |
+| DeferredReply | `Interp::resume_reply` |
+| Uninit | `Interp::run_one_uninit`'s send |
+| Native | `Interp::invoke`'s run-half native and implemented-external arms; the begin halves, `RESULT` and `WAIT` among them, push none |
 
 ## Measured
 

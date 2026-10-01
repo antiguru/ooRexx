@@ -2478,7 +2478,10 @@ impl Interp {
     pub(crate) fn drive(&mut self, root: Level) -> Result<Ended, Failure> {
         match self.drive_from(DriveStart::Level(root), false)? {
             Driven::Ended(ended) => Ok(ended),
-            Driven::Parked(_) => Err(Loud::op_not_driven("a park off its activity's root").into()),
+            Driven::Parked(_) => Err(Loud::scheduler_inconsistency(
+                "a wait outside every root driver and pinned frame",
+            )
+            .into()),
         }
     }
 
@@ -2850,9 +2853,10 @@ impl Interp {
     ) -> Result<Exit, Failure> {
         let delivered = match parked.deliver {
             Deliver::Send => self.deliver_woken_send(chunk, registers, parked.at, sent),
-            Deliver::Register(_) | Deliver::Flow(_) => {
-                Err(Loud::op_not_driven("a park off a send").into())
-            }
+            Deliver::Register(_) | Deliver::Flow(_) => Err(Loud::scheduler_inconsistency(
+                "a wait parked at an op that is not a send",
+            )
+            .into()),
         };
         match delivered {
             Ok(()) => self.ops_loop_steady(

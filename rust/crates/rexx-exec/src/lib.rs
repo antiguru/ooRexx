@@ -689,6 +689,14 @@ impl Loud {
         }
     }
 
+    /// A state of the activity table nothing should produce: an internal
+    /// inconsistency, never a program error.
+    fn scheduler_inconsistency(what: &'static str) -> Loud {
+        Loud {
+            message: format!("the scheduler found {what}"),
+        }
+    }
+
     /// A pinned wait for `what` that only an activity pinned below it can end
     /// (spec 2026-09-29 section 2.6, an inverted wait).
     fn inverted_wait(what: &str) -> Loud {
@@ -2812,6 +2820,48 @@ fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, Strin
     out
 }
 
+/// Reports what a body run after the main one failed with: a refusal on its
+/// own line and in the exit status, a condition as its traceback; the status
+/// stays the main body's otherwise.
+fn report_late_failures(
+    interp: &mut Interp,
+    failures: Vec<(Failure, Vec<FailureSite>)>,
+    path: &str,
+    exit_code: &mut i32,
+) {
+    for (failure, mut sites) in failures {
+        match failure {
+            // `Interp::resume_reply` answers `Ok` for this variant, exactly as
+            // a send does; the arm is what makes this
+            // match exhaustive and nothing else.
+            Failure::Exited(_) => {}
+            // The guard below the `UNINIT` sweep is what reports this, for
+            // the reason the main body's own arm gives.
+            Failure::Deadline => {}
+            Failure::Loud(loud) => {
+                interp
+                    .trace
+                    .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+                *exit_code = NOT_IMPLEMENTED_EXIT;
+            }
+            Failure::Raised(raised) => {
+                if sites.is_empty() {
+                    sites.push(FailureSite::Clause {
+                        line: 0,
+                        text: b"<no failing clause recorded>".to_vec(),
+                        indent: 0,
+                    });
+                }
+                let site = ClauseSite {
+                    path,
+                    sites: &sites,
+                };
+                interp.write_trace_report(&raised.report(&site));
+            }
+        }
+    }
+}
+
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
 fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Outcome {
     let interpreter = std::thread::Builder::new()
@@ -2982,57 +3032,23 @@ fn execute(
         Err(Failure::Deadline) => 0,
     };
 
+    // The oracle's termination waits for every activity
+    // (`InterpreterInstance::terminate`).
+    let started = interp.run_started_to_end();
+    report_late_failures(&mut interp, started, path, &mut exit_code);
+
     // **After the main body's own report and after its exit status is
     // settled**, which is the order the oracle produces: the main activity
     // writes its traceback when it fails and the replied remainder runs on
     // afterwards. Measured, oracle rc 7 on a program ending `exit 7` whose
     // replied method then raises 98.936 -- the traceback is on stderr and the
     // status is the main body's, so a raise here only writes.
-    // The oracle's termination waits for every activity
-    // (`InterpreterInstance::terminate`).
-    let run_started = |interp: &mut Interp, exit_code: &mut i32| {
-        if let Err(Failure::Loud(loud)) = interp.run_started_activities() {
-            interp
-                .trace
-                .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
-            *exit_code = NOT_IMPLEMENTED_EXIT;
-        }
-    };
-    run_started(&mut interp, &mut exit_code);
-    for (failure, mut sites) in interp.run_deferred_replies() {
-        match failure {
-            // `Interp::resume_reply` answers `Ok` for this variant, exactly as
-            // a send does; the arm is what makes this
-            // match exhaustive and nothing else.
-            Failure::Exited(_) => {}
-            // The guard below the `UNINIT` sweep is what reports this, for
-            // the reason the main body's own arm gives.
-            Failure::Deadline => {}
-            Failure::Loud(loud) => {
-                interp
-                    .trace
-                    .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
-                exit_code = NOT_IMPLEMENTED_EXIT;
-            }
-            Failure::Raised(raised) => {
-                if sites.is_empty() {
-                    sites.push(FailureSite::Clause {
-                        line: 0,
-                        text: b"<no failing clause recorded>".to_vec(),
-                        indent: 0,
-                    });
-                }
-                let site = ClauseSite {
-                    path,
-                    sites: &sites,
-                };
-                interp.write_trace_report(&raised.report(&site));
-            }
-        }
-    }
+    let replied = interp.run_deferred_replies();
+    report_late_failures(&mut interp, replied, path, &mut exit_code);
 
     // What a replied body started.
-    run_started(&mut interp, &mut exit_code);
+    let started = interp.run_started_to_end();
+    report_late_failures(&mut interp, started, path, &mut exit_code);
 
     // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached
     // from `Interpreter::terminateInterpreter` (`runtime/Interpreter.cpp:279`)

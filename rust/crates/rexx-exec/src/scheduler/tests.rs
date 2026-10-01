@@ -114,29 +114,61 @@ fn a_pinned_wait_completes_under_each_pinning_frame() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
-/// A pinned wait whose answer only an activity pinned below it can give is
-/// refused, loudly and with no owner: the started activity waits inside a
-/// comparator on a message main sends after its own pinned wait ends, and
-/// main is ready below it.
+/// The waits of the inversion witnesses: main parks unpinned on `m0`; `s1`
+/// waits pinned on `m1` and starts `s3`, which sends `m0` (main is ready, set
+/// aside by `s1`'s loop) and starts `s2`; `s2` waits pinned on `m2`, which
+/// main sends once it runs. The oracle completes.
+const HIDDEN_INVERSION: &str = "c = .w~new\n\
+    m0 = .message~new(c, 'val', 'I', 0)\nm1 = .message~new(c, 'val', 'I', 1)\n\
+    m2 = .message~new(c, 'val', 'I', 2)\nc~start('s1', m0, m1, m2)\n\
+    say 'main got' m0~result\nm2~send\nsay 'main sent m2'\nsay 'done'\n\
+    ::class w\n::method val unguarded; use arg x; return x*10\n\
+    ::method s1 unguarded\n  use arg m0, m1, m2\n  .w~new~start('s3', m0, m1, m2)\n\
+    \x20 interpret 'say \"S1 got\" m1~result'\n\
+    ::method s3 unguarded\n  use arg m0, m1, m2\n  m0~send\n  say 's3 sent m0'\n\
+    \x20 .w~new~start('s2', m1, m2)\n\
+    ::method s2 unguarded\n  use arg m1, m2\n  interpret 'say \"S2 got\" m2~result'\n  m1~send\n";
+
+/// A pinned wait whose loop finds nothing to run, while a loop enclosing it
+/// set a ready activity aside, is refused as inverted, loudly and with no
+/// owner.
 #[test]
 fn an_inverted_pinned_wait_is_refused() {
-    let outcome = run(
-        "m1 = .message~new('abc', 'length')\nm2 = .message~new('de', 'length')\n\
-         t = .s~new~start('RUN', m1, m2)\n\
-         a = .array~of(2, 1)\na~sortWith(.c~new(m1))\nsay 'main sorted'\nm2~send\nsay t~result\n\
-         ::class s\n::method run\n  use arg m1, m2\n  m1~send\n\
-         \x20 b = .array~of(2, 1)\n  b~sortWith(.c~new(m2))\n  return 'done'\n\
-         ::class c\n::method init\n  expose m\n  use arg m\n\
-         ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n",
-    );
+    let outcome = run(HIDDEN_INVERSION);
     assert_eq!(outcome.exit_code, 120);
-    assert_eq!(stdout(&outcome), "");
+    assert_eq!(stdout(&outcome), "s3 sent m0\n");
     assert_eq!(
         stderr(&outcome),
         "rexx-exec: a pinned wait for a message's completion that only an activity pinned \
          below it can end is not implemented\n"
     );
 }
+
+/// A pinned wait whose own loop set aside the only ready activity is a wait
+/// nothing left to run can end, not an inverted one: `s2` wakes main, and
+/// nothing ever sends `s1`'s message (the oracle prints two more lines and
+/// then blocks for ever).
+#[test]
+fn a_deadlock_with_a_buried_activity_ready_is_not_an_inverted_wait() {
+    let outcome = run(BURIED_DEADLOCK);
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(stdout(&outcome), "");
+    assert_eq!(
+        stderr(&outcome),
+        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
+    );
+}
+
+/// The deadlock witness: main waits pinned on `m1`; `s1` starts `s2` and
+/// waits pinned on `m2`, which nothing sends; `s2` sends `m1`.
+const BURIED_DEADLOCK: &str = "c = .w~new\n\
+    m1 = .message~new(c, 'val', 'I', 1)\nm2 = .message~new(c, 'val', 'I', 2)\n\
+    m3 = .message~new(c, 'val', 'I', 3)\nc~start('s1', m1, m2)\n\
+    interpret 'say \"main got\" m1~result'\nsay 'main waits m3'\nsay m3~result\nsay 'done'\n\
+    ::class w\n::method val unguarded; use arg x; return x*10\n\
+    ::method s1 unguarded\n  use arg m1, m2\n  .w~new~start('s2', m1)\n\
+    \x20 interpret 'say \"S1 got\" m2~result'\n\
+    ::method s2 unguarded\n  use arg m1\n  m1~send\n";
 
 /// A pinned wait nothing left to run can end is refused as such.
 #[test]
@@ -198,6 +230,14 @@ fn an_ended_activitys_thread_context_is_kept() {
             assert_eq!(String::from_utf8_lossy(&interp.out), "328448\n");
             assert_eq!(interp.activity.pin_depth, 0);
             let kept = interp.activities.retired().len();
+            // The call an extension that kept the started activity's instance
+            // makes once that activity has ended.
+            let version = interp
+                .activities
+                .retired()
+                .first()
+                .map(rexx_api::ffi::ThreadContext::interpreter_version_through_instance);
+            assert_eq!(version, Some(328_448));
             assert!(interp.terminate().is_empty());
             kept
         })

@@ -2892,7 +2892,11 @@ impl Interp {
             self.classes().forget_uninit_class(object);
         }
         let caller = self.caller();
-        let outcome = self.send_message(object, UNINIT, None, &[], caller);
+        let outcome = pinned!(
+            self,
+            crate::pinning::PinKind::Uninit,
+            self.send_message(object, UNINIT, None, &[], caller)
+        );
         self.clear_failure_levels();
         match outcome {
             // A deadline is discarded here with the rest, and `execute`'s own
@@ -2983,7 +2987,11 @@ impl Interp {
     /// Puts one parked method body back and runs the rest of it.
     fn resume_reply(&mut self, deferred: DeferredReply) -> Result<(), Failure> {
         self.begin_resume_reply(deferred);
-        let ended = self.run_activation();
+        let ended = pinned!(
+            self,
+            crate::pinning::PinKind::DeferredReply,
+            self.run_activation()
+        );
         // Every ending is the same ending here: nothing is waiting for a
         // value, and a resumed body's `EXIT` does not set the process's
         // status. Measured, oracle rc 0: `reply 'v'` then `say 'tail'` then

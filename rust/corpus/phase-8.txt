@@ -397,3 +397,7 @@ lang/started_raises.rex
 lang/message_wait_then_completed.rex
 lang/message_two_waiters.rex
 lang/message_start.rex
+# Task 2 fix round 2: a replied body and an UNINIT run from Rust frames, so a
+# wait in either is a pinned wait.
+lang/started_waited_in_a_replied_body.rex
+lang/started_waited_in_uninit.rex

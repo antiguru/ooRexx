@@ -1058,7 +1058,7 @@ pub(super) fn native_message_wait(
         return Ok(NativeStarted::Ran(None));
     }
     let id = interp.activities.message_id(receiver);
-    interp.park_native(ParkReason::MessageResult(id), |_, _| Ok(None), receiver)
+    interp.park_native(ParkReason::MessageWait(id), |_, _| Ok(None), receiver)
 }
 
 /// `Message~completed`: whether the send has ended, with a result or with an

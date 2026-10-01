@@ -128,6 +128,10 @@ mod counter {
         TreeSend,
         OpExec,
         Program,
+        /// A replied body run at the program's end.
+        DeferredReply,
+        /// An `UNINIT` method run by the collector's sweep or at termination.
+        Uninit,
         /// A native method that runs Rexx, by message name.
         Native(Box<str>),
     }
@@ -232,6 +236,7 @@ mod counter {
             let kind = match reason {
                 crate::scheduler::ParkReason::Guard => ParkKind::GuardOn,
                 crate::scheduler::ParkReason::MessageResult(_) => ParkKind::MessageResult,
+                crate::scheduler::ParkReason::MessageWait(_) => ParkKind::MessageWait,
             };
             let mut frames: Vec<PinKind> = pins.stack.borrow().iter().flatten().cloned().collect();
             frames.dedup();
