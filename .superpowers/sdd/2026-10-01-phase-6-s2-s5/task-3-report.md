@@ -205,3 +205,6 @@ Witnesses, each compared on stdout, stderr and rc separately and run 30 times on
 
 Checks before committing: fmt clean; `cargo test --release -p rexx-exec --lib` 880 passed;
 `refusal_sites` green with no row change; corpus 694 of 694 matching.
+
+Gates this round at bbb4e82f7: G1-G8 all exit 0 (corpus 694 of 694 matching in G4 and G6), finished
+2026-10-01T20:48:15+02:00, tree clean at the end.
