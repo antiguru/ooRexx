@@ -389,12 +389,16 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
     }
 }
 
-/// `Message~hasError` answering `1`, which no differential row can carry.
+/// A started send that raises: its traceback on its own activity at once,
+/// `~hasError` answering `1` once waited on, and `~result` raising it again.
+/// The oracle's report of the second raise repeats the started method's clause
+/// where this one names `RESULT`, so no differential row carries it.
 #[test]
 fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
     const PATH: &str = "/tmp/message-has-error.rex";
     let source = b"o = .K~new\n\
                    m = o~start('M')\n\
+                   m~wait\n\
                    say 'haserror' m~hasError 'completed' m~completed\n\
                    say 'result' m~result\n\
                    say 'never'\n\
@@ -410,10 +414,12 @@ fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
     assert_eq!(
         String::from_utf8_lossy(&outcome.stderr),
         format!(
-            "\x20    8 *-* return 1/0\n\
+            "\x20    9 *-* return 1/0\n\
+             Error 42 running {PATH} line 9:  Arithmetic overflow/underflow.\n\
+             Error 42.3:  Arithmetic overflow; divisor must not be zero.\n\
              \x20      *-* Compiled method \"RESULT\" with scope \"Message\".\n\
-             \x20    4 *-* say 'result' m~result\n\
-             Error 42 running {PATH} line 8:  Arithmetic overflow/underflow.\n\
+             \x20    5 *-* say 'result' m~result\n\
+             Error 42 running {PATH} line 5:  Arithmetic overflow/underflow.\n\
              Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
         )
     );

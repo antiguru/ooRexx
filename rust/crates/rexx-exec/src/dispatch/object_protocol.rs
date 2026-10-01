@@ -13,6 +13,8 @@
 //! `setMethod`, `copy`, `request`, and `run`/`send`/`start` with the `Message`
 //! readers.
 
+use crate::scheduler::{ParkReason, Scheduler, StartedSend};
+
 use super::{
     Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
     MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, NativeStarted, OBJECTNAME, ObjRef,
@@ -812,9 +814,9 @@ fn dynamic_send(
     )
 }
 
-/// The `Message` object `~start` and `~startWith` answer, with its send
-/// already made -- `RexxObject::startCommon` (`classes/ObjectClass.cpp:2094`)
-/// and `MessageClass::dispatch` (`classes/MessageClass.cpp:421`).
+/// The `Message` object `~start` and `~startWith` answer, its send made by a
+/// new activity -- `RexxObject::startCommon` (`classes/ObjectClass.cpp:2094`)
+/// and `MessageClass::start` (`classes/MessageClass.cpp:522`).
 fn started_message(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -826,12 +828,15 @@ fn started_message(
     let class = interp.object_model().message;
     let object = interp.native_instance(class);
     let caller = interp.caller();
-    let sent = match interp.begin_send(receiver, &name, scope, args, caller) {
-        Ok(Started::Entered) => return Ok(NativeStarted::Entered(Then::Started(object))),
-        Ok(Started::Ran(value)) => Ok(value),
-        Err(failure) => Err(failure),
+    let send = StartedSend {
+        receiver,
+        name,
+        scope,
+        args: args.to_vec(),
+        caller,
     };
-    record_started(interp, object, sent).map(NativeStarted::Ran)
+    interp.spawn(send, Then::Started(object));
+    Ok(NativeStarted::Ran(Some(object)))
 }
 
 /// A started message's outcome recorded on it, and the message answered;
@@ -851,6 +856,7 @@ pub(super) fn record_started(
         Err(other) => return Err(other),
     };
     interp.message_outcomes.insert(object, outcome);
+    interp.message_completed(object);
     Ok(Some(object))
 }
 
@@ -928,37 +934,131 @@ pub(super) fn record_held(
         Ok(answer) => {
             interp.set_native_entry(message, MESSAGE_RESULT, answer.unwrap_or(ObjRef::NIL));
             interp.message_outcomes.insert(message, None);
+            interp.message_completed(message);
             Ok(answer)
         }
         Err(Failure::Raised(raised)) => {
             interp
                 .message_outcomes
                 .insert(message, Some(raised.clone()));
+            interp.message_completed(message);
             Err(Failure::Raised(raised))
         }
         Err(other) => Err(other),
     }
 }
 
+/// `Message~start([receiver] [, argument ...])`: the send a `Message~new`
+/// object holds, made by a new activity, to a new receiver and with new
+/// arguments where given -- `MessageClass::startRexx`
+/// (`classes/MessageClass.cpp:465`).
+pub(super) fn native_message_start(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(target)) = args.first() {
+        interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
+    }
+    if args.len() > 1 {
+        let arguments = interp.security_arguments_array(&args[1..]);
+        interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
+    }
+    start_held_message(interp, receiver)
+}
+
+/// `Message~startWith(receiver, arguments)`: [`native_message_start`] with
+/// the arguments required, in an array -- `MessageClass::startWithRexx`
+/// (`classes/MessageClass.cpp:497`).
+pub(super) fn native_message_start_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(target)) = args.first() {
+        interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
+    }
+    let values = message_arguments(interp, args.get(1).copied().flatten())?;
+    let arguments = interp.security_arguments_array(&values);
+    interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
+    start_held_message(interp, receiver)
+}
+
+/// `MessageClass::start` (`classes/MessageClass.cpp:522`): the held send
+/// handed to a new activity, which records its outcome on `message`.
+fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let (Some(target), Some(name), Some(arguments)) = (
+        interp.native_entry(message, MESSAGE_TARGET),
+        interp.native_entry(message, MESSAGE_NAME),
+        interp.native_entry(message, MESSAGE_ARGUMENTS),
+    ) else {
+        return Err(Loud::native_method(b"START", "Message").into());
+    };
+    let scope = interp.native_entry(message, MESSAGE_SCOPE);
+    let name = interp.to_text(name).into_owned();
+    let args = interp.array_slots_of(arguments).unwrap_or_default();
+    interp.message_outcomes.remove(&message);
+    interp.validate_scope_override(target, scope)?;
+    let caller = interp.caller();
+    let send = StartedSend {
+        receiver: target,
+        name,
+        scope,
+        args,
+        caller,
+    };
+    interp.spawn(send, Then::Held(message));
+    Ok(None)
+}
+
 /// `Message~result`: the value the send answered, `.nil` for one that
 /// answered none, and the send's own condition raised again where it failed
-/// -- `MessageClass::result` (`classes/MessageClass.cpp:279`).
+/// -- `MessageClass::result` (`classes/MessageClass.cpp:279`). A send not yet
+/// completed parks the activity until it is.
 pub(super) fn native_message_result(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeStarted, Failure> {
     park_point!(interp, crate::pinning::ParkKind::MessageResult);
-    match interp.message_outcomes.get(&receiver) {
+    if interp.message_outcomes.contains_key(&receiver) {
+        return message_result(interp, receiver).map(NativeStarted::Ran);
+    }
+    let id = interp.activities.message_id(receiver);
+    interp.park_native(ParkReason::MessageResult(id), message_result, receiver)
+}
+
+/// [`native_message_result`] once the send has completed. A send made again
+/// between the wake and this read has cleared the outcome, which answers
+/// `.nil`.
+fn message_result(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    match interp.message_outcomes.get(&message) {
         Some(Some(raised)) => Err(Failure::Raised(raised.clone())),
         Some(None) => {
-            let held = interp.native_entry(receiver, MESSAGE_RESULT);
+            let held = interp.native_entry(message, MESSAGE_RESULT);
             Ok(Some(held.unwrap_or(ObjRef::NIL)))
         }
-        // A `Message~new` object, whose send has not been made.
-        None => Err(Loud::unsent_message_result().into()),
+        None => Ok(Some(ObjRef::NIL)),
     }
+}
+
+/// `Message~wait`: nothing, once the send has completed --
+/// `MessageClass::wait` (`classes/MessageClass.cpp:240`).
+pub(super) fn native_message_wait(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<NativeStarted, Failure> {
+    park_point!(interp, crate::pinning::ParkKind::MessageWait);
+    if interp.message_outcomes.contains_key(&receiver) {
+        return Ok(NativeStarted::Ran(None));
+    }
+    let id = interp.activities.message_id(receiver);
+    interp.park_native(ParkReason::MessageResult(id), |_, _| Ok(None), receiver)
 }
 
 /// `Message~completed`: whether the send has ended, with a result or with an

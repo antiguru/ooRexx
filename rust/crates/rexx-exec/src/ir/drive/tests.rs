@@ -604,10 +604,10 @@ fn a_send_op_runs_its_method_on_the_drivers_own_frame() {
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "m m\nm m m\nr\n");
     assert_eq!(
-        entered, 9,
-        "INIT, m by clause, by value and in f's argument, f, m by Message~send, by \
-         Object~send and by Object~start, and r by Routine~call are the bodies this program \
-         enters"
+        entered, 8,
+        "INIT, m by clause, by value and in f's argument, f, m by Message~send and by \
+         Object~send, and r by Routine~call are the bodies this program enters; Object~start's \
+         m is its started activity's root"
     );
 }
 

@@ -184,11 +184,12 @@ use object_protocol::{
     ArrayArgument, array_argument, decode_message_name, hash_value, native_class, native_copy,
     native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
     native_is_nil, native_message_completed, native_message_has_error, native_message_result,
-    native_message_send, native_message_send_with, native_no_op, native_object_concat,
-    native_object_concat_blank, native_object_different, native_object_identical,
-    native_object_name, native_object_name_set, native_request, native_run, native_send,
-    native_send_with, native_set_method, native_start, native_start_with, native_string,
-    native_unset_method, operator_argument, run_method_body, string_hash,
+    native_message_send, native_message_send_with, native_message_start, native_message_start_with,
+    native_message_wait, native_no_op, native_object_concat, native_object_concat_blank,
+    native_object_different, native_object_identical, native_object_name, native_object_name_set,
+    native_request, native_run, native_send, native_send_with, native_set_method, native_start,
+    native_start_with, native_string, native_unset_method, operator_argument, run_method_body,
+    string_hash,
 };
 
 // The required-string protocol and the string conversion behind it.
@@ -225,8 +226,9 @@ fn put_native(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: N
     natives[index] = Some(entry);
 }
 
-/// The begin half of a primitive method that runs a Rexx activation, which
-/// answers [`NativeStarted::Entered`] with that activation pushed.
+/// The begin half of a primitive method that runs a Rexx activation or parks
+/// the activity, which answers [`NativeStarted::Entered`] with that activation
+/// pushed or the park on [`crate::activity::Activity::native_park`].
 type NativeBegin =
     fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<NativeStarted, Failure>;
 
@@ -247,8 +249,8 @@ enum NativeBody {
 /// What a [`NativeBegin`] left.
 pub(crate) enum NativeStarted {
     Ran(Option<ObjRef>),
-    /// A Rexx activation is pushed, and `Then` is the native's own work once
-    /// it has ended.
+    /// A Rexx activation is pushed, or the activity's park recorded, and
+    /// `Then` is the native's own work once it has ended or woken.
     Entered(Then),
 }
 
@@ -286,16 +288,57 @@ struct NativeBlame {
     args: Box<[Option<ObjRef>]>,
 }
 
-impl NativeTail {
-    /// Appends every `ObjRef` this tail holds to `out`.
-    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
-        match self.then {
+impl Then {
+    /// Appends the `ObjRef` this holds to `out`.
+    pub(crate) fn object_roots(self, out: &mut Vec<ObjRef>) {
+        match self {
             Then::Pass => {}
             Then::Answer(object) | Then::Started(object) | Then::Held(object) => out.push(object),
         }
+    }
+}
+
+impl NativeBlame {
+    fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        out.extend([self.scope, self.receiver]);
+        out.extend(self.args.iter().flatten().copied());
+    }
+}
+
+impl NativeTail {
+    /// Appends every `ObjRef` this tail holds to `out`.
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        self.then.object_roots(out);
         if let Some(blame) = &self.blame {
-            out.extend([blame.scope, blame.receiver]);
-            out.extend(blame.args.iter().flatten().copied());
+            blame.object_roots(out);
+        }
+    }
+}
+
+/// What a primitive method that parked answers once its activity wakes.
+pub(crate) type NativeResume = fn(&mut Interp, ObjRef) -> Result<Option<ObjRef>, Failure>;
+
+/// A primitive method's park: why, its continuation, and the work of each
+/// primitive method between it and the driver, innermost first.
+pub(crate) struct NativePark {
+    reason: crate::scheduler::ParkReason,
+    resume: NativeResume,
+    receiver: ObjRef,
+    thens: Vec<(Then, Option<NativeBlame>)>,
+}
+
+impl NativePark {
+    pub(crate) fn reason(&self) -> crate::scheduler::ParkReason {
+        self.reason
+    }
+
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        out.push(self.receiver);
+        for (then, blame) in &self.thens {
+            then.object_roots(out);
+            if let Some(blame) = blame {
+                blame.object_roots(out);
+            }
         }
     }
 }
@@ -514,7 +557,13 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_message_has_error,
     ),
-    ("Message", "RESULT", Arity::Fixed(0), native_message_result),
+    ("Message", "START", Arity::Counted, native_message_start),
+    (
+        "Message",
+        "STARTWITH",
+        Arity::Fixed(2),
+        native_message_start_with,
+    ),
     ("Method", "ANNOTATION", Arity::Fixed(1), native_annotation),
     ("Method", "ANNOTATIONS", Arity::Fixed(0), native_annotations),
     // `MethodClass::getScopeRexx`, `memory/Setup.cpp:1113`. `Routine` and
@@ -698,8 +747,9 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 ];
 
 /// The primitive methods that send a message the receiver may answer with a
-/// Rexx body, entered by their begin halves.
+/// Rexx body, or that park the activity, entered by their begin halves.
 static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
+    ("Message", "RESULT", Arity::Fixed(0), native_message_result),
     ("Message", "SEND", Arity::Counted, native_message_send),
     (
         "Message",
@@ -711,6 +761,7 @@ static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
     ("Object", "SENDWITH", Arity::Fixed(2), native_send_with),
     ("Object", "START", Arity::Counted, native_start),
     ("Object", "STARTWITH", Arity::Fixed(2), native_start_with),
+    ("Message", "WAIT", Arity::Fixed(0), native_message_wait),
 ];
 
 /// [`RESUMABLE_METHODS`] for the class dictionary: every `NEW` that sends
@@ -2145,7 +2196,10 @@ impl Interp {
                             receiver,
                             args: args.into(),
                         };
-                        self.push_native_tail(then, Some(blame));
+                        match self.activity.native_park.as_mut() {
+                            Some(park) => park.thens.push((then, Some(blame))),
+                            None => self.push_native_tail(then, Some(blame)),
+                        }
                         return Ok(Started::Entered);
                     }
                     Err(failure) => {
@@ -2248,10 +2302,78 @@ impl Interp {
         match started {
             Started::Ran(value) => Ok(value),
             Started::Entered => {
+                if self.activity.native_park.is_some() {
+                    return Err(self.refuse_unrooted_park());
+                }
                 let ended = self.run_activation();
                 self.finish_send(ended)
             }
         }
+    }
+
+    /// Answers a park for `reason`, whose continuation is `resume` on
+    /// `receiver`, or refuses it where a Rust frame pins the activity.
+    pub(crate) fn park_native(
+        &mut self,
+        reason: crate::scheduler::ParkReason,
+        resume: NativeResume,
+        receiver: ObjRef,
+    ) -> Result<NativeStarted, Failure> {
+        if self.activity.pin_depth > 0 {
+            return Err(Loud::pinned_park().into());
+        }
+        self.activity.native_park = Some(Box::new(NativePark {
+            reason,
+            resume,
+            receiver,
+            thens: Vec::new(),
+        }));
+        Ok(NativeStarted::Entered(Then::Pass))
+    }
+
+    /// `park`'s primitive methods, run once their activity has woken: the
+    /// continuation, or `failure` in its place, then each method's work after
+    /// it.
+    pub(crate) fn resume_native_park(
+        &mut self,
+        park: NativePark,
+        failure: Option<Failure>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let NativePark {
+            resume,
+            receiver,
+            thens,
+            ..
+        } = park;
+        let frame = self.roots.activity_mut().push_frame();
+        let mut held = Vec::new();
+        for (then, blame) in &thens {
+            then.object_roots(&mut held);
+            if let Some(blame) = blame {
+                blame.object_roots(&mut held);
+            }
+        }
+        for object in held {
+            self.roots.activity_mut().push_temp(object);
+        }
+        let mut sent = match failure {
+            Some(failure) => Err(failure),
+            None => resume(self, receiver),
+        };
+        for (then, blame) in thens {
+            if let Ok(Some(value)) = sent {
+                self.roots.activity_mut().push_temp(value);
+            }
+            sent = self.apply_then(then, sent);
+            if sent.is_err()
+                && let Some(blame) = blame
+            {
+                let scope = self.classes().id_string(blame.scope).to_string();
+                self.blame_native_method(&blame.name, &scope, blame.receiver, &blame.args);
+            }
+        }
+        self.roots.activity_mut().pop_frame(frame);
+        sent
     }
 
     /// A send's value once the Rexx body it entered has ended `ended`: the
@@ -2319,6 +2441,9 @@ impl Interp {
         match started {
             NativeStarted::Ran(value) => Ok(value),
             NativeStarted::Entered(then) => {
+                if self.activity.native_park.is_some() {
+                    return Err(self.refuse_unrooted_park());
+                }
                 self.push_native_tail(then, None);
                 let ended = self.run_activation();
                 self.finish_send(ended)
@@ -2328,7 +2453,7 @@ impl Interp {
 
     /// What a primitive method answers once the activation it entered
     /// answered `sent`.
-    fn apply_then(
+    pub(crate) fn apply_then(
         &mut self,
         then: Then,
         sent: Result<Option<ObjRef>, Failure>,

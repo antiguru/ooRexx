@@ -571,6 +571,59 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
     );
 }
 
+/// A started activity parked on `~result` keeps the values its registers
+/// hold, in the level that parked and in the level below it, while the
+/// activity that completes the message allocates, with a collection at every
+/// allocation.
+#[test]
+fn a_parked_activitys_registers_survive_the_activity_that_wakes_it() {
+    let program = concat!(
+        "m = .message~new(.j~new, 'SECOND')\n",
+        "a = .k~new~start('FIRST', m)\n",
+        "m~start\n",
+        "say a~result\n",
+        "::class k\n",
+        "::method first\n",
+        "  use arg m\n",
+        "  p = 'aaaaaaaaaaaaaaaa'\n",
+        "  q = 'bbbbbbbbbbbbbbbb'\n",
+        "  return (p || q) || self~inner(m)\n",
+        "::method inner\n",
+        "  use arg m\n",
+        "  p = 'cccccccccccccccc'\n",
+        "  q = 'dddddddddddddddd'\n",
+        "  return (p || q) || m~result\n",
+        "::class j\n",
+        "::method second\n",
+        "  s = ''\n",
+        "  do i = 1 to 20\n",
+        "    s = s || 'eeeeeeeeeeeeeeee'\n",
+        "  end\n",
+        "  return length(s)\n",
+    );
+    let expected = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbccccccccccccccccdddddddddddddddd320\n";
+    let stress = run_program_collect_every_alloc(
+        "<parked-activity-rooting>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(
+        stress.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        expected,
+        "a parked activity lost a value under collect-on-every-allocation"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
 /// A running activation's `RexxContext` survives a collection, with one at
 /// every allocation between the two sends that reach it.
 #[test]

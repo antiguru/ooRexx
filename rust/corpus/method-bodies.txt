@@ -98,14 +98,14 @@ Message	messageName	instance	loud	method "MESSAGENAME" of class "Message"
 Message	notify	instance	loud	method "NOTIFY" of class "Message"
 Message	reply	instance	loud	method "REPLY" of class "Message"
 Message	replyWith	instance	loud	method "REPLYWITH" of class "Message"
-Message	result	instance	loud	`Message~result` on a message whose send has not been made
+Message	result	instance	loud	a wait that nothing left to run can end
 Message	send	instance	answers	rc 0
 Message	sendWith	instance	answers	rc 168
-Message	start	instance	loud	method "START" of class "Message"
-Message	startWith	instance	loud	method "STARTWITH" of class "Message"
+Message	start	instance	answers	rc 165
+Message	startWith	instance	answers	rc 168
 Message	target	instance	loud	method "TARGET" of class "Message"
 Message	triggered	instance	loud	method "TRIGGERED" of class "Message"
-Message	wait	instance	loud	method "WAIT" of class "Message"
+Message	wait	instance	loud	a wait that nothing left to run can end
 Message	cancel	instance	answers	rc 165
 Method	new	class	answers	rc 168
 Method	loadExternalMethod	class	answers	rc 168

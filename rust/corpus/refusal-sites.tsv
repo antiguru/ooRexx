@@ -241,6 +241,7 @@ Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:370	off-send-surface	-	-	
 Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:463	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
 Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1511	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
 Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:571	off-send-surface	-	-	-
+Loud	pinned_park	send	crates/rexx-exec/src/lib.rs:693	diverges	yes	pins its activity	m~result inside the COMPARE method a~sortWith(.c~new(m)) sends, over a message a started activity sends -- the oracle prints 3 and sorts
 Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
 Raised	private_method	send	crates/rexx-exec/src/error.rs:1505	agrees	yes	97.2	.K~new~p over ::method p private
 Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:579	off-send-surface	-	-	-
@@ -275,7 +276,7 @@ Loud	redirection	body	crates/rexx-exec/src/lib.rs:361	off-send-surface	-	-	-
 Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:762	off-send-surface	-	-	-
 Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1572	off-send-surface	-	-	-
 Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:619	off-send-surface	-	-	-
-Loud	reply_inside_construct	body	crates/rexx-exec/src/lib.rs:694	off-send-surface	-	-	-
+Loud	reply_inside_construct	body	crates/rexx-exec/src/lib.rs:700	off-send-surface	-	-	-
 Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1734	off-send-surface	-	-	-
 Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1750	off-send-surface	-	-	-
 Loud	required_source	body	crates/rexx-exec/src/lib.rs:503	off-send-surface	-	-	-
@@ -311,7 +312,7 @@ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1054	agrees	yes	
 Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
 Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:441	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
 Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:325	off-send-surface	-	-	-
-Loud	unsent_message_result	send	crates/rexx-exec/src/lib.rs:685	not-run	no	oracle-crashes.txt, the unsent-message block: never run	-
+Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:686	off-send-surface	-	-	-
 Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1118	agrees	yes	93.967	.Pointer~new
 Loud	use_local_in_a_method	body	crates/rexx-exec/src/lib.rs:531	off-send-surface	-	-	-
 Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1772	off-send-surface	-	-	-

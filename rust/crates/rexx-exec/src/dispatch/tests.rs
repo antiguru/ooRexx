@@ -1184,8 +1184,7 @@ fn a_constructor_taking_arguments_answers_an_instance_and_refuses_its_state() {
     assert_eq!((code, stdout.as_str()), (120, ""));
     assert_eq!(
         stderr,
-        "rexx-exec: `Message~result` on a message whose send has not been made is not \
-         implemented (Phase 6)\n"
+        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
     );
     assert_eq!(
         run_source(

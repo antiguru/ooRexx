@@ -9,51 +9,63 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The pinned-park counter: at each would-be park point, the pinned re-entry
-//! frames (spec 2026-09-29 section 2.1) between the driver and that point.
-//! Without the `pinning` feature its macros expand to their body or to nothing.
+//! The pin depth, and the pinned-park counter: at each would-be park point,
+//! the pinned re-entry frames (spec 2026-09-29 section 2.1) between the driver
+//! and that point. Every build counts the depth on the running activity; the
+//! `pinning` feature adds the kind of each frame.
 
 /// `$body`, run with `$kind` pushed as a pinned frame.
 #[cfg(feature = "pinning")]
 macro_rules! pinned {
     ($interp:expr, $kind:expr, $body:expr) => {{
+        $interp.activity.pin_depth += 1;
         $interp.activity.pins.enter($kind);
         let answer = $body;
         $interp.activity.pins.leave();
+        $interp.activity.pin_depth -= 1;
         answer
     }};
 }
 
 #[cfg(not(feature = "pinning"))]
 macro_rules! pinned {
-    ($interp:expr, $kind:expr, $body:expr) => {
-        $body
-    };
+    ($interp:expr, $kind:expr, $body:expr) => {{
+        $interp.activity.pin_depth += 1;
+        let answer = $body;
+        $interp.activity.pin_depth -= 1;
+        answer
+    }};
 }
 
 /// Pushes `$kind` as a pinned frame; [`pin_leave!`] pops it.
 #[cfg(feature = "pinning")]
 macro_rules! pin_enter {
-    ($interp:expr, $kind:expr) => {
+    ($interp:expr, $kind:expr) => {{
+        $interp.activity.pin_depth += 1;
         $interp.activity.pins.enter($kind)
-    };
+    }};
 }
 
 #[cfg(not(feature = "pinning"))]
 macro_rules! pin_enter {
-    ($interp:expr, $kind:expr) => {};
+    ($interp:expr, $kind:expr) => {
+        $interp.activity.pin_depth += 1
+    };
 }
 
 #[cfg(feature = "pinning")]
 macro_rules! pin_leave {
-    ($interp:expr) => {
-        $interp.activity.pins.leave()
-    };
+    ($interp:expr) => {{
+        $interp.activity.pins.leave();
+        $interp.activity.pin_depth -= 1;
+    }};
 }
 
 #[cfg(not(feature = "pinning"))]
 macro_rules! pin_leave {
-    ($interp:expr) => {};
+    ($interp:expr) => {
+        $interp.activity.pin_depth -= 1
+    };
 }
 
 /// Records an arrival at the park point `$kind`, an `Option` or a kind.
@@ -108,12 +120,9 @@ mod counter {
     }
 
     impl PinKind {
-        /// The frame a native method `name` pushes; `None` for the
-        /// park-point natives.
-        pub(crate) fn native(name: &[u8]) -> Option<PinKind> {
-            const PARKING: &[&[u8]] = &[b"RESULT", b"WAIT", b"ACQUIRE"];
-            (!PARKING.contains(&name))
-                .then(|| PinKind::Native(String::from_utf8_lossy(name).into()))
+        /// The frame a native method `name` pushes.
+        pub(crate) fn native(name: &[u8]) -> PinKind {
+            PinKind::Native(String::from_utf8_lossy(name).into())
         }
     }
 
@@ -136,7 +145,6 @@ mod counter {
         /// with no body reaches.
         pub(crate) fn unimplemented_method(scope: &str, name: &[u8]) -> Option<ParkKind> {
             match (scope, name) {
-                ("Message", b"WAIT") => Some(ParkKind::MessageWait),
                 ("EventSemaphore", b"WAIT") | ("MutexSemaphore", b"ACQUIRE") => {
                     Some(ParkKind::SemaphoreWait)
                 }

@@ -89,7 +89,7 @@ mod clause;
 mod run;
 use run::Ended;
 
-// The scheduler seam the driver's split outcome goes through.
+// The scheduler seam and the activity table.
 mod scheduler;
 
 // The `PARSE` template engine: the movement cursor (source-independent, one
@@ -681,12 +681,18 @@ impl Loud {
         }
     }
 
-    /// `Message~result` on a message whose send has not been made.
-    fn unsent_message_result() -> Loud {
+    /// A wait that nothing left to run can end. The oracle blocks for ever
+    /// (`corpus/oracle-crashes.txt`, the unsent-message block).
+    fn unsatisfiable_wait() -> Loud {
         Loud {
-            message: "`Message~result` on a message whose send has not been made is not \
-                      implemented (Phase 6)"
-                .to_string(),
+            message: owned_message("a wait that nothing left to run can end", None),
+        }
+    }
+
+    /// A wait with a Rust frame between the scheduler and the running driver.
+    fn pinned_park() -> Loud {
+        Loud {
+            message: owned_message("a wait inside a frame that pins its activity", None),
         }
     }
 
@@ -1224,7 +1230,8 @@ struct Interp {
     collections_before_program: u64,
     #[cfg(feature = "pinning")]
     pinning: pinning::Pinning,
-    scheduler: scheduler::SingleActivity,
+    /// Every activity but the running one.
+    activities: scheduler::Activities,
     /// The programs the library bootstrap loaded, in load order.
     library_programs: Vec<ProgramId>,
     /// The name a program compiled from method source text reports under.
@@ -1830,7 +1837,7 @@ impl Interp {
             collections_before_program: 0,
             #[cfg(feature = "pinning")]
             pinning: pinning::Pinning::default(),
-            scheduler: scheduler::SingleActivity,
+            activities: scheduler::Activities::new(),
             library_programs: Vec::new(),
             method_bodies: NameMap::default(),
             compiled_method_names: FxHashMap::default(),
@@ -2217,11 +2224,15 @@ impl Interp {
         // `exit 5`, and a bare `return` there exits 0. `Ended` keeps the two
         // apart because a *callee* has to tell them apart, not because the
         // program's own exit value ever depends on which arrived.
-        let exit = pinned!(
-            self,
-            nested.then_some(crate::pinning::PinKind::Program),
-            self.run_activation()
-        )
+        let exit = if nested {
+            pinned!(
+                self,
+                crate::pinning::PinKind::Program,
+                self.run_activation()
+            )
+        } else {
+            self.run_activity_root()
+        }
         .map(Ended::value);
         if called {
             if let Err(failure) = &exit {
@@ -2493,7 +2504,7 @@ impl Interp {
             collections_before_program: _,
             #[cfg(feature = "pinning")]
                 pinning: _,
-            scheduler: _,
+            activities,
             library_programs: _,
             compiled_method_names: _,
             object_methods: _,
@@ -2576,6 +2587,7 @@ impl Interp {
             command_words: _,
         } = self;
         activity.object_roots(out);
+        activities.object_roots(out);
         out.extend(stem_exposers.values().flatten().copied());
         out.extend(global_references.roots());
         // A manager is an ordinary program object held by nothing else: the
@@ -2972,6 +2984,17 @@ fn execute(
     // afterwards. Measured, oracle rc 7 on a program ending `exit 7` whose
     // replied method then raises 98.936 -- the traceback is on stderr and the
     // status is the main body's, so a raise here only writes.
+    // The oracle's termination waits for every activity
+    // (`InterpreterInstance::terminate`).
+    let run_started = |interp: &mut Interp, exit_code: &mut i32| {
+        if let Err(Failure::Loud(loud)) = interp.run_started_activities() {
+            interp
+                .trace
+                .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+            *exit_code = NOT_IMPLEMENTED_EXIT;
+        }
+    };
+    run_started(&mut interp, &mut exit_code);
     for (failure, mut sites) in interp.run_deferred_replies() {
         match failure {
             // `Interp::resume_reply` answers `Ok` for this variant, exactly as
@@ -3003,6 +3026,9 @@ fn execute(
             }
         }
     }
+
+    // What a replied body started.
+    run_started(&mut interp, &mut exit_code);
 
     // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached
     // from `Interpreter::terminateInterpreter` (`runtime/Interpreter.cpp:279`)

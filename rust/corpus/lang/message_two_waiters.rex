@@ -1,0 +1,10 @@
+/* Two started activities wait on one message; its send wakes both. */
+m = .message~new('abc', 'length')
+a = .w~new~start('WAITON', m)
+b = .w~new~start('WAITON', m)
+m~send
+say a~result b~result
+::class w
+::method waiton
+  use arg m
+  return m~result

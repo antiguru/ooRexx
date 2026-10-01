@@ -57,6 +57,25 @@ pub(crate) struct Level {
     pub(crate) selector: Option<usize>,
 }
 
+/// Where [`Interp::drive_from`] starts.
+pub(crate) enum DriveStart {
+    /// A body, from its activation's own `pc`.
+    Level(Level),
+    /// The level a park left at `floor`, with what the parked send answered.
+    Woken {
+        floor: usize,
+        sent: Result<Option<ObjRef>, Failure>,
+    },
+}
+
+/// How [`Interp::drive_from`] stopped.
+pub(crate) enum Driven {
+    Ended(Ended),
+    /// A primitive method parked the activity, whose levels down to this floor
+    /// are parked on it.
+    Parked(usize),
+}
+
 /// A level [`Interp::drive`] left for a callee: its body, its register frame
 /// and temps, and the floor of the constructs it has open.
 pub(crate) struct ParkedLevel {
@@ -106,6 +125,8 @@ enum Next {
     At(u32),
     /// The call it parked, whose callee has ended.
     Resume,
+    /// The send it parked, whose activity has woken.
+    Woken,
 }
 
 /// Why [`Interp::drive`] let go of the body it holds.
@@ -114,6 +135,8 @@ enum Left {
     Entered(Level),
     /// The callee ended, and its caller runs this one.
     Resumed(Level),
+    /// A primitive method parked the activity.
+    Parked,
 }
 
 /// How a pass of [`Interp::ops_loop`] ended.
@@ -2185,7 +2208,10 @@ impl Interp {
         let mut values = std::mem::take(&mut self.activity.value_buffer);
         let started = self.begin_send(receiver, name, None, &values[mark..], caller);
         values.truncate(mark);
-        self.lend_stack(matches!(started, Ok(Started::Entered)), values);
+        self.lend_stack(
+            matches!(started, Ok(Started::Entered)) && self.activity.native_park.is_none(),
+            values,
+        );
         match started {
             Ok(Started::Entered) => Ok(Started::Entered),
             Ok(Started::Ran(sent)) => {
@@ -2209,6 +2235,10 @@ impl Interp {
     ) -> Result<(), Failure> {
         let value = match self.begin_send_op(chunk, registers, op)? {
             Started::Ran(value) => value,
+            Started::Entered if self.activity.native_park.is_some() => {
+                self.activity.depth -= 1;
+                return Err(self.refuse_unrooted_park());
+            }
             Started::Entered => {
                 let ended = self.run_activation();
                 return self.finish_sent(chunk, registers, op, ended);
@@ -2238,6 +2268,30 @@ impl Interp {
             return Err(Loud::chunk_map_too_short().into());
         };
         self.finish_sent(chunk, registers, op, ended)
+    }
+
+    /// The [`Op::Send`] in front of op `at`, whose activity parked and has
+    /// woken with `sent`.
+    fn deliver_woken_send(
+        &mut self,
+        chunk: &Chunk,
+        registers: RegFrame<'_>,
+        at: u32,
+        sent: Result<Option<ObjRef>, Failure>,
+    ) -> Result<(), Failure> {
+        let op = at
+            .checked_sub(1)
+            .and_then(|send| chunk.ops_in(send, at))
+            .and_then(<[Op]>::first);
+        let Some(op) = op else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        self.activity.depth -= 1;
+        let value = self.deliver_sent(chunk, op, sent?)?;
+        if let Op::Send { dst, .. } = *op {
+            registers.set(dst, value);
+        }
+        Ok(())
     }
 
     /// [`Interp::finish_send_op`] with the op in hand.
@@ -2365,23 +2419,19 @@ impl Interp {
         });
     }
 
-    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. A
-    /// park is loud, since the driver parks no activity. With no activity made
-    /// for a split, the continuation stays with this activity.
+    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. An
+    /// instruction's park is loud. A split's continuation stays with this
+    /// activity.
     #[cold]
     #[inline(never)]
-    fn exec_suspends(&mut self, outcome: ExecOutcome) -> Result<RegionEnd, Failure> {
+    fn exec_suspends(&self, outcome: ExecOutcome) -> Result<RegionEnd, Failure> {
         match outcome {
             ExecOutcome::Done(flow) => Ok(RegionEnd::Flowed(flow)),
             ExecOutcome::Park(_) => Err(Loud::op_not_driven("an activity park").into()),
             ExecOutcome::Split(flow) => {
                 #[cfg(test)]
                 count_exec_split();
-                if self.scheduler.spawn() {
-                    Err(Loud::op_not_driven("a continuation on another activity").into())
-                } else {
-                    Ok(RegionEnd::Flowed(flow))
-                }
+                Ok(RegionEnd::Flowed(flow))
             }
         }
     }
@@ -2426,20 +2476,61 @@ impl Interp {
     /// body of every callee a call op of a driven region enters, on this one
     /// Rust frame.
     pub(crate) fn drive(&mut self, root: Level) -> Result<Ended, Failure> {
+        match self.drive_from(DriveStart::Level(root), false)? {
+            Driven::Ended(ended) => Ok(ended),
+            Driven::Parked(_) => Err(Loud::op_not_driven("a park off its activity's root").into()),
+        }
+    }
+
+    /// [`Interp::drive`] from `start`. Where `parkable`, this is the running
+    /// activity's root driver and a primitive method's park parks it.
+    pub(crate) fn drive_from(
+        &mut self,
+        start: DriveStart,
+        parkable: bool,
+    ) -> Result<Driven, Failure> {
         #[cfg(test)]
         count_run_chunk_entry();
 
         let arena = self.roots.activity().frames();
-        let floor = self.activity.parked_levels.len();
-        let mut level = root;
-        // Truncated on the way out of each level, so a temp its chunk leaks
-        // does not outlive it.
-        let mut temps = self.roots.activity_mut().push_frame();
-        let mut registers = arena.reserve(level.chunk.registers);
-        let mut base = self.activity.frames.len();
-        let mut next = Next::Body;
-        // What the callee a parked call ran answered, for `Next::Resume`.
-        let mut callee: Result<Ended, Failure> = Ok(END_OF_BODY);
+        let (floor, mut level, mut temps, mut registers, mut base, mut next, mut callee) =
+            match start {
+                DriveStart::Level(root) => {
+                    // Truncated on the way out of each level, so a temp its
+                    // chunk leaks does not outlive it.
+                    let temps = self.roots.activity_mut().push_frame();
+                    let registers = arena.reserve(root.chunk.registers);
+                    (
+                        self.activity.parked_levels.len(),
+                        root,
+                        temps,
+                        registers,
+                        self.activity.frames.len(),
+                        Next::Body,
+                        Ok(END_OF_BODY),
+                    )
+                }
+                DriveStart::Woken { floor, sent } => {
+                    let Some(ParkedLevel {
+                        level: Some(level),
+                        registers,
+                        temps,
+                        base,
+                    }) = self.activity.parked_levels.pop()
+                    else {
+                        return Err(Loud::op_not_driven("a parked level").into());
+                    };
+                    (
+                        floor,
+                        level,
+                        temps,
+                        arena.unpark(registers),
+                        base,
+                        Next::Woken,
+                        sent.map(Ended::Returned),
+                    )
+                }
+            };
         loop {
             let left = 'level: {
                 let code = body_of(&level.program, level.selector).map(|body| Code {
@@ -2511,11 +2602,29 @@ impl Interp {
                                         None => Err(Loud::op_not_driven("a parked call").into()),
                                     }
                                 }
+                                Next::Woken => {
+                                    let sent = std::mem::replace(&mut callee, Ok(END_OF_BODY))
+                                        .map(Ended::value);
+                                    match self.activity.parked_calls.pop() {
+                                        Some(parked) => self.resume_woken(
+                                            code, chunk, registers, source, base, len, parked, sent,
+                                        ),
+                                        None => Err(Loud::op_not_driven("a parked call").into()),
+                                    }
+                                }
                             };
                             let flow = match ran {
                                 Ok(Exit::Flow(flow)) => flow,
                                 Ok(Exit::At(at)) => {
                                     next = Next::At(at);
+                                    continue;
+                                }
+                                Ok(Exit::Parked) if self.activity.native_park.is_some() => {
+                                    if parkable {
+                                        break 'level Left::Parked;
+                                    }
+                                    callee = Err(self.refuse_unrooted_park());
+                                    next = Next::Woken;
                                     continue;
                                 }
                                 Ok(Exit::Parked) => match self.callee_level(&level) {
@@ -2586,7 +2695,7 @@ impl Interp {
                     arena.release(registers);
                     self.roots.activity_mut().pop_frame(temps);
                     if self.activity.parked_levels.len() == floor {
-                        return ended;
+                        return ended.map(Driven::Ended);
                     }
                     let Some(parked) = self.activity.parked_levels.pop() else {
                         return Err(Loud::op_not_driven("a parked level").into());
@@ -2619,6 +2728,19 @@ impl Interp {
                     count_stackless_entry();
                 }
                 Left::Resumed(caller) => level = caller,
+                Left::Parked => {
+                    if let Some(park) = self.activity.native_park.as_ref() {
+                        let reason = park.reason();
+                        self.park(reason);
+                    }
+                    self.activity.parked_levels.push(ParkedLevel {
+                        level: Some(level),
+                        registers: arena.park(registers),
+                        temps,
+                        base,
+                    });
+                    return Ok(Driven::Parked(floor));
+                }
             }
         }
     }
@@ -2689,6 +2811,48 @@ impl Interp {
                 .map(|value| registers.set(dst, value)),
             Deliver::Send => self.finish_send_op(chunk, registers, parked.at, ended),
             Deliver::Flow(_) => Err(Loud::op_not_driven("a parked CALL resumed mid-region").into()),
+        };
+        match delivered {
+            Ok(()) => self.ops_loop_steady(
+                code,
+                chunk,
+                registers,
+                parked.at,
+                0,
+                len,
+                source,
+                base,
+                NO_GRANT,
+                Some(parked),
+            ),
+            Err(failure) => self.leave_parked(code, chunk, source, base, len, parked, Err(failure)),
+        }
+    }
+
+    /// [`Interp::resume_region`] for a send whose activity parked and has
+    /// woken with `sent`.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value it already holds"
+    )]
+    #[cold]
+    #[inline(never)]
+    fn resume_woken(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        registers: RegFrame<'_>,
+        source: Option<&ProgramSource>,
+        base: usize,
+        len: usize,
+        parked: ParkedCall,
+        sent: Result<Option<ObjRef>, Failure>,
+    ) -> Result<Exit, Failure> {
+        let delivered = match parked.deliver {
+            Deliver::Send => self.deliver_woken_send(chunk, registers, parked.at, sent),
+            Deliver::Register(_) | Deliver::Flow(_) => {
+                Err(Loud::op_not_driven("a park off a send").into())
+            }
         };
         match delivered {
             Ok(()) => self.ops_loop_steady(

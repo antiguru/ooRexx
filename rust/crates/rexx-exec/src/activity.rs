@@ -266,6 +266,19 @@ pub(crate) struct Activity {
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
     pub(crate) requires_installing: Vec<Box<str>>,
+    /// How many Rust frames pin this activity between the scheduler and its
+    /// running driver (spec 2026-09-29 section 2.6).
+    pub(crate) pin_depth: u32,
+    /// The park a primitive method answered, from its answer until the
+    /// activity wakes.
+    pub(crate) native_park: Option<Box<crate::dispatch::NativePark>>,
+    /// A started activity's send, until its first step makes it.
+    pub(crate) first_send: Option<Box<crate::scheduler::StartedSend>>,
+    /// Where a started activity records its send's outcome.
+    pub(crate) root_then: Option<crate::dispatch::Then>,
+    /// The floor of the driver a parked activity left, `None` where it parked
+    /// outside one.
+    pub(crate) drive_floor: Option<usize>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
 }
@@ -330,6 +343,11 @@ impl Activity {
             elapsed_anchor: None,
             pending_elapsed_reset: false,
             requires_installing: Vec::new(),
+            pin_depth: 0,
+            native_park: None,
+            first_send: None,
+            root_then: None,
+            drive_floor: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -418,6 +436,11 @@ impl Activity {
             pending_elapsed_reset: _,
             requires_installing: _,
             locals: _,
+            pin_depth: _,
+            native_park,
+            first_send,
+            root_then,
+            drive_floor: _,
             #[cfg(feature = "pinning")]
                 pins: _,
         } = self;
@@ -431,6 +454,15 @@ impl Activity {
         out.extend(failure_frames.iter().copied());
         for tail in native_tails {
             tail.object_roots(out);
+        }
+        if let Some(park) = native_park {
+            park.object_roots(out);
+        }
+        if let Some(send) = first_send {
+            send.object_roots(out);
+        }
+        if let Some(then) = root_then {
+            then.object_roots(out);
         }
         // Everything a native call has been handed, and the receiver it is
         // writing object variables through. Held here rather than by the

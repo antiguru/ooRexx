@@ -386,3 +386,14 @@ lang/new_init_subclasses.rex
 # Phase 6 Task 10: plain DO blocks run flat, their calls and sends on the
 # driver's frame.
 lang/do_block_calls.rex
+
+# Phase 6 S2 Task 2: started messages run on activities of their own, and
+# ~result and ~wait park the waiting activity until the send completes.
+lang/started_waits_for_a_later_send.rex
+lang/started_waits_inside_a_call.rex
+lang/started_unwaited_says.rex
+lang/started_result_message.rex
+lang/started_raises.rex
+lang/message_wait_then_completed.rex
+lang/message_two_waiters.rex
+lang/message_start.rex
