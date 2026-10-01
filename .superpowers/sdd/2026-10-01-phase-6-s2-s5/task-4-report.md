@@ -1,6 +1,6 @@
 # Task 4 report: slices, the timer thread, the deterministic switch mode, Message~halt
 
-Status: code committed; gates below.
+Status: DONE. Commits 50d58865e (code, witnesses, records) and the commit carrying this report's gate section. Gates G1-G8 green at 50d58865e.
 
 Base: dcf9fd554 (checked before starting).
 
@@ -160,3 +160,25 @@ Every `rust/bench-programs/*.rex` on release builds of the base (dcf9fd554 by `g
 target dir, `Compiling rexx-exec` seen) and this tree: stdout, stderr and exit status identical,
 except `heapshape`, whose stdout prints timings (identical with digits masked). `extcall` ran with
 `LD_LIBRARY_PATH=build/lib` on both.
+
+## Gates
+
+At 50d58865e (`S=$W bash $W/p6-gates/gates.sh`): G1 fmt, G2 clippy from an empty target, G3/G5
+builds, G4 release and G6 debug `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --no-fail-fast`
+(corpus 699 of 699 matching in both, no `FAILED` line in either log), G7 clippy `--features pinning`,
+G8 pinning self-tests (9 passed, `a_slice_deferred_inside_a_sort_comparator_is_counted_once` among
+them): all exit 0, finished 2026-10-01T22:37:48+02:00, tree clean at the end. The assertion-table
+report in G4 (report mode, not gated) reads 4247 of 4259; not compared against the base.
+
+## Concerns
+
+1. `Op::LoopNext` now counts the pass header itself and hands an `Option<DeadlineCounted>` down, so
+   the flattened-loop pass path carries one more well-predicted branch than before; no per-task
+   performance gate measures it (Task 26 does).
+2. A halt request is served at the next countdown visit, so a request made to an activity whose
+   halted clause is the last of its activation is raised in the caller's next clause; the oracle's
+   flag lives on the activation and is lost with it. Not witnessed either way.
+3. The timer's slices are counted from its own tick, not from each switch, so a slice can be shorter
+   than 24 ms; nothing observable depends on its length beyond "a busy loop yields".
+4. TEST_HALT_START differs from the oracle until SysSleep parks (R-T4-10); listed as differing in
+   `concurrency_tests.rs` rather than refused.
