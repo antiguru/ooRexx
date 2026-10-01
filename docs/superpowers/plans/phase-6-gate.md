@@ -88,3 +88,25 @@ The remaining hits are tests (`rexx-exec/tests/`, `*/tests.rs`, `run/tests/`), c
 - The driver's Park path is refused in S1 and lands with S2's first real parker (P21).
 - `REPLY` ordering: the oracle runs a `REPLY` continuation's output before the caller continues;
   this crate runs it after. Pre-existing.
+
+### Gates
+
+Run at `6a621dbbd` by `.superpowers/sdd/2026-09-29-phase-6-s0-s1/p6-gates/gates.sh`; status lines verbatim:
+
+```
+6a621dbbd76297395444c504aed11f3e8bab31b8
+G1 fmt exit 0
+G2 clippy(empty target) exit 0
+G3 release build (test --no-run) exit 0
+G4 release test exit 0
+G4 Compiling lines: 0
+G5 debug build (test --no-run) exit 0
+G6 debug test exit 0
+G6 Compiling lines: 0
+G7 clippy --features pinning exit 0
+G8 pinning self-tests exit 0
+6a621dbbd76297395444c504aed11f3e8bab31b8
+finished 2026-10-01T11:22:06+02:00
+```
+
+G4 release: 2803 passed, 0 failed. G6 debug: 2805 passed, 0 failed (sums of `test result` lines).
