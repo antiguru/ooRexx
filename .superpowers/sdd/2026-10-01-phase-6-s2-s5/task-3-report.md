@@ -1,6 +1,7 @@
 # Task 3 report: activity numbers, errors in started activities, Message accessors
 
-Status: IN PROGRESS (written as the work goes).
+Status: DONE. Commits 82c073c6b, 2cb2f57a1 (code and witnesses), and the commit carrying this report's
+gate section. Gates G1-G8 green at 2cb2f57a1.
 
 Base: 9b06ca28a (checked before starting).
 
@@ -148,3 +149,28 @@ START tests all pass, unchanged.
 Every `rust/bench-programs/*.rex` on release builds of the base (9b06ca28a, own target dir) and the
 first commit's tree: stdout, stderr and exit status identical except `heapshape`, whose stdout
 prints timings (identical with digits masked). `extcall` ran with `LD_LIBRARY_PATH=build/lib` on both.
+
+## Gates
+
+Round 1 at 82c073c6b was stopped by me after G2 (G1, G2 exit 0): a probe made during the run
+(`userraise.rex`) showed the first commit answering `~errorCondition` for a synchronous send ended by
+a USER condition, where the oracle leaves the message uncompleted; fixed in 2cb2f57a1.
+
+Round 2 at 2cb2f57a1 (`S=$W bash $W/p6-gates/gates.sh`): G1 fmt, G2 clippy from an empty target,
+G3/G5 builds, G4 release and G6 debug `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace
+--no-fail-fast` (corpus 692 of 692 matching in both), G7 clippy `--features pinning`, G8 pinning
+self-tests: all exit 0, finished 2026-10-01T20:05:12+02:00, tree clean at the end.
+
+## Concerns
+
+1. `~errorCondition` answers the interpreter's own condition Directory (R-T3-3): `ITEMS`, `HASINDEX`,
+   `ALLINDEXES` and other store-only Directory methods refuse loudly on it.
+2. A synchronous send failing with SYNTAX whose failure stops somewhere other than the settling
+   points of R-T3-6 leaves `~errorCondition` `.nil` while `~hasError` is 1; I found no such path,
+   but the list is enumerated by reading, not derived.
+3. The oracle's own error-witness output depends on timing (its report is printed after the message
+   completes, and the re-raise mutates the shared object); the witnesses hold only with the 0.3 s
+   sleep, measured 30/30 on this machine.
+4. The first commit message states a count of witnesses ("Twelve"), against the prose rule; it is
+   true for that commit (a thirteenth came in the second).
+5. Task 9: TraceObject THREAD must use `activity_number()` so it numbers lazily as R-T3-1 records.
