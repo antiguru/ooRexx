@@ -27,9 +27,7 @@ pub(crate) struct Deadline {
 
 impl Deadline {
     /// Clauses between two visits to [`Interp::countdown_reached`], with or
-    /// without a deadline: any interpreter can receive a request or a
-    /// completion, so the cold path always runs on this cadence (design
-    /// section 4).
+    /// without a deadline.
     pub(crate) const CLAUSES_PER_CHECK: u32 = 1024;
 
     /// A bound `limit` from now.

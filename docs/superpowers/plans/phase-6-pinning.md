@@ -277,6 +277,7 @@ Pinned frames:
 | Conversion | `Interp::required_string_dispatch`'s `STRING` send, `send_make_string`, `request_array_for_over` |
 | Unknown | `Interp::unknown_or_nomethod` |
 | Forward | `Interp::exec_forward`'s send |
+| Delegate | `Interp::send_to_delegate` |
 | Operator | `Interp::send_operator` |
 | TrapHandler | `deliver_one_pending_trap` |
 | NativeApiCallback | `run_library_method`, `run_library_routine`, `run_command_handler` |
@@ -289,10 +290,11 @@ Pinned frames:
 | LoopHeader | the flat loop's `WHILE` and `UNTIL` |
 | NestedLoop | `Op::LoopRun`'s `run_loop_with_header` |
 | Interpret | `run_fragment`'s callers |
-| TreeEval | `Op::EvalExpr` |
+| TreeEval | `Op::EvalExpr`; a call's non-leaf argument in `run/call.rs` |
 | TreeSend | `Op::Message` |
 | OpExec | `Op::Exec` |
-| Native | `Interp::invoke`'s native and implemented-external arms, except `SEND`, `SENDWITH`, `START`, `STARTWITH`, `NEW`, `CALL`, `CALLWITH` and the park points `RESULT`, `WAIT`, `ACQUIRE` |
+| Program | `Interp::run_loaded` under a running activation |
+| Native | `Interp::invoke`'s native and implemented-external arms, except the park points `RESULT`, `WAIT`, `ACQUIRE` |
 
 ## Measured
 

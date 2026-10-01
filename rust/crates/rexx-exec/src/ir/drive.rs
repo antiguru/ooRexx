@@ -2423,7 +2423,8 @@ impl Interp {
 
 impl Interp {
     /// Runs `root`'s body for the activation on top of the stack, and the
-    /// body of every callee a call op of it enters, on this one Rust frame.
+    /// body of every callee a call op of a driven region enters, on this one
+    /// Rust frame.
     pub(crate) fn drive(&mut self, root: Level) -> Result<Ended, Failure> {
         #[cfg(test)]
         count_run_chunk_entry();

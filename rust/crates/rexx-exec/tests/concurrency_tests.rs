@@ -690,7 +690,7 @@ mod measured {
     }
 
     /// Calls and sends in argument positions, sends, the natives that run a
-    /// Rexx body, and calls inside a plain `DO` block run on the driver's
+    /// Rexx body, and calls inside an unlabelled plain `DO` block run on the driver's
     /// frame, so a park inside them has no pinned frame above it.
     #[test]
     fn a_park_inside_a_stackless_entry_is_under_no_pinned_frame() {

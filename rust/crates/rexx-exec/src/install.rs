@@ -2290,8 +2290,9 @@ impl Interp {
         &mut self.special_methods[index]
     }
 
-    /// One `::ROUTINE` over the arguments given, for `Routine~call` and the
-    /// two rows beside it, up to the point its body would run.
+    /// One `::ROUTINE` over the arguments given, for the rows of
+    /// `executable.rs`'s `RESUMABLE_METHODS`, up to the point its body would
+    /// run.
     pub(crate) fn begin_installed_routine(
         &mut self,
         program: ProgramId,

@@ -11,7 +11,7 @@ Tables, commands and binary hashes: `phase-6-perf.md` `## Task 11`.
 
 - Instructions, running total against base: `fibfunc` +1.88% is over the +0.3% budget; every other
   program is inside it. `fibfunc` over budget accepted by Moritz, 2026-10-01 (P22).
-- Wall clock, recorded without a control (P19): `decrender` +5.68%, `sendloop` +10.14% and
+- Wall clock, recorded only, no layout control (P19): `decrender` +5.68%, `sendloop` +10.14% and
   `textnum` +8.79% are over their ±4% bars; `dispatch` +8.94% is inside its 14.91% band.
 
 ### Pinning counter
@@ -86,12 +86,13 @@ The remaining hits are tests (`rexx-exec/tests/`, `*/tests.rs`, `run/tests/`), c
 ### Inputs to S2
 
 - The driver's Park path is refused in S1 and lands with S2's first real parker (P21).
-- `REPLY` ordering: the oracle runs a `REPLY` continuation's output before the caller continues;
-  this crate runs it after. Pre-existing.
+- `REPLY` ordering: the oracle runs a `REPLY` continuation concurrently with its caller, so its
+  output can come before the caller's later output; this crate runs it after the caller.
+  Pre-existing.
 
 ### Gates
 
-Run at `6a621dbbd` by `.superpowers/sdd/2026-09-29-phase-6-s0-s1/p6-gates/gates.sh`; status lines verbatim:
+Run at `6a621dbbd` by `.superpowers/sdd/2026-09-29-phase-6-s0-s1/p6-gates/gates.sh`; its result lines, verbatim:
 
 ```
 6a621dbbd76297395444c504aed11f3e8bab31b8

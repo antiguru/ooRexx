@@ -329,7 +329,7 @@ touches any island value (derives a borrow, clones or drops an `Rc`, reads or wr
 while it holds the baton. The baton is released only at a driver exit, where the releasing thread
 holds no island value, only raw handles; so no two threads ever hold island values at the same
 time, which is exactly the property `Rc` and `Cell` need. Today's native call holds `Rc` clones
-across the C call (`dispatch/library.rs:86`, `:94`, `:155`, `:165`); S4 turns those into raw
+across the C call (`dispatch/library.rs:86`, `:95`, `:157`, `:168`); S4 turns those into raw
 handles or moves them into the activity record before the exit. **Why the compiler cannot check
 it:** "no island value is live on this thread" is a property of every frame below the exit, not of a
 type. **What enforces it instead** (the wrapper's shape is this block's proposal, settled when S4

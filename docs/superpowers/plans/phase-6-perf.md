@@ -444,8 +444,7 @@ $B/wallclock.sh -r 5 -o $S/wallA base=$S/bin/base/rexx-run stepA=$S/bin/stepA/re
 is flat (+283,182, +0.0020%) same as `dispatch`'s. The identical-binary control (`wallctl`) shows
 every program, `dispatch` and `sendloop` included, inside 4% when nothing about the binary differs,
 so the instrument itself is not this noisy; a real, flat-instruction-count code change is enough to
-move `dispatch` and sometimes `sendloop` past ±4% here. Task 2's own three padding controls put
-`dispatch`'s band at -3.58% (`pad2`), narrower than what a real (non-padding) code change produces.
+move `dispatch` and sometimes `sendloop` past ±4% here.
 Reported for a ruling rather than spent on rounds: no candidate change is indicated by a flat
 instruction count, and a round chasing linker-address luck on one benchmark is not a principled
 S0 change.

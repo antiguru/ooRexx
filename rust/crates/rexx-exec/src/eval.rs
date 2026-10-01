@@ -574,7 +574,7 @@ impl Interp {
     ) -> Result<Started<ObjRef>, Failure> {
         // **A builtin goes straight to its own entry point**, which is the
         // same call `invoke_call` would make and answers the value this
-        // function wants: none of `function_value`'s three arms can apply to it, since
+        // function wants: none of `function_value`'s arms can apply to it, since
         // it runs no activation and so can neither exit nor return nothing.
         // What the detour cost is the `Ended` -- wider than a register pair,
         // so built in memory here and read back out one line later, on the
