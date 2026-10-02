@@ -614,3 +614,76 @@ frames column of the S1 table lists `OpExec` for GuardOn, GuardWhen and Reply (`
 for one Reply arrival) and `-` for every other park; Task 3's rows had `TreeSend` in their frame
 chains. Every park Task 3 counted is still reached. `SysSleep` differs by two arrivals; busy-wait arrival
 counts depend on timing.
+
+## S2 close
+
+At the Task 10 tree, from `rust/`:
+
+```
+RAYON_NUM_THREADS=4 cargo test --release -p rexx-exec --features pinning --test concurrency_tests \
+  -- measured::pinned_parks --nocapture --test-threads=1
+```
+
+Exit 0, both tests passed. The tables are `<target>/tmp/pinning-table.md` (the shipped scheduler)
+and `<target>/tmp/pinning-table-every-opportunity.md` (a switch at every clause boundary). Arrivals
+per park, beside the S1 close table above:
+
+| park | S1 close | S2 normal | S2 every opportunity |
+|---|---:|---:|---:|
+| GuardOn | 8 | 27 | 59 |
+| GuardWhen | 32 | 31 | 31 |
+| Reply | 48 | 67 | 77 |
+| MessageResult | 38 | 96 | 96 |
+| MessageWait | 1 | 11 | 11 |
+| SemaphoreWait | 8 | 6 | 6 |
+| SysSleep | 1476 | 135 | 134 |
+| Timer | 11 | 19 | 52 |
+
+Every park S1 counted is reached in both modes. `SysSleep` arrivals are 135 against 1476; the S1
+close noted that busy-wait arrival counts depend on timing. The waits by kind, normal:
+
+| wait | park | frames | count |
+|---|---|---|---|
+| deferred slice | - | Program | 3 |
+| pinned | MessageResult | Program | 76 |
+| pinned | MessageResult | Program > TreeSend | 18 |
+| pinned | MessageWait | Program | 8 |
+| pinned | SysSleep | Program | 100 |
+| pinned yield | - | Program | 1 |
+
+Every opportunity:
+
+| wait | park | frames | count |
+|---|---|---|---|
+| deferred slice | - | - | 31 |
+| deferred slice | - | Notification | 8 |
+| deferred slice | - | Program | 326 |
+| deferred slice | - | Program > OpExec | 140 |
+| deferred slice | - | Program > TreeEval > TreeSend | 7 |
+| deferred slice | - | TraceWrapper | 697 |
+| deferred slice | - | TraceWrapper > Unknown | 80 |
+| deferred slice | - | TraceWrapper > Unknown > OpExec > Forward | 33 |
+| deferred slice | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+| inverted yield | - | Notification | 6 |
+| inverted yield | - | TraceWrapper | 697 |
+| inverted yield | - | TraceWrapper > Unknown | 43 |
+| inverted yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+| inverted yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+| late wake | MessageResult | Program | 456 |
+| late wake | MessageWait | Program | 234 |
+| pinned | MessageResult | Program | 75 |
+| pinned | MessageResult | Program > TreeSend | 18 |
+| pinned | MessageWait | Program | 8 |
+| pinned | SysSleep | Program | 99 |
+| pinned yield | - | Notification | 6 |
+| pinned yield | - | Program | 260 |
+| pinned yield | - | Program > OpExec | 140 |
+| pinned yield | - | Program > TreeEval > TreeSend | 7 |
+| pinned yield | - | TraceWrapper | 697 |
+| pinned yield | - | TraceWrapper > Unknown | 43 |
+| pinned yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+| pinned yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+
+No immovable `REPLY` is counted in either mode. Under every opportunity the late wakes are
+`MessageResult` and `MessageWait`; the deferred slices and pinned yields have the same frame
+chains, and the inverted yields are those under `TraceWrapper` and `Notification`.

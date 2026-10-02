@@ -1139,7 +1139,7 @@ mod measured {
         );
     }
 
-    fn run_test(run: &Path, group: &str, test: &str) -> Outcome {
+    fn run_test(run: &Path, group: &str, test: &str, mode: Option<SwitchMode>) -> Outcome {
         let dir = Path::new(group).parent().and_then(Path::to_str);
         fresh_copy(run, dir.expect("a group directory"));
         let driver = run.join("testOORexx.rex");
@@ -1155,9 +1155,13 @@ mod measured {
             b"LD_LIBRARY_PATH".to_vec(),
             lib.to_string_lossy().into_owned().into_bytes(),
         ));
-        let invocation = Invocation::with_argument(args.into_bytes())
-            .with_directory(run.to_path_buf())
-            .with_environment(environment);
+        let invocation = Invocation::with_argument(args.into_bytes());
+        let invocation = match mode {
+            Some(mode) => invocation.with_switch_mode(mode),
+            None => invocation,
+        }
+        .with_directory(run.to_path_buf())
+        .with_environment(environment);
         let outcome = super::watchdog::run_bounded(&driver.to_string_lossy(), text, invocation);
         fs::remove_dir_all(run).unwrap_or_else(|e| panic!("cannot remove {}: {e}", run.display()));
         outcome
@@ -1216,14 +1220,30 @@ mod measured {
 
     #[test]
     fn pinned_parks_over_the_derived_list() {
+        pinning_table(None, "pinning-table.md");
+    }
+
+    /// The same table with a switch at every clause boundary.
+    #[test]
+    fn pinned_parks_over_the_derived_list_under_every_opportunity() {
+        pinning_table(
+            Some(SwitchMode::EveryOpportunity),
+            "pinning-table-every-opportunity.md",
+        );
+    }
+
+    fn pinning_table(mode: Option<SwitchMode>, file: &str) {
         let (list, _) = derive(&worktree().join("ootest/ooRexx"));
-        let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("pinning-{}", std::process::id()));
+        let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
+            "pinning-{}-{}",
+            std::process::id(),
+            file.trim_end_matches(".md")
+        ));
         let rows: Vec<(String, String, PinReport)> = list
             .par_iter()
             .enumerate()
             .map(|(at, row)| {
-                let outcome = run_test(&base.join(at.to_string()), &row.group, &row.test);
+                let outcome = run_test(&base.join(at.to_string()), &row.group, &row.test, mode);
                 (
                     format!("{} {}", row.group, row.test),
                     outcome_of(&outcome),
@@ -1269,7 +1289,7 @@ mod measured {
             .iter()
             .flat_map(|(_, _, report)| report.parks.values())
             .sum();
-        let mut waits: BTreeMap<(&str, ParkKind, String), u64> = BTreeMap::new();
+        let mut waits: BTreeMap<(&str, String, String), u64> = BTreeMap::new();
         for (_, _, report) in &rows {
             for (what, map) in [
                 ("pinned", &report.pinned_parks),
@@ -1277,23 +1297,33 @@ mod measured {
                 ("late wake", &report.late_wakes),
             ] {
                 for ((park, frames), count) in map {
-                    *waits.entry((what, *park, frames_text(frames))).or_default() += count;
+                    *waits
+                        .entry((what, format!("{park:?}"), frames_text(frames)))
+                        .or_default() += count;
                 }
             }
-            for (frames, count) in &report.immovable_replies {
-                *waits
-                    .entry(("immovable", ParkKind::Reply, frames_text(frames)))
-                    .or_default() += count;
+            for (what, map) in [
+                ("immovable", &report.immovable_replies),
+                ("deferred slice", &report.deferred_slices),
+                ("pinned yield", &report.pinned_yields),
+                ("inverted yield", &report.inverted_yields),
+            ] {
+                for (frames, count) in map {
+                    let park = if what == "immovable" { "Reply" } else { "-" };
+                    *waits
+                        .entry((what, park.to_string(), frames_text(frames)))
+                        .or_default() += count;
+                }
             }
         }
         let mut by_kind = String::from("| wait | park | frames | count |\n|---|---|---|---|\n");
         for ((what, park, frames), count) in &waits {
-            by_kind.push_str(&format!("| {what} | {park:?} | {frames} | {count} |\n"));
+            by_kind.push_str(&format!("| {what} | {park} | {frames} | {count} |\n"));
         }
         let text = format!(
             "{summary}\narrivals {all}, with a frame other than TreeEval, TreeSend or OpExec {beyond}\n\n{by_kind}\n{per_test}"
         );
-        let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("pinning-table.md");
+        let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(file);
         fs::write(&out, &text).expect("cannot write the table");
         println!("{text}\nwritten to {}", out.display());
         assert!(
@@ -1553,6 +1583,140 @@ mod group_runs {
         );
         assert!(failing.is_empty(), "not passing: {failing:?}");
     }
+
+    /// The features of criterion 1's list that S2 covers; a row naming none
+    /// of them belongs to a later stage.
+    const S2_FEATURES: &[&str] = &[
+        "REPLY",
+        "~start",
+        "Message~reply",
+        "SysSleep",
+        ".context~thread",
+        "TraceObject field",
+    ];
+
+    /// Where the both-modes table of the S2 rows is written when set.
+    const CRITERION_ONE_TABLE_ENV: &str = "REXX_CRITERION_ONE_TABLE";
+
+    /// The S2 rows whose outcome differs between the two modes: each asserts
+    /// after a `REPLY` in the continuation, which races the end of the
+    /// program. The shipped scheduler ends first; `EveryOpportunity` runs the
+    /// continuation first. The oracle's own count varies between runs, so a
+    /// row of this list can also agree in both modes.
+    const MODE_DIFFERING: &[&str] = &[
+        "base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT",
+        "base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_REPLYASSERT",
+        "base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT",
+        "base/keyword/REPLY.testGroup TEST_REPLY_EXIT_CODE_REPLYASSERT",
+        "base/keyword/REPLY.testGroup TEST_REPLY_STACK_REPLYASSERT",
+        "base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT",
+    ];
+
+    /// A result as a key and a detail. Two results agree when their keys do:
+    /// the label, and the refusal or the status of a difference. The detail
+    /// is the first line where a difference's stdout departs from the
+    /// oracle's.
+    fn cell(outcome: &Outcome) -> (String, String) {
+        match outcome {
+            Outcome::Refused { message, .. } => (format!("refused: {message}"), String::new()),
+            Outcome::Differ { oracle, ours } => {
+                let detail = first_difference(&masked(&oracle.stdout), &masked(&ours.stdout))
+                    .replace(['\n', '\t'], " ");
+                match ours.status {
+                    None => ("differ: did not finish".to_string(), detail),
+                    Some(status) => (format!("differ: rc {status}"), detail),
+                }
+            }
+            other => (other.label().to_string(), String::new()),
+        }
+    }
+
+    /// Every S2 row of the derived list, run on both sides with the shipped
+    /// scheduler and under `EveryOpportunity`.
+    #[test]
+    fn the_s2_rows_of_the_derived_list_in_both_modes() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let (list, _) = super::derive(&super::worktree().join("ootest/ooRexx"));
+        let mut groups: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        for row in list
+            .iter()
+            .filter(|row| row.features.iter().any(|f| S2_FEATURES.contains(f)))
+        {
+            groups
+                .entry(row.group.clone())
+                .or_default()
+                .push(row.test.clone());
+        }
+        let oracle = oracle::locate();
+        let mut table = String::from("group\ttest\tnormal\tevery opportunity\n");
+        let mut differing = Vec::new();
+        let mut stuck = Vec::new();
+        for (file, tests) in &groups {
+            let (dir, group) = file
+                .trim_end_matches(".testGroup")
+                .rsplit_once('/')
+                .expect("a group below a directory");
+            let run = scratch("criterion-one");
+            for test in tests {
+                let one = std::slice::from_ref(test);
+                let mut cells = Vec::new();
+                for mode in [SwitchMode::None, SwitchMode::EveryOpportunity] {
+                    // The runner asserts that the oracle finishes within the
+                    // deadline; a test it outlasts is recorded as such.
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        run_tests(&oracle, &run, dir, group, one, mode, None)
+                    }));
+                    match result {
+                        Ok(results) => cells.push(cell(&results[0].outcome)),
+                        Err(_) => {
+                            let none = ("oracle did not finish".to_string(), String::new());
+                            cells = vec![none.clone(), none];
+                            break;
+                        }
+                    }
+                }
+                let (normal, every) = (&cells[0], &cells[1]);
+                for (text, _) in [normal, every] {
+                    if text.contains("inverted") || text == "differ: did not finish" {
+                        stuck.push(format!("{file} {test}: {text}"));
+                    }
+                }
+                if normal.0 != every.0 {
+                    differing.push(format!("{file} {test}"));
+                }
+                let show = |(key, detail): &(String, String)| {
+                    if detail.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{key}: {detail}")
+                    }
+                };
+                table.push_str(&format!(
+                    "{file}\t{test}\t{}\t{}\n",
+                    show(normal),
+                    show(every)
+                ));
+            }
+            fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+        }
+        eprintln!("{table}");
+        if let Some(path) = std::env::var_os(CRITERION_ONE_TABLE_ENV) {
+            fs::write(path, &table).expect("cannot write the table");
+        }
+        assert!(stuck.is_empty(), "an inverted wait or a hang: {stuck:?}");
+        let unexpected: Vec<&String> = differing
+            .iter()
+            .filter(|row| !MODE_DIFFERING.contains(&row.as_str()))
+            .collect();
+        assert!(
+            unexpected.is_empty(),
+            "tests differing between the modes: {unexpected:?}"
+        );
+    }
+
     /// The `TRACE_TraceObject` tests that pass; the table printed beside
     /// them names what each of the others waits on.
     const TRACE_OBJECT_PASSING: &[&str] = &[

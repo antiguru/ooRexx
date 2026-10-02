@@ -148,3 +148,106 @@ oracle's further run at an activation return (`RexxActivation.cpp:705`) is colle
 which is not a specified observable; `u3` and `u4` answer differently here for that reason.
 Witnesses: `corpus/lang/uninit_after_every_activity.rex`; the ending activity and `t7`'s shape
 are crate-side (`scheduler/tests.rs`).
+
+
+### Criterion 1, S2 rows in both modes
+
+Command, from `rust/`:
+
+```
+REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=<file> cargo test --release -p rexx-exec \
+  --test concurrency_tests -- group_runs::the_s2 --test-threads=1
+```
+
+Each derived-list row naming `REPLY`, `~start`, `Message~reply`, `SysSleep`, `.context~thread` or
+a TraceObject field runs one test per run on both sides, with the shipped scheduler and under
+`EveryOpportunity`. Task 1's starting table covers `base/class/Message` only; its refusals were
+the Message methods of Tasks 2 to 7, and the Message rows pass here apart from the two
+`makeArray` rows below. Passing in both modes, by group:
+
+- `base/bif/STREAM.testGroup`: TEST_QUERYDIR_EXISTS
+- `base/bif/TIME.testGroup`: TEST_2
+- `base/class/DateTime.testGroup`: TEST_ELAPSED1
+- `base/class/Message.testGroup`: TEST_START, TEST_REPLY, TEST_NOTIFY, TEST_SUPER_OVERRIDE, TEST_STARTWITH_NO_ARRAY, TEST_STARTWITH_TOO_MANY, TEST_REPLYWITH_NO_ARRAY, TEST_REPLYWITH_TOO_MANY, TEST_START_OVERRIDE_CONTEXT, TEST_STARTWITH_OVERRIDE_CONTEXT, TEST_REPLY_OVERRIDE_CONTEXT, TEST_REPLYWITH_OVERRIDE_CONTEXT, TEST_START_OVERRIDE_NOT_FOUND, TEST_STARTWITH_OVERRIDE_NOT_FOUND, TEST_REPLY_OVERRIDE_NOT_FOUND, TEST_REPLYWITH_OVERRIDE_NOT_FOUND, TEST_START_OVERRIDE_NO_METHOD, TEST_STARTWITH_OVERRIDE_NO_METHOD, TEST_REPLY_OVERRIDE_NO_METHOD, TEST_REPLYWITH_OVERRIDE_NO_METHOD, TEST_START_OVERRIDE_NOT_NON_SCOPE, TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE, TEST_REPLY_OVERRIDE_NOT_NON_SCOPE, TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE, TEST_HALT_START, TEST_START_OVERRIDE_FROM_NONSELF, TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS, TEST_START_OVERRIDE_AMONG_MIXINCLASSES, TEST_STARTWITH_OVERRIDE_FROM_NONSELF, TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS, TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES
+- `base/class/Object.testGroup`: TESTSTART01, TESTSTARTWITH01, TEST_START_NO_NAME, TEST_START_NO_NAME2, TEST_START_NOT_STRING, TEST_START_NO_METHOD, TEST_START_OVERRIDE, TEST_START_OVERRIDE_CONTEXT, TEST_START_OVERRIDE_EMPTY_ARRAY, TEST_START_OVERRIDE_MISSING_NAME, TEST_START_OVERRIDE_MISSING_SCOPE, TEST_START_OVERRIDE_EXTRA_STUFF, TEST_START_OVERRIDE_NON_STRING_NAME, TEST_START_OVERRIDE_NON_CLASS_SCOPE, TEST_START_OVERRIDE_NON_CLASS_SCOPE2, TEST_START_OVERRIDE_NOT_FOUND, TEST_START_OVERRIDE_NOT_NON_SCOPE, TEST_START_OVERRIDE_NO_METHOD, TEST_STARTWITH_NO_NAME, TEST_STARTWITH_NO_NAME2, TEST_STARTWITH_NOT_STRING, TEST_STARTWITH_NO_METHOD, TEST_STARTWITH_OVERRIDE, TEST_STARTWITH_OVERRIDE_CONTEXT, TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY, TEST_STARTWITH_OVERRIDE_MISSING_NAME, TEST_STARTWITH_OVERRIDE_MISSING_SCOPE, TEST_STARTWITH_OVERRIDE_EXTRA_STUFF, TEST_STARTWITH_OVERRIDE_NON_STRING_NAME, TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE, TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2, TEST_STARTWITH_OVERRIDE_NOT_FOUND, TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE, TEST_STARTWITH_OVERRIDE_NO_METHOD, TEST_START_OVERRIDE_FROM_NONSELF, TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS, TEST_START_OVERRIDE_AMONG_MIXINCLASSES, TEST_STARTWITH_OVERRIDE_FROM_NONSELF, TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS, TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES
+- `base/class/RexxContext.testGroup`: TEST_INTERPRETER_THREAD_INVOCATION
+- `base/class/Ticker.testGroup`: TEST_TICKER_TWO_ARGS_STRING_TRIGGER, TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER, TEST_TICKER_THREE_ARGS_STRING_TRIGGER, TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER, TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE, TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE, TEST_CANCEL_TWICE
+- `base/directives/ATTRIBUTE.testGroup`: TEST001
+- `base/directives/CONSTANT.testGroup`: TEST_CONSTANT_METHOD_PROPERTIES
+- `base/keyword/GUARD.testGroup`: TEST_OFF, TEST_UNGUARDED, TEST_ON_OFF
+- `base/keyword/REPLY.testGroup`: TEST_REPLY_ROUTINE, TEST_REPLY_PROCEDURE, TEST_REPLY_CALL, TEST_REPLY_PLAIN, TEST_REPLY_STRING, TEST_REPLY_ARRAY, TEST_REPLY_NIL, TEST_REPLY_NOP, TEST_REPLY__CODE_RETURN, TEST_REPLY__CODE_EXIT, TEST_REPLY_CONCURRENT
+- `base/keyword/TRACE.testGroup`: TEST_TRACE_REPLY
+- `base/rexxutil/SysSleep.testGroup`: TEST_SLEEP_NO_ARG, TEST_SLEEP_TWO_ARGS, TEST_SLEEP_INVALID, TEST_SLEEP_INVALID_NEGATIVE, TEST_SLEEP_INVALID_TOO_LARGE, TEST_SLEEP_DURATION, TEST_SLEEP_CONCURRENT
+- `base/special.variables/RESULT_RC_SIGL.testGroup`: TEST_RESULT_WITH_REPLY
+- `doc/rexxref/chapter5/Section1.testGroup`: TEST_OBJECT_START
+
+Not passing:
+
+| group | test | normal | every opportunity | owner |
+|---|---|---|---|---|
+| base/bif/TIME.testGroup | TEST_3 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
+| base/bif/TIME.testGroup | TEST_4 | rc 1, oracle 8 assertions, ours 5 | same | TIME('E')/TIME('R') value after SysSleep; not traced, same in both modes |
+| base/bif/TIME.testGroup | TEST_5 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
+| base/bif/TIME.testGroup | TEST_8 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
+| base/bif/TIME.testGroup | TEST_9 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
+| base/bif/TIME.testGroup | TEST_10 | rc 1, oracle 8 assertions, ours 5 | same | TIME('E')/TIME('R') value after SysSleep; not traced, same in both modes |
+| base/bif/TIME.testGroup | TEST_11 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
+| base/class/Alarm.testGroup | TEST_BASE_ALARM | oracle did not finish | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/class/EventSemaphore.testGroup | TEST_WAIT_CONCURRENT | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/class/Message.testGroup | TEST_STARTWITH_NOT_ARRAY | refused: Object~MAKEARRAY | same | Phase 9 (Object~makeArray) |
+| base/class/Message.testGroup | TEST_REPLYWITH_NOT_ARRAY | refused: Object~MAKEARRAY | same | Phase 9 (Object~makeArray) |
+| base/class/Method.testGroup | TESTDIRECTIVES | refused: DO is not implemented | same | loop DO, not a concurrency feature |
+| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/directives/ATTRIBUTE.testGroup | TESTDELEGATE | rc 1, oracle 122 assertions, ours 95 | same | Method delegate attributes; the row matched on `isGuarded` |
+| base/directives/METHOD.testGroup | TESTGUARDEDACCESS | rc 1, oracle 1 assertions, ours 0 | same | unguarded attribute read beside a REPLY activity (`BAD` for 21); S3 by feature, not traced |
+| base/directives/METHOD.testGroup | TESTDELEGATE | rc 1, oracle 116 assertions, ours 66 | same | Method delegate attributes; the row matched on `isGuarded` |
+| base/keyword/CALL.testGroup | TEST_4 | rc 1, oracle 18 assertions, ours 7 | same | TIME('E')/TIME('R') value after SysSleep; not traced, same in both modes |
+| base/keyword/GUARD.testGroup | TEST_ON_DEFAULT | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/GUARD.testGroup | TEST_ON | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE_TRIGGER | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE | rc 1, oracle 2 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/GUARD.testGroup | TEST_WAIT_MULTIPLE | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/RAISE.testGroup | TEST_RAISE_INSERT_CRLF | rc 1, oracle 1 assertions, ours 0 | same | message text conversion (`?` for non-ASCII), not scheduling |
+| base/keyword/REPLY.testGroup | TEST_REPLY_TWICE_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
+| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
+| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
+| base/keyword/REPLY.testGroup | TEST_REPLY_EXIT_CODE_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
+| base/keyword/REPLY.testGroup | TEST_REPLY_STACK_REPLYASSERT | pass | rc 0, oracle 1 assertions, ours 2 | S2, mode difference below |
+| base/keyword/REPLY.testGroup | TEST_REPLY_SAME_REPLYASSERT | pass | rc 0, oracle 6 assertions, ours 5 | S2, mode difference below |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_TRACEOBJECT_COLLECTOR | refused: DO is not implemented | same | loop DO, not a concurrency feature |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| regressions/bug2003_guard_when.testGroup | TEST_GUARD_WHEN_1 | fails on both | same | S3 (GUARD WHEN, semaphores, Alarm) |
+
+The rows marked `oracle did not finish` are the oracle's run exceeding the runner's 10 s deadline
+(`TIME` TEST_3 takes 13.5 s on the oracle). In process, in both pinning tables, `TIME` TEST_3,
+TEST_8 and TEST_9 pass, TEST_5 and TEST_11 fail as TEST_4 and TEST_10 do, and `Alarm`
+TEST_BASE_ALARM is refused at the GUARD WHEN, each the same in both modes.
+
+#### Mode differences
+
+Six `REPLY` rows, each asserting after the `REPLY` in the continuation, which races the end of the
+program: TEST_REPLY_TWICE_REPLYASSERT, TEST_REPLY_RETURN_CODE_REPLYASSERT,
+TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT, TEST_REPLY_EXIT_CODE_REPLYASSERT,
+TEST_REPLY_STACK_REPLYASSERT and TEST_REPLY_SAME_REPLYASSERT. `rexx-run` (with `REXX_SWITCH_MODE=every`
+for the second), 20 runs each, assertions counted:
+
+| test | ours normal | ours every | oracle |
+|---|---|---|---|
+| TWICE | 0 x20 | 1 x20 | 0 x16, 1 x4 |
+| RETURN_CODE | 0 x20 | 1 x20 | 0 x18, 1 x2 |
+| RETURN_CODE_SAME | 0 x20 | 1 x20 | 0 x19, 1 x1 |
+| EXIT_CODE | 0 x20 | 1 x20 | 0 x18, 1 x2 |
+| STACK | 1 x20 | 2 x20 | 1 x20 |
+| SAME | 1 x20 | 5 x20 | 1 x18, 6 x2 |
+
+The shipped scheduler ends the program before the continuation asserts; the oracle does so in most
+runs and not in all. Under `EveryOpportunity` the continuation always asserts. For STACK the
+oracle's 20 runs never show the continuation's assertion that every opportunity always shows, and
+SAME counts 5 where the oracle's runs count 1 or 6 (a race of the `u5` kind). The test
+`the_s2_rows_of_the_derived_list_in_both_modes` allows a difference for these six rows only.
+
+Over the whole derived list, the two pinning tables give the same per-test outcome except the
+`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows, S3): normal refuses each at
+the GUARD WHEN; under every opportunity each is refused at `DO is not implemented` except
+TEST_REQUEST_STRING_MESSAGE, which passes. Both are loud refusals; which one a program reaches first
+depends on the schedule.
