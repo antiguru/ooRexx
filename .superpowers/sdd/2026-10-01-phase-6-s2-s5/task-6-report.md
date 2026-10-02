@@ -42,8 +42,9 @@ Status: DONE. Base 88bad9ebc. Code at 6599f7882.
 - R-T6-2: a REPLY is movable iff the only pin above its driver's entry is its own `Op::Exec`
   (`pin_depth == driver_pins + 1`, `driver_pins` recorded per `drive_from`). The reachable
   immovable shape is a REPLY in a block run on a nested Rust frame (a labelled `DO` block):
-  `INTERPRET` cannot hold a REPLY (99.924, both sides) and a `CALL ON` handler is not a method
-  activation (99.919, both sides). Without the check such a REPLY would run the rest of its
+  `INTERPRET` cannot hold a REPLY (99.924 and rc on both sides; the oracle's traceback has one
+  more first line, the interpreted clause, a recorded pre-existing divergence) and a `CALL ON`
+  handler is not a method activation (99.919, both sides). Without the check such a REPLY would run the rest of its
   construct in the sender's time and split at the next clause after the frames unwind (measured
   by mutation); the spec's loud refusal is kept.
 - R-T6-3: the pending-trap hand-over at the split is an assertion, not a move: a trap the REPLY
@@ -313,3 +314,113 @@ P28 checks at a8173be99:
   passed, sourceline_oracle passed.
 - Bench "it works": every program matches 939fdace1 except `heapshape`, which prints its own
   timings.
+
+## Fix round 2
+
+Code at 6d5f6f116.
+
+### O1: a slice inside an unpinned nested driver
+
+The cause is not the continuation. A nested driver (`Interp::drive`, never parkable) can only
+defer a slice when a pinned frame sits above it. `resolve_stream`'s `.STREAM~new` send had no
+pin, so a stream builtin naming a new stream ran the `Stream` class's `NEW` on a driver with
+`pin_depth` 0. The same panic occurs on a started activity and on main whenever another
+activity is ready. The review's control only had no ready activity. Measured with temporary
+logging, debug build, `REXX_SWITCH_MODE=every` (scratch `t6b/p2/` and inline):
+`DBG slice pin=0 drv=0 ready=1` on the continuation, on a started activity with main busy, and
+on main with a started activity ready, each followed by the assertion.
+
+To find every such site, I logged a backtrace at each `drive` entry with `pin_depth == 0` over
+the debug corpus (instrumentation not committed). The runtime sites:
+- `resolve_stream` (`lineout`, `linein`, `lines`, `stream`);
+- the `NAME=` send of a message-term assignment target (`assign_expr_target`, from PARSE);
+- `security_send` (security-manager checkpoints);
+- `run_stored_method` (a directory's `setMethod` entry run by a lookup).
+
+The other logged sites are bootstrap (`mint_local_entries`) and the main program's install
+(`install_directives` from `run_loaded`), both before any second activity exists.
+
+Fix:
+- **Pins.** `pinned!` around the four sends, with kinds StreamWrapper, TreeSend, the new
+  `PinKind::SecurityManager`, and `PinKind::native(name)`.
+- **Probe.** `FRAME_PROBES` gains a `SecurityManager` case. It is red with the pin removed,
+  because the park is then reported under `Unknown` only.
+- **Debug guard.** `Interp::drive` now asserts in debug builds that it runs under a pinned
+  frame once any activity has been spawned (`Interp::activities_spawned`). A missing pin then
+  fails on every debug run of a multi-activity program, not only where a slice lands.
+- **Rooting.** The new pins expose a rooting defect in the stream builtins. A pinned frame
+  takes a pinned yield (P29), and other activities allocate during it. `stream()`'s COMMAND
+  argument, `lines()`'s argument, and the resolved stream were not rooted. Under debug,
+  stress and `every`, the review's `lineoutcont2` panicked "a live value". The stream builtins
+  now `push_temp` the stream and the argument.
+
+Tests:
+- `a_stream_a_builtin_builds_defers_the_slice_under_the_switch_mode` (lib, EveryOpportunity, a
+  REPLY continuation and a started activity, each with another activity ready). Red with the
+  `NEW` pin and the drive guard removed: "a slice ended in a driver no pinned frame counts".
+- `a_stream_builtins_values_survive_a_pinned_yield` (collect_stress, `every`, collect every
+  allocation; the oracle's stdout). Red without the new `push_temp`s, in release and debug:
+  "a live value".
+- Debug, stress and `every` through the scratch driver `t6b/stressdrv`:
+  - All of these match the oracle (stdout and rc, or sorted stdout where the order is
+    scheduling-dependent) with no panic: every `reply*.rex` witness; the review's `lineoutcont`,
+    `lineoutcont2` and `lineoutcont3`; `settings`, `deep`, `loops`, `ref`, `nested`, `fwd`,
+    `started`, `parkedin`, `pinwait` and `treesend`; `pend1`, `hsend` and `two`; and the
+    round's `secsleep`, `streamstart` and `streamcont`.
+  - `lineoutcont3` and `settings` panicked before the fix; `lineoutcont2` panicked on the
+    missing rooting until the `push_temp`s.
+
+### N1 (P36): yield after a REPLY only where another activity is ready
+
+`spawn_continuation` sets `SLICE` when the ready queue was non-empty before the continuation
+is filed (`Interp::any_ready`), so the sender yields at its next clause boundary. With nothing
+ready it runs on as before. Its comment names both rulings.
+`a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready`:
+- It runs under `AtClause(1_000_000)`, which keeps the timer out.
+- `two.rex` gives `ra, rb, a rest, b rest, main 1, main 2`. The first REPLY does not yield and
+  the second does.
+- `REPLIED` keeps the sender-first order.
+- With the yield removed it is red (`ra, rb, main 1, main 2, a rest, b rest`).
+
+The oracle's majority orders for `two` and `hsend` are not reached: its relinquish happens
+inside the REPLY, before the sender's clause shows the value, and this crate's yield is at the
+sender's next boundary as ruled. These are crate tests only.
+
+Side effect: `memreply100000` (100k REPLYs, `t6b/rss.sh`) now peaks at 21,080 / 21,028 kB. Each
+REPLY after the first finds the previous continuation ready, so the sender yields and the
+queue does not grow.
+
+### Witness made order-fixed
+
+During the debug corpus run under `every`, `reply_inside_constructs.rex` failed once with the
+**oracle** side printing the OTHERWISE continuation before the sender's `otherwise: other`.
+The oracle's order there is a race it almost always wins, not a fixed order. Each method's
+rest now waits (`call hold d`) until the sender has shown the reply value. The output is
+unchanged:
+- quiet: oracle 30/30 and ours 30/30, unswitched and `every`, all the same hash as before the
+  edit;
+- under load: oracle 32/32 (eight parallel runners of four each).
+
+The sourceline file was regenerated. The other REPLY witnesses held one hash on the oracle
+under the same load: 24 runs each, eight runners of three.
+
+### Minors
+
+- M4: R-T6-2's "99.924, both sides" corrected: code and rc agree, and the oracle's traceback has
+  the interpreted clause as an extra first line.
+- Queued with probe and both sides' output: `2026-10-02-exit-in-handler-at-reply.md` (O2) and
+  `2026-10-02-halt-after-replied-send.md` (O3).
+
+### P28 checks (at 6d5f6f116)
+
+- **Format and lint.** fmt is 0. Clippy `-D warnings --all-targets` is clean for `-p rexx-exec`
+  and for `--features pinning`.
+- **Full debug suite.** `REXX_CORPUS_GATE=1 memcap 8G cargo test -p rexx-exec --no-fail-fast`
+  (debug, every integration test, with the new drive guard): exit 0. The corpus gave 722/722.
+  The run predates the witness edit.
+- **Corpus.** Debug under `every`: 722/722, after the witness edit. Release: 722/722
+  unswitched and 722/722 under `every`.
+- **Stress.** collect_stress (release): 36 passed. The corpus run alongside it gave 722/722.
+- **Other suites.** Lib tests 904 passed. Pinning `measured::` 16 passed. rexx-core is green in
+  debug and release. sourceline_oracle passed.
+- **Bench "it works".** Every program matches 939fdace1 except `heapshape`.
