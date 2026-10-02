@@ -1045,3 +1045,63 @@ lines go to stdout and the object's `lineout` is never run. This crate prints th
 and exits 0. First found with a started activity spinning alongside (the Phase 6 S2-S5 Task 6
 re-review 2, `rr-t6/p2/traceobj.rex`); the started activity is not needed. **Cause not
 established.** No upstream ticket.
+
+## 25. `alarm_stopTimer` on the handle of an `alarm_startTimer` whose wait has ended
+
+    o = .t~new
+    say o~alarmStart(0, 10)
+    h = o~handle
+    m = o~start('alarmStart', 0, 300)
+    call SysSleep 0.1
+    say o~alarmStop(h)
+    say m~result
+    ::class t
+    ::method alarmStart unguarded external 'LIBRARY REXX alarm_startTimer'
+    ::method alarmStop unguarded external 'LIBRARY REXX alarm_stopTimer'
+    ::method handle unguarded
+      expose eventSemHandle
+      return eventSemHandle
+
+SIGABRT, rc 134, 10 runs of 10 under the standard wrapper with `timeout -s KILL 20`: stdout `0`,
+stderr `Fatal glibc error: pthread_mutex_lock.c:426 (__pthread_mutex_lock_full): assertion
+failed: e != ESRCH || !robust`. An earlier shape (the stop during a second object's wait) aborted
+10 of 10 at `pthread_mutex_lock.c:88` instead. Cause: `alarm_startTimer`'s semaphore is a local
+of the native (`platform/unix/TimeSupport.cpp:116`) and `EVENTSEMHANDLE` keeps a pointer to it,
+which `alarm_stopTimer` posts (`:165`-`:166`) after the frame is gone. `.Alarm~cancel` reaches it
+only in the window before `init` clears `eventSemHandle`. Measured 2026-10-02 by Phase 6 S2-S5
+Task 8. This crate's stop on an ended timer does nothing (ruling R-T8-2). No upstream ticket.
+
+## 26. Two waits on one ticker timer, both in their whole days, and one post
+
+    do p = 1 to 2
+      if p = 1 then parse value 0 20000 0.2 with days millis slept
+      else parse value 1 300 0.6 with days millis slept
+      o = .t~new
+      r = o~tickerCreate
+      h = o~handle
+      m1 = .message~new(o, 'tickerWait', 'I', h, days, millis); m1~start
+      m2 = .message~new(o, 'tickerWait', 'I', h, days, millis); m2~start
+      call SysSleep 0.2
+      r = o~tickerStop(h)
+      call SysSleep slept
+      say m1~completed m2~completed
+    end
+    exit
+    ::class t
+    ::method tickerCreate unguarded external 'LIBRARY REXX ticker_createTimer'
+    ::method tickerWait unguarded external 'LIBRARY REXX ticker_waitTimer'
+    ::method tickerStop unguarded external 'LIBRARY REXX ticker_stopTimer'
+    ::method handle unguarded
+      expose eventSemHandle
+      return eventSemHandle
+
+**An intermittent indefinite block**: 1 run of 10 under the standard wrapper, and 1 run of 30
+under `memcap 1G` with `timeout -s KILL 20`, print `1 1` then `1 0` and are killed at 20 s
+(rc 137, the kill); the others print `1 1` twice and exit 0. The same second pass alone (one
+object, days 1, millis 300) did not block in 10 runs under the wrapper or 40 under `memcap 1G`.
+Cause: `ticker_waitTimer`'s day loop (`platform/unix/TimeSupport.cpp:191`-`:212`) resets the
+semaphore when a wait ends early without `CANCELED`; the post wakes both waiters by broadcast
+(`common/platform/unix/SysSemaphore.cpp:231`-`:238`), and when the first resets before the
+second's `pthread_cond_timedwait` loop re-tests `postedCount` (`:291`-`:306`), the second goes
+back to waiting out its day. Measured 2026-10-02 by Phase 6 S2-S5 Task 8. This crate ends both
+waits' current day (`a_post_wakes_every_waiter_of_a_timer`). No upstream ticket.
