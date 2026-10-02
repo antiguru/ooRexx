@@ -77,10 +77,17 @@ impl Interp {
     /// Whether a send of `method`, `declared` guarded by its directive,
     /// reserves its guard lock: `setGuarded` and `setUnguarded` on its
     /// `Method` object overrule the directive, as `isGuarded` reads them.
+    #[inline]
     pub(crate) fn sends_guarded(&self, method: rexx_classes::MethodId, declared: bool) -> bool {
         if self.method_flag_writes.is_empty() {
             return declared;
         }
+        self.written_guard(method, declared)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn written_guard(&self, method: rexx_classes::MethodId, declared: bool) -> bool {
         self.method_flag_writes
             .iter()
             .find(|(object, _)| {

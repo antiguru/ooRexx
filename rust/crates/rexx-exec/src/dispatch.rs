@@ -3054,6 +3054,8 @@ impl Interp {
         );
         let frame = self.roots.push_slots(plan.len());
         let (self_slot, super_slot) = (plan.self_slot, plan.super_slot);
+        let reserve_at_once =
+            guarded && !plan.traces_entry_early && !self.activities.guards.is_live();
         let callee_id = self.next_activation_id();
         let super_scope = match behaviour {
             Some(behaviour) => self.super_scope_in(behaviour, resolution.scope),
@@ -3103,10 +3105,13 @@ impl Interp {
             &mut callee,
             self.running_activation().map(|caller| &caller.settings),
         );
-        callee.flags.set_guarded(guarded);
+        // With one activity the lock is the activation's flag alone, taken
+        // here unless a package-traced `>I>` has to come first.
+        let reserve_at_once = reserve_at_once && !callee.trace_mode.labels;
+        callee.flags = crate::activation::ActivationFlags::method(guarded, reserve_at_once);
         self.push_activation(callee);
         self.trace_package_invocation_entry();
-        if guarded {
+        if guarded && !reserve_at_once {
             self.reserve_for_method(crate::guards::GuardKey {
                 object: receiver,
                 scope: resolution.scope,

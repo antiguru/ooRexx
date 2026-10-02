@@ -1024,8 +1024,11 @@ impl Interp {
             self.capture_activation_frame(failure);
         }
 
-        // `RexxActivation::termination` releases the guard lock first.
-        if kind == TailKind::Method {
+        // `RexxActivation::termination` releases the guard lock first. With one
+        // activity there is nothing to release; a `<I<` drops the flag first.
+        if kind == TailKind::Method
+            && (self.activities.guards.is_live() || !self.activity.guard_waits.is_empty())
+        {
             self.guard_off_at_end();
         }
         // Before the pop, because both halves of `<I<`'s gate are the

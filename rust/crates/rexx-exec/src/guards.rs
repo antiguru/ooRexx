@@ -88,6 +88,12 @@ impl GuardTable {
         }
     }
 
+    /// Whether a second activity has ever existed.
+    #[inline]
+    pub(crate) fn is_live(&self) -> bool {
+        self.live
+    }
+
     /// Records one more level of `key` held by `owner`, as a lock held before
     /// the table went live.
     fn hold(&mut self, key: GuardKey, owner: ActivityId) {
@@ -212,6 +218,7 @@ pub(crate) struct GuardWait {
 /// Whether a method the directive `kind` declares is guarded: every
 /// `::METHOD` and `::ATTRIBUTE` without `UNGUARDED`, and no `::CONSTANT`
 /// (`parser/DirectiveParser.cpp:2525`).
+#[inline]
 pub(crate) fn directive_guarded(kind: &rexx_parse::DirectiveKind) -> bool {
     use rexx_parse::{DirectiveKind, GuardOption};
     match kind {
@@ -286,6 +293,8 @@ impl Interp {
     /// reserve to a clause boundary of the method: its first, where another
     /// activity owns the lock, and the one after its `>I>` where that is
     /// traced early (`RexxActivation::run`, `execution/RexxActivation.cpp:523-532`).
+    #[cold]
+    #[inline(never)]
     pub(crate) fn reserve_for_method(&mut self, key: GuardKey) {
         let after_entry = self.activation().plan.traces_entry_early;
         if !after_entry && let Reserve::Held = self.take_guard(key) {
@@ -432,33 +441,40 @@ impl Interp {
 
     /// The running method activation's end, unless a `REPLY` moves it on:
     /// its guard lock released, and a reserve still pending dropped
-    /// (`RexxActivation::termination`'s `guardOff`).
+    /// (`RexxActivation::termination`'s `guardOff`). A `<I<` runs it first,
+    /// as the oracle releases before tracing the exit.
     pub(crate) fn guard_off_at_end(&mut self) {
-        let Some(ending) = self.activity.running.as_deref() else {
+        let Some(mut ending) = self.activity.running.take() else {
             return;
         };
-        if ending
-            .replied
-            .as_ref()
-            .is_some_and(|replied| replied.continuation.is_some())
-        {
-            return;
-        }
-        let id = ending.id;
-        let key = if ending.flags.reserved() {
-            GuardKey::of(ending)
-        } else {
-            None
-        };
+        self.guard_off_ended(&mut ending);
+        self.activity.running = Some(ending);
+    }
+
+    /// [`Interp::guard_off_at_end`] for `ended`.
+    fn guard_off_ended(&mut self, ended: &mut Activation) {
         if !self.activity.guard_waits.is_empty() {
+            let id = ended.id;
             self.activity
                 .guard_waits
                 .retain(|wait| wait.activation != id);
         }
-        if let Some(key) = key {
-            self.activation_mut().flags.set_reserved(false);
-            self.release_guard(key);
+        if ended.flags.reserved() && !Self::moves_on(ended) {
+            ended.flags.set_reserved(false);
+            if self.activities.guards.is_live()
+                && let Some(key) = GuardKey::of(ended)
+            {
+                self.release_guard(key);
+            }
         }
+    }
+
+    /// Whether `ending` replied and its continuation takes it.
+    fn moves_on(ending: &Activation) -> bool {
+        ending
+            .replied
+            .as_ref()
+            .is_some_and(|replied| replied.continuation.is_some())
     }
 
     /// `GUARD ON` and `GUARD OFF`'s change of the running method's lock

@@ -172,6 +172,9 @@ impl Interp {
         if self.activation().trace_entry != TraceEntry::Done {
             return;
         }
+        if self.activation().entry == crate::activation::Entry::Method {
+            self.guard_off_at_end();
+        }
         let Some(subject) = self.invocation_subject() else {
             return;
         };

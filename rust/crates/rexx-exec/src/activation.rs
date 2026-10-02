@@ -501,6 +501,13 @@ impl ActivationFlags {
     const GUARDED: u8 = 2;
     const RESERVED: u8 = 4;
 
+    /// A method activation's flags: `guarded`, and holding its lock where
+    /// `reserved`.
+    #[inline]
+    pub(crate) fn method(guarded: bool, reserved: bool) -> ActivationFlags {
+        ActivationFlags(u8::from(guarded) << 1 | u8::from(reserved) << 2)
+    }
+
     pub(crate) fn forwarded(self) -> bool {
         self.0 & Self::FORWARDED != 0
     }
@@ -515,10 +522,6 @@ impl ActivationFlags {
 
     pub(crate) fn reserved(self) -> bool {
         self.0 & Self::RESERVED != 0
-    }
-
-    pub(crate) fn set_guarded(&mut self, guarded: bool) {
-        self.set(Self::GUARDED, guarded);
     }
 
     pub(crate) fn set_reserved(&mut self, reserved: bool) {
