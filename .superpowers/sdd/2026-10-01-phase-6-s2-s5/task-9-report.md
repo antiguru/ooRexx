@@ -160,7 +160,7 @@ copied in:
 - The collector/option path (R-T9-3) is what most of TRACE_TraceObject's thread tests read, so
   Task 10's table will show them differing for that, not for THREAD.
 
-## Fix round 1 (review task-9-review.md)
+## Fix round 1 (review task-9-review.md): e0bdc1ce5
 
 - I1, ruling P39: the program end does not wait for activities a termination `UNINIT` starts. The
   second `run_started_to_end` after the sweep is gone (R-T9-5 withdrawn); `execute_on` calls
