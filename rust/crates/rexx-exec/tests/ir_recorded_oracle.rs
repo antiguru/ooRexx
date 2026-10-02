@@ -113,7 +113,11 @@ fn render_crate(program: &str) -> String {
         stderr,
         exit_code,
         ..
-    } = run_program(INLINE_PATH, program.as_bytes().to_vec(), Invocation::none());
+    } = run_program(
+        INLINE_PATH,
+        program.as_bytes().to_vec(),
+        Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    );
     tagged(exit_code, &stdout, &stderr)
 }
 

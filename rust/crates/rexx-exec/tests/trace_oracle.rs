@@ -89,7 +89,7 @@ fn check_witness(name: &str, program_path: &Path) {
     let outcome = run_program(
         &program_path.to_string_lossy(),
         source,
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
     );
 
     assert_eq!(outcome.stdout, expected.stdout, "{name}: stdout");
@@ -533,7 +533,7 @@ fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
         let outcome = run_program(
             &path.to_string_lossy(),
             source,
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
         );
         assert!(
             contains_bytes(&outcome.stderr, prefix.as_bytes()),

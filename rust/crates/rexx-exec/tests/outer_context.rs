@@ -89,7 +89,8 @@ fn run_ours(program: &Path, run: &Path, library_path: &str, stress: bool) -> Out
     ));
     let invocation = Invocation::none()
         .with_directory(run.to_path_buf())
-        .with_environment(environment);
+        .with_environment(environment)
+        .with_deadline(support::oracle::RUN_DEADLINE);
     let path = program.to_string_lossy().into_owned();
     if stress {
         run_program_collect_every_alloc(&path, text, invocation)

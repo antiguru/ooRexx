@@ -356,8 +356,11 @@ impl Scheduler for Interp {
     }
 
     fn run_until_park(&mut self) -> Result<bool, Failure> {
-        self.run_started()
-            .map(|stopped| matches!(stopped, Stopped::Parked))
+        let stopped = self.run_started()?;
+        if matches!(stopped, Stopped::Ended) {
+            self.run_ending_uninits()?;
+        }
+        Ok(matches!(stopped, Stopped::Parked))
     }
 
     fn park(&mut self, reason: ParkReason) {
@@ -743,11 +746,20 @@ impl Interp {
     /// whether its object's `CANCELED` is `.true`, and wakes every waiter. A
     /// waiter in its whole days whose object is not cancelled resets the post
     /// and has its current day end instead, as the oracle's day loop does.
+    ///
+    /// # Panics
+    ///
+    /// If `cancelled` does not hold one flag per waiter.
     pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: &[bool]) {
         let table = &mut self.activities;
         let Some(timer) = table.timers.get_mut(&id) else {
             return;
         };
+        assert_eq!(
+            timer.waiters.len(),
+            cancelled.len(),
+            "a timer posted with a cancel flag per waiter"
+        );
         let now = Instant::now();
         let mut moved: Vec<(u64, Instant, Instant)> = Vec::new();
         let mut woken: Vec<u64> = Vec::new();
@@ -822,6 +834,15 @@ impl Interp {
         failures
     }
 
+    /// The `UNINIT`s a collection readied, run on an activity whose dispatch
+    /// has ended (`Activity::runThread`, `concurrency/Activity.cpp:249`).
+    pub(crate) fn run_ending_uninits(&mut self) -> Result<(), Failure> {
+        match self.run_ready_uninits().into_iter().next() {
+            Some(loud) => Err(loud.into()),
+            None => Ok(()),
+        }
+    }
+
     /// A failure another activity answered main's root loop with after
     /// main's own end, kept for the program's end to report.
     fn keep_late_failure(&mut self, failure: Failure) {
@@ -829,31 +850,34 @@ impl Interp {
     }
 
     /// Runs every started activity to its end, for the end of the program.
-    /// Activities left waiting are abandoned, with the refusal.
+    /// One that nothing left can wake keeps the program waiting, as the
+    /// oracle's termination does (`InterpreterInstance::terminate`,
+    /// `runtime/InterpreterInstance.cpp:562`), until the run's deadline.
     pub(crate) fn run_started_activities(&mut self) -> Result<(), Failure> {
-        self.run_others(false)?;
         self.cancel_wait();
-        let table = &mut self.activities;
-        let me = table.running.0 as usize;
-        let mut blocked = false;
-        for (index, idle) in table.idle.iter_mut().enumerate() {
-            if index == me {
-                continue;
+        loop {
+            self.run_others(false)?;
+            let table = &self.activities;
+            let me = table.running.0 as usize;
+            let others =
+                (table.idle.iter().enumerate()).any(|(index, idle)| index != me && idle.is_some());
+            if !others {
+                return Ok(());
             }
-            if let Some(mut idle) = idle.take() {
-                table.retired.extend(idle.activity.thread.take());
-                table.free.push(index as u32);
-                blocked = true;
+            if table.ready.is_empty() && table.sleepers.is_empty() {
+                return Err(self.idle_for_good());
             }
         }
-        if blocked {
-            table.waiters.clear();
-            table.message_ids.clear();
-            table.sleepers.clear();
-            table.timers.clear();
-            return Err(Loud::unsatisfiable_wait().into());
+    }
+
+    /// Idles this thread with nothing left that can wake an activity: only
+    /// the run's deadline ends it.
+    fn idle_for_good(&mut self) -> Failure {
+        loop {
+            if let Err(failure) = self.idle_until(Instant::now() + TIMER_DAY) {
+                return failure;
+            }
         }
-        Ok(())
     }
 
     /// Runs ready activities with the running one set aside, until it is

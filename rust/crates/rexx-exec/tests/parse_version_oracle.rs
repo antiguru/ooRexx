@@ -71,7 +71,11 @@ fn parse_version_still_answers_what_the_oracle_answers() {
 
     let oracle = support::oracle::locate();
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-    let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
+    let rust = rexx_exec::run_program(
+        path,
+        text,
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    );
     let cpp = oracle.run(&abs);
 
     // Named even though this file runs exactly one program: `descriptor_diffs`

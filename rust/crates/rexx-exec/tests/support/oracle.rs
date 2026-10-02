@@ -48,6 +48,10 @@ pub const ORACLE_MEMORY_LIMIT_KIB: u64 = 1_048_576;
 /// figure.
 pub const ORACLE_DEADLINE: Duration = Duration::from_secs(10);
 
+/// The bound on one in-process run of this crate: a program's end waits for
+/// an activity nothing can wake, as the oracle's does.
+pub const RUN_DEADLINE: Duration = Duration::from_secs(60);
+
 /// How often [`wait_with_deadline`] polls [`Child::try_wait`] while a run is
 /// still outstanding.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);

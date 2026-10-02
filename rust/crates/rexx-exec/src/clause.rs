@@ -316,6 +316,7 @@ impl Interp {
     /// Blocks this thread until `due`, or fails where the run's deadline
     /// comes first.
     pub(crate) fn idle_until(&mut self, due: Instant) -> Result<(), Failure> {
+        self.hand_over_output();
         if let Some(deadline) = &mut self.deadline
             && (deadline.expired || deadline.at <= due)
         {

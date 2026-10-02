@@ -3150,6 +3150,10 @@ fn execute_on(
         Err(Failure::Deadline) => 0,
     };
 
+    // Main's dispatch has ended (`Activity::exitCurrentThread`,
+    // `concurrency/Activity.cpp:324`).
+    let mut refused = interp.run_ready_uninits();
+
     // The oracle's termination waits for every activity
     // (`InterpreterInstance::terminate`).
     let started = interp.run_started_to_end();
@@ -3161,7 +3165,13 @@ fn execute_on(
     // whatever the program's own outcome was. Measured, oracle: a program
     // whose main body raises 42.3 still prints its class `UNINIT` and exits
     // 214, and one ending `exit 7` prints it and exits 7.
-    for loud in interp.terminate() {
+    refused.extend(interp.run_termination_uninits());
+    // An activity those `UNINIT`s started, a `REPLY`'s continuation among
+    // them, runs to its end before the unloaders.
+    let started = interp.run_started_to_end();
+    report_late_failures(&mut interp, started, path, &mut exit_code);
+    refused.extend(interp.run_package_unloaders());
+    for loud in refused {
         interp
             .trace
             .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());

@@ -120,7 +120,11 @@ fn the_two_library_files_install_and_answer_what_the_oracle_answers() {
     );
 
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-    let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
+    let rust = rexx_exec::run_program(
+        path,
+        text,
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    );
     let diffs = descriptor_diffs(&rust, &cpp);
     assert!(
         diffs.is_empty(),

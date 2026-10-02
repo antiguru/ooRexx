@@ -146,6 +146,12 @@ impl Interp {
     /// it on stdout, which is `corpus/oracle-crashes.txt` entry 11's licensed
     /// answer for a route the oracle dies on.
     pub(crate) fn route_trace_line(&mut self, start: usize) {
+        self.route_trace_line_as(start, false);
+    }
+
+    /// [`Interp::route_trace_line`] for a line that is `>I>` (`entry`), whose
+    /// `TraceObject` names the caller's frame too.
+    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
         if self.activity.routing_trace {
             return;
         }
@@ -174,7 +180,7 @@ impl Interp {
         let delivered = pinned!(
             self,
             crate::pinning::PinKind::TraceWrapper,
-            self.deliver_trace_line(class, route, &line)
+            self.deliver_trace_line(class, route, &line, entry)
         );
         self.give_value_buffer(values, mark);
         self.activity.routing_trace = false;
@@ -197,16 +203,43 @@ impl Interp {
         }
     }
 
-    /// The send itself: a `TraceObject` carrying `line`, then `LINEOUT` to
-    /// `route`. Every entry is a `String` on the oracle, `NUMBER` included.
+    /// The send itself: a `TraceObject` carrying `line` and where it was
+    /// traced, then `LINEOUT` to `route` (`RexxActivation::createTraceObject`,
+    /// `execution/RexxActivation.cpp:5160`). `ATTRIBUTEPOOL` and the guard
+    /// entries read zero: they come from the guard table (plan Task 11).
     fn deliver_trace_line(
         &mut self,
         class: ObjRef,
         route: ObjRef,
         line: &[u8],
+        entry: bool,
     ) -> Result<(), Failure> {
-        let caller = self.caller();
-        let Some(object) = self.send_message(class, b"NEW", None, &[], caller)? else {
+        let thread = self.activity_number();
+        let invocation = self.invocation_of(0).unwrap_or(0);
+        let levels = crate::dispatch::context::live_levels(self);
+        let frame = match levels.first() {
+            Some(&level) => Some(self.frame_record(level)?),
+            None => None,
+        };
+        let caller = match (entry, levels.get(1)) {
+            (false, _) => None,
+            (true, Some(&level)) => Some(CallerFrame::Of(self.frame_record(level)?)),
+            (true, None) => Some(CallerFrame::Spawner),
+        };
+        let receiver = match (levels.first(), self.frame_at(0)) {
+            (Some(crate::dispatch::context::LiveLevel::Activation(0)), Some(activation))
+                if activation.entry == crate::activation::Entry::Method =>
+            {
+                activation
+                    .method_identity
+                    .as_ref()
+                    .map(|identity| identity.receiver)
+            }
+            _ => None,
+        };
+
+        let caller_ref = self.caller();
+        let Some(object) = self.send_message(class, b"NEW", None, &[], caller_ref)? else {
             return Err(Failure::Raised(Box::new(crate::error::Raised::syntax(
                 97,
                 1,
@@ -214,37 +247,154 @@ impl Interp {
             ))));
         };
         self.roots.activity_mut().push_temp(object);
-        // A `StringTable` keeps its entries in a bucket table, so the put goes
-        // through the message. `t[i] = v` sends `t~"[]="(v, i)`, so the value
-        // leads.
-        for (name, value) in [
-            (b"THREAD".as_slice(), Some(b"1".as_slice())),
-            (b"INVOCATION".as_slice(), Some(b"0".as_slice())),
-            (b"INTERPRETER".as_slice(), Some(b"1".as_slice())),
-            (b"TRACELINE".as_slice(), Some(line)),
-            (b"STACKFRAME".as_slice(), None),
-        ] {
-            let held = match value {
-                Some(bytes) => {
-                    let held = self.text(bytes);
-                    self.roots.activity_mut().push_temp(held);
-                    held
-                }
-                None => ObjRef::NIL,
+        let traced = self.text(line);
+        self.trace_object_put(object, b"TRACELINE", traced)?;
+        let interpreter = self.counted(1);
+        self.trace_object_put(object, b"INTERPRETER", interpreter)?;
+        let thread = self.counted(thread as usize);
+        self.trace_object_put(object, b"THREAD", thread)?;
+        let invocation = self.counted(invocation as usize);
+        self.trace_object_put(object, b"INVOCATION", invocation)?;
+        let stack_frame = match frame {
+            Some(frame) => self.frame_table(Some(frame))?,
+            None => ObjRef::NIL,
+        };
+        self.trace_object_put(object, b"STACKFRAME", stack_frame)?;
+        if let Some(caller) = caller {
+            let table = match caller {
+                CallerFrame::Of(frame) => self.frame_table(Some(frame))?,
+                CallerFrame::Spawner => self.spawner_table()?,
             };
-            let index = self.text(name);
-            self.roots.activity_mut().push_temp(index);
-            let caller = self.caller();
-            self.send_message(object, b"PUT", None, &[Some(held), Some(index)], caller)?;
+            self.trace_object_put(object, b"CALLERSTACKFRAME", table)?;
         }
-        let caller = self.caller();
+        if let Some(receiver) = receiver {
+            let zero = self.counted(0);
+            self.trace_object_put(object, b"ATTRIBUTEPOOL", zero)?;
+            self.trace_object_put(object, b"ISGUARDED", crate::eval::logical(false))?;
+            self.trace_object_put(object, b"SCOPELOCKCOUNT", zero)?;
+            self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(false))?;
+            self.trace_object_put(object, b"RECEIVER", receiver)?;
+        }
+        let caller_ref = self.caller();
         self.send_message(
             route,
             crate::dispatch::LINEOUT,
             None,
             &[Some(object)],
-            caller,
+            caller_ref,
         )?;
         Ok(())
     }
+
+    /// `PUT` of `value` under `name` on the `TraceObject` being built. A
+    /// `StringTable` keeps its entries in a bucket table, so the put goes
+    /// through the message; `t[i] = v` sends `t~"[]="(v, i)`, so the value
+    /// leads.
+    fn trace_object_put(
+        &mut self,
+        object: ObjRef,
+        name: &[u8],
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        self.roots.activity_mut().push_temp(value);
+        let index = self.text(name);
+        self.roots.activity_mut().push_temp(index);
+        let caller = self.caller();
+        self.send_message(object, b"PUT", None, &[Some(value), Some(index)], caller)?;
+        Ok(())
+    }
+
+    /// The `StackFrame` of `level` and its executable (`.nil` where this
+    /// crate has no object for it), rooted as temporaries.
+    pub(crate) fn frame_record(
+        &mut self,
+        level: crate::dispatch::context::LiveLevel,
+    ) -> Result<(ObjRef, ObjRef), Failure> {
+        let frame = crate::dispatch::context::build_live_frame(self, level)?;
+        self.roots.activity_mut().push_temp(frame);
+        let executable = match level {
+            crate::dispatch::context::LiveLevel::Activation(depth) => {
+                crate::dispatch::context::executable_at(self, depth).unwrap_or(ObjRef::NIL)
+            }
+            _ => ObjRef::NIL,
+        };
+        self.roots.activity_mut().push_temp(executable);
+        Ok((frame, executable))
+    }
+
+    /// `RexxActivation::getStackFrameAsStringTable`
+    /// (`execution/RexxActivation.cpp:5289`): a `StringTable` of `frame`'s
+    /// entries, empty for none.
+    fn frame_table(&mut self, frame: Option<(ObjRef, ObjRef)>) -> Result<ObjRef, Failure> {
+        let table = crate::dispatch::hash::new_string_table(self)?;
+        self.roots.activity_mut().push_temp(table);
+        let Some((frame, executable)) = frame else {
+            return Ok(table);
+        };
+        for name in [
+            b"ARGUMENTS".as_slice(),
+            b"INVOCATION",
+            b"LINE",
+            b"NAME",
+            b"TRACELINE",
+            b"TYPE",
+        ] {
+            self.frame_entry_into(table, frame, name)?;
+        }
+        crate::dispatch::hash::directory_put(self, table, b"EXECUTABLE", executable)?;
+        self.frame_entry_into(table, frame, b"TARGET")?;
+        Ok(table)
+    }
+
+    /// What `frame` answers to `name`, put in `table` under `name`.
+    fn frame_entry_into(
+        &mut self,
+        table: ObjRef,
+        frame: ObjRef,
+        name: &[u8],
+    ) -> Result<(), Failure> {
+        let caller = self.caller();
+        let value = self
+            .send_message(frame, name, None, &[], caller)?
+            .unwrap_or(ObjRef::NIL);
+        self.roots.activity_mut().push_temp(value);
+        crate::dispatch::hash::directory_put(self, table, name, value)
+    }
+
+    /// The table of the frame that started this activity, with the
+    /// spawner's number as its `THREAD` (`Activity::setCallerStackFrameAsStringTable`,
+    /// `concurrency/Activity.cpp:1199`), built once; `.nil` for main.
+    fn spawner_table(&mut self) -> Result<ObjRef, Failure> {
+        match self.activity.spawner {
+            None => Ok(ObjRef::NIL),
+            Some(crate::activity::Spawner::Table(table)) => Ok(table),
+            Some(crate::activity::Spawner::Frame { thread, frame }) => {
+                let table = self.frame_table(frame)?;
+                let thread = self.counted(thread as usize);
+                self.roots.activity_mut().push_temp(thread);
+                crate::dispatch::hash::directory_put(self, table, b"THREAD", thread)?;
+                self.activity.spawner = Some(crate::activity::Spawner::Table(table));
+                Ok(table)
+            }
+        }
+    }
+
+    /// What a spawned activity records of the running one for its
+    /// `CALLERSTACKFRAME`: its number and the frame of the innermost level.
+    pub(crate) fn spawner_of_running(&mut self) -> Result<crate::activity::Spawner, Failure> {
+        let thread = self.activity_number();
+        let frame = match crate::dispatch::context::live_levels(self).first() {
+            Some(&level) => Some(self.frame_record(level)?),
+            None => None,
+        };
+        Ok(crate::activity::Spawner::Frame { thread, frame })
+    }
+}
+
+/// Where a `>I>` line's `CALLERSTACKFRAME` comes from.
+enum CallerFrame {
+    /// The level below the traced one.
+    Of((ObjRef, ObjRef)),
+    /// None below it: the frame that started this activity.
+    Spawner,
 }

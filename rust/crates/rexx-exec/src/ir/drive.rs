@@ -2720,8 +2720,9 @@ impl Interp {
                                 }
                                 Ok(Exit::Slice(at)) => {
                                     if self.split_owed() {
-                                        self.split_level(&level, registers, base, at);
-                                        break 'ended Ok(END_OF_BODY);
+                                        break 'ended self
+                                            .split_level(&level, registers, base, at)
+                                            .map(|()| END_OF_BODY);
                                     }
                                     debug_assert!(
                                         parkable,
@@ -2875,8 +2876,16 @@ impl Interp {
     /// [`Interp::release_method_activation`].
     #[cold]
     #[inline(never)]
-    fn split_level(&mut self, level: &Level, registers: RegFrame<'_>, base: usize, at: u32) {
+    fn split_level(
+        &mut self,
+        level: &Level,
+        registers: RegFrame<'_>,
+        base: usize,
+        at: u32,
+    ) -> Result<(), Failure> {
+        let spawner = self.spawner_of_running()?;
         let mut idle = self.new_activity();
+        idle.activity.spawner = Some(spawner);
         let values = (0..registers.len())
             .map(|index| registers.get(index))
             .collect();
@@ -2917,6 +2926,7 @@ impl Interp {
             replied.continuation = Some(idle);
         }
         self.activity.splits_owed -= 1;
+        Ok(())
     }
 
     /// Parks the level [`Interp::split_level`] moved, its registers now in

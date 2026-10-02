@@ -487,3 +487,7 @@ lang/timer_native_arguments.rex
 lang/timer_post_wakes_every_waiter.rex
 lang/timer_post_reads_the_waiters_cancel.rex
 lang/timer_remainder_modulo_2_32.rex
+# Phase 6 S2-S5 Task 9: TraceObject THREAD, frame, guard and CALLERSTACKFRAME
+# entries across activities, and UNINIT at termination after every activity.
+lang/trace_object_activity_fields.rex
+lang/uninit_after_every_activity.rex

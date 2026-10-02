@@ -11,11 +11,15 @@
 
 use crate::{Interp, Invocation, Outcome, SwitchMode, parse_program, run_program};
 
+/// A bound on every run here: a program end waits for an activity nothing
+/// can wake.
+const RUN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
 fn run(source: &str) -> Outcome {
     run_program(
         "/tmp/scheduler.rex",
         source.as_bytes().to_vec(),
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     )
 }
 
@@ -243,20 +247,21 @@ say 'not reached'
     );
 }
 
-/// A started activity whose wait nothing can end is refused at the program's
-/// end, where the oracle blocks for ever; main's output stands.
+/// A started activity whose wait nothing can end keeps the program's end
+/// waiting, as the oracle's does, until the run's deadline; main's output
+/// stands.
 #[test]
-fn a_started_wait_nothing_can_end_is_refused_at_the_programs_end() {
-    let outcome = run(
+fn a_started_wait_nothing_can_end_keeps_the_programs_end_waiting() {
+    let began = std::time::Instant::now();
+    let outcome = run_with(
         ".w~new~start('WAITON', .message~new('abc', 'length'))\nsay 'main done'\n\
          ::class w\n::method waiton\n  use arg m\n  say 'waits'\n  return m~result\n",
+        Invocation::none().with_deadline(std::time::Duration::from_millis(300)),
     );
-    assert_eq!(outcome.exit_code, 120);
+    assert!(began.elapsed() >= std::time::Duration::from_millis(300));
+    assert_eq!(outcome.exit_code, crate::DEADLINE_EXIT);
     assert_eq!(stdout(&outcome), "main done\nwaits\n");
-    assert_eq!(
-        stderr(&outcome),
-        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
-    );
+    assert_eq!(outcome.stderr, crate::DEADLINE_REPORT);
 }
 
 /// An ended activity's thread context stays with the interpreter, so an
@@ -1011,4 +1016,34 @@ fn a_notifier_failing_on_a_started_success_is_the_sends_failure() {
         "in notifier\nmain 3\nin notifier\nin notifier\n"
     );
     assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 2);
+}
+
+/// A `REPLY` in an `UNINIT` run at termination has its continuation run
+/// before the program ends, as the oracle's does (29 runs of 30).
+#[test]
+fn a_reply_in_a_termination_uninit_runs_its_continuation() {
+    let outcome = run("o = .k~new\nsay 'main end'\n::class k\n::method uninit\n  \
+                       say 'uninit before reply'\n  reply\n  say 'uninit after reply'\n");
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(
+        stdout(&outcome),
+        "main end\nuninit before reply\nuninit after reply\n"
+    );
+}
+
+/// An object a collection readied while a started activity ran is
+/// finalized when that activity ends, before main goes on.
+#[test]
+fn an_uninit_a_collection_readied_runs_when_its_activity_ends() {
+    let outcome = crate::run_program_collect_every_alloc(
+        "/tmp/scheduler.rex",
+        b"m = .w~new~start('run')\nm~wait\nsay 'main after'\n\
+          ::class k\n::method uninit\n  say 'uninit'\n\
+          ::class w\n::method run\n  d = .k~new\n  drop d\n  s = 'a' || random()\n  \
+          say 'activity end'\n"
+            .to_vec(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "activity end\nuninit\nmain after\n");
 }

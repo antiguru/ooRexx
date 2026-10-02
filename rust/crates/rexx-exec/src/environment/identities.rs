@@ -182,9 +182,13 @@ impl Interp {
         scope: ObjRef,
         name: &[u8],
     ) -> Result<ObjRef, crate::error::Failure> {
-        let found = self
-            .classes()
-            .own_instance_slot(scope, &String::from_utf8_lossy(name));
+        // A method set on an object with a `.nil` scope has no class to ask.
+        let found = if self.heap.is_class(scope) {
+            self.classes()
+                .own_instance_slot(scope, &String::from_utf8_lossy(name))
+        } else {
+            None
+        };
         match found {
             Some(rexx_classes::MethodSlot::Defined { scope, method }) => {
                 let record = crate::ExecutableRecord {

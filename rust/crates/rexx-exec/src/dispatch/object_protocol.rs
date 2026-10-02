@@ -871,7 +871,7 @@ fn started_message(
         args: args.to_vec(),
         caller,
     };
-    spawn_send(interp, send, object);
+    spawn_send(interp, send, object)?;
     Ok(NativeStarted::Ran(Some(object)))
 }
 
@@ -1085,17 +1085,25 @@ fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<Obj
         args,
         caller,
     };
-    spawn_send(interp, send, message);
+    spawn_send(interp, send, message)?;
     Ok(None)
 }
 
 /// Files a new activity whose first step is `send`, recording its outcome on
 /// `message`.
-fn spawn_send(interp: &mut Interp, send: StartedSend, message: ObjRef) {
+fn spawn_send(interp: &mut Interp, send: StartedSend, message: ObjRef) -> Result<(), Failure> {
+    let mut held = vec![message];
+    send.object_roots(&mut held);
+    for object in held {
+        interp.roots.activity_mut().push_temp(object);
+    }
+    let spawner = interp.spawner_of_running()?;
     let mut idle = interp.new_activity();
+    idle.activity.spawner = Some(spawner);
     idle.activity.first = Some(First::Send(Box::new(send)));
     idle.activity.root_then = Some(Then::Started(message));
     interp.spawn(idle);
+    Ok(())
 }
 
 /// `Message~reply([receiver] [, argument ...])`: a copy of the message whose

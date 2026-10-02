@@ -211,13 +211,15 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
         let plain = run_program(
             path_str,
             text.clone(),
-            support::sidecar::invocation(&cwd, &overrides, stdin),
+            support::sidecar::invocation(&cwd, &overrides, stdin)
+                .with_deadline(support::oracle::RUN_DEADLINE),
         );
         let cwd = prepare_run_directory(&dir, &sidecar);
         let stress = run_program_collect_every_alloc(
             path_str,
             text,
-            support::sidecar::invocation(&cwd, &overrides, stdin),
+            support::sidecar::invocation(&cwd, &overrides, stdin)
+                .with_deadline(support::oracle::RUN_DEADLINE * 10),
         );
 
         if stress.collections == 0 {

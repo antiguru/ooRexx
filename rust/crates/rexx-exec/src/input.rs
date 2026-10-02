@@ -260,7 +260,15 @@ impl Interp {
     /// Does nothing for an embedding that installed none, and nothing for a
     /// source that cannot wait -- so no differential run's output moves.
     fn hand_over_before_read(&mut self) {
-        if self.sinks.is_none() || !self.input.is_live() {
+        if self.input.is_live() {
+            self.hand_over_output();
+        }
+    }
+
+    /// Hands the two output buffers to the embedding's [`crate::Sinks`], if
+    /// it installed any: before a read, and before this thread idles.
+    pub(crate) fn hand_over_output(&mut self) {
+        if self.sinks.is_none() {
             return;
         }
         let mut out = std::mem::take(&mut self.out);

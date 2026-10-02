@@ -140,7 +140,7 @@ impl Interp {
 
     /// `RexxActivation::getIdntfr` (`execution/RexxActivation.cpp:94`): this
     /// activation's `~invocation`, minted on the first ask.
-    fn invocation_of(&mut self, depth: usize) -> Option<u32> {
+    pub(crate) fn invocation_of(&mut self, depth: usize) -> Option<u32> {
         if let Some(found) = self.frame_at(depth)?.invocation {
             return Some(found);
         }

@@ -104,7 +104,11 @@ fn run_crate(path: &Path) -> Outcome {
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("case path {} is not valid UTF-8", path.display()));
-    run_program(path_str, text, Invocation::none())
+    run_program(
+        path_str,
+        text,
+        Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    )
 }
 
 /// Every descriptor of one crate-side run, against what the row records.

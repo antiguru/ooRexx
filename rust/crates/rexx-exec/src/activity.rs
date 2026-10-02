@@ -291,6 +291,9 @@ pub(crate) struct Activity {
     /// What `.context~thread` answers, assigned on first use
     /// ([`crate::Interp::activity_number`]).
     pub(crate) number: Option<u32>,
+    /// What started this activity, for a `>I>` line's `CALLERSTACKFRAME`
+    /// where no frame lies below the traced one; `None` for main.
+    pub(crate) spawner: Option<Spawner>,
     /// How many of this activity's activations have replied and wait for
     /// their split, which a trap handler run at the `REPLY` clause's end
     /// delays to the replier's next clause.
@@ -300,6 +303,19 @@ pub(crate) struct Activity {
     pub(crate) failed_sends: Vec<ObjRef>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
+}
+
+/// What a spawned activity keeps of the activity and frame that started it
+/// (`Activity::setCallerStackFrameAsStringTable`, `concurrency/Activity.cpp:1199`).
+pub(crate) enum Spawner {
+    /// The spawner's number, and the `StackFrame` and executable of its
+    /// innermost level where it had one.
+    Frame {
+        thread: u32,
+        frame: Option<(ObjRef, ObjRef)>,
+    },
+    /// The `StringTable` built from those, shared by every later line.
+    Table(ObjRef),
 }
 
 impl Activity {
@@ -371,6 +387,7 @@ impl Activity {
             sliced: None,
             root_end: None,
             number: None,
+            spawner: None,
             splits_owed: 0,
             failed_sends: Vec::new(),
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
@@ -471,6 +488,7 @@ impl Activity {
             sliced: _,
             root_end,
             number: _,
+            spawner,
             splits_owed: _,
             failed_sends,
             #[cfg(feature = "pinning")]
@@ -485,6 +503,14 @@ impl Activity {
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(failed_sends.iter().copied());
+        match spawner {
+            Some(Spawner::Frame {
+                frame: Some((frame, executable)),
+                ..
+            }) => out.extend([*frame, *executable]),
+            Some(Spawner::Table(table)) => out.push(*table),
+            _ => {}
+        }
         match root_end {
             Some(Ok(crate::run::Ended::Returned(value) | crate::run::Ended::Exited(value)))
             | Some(Err(Failure::Exited(value))) => out.extend(*value),

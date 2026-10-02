@@ -169,7 +169,9 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
     let rust = rexx_exec::run_program(
         path_str,
         text,
-        rexx_exec::Invocation::none().with_directory(directory),
+        rexx_exec::Invocation::none()
+            .with_directory(directory)
+            .with_deadline(support::oracle::RUN_DEADLINE),
     );
     let cpp = oracle.run(&abs);
 

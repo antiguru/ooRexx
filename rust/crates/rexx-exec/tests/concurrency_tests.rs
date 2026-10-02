@@ -1544,4 +1544,33 @@ mod group_runs {
         );
         assert!(failing.is_empty(), "not passing: {failing:?}");
     }
+    /// The `TRACE_TraceObject` tests that pass; the table printed beside
+    /// them names what each of the others waits on.
+    const TRACE_OBJECT_PASSING: &[&str] = &[
+        "TEST_SETMAKESTRING_WITH_METHOD_OBJECT",
+        "TEST_TRACEOBJECT_OPTION",
+        "TEST_TRACEOBJECT_OPTION_INVALID",
+    ];
+
+    #[test]
+    fn the_outcome_table_of_the_trace_object_group() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let results = outcome_table(
+            "trace-object-table",
+            "base/keyword",
+            "TRACE_TraceObject",
+            "REXX_TRACE_OBJECT_TABLE",
+            SwitchMode::None,
+            |_| true,
+        );
+        let passing: Vec<&str> = results
+            .iter()
+            .filter(|row| matches!(row.outcome, Outcome::Pass))
+            .map(|row| row.test.as_str())
+            .collect();
+        assert_eq!(passing, TRACE_OBJECT_PASSING);
+    }
 }

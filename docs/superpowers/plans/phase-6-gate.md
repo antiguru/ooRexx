@@ -111,3 +111,32 @@ finished 2026-10-01T11:22:06+02:00
 ```
 
 G4 release: 2803 passed, 0 failed. G6 debug: 2805 passed, 0 failed (sums of `test result` lines).
+
+## S2
+
+### UNINIT ordering (spec section 6, the *(verify)* item)
+
+Oracle, 30 runs each, from a fresh directory; each line is one run's stdout, `|`-joined, with its
+count. Probes: `S/t9/v/u1.rex` to `u5.rex` (`S` as above).
+
+- `u1`, an object main holds, and a started activity still sleeping when main ends:
+  30 `main end|activity end|uninit live`. Termination waits for the activity, then runs the
+  `UNINIT`.
+- `u2`, an object dropped in a started activity that main waits on: 30
+  `activity end|main end|uninit dropped`. Without a collection it waits for termination.
+- `u3`, the same with `call gc 'force'` in the activity: 30 `activity end|main end|uninit
+  dropped 1`: the forced collection does not run it; termination does, on thread 1.
+- `u4`, the same with a loop allocating 200000 arrays, then a `call`: 30 `activity loop
+  done|uninit dropped|activity end|main end`. A collection readies it and the next activation
+  return runs it, on the started activity.
+- `u5`, `REPLY` inside an `UNINIT` run at termination: 29 `main end|uninit before reply|uninit
+  after reply`, 1 without the last line (the continuation races process exit).
+
+Rule (`concurrency/Activity.cpp:249`, `:324`, `runtime/InterpreterInstance.cpp:562-581`):
+readied `UNINIT`s run when an activity's dispatch ends, main's included, and termination waits for
+every activity before its collection and sweep. This crate runs readied `UNINIT`s when an activity
+ends and when main ends, waits for every activity, sweeps, then runs to their end the activities
+the sweep started. The oracle's further run at an activation return (`RexxActivation.cpp:705`) is
+collection timing, which is not a specified observable; `u3` and `u4` answer differently here for
+that reason. Witnesses: `corpus/lang/uninit_after_every_activity.rex`; `u5` and the ending
+activity are crate-side (`scheduler/tests.rs`).

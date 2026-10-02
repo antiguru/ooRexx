@@ -31,7 +31,7 @@ use std::process::{Command, Stdio};
 use rexx_exec::{Invocation, Outcome, run_program};
 
 use crate::support::oracle::{
-    CppOutcome, StderrComparison, descriptor_diff_with, wrapped_exit_code,
+    CppOutcome, ORACLE_DEADLINE, StderrComparison, descriptor_diff_with, wrapped_exit_code,
 };
 
 pub mod orx;
@@ -98,14 +98,20 @@ pub fn verdict(differs: Descriptors) -> Verdict {
         (true, true, true) => Verdict::DivergeBoth,
     }
 }
-/// Runs one probe in process and hands back its outcome.
+/// Runs one probe in process and hands back its outcome, bounded as the
+/// oracle's run is: a probe whose program does not end here reports the
+/// deadline on its stderr instead of stalling the table.
 pub fn run_gate_probe(abs: &Path) -> Outcome {
     let text = fs::read(abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
     let path = abs
         .to_str()
         .unwrap_or_else(|| panic!("probe path {} is not valid UTF-8", abs.display()));
 
-    let outcome = run_program(path, text, Invocation::none());
+    let outcome = run_program(
+        path,
+        text,
+        Invocation::none().with_deadline(ORACLE_DEADLINE),
+    );
 
     // A refusal raises, so this count is zero in any row that produced a
     // measurement; reading it is the cheapest statement that the row measured

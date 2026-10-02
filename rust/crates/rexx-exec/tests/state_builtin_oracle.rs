@@ -438,7 +438,11 @@ fn sweep_one(oracle: &Oracle, run_root: &Path, case: &Case) -> Option<String> {
         .unwrap_or_else(|| panic!("case path {} is not valid UTF-8", abs.display()));
 
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-    let rust = rexx_exec::run_program(path, text, rexx_exec::Invocation::none());
+    let rust = rexx_exec::run_program(
+        path,
+        text,
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    );
     let cpp = oracle.run(&abs);
 
     // An unconditional `assert!`, not a `Some(String)` return: this
@@ -546,7 +550,7 @@ fn every_declared_gap_names_a_case_and_fails_loudly() {
         let rust = rexx_exec::run_program(
             file.to_str().expect("a UTF-8 path"),
             text,
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
         );
         assert_eq!(
             rust.exit_code,

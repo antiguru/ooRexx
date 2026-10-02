@@ -97,7 +97,11 @@ fn describe(label: &str, actual: &[u8], expected: &[u8]) -> String {
 fn check_case(name: &str) -> Vec<String> {
     let expected = parse_expected(&read_case(name, "expected"), name);
     let source = read_case(name, "rex");
-    let outcome = run_program(CASE_PATH, source, Invocation::none());
+    let outcome = run_program(
+        CASE_PATH,
+        source,
+        Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    );
 
     let mut mismatches = Vec::new();
     if outcome.stdout != expected.stdout {

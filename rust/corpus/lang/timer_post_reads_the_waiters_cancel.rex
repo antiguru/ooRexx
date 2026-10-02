@@ -15,7 +15,7 @@ b~cancelNow
 r = b~alarmStop(a~handle)
 call SysSleep 0.1
 say 'poster cancelled' m~completed
-say 'remainder ran' m~result
+say 'waiter result' m~result
 exit
 waitStarted: procedure
   use arg o

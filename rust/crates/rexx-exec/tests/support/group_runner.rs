@@ -514,14 +514,23 @@ pub fn test_names(
 /// `test...` of its `ooTestCase` subclasses: for a group whose whole-group
 /// listing run outlasts the oracle's deadline. A test class inheriting from
 /// another test class, or a `::CLASS` directive split across lines, is not
-/// listed.
+/// listed; resource bodies are skipped.
 pub fn source_test_names(dir: &str, group: &str) -> Vec<String> {
     let text = read_lossy(&groups_root().join(dir).join(format!("{group}.testGroup")));
     let mut in_test_class = false;
+    let mut resource_end: Option<String> = None;
     let mut names = Vec::new();
     for line in text.lines() {
+        if let Some(marker) = &resource_end {
+            if line.starts_with(marker.as_str()) {
+                resource_end = None;
+            }
+            continue;
+        }
         let lower = line.trim_start().to_ascii_lowercase();
-        if lower.starts_with("::class") {
+        if lower.starts_with("::resource") {
+            resource_end = Some(resource_marker(line.trim_start()));
+        } else if lower.starts_with("::class") {
             in_test_class = lower.contains("ootestcase");
         } else if let Some(rest) = lower.strip_prefix("::method") {
             let name = rest
@@ -536,6 +545,34 @@ pub fn source_test_names(dir: &str, group: &str) -> Vec<String> {
     }
     names.sort();
     names
+}
+
+/// The line prefix that ends the resource `directive` opens: its `END`
+/// marker, a quoted string as written or a symbol in upper case, else
+/// `::END` (`LanguageParser::checkMarker`, `parser/LanguageParser.cpp:959`).
+/// A hex or binary string marker is not decoded.
+fn resource_marker(directive: &str) -> String {
+    let mut tokens = Vec::new();
+    let mut rest = directive.trim_start_matches(':');
+    while let Some(start) = rest.find(|c: char| !c.is_whitespace()) {
+        rest = &rest[start..];
+        let quote = rest.chars().next().filter(|c| matches!(c, '\'' | '"'));
+        let end = match quote {
+            Some(quote) => rest[1..].find(quote).map_or(rest.len(), |at| at + 2),
+            None => rest.find(char::is_whitespace).unwrap_or(rest.len()),
+        };
+        tokens.push(&rest[..end]);
+        rest = &rest[end..];
+    }
+    match tokens.as_slice() {
+        [_, _, keyword, marker, ..] if keyword.eq_ignore_ascii_case("end") => {
+            match marker.strip_prefix(['\'', '"']) {
+                Some(quoted) => quoted[..quoted.len() - 1].to_string(),
+                None => marker.to_ascii_uppercase(),
+            }
+        }
+        _ => "::END".to_string(),
+    }
 }
 
 /// Runs each of `tests` of `group` (files in `dir`, below `ootest/ooRexx`),

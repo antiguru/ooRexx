@@ -538,7 +538,7 @@ impl Interp {
         self.trace.extend_from_slice(package);
         self.trace.extend_from_slice(b"\".\n");
         make_displayable(&mut self.trace, line_start);
-        self.route_trace_line(line_start);
+        self.route_trace_line_as(line_start, prefix == ">I>");
     }
 }
 
