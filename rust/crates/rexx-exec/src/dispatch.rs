@@ -92,6 +92,9 @@ use string::{
 // body takes the seam's `Cleared`, which cannot be named outside it.
 pub(crate) mod stream;
 
+// `.Alarm`'s and `.Ticker`'s `LIBRARY REXX` entry points.
+mod time_support;
+
 /// `.File`'s entry points, whose Rexx half hands each one an already-qualified
 /// path.
 mod files;
@@ -233,6 +236,12 @@ fn put_native(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: N
 /// pushed or the park on [`crate::activity::Activity::native_park`].
 type NativeBegin =
     fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Result<NativeStarted, Failure>;
+
+/// A `LIBRARY REXX` entry point that reads or writes the receiver's variables
+/// in the method's scope, its fourth parameter, and may park as a
+/// [`NativeBegin`] does.
+type ScopedBegin =
+    fn(&mut Interp, Cleared, ObjRef, ObjRef, &[Option<ObjRef>]) -> Result<NativeStarted, Failure>;
 
 /// What [`Interp::invoke`] needs about one primitive method beyond its code.
 #[derive(Copy, Clone)]
@@ -2324,6 +2333,35 @@ impl Interp {
                         self.blame_external_method(name, &scope, method, receiver, args, reraised);
                     }
                     outcome
+                }
+                native::ExternalBody::Scoped { arity, begin } => {
+                    let outcome = match arity {
+                        Arity::Fixed(arity) if args.len() > *arity => {
+                            Err(Raised::too_many_external_arguments(*arity).into())
+                        }
+                        Arity::Fixed(_) | Arity::Counted => {
+                            begin(self, cleared, receiver, resolution.scope, args)
+                        }
+                    };
+                    match outcome {
+                        Ok(NativeStarted::Ran(value)) => Ok(value),
+                        Ok(NativeStarted::Entered(then)) => {
+                            match self.activity.native_park.as_mut() {
+                                Some(park) => park.thens.push((then, None)),
+                                None => self.push_native_tail(then, None),
+                            }
+                            return Ok(Started::Entered);
+                        }
+                        Err(failure) => {
+                            let scope = self.classes().id_string(resolution.scope).to_string();
+                            let method = resolution.method;
+                            let reraised = failure.reraised_by_native_call();
+                            self.blame_external_method(
+                                name, &scope, method, receiver, args, reraised,
+                            );
+                            Err(failure)
+                        }
+                    }
                 }
             },
             Invocable::Rexx(_) | Invocable::Native(_) => return Err(Loud::missing_body().into()),

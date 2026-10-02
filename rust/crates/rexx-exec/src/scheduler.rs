@@ -52,6 +52,34 @@ pub(crate) enum ExecOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ActivityId(u32);
 
+/// A timer the natives behind `.Alarm` and `.Ticker` wait on, numbered per
+/// interpreter from 1; its `EVENTSEMHANDLE` pointer holds the number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TimerId(u32);
+
+impl TimerId {
+    pub(crate) fn from_address(address: usize) -> Option<TimerId> {
+        u32::try_from(address).ok().map(TimerId)
+    }
+
+    pub(crate) fn address(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// A timer's state: the oracle's event semaphore (`SysSemaphore`), posted
+/// until reset, and the activity waiting on it.
+#[derive(Default)]
+struct Timer {
+    posted: bool,
+    /// Whether a post was a cancel.
+    cancelled: bool,
+    /// The waiting activity and its sleeper's park order.
+    waiter: Option<(ActivityId, u64)>,
+    /// When the whole days of the wait end and its remainder begins.
+    days_end: Option<Instant>,
+}
+
 /// A message object's identity among the activities waiting on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct MessageId(u32);
@@ -70,6 +98,8 @@ pub(crate) enum ParkReason {
     MessageWait(MessageId),
     /// `SysSleep`, until `deadline`.
     Sleep { deadline: Instant },
+    /// A timer's wait, until `deadline` or a post to `cancel`.
+    Timer { deadline: Instant, cancel: TimerId },
 }
 
 impl ParkReason {
@@ -79,6 +109,7 @@ impl ParkReason {
             ParkReason::Guard => "a guard",
             ParkReason::MessageResult(_) | ParkReason::MessageWait(_) => "a message's completion",
             ParkReason::Sleep { .. } => "a sleep's end",
+            ParkReason::Timer { .. } => "a timer's end",
         }
     }
 }
@@ -144,6 +175,8 @@ pub(crate) struct Activities {
     /// the loop that set it aside; it goes back to the ready queue when that
     /// loop returns.
     set_aside: Vec<(ActivityId, usize)>,
+    timers: FxHashMap<TimerId, Timer>,
+    next_timer: u32,
     message_ids: FxHashMap<ObjRef, MessageId>,
     next_message: u32,
     /// The parked activities waiting on each message, in the order they
@@ -169,6 +202,10 @@ pub(crate) struct Activities {
     late_failures: Vec<Failure>,
 }
 
+/// The oracle's `msecInADay`: a timer's wait is whole days of this, then a
+/// remainder.
+pub(crate) const TIMER_DAY: std::time::Duration = std::time::Duration::from_secs(86_400);
+
 /// Main's handle, which `Activities::new` gives the activity that runs the
 /// program.
 const MAIN: ActivityId = ActivityId(0);
@@ -193,6 +230,8 @@ impl Activities {
             next_sleeper: 0,
             owners: Vec::new(),
             set_aside: Vec::new(),
+            timers: FxHashMap::default(),
+            next_timer: 0,
             message_ids: FxHashMap::default(),
             next_message: 0,
             waiters: FxHashMap::default(),
@@ -306,6 +345,14 @@ impl Scheduler for Interp {
                 table
                     .sleepers
                     .push(Reverse((deadline, table.next_sleeper, running)));
+            }
+            ParkReason::Timer { deadline, cancel } => {
+                table.next_sleeper += 1;
+                let order = table.next_sleeper;
+                table.sleepers.push(Reverse((deadline, order, running)));
+                if let Some(timer) = table.timers.get_mut(&cancel) {
+                    timer.waiter = Some((running, order));
+                }
             }
         }
     }
@@ -545,12 +592,18 @@ impl Interp {
         Some(failure)
     }
 
-    /// Withdraws the running activity from every message's waiters and from
-    /// the sleepers.
+    /// Withdraws the running activity from every message's waiters, from the
+    /// sleepers and from the timers.
     fn cancel_wait(&mut self) {
         let running = self.activities.running;
         for waiters in self.activities.waiters.values_mut() {
             waiters.retain(|waiter| *waiter != running);
+        }
+        for timer in self.activities.timers.values_mut() {
+            if timer.waiter.is_some_and(|(waiter, _)| waiter == running) {
+                timer.waiter = None;
+                timer.days_end = None;
+            }
         }
         self.activities
             .sleepers
@@ -581,6 +634,96 @@ impl Interp {
         self.stack_base.abs_diff(here as usize) > self.stack_room
     }
 
+    /// A new timer, not posted.
+    pub(crate) fn create_timer(&mut self) -> TimerId {
+        let table = &mut self.activities;
+        table.next_timer += 1;
+        let id = TimerId(table.next_timer);
+        table.timers.insert(id, Timer::default());
+        id
+    }
+
+    /// Ends `id`, whose waits are over.
+    pub(crate) fn remove_timer(&mut self, id: TimerId) {
+        self.activities.timers.remove(&id);
+    }
+
+    /// Whether `id` is posted, or `None` for a timer that has ended.
+    pub(crate) fn timer_posted(&self, id: TimerId) -> Option<bool> {
+        self.activities.timers.get(&id).map(|timer| timer.posted)
+    }
+
+    /// Clears `id`'s post.
+    pub(crate) fn reset_timer(&mut self, id: TimerId) {
+        if let Some(timer) = self.activities.timers.get_mut(&id) {
+            timer.posted = false;
+        }
+    }
+
+    /// Records that a wait on `id` whose whole days end at `days_end` is
+    /// about to park.
+    pub(crate) fn begin_timer_wait(&mut self, id: TimerId, days_end: Instant) {
+        if let Some(timer) = self.activities.timers.get_mut(&id) {
+            timer.days_end = Some(days_end);
+        }
+    }
+
+    /// Ends the running activity's wait on `id`: whether it was posted, and
+    /// whether that post was a cancel.
+    pub(crate) fn end_timer_wait(&mut self, id: TimerId) -> (bool, bool) {
+        let Some(timer) = self.activities.timers.get_mut(&id) else {
+            return (false, false);
+        };
+        timer.waiter = None;
+        timer.days_end = None;
+        (timer.posted, timer.cancelled)
+    }
+
+    /// Posts `id`, `cancelled` where the receiver's `CANCELED` is `.true`,
+    /// and wakes its waiter. During a wait's whole days a post that is not a
+    /// cancel is reset and ends the current day, as the oracle's day loop
+    /// does.
+    pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: bool) {
+        let table = &mut self.activities;
+        let Some(timer) = table.timers.get_mut(&id) else {
+            return;
+        };
+        let now = Instant::now();
+        if !cancelled
+            && let Some(end) = timer.days_end
+            && now < end
+        {
+            let begun = (end - now).as_nanos().div_ceil(TIMER_DAY.as_nanos());
+            let left = u32::try_from(begun - 1).unwrap_or(u32::MAX);
+            let ended = now + TIMER_DAY * left;
+            timer.days_end = Some(ended);
+            let Some((_, order)) = timer.waiter else {
+                return;
+            };
+            let mut sleepers = std::mem::take(&mut table.sleepers).into_vec();
+            for Reverse((deadline, parked, _)) in &mut sleepers {
+                if *parked == order {
+                    *deadline = ended + (*deadline - end);
+                }
+            }
+            table.sleepers = BinaryHeap::from(sleepers);
+            return;
+        }
+        timer.posted = true;
+        timer.cancelled |= cancelled;
+        let Some((waiter, order)) = timer.waiter.take() else {
+            return;
+        };
+        timer.days_end = None;
+        let before = table.sleepers.len();
+        table
+            .sleepers
+            .retain(|Reverse((_, parked, _))| *parked != order);
+        if table.sleepers.len() < before {
+            table.ready.push_back(waiter);
+        }
+    }
+
     /// Moves every sleeper whose deadline is due to the ready queue, in
     /// deadline order.
     fn wake_due_sleepers(&mut self) {
@@ -595,15 +738,20 @@ impl Interp {
         }
     }
 
-    /// [`Interp::run_started_activities`] until it has nothing left to run,
-    /// with each failure it answered on the way, in order.
+    /// [`Interp::run_started_activities`] until it has nothing left to run or
+    /// the run's deadline has passed, with each failure it answered on the
+    /// way, in order.
     pub(crate) fn run_started_to_end(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
         let mut failures: Vec<_> = std::mem::take(&mut self.activities.late_failures)
             .into_iter()
             .map(|failure| (failure, Vec::new()))
             .collect();
         while let Err(failure) = self.run_started_activities() {
+            let deadline = matches!(failure, Failure::Deadline);
             failures.push((failure, Vec::new()));
+            if deadline {
+                break;
+            }
         }
         failures
     }

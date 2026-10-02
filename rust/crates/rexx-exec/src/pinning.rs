@@ -254,6 +254,7 @@ mod counter {
                 crate::scheduler::ParkReason::MessageResult(_) => ParkKind::MessageResult,
                 crate::scheduler::ParkReason::MessageWait(_) => ParkKind::MessageWait,
                 crate::scheduler::ParkReason::Sleep { .. } => ParkKind::SysSleep,
+                crate::scheduler::ParkReason::Timer { .. } => ParkKind::Timer,
             }
         }
 

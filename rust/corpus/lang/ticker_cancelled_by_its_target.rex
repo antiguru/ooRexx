@@ -1,0 +1,17 @@
+/* A Ticker triggers its target each interval until the target cancels it. */
+t = .counter~new
+k = .ticker~new(0.05, t)
+say 'main'
+::class counter inherit AlarmNotification
+::method init
+  expose count
+  count = 0
+::method triggered
+  expose count
+  use arg ticker
+  count = count + 1
+  say 'tick' count ticker~canceled
+  if count = 3 then ticker~cancel
+::method cancel
+  use arg ticker
+  say 'cancel notified' ticker~canceled

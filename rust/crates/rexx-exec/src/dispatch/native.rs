@@ -26,7 +26,7 @@ use rexx_parse::{
     AttributeDirective, AttributeStyle, ExternalSpec, MethodDirective, RoutineDirective,
 };
 
-use super::{Arity, NativeMethod, native_file_path_separator, native_file_separator};
+use super::{Arity, NativeMethod, ScopedBegin, native_file_path_separator, native_file_separator};
 use crate::{Loud, accessor_setter_name};
 
 /// Which part of the interpreter an entry point belongs to, and through that
@@ -76,6 +76,9 @@ pub(in crate::dispatch) enum ExternalBody {
     /// A body this phase runs, with the parameter count the C++ entry
     /// declares.
     Implemented { arity: Arity, run: NativeMethod },
+    /// A body that runs in the method's scope, with the parameter count the
+    /// C++ entry declares.
+    Scoped { arity: Arity, begin: ScopedBegin },
     /// A body some later phase owes, named here. The bind still succeeds;
     /// the send is loud.
     Deferred { owner: &'static str },
@@ -91,6 +94,19 @@ const fn implemented(
         name,
         family,
         body: ExternalBody::Implemented { arity, run },
+    }
+}
+
+const fn scoped(
+    name: &'static str,
+    family: Family,
+    arity: Arity,
+    begin: ScopedBegin,
+) -> NativeExternal {
+    NativeExternal {
+        name,
+        family,
+        body: ExternalBody::Scoped { arity, begin },
     }
 }
 
@@ -113,11 +129,36 @@ const fn deferred(name: &'static str, family: Family, owner: &'static str) -> Na
 
 /// The `REXX` package's exported method table.
 static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
-    deferred("alarm_startTimer", Family::Timer, "Phase 6"),
-    deferred("alarm_stopTimer", Family::Timer, "Phase 6"),
-    deferred("ticker_createTimer", Family::Timer, "Phase 6"),
-    deferred("ticker_waitTimer", Family::Timer, "Phase 6"),
-    deferred("ticker_stopTimer", Family::Timer, "Phase 6"),
+    scoped(
+        "alarm_startTimer",
+        Family::Timer,
+        Arity::Fixed(2),
+        super::time_support::alarm_start_timer,
+    ),
+    scoped(
+        "alarm_stopTimer",
+        Family::Timer,
+        Arity::Fixed(1),
+        super::time_support::stop_timer,
+    ),
+    scoped(
+        "ticker_createTimer",
+        Family::Timer,
+        Arity::Fixed(0),
+        super::time_support::ticker_create_timer,
+    ),
+    scoped(
+        "ticker_waitTimer",
+        Family::Timer,
+        Arity::Fixed(3),
+        super::time_support::ticker_wait_timer,
+    ),
+    scoped(
+        "ticker_stopTimer",
+        Family::Timer,
+        Arity::Fixed(1),
+        super::time_support::stop_timer,
+    ),
     implemented(
         "stream_init",
         Family::Stream,
@@ -436,9 +477,9 @@ pub(crate) fn entry_points() -> impl Iterator<Item = crate::NativeEntryPoint> {
             family: entry.family.label(),
             owner: match entry.body {
                 ExternalBody::Deferred { owner } => Some(owner),
-                ExternalBody::Implemented { .. } => None,
+                ExternalBody::Implemented { .. } | ExternalBody::Scoped { .. } => None,
             },
-            implemented: matches!(entry.body, ExternalBody::Implemented { .. }),
+            implemented: !matches!(entry.body, ExternalBody::Deferred { .. }),
         })
 }
 

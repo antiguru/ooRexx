@@ -372,6 +372,22 @@ const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
         ".Properties~new~~put('v1','k1')~~put('v2','k2')",
     ),
     ("Stem", ".Stem~new~~put('v1','k1')~~put('v2','k2')"),
+    // A timer whose replied activity has started its wait before the cancel
+    // and ended after it, by a `SysSleep` on each side: `class-set.txt`'s
+    // `~~cancel` straight after `~new` reaches `Alarm~cancel`'s `guard on
+    // when timerStarted` before the timer has started; a second cancel before
+    // the alarm clears `eventSemHandle` posts the oracle's freed semaphore;
+    // and a row re-running `Ticker~init` would race the ticker's loop.
+    (
+        "Alarm",
+        ".Array~of(.Array~of(.Alarm~new(99999, .Message~new(.Object~new, 'STRING')), \
+         SysSleep(0.2))[1]~~cancel, SysSleep(0.2))[1]",
+    ),
+    (
+        "Ticker",
+        ".Array~of(.Ticker~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel, \
+         SysSleep(0.2))[1]",
+    ),
     // **Phase 5i Task 6.** `StackFrame` has no construction expression in
     // `corpus/docs/class-set.txt` -- the reference says the user cannot make
     // one -- so the fallback receiver is a bare `~new`, which the oracle and

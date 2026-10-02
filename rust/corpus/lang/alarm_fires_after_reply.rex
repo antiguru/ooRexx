@@ -1,0 +1,9 @@
+/* An Alarm replies, then waits on its timer on the replied activity, which
+   fires after main has ended; the program waits for it. */
+t = .target~new
+a = .alarm~new(0.1, t)
+say 'main' a~triggered
+::class target inherit AlarmNotification
+::method triggered
+  use arg alarm
+  say 'triggered' alarm~triggered (.context~thread \= 1)

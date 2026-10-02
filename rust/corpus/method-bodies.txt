@@ -891,13 +891,13 @@ Table	union	instance	answers	rc 163
 Table	xor	instance	answers	rc 163
 Table	of	class	answers	rc 0
 Table	putAll	instance	answers	rc 163
-Alarm	attachment	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
-Alarm	cancel	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
-Alarm	canceled	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
-Alarm	cancelled	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
-Alarm	init	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
-Alarm	scheduledTime	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
-Alarm	triggered	instance	loud	a GUARD that has to wait for another activity to make its WHEN expression true
+Alarm	attachment	instance	answers	rc 0
+Alarm	cancel	instance	answers	rc 165
+Alarm	canceled	instance	answers	rc 0
+Alarm	cancelled	instance	answers	rc 0
+Alarm	init	instance	answers	rc 163
+Alarm	scheduledTime	instance	unstable	this crate
+Alarm	triggered	instance	answers	rc 0
 AlarmNotification	cancel	instance	answers	rc 165
 AlarmNotification	triggered	instance	answers	rc 163
 Buffer	new	class	answers	rc 163
@@ -1249,12 +1249,12 @@ Supplier	index	instance	answers	rc 163
 Supplier	item	instance	answers	rc 163
 Supplier	next	instance	answers	rc 163
 Supplier	supplier	instance	answers	rc 0
-Ticker	attachment	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
-Ticker	cancel	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
-Ticker	canceled	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
-Ticker	cancelled	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
-Ticker	init	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
-Ticker	interval	instance	loud	the LIBRARY REXX entry point "ticker_createTimer"
+Ticker	attachment	instance	answers	rc 0
+Ticker	cancel	instance	answers	rc 165
+Ticker	canceled	instance	answers	rc 0
+Ticker	cancelled	instance	answers	rc 0
+Ticker	init	instance	answers	rc 163
+Ticker	interval	instance	answers	rc 0
 TimeSpan	init	instance	answers	rc 163
 TimeSpan	new	class	answers	rc 163
 TimeSpan	fromCivilTime	class	answers	rc 163

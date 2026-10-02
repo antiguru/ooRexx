@@ -35,6 +35,12 @@ const BEFORE_THE_SEND: &[u8] = b"main\n";
 /// installing, so a bootstrap that cannot run them cannot install that
 /// file.
 const IMPLEMENTED: &[&str] = &[
+    // The timers `.Alarm` and `.Ticker` drive.
+    "alarm_startTimer",
+    "alarm_stopTimer",
+    "ticker_createTimer",
+    "ticker_waitTimer",
+    "ticker_stopTimer",
     "file_separator",
     "file_path_separator",
     // `.File`'s own entry points. `file_qualify` leads because `init`

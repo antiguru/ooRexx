@@ -476,3 +476,9 @@ lang/message_notifier_fails.rex
 lang/message_notifier_fails_untrapped.rex
 # Task 7 fix round 2: a notified failed send keeps the native SEND level.
 lang/message_notify_error_traceback.rex
+# Phase 6 S2 Task 8: the timer natives park; an Alarm fires on its replied
+# activity, a Ticker until cancelled, a cancel ends whole days of waiting.
+lang/alarm_fires_after_reply.rex
+lang/ticker_cancelled_by_its_target.rex
+lang/timer_cancel_in_whole_days.rex
+lang/timer_native_arguments.rex

@@ -716,6 +716,20 @@ fn a_deadline_ends_a_wait_on_a_later_sleeper() {
     assert_eq!(stdout(&outcome), "");
 }
 
+/// A run's deadline also ends the program's end waiting on a started
+/// activity's sleep.
+#[test]
+fn a_deadline_ends_the_programs_wait_on_a_started_sleeper() {
+    let began = std::time::Instant::now();
+    let outcome = run_with(
+        "t = .t~new~start('nap')\nsay 'main'\n::class t\n::method nap\n  call SysSleep 30\n",
+        Invocation::none().with_deadline(std::time::Duration::from_millis(300)),
+    );
+    assert!(began.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(outcome.exit_code, crate::DEADLINE_EXIT);
+    assert_eq!(stdout(&outcome), "main\n");
+}
+
 /// An inverted pinned wait is refused naming the kind of its wait under the
 /// switch mode too, whose pinned yields run the same activities.
 #[test]
