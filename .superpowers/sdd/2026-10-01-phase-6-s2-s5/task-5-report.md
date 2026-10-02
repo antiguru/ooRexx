@@ -181,3 +181,22 @@ concurrency_tests (gated, pinning) 42 passed, Message 52 pass / 16 refused, swit
 passed. The reviewer's other probes rerun against the new release: 80 match the oracle; `q108`
 (ADDRESS WITH STEM expression, 20.932 report shape) and `q211` (`LOOP` not implemented) differ the
 same at base; `k_reply` is the known deferred-REPLY ordering (Task 6); `e4`'s oracle run timed out.
+
+## Fix round 1b (background gates at 917e229ea: G4 corpus, message_halt_loop_step.rex)
+
+* `message_halt_loop_step.rex` printed the halt's landing site (traceback on stderr, POSITION on
+  stdout), which depends on where the request finds the loop (P32). Each spinning method now traps
+  the 4.1 with `SIGNAL ON SYNTAX` in its own activation and answers its kind, the condition and the
+  code; main prints `~hasError` and `~result`. Still witnessed: a halt reaching each loop shape
+  ends it, raised in the spinning method's activation. Sourceline expectation regenerated. Oracle
+  30/30 one hash; ours 30/30 that hash unswitched and 30/30 under every.
+* Sweep of every Phase 6 witness in phase-8.txt (from the first "Phase 6" heading): run on the
+  oracle, those with stderr read. Halt tracebacks: `message_halt_self` and `message_halt_interpret`
+  (a self-halt, landing at the end of the halting clause), `message_halt_untrapped` and
+  `message_halt_returning` (a halt to a parked activity, landing at the waiting clause when the
+  wait ends): none lands where a cross-activity request finds a running loop, so they stay.
+  `message_halt_pinned_target` was made site-free in Task 4. No witness prints a traceback from a
+  slice.
+* Load: `REXX_CORPUS_GATE=1 cargo test --release --test corpus corpus_differential` 5 times while
+  `collect_stress` (release) ran in a loop: 712 of 712 each time; the two `collect_stress` runs that
+  finished meanwhile passed 34/34. `sourceline_oracle` passes.
