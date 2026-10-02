@@ -820,10 +820,7 @@ impl Interp {
     /// the run's deadline has passed, with each failure it answered on the
     /// way, in order.
     pub(crate) fn run_started_to_end(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
-        let mut failures: Vec<_> = std::mem::take(&mut self.activities.late_failures)
-            .into_iter()
-            .map(|failure| (failure, Vec::new()))
-            .collect();
+        let mut failures = self.take_late_failures();
         while let Err(failure) = self.run_started_activities() {
             let deadline = matches!(failure, Failure::Deadline);
             failures.push((failure, Vec::new()));
@@ -847,6 +844,14 @@ impl Interp {
             self.keep_late_failure(loud.into());
         }
         Err(first.into())
+    }
+
+    /// The failures kept for the program's end, in order.
+    pub(crate) fn take_late_failures(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
+        std::mem::take(&mut self.activities.late_failures)
+            .into_iter()
+            .map(|failure| (failure, Vec::new()))
+            .collect()
     }
 
     /// A failure another activity answered main's root loop with after

@@ -1109,3 +1109,18 @@ fn every_refusal_of_the_uninits_at_an_activitys_end_is_reported() {
     );
     assert_eq!(stdout(&outcome), "activity end\nuninit\nuninit\n");
 }
+
+/// A refusal in main ends the run at once, without waiting for an activity
+/// that is still sleeping.
+#[test]
+fn a_refusal_in_main_does_not_wait_for_the_other_activities() {
+    let began = std::time::Instant::now();
+    let outcome = run(
+        ".w~new~start('nap')\nsay 'main'\ndo counter c over .array~of(1)\nend\n\
+                       ::class w\n::method nap\n  call SysSleep 99999\n",
+    );
+    assert!(began.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(outcome.exit_code, 120);
+    assert_eq!(stdout(&outcome), "main\n");
+    assert_eq!(stderr(&outcome), "rexx-exec: DO is not implemented\n");
+}

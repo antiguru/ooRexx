@@ -3101,6 +3101,7 @@ fn execute_on(
     // `interp` below -- a partial move of one field ends `interp`'s usability
     // as a whole value, and every other call above this one only reads or
     // takes a single field, never the whole struct.
+    let refused_main = matches!(result, Err(Failure::Loud(_) | Failure::Slice));
     let mut exit_code = match result {
         // `Failure::Exited` is not a failure -- it is `EXIT` (or falling off
         // the routine's own end) reached through `ExprKind::Call`'s
@@ -3155,8 +3156,13 @@ fn execute_on(
     let mut refused = interp.run_ready_uninits();
 
     // The oracle's termination waits for every activity
-    // (`InterpreterInstance::terminate`).
-    let started = interp.run_started_to_end();
+    // (`InterpreterInstance::terminate`); a refusal in main ends the run
+    // without the wait (ruling P40).
+    let started = if refused_main {
+        interp.take_late_failures()
+    } else {
+        interp.run_started_to_end()
+    };
     report_late_failures(&mut interp, started, path, &mut exit_code);
 
     // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached

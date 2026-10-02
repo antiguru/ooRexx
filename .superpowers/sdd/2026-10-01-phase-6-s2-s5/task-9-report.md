@@ -204,3 +204,26 @@ every 743 of 743; `collect_stress` 36 passed with the corpus (743 of 743) alongs
 `concurrency_tests` `--features pinning`, gate: 44 passed; `gate_table_c` 22 (16.75 s),
 `gate_table_d` 23, `refusal_sites` 5, `native_entries` 24, `closed_phases` 5, `owners` 6, `loud`
 9, `program_end` 2, `method_bodies` 23 (0 regressions, 0 drift); `sourceline_oracle` 1.
+
+### Fix round 1 addendum
+
+- P40: a refusal in main (`Failure::Loud`, or the `Slice` inconsistency reported the same way)
+  ends the run without the wait for the other activities; failures already kept for the program's
+  end are still reported; the termination sweep still runs. Other main endings keep the wait.
+  `corpus/gate-tables/methods/alarm__instance.rex` under release `rexx-run`: stdout empty, stderr
+  the GUARD WHEN refusal, rc 120, in 0.03 s. Test `a_refusal_in_main_does_not_wait_for_the_other_activities`
+  (main refuses at `DO COUNTER ... OVER` while a started activity sleeps 99999 s: rc 120, prompt);
+  with the wait restored (mutation, restored from a copy) it ran to the 60 s test deadline and
+  failed `began.elapsed() < 10 s`. The first build of P40 skipped the kept failures with the wait
+  and reddened `every_refusal_of_the_uninits_at_an_activitys_end_is_reported` (left 1, right 2);
+  `take_late_failures` now reports them on both paths.
+- `tests/dispatch_seam.rs`: `src/dispatch/time_support.rs` joins `CLEARANCE_CONSUMERS`. It is a
+  dispatch submodule holding native bodies that take the token as their `_cleared` parameter, the
+  same consumer shape as the listed files. `dispatch_seam` release: 6 passed.
+
+P28 after the addendum (exit statuses read): fmt 0; clippy 0 and with `--features pinning` 0
+(`Checking rexx-exec` in both); lib release 928 passed; corpus release 743 of 743, `every` 743 of
+743, debug under every 743 of 743; `collect_stress` 36 with the corpus (743 of 743) alongside;
+`concurrency_tests` pinning gate 44; `gate_table_c` 22 (6.83 s), `gate_table_d` 23,
+`refusal_sites` 5, `native_entries` 24, `closed_phases` 5, `owners` 6, `loud` 9, `program_end` 2,
+`dispatch_seam` 6, `method_bodies` 23 (0 regressions, 0 drift); `sourceline_oracle` 1.
