@@ -890,6 +890,12 @@ mod measured {
              ::class sm\n::method unknown\n  call SysSleep 0\n  return 0\n",
         ),
         (
+            "Notification",
+            "m = .message~new('abc', 'length')\nm~notify(.n~new)\nm~send\n\
+             ::class n inherit MessageNotification\n::method messageComplete\n  \
+             call SysSleep 0\n",
+        ),
+        (
             "RedirectWrapper",
             "a = .d~new\naddress system 'echo hi' with output using (a)\n\
              ::class d subclass array\n::method append\n  call SysSleep 0\n  forward class (super)\n",
@@ -1481,7 +1487,7 @@ mod group_runs {
         );
         let failing = not_passing(&results, MESSAGE_START_REFUSED, MESSAGE_START_DIFFERING);
         assert!(failing.is_empty(), "not passing: {failing:?}");
-        for test in ["TEST_SEND", "TEST_START"] {
+        for test in ["TEST_SEND", "TEST_START", "TEST_REPLY", "TEST_NOTIFY"] {
             let row = results
                 .iter()
                 .find(|row| row.test.eq_ignore_ascii_case(test))

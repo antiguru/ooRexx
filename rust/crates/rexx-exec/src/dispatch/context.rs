@@ -131,20 +131,11 @@ struct Snapshot {
 }
 
 impl Interp {
-    /// Where in the activation stack the `RexxContext` `receiver` belongs,
-    /// counted from the innermost -- `0` is the running activation.
+    /// Where in the running activity's stack the `RexxContext` `receiver`
+    /// belongs, counted from the innermost -- `0` is the running activation.
     fn context_depth(&self, receiver: ObjRef) -> Option<usize> {
         self.frames()
             .position(|activation| activation.context_object == Some(receiver))
-    }
-
-    /// The activation the `RexxContext` `receiver` names, or `98.981`.
-    fn context_frame(&self, receiver: ObjRef) -> Result<&Activation, Failure> {
-        let depth = self
-            .context_depth(receiver)
-            .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
-        self.frame_at(depth)
-            .ok_or_else(|| Failure::from(Raised::context_not_active()))
     }
 
     /// `RexxActivation::getIdntfr` (`execution/RexxActivation.cpp:94`): this
@@ -160,12 +151,39 @@ impl Interp {
     }
 }
 
-/// The whole of `RexxContext::checkValid` at a reader that answers straight
-/// out of the activation: the depth, or `98.981`.
-fn depth_of(interp: &Interp, receiver: ObjRef) -> Result<usize, Failure> {
+/// `read`'s answer for the activation the `RexxContext` `receiver` names, at
+/// its depth in its own activity, which is swapped in where it is idle.
+/// `RexxContext::checkValid` (`classes/ContextClass.cpp:145`) tests only that
+/// the activation has not ended, so `98.981` is the answer where no activity
+/// holds it.
+fn at_context(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    read: impl FnOnce(&mut Interp, usize) -> Result<Option<ObjRef>, Failure>,
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(depth) = interp.context_depth(receiver) {
+        return read(interp, depth);
+    }
+    let owner = interp
+        .idle_context_owner(receiver)
+        .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
+    let answer = interp.with_idle_activity(owner, |interp| {
+        let depth = interp
+            .context_depth(receiver)
+            .expect("the owner holds the context's activation");
+        read(interp, depth)
+    })?;
+    if let Some(object) = answer {
+        interp.roots.activity_mut().push_temp(object);
+    }
+    Ok(answer)
+}
+
+/// The activation at `depth`, or `98.981`.
+fn frame(interp: &Interp, depth: usize) -> Result<&Activation, Failure> {
     interp
-        .context_depth(receiver)
-        .ok_or_else(|| Raised::context_not_active().into())
+        .frame_at(depth)
+        .ok_or_else(|| Failure::from(Raised::context_not_active()))
 }
 
 /// `RexxContext::getDigits`: `activation->digits()`, the setting **in force**
@@ -176,8 +194,10 @@ fn context_digits(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let digits = interp.context_frame(receiver)?.settings.digits();
-    Ok(Some(interp.counted(digits as usize)))
+    at_context(interp, receiver, |interp, depth| {
+        let digits = frame(interp, depth)?.settings.digits();
+        Ok(Some(interp.counted(digits as usize)))
+    })
 }
 
 /// `RexxContext::getFuzz`: `activation->fuzz()`, in force -- see
@@ -188,8 +208,10 @@ fn context_fuzz(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let fuzz = interp.context_frame(receiver)?.settings.fuzz();
-    Ok(Some(interp.counted(fuzz as usize)))
+    at_context(interp, receiver, |interp, depth| {
+        let fuzz = frame(interp, depth)?.settings.fuzz();
+        Ok(Some(interp.counted(fuzz as usize)))
+    })
 }
 
 /// `RexxContext::getForm`: `activation->form()` as one of the two global
@@ -200,12 +222,13 @@ fn context_form(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let form = interp.context_frame(receiver)?.settings.form();
-    let text: &[u8] = match form {
-        rexx_num::Form::Scientific => b"SCIENTIFIC",
-        rexx_num::Form::Engineering => b"ENGINEERING",
-    };
-    Ok(Some(interp.text(text)))
+    at_context(interp, receiver, |interp, depth| {
+        let text: &[u8] = match frame(interp, depth)?.settings.form() {
+            rexx_num::Form::Scientific => b"SCIENTIFIC",
+            rexx_num::Form::Engineering => b"ENGINEERING",
+        };
+        Ok(Some(interp.text(text)))
+    })
 }
 
 /// `RexxContext::getLine`: `activation->getContextLine()`, the line of the
@@ -216,9 +239,10 @@ fn context_line(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let depth = depth_of(interp, receiver)?;
-    let line = interp.clause_of(depth).line;
-    Ok(Some(interp.counted(line)))
+    at_context(interp, receiver, |interp, depth| {
+        let line = interp.clause_of(depth).line;
+        Ok(Some(interp.counted(line)))
+    })
 }
 
 /// `RexxContext::getName`: `activation->getCallname()` -- the name this
@@ -229,8 +253,10 @@ fn context_name(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let name = interp.context_frame(receiver)?.invoked_as().to_vec();
-    Ok(Some(interp.text_built(name)))
+    at_context(interp, receiver, |interp, depth| {
+        let name = frame(interp, depth)?.invoked_as().to_vec();
+        Ok(Some(interp.text_built(name)))
+    })
 }
 
 /// `RexxContext::getInvocation`: `activation->getIdntfr()`.
@@ -240,11 +266,12 @@ fn context_invocation(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let depth = depth_of(interp, receiver)?;
-    let id = interp
-        .invocation_of(depth)
-        .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
-    Ok(Some(interp.counted(id as usize)))
+    at_context(interp, receiver, |interp, depth| {
+        let id = interp
+            .invocation_of(depth)
+            .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
+        Ok(Some(interp.counted(id as usize)))
+    })
 }
 
 /// `RexxContext::getThread`: `activation->getActivity()->getIdntfr()`.
@@ -254,9 +281,10 @@ fn context_thread(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    depth_of(interp, receiver)?;
-    let number = interp.activity_number();
-    Ok(Some(interp.counted(number as usize)))
+    at_context(interp, receiver, |interp, _| {
+        let number = interp.activity_number();
+        Ok(Some(interp.counted(number as usize)))
+    })
 }
 
 /// `RexxContext::getInterpreter`:
@@ -267,8 +295,7 @@ fn context_interpreter(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    depth_of(interp, receiver)?;
-    Ok(Some(interp.counted(1)))
+    at_context(interp, receiver, |interp, _| Ok(Some(interp.counted(1))))
 }
 
 /// `RexxContext::getRS`: `activation->getContextReturnStatus()`, which is
@@ -279,8 +306,7 @@ fn context_rs(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    depth_of(interp, receiver)?;
-    Ok(Some(ObjRef::NIL))
+    at_context(interp, receiver, |_, _| Ok(Some(ObjRef::NIL)))
 }
 
 /// `RexxContext::getCondition`: a **copy** of the condition object the
@@ -291,10 +317,12 @@ fn context_condition(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if interp.context_frame(receiver)?.condition.is_some() {
-        return Err(Loud::builtin_option_object("CONDITION", b'O', "a Directory").into());
-    }
-    Ok(Some(ObjRef::NIL))
+    at_context(interp, receiver, |interp, depth| {
+        if frame(interp, depth)?.condition.is_some() {
+            return Err(Loud::builtin_option_object("CONDITION", b'O', "a Directory").into());
+        }
+        Ok(Some(ObjRef::NIL))
+    })
 }
 
 /// `RexxContext::getPackage`: the package of the program **the receiver's own
@@ -305,10 +333,12 @@ fn context_package(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = interp.context_frame(receiver)?.program_id;
-    Ok(Some(
-        interp.package_object(crate::plan::Package::Program(program)),
-    ))
+    at_context(interp, receiver, |interp, depth| {
+        let program = frame(interp, depth)?.program_id;
+        Ok(Some(
+            interp.package_object(crate::plan::Package::Program(program)),
+        ))
+    })
 }
 
 /// `RexxContext::getArgs`: the arguments the context's activation was entered
@@ -319,8 +349,10 @@ fn context_args(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let arguments = interp.context_frame(receiver)?.invoked_with().to_vec();
-    Ok(Some(array_of_slots(interp, arguments)))
+    at_context(interp, receiver, |interp, depth| {
+        let arguments = frame(interp, depth)?.invoked_with().to_vec();
+        Ok(Some(array_of_slots(interp, arguments)))
+    })
 }
 
 /// `RexxContext::getVariables`: `activation->getAllLocalVariables()`, a fresh
@@ -331,8 +363,9 @@ fn context_variables(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let depth = depth_of(interp, receiver)?;
-    local_variables(interp, depth).map(Some)
+    at_context(interp, receiver, |interp, depth| {
+        local_variables(interp, depth).map(Some)
+    })
 }
 
 /// `RexxActivation::getAllLocalVariables`: a `Directory` of every variable
@@ -366,8 +399,9 @@ fn context_executable(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let depth = depth_of(interp, receiver)?;
-    executable_at(interp, depth).map(Some)
+    at_context(interp, receiver, |interp, depth| {
+        executable_at(interp, depth).map(Some)
+    })
 }
 
 /// [`context_executable`]'s answer for the activation at `depth`.
@@ -419,33 +453,34 @@ fn routine_entry_name(
     }
 }
 
-/// `RexxContext::getStackFrames`: every frame of the running stack, innermost
-/// first.
+/// `RexxContext::getStackFrames`: every frame of the stack of the context's
+/// activity, innermost first.
 fn context_stack_frames(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    depth_of(interp, receiver)?;
-    let levels = live_levels(interp);
-    let frame = interp.roots.activity_mut().push_frame();
-    let mut slots = Vec::with_capacity(levels.len());
-    for level in levels {
-        let object = build_live_frame(interp, level)?;
-        interp.roots.activity_mut().push_temp(object);
-        slots.push(Some(object));
-    }
-    let array = interp.alloc_with(
-        BehaviourId::ARRAY,
-        Body::Array {
-            dimensions: None,
-            slots,
-        },
-    );
-    interp.roots.activity_mut().pop_frame(frame);
-    interp.roots.activity_mut().push_temp(array);
-    Ok(Some(array))
+    at_context(interp, receiver, |interp, _| {
+        let levels = live_levels(interp);
+        let frame = interp.roots.activity_mut().push_frame();
+        let mut slots = Vec::with_capacity(levels.len());
+        for level in levels {
+            let object = build_live_frame(interp, level)?;
+            interp.roots.activity_mut().push_temp(object);
+            slots.push(Some(object));
+        }
+        let array = interp.alloc_with(
+            BehaviourId::ARRAY,
+            Body::Array {
+                dimensions: None,
+                slots,
+            },
+        );
+        interp.roots.activity_mut().pop_frame(frame);
+        interp.roots.activity_mut().push_temp(array);
+        Ok(Some(array))
+    })
 }
 
 /// One level of the running stack as `Activity::generateStackFrames` walks

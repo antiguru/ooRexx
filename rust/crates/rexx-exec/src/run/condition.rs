@@ -372,7 +372,7 @@ impl Interp {
             Some(object) => self.trap_reraised_condition_object(object, unwound.origin)?,
             None => self.build_trapped_condition_object(&raised, &unwound)?,
         };
-        self.attach_condition(object);
+        self.attach_condition(object)?;
         self.activation_mut().condition = Some(TrappedCondition {
             name: raised.condition.as_bytes().into(),
             // Only a `SYNTAX` condition has a `CODE` item at all

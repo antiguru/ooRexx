@@ -614,7 +614,7 @@ fn a_refusal_after_main_ended_in_a_nested_round_is_reported() {
              ::method init\n  expose started done\n  started = 0\n  done = 0\n\
              ::method spin unguarded\n  self~started = 1\n  \
              interpret \"do while \\self~done; end\"\n  say 'spin ended'\n  \
-             x = .message~new(.nil, 'x')~replyWith(.array~new)\n  say 'spin after' x~items\n"
+             x = .RexxInfo~executable\n  say 'spin after' x\n"
         )
     };
     for (end, expected) in [
@@ -631,7 +631,7 @@ fn a_refusal_after_main_ended_in_a_nested_round_is_reported() {
             assert_eq!(outcome.exit_code, 120, "{end}: {}", stderr(&outcome));
             assert_eq!(
                 stderr(&outcome),
-                "rexx-exec: method \"REPLYWITH\" of class \"Message\" is not implemented \
+                "rexx-exec: method \"EXECUTABLE\" of class \"RexxInfo\" is not implemented \
                  (Phase 9)\n"
             );
             let printed = stdout(&outcome);
@@ -877,4 +877,80 @@ fn a_stream_a_builtin_builds_defers_the_slice_under_the_switch_mode() {
 #[should_panic(expected = "leaves nothing beyond")]
 fn a_stack_within_the_margin_is_refused() {
     Interp::new().measure_stack(0, super::STACK_MARGIN);
+}
+
+/// Runs `source` unswitched, collecting at every allocation and, where
+/// `switched`, under `EveryOpportunity`, each answering `expected` at exit 0.
+fn in_modes(source: &str, switched: bool, expected: &str) {
+    let mut outcomes = vec![
+        ("unswitched", run(source)),
+        (
+            "collect",
+            crate::run_program_collect_every_alloc(
+                "/tmp/scheduler.rex",
+                source.as_bytes().to_vec(),
+                Invocation::none(),
+            ),
+        ),
+    ];
+    if switched {
+        let invocation = Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity);
+        outcomes.push(("every", run_with(source, invocation)));
+    }
+    for (mode, outcome) in outcomes {
+        assert_eq!(outcome.exit_code, 0, "{mode}: {}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), expected, "{mode}");
+    }
+}
+
+/// A `RexxContext` of an activation on another live activity reads that
+/// activation, its activity's number and its stack; once the activation
+/// has ended it is 98.981.
+#[test]
+fn a_context_reads_an_activation_of_another_live_activity() {
+    in_modes(
+        "o = .k~new\ngate = .message~new(o, 'open')\nm = o~start('hold', gate)\n\
+         do while o~ctx == .nil\n  call SysSleep 0.01\nend\nc = o~ctx\n\
+         say c~line c~name c~variables~x c~digits c~thread .context~thread\n\
+         say c~stackFrames~items c~stackFrames[1]~name c~args[1]~messageName\n\
+         gate~send\nm~wait\nsignal on syntax\nsay c~line\nexit\n\
+         syntax: say condition('o')~code\n\
+         ::class k\n::attribute ctx get unguarded\n\
+         ::method init\n  expose ctx\n  ctx = .nil\n\
+         ::method open unguarded\n\
+         ::method hold unguarded\n  expose ctx\n  use arg gate\n  x = 'held'\n\
+         \x20 numeric digits 12\n  ctx = .context\n  gate~wait\n",
+        true,
+        "28 HOLD held 12 2 1\n1 HOLD OPEN\n98.981\n",
+    );
+}
+
+/// The replier `r` of [`a_context_follows_its_activation_to_a_reply_continuation`],
+/// whose continuation waits on `gate` after setting `waiting`.
+const REPLIER: &str = "::class k\n::attribute waiting get unguarded\n\
+                       ::attribute inv get unguarded\n\
+                       ::method init\n  expose waiting\n  waiting = 0\n\
+                       ::method open unguarded\n\
+                       ::method r unguarded\n  expose waiting inv\n  use arg gate\n  \
+                       y = 'before'\n  inv = .context~invocation\n  reply .context\n  \
+                       y = 'after'\n  waiting = 1\n  gate~wait\n";
+
+/// A `RexxContext` of an activation a `REPLY` moved reads it on the new
+/// activity, keeping its `~invocation`: before the continuation has run,
+/// which only the sender-first schedule fixes, and while it waits.
+#[test]
+fn a_context_follows_its_activation_to_a_reply_continuation() {
+    let pending = format!(
+        "o = .k~new\ngate = .message~new(o, 'open')\nc = o~r(gate)\n\
+         say c~line c~variables~y c~thread .context~thread (c~invocation == o~inv)\n\
+         gate~send\n{REPLIER}"
+    );
+    in_modes(&pending, false, "18 before 2 1 1\n");
+    let waiting = format!(
+        "o = .k~new\ngate = .message~new(o, 'open')\nc = o~r(gate)\n\
+         do while o~waiting == 0\n  call SysSleep 0.01\nend\n\
+         say c~line c~variables~y c~thread (c~invocation == o~inv)\n\
+         gate~send\n{REPLIER}"
+    );
+    in_modes(&waiting, true, "24 after 2 1\n");
 }

@@ -1294,6 +1294,9 @@ struct Interp {
     /// The `Message` objects a start has been sent to, which cannot be sent,
     /// started or replied again -- `MessageClass`'s `flagMsgActivated`.
     started_messages: rustc_hash::FxHashSet<ObjRef>,
+    /// The `Message` objects whose completion has notified every object
+    /// `~notify` named -- `MessageClass`'s `flagAllNotified`.
+    notified_messages: rustc_hash::FxHashSet<ObjRef>,
     /// The methods a directive implements itself -- see [`GeneratedMethod`]
     /// for why these are not rows of [`method_bodies`], which is a
     /// measurement rather than a taxonomy.
@@ -1888,6 +1891,7 @@ impl Interp {
             method_flag_writes: FxHashMap::default(),
             message_outcomes: FxHashMap::default(),
             started_messages: rustc_hash::FxHashSet::default(),
+            notified_messages: rustc_hash::FxHashSet::default(),
             generated_methods: FxHashMap::default(),
             native_externals: FxHashMap::default(),
             libraries: Libraries::new(),
@@ -2573,6 +2577,7 @@ impl Interp {
             method_flag_writes: _,
             message_outcomes: _,
             started_messages: _,
+            notified_messages: _,
             generated_methods: _,
             native_externals: _,
             // Library handles and procedure names, no `ObjRef` in either.

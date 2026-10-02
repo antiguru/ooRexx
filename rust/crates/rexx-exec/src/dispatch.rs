@@ -184,8 +184,9 @@ use object_protocol::{
     native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
     native_is_nil, native_message_arguments, native_message_completed,
     native_message_error_condition, native_message_halt, native_message_has_error,
-    native_message_has_result, native_message_name, native_message_result, native_message_send,
-    native_message_send_with, native_message_start, native_message_start_with,
+    native_message_has_result, native_message_message_complete, native_message_name,
+    native_message_notify, native_message_reply, native_message_reply_with, native_message_result,
+    native_message_send, native_message_send_with, native_message_start, native_message_start_with,
     native_message_target, native_message_wait, native_no_op, native_object_concat,
     native_object_concat_blank, native_object_different, native_object_identical,
     native_object_name, native_object_name_set, native_request, native_run, native_send,
@@ -266,6 +267,8 @@ pub(crate) enum Then {
     Started(ObjRef),
     /// The activation's answer, with its outcome recorded on this message.
     Held(ObjRef),
+    /// Nothing, with the activation's outcome recorded on this message.
+    Triggered(ObjRef),
 }
 
 /// A [`Then`] parked on [`Activity::native_tails`] until the activation whose
@@ -294,7 +297,10 @@ impl Then {
     pub(crate) fn object_roots(self, out: &mut Vec<ObjRef>) {
         match self {
             Then::Pass => {}
-            Then::Answer(object) | Then::Started(object) | Then::Held(object) => out.push(object),
+            Then::Answer(object)
+            | Then::Started(object)
+            | Then::Held(object)
+            | Then::Triggered(object) => out.push(object),
         }
     }
 }
@@ -583,6 +589,14 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         native_message_name,
     ),
+    ("Message", "NOTIFY", Arity::Fixed(1), native_message_notify),
+    ("Message", "REPLY", Arity::Counted, native_message_reply),
+    (
+        "Message",
+        "REPLYWITH",
+        Arity::Fixed(2),
+        native_message_reply_with,
+    ),
     ("Message", "START", Arity::Counted, native_message_start),
     (
         "Message",
@@ -776,6 +790,20 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
 /// The primitive methods that send a message the receiver may answer with a
 /// Rexx body, or that park the activity, entered by their begin halves.
 static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
+    // `MessageClass::messageCompleted`, bound under both names
+    // (`memory/Setup.cpp:1073`-`:1074`).
+    (
+        "Message",
+        "MESSAGECOMPLETE",
+        Arity::Fixed(1),
+        native_message_message_complete,
+    ),
+    (
+        "Message",
+        "TRIGGERED",
+        Arity::Fixed(1),
+        native_message_message_complete,
+    ),
     ("Message", "RESULT", Arity::Fixed(0), native_message_result),
     ("Message", "SEND", Arity::Counted, native_message_send),
     (
@@ -966,6 +994,10 @@ const MESSAGE_TARGET: &[u8] = b"TARGET";
 const MESSAGE_NAME: &[u8] = b"MESSAGENAME";
 const MESSAGE_SCOPE: &[u8] = b"SCOPE";
 const MESSAGE_ARGUMENTS: &[u8] = b"ARGUMENTS";
+
+/// The entry a `Message` object keeps the `Array` of objects `~notify` named
+/// under -- `MessageClass`'s `interestedParties`.
+const MESSAGE_PARTIES: &[u8] = b"NOTIFY";
 
 /// The message a class construction sends the class it just built --
 /// `GlobalNames::INIT`, sent by `RexxClass::subclass`
@@ -2514,6 +2546,9 @@ impl Interp {
             Then::Answer(object) => sent.map(|_| Some(object)),
             Then::Started(message) => object_protocol::record_started(self, message, sent),
             Then::Held(message) => object_protocol::record_held(self, message, sent),
+            Then::Triggered(message) => {
+                object_protocol::record_held(self, message, sent).map(|_| None)
+            }
         }
     }
 

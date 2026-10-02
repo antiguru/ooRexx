@@ -93,18 +93,18 @@ Message	errorCondition	instance	answers	rc 0
 Message	halt	instance	answers	rc 0
 Message	hasError	instance	answers	rc 0
 Message	hasResult	instance	answers	rc 0
-Message	messageComplete	instance	loud	method "MESSAGECOMPLETE" of class "Message"
+Message	messageComplete	instance	answers	rc 165
 Message	messageName	instance	answers	rc 0
-Message	notify	instance	loud	method "NOTIFY" of class "Message"
-Message	reply	instance	loud	method "REPLY" of class "Message"
-Message	replyWith	instance	loud	method "REPLYWITH" of class "Message"
+Message	notify	instance	answers	rc 168
+Message	reply	instance	answers	rc 0
+Message	replyWith	instance	answers	rc 168
 Message	result	instance	loud	a wait that nothing left to run can end
 Message	send	instance	answers	rc 0
 Message	sendWith	instance	answers	rc 168
 Message	start	instance	answers	rc 165
 Message	startWith	instance	answers	rc 168
 Message	target	instance	answers	rc 0
-Message	triggered	instance	loud	method "TRIGGERED" of class "Message"
+Message	triggered	instance	answers	rc 165
 Message	wait	instance	loud	a wait that nothing left to run can end
 Message	cancel	instance	answers	rc 165
 Method	new	class	answers	rc 168

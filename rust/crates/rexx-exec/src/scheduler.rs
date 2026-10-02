@@ -338,6 +338,49 @@ impl Interp {
             .clone()
     }
 
+    /// The idle activity holding the activation whose `RexxContext` is
+    /// `context`.
+    pub(crate) fn idle_context_owner(&self, context: ObjRef) -> Option<ActivityId> {
+        let holds = |idle: &Idle| {
+            let activity = &idle.activity;
+            activity
+                .running
+                .iter()
+                .chain(&activity.suspended)
+                .any(|activation| activation.context_object == Some(context))
+        };
+        let index = self
+            .activities
+            .idle
+            .iter()
+            .position(|idle| idle.as_deref().is_some_and(holds))?;
+        Some(ActivityId(u32::try_from(index).expect("handles fit u32")))
+    }
+
+    /// Runs `read` with the idle activity `id` in the running one's place, as
+    /// [`Interp::switch_to`] puts it there, and both back where they were
+    /// after. `read` may allocate; it may not park, switch or run Rexx.
+    pub(crate) fn with_idle_activity<R>(
+        &mut self,
+        id: ActivityId,
+        read: impl FnOnce(&mut Interp) -> R,
+    ) -> R {
+        self.swap_idle(id);
+        let frame = self.roots.activity_mut().push_frame();
+        let answer = read(self);
+        self.roots.activity_mut().pop_frame(frame);
+        self.swap_idle(id);
+        answer
+    }
+
+    fn swap_idle(&mut self, id: ActivityId) {
+        let Some(idle) = self.activities.idle[id.0 as usize].as_deref_mut() else {
+            unreachable!("an idle handle names an idle activity");
+        };
+        std::mem::swap(&mut self.activity, &mut idle.activity);
+        std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
+    }
+
     /// Whether an activity waits in the ready queue.
     pub(crate) fn any_ready(&self) -> bool {
         !self.activities.ready.is_empty()
@@ -767,12 +810,22 @@ impl Interp {
             unreachable!("a started activity records its outcome");
         };
         let recorded = self.apply_then(then, sent);
-        if let Some(raised) = untrapped {
-            self.settle_failed_sends(&raised)?;
-            self.report_started_failure(&raised);
-        }
-        match recorded {
-            Ok(_) | Err(Failure::Raised(_)) => Ok(Stopped::Ended),
+        // A condition a notification raised is the activity's own untrapped
+        // failure, reported after the one it was notifying of.
+        let notified = match untrapped {
+            Some(raised) => {
+                let settled = self.settle_failed_sends(&raised);
+                self.report_started_failure(&raised);
+                settled
+            }
+            None => recorded.map(|_| ()),
+        };
+        match notified {
+            Ok(()) => Ok(Stopped::Ended),
+            Err(Failure::Raised(raised)) => {
+                self.report_started_failure(&raised);
+                Ok(Stopped::Ended)
+            }
             Err(failure) => Err(failure),
         }
     }

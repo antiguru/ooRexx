@@ -219,6 +219,8 @@ mod counter {
         Program,
         /// An `UNINIT` method run by the collector's sweep or at termination.
         Uninit,
+        /// A `messageComplete` sent to an object a `Message~notify` named.
+        Notification,
         /// A native method that runs Rexx, by message name.
         Native(Box<str>),
     }

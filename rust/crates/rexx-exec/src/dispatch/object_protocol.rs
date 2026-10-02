@@ -17,11 +17,12 @@ use crate::scheduler::{First, ParkReason, Scheduler, StartedSend};
 
 use super::{
     Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
-    MESSAGE_CONDITION, MESSAGE_NAME, MESSAGE_RESULT, MESSAGE_SCOPE, MESSAGE_TARGET, NativeStarted,
-    OBJECTNAME, ObjRef, ObjectMethod, ObjectMethodWrite, Operator, Primitive, Raised, Resolution,
-    Started, Then, UNNAMED_METHOD, class_argument, compile_method_source, is_enhanced_instance,
-    method_name_argument, pointer_address, request_array, required_string_argument,
-    required_string_named_argument, unconverted_array_argument,
+    MESSAGE_CONDITION, MESSAGE_NAME, MESSAGE_PARTIES, MESSAGE_RESULT, MESSAGE_SCOPE,
+    MESSAGE_TARGET, NativeStarted, OBJECTNAME, ObjRef, ObjectMethod, ObjectMethodWrite, Operator,
+    Primitive, Raised, Resolution, Started, Then, UNNAMED_METHOD, class_argument,
+    compile_method_source, is_enhanced_instance, method_name_argument, pointer_address,
+    request_array, required_string_argument, required_string_named_argument,
+    unconverted_array_argument,
 };
 
 /// `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`): it takes
@@ -577,6 +578,11 @@ pub(super) fn native_copy(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    copy_object(interp, receiver).map(Some)
+}
+
+/// [`native_copy`]'s copy of `receiver`, left on the temps.
+fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     // **An `Array` and a `Stem` are copyable too**, and each keeps its own
     // behaviour: measured, `.Array~of('x','y')~copy~class~id` is `Array` and a
     // stem's is `Stem`. The clone below is what makes both deep in the way
@@ -585,12 +591,12 @@ pub(super) fn native_copy(
     // (`a~items` 2 against `b~items` 3) and a tail written on the copy does
     // not appear on the receiver.
     let behaviour = match interp.receiver_kind(receiver) {
-        Ok(Primitive::Instance { .. }) => rexx_core::BehaviourId::OBJECT,
+        Ok(Primitive::Instance { .. } | Primitive::Message) => rexx_core::BehaviourId::OBJECT,
         Ok(Primitive::Array) => rexx_core::BehaviourId::ARRAY,
         Ok(Primitive::Stem) => rexx_core::BehaviourId::STEM,
         // A value carried in its handle is its own copy (D15).
         Ok(Primitive::String | Primitive::SmallInt) if interp.heap.get(receiver).is_none() => {
-            return Ok(Some(receiver));
+            return Ok(receiver);
         }
         Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
@@ -612,10 +618,31 @@ pub(super) fn native_copy(
     let copy = interp.alloc_with(behaviour, body);
     interp.roots.activity_mut().push_temp(copy);
     duplicate_collection_stores(interp, copy);
+    if interp.is_message(copy) {
+        reset_copied_message(interp, copy);
+    }
     if interp.answers_uninit(copy) {
         interp.heap.set_uninit(copy);
     }
-    Ok(Some(copy))
+    Ok(copy)
+}
+
+/// `MessageClass::copy` (`classes/MessageClass.cpp:182`): a copy keeps no
+/// outcome and has its own array of the objects `~notify` named.
+fn reset_copied_message(interp: &mut Interp, copy: ObjRef) {
+    interp.remove_native_entry(copy, MESSAGE_RESULT);
+    interp.remove_native_entry(copy, MESSAGE_CONDITION);
+    if let Some(parties) = interp.native_entry(copy, MESSAGE_PARTIES) {
+        let slots = interp.array_slots_of(parties).unwrap_or_default();
+        let parties = interp.alloc_with(
+            BehaviourId::ARRAY,
+            Body::Array {
+                dimensions: None,
+                slots,
+            },
+        );
+        interp.set_native_entry(copy, MESSAGE_PARTIES, parties);
+    }
 }
 
 /// The pool entries a collection's CONTENTS live in, as (scope class, name).
@@ -867,8 +894,12 @@ pub(super) fn record_started(
         }
         Err(other) => return Err(other),
     };
+    let failed = outcome.is_some();
     interp.message_outcomes.insert(object, outcome);
     interp.message_completed(object);
+    if !failed {
+        interp.notify_parties(object)?;
+    }
     Ok(Some(object))
 }
 
@@ -888,7 +919,7 @@ pub(super) fn native_message_send(
         let arguments = interp.security_arguments_array(&args[1..]);
         interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
     }
-    dispatch_held_message(interp, receiver)
+    dispatch_held_message(interp, receiver, Then::Held(receiver))
 }
 
 /// `Message~sendWith(receiver, arguments)`: [`native_message_send`] with the
@@ -906,13 +937,18 @@ pub(super) fn native_message_send_with(
     let values = message_arguments(interp, args.get(1).copied().flatten())?;
     let arguments = interp.security_arguments_array(&values);
     interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
-    dispatch_held_message(interp, receiver)
+    dispatch_held_message(interp, receiver, Then::Held(receiver))
 }
 
 /// `MessageClass::send` and `dispatch` (`classes/MessageClass.cpp:401`,
 /// `:421`): the held send made, its answer or its condition recorded for
 /// `result`, `completed` and `hasError`, and the condition raised here too.
-fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<NativeStarted, Failure> {
+/// `then` is the work left where the send enters a Rexx activation.
+fn dispatch_held_message(
+    interp: &mut Interp,
+    message: ObjRef,
+    then: Then,
+) -> Result<NativeStarted, Failure> {
     if interp.started_messages.contains(&message) {
         return Err(Raised::message_reuse().into());
     }
@@ -930,7 +966,7 @@ fn dispatch_held_message(interp: &mut Interp, message: ObjRef) -> Result<NativeS
     interp.validate_scope_override(target, scope)?;
     let caller = interp.caller();
     let sent = match interp.begin_send(target, &name, scope, &values, caller) {
-        Ok(Started::Entered) => return Ok(NativeStarted::Entered(Then::Held(message))),
+        Ok(Started::Entered) => return Ok(NativeStarted::Entered(then)),
         Ok(Started::Ran(value)) => Ok(value),
         Err(failure) => Err(failure),
     };
@@ -952,6 +988,7 @@ pub(super) fn record_held(
             // `flagResultReturned` and `flagRaiseError` are separate flags.
             interp.message_outcomes.entry(message).or_insert(None);
             interp.message_completed(message);
+            interp.notify_parties(message)?;
             Ok(answer)
         }
         // Only a `SYNTAX` condition notifies the message
@@ -973,6 +1010,7 @@ pub(super) fn record_held(
 /// outcome of an earlier send forgotten.
 fn clear_completion(interp: &mut Interp, message: ObjRef) {
     interp.message_outcomes.remove(&message);
+    interp.notified_messages.remove(&message);
     interp.remove_native_entry(message, MESSAGE_RESULT);
     interp.remove_native_entry(message, MESSAGE_CONDITION);
 }
@@ -1052,6 +1090,173 @@ fn spawn_send(interp: &mut Interp, send: StartedSend, message: ObjRef) {
     idle.activity.first = Some(First::Send(Box::new(send)));
     idle.activity.root_then = Some(Then::Started(message));
     interp.spawn(idle);
+}
+
+/// `Message~reply([receiver] [, argument ...])`: a copy of the message whose
+/// send a new activity makes, to a new receiver and with new arguments where
+/// given -- `MessageClass::replyRexx` (`classes/MessageClass.cpp:565`).
+pub(super) fn native_message_reply(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(target)) = args.first() {
+        interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
+    }
+    if args.len() > 1 {
+        let arguments = interp.security_arguments_array(&args[1..]);
+        interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
+    }
+    reply_held_message(interp, receiver)
+}
+
+/// `Message~replyWith(receiver, arguments)`: [`native_message_reply`] with
+/// the arguments required, in an array -- `MessageClass::replyWithRexx`
+/// (`classes/MessageClass.cpp:597`).
+pub(super) fn native_message_reply_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    if let Some(Some(target)) = args.first() {
+        interp.set_native_entry(receiver, MESSAGE_TARGET, *target);
+    }
+    let values = message_arguments(interp, args.get(1).copied().flatten())?;
+    let arguments = interp.security_arguments_array(&values);
+    interp.set_native_entry(receiver, MESSAGE_ARGUMENTS, arguments);
+    reply_held_message(interp, receiver)
+}
+
+/// `MessageClass::reply` (`classes/MessageClass.cpp:622`): the held send
+/// started on a copy of `message`, which is answered; `message` itself stays
+/// reusable.
+fn reply_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    if interp.started_messages.contains(&message) {
+        return Err(Raised::message_reuse().into());
+    }
+    clear_completion(interp, message);
+    let Some(target) = interp.native_entry(message, MESSAGE_TARGET) else {
+        return Err(Loud::native_method(b"REPLY", "Message").into());
+    };
+    let scope = interp.native_entry(message, MESSAGE_SCOPE);
+    interp.validate_scope_override(target, scope)?;
+    let copy = copy_object(interp, message)?;
+    start_held_message(interp, copy)?;
+    Ok(Some(copy))
+}
+
+/// `Message~notify(target)`: `target` is sent `messageComplete` when the send
+/// completes, and at once where it already has -- `MessageClass::notify`
+/// (`classes/MessageClass.cpp:209`).
+pub(super) fn native_message_notify(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    const ARGUMENT: &str = "notification target";
+    let Some(target) = args.first().copied().flatten() else {
+        return Err(Raised::missing_named_argument(ARGUMENT).into());
+    };
+    let Some(notification) = interp.rexx_package_class(b"MESSAGENOTIFICATION") else {
+        return Err(Loud::native_method(b"NOTIFY", "Message").into());
+    };
+    let notifiable = interp
+        .class_of_value(target)
+        .is_some_and(|class| interp.classes().is_a(class, notification));
+    if !notifiable {
+        return Err(Raised::argument_not_an_instance(ARGUMENT, "MessageNotification").into());
+    }
+    let parties = match interp.native_entry(receiver, MESSAGE_PARTIES) {
+        Some(parties) => parties,
+        None => {
+            let parties = interp.alloc_with(
+                BehaviourId::ARRAY,
+                Body::Array {
+                    dimensions: None,
+                    slots: Vec::new(),
+                },
+            );
+            interp.set_native_entry(receiver, MESSAGE_PARTIES, parties);
+            parties
+        }
+    };
+    if let Some(Body::Array { slots, .. }) = interp.heap.get_mut(parties).map(|held| &mut held.body)
+    {
+        slots.push(Some(target));
+    }
+    if interp.notified_messages.contains(&receiver) {
+        let caller = interp.caller();
+        interp.send_message(target, MESSAGE_COMPLETE, None, &[Some(receiver)], caller)?;
+    }
+    Ok(None)
+}
+
+/// `Message~messageComplete(source)` and `Message~triggered(source)`: the held
+/// send made, answering nothing -- `MessageClass::messageCompleted`
+/// (`classes/MessageClass.cpp:693`), which ignores `source`.
+pub(super) fn native_message_message_complete(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<NativeStarted, Failure> {
+    Ok(
+        match dispatch_held_message(interp, receiver, Then::Triggered(receiver))? {
+            NativeStarted::Ran(_) => NativeStarted::Ran(None),
+            entered => entered,
+        },
+    )
+}
+
+/// The message each object `~notify` named is sent.
+const MESSAGE_COMPLETE: &[u8] = b"MESSAGECOMPLETE";
+
+impl Interp {
+    /// Whether `object` is a `Message` this crate built.
+    pub(crate) fn is_message(&mut self, object: ObjRef) -> bool {
+        let message = self.object_model().message;
+        matches!(
+            self.heap.get(object).map(|held| &held.body),
+            Some(Body::Native(native)) if native.class() == message
+        )
+    }
+
+    /// `MessageClass::sendNotification` (`classes/MessageClass.cpp:645`) once
+    /// the waiters are woken: `messageComplete` sent to each object `~notify`
+    /// had named when it began, in order, and `message` marked as notified.
+    pub(crate) fn notify_parties(&mut self, message: ObjRef) -> Result<(), Failure> {
+        if let Some(parties) = self.native_entry(message, MESSAGE_PARTIES) {
+            let frame = self.roots.activity_mut().push_frame();
+            self.roots.activity_mut().push_temp(message);
+            self.roots.activity_mut().push_temp(parties);
+            let count = self.array_slots(parties).map_or(0, <[_]>::len);
+            let mut sent = Ok(None);
+            for index in 0..count {
+                let party = self
+                    .array_slots(parties)
+                    .and_then(|slots| slots.get(index).copied().flatten());
+                let Some(party) = party else {
+                    continue;
+                };
+                let caller = self.caller();
+                sent = pinned!(
+                    self,
+                    crate::pinning::PinKind::Notification,
+                    self.send_message(party, MESSAGE_COMPLETE, None, &[Some(message)], caller)
+                );
+                if sent.is_err() {
+                    break;
+                }
+            }
+            self.roots.activity_mut().pop_frame(frame);
+            sent?;
+        }
+        self.notified_messages.insert(message);
+        Ok(())
+    }
 }
 
 /// `Message~result`: the value the send answered, `.nil` for one that

@@ -897,19 +897,25 @@ unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> &'a Activation<'a
 
 /// [`activation_of`] for the context-variable members, with the host frame
 /// of the call the context was handed to where that call is not the
-/// innermost one: the members then reach that call's caller.
+/// innermost one: the members then reach that call's caller. `None` where the
+/// innermost call of the context's activity is itself busy, so the member came
+/// from another activity: the oracle raises 98.983 against the context's own
+/// activity (`Activity::validateThread`, `concurrency/Activity.cpp:3620`) and
+/// the member answers nothing.
 ///
 /// # Safety
 /// As [`activation_of`].
-unsafe fn variables_of<'a, C: CallLinked>(context: *mut C) -> (&'a Activation<'a>, Option<u64>) {
+unsafe fn variables_of<'a, C: CallLinked>(
+    context: *mut C,
+) -> Option<(&'a Activation<'a>, Option<u64>)> {
     // SAFETY: as `activation_of`.
     let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
     if !own.is_busy() {
-        return (own, None);
+        return Some((own, None));
     }
     // SAFETY: as `activation_of`.
     let innermost = unsafe { innermost_activation(C::thread_of(context), "nested call") };
-    (innermost, own.frame())
+    (!innermost.is_busy()).then_some((innermost, own.frame()))
 }
 
 /// The activation of the innermost native call in flight, reached through a
@@ -2667,10 +2673,12 @@ mod variables {
         name: CSTRING,
     ) -> RexxObjectPtr {
         // SAFETY: the caller guarantees the context and the name.
-        let ((activation, outer), name) = unsafe { (variables_of(context), name_of(name)) };
-        name.map_or(std::ptr::null_mut(), |name| {
-            activation.context_variable(outer, name)
-        })
+        let (Some((activation, outer)), Some(name)) =
+            (unsafe { variables_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
+        activation.context_variable(outer, name)
     }
 
     /// # Safety
@@ -2681,8 +2689,9 @@ mod variables {
         value: RexxObjectPtr,
     ) {
         // SAFETY: as `get_context_variable`.
-        let ((activation, outer), name) = unsafe { (variables_of(context), name_of(name)) };
-        if let Some(name) = name {
+        if let (Some((activation, outer)), Some(name)) =
+            (unsafe { variables_of(context) }, unsafe { name_of(name) })
+        {
             activation.set_context_variable(outer, name, value);
         }
     }
@@ -2694,8 +2703,9 @@ mod variables {
         name: CSTRING,
     ) {
         // SAFETY: as `get_context_variable`.
-        let ((activation, outer), name) = unsafe { (variables_of(context), name_of(name)) };
-        if let Some(name) = name {
+        if let (Some((activation, outer)), Some(name)) =
+            (unsafe { variables_of(context) }, unsafe { name_of(name) })
+        {
             activation.drop_context_variable(outer, name);
         }
     }
@@ -2706,7 +2716,9 @@ mod variables {
         context: *mut C,
     ) -> RexxDirectoryObject {
         // SAFETY: as `get_context_variable`.
-        let (activation, outer) = unsafe { variables_of(context) };
+        let Some((activation, outer)) = (unsafe { variables_of(context) }) else {
+            return std::ptr::null_mut();
+        };
         activation.context_variables(outer).cast()
     }
 

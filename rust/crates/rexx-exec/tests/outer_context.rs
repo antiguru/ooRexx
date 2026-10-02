@@ -92,20 +92,28 @@ fn run_ours(program: &Path, run: &Path, library_path: &str, stress: bool) -> Out
     }
 }
 
-#[test]
-fn a_kept_outer_context_reaches_its_callers_variables() {
-    if !gate_mode() {
-        eprintln!("outer_context: skipped without {GATE_ENV}");
-        return;
-    }
-    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("outer-context-{}", std::process::id()));
+/// The forge built into a fresh directory named for `name`: the base to
+/// remove, the run directory and the library path.
+fn forged(name: &str) -> (PathBuf, PathBuf, String) {
+    let base =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-{}", std::process::id()));
     let (forge, run) = (base.join("forge"), base.join("run"));
     fs::create_dir_all(&forge).expect("the forge directory");
     fs::create_dir_all(&run).expect("the run directory");
     build_forge(&forge);
     let oracle = support::oracle::locate();
     let library_path = format!("{}:{}", oracle.lib_dir().display(), forge.display());
+    (base, run, library_path)
+}
+
+#[test]
+fn a_kept_outer_context_reaches_its_callers_variables() {
+    if !gate_mode() {
+        eprintln!("outer_context: skipped without {GATE_ENV}");
+        return;
+    }
+    let (base, run, library_path) = forged("outer-context");
+    let oracle = support::oracle::locate();
 
     let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/outer_context");
     for program in [
@@ -136,6 +144,34 @@ fn a_kept_outer_context_reaches_its_callers_variables() {
                 "the stress mode did not collect"
             );
         }
+    }
+    fs::remove_dir_all(&base).expect("cannot remove the run directory");
+}
+
+/// `outer_context/o9e.rex`: a started activity reads a variable through the
+/// call context main's `Outer` kept, and is answered nothing. The oracle
+/// raises 98.983 against main's activity, after which the started activity
+/// ends in 44.1 and the program hangs (3 runs of 3), so this is not a
+/// differential.
+#[test]
+fn a_kept_outer_context_used_by_another_activity_answers_nothing() {
+    if !gate_mode() {
+        eprintln!("outer_context: skipped without {GATE_ENV}");
+        return;
+    }
+    let (base, run, library_path) = forged("outer-context-elsewhere");
+    let program = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/outer_context/o9e.rex");
+    for stress in [false, true] {
+        let ours = run_ours(&program, &run, &library_path, stress);
+        assert_eq!(
+            (
+                String::from_utf8_lossy(&ours.stdout),
+                String::from_utf8_lossy(&ours.stderr),
+                ours.exit_code
+            ),
+            ("started null\nret\nend main\n".into(), "".into(), 0),
+            "collecting at every allocation: {stress}"
+        );
     }
     fs::remove_dir_all(&base).expect("cannot remove the run directory");
 }

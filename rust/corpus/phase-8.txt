@@ -459,3 +459,13 @@ lang/reply_split_after_a_trap_at_the_reply.rex
 lang/reply_split_after_a_trap_takes_the_failure.rex
 lang/reply_split_after_a_trap_does_not_wait.rex
 lang/reply_as_the_last_clause_numbers_the_replier.rex
+# Phase 6 S2 Task 7: a RexxContext answers for its activation on whichever
+# activity holds it, a REPLY's included; Message~reply, ~replyWith, ~notify,
+# ~messageComplete and ~triggered.
+lang/context_of_another_activity.rex
+lang/context_moved_by_reply.rex
+lang/message_reply.rex
+lang/message_notify.rex
+lang/message_notify_arguments.rex
+lang/message_notify_error.rex
+lang/message_notify_untrapped.rex

@@ -37,6 +37,18 @@ pub(crate) struct Unwound<'a> {
     pub(crate) reraised: bool,
 }
 
+/// An unwinding failure's record on [`crate::activity::Activity`].
+struct Unwinding {
+    site: Option<FailureSite>,
+    sites: Vec<FailureSite>,
+    frame: Option<ObjRef>,
+    frames: Vec<ObjRef>,
+    origin: Option<(Package, Option<usize>)>,
+    propagated: bool,
+    reraised: bool,
+    reraised_object: Option<ObjRef>,
+}
+
 /// The indexes a condition's directory is keyed by.
 mod key {
     pub(super) const ADDITIONAL: &[u8] = b"ADDITIONAL";
@@ -194,7 +206,7 @@ impl Interp {
                 self.build_condition_object_from(raised, None, false, Some(&unwound))
             }
         };
-        let attached = object.map(|object| self.attach_condition(object));
+        let attached = object.and_then(|object| self.attach_condition(object));
         if attached.is_err() {
             self.activity.failed_sends.clear();
         }
@@ -203,11 +215,69 @@ impl Interp {
     }
 
     /// `MessageClass::error` (`classes/MessageClass.cpp:706`) for every
-    /// message whose send the condition behind `object` ended.
-    pub(crate) fn attach_condition(&mut self, object: ObjRef) {
-        for message in std::mem::take(&mut self.activity.failed_sends) {
-            self.set_native_entry(message, crate::dispatch::MESSAGE_CONDITION, object);
+    /// message whose send the condition behind `object` ended, each then
+    /// notifying the objects its `~notify` named while the unwinding
+    /// failure's record is set aside.
+    pub(crate) fn attach_condition(&mut self, object: ObjRef) -> Result<(), Failure> {
+        let messages = std::mem::take(&mut self.activity.failed_sends);
+        if messages.is_empty() {
+            return Ok(());
         }
+        let frame = self.roots.activity_mut().push_frame();
+        for &message in &messages {
+            self.set_native_entry(message, crate::dispatch::MESSAGE_CONDITION, object);
+            self.roots.activity_mut().push_temp(message);
+        }
+        let unwinding = self.set_aside_unwinding();
+        let mut notified = Ok(());
+        for message in messages {
+            notified = self.notify_parties(message);
+            if notified.is_err() {
+                break;
+            }
+        }
+        self.restore_unwinding(unwinding);
+        self.roots.activity_mut().pop_frame(frame);
+        notified
+    }
+
+    /// The running activity's record of the failure now unwinding, taken
+    /// off it with its objects on the temps.
+    fn set_aside_unwinding(&mut self) -> Unwinding {
+        let activity = &mut self.activity;
+        let unwinding = Unwinding {
+            site: activity.failure_site.take(),
+            sites: std::mem::take(&mut activity.failure_sites),
+            frame: activity.failure_frame.take(),
+            frames: std::mem::take(&mut activity.failure_frames),
+            origin: activity.failure_origin.take(),
+            propagated: std::mem::take(&mut activity.failure_propagated),
+            reraised: std::mem::take(&mut activity.failure_reraised),
+            reraised_object: activity.reraised_object.take(),
+        };
+        let temps = self.roots.activity_mut();
+        for &object in unwinding
+            .frame
+            .iter()
+            .chain(&unwinding.frames)
+            .chain(&unwinding.reraised_object)
+        {
+            temps.push_temp(object);
+        }
+        unwinding
+    }
+
+    /// Puts back what [`Interp::set_aside_unwinding`] took.
+    fn restore_unwinding(&mut self, unwinding: Unwinding) {
+        let activity = &mut self.activity;
+        activity.failure_site = unwinding.site;
+        activity.failure_sites = unwinding.sites;
+        activity.failure_frame = unwinding.frame;
+        activity.failure_frames = unwinding.frames;
+        activity.failure_origin = unwinding.origin;
+        activity.failure_propagated = unwinding.propagated;
+        activity.failure_reraised = unwinding.reraised;
+        activity.reraised_object = unwinding.reraised_object;
     }
 
     /// [`Interp::reraise_condition_object`] for a `SIGNAL ON` trap, which
