@@ -136,3 +136,61 @@ identical for all but `heapshape`, whose stdout is wall-clock timings on both (`
   both messages failed, so both now also notify.
 - A stray `git checkout -p` ran once with stdin closed; it quit at its first prompt and
   discarded nothing (`git diff --stat` unchanged before and after).
+
+## Fix round 1
+
+Commit d0274573d (review `task-7-review.md`; reviewer probes in scratchpad `rev-t7/`).
+
+- **C1 (ruling P37).** `rexx-api/src/ffi.rs`: the thread table tracks the native call entered last
+  on any of its contexts (`Running`); a method or call context whose own call and its activity's
+  innermost call are both busy was kept by another activity's call (`Addressed::Elsewhere`).
+  `GetContextDigits`/`Fuzz`/`Form` and `GetRoutine` answer from that activity's top frame
+  (`Surface::kept_numeric`/`kept_executable`): the oracle's non-blocking members read
+  `Activity::getApiContext`, the top frame, cast as a native activation. Every other call/method
+  member raises 98.983 in the running call (held, raised when it returns) and answers null or does
+  nothing; a thread-context member through a kept thread context raises 98.983 and is served by
+  the running call. Native frame numbers are one counter for all activities
+  (`Activities::next_native`), so a frame token names its call on one activity
+  (`Interp::idle_native_owner`). Test `outer_context::a_kept_call_context_used_by_another_activity_answers_or_raises`
+  (`tests/outer_context/outer7.cpp`, the reviewer's forge), every member listed in the review,
+  plain and collect stress. Red before: the reviewer's run, all 14 abort at rc 134 (`RefCell already
+  borrowed`). The `o9e.rex` test it supersedes is removed.
+  Ruling R-T7-5: `GetContextFuzz` answers 0 where the oracle answers 256, which comes from reading
+  a Rexx activation's memory as a native activation's; digits 9, form 0 and `a Method` match.
+- **I1.** `attach_condition` no longer notifies. A held send's failure notifies at once, in
+  `record_held` (condition object built then, `settle_failed_sends`), with the unwinding record set
+  aside; a notifier's failure replaces the send's, its record on top and the set-aside one below
+  (`notify_failed_send`, `restore_unwinding_below`), so it is trapped and reported as the oracle's
+  (e1, e2 identical on all three descriptors). A started activity's failure follows the oracle's two
+  handlers (`Interp::end_failed_started`, `Activity.cpp:3423` then `:233`): the message is told,
+  and where its notifier fails, that failure replaces the send's, the message is told again and
+  both notifier failures are reported; the completion's waiter gets a round after a notifier
+  failure (`yield_after_notifier_failure`), where the oracle's activity gives up the kernel lock.
+  e4 and n1 (`2026-10-02-notifier-failure-in-started-activity.md`, now resolved) match the oracle on
+  all three descriptors, 3 of 3 each; crate tests
+  `a_notifier_failing_in_a_started_activity_replaces_its_failure` and
+  `a_notifier_failing_on_a_started_success_is_the_sends_failure` (unswitched: the waiter's place is
+  a scheduling order). The `scheduler.rs` comment is replaced by `end_failed_started`'s doc.
+- **I2.** `Activation::notify_message`, the single `notifyObject`: a held send puts its message
+  there (not where a native call is above the activation, nor on an activity with no activation),
+  completion clears it, and a `SYNTAX` failure fails and notifies only the message the slot holds.
+  n4, n4b, `re2a`, `re2b` match the oracle; queued note marked resolved.
+- **M1.** `Interp::unnotified_messages` holds only messages whose notification is running or
+  failed; notified is "completed and not in it". 1,000,000 `.message~new('a','length')~send`: max
+  RSS 94,728 and 93,640 KB at head against 94,540 and 94,184 KB at base (two runs each,
+  `/usr/bin/time -f %M`).
+- **M3.** `with_idle_activity` asserts in debug that `read` left the running handle, the ready
+  queue's length, the pin depth, the activation stack and the open constructs unchanged.
+- Witnesses added (phase-8.txt): `message_notify_single_slot`, `message_notifier_fails`,
+  `message_notifier_fails_untrapped`; 30/30 oracle, ours unswitched and every (`stab.sh`).
+- Accepted: M2, `~line` of a switched-out activity mid-loop (P32 class).
+
+P28 checks at d0274573d: `cargo fmt --all --check` exit 0; clippy `-p rexx-exec -p rexx-api
+--all-targets -D warnings` exit 0, with `--features pinning` exit 0; `memcap 8G cargo test -p
+rexx-exec --lib` 908 passed; `cargo test -p rexx-api` green (run before the commit on the same
+sources); corpus release unswitched 732 of 732, release every 732 of 732, debug every 732 of 732;
+collect_stress (release) 36 passed alongside the corpus (release) 732 of 732; concurrency_tests
+(gate, release) 27 passed, Message table unchanged (pass 65, refused 3); pinning `measured::` 16
+passed; outer_context (gate) release and debug 22 passed; refusal_sites re-derived, no change;
+sourceline_oracle passed; method_bodies (release) passed, no drift. Bench "it works": every
+`bench-programs/*.rex` identical to base 83c0a6ff1 except `heapshape`'s timings.
