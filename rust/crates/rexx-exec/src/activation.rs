@@ -296,13 +296,10 @@ pub(crate) struct Activation {
     /// What a `REPLY` leaves here while [`ReplyState::Owed`].
     pub(crate) replied: Option<Box<Replied>>,
     /// Whether this activation is performing the send of a `FORWARD` that
-    /// does not `CONTINUE`, which makes it a phantom for condition delivery.
-    pub(crate) forwarded: bool,
-    /// Whether the method is guarded (`ActivationSettings::isGuarded`).
-    pub(crate) guarded: bool,
-    /// Whether this activation holds its receiver's guard lock for its scope
-    /// (`objectScope == SCOPE_RESERVED`).
-    pub(crate) scope_reserved: bool,
+    /// does not `CONTINUE`, which makes it a phantom for condition delivery;
+    /// whether the method is guarded; and whether this activation holds its
+    /// receiver's guard lock for its scope.
+    pub(crate) flags: ActivationFlags,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     /// ```text
@@ -491,6 +488,52 @@ pub(crate) struct MethodIdentity {
     pub(crate) receiver: ObjRef,
 }
 
+/// An activation's flags in one byte, which keeps [`Activation`] at 512
+/// bytes: forwarded, `ActivationSettings::isGuarded`, and `objectScope ==
+/// SCOPE_RESERVED`.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct ActivationFlags(u8);
+
+const _: () = assert!(size_of::<Activation>() == 512);
+
+impl ActivationFlags {
+    const FORWARDED: u8 = 1;
+    const GUARDED: u8 = 2;
+    const RESERVED: u8 = 4;
+
+    pub(crate) fn forwarded(self) -> bool {
+        self.0 & Self::FORWARDED != 0
+    }
+
+    pub(crate) fn set_forwarded(&mut self, forwarded: bool) {
+        self.set(Self::FORWARDED, forwarded);
+    }
+
+    pub(crate) fn guarded(self) -> bool {
+        self.0 & Self::GUARDED != 0
+    }
+
+    pub(crate) fn reserved(self) -> bool {
+        self.0 & Self::RESERVED != 0
+    }
+
+    pub(crate) fn set_guarded(&mut self, guarded: bool) {
+        self.set(Self::GUARDED, guarded);
+    }
+
+    pub(crate) fn set_reserved(&mut self, reserved: bool) {
+        self.set(Self::RESERVED, reserved);
+    }
+
+    fn set(&mut self, bit: u8, on: bool) {
+        if on {
+            self.0 |= bit;
+        } else {
+            self.0 &= !bit;
+        }
+    }
+}
+
 /// What a `REPLY` leaves its activation until the activation ends.
 pub(crate) struct Replied {
     /// What the caller resumes with.
@@ -550,9 +593,7 @@ impl Activation {
             reply: ReplyState::None,
             replied_a_value: false,
             replied: None,
-            forwarded: false,
-            guarded: false,
-            scope_reserved: false,
+            flags: ActivationFlags::default(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -623,9 +664,7 @@ impl Activation {
             reply: ReplyState::None,
             replied_a_value: false,
             replied: None,
-            forwarded: false,
-            guarded: false,
-            scope_reserved: false,
+            flags: ActivationFlags::default(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -686,9 +725,7 @@ impl Activation {
             reply: ReplyState::None,
             replied_a_value: false,
             replied: None,
-            forwarded: false,
-            guarded: false,
-            scope_reserved: false,
+            flags: ActivationFlags::default(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -739,9 +776,7 @@ impl Activation {
             reply: ReplyState::None,
             replied_a_value: false,
             replied: None,
-            forwarded: false,
-            guarded: false,
-            scope_reserved: false,
+            flags: ActivationFlags::default(),
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -808,9 +843,7 @@ impl Activation {
             reply: _,
             replied_a_value: _,
             replied,
-            forwarded: _,
-            guarded: _,
-            scope_reserved: _,
+            flags: _,
             first_instruction_pending: _,
             trace_entry: _,
             pc: _,
@@ -1070,7 +1103,7 @@ impl Interp {
     /// is not.
     pub(crate) fn trap_frame(&self) -> Option<&Activation> {
         let running = self.running_activation()?;
-        if !running.forwarded {
+        if !running.flags.forwarded() {
             return Some(running);
         }
         self.activity
@@ -1078,7 +1111,7 @@ impl Interp {
             .iter()
             .rev()
             .map(Box::as_ref)
-            .find(|activation| !activation.forwarded)
+            .find(|activation| !activation.flags.forwarded())
     }
 
     /// How many activations are live, the running one included.

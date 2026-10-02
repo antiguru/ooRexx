@@ -1,0 +1,16 @@
+count 15
+/* An unguarded method made guarded by setGuarded takes the lock: two
+   activities run it one after the other. */
+.k~method('U')~setGuarded
+o = .k~new
+a = o~start('u', 'A')
+call syssleep 0.1
+b = o~start('u', 'B')
+a~wait; b~wait
+say 'isGuarded' .k~method('U')~isGuarded
+::class k
+::method u unguarded
+  use arg n
+  say n 'in'
+  call syssleep 0.3
+  say n 'out'

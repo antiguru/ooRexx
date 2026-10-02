@@ -346,6 +346,7 @@ pub(crate) trait Scheduler {
 
 impl Scheduler for Interp {
     fn spawn(&mut self, idle: Box<Idle>) -> ActivityId {
+        self.guards_go_live(None);
         // `Activity::setCallerStackFrameAsStringTable` numbers the spawner
         // (`concurrency/Activity.cpp:1206`).
         self.activity_number();

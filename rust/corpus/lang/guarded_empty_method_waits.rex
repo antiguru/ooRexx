@@ -1,0 +1,14 @@
+/* A guarded method with an empty body still waits for the lock another
+   activity holds. */
+o = .k~new
+m = o~start('hold')
+call syssleep 0.2
+o~empty
+say 'after empty'
+m~wait
+::class k
+::method hold
+  say 'hold in'
+  call syssleep 0.5
+  say 'hold out'
+::method empty

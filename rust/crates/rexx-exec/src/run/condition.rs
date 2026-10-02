@@ -309,7 +309,10 @@ impl Interp {
         // [`Interp::trap_for`] does the drilling for the callers that ask
         // whether a condition would be trapped at all, which is the same
         // question `RexxActivation::willTrap` answers.
-        if self.running_activation().is_some_and(|a| a.forwarded) {
+        if self
+            .running_activation()
+            .is_some_and(|a| a.flags.forwarded())
+        {
             return Err(failure);
         }
         let Some(trap) = self.trap_for(raised.condition.as_bytes()) else {

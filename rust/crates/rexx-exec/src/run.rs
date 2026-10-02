@@ -2028,7 +2028,7 @@ impl Interp {
         // the send raises is not offered to this activation's own traps.
         // [`Activation::forwarded`] carries what that costs.
         if owed.is_ok() && !forward.continue_ {
-            self.activation_mut().forwarded = true;
+            self.activation_mut().flags.set_forwarded(true);
         }
         let caller = self.caller();
         let sent = owed

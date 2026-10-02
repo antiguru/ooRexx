@@ -242,8 +242,8 @@ impl Interp {
                             object: identity.receiver,
                             scope: identity.scope,
                         },
-                        activation.guarded,
-                        activation.scope_reserved,
+                        activation.flags.guarded(),
+                        activation.flags.reserved(),
                     )
                 })
             }
@@ -284,7 +284,7 @@ impl Interp {
             let pool = self.counted(pool as usize);
             self.trace_object_put(object, b"ATTRIBUTEPOOL", pool)?;
             self.trace_object_put(object, b"ISGUARDED", crate::eval::logical(guarded))?;
-            let count = self.activities.guards.count(key);
+            let count = self.guard_count(key);
             let count = self.counted(count as usize);
             self.trace_object_put(object, b"SCOPELOCKCOUNT", count)?;
             self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(reserved))?;

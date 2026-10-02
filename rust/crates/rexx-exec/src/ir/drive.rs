@@ -2637,6 +2637,22 @@ impl Interp {
                                     // trap -- and `apply_flow` is what moves it afterwards.
                                     let entry = self.activation().pc;
                                     if entry >= len {
+                                        // A body with no clause serves its
+                                        // method's pending reserve here.
+                                        if !self.activity.guard_waits.is_empty() {
+                                            match self.serve_guard_wait(parkable) {
+                                                Ok(()) => {}
+                                                Err(Failure::Slice) => {
+                                                    let Some(at) = chunk.op_at(entry) else {
+                                                        break 'ended Err(
+                                                            Loud::chunk_map_too_short().into(),
+                                                        );
+                                                    };
+                                                    break 'level Left::Sliced(at);
+                                                }
+                                                Err(failure) => break 'ended Err(failure),
+                                            }
+                                        }
                                         break 'ended Ok(END_OF_BODY);
                                     }
                                     let Some(at) = chunk.op_at(entry) else {

@@ -506,3 +506,9 @@ lang/guard_on_waits_in_an_unguarded_method.rex
 lang/guard_deadlock_two_activities.rex
 lang/message_wait_deadlock.rex
 lang/trace_object_guard_fields.rex
+# Task 11 fix round 1: setGuarded/setUnguarded decide a send's reserve; an
+# empty guarded method waits; a lock held before the first ~start counts.
+lang/method_set_unguarded_is_not_reserved.rex
+lang/method_set_guarded_is_reserved.rex
+lang/guarded_empty_method_waits.rex
+lang/guard_held_before_the_first_start.rex

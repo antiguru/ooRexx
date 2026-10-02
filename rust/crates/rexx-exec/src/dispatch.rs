@@ -2406,22 +2406,19 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let guard = self.other_guard(&invocable, resolution, receiver);
-        if let Some(key) = guard {
-            let me = self.running_activity();
-            if let crate::guards::Reserve::Contended(owner) =
-                self.activities.guards.try_reserve(key, me)
-            {
-                let send = GuardedSend {
-                    key,
-                    invocable,
-                    cleared,
-                    resolution,
-                    receiver,
-                    name: name.into(),
-                    args: args.to_vec(),
-                };
-                return self.wait_for_other_guard(owner, send);
-            }
+        if let Some(key) = guard
+            && let crate::guards::Reserve::Contended(owner) = self.take_guard(key)
+        {
+            let send = GuardedSend {
+                key,
+                invocable,
+                cleared,
+                resolution,
+                receiver,
+                name: name.into(),
+                args: args.to_vec(),
+            };
+            return self.wait_for_other_guard(owner, send);
         }
         self.run_other_guarded(guard, invocable, cleared, resolution, receiver, name, args)
     }
@@ -2450,6 +2447,12 @@ impl Interp {
             }
             Invocable::External(_) | Invocable::Library(_) => {
                 self.guarded_externals.contains(&resolution.method)
+            }
+            Invocable::Rexx(_) | Invocable::Native(_) => false,
+        };
+        let guarded = match invocable {
+            Invocable::Generated(_) | Invocable::External(_) | Invocable::Library(_) => {
+                self.sends_guarded(resolution.method, guarded)
             }
             Invocable::Rexx(_) | Invocable::Native(_) => false,
         };
@@ -2485,6 +2488,9 @@ impl Interp {
             Ok(NativeStarted::Entered(_)) => Ok(Started::Entered),
             Err(failure) => {
                 self.activity.guarded_send = None;
+                if self.granted(key) {
+                    self.release_guard(key);
+                }
                 Err(failure)
             }
         }
@@ -3024,7 +3030,10 @@ impl Interp {
         let Some(body) = body_of(&program, Some(installed.directive)) else {
             return Err(Loud::missing_body().into());
         };
-        let guarded = crate::guards::directive_guarded(&directive.kind);
+        let guarded = self.sends_guarded(
+            resolution.method,
+            crate::guards::directive_guarded(&directive.kind),
+        );
         // D19/I6, the same guard `Interp::invoke_call` takes and for the same
         // reason: a method that sends itself a message is an unbounded
         // recursion, and it must become a reportable condition rather than a
@@ -3094,7 +3103,7 @@ impl Interp {
             &mut callee,
             self.running_activation().map(|caller| &caller.settings),
         );
-        callee.guarded = guarded;
+        callee.flags.set_guarded(guarded);
         self.push_activation(callee);
         self.trace_package_invocation_entry();
         if guarded {
@@ -3218,6 +3227,7 @@ impl Interp {
             TraceEntry::Spent
         };
         activation.first_instruction_pending = false;
+        self.guards_go_live(Some(&activation));
         let transfer = self.transfer_on_reply(&mut activation);
         let resumed = &mut continuation.activity;
         if let crate::guards::Transfer::Again(wait) = transfer {

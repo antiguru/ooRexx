@@ -73,6 +73,26 @@ pub(crate) struct MethodFlagWrites {
     pub(crate) protected: bool,
 }
 
+impl Interp {
+    /// Whether a send of `method`, `declared` guarded by its directive,
+    /// reserves its guard lock: `setGuarded` and `setUnguarded` on its
+    /// `Method` object overrule the directive, as `isGuarded` reads them.
+    pub(crate) fn sends_guarded(&self, method: rexx_classes::MethodId, declared: bool) -> bool {
+        if self.method_flag_writes.is_empty() {
+            return declared;
+        }
+        self.method_flag_writes
+            .iter()
+            .find(|(object, _)| {
+                self.executable_sources
+                    .get(object)
+                    .is_some_and(|record| record.installed == Some(method))
+            })
+            .and_then(|(_, writes)| writes.unguarded)
+            .map_or(declared, |unguarded| !unguarded)
+    }
+}
+
 /// The `ExecutableSource` this receiver reports on, or the refusal for a
 /// receiver this crate did not build.
 fn source_of(interp: &Interp, receiver: ObjRef) -> Result<ExecutableSource, Failure> {

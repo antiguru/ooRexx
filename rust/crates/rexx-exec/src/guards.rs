@@ -58,6 +58,10 @@ pub(crate) enum Reserve {
 /// `TraceObject`'s `ATTRIBUTEPOOL`.
 #[derive(Default)]
 pub(crate) struct GuardTable {
+    /// Whether a second activity has ever existed. Until then no lock can be
+    /// contended, the table holds nothing, and a method activation's own flag
+    /// is the whole of its lock.
+    live: bool,
     locks: FxHashMap<GuardKey, Lock>,
     waiting: FxHashMap<ActivityId, Waiting>,
     pools: FxHashMap<GuardKey, u32>,
@@ -82,6 +86,19 @@ impl GuardTable {
             }
             Entry::Occupied(held) => Reserve::Contended(held.get().owner),
         }
+    }
+
+    /// Records one more level of `key` held by `owner`, as a lock held before
+    /// the table went live.
+    fn hold(&mut self, key: GuardKey, owner: ActivityId) {
+        self.locks
+            .entry(key)
+            .or_insert(Lock {
+                owner,
+                count: 0,
+                waiters: VecDeque::new(),
+            })
+            .count += 1;
     }
 
     /// Queues `me` behind `key`'s owner and records the wait.
@@ -218,18 +235,62 @@ impl GuardKey {
 }
 
 impl Interp {
+    /// Takes `key` for the running activity, or nests it: from the table once
+    /// a second activity has existed, at once before.
+    pub(crate) fn take_guard(&mut self, key: GuardKey) -> Reserve {
+        if !self.activities.guards.live {
+            return Reserve::Held;
+        }
+        let me = self.running_activity();
+        self.activities.guards.try_reserve(key, me)
+    }
+
+    /// Puts into the table the locks the running activity's method
+    /// activations hold, and `moving`'s, which a `REPLY` has popped, the
+    /// first time a second activity is about to exist.
+    pub(crate) fn guards_go_live(&mut self, moving: Option<&Activation>) {
+        if self.activities.guards.live {
+            return;
+        }
+        self.activities.guards.live = true;
+        let me = self.running_activity();
+        let activity = &self.activity;
+        let held: Vec<GuardKey> = (activity.suspended.iter().map(|a| &**a))
+            .chain(activity.running.as_deref())
+            .chain(moving)
+            .filter(|activation| activation.flags.reserved())
+            .filter_map(GuardKey::of)
+            .collect();
+        for key in held {
+            self.activities.guards.hold(key, me);
+        }
+    }
+
+    /// `key`'s nesting count: the table's, or before it is live the running
+    /// activity's activations holding it.
+    pub(crate) fn guard_count(&self, key: GuardKey) -> u32 {
+        if self.activities.guards.live {
+            return self.activities.guards.count(key);
+        }
+        let activity = &self.activity;
+        let held = (activity.suspended.iter().map(|a| &**a))
+            .chain(activity.running.as_deref())
+            .filter(|activation| {
+                activation.flags.reserved() && GuardKey::of(activation) == Some(key)
+            })
+            .count();
+        u32::try_from(held).unwrap_or(u32::MAX)
+    }
+
     /// Reserves `key` for the method activation just pushed, or leaves the
     /// reserve to a clause boundary of the method: its first, where another
     /// activity owns the lock, and the one after its `>I>` where that is
     /// traced early (`RexxActivation::run`, `execution/RexxActivation.cpp:523-532`).
     pub(crate) fn reserve_for_method(&mut self, key: GuardKey) {
         let after_entry = self.activation().plan.traces_entry_early;
-        if !after_entry {
-            let me = self.running_activity();
-            if let Reserve::Held = self.activities.guards.try_reserve(key, me) {
-                self.activation_mut().scope_reserved = true;
-                return;
-            }
+        if !after_entry && let Reserve::Held = self.take_guard(key) {
+            self.activation_mut().flags.set_reserved(true);
+            return;
         }
         let activation = self.activation().id;
         self.activity.guard_waits.push(GuardWait {
@@ -265,10 +326,9 @@ impl Interp {
             return Ok(());
         }
         self.activity.guard_waits.remove(at);
-        let me = self.running_activity();
-        let owner = match self.activities.guards.try_reserve(wait.key, me) {
+        let owner = match self.take_guard(wait.key) {
             Reserve::Held => {
-                self.activation_mut().scope_reserved = true;
+                self.activation_mut().flags.set_reserved(true);
                 return Ok(());
             }
             Reserve::Contended(owner) => owner,
@@ -277,6 +337,7 @@ impl Interp {
             self.blame_first_clause();
             return Err(Raised::deadlock().into());
         }
+        let me = self.running_activity();
         self.activities.guards.enqueue(wait.key, me);
         if yields && self.activity.pin_depth == 0 {
             self.activity.guard_waits.push(GuardWait {
@@ -288,13 +349,11 @@ impl Interp {
             self.clause_countdown = 1;
             return Err(Failure::Slice);
         }
-        match self.pinned_wait(ParkReason::Guard(wait.key)) {
-            None => {
-                self.activation_mut().scope_reserved = true;
-                Ok(())
-            }
-            Some(failure) => Err(failure),
+        let failure = self.pinned_wait(ParkReason::Guard(wait.key));
+        if failure.is_none() || self.granted(wait.key) {
+            self.activation_mut().flags.set_reserved(true);
         }
+        failure.map_or(Ok(()), Err)
     }
 
     /// Blames the running activation's first clause for a failure raised
@@ -351,12 +410,21 @@ impl Interp {
             "a guard waiter resumed in another activation"
         );
         if let Some(running) = self.activity.running.as_deref_mut() {
-            running.scope_reserved = true;
+            running.flags.set_reserved(true);
         }
+    }
+
+    /// Whether a release has made the running activity `key`'s owner, which
+    /// a wait that then failed still has to give back.
+    pub(crate) fn granted(&self, key: GuardKey) -> bool {
+        self.activities.guards.owner(key) == Some(self.running_activity())
     }
 
     /// Releases one level of `key`, waking the waiter it passes to.
     pub(crate) fn release_guard(&mut self, key: GuardKey) {
+        if !self.activities.guards.live {
+            return;
+        }
         if let Some(next) = self.activities.guards.release(key) {
             self.unpark(next);
         }
@@ -377,7 +445,7 @@ impl Interp {
             return;
         }
         let id = ending.id;
-        let key = if ending.scope_reserved {
+        let key = if ending.flags.reserved() {
             GuardKey::of(ending)
         } else {
             None
@@ -388,7 +456,7 @@ impl Interp {
                 .retain(|wait| wait.activation != id);
         }
         if let Some(key) = key {
-            self.activation_mut().scope_reserved = false;
+            self.activation_mut().flags.set_reserved(false);
             self.release_guard(key);
         }
     }
@@ -404,26 +472,29 @@ impl Interp {
             return Ok(());
         };
         if !on {
-            if activation.scope_reserved {
-                self.activation_mut().scope_reserved = false;
+            if activation.flags.reserved() {
+                self.activation_mut().flags.set_reserved(false);
                 self.release_guard(key);
             }
             return Ok(());
         }
-        if activation.scope_reserved {
+        if activation.flags.reserved() {
             return Ok(());
         }
-        let me = self.running_activity();
-        if let Reserve::Contended(owner) = self.activities.guards.try_reserve(key, me) {
+        if let Reserve::Contended(owner) = self.take_guard(key) {
             if self.deadlocks(owner) {
                 return Err(Raised::deadlock().into());
             }
+            let me = self.running_activity();
             self.activities.guards.enqueue(key, me);
             if let Some(failure) = self.pinned_wait(ParkReason::Guard(key)) {
+                if self.granted(key) {
+                    self.activation_mut().flags.set_reserved(true);
+                }
                 return Err(failure);
             }
         }
-        self.activation_mut().scope_reserved = true;
+        self.activation_mut().flags.set_reserved(true);
         Ok(())
     }
 
@@ -432,17 +503,17 @@ impl Interp {
     /// by the continuation (`VariableDictionary::transfer`,
     /// `execution/VariableDictionary.cpp:600-617`).
     pub(crate) fn transfer_on_reply(&mut self, activation: &mut Activation) -> Transfer {
-        if !activation.scope_reserved {
+        if !activation.flags.reserved() {
             return Transfer::None;
         }
         let Some(key) = GuardKey::of(activation) else {
             return Transfer::None;
         };
-        if self.activities.guards.count(key) == 1 {
+        if self.guard_count(key) == 1 {
             return Transfer::Moved(key);
         }
         self.release_guard(key);
-        activation.scope_reserved = false;
+        activation.flags.set_reserved(false);
         Transfer::Again(GuardWait {
             key,
             activation: activation.id,
@@ -463,10 +534,10 @@ impl Interp {
             return true;
         };
         let me = self.running_activity();
-        match self.activities.guards.try_reserve(wait.key, me) {
+        match self.take_guard(wait.key) {
             Reserve::Held => {
                 if let Some(running) = self.activity.running.as_deref_mut() {
-                    running.scope_reserved = true;
+                    running.flags.set_reserved(true);
                 }
                 true
             }
