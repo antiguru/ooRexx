@@ -1,6 +1,6 @@
 # Task 9 report: TraceObject fields, UNINIT and program end
 
-Status: DONE. Base a4bde5677. Commit: see the end of this file.
+Status: DONE. Base a4bde5677. Commit 826b07b45 (code, tests, witnesses, gate record, this report).
 
 ## gate_table_c hang (abf33a371 G4)
 
