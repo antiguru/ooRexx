@@ -29,10 +29,8 @@ wait: procedure
 ::method indo
   use arg d
   do i = 1 to 3
-    if i = 2 then do
-      reply i
-      call hold d
-    end
+    if i = 2 then reply i
+    if i = 2 then call hold d
     say 'loop' i
   end
   say 'after loop' i

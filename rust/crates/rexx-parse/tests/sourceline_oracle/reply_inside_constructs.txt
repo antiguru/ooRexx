@@ -1,4 +1,4 @@
-count 81
+count 79
 /* A REPLY inside a DO, a SELECT branch and either arm of an IF: the rest of
    the construct, and the body after it, run on the new activity. The rest
    waits until the sender has shown the reply value, so the order is fixed. */
@@ -30,10 +30,8 @@ wait: procedure
 ::method indo
   use arg d
   do i = 1 to 3
-    if i = 2 then do
-      reply i
-      call hold d
-    end
+    if i = 2 then reply i
+    if i = 2 then call hold d
     say 'loop' i
   end
   say 'after loop' i

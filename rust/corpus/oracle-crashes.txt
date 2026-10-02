@@ -1025,3 +1025,28 @@ crash. The other runs exit 0 with the started activity's 4.1 report alone. Witho
 `say m~halt` it is 30 runs of 30 rc 0 (`lang/message_halt_untrapped.rex`). Measured 2026-10-01 by
 Phase 6 S2-S5 Task 4. **Cause not established.** This crate answers `1` for the last halt (the
 started activity has no Rexx frame) and exits 0. No upstream ticket.
+
+## 24. `.traceOutput` redirected to a Rexx object's `lineout` under `trace r`, with a started activity running
+
+    b = .busy~new~start("spin")
+    .traceOutput~destination(.tc~new)
+    trace r
+    x = 1
+    trace o
+    .traceOutput~destination
+    say 'trace lines' .local~tl
+    .local~stop = 1
+    say b~result
+    exit
+    ::class tc
+    ::method lineout
+      .local~tl = .local~tl~string + 1
+    ::class busy
+    ::method spin
+      do until .local~stop = 1; nop; end
+      return "busy done"
+
+SIGSEGV, rc 139, 3 runs of 3, stdout `     4 *-* x = 1` and `       >>>   "1"`, stderr empty.
+Found by the Phase 6 S2-S5 Task 6 re-review 2 (`rr-t6/p2/traceobj.rex`) and reproduced 3 of 3
+in Task 6 fix round 3. **Cause not established.** This crate exits 0 and prints the two trace
+lines, `     5 *-* trace o`, `trace lines The NIL object` and `busy done`. No upstream ticket.

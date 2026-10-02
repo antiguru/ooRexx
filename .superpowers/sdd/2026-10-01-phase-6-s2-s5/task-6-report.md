@@ -424,3 +424,21 @@ under the same load: 24 runs each, eight runners of three.
 - **Other suites.** Lib tests 904 passed. Pinning `measured::` 16 passed. rexx-core is green in
   debug and release. sourceline_oracle passed.
 - **Bench "it works".** Every program matches 939fdace1 except `heapshape`.
+
+## Fix round 3
+
+- R2-2: `reply_inside_constructs.rex`'s `indo` is `if i = 2 then reply i` again, a REPLY as an
+  IF arm's sole instruction inside a loop. The order fix moved to a second clause,
+  `if i = 2 then call hold d` (the re-review's `p2/indo_old.rex`).
+  - Oracle 30/30, ours 30/30 unswitched and 30/30 under `every`, all one hash
+    (`t6b/stab.sh`), the same as before the edit.
+  - Debug, collect every allocation (`t6b/stressdrv`): unswitched and `every`, 3 runs each,
+    each with the oracle's stdout, rc 0 and no panic.
+  - The sourceline file was regenerated.
+- R2-3: `queued/2026-10-02-halt-after-replied-send.md` now says only rc 252 and the 4.1 at line 5
+  are fixed, and that the order of the `1` and `rest 1` varies.
+- `oracle-crashes.txt` entry 24: the re-review's `p2/traceobj.rex` (`.traceOutput` redirected
+  to a Rexx object under `trace r`, with a started activity running). Reproduced SIGSEGV rc 139
+  3 of 3 under the standard wrapper. The entry also records what this crate prints.
+- Checks: corpus (release, gate) 722/722 unswitched and 722/722 under `every`;
+  `sourceline_oracle` passed.

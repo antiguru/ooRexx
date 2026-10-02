@@ -2,8 +2,8 @@
 
 Found by the Task 6 re-review (O3), present before Task 6's fixes (939fdace1 behaves the same).
 A `Message~send` whose method replies leaves the message's activity as the sender's on the
-oracle, so `m~halt` answers `1` and halts the sending activity (main): 4.1 at the next clause
-boundary. This crate answers `0` and runs on. Probe: scratchpad `rr-t6/probes/pend4.rex`.
+oracle, so `m~halt` answers `1` and halts the sending activity (main) with 4.1 at `say m~halt`.
+This crate answers `0` and runs on. Probe: scratchpad `rr-t6/probes/pend4.rex`.
 
 ```rexx
 /* halt the message's activity before the continuation has run */
@@ -19,7 +19,9 @@ say 'main end'
   do i = 1 to 3; say 'rest' i; end
 ```
 
-Oracle (3/3 in the review), rc 252:
+Oracle, rc 252 and the 4.1 at line 5 in 3 of 3 runs (the review); the order of the `1` and the
+continuation's `rest 1` varies (`v, rest 1, 1, rest 2, rest 3` once in the re-review's three
+runs). One run's stdout:
 
 ```
 v
