@@ -305,6 +305,40 @@ fn an_ended_activitys_thread_context_is_kept() {
     assert_eq!(kept, 1, "the started activity's context was not kept");
 }
 
+/// An activity that made no native call and ran no package hook made no
+/// thread context, so its end retains nothing: a started send and a `REPLY`'s
+/// continuation, both ended before termination.
+#[test]
+fn an_activity_without_a_native_call_retains_no_thread_context() {
+    let source = b"m = .k~new~start('v')\nsay m~result\nsay .k~new~r\n\
+                   ::class k\n::method v\n  return 'started'\n\
+                   ::method r\n  reply 'replied'\n  say 'rest'\n"
+        .to_vec();
+    let kept = std::thread::Builder::new()
+        .stack_size(crate::INTERPRETER_STACK_BYTES)
+        .spawn(move || {
+            let mut interp = Interp::new();
+            let program = parse_program(source).expect("the program parses");
+            let ran = interp
+                .bootstrap_library()
+                .and_then(|()| interp.run(program))
+                .and_then(|_| interp.run_started_activities());
+            assert!(ran.is_ok(), "{}", String::from_utf8_lossy(&interp.trace));
+            assert_eq!(
+                String::from_utf8_lossy(&interp.out),
+                "started\nreplied\nrest\n"
+            );
+            assert!(interp.activities.idle.iter().all(Option::is_none));
+            let kept = interp.activities.retired().len();
+            assert!(interp.terminate().is_empty());
+            kept
+        })
+        .expect("the interpreter thread")
+        .join()
+        .expect("the run did not panic");
+    assert_eq!(kept, 0, "an ended activity's unmade context was kept");
+}
+
 fn run_with(source: &str, invocation: Invocation) -> Outcome {
     run_program("/tmp/scheduler.rex", source.as_bytes().to_vec(), invocation)
 }
@@ -743,15 +777,15 @@ fn lines_of<'a>(out: &'a str, prefix: &str) -> Vec<&'a str> {
         .collect()
 }
 
-/// A `REPLY` asks for a switch, which its sender takes at its next clause
-/// boundary: the rest of the method runs before the sender's next line.
+/// A `REPLY` asks for no switch: the sender runs on until an ordinary one,
+/// here its end, and the rest of the method runs after it (ruling P34).
 #[test]
-fn a_reply_yields_to_its_continuation_at_the_senders_next_clause() {
+fn a_reply_leaves_its_sender_running_until_an_ordinary_switch() {
     let outcome = run(REPLIED);
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
     assert_eq!(
         stdout(&outcome),
-        "answered\nrest 1\nrest 2\ncaller 1\ncaller 2\n"
+        "answered\ncaller 1\ncaller 2\nrest 1\nrest 2\n"
     );
 }
 

@@ -290,9 +290,13 @@ fn a_moved_frame_keeps_its_values_and_cells() {
     assert!(roots.iter().any(|r| r == plain));
 }
 
-/// The handle a frame had before its move is refused by its new record.
+/// The handle a frame had before its move is refused by its new record. The
+/// moved frame keeps its serial, so the top-frame fast path refuses it only
+/// through its debug assertion: a release check would be a depth compare on
+/// every slot access.
+#[cfg(debug_assertions)]
 #[test]
-#[should_panic]
+#[should_panic(expected = "the cached top record disagrees")]
 fn a_moved_frames_old_handle_is_refused() {
     let mut roots = RootSet::new();
     let _outer = roots.push_slots(1);

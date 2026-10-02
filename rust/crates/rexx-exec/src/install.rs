@@ -1993,7 +1993,7 @@ impl Interp {
     ) -> LibraryLoad {
         match opened {
             Ok(Some(mut library)) => {
-                library.keep_thread_context(&self.activity.thread);
+                library.keep_thread_context(&self.thread_context());
                 let held = self.libraries.hold(name, Rc::new(library));
                 self.register_package_routines(name, &held);
                 // Measured, oracle: a loader that raises leaves the library
@@ -2008,7 +2008,7 @@ impl Interp {
                 LibraryLoad::Missing
             }
             Err(mut refused) => {
-                refused.library.keep_thread_context(&self.activity.thread);
+                refused.library.keep_thread_context(&self.thread_context());
                 self.libraries.hold(name, Rc::from(refused.library));
                 LibraryLoad::Version
             }

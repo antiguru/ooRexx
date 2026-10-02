@@ -2837,8 +2837,13 @@ impl Interp {
         match continuation {
             Some(continuation) => self.spawn_continuation(callee, callee_context, continuation),
             // The body ended before its next clause, so nothing is left to
-            // move.
+            // move. The oracle still spawns the empty rest, which numbers the
+            // replier (`Activity.cpp:1206`) and takes the oldest pooled
+            // thread back to the pool's tail.
             None => {
+                self.activity_number();
+                self.rotate_pooled();
+                self.activity.splits_owed -= 1;
                 self.roots.activity_mut().pop_slots(callee.frame);
                 self.recycle_activation(callee);
             }
@@ -2847,8 +2852,10 @@ impl Interp {
     }
 
     /// Files `continuation`, the record a `REPLY`'s split left, with
-    /// `activation` and its slot frame moved into it, and requests the slice
-    /// the oracle's replier gives up (`RexxActivation.cpp:776`).
+    /// `activation` and its slot frame moved into it. The sender keeps
+    /// running: the oracle's replier yields only to a thread already waiting
+    /// (`ActivityManager.hpp:293`), which the continuation's is not, so the
+    /// continuation runs at the next ordinary switch (ruling P34).
     #[cold]
     #[inline(never)]
     fn spawn_continuation(
@@ -2887,7 +2894,8 @@ impl Interp {
         resumed.first = Some(crate::scheduler::First::Reply);
         resumed.root_then = Some(Then::Pass);
         self.spawn(continuation);
-        self.timer.requests().set(crate::timer::SLICE);
+        // The split's own visit served no other request, so the sender's next
+        // clause does: it arms the timer for the continuation now ready.
         self.clause_countdown = 1;
     }
 

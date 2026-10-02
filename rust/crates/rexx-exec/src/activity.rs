@@ -66,8 +66,9 @@ pub(crate) struct Activity {
     /// The next [`NativeFrame`] number, wrapping.
     pub(crate) next_native: u32,
     /// The thread context every native call and package hook is handed,
-    /// which an extension may keep for as long as this interpreter runs.
-    pub(crate) thread: rexx_api::ffi::ThreadContext,
+    /// which an extension may keep for as long as this interpreter runs;
+    /// made by the first ([`crate::Interp::thread_context`]).
+    pub(crate) thread: Option<rexx_api::ffi::ThreadContext>,
     /// `current_value_indent` and `current_clause_line`, bundled -- see
     /// `ClauseState`'s own doc comment for what the two share, the property
     /// that decides what belongs alongside them, and why they are one field
@@ -289,6 +290,10 @@ pub(crate) struct Activity {
     /// What `.context~thread` answers, assigned on first use
     /// ([`crate::Interp::activity_number`]).
     pub(crate) number: Option<u32>,
+    /// How many of this activity's activations have replied and wait for
+    /// their split, which a trap handler run at the `REPLY` clause's end
+    /// delays to the replier's next clause.
+    pub(crate) splits_owed: u32,
     /// The messages whose send failed with the condition now unwinding,
     /// until its condition object is built.
     pub(crate) failed_sends: Vec<ObjRef>,
@@ -304,7 +309,7 @@ impl Activity {
             running: None,
             suspended: Vec::new(),
             spare_activations: Vec::new(),
-            thread: rexx_api::ffi::ThreadContext::new(),
+            thread: None,
             native_handles: Vec::new(),
             native_spares: Vec::new(),
             next_native: 0,
@@ -365,6 +370,7 @@ impl Activity {
             sliced: None,
             root_end: None,
             number: None,
+            splits_owed: 0,
             failed_sends: Vec::new(),
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
@@ -463,6 +469,7 @@ impl Activity {
             sliced: _,
             root_end,
             number: _,
+            splits_owed: _,
             failed_sends,
             #[cfg(feature = "pinning")]
                 pins: _,

@@ -336,9 +336,9 @@ then a FORWARD that resolves back to it is rc 137 at the timeout with both
 descriptors empty, where the same shapes without the `reply` are rc 245 in
 under 0.08 s. Each continuation runs on an activity of its own and ends once
 its FORWARD has spawned the next, so no activation depth grows and the guard
-above never fires. Measured again 2026-10-02 (Phase 6 S2 Task 6), release
-build, `timeout -s KILL 10`: rc 137, `VmRSS` 248,748 kB at 3 s and 547,536 kB
-at 7 s, the ended activities' thread contexts being kept until termination.
+above never fires. Measured again 2026-10-02 (Phase 6 S2 Task 6 fix round 1),
+release build, killed at 5 s: `VmRSS` 20 to 21 MB at each of 1 to 5 s, since
+an ended activity that made no native call keeps no thread context.
 The oracle's answer to this member cannot be measured, because it is this
 shape. No bound has been chosen; Task 9's list carries the reasoning.
 

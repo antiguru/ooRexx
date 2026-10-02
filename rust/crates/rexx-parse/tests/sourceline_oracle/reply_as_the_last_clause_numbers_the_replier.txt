@@ -1,0 +1,22 @@
+count 21
+/* A REPLY that is the last clause its method runs still numbers the
+   replier's activity, which the oracle does as it spawns the empty rest:
+   the started activity that replied is 2, the one started after it 3. */
+o = .k~new
+say 'main' .context~thread
+s = o~start('s')
+call SysSleep 0.2
+t = o~start('num', 0)
+say 't' t~result
+.local~go = 1
+say 's' s~result
+::class k
+::method num unguarded
+  use arg t
+  return .context~thread
+::method s unguarded
+  x = self~last
+  do until .local~go = 1; call SysSleep 0.01; end
+  return .context~thread
+::method last unguarded
+  reply 'v'

@@ -92,7 +92,7 @@ impl Interp {
         let packaged = self.external_package_path(resolution.method).is_some();
         self.native_frame_mut().packaged = packaged;
         let mut strings = CStringPool::new();
-        let thread = self.activity.thread.clone();
+        let thread = self.thread_context();
         let (answered, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
@@ -165,7 +165,7 @@ impl Interp {
         let program = self.library_code_program(code);
         self.native_frame_mut().packaged = program.is_some();
         let mut strings = CStringPool::new();
-        let thread = self.activity.thread.clone();
+        let thread = self.thread_context();
         let (answered, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
@@ -215,7 +215,7 @@ impl Interp {
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
         pin_enter!(self, crate::pinning::PinKind::LibraryEntry);
         let mut strings = CStringPool::new();
-        let thread = self.activity.thread.clone();
+        let thread = self.thread_context();
         let (ran, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
@@ -261,7 +261,7 @@ impl Interp {
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let mut strings = CStringPool::new();
-        let thread = self.activity.thread.clone();
+        let thread = self.thread_context();
         let (answered, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {

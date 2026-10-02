@@ -236,7 +236,7 @@ pub static INSTANCE: RexxInstanceInterface = {
     table
 };
 
-/// The thread table each [`ThreadContext`] copies
+/// The thread table a [`ThreadTable`] starts from
 /// (`Activity::threadContextFunctions`,
 /// `interpreter/api/ThreadContextStubs.cpp:2098`), its data members null until
 /// the first [`ThreadContext::enter`] writes them.
@@ -488,6 +488,52 @@ pub struct ThreadContext {
     home: Rc<Home>,
 }
 
+/// One thread table, which every [`ThreadContext`] built from it links: its
+/// data members are one interpreter's constants. A clone addresses the same
+/// table; the allocation lives until the last clone, or the last context
+/// linking it, is dropped.
+#[derive(Clone)]
+pub struct ThreadTable {
+    home: Rc<TableHome>,
+}
+
+/// Owns a [`ThreadTable`]'s allocation, which extensions read through the
+/// contexts linking it.
+struct TableHome(NonNull<RexxThreadInterface>);
+
+impl Drop for TableHome {
+    fn drop(&mut self) {
+        // SAFETY: the pointer came from `Box::into_raw` in
+        // `ThreadTable::new`, and only this `TableHome`, which is not
+        // `Clone`, frees it.
+        drop(unsafe { Box::from_raw(self.0.as_ptr()) });
+    }
+}
+
+impl ThreadTable {
+    /// A table whose data members are null until the first
+    /// [`ThreadContext::enter`] of a context linking it.
+    #[must_use]
+    pub fn new() -> ThreadTable {
+        let raw = Box::into_raw(Box::new(THREAD));
+        ThreadTable {
+            home: Rc::new(TableHome(
+                NonNull::new(raw).expect("Box::into_raw answers a non-null pointer"),
+            )),
+        }
+    }
+
+    fn pointer(&self) -> *mut RexxThreadInterface {
+        self.home.0.as_ptr()
+    }
+}
+
+impl Default for ThreadTable {
+    fn default() -> ThreadTable {
+        ThreadTable::new()
+    }
+}
+
 /// Owns the allocation a [`ThreadContext`] hands out addresses into. Nothing
 /// forms a reference to the whole of it, so an address an extension kept is
 /// never invalidated by one.
@@ -507,7 +553,7 @@ impl Drop for Home {
 struct Thread {
     thread: Owned<RexxThreadContext_, Innermost>,
     instance: Owned<RexxInstance_, Innermost>,
-    table: RexxThreadInterface,
+    table: ThreadTable,
     innermost: Innermost,
     /// The thread the interpreter runs on, which is the only one an
     /// extension may attach to it.
@@ -522,9 +568,16 @@ struct Thread {
 struct Innermost(Cell<*const Activation<'static>>);
 
 impl ThreadContext {
-    /// A thread context with no native call in flight.
+    /// A thread context with no native call in flight, linking a table of its
+    /// own.
     #[must_use]
     pub fn new() -> ThreadContext {
+        ThreadContext::linking(&ThreadTable::new())
+    }
+
+    /// A thread context with no native call in flight, linking `table`.
+    #[must_use]
+    pub fn linking(table: &ThreadTable) -> ThreadContext {
         let raw = Box::into_raw(Box::new(Thread {
             thread: Owned {
                 context: RexxThreadContext_ {
@@ -540,7 +593,7 @@ impl ThreadContext {
                 },
                 owner: std::ptr::null_mut(),
             },
-            table: THREAD,
+            table: table.clone(),
             innermost: Innermost(Cell::new(std::ptr::null())),
             home: std::thread::current().id(),
         }));
@@ -551,7 +604,7 @@ impl ThreadContext {
         unsafe {
             let innermost = &raw mut (*raw).innermost;
             (*raw).thread.context.instance = (&raw mut (*raw).instance).cast();
-            (*raw).thread.context.functions = &raw mut (*raw).table;
+            (*raw).thread.context.functions = (*raw).table.pointer();
             (*raw).thread.owner = innermost;
             (*raw).instance.context.functions = std::ptr::from_ref(&INSTANCE).cast_mut();
             (*raw).instance.owner = innermost;
@@ -602,15 +655,17 @@ impl ThreadContext {
     ) -> R {
         let raw = self.home.0.as_ptr();
         let constants = activation.constants();
-        // SAFETY: the allocation is live while `self` is. The data members
-        // are written only while they are still null, which is before any
-        // extension has been handed this context, so nothing is reading them.
+        // SAFETY: the allocation is live while `self` is, and so is the table
+        // it links. The data members are written only while they are still
+        // null, which is before any extension has been handed a context
+        // linking the table, so nothing is reading them.
         unsafe {
-            if (*raw).table.RexxNil.is_null() {
-                (*raw).table.RexxNil = constants.nil;
-                (*raw).table.RexxTrue = constants.true_object;
-                (*raw).table.RexxFalse = constants.false_object;
-                (*raw).table.RexxNullString = constants.null_string.cast();
+            let table = (*raw).table.pointer();
+            if (*table).RexxNil.is_null() {
+                (*table).RexxNil = constants.nil;
+                (*table).RexxTrue = constants.true_object;
+                (*table).RexxFalse = constants.false_object;
+                (*table).RexxNullString = constants.null_string.cast();
             }
         }
         debug_assert_eq!(self.constants(), constants, "a constant's handle moved");
@@ -658,14 +713,16 @@ impl ThreadContext {
     #[must_use]
     pub fn constants(&self) -> crate::values::Constants<RexxObjectPtr> {
         let raw = self.home.0.as_ptr();
-        // SAFETY: the allocation is live while `self` is, and a data member
-        // is written only before any extension could read it.
+        // SAFETY: the allocation is live while `self` is, and so is the table
+        // it links; a data member is written only before any extension could
+        // read it.
         unsafe {
+            let table = (*raw).table.pointer();
             crate::values::Constants {
-                nil: (*raw).table.RexxNil,
-                true_object: (*raw).table.RexxTrue,
-                false_object: (*raw).table.RexxFalse,
-                null_string: (*raw).table.RexxNullString.cast(),
+                nil: (*table).RexxNil,
+                true_object: (*table).RexxTrue,
+                false_object: (*table).RexxFalse,
+                null_string: (*table).RexxNullString.cast(),
             }
         }
     }

@@ -452,5 +452,10 @@ lang/reply_inside_constructs.rex
 lang/reply_continuation_error_trace.rex
 lang/reply_continuation_error_stderr.rex
 lang/reply_continuation_failed_send.rex
-lang/reply_seen_by_a_guarded_send.rex
 lang/reply_as_the_last_clause.rex
+# Task 6 fix round 1: a trap handled at the REPLY clause's end leaves the split
+# owed to the replier's next clause; an empty rest still numbers the replier.
+lang/reply_split_after_a_trap_at_the_reply.rex
+lang/reply_split_after_a_trap_takes_the_failure.rex
+lang/reply_split_after_a_trap_does_not_wait.rex
+lang/reply_as_the_last_clause_numbers_the_replier.rex

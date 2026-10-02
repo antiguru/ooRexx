@@ -2465,6 +2465,7 @@ impl Interp {
                     value,
                     continuation: None,
                 }));
+                self.activity.splits_owed += 1;
                 self.clause_countdown = 1;
                 Ok(RegionEnd::Flowed(Flow::Next))
             }
@@ -2902,6 +2903,7 @@ impl Interp {
         if let Some(replied) = self.activation_mut().replied.as_mut() {
             replied.continuation = Some(idle);
         }
+        self.activity.splits_owed -= 1;
     }
 
     /// The body the callee a call op of `caller` entered runs: [`Interp::

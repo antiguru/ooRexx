@@ -149,9 +149,12 @@ pub(crate) struct Activities {
     /// The parked activities waiting on each message, in the order they
     /// parked.
     waiters: FxHashMap<MessageId, Vec<ActivityId>>,
-    /// The thread contexts of ended activities, which an extension may have
-    /// kept and which last until interpreter termination.
+    /// The thread contexts of ended activities that made a native call or
+    /// ran a package hook, which an extension may have kept and which last
+    /// until interpreter termination.
     retired: Vec<rexx_api::ffi::ThreadContext>,
+    /// The thread table every activity's context links.
+    thread_table: rexx_api::ffi::ThreadTable,
     /// The numbers of ended activities a new one takes first, oldest first:
     /// the oracle's pool of idle threads (`availableActivities`,
     /// `concurrency/ActivityManager.cpp:556`), whose threads keep their
@@ -191,6 +194,7 @@ impl Activities {
             next_message: 0,
             waiters: FxHashMap::default(),
             retired: Vec::new(),
+            thread_table: rexx_api::ffi::ThreadTable::new(),
             pooled: VecDeque::new(),
             last_number: 0,
             late_failures: Vec::new(),
@@ -323,6 +327,27 @@ impl Interp {
         Box::new(Idle { activity, roots })
     }
 
+    /// The running activity's thread context, made at its first native call
+    /// or package hook.
+    pub(crate) fn thread_context(&mut self) -> rexx_api::ffi::ThreadContext {
+        self.activity
+            .thread
+            .get_or_insert_with(|| {
+                rexx_api::ffi::ThreadContext::linking(&self.activities.thread_table)
+            })
+            .clone()
+    }
+
+    /// Moves the oldest pooled number to the pool's tail, as a spawned
+    /// activity that ends at once does.
+    pub(crate) fn rotate_pooled(&mut self) {
+        let pooled = &mut self.activities.pooled;
+        let number = pooled.pop_front().flatten();
+        if pooled.len() <= MAX_POOLED {
+            pooled.push_back(number);
+        }
+    }
+
     /// The running activity's number, which `.context~thread` answers: main
     /// is 1 and an activity is numbered when first asked, as the oracle
     /// numbers its threads (`Activity::getIdntfr`,
@@ -359,7 +384,7 @@ impl Interp {
         std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
         let outgoing = std::mem::replace(&mut table.running, next);
         if ended {
-            table.retired.push(idle.activity.thread.clone());
+            table.retired.extend(idle.activity.thread.take());
             table.free.push(outgoing.0);
             if table.pooled.len() <= MAX_POOLED {
                 table.pooled.push_back(idle.activity.number);
@@ -497,8 +522,8 @@ impl Interp {
             if index == me {
                 continue;
             }
-            if let Some(idle) = idle.take() {
-                table.retired.push(idle.activity.thread.clone());
+            if let Some(mut idle) = idle.take() {
+                table.retired.extend(idle.activity.thread.take());
                 table.free.push(index as u32);
                 blocked = true;
             }
@@ -880,12 +905,13 @@ impl Interp {
     /// clause that does (spec 2026-09-29 P6-4), and a second slice that finds
     /// the activity still pinned takes a pinned yield (ruling P29).
     pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
-        if self.split_owed() {
-            if yields {
+        if self.activity.splits_owed > 0 {
+            if yields && self.split_owed() {
                 return Err(Failure::Slice);
             }
-            // A boundary closing a construct's branch: the split waits for
-            // the next clause.
+            // A boundary closing a construct's branch, or a clause of a trap
+            // handler the `REPLY` clause's end ran: the split waits for the
+            // replier's next clause.
             self.clause_countdown = 1;
         }
         if self.stress_collect {

@@ -1027,6 +1027,25 @@ fn a_thread_context_kept_from_one_call_reaches_the_next() {
     );
 }
 
+/// Contexts linking one table share it: the constants the first one's entry
+/// writes are what a second one, never entered, already carries.
+#[test]
+fn contexts_linking_one_table_share_its_constants() {
+    let table = crate::ffi::ThreadTable::new();
+    let first = ThreadContext::linking(&table);
+    let second = ThreadContext::linking(&table);
+    let mut interpreter = Interpreter::new();
+    let mut strings = CStringPool::new();
+    let activation = Activation::new(Conversion {
+        host: &mut interpreter,
+        strings: &mut strings,
+    });
+    first.enter(&activation, |_| ());
+    assert!(!second.constants().nil.is_null());
+    assert_eq!(second.constants(), first.constants());
+    assert!(ThreadContext::new().constants().nil.is_null());
+}
+
 /// A native call nested inside a callback enters the same thread context,
 /// and once it returns the outer call is the innermost again: the outer
 /// stub's raise, made through the thread context after the nested call,
