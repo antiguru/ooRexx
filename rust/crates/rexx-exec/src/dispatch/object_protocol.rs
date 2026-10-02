@@ -1346,8 +1346,19 @@ pub(super) fn native_message_result(
     if interp.message_outcomes.contains_key(&receiver) {
         return message_result(interp, receiver).map(NativeStarted::Ran);
     }
+    check_message_deadlock(interp, receiver)?;
     let id = interp.activities.message_id(receiver);
     interp.park_native(ParkReason::MessageResult(id), message_result, receiver)
+}
+
+/// 98.905 where the activity running `message`'s send waits, through a
+/// chain of waits, on the running one (`MessageClass::wait`,
+/// `classes/MessageClass.cpp:250-253`).
+fn check_message_deadlock(interp: &Interp, message: ObjRef) -> Result<(), Failure> {
+    match interp.message_runner(message) {
+        Some(runner) if interp.deadlocks(runner) => Err(crate::error::Raised::deadlock().into()),
+        _ => Ok(()),
+    }
 }
 
 /// [`native_message_result`] once the send has completed. A send made again
@@ -1392,6 +1403,7 @@ pub(super) fn native_message_wait(
     if interp.message_outcomes.contains_key(&receiver) {
         return Ok(NativeStarted::Ran(None));
     }
+    check_message_deadlock(interp, receiver)?;
     let id = interp.activities.message_id(receiver);
     interp.park_native(ParkReason::MessageWait(id), |_, _| Ok(None), receiver)
 }

@@ -1,0 +1,26 @@
+/* Two activities each holding one object's guard and sending a guarded
+   method to the other's: the second to wait closes the cycle and raises
+   98.905 in the method it entered. */
+a = .k~new('A')
+b = .k~new('B')
+m1 = a~start('hold', b)
+call SysSleep 0.05
+m2 = b~start('hold', a)
+m1~wait
+m2~wait
+say 'end'
+::class k
+::method init
+  expose n
+  use arg n
+::method hold
+  expose n
+  use arg other
+  say n 'holds'
+  call SysSleep 0.2
+  say n 'sends'
+  other~poke
+  say n 'done'
+::method poke
+  expose n
+  say n 'poked'

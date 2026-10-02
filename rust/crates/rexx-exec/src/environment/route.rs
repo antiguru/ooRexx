@@ -205,8 +205,7 @@ impl Interp {
 
     /// The send itself: a `TraceObject` carrying `line` and where it was
     /// traced, then `LINEOUT` to `route` (`RexxActivation::createTraceObject`,
-    /// `execution/RexxActivation.cpp:5160`). `ATTRIBUTEPOOL` and the guard
-    /// entries read zero: they come from the guard table (plan Task 11).
+    /// `execution/RexxActivation.cpp:5160`).
     fn deliver_trace_line(
         &mut self,
         class: ObjRef,
@@ -233,14 +232,20 @@ impl Interp {
             (true, None, Some(&level)) => Some(CallerFrame::Of(self.frame_record(level)?)),
             (true, None, None) => Some(CallerFrame::Spawner),
         };
-        let receiver = match (levels.first(), self.frame_at(0)) {
+        let method = match (levels.first(), self.frame_at(0)) {
             (Some(crate::dispatch::context::LiveLevel::Activation(0)), Some(activation))
                 if activation.entry == crate::activation::Entry::Method =>
             {
-                activation
-                    .method_identity
-                    .as_ref()
-                    .map(|identity| identity.receiver)
+                activation.method_identity.as_ref().map(|identity| {
+                    (
+                        crate::guards::GuardKey {
+                            object: identity.receiver,
+                            scope: identity.scope,
+                        },
+                        activation.guarded,
+                        activation.scope_reserved,
+                    )
+                })
             }
             _ => None,
         };
@@ -274,13 +279,16 @@ impl Interp {
             };
             self.trace_object_put(object, b"CALLERSTACKFRAME", table)?;
         }
-        if let Some(receiver) = receiver {
-            let zero = self.counted(0);
-            self.trace_object_put(object, b"ATTRIBUTEPOOL", zero)?;
-            self.trace_object_put(object, b"ISGUARDED", crate::eval::logical(false))?;
-            self.trace_object_put(object, b"SCOPELOCKCOUNT", zero)?;
-            self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(false))?;
-            self.trace_object_put(object, b"RECEIVER", receiver)?;
+        if let Some((key, guarded, reserved)) = method {
+            let pool = self.activities.guards.pool_number(key);
+            let pool = self.counted(pool as usize);
+            self.trace_object_put(object, b"ATTRIBUTEPOOL", pool)?;
+            self.trace_object_put(object, b"ISGUARDED", crate::eval::logical(guarded))?;
+            let count = self.activities.guards.count(key);
+            let count = self.counted(count as usize);
+            self.trace_object_put(object, b"SCOPELOCKCOUNT", count)?;
+            self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(reserved))?;
+            self.trace_object_put(object, b"RECEIVER", key.object)?;
         }
         let caller_ref = self.caller();
         self.send_message(

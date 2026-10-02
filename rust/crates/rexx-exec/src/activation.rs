@@ -298,6 +298,11 @@ pub(crate) struct Activation {
     /// Whether this activation is performing the send of a `FORWARD` that
     /// does not `CONTINUE`, which makes it a phantom for condition delivery.
     pub(crate) forwarded: bool,
+    /// Whether the method is guarded (`ActivationSettings::isGuarded`).
+    pub(crate) guarded: bool,
+    /// Whether this activation holds its receiver's guard lock for its scope
+    /// (`objectScope == SCOPE_RESERVED`).
+    pub(crate) scope_reserved: bool,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     /// ```text
@@ -546,6 +551,8 @@ impl Activation {
             replied_a_value: false,
             replied: None,
             forwarded: false,
+            guarded: false,
+            scope_reserved: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -617,6 +624,8 @@ impl Activation {
             replied_a_value: false,
             replied: None,
             forwarded: false,
+            guarded: false,
+            scope_reserved: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -678,6 +687,8 @@ impl Activation {
             replied_a_value: false,
             replied: None,
             forwarded: false,
+            guarded: false,
+            scope_reserved: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -729,6 +740,8 @@ impl Activation {
             replied_a_value: false,
             replied: None,
             forwarded: false,
+            guarded: false,
+            scope_reserved: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -796,6 +809,8 @@ impl Activation {
             replied_a_value: _,
             replied,
             forwarded: _,
+            guarded: _,
+            scope_reserved: _,
             first_instruction_pending: _,
             trace_entry: _,
             pc: _,

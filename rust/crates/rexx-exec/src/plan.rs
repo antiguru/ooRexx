@@ -151,7 +151,31 @@ pub(crate) struct Plan {
     /// How a compound-shaped symbol this body names splits, by
     /// `SymbolId::index`, `None` where this pass recorded nothing for it.
     pub(crate) compounds: Box<[Option<CompoundName>]>,
+    /// Whether this is a method body whose first instruction past an
+    /// `EXPOSE` is a `TRACE` naming a label-tracing letter, whose `>I>` the
+    /// oracle traces before the method's guard lock is reserved
+    /// (`RexxActivation::traceEntry`, `execution/RexxActivation.cpp:3630-3642`).
+    pub(crate) traces_entry_early: bool,
     last_chunk: LastChunk,
+}
+
+/// Whether `body`'s first instruction past an `EXPOSE` is a `TRACE` naming a
+/// label-tracing letter.
+fn traces_entry_early(body: &CodeBody) -> bool {
+    let mut instructions = body
+        .instructions
+        .iter()
+        .map(|instruction| &instruction.kind);
+    let first = match instructions.next() {
+        Some(InstructionKind::Expose { .. }) => instructions.next(),
+        first => first,
+    };
+    matches!(
+        first,
+        Some(InstructionKind::Trace(rexx_parse::Trace::Setting(bytes)))
+            if crate::trace::parse_trace_request(bytes)
+                .is_ok_and(|request| request.setting.is_some_and(|mode| mode.labels))
+    )
 }
 
 /// The chunk [`Interp::chunk_for`] last answered for a plan, with the key and
@@ -285,6 +309,7 @@ impl Plan {
         if kind == BodyKind::Method {
             plan.self_slot = Some(plan.slot_for(b"SELF"));
             plan.super_slot = Some(plan.slot_for(b"SUPER"));
+            plan.traces_entry_early = traces_entry_early(body);
         }
         plan.indents = crate::run::all_indents(&body.instructions);
         if let Some(source) = source {

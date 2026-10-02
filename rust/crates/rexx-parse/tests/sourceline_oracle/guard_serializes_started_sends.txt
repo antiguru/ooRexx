@@ -1,0 +1,44 @@
+count 43
+/* Two activities sending the same guarded method run it one after the
+   other; two sending an unguarded one run it interleaved, each waiting
+   inside it for the other's progress. */
+o = .k~new
+q = .queue~new
+m1 = o~start('g', 'A', q)
+call until q, 1
+m2 = o~start('g', 'B', q)
+m1~wait; m2~wait
+qc = .queue~new
+qd = .queue~new
+m3 = o~start('u', 'C', qc, qd, 1)
+call until qc, 1
+m4 = o~start('u', 'D', qd, qc, 2)
+m3~wait; m4~wait
+exit
+until:
+  use arg queue, count
+  do while queue~items < count
+    call SysSleep 0.01
+  end
+  return
+::class k
+::method g
+  use arg n, q
+  say n 'in'
+  q~queue(n)
+  call SysSleep 0.3
+  say n 'out'
+::method u unguarded
+  use arg n, mine, other, count
+  say n 'in'
+  mine~queue(n 'in')
+  call until other, count
+  say n 'out'
+  mine~queue(n 'out')
+  return
+until:
+  use arg queue, count
+  do while queue~items < count
+    call SysSleep 0.01
+  end
+  return

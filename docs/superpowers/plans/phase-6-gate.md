@@ -200,7 +200,7 @@ Not passing:
 | base/class/Method.testGroup | TESTDIRECTIVES | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
 | base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/directives/ATTRIBUTE.testGroup | TESTDELEGATE | rc 1, oracle 122 assertions, ours 95 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
-| base/directives/METHOD.testGroup | TESTGUARDEDACCESS | rc 1, oracle 1 assertions, ours 0 | same | Task 11: a guarded attribute read does not wait for the lock a REPLY continuation holds (`BAD` where the oracle gives `GOOD`, 10 of 10) |
+| base/directives/METHOD.testGroup | TESTGUARDEDACCESS | rc 1, oracle 1 assertions, ours 0 | same | passes from Task 11: the guarded attribute read waits for the lock the REPLY continuation holds (`rust/corpus/lang/guarded_getter_waits_for_reply.rex`) |
 | base/directives/METHOD.testGroup | TESTDELEGATE | rc 1, oracle 116 assertions, ours 66 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
 | base/keyword/CALL.testGroup | TEST_4 | rc 1, oracle 18 assertions, ours 7 | same | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
 | base/keyword/GUARD.testGroup | TEST_ON_DEFAULT | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |

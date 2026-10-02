@@ -1623,6 +1623,31 @@ impl Interp {
                     },
                 )
                 .is_some(),
+            InstallBody::Native(_) | InstallBody::Library(_)
+                if self.programs.get(program.0).is_some_and(|installed| {
+                    installed
+                        .directives
+                        .get(directive)
+                        .is_some_and(|declared| crate::guards::directive_guarded(&declared.kind))
+                }) =>
+            {
+                self.guarded_externals.insert(method);
+                self.record_external(method, program, body)
+            }
+            InstallBody::Native(_) | InstallBody::Library(_) => {
+                self.record_external(method, program, body)
+            }
+        };
+        debug_assert!(
+            !previous,
+            "a MethodId was recorded twice, so one of the two bodies is lost"
+        );
+    }
+
+    /// [`Interp::record_method_body`] for an `EXTERNAL` method, answering
+    /// whether `method` was recorded before.
+    fn record_external(&mut self, method: MethodId, program: ProgramId, body: InstallBody) -> bool {
+        match body {
             InstallBody::Native(entry) => {
                 self.external_packages.insert(method, program);
                 self.native_externals.insert(method, entry).is_some()
@@ -1631,11 +1656,8 @@ impl Interp {
                 self.external_packages.insert(method, program);
                 self.library_externals.insert(method, binding).is_some()
             }
-        };
-        debug_assert!(
-            !previous,
-            "a MethodId was recorded twice, so one of the two bodies is lost"
-        );
+            InstallBody::Written | InstallBody::Generated(_) => false,
+        }
     }
 
     /// Files a body compiled from method source text as a program of its own

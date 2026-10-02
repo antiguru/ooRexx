@@ -49,8 +49,15 @@ pub(crate) enum ExecOutcome {
 }
 
 /// An activity's handle: its offset in the interpreter's activity table.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ActivityId(u32);
+
+#[cfg(test)]
+impl ActivityId {
+    pub(crate) fn test(index: u32) -> ActivityId {
+        ActivityId(index)
+    }
+}
 
 /// A timer the natives behind `.Alarm` and `.Ticker` wait on, numbered per
 /// interpreter from 1; its `EVENTSEMHANDLE` pointer holds the number.
@@ -101,11 +108,8 @@ pub(crate) struct MessageId(u32);
 /// Why an activity parks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ParkReason {
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "constructed only by the test-only arm")
-    )]
-    Guard,
+    /// A guard lock, until a release makes this activity its owner.
+    Guard(crate::guards::GuardKey),
     /// `~result`, until the message's send completes.
     MessageResult(MessageId),
     /// `~wait`, until the message's send completes.
@@ -120,7 +124,7 @@ impl ParkReason {
     /// What a wait for this reason waits for, as a refusal names it.
     fn waits_for(self) -> &'static str {
         match self {
-            ParkReason::Guard => "a guard",
+            ParkReason::Guard(_) => "a guard",
             ParkReason::MessageResult(_) | ParkReason::MessageWait(_) => "a message's completion",
             ParkReason::Sleep { .. } => "a sleep's end",
             ParkReason::Timer { .. } => "a timer's end",
@@ -214,6 +218,8 @@ pub(crate) struct Activities {
     next_native: u32,
     /// Failures kept by [`Interp::keep_late_failure`].
     late_failures: Vec<Failure>,
+    /// The guard locks, and what each parked activity waits on.
+    pub(crate) guards: crate::guards::GuardTable,
 }
 
 /// The oracle's `msecInADay`: a timer's wait is whole days of this, then a
@@ -255,6 +261,7 @@ impl Activities {
             last_number: 0,
             next_native: 0,
             late_failures: Vec::new(),
+            guards: crate::guards::GuardTable::default(),
         }
     }
 
@@ -367,9 +374,12 @@ impl Scheduler for Interp {
         let running = self.activities.running;
         let table = &mut self.activities;
         match reason {
-            ParkReason::Guard => {}
+            ParkReason::Guard(_) => {}
             ParkReason::MessageResult(id) | ParkReason::MessageWait(id) => {
                 table.waiters.entry(id).or_default().push(running);
+                table
+                    .guards
+                    .set_waiting(running, crate::guards::Waiting::Message(id));
             }
             ParkReason::Sleep { deadline } => {
                 table.next_sleeper += 1;
@@ -397,6 +407,7 @@ impl Scheduler for Interp {
     }
 
     fn unpark(&mut self, activity: ActivityId) {
+        self.activities.guards.woken(activity);
         self.activities.ready.push_back(activity);
     }
 
@@ -552,6 +563,63 @@ impl Interp {
         number
     }
 
+    /// The running activity's handle.
+    pub(crate) fn running_activity(&self) -> ActivityId {
+        self.activities.running
+    }
+
+    /// Whether the waits chained from `owner`'s lead back to the running
+    /// activity (`Activity::checkDeadLock`, `concurrency/Activity.cpp:2000`):
+    /// each waiting activity waits on a guard lock's owner or on the activity
+    /// running a message's send.
+    pub(crate) fn deadlocks(&self, owner: ActivityId) -> bool {
+        let me = self.activities.running;
+        let mut at = owner;
+        for _ in 0..self.activities.idle.len() {
+            let next = match self.activities.guards.waiting(at) {
+                Some(crate::guards::Waiting::Guard(key)) => self.activities.guards.owner(key),
+                Some(crate::guards::Waiting::Message(id)) => self
+                    .activities
+                    .message_ids
+                    .iter()
+                    .find(|(_, waited)| **waited == id)
+                    .and_then(|(message, _)| self.message_runner(*message)),
+                None => None,
+            };
+            match next {
+                Some(next) if next == me => return true,
+                Some(next) => at = next,
+                None => return false,
+            }
+        }
+        false
+    }
+
+    /// The activity running `message`'s send, started or sent, while it runs
+    /// (`MessageClass::startActivity`).
+    pub(crate) fn message_runner(&self, message: ObjRef) -> Option<ActivityId> {
+        let runs = |activity: &Activity| {
+            matches!(activity.root_then, Some(Then::Started(started)) if started == message)
+                || activity
+                    .native_tails
+                    .iter()
+                    .any(|tail| tail.records(message))
+                || activity
+                    .native_park
+                    .as_ref()
+                    .is_some_and(|park| park.records(message))
+        };
+        if runs(&self.activity) {
+            return Some(self.activities.running);
+        }
+        let index = self
+            .activities
+            .idle
+            .iter()
+            .position(|idle| idle.as_deref().is_some_and(|idle| runs(&idle.activity)))?;
+        Some(ActivityId(u32::try_from(index).expect("handles fit u32")))
+    }
+
     /// Wakes every activity waiting on `message`, whose send has completed.
     pub(crate) fn message_completed(&mut self, message: ObjRef) {
         let Some(id) = self.activities.message_ids.remove(&message) else {
@@ -632,9 +700,12 @@ impl Interp {
     }
 
     /// Withdraws the running activity from every message's waiters, from the
-    /// sleepers and from the timers.
+    /// guard queues, from the sleepers and from the timers.
     fn cancel_wait(&mut self) {
         let running = self.activities.running;
+        self.activities.guards.withdraw(running);
+        self.activity.guard_waits.retain(|wait| !wait.queued);
+        self.activity.guarded_send = None;
         for waiters in self.activities.waiters.values_mut() {
             waiters.retain(|waiter| *waiter != running);
         }
@@ -1079,8 +1150,14 @@ impl Interp {
                 // The oracle's resumed activation announces itself again
                 // where it had before the `REPLY` (`RexxActivation.cpp:561`).
                 if matches!(first, Some(First::Reply)) {
+                    if !self.reserve_for_continuation() {
+                        self.activity.first = first;
+                        return Ok(Stopped::Parked);
+                    }
                     self.open_replied_level();
                     self.trace_invocation_entry();
+                } else if !self.activity.guard_waits.is_empty() {
+                    self.take_granted_guard();
                 }
                 let driven = match self.activity.sliced.take() {
                     Some((floor, at)) => self.drive_from(DriveStart::Sliced { floor, at }, true),
@@ -1186,7 +1263,9 @@ impl Interp {
             }
             Ok(Driven::Sliced { floor, at }) => {
                 self.activity.sliced = Some((floor, at));
-                self.yield_at_slice();
+                if !self.parked_for_guard() {
+                    self.yield_at_slice();
+                }
                 None
             }
             Ok(Driven::Ended(ended)) => Some(self.finish_send(Ok(ended))),
@@ -1265,7 +1344,12 @@ impl Interp {
     fn root_step(&mut self, failure: Option<Failure>) {
         let driven = match (self.activity.sliced.take(), failure) {
             (Some(_), Some(failure)) => Err(failure),
-            (Some((floor, at)), None) => self.drive_from(DriveStart::Sliced { floor, at }, true),
+            (Some((floor, at)), None) => {
+                if !self.activity.guard_waits.is_empty() {
+                    self.take_granted_guard();
+                }
+                self.drive_from(DriveStart::Sliced { floor, at }, true)
+            }
             (None, failure) => match self.activity.drive_floor.take() {
                 Some(floor) => {
                     let sent = self.resume_parked(failure);
@@ -1284,7 +1368,9 @@ impl Interp {
             Ok(Driven::Parked(floor)) => self.activity.drive_floor = Some(floor),
             Ok(Driven::Sliced { floor, at }) => {
                 self.activity.sliced = Some((floor, at));
-                self.yield_at_slice();
+                if !self.parked_for_guard() {
+                    self.yield_at_slice();
+                }
             }
             Ok(Driven::Ended(ended)) => self.activity.root_end = Some(Ok(ended)),
             Err(failure) => self.activity.root_end = Some(Err(failure)),
@@ -1313,6 +1399,9 @@ impl Interp {
     /// clause that does (spec 2026-09-29 P6-4), and a second slice that finds
     /// the activity still pinned takes a pinned yield (ruling P29).
     pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
+        if !self.activity.guard_waits.is_empty() {
+            self.serve_guard_wait(yields)?;
+        }
         if self.activity.splits_owed > 0 {
             if yields && self.split_owed() {
                 return Err(Failure::Slice);

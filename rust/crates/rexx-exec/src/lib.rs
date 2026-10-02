@@ -92,6 +92,9 @@ use run::Ended;
 // The scheduler seam and the activity table.
 mod scheduler;
 
+// The guard locks and the deadlock check.
+mod guards;
+
 // The live-interpreter registry and the timer thread.
 mod timer;
 
@@ -1306,6 +1309,8 @@ struct Interp {
     /// to, keyed by the identity [`Interp::install_one_method`] minted for
     /// its dictionary key.
     native_externals: FxHashMap<MethodId, &'static dispatch::native::NativeExternal>,
+    /// The `EXTERNAL` methods whose directive leaves them guarded.
+    guarded_externals: rustc_hash::FxHashSet<MethodId>,
     /// Every object an extension made a global reference, which a handle to
     /// it resolves to from any native call for as long as the interpreter
     /// runs (`InterpreterInstance::addGlobalReference`).
@@ -1895,6 +1900,7 @@ impl Interp {
             unnotified_messages: rustc_hash::FxHashSet::default(),
             generated_methods: FxHashMap::default(),
             native_externals: FxHashMap::default(),
+            guarded_externals: rustc_hash::FxHashSet::default(),
             libraries: Libraries::new(),
             #[cfg(test)]
             library_open_attempts: 0,
@@ -2581,6 +2587,7 @@ impl Interp {
             unnotified_messages: _,
             generated_methods: _,
             native_externals: _,
+            guarded_externals: _,
             // Library handles and procedure names, no `ObjRef` in either.
             libraries: _,
             #[cfg(test)]
@@ -2691,6 +2698,11 @@ impl Interp {
                 || heap.get(*object).is_some()
         });
         self.drop_loose_kept_strings();
+        let heap = &self.heap;
+        self.activities.guards.prune_pools(|object| {
+            !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                || heap.get(object).is_some()
+        });
         // A sweep can free a class the registry named, which unlinks its row
         // and leaves any `.NAME` answer derived from it naming nothing.
         self.invalidate_rexx_class_cache();

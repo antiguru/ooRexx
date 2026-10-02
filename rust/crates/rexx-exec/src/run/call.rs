@@ -1024,6 +1024,10 @@ impl Interp {
             self.capture_activation_frame(failure);
         }
 
+        // `RexxActivation::termination` releases the guard lock first.
+        if kind == TailKind::Method {
+            self.guard_off_at_end();
+        }
         // Before the pop, because both halves of `<I<`'s gate are the
         // callee's own -- its `trace_entry` state and its `TRACE` setting.
         // `RexxActivation::termination` is where the C++ puts it, which is

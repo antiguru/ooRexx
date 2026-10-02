@@ -280,6 +280,13 @@ pub(crate) enum Then {
     Triggered(ObjRef),
 }
 
+impl Then {
+    /// Whether this records an outcome on `message`.
+    fn records(&self, message: ObjRef) -> bool {
+        matches!(self, Then::Started(object) | Then::Held(object) | Then::Triggered(object) if *object == message)
+    }
+}
+
 /// A [`Then`] parked on [`Activity::native_tails`] until the activation whose
 /// [`CallTail`] sits at `depth` ends.
 ///
@@ -329,6 +336,11 @@ impl NativeTail {
             blame.object_roots(out);
         }
     }
+
+    /// Whether this records its activation's outcome on `message`.
+    pub(crate) fn records(&self, message: ObjRef) -> bool {
+        self.then.records(message)
+    }
 }
 
 impl Interp {
@@ -359,6 +371,68 @@ impl Interp {
 /// What a primitive method that parked answers once its activity wakes.
 pub(crate) type NativeResume = fn(&mut Interp, ObjRef) -> Result<Option<ObjRef>, Failure>;
 
+/// A send to a guarded method that is not a Rexx body, kept while its
+/// activity waits for the guard lock.
+pub(crate) struct GuardedSend {
+    key: crate::guards::GuardKey,
+    invocable: Invocable,
+    cleared: Cleared,
+    resolution: Resolution,
+    receiver: ObjRef,
+    name: Box<[u8]>,
+    args: Vec<Option<ObjRef>>,
+}
+
+impl GuardedSend {
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        out.push(self.receiver);
+        out.extend(self.args.iter().flatten().copied());
+    }
+}
+
+/// The send a guard wait kept, run once the lock is granted.
+fn resume_guarded_send(interp: &mut Interp, _receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let Some(send) = interp.activity.guarded_send.take() else {
+        return Err(Loud::scheduler_inconsistency("a guard wait with no send recorded").into());
+    };
+    let GuardedSend {
+        key,
+        invocable,
+        cleared,
+        resolution,
+        receiver,
+        name,
+        args,
+    } = *send;
+    let frame = interp.roots.activity_mut().push_frame();
+    interp.roots.activity_mut().push_temp(receiver);
+    for arg in args.iter().flatten() {
+        interp.roots.activity_mut().push_temp(*arg);
+    }
+    let started = interp.run_other_guarded(
+        Some(key),
+        invocable,
+        cleared,
+        resolution,
+        receiver,
+        &name,
+        &args,
+    );
+    interp.roots.activity_mut().pop_frame(frame);
+    match started? {
+        Started::Ran(value) => {
+            if let Some(value) = value {
+                interp.roots.activity_mut().push_temp(value);
+            }
+            Ok(value)
+        }
+        Started::Entered => Err(Loud::scheduler_inconsistency(
+            "a guarded method that parked again after its guard wait",
+        )
+        .into()),
+    }
+}
+
 /// A primitive method's park: why, its continuation, and the work of each
 /// primitive method between it and the driver, innermost first.
 pub(crate) struct NativePark {
@@ -371,6 +445,12 @@ pub(crate) struct NativePark {
 impl NativePark {
     pub(crate) fn reason(&self) -> crate::scheduler::ParkReason {
         self.reason
+    }
+
+    /// Whether a primitive method between the park and the driver records
+    /// its outcome on `message`.
+    pub(crate) fn records(&self, message: ObjRef) -> bool {
+        self.thens.iter().any(|(then, _)| then.records(message))
     }
 
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
@@ -2314,9 +2394,138 @@ impl Interp {
     }
 
     /// [`Interp::begin_invoke`] for a method whose body is neither Rexx nor
-    /// native.
+    /// native, holding its guard lock where it is guarded.
     #[inline(never)]
     fn begin_invoke_other(
+        &mut self,
+        invocable: Invocable,
+        cleared: Cleared,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
+        let guard = self.other_guard(&invocable, resolution, receiver);
+        if let Some(key) = guard {
+            let me = self.running_activity();
+            if let crate::guards::Reserve::Contended(owner) =
+                self.activities.guards.try_reserve(key, me)
+            {
+                let send = GuardedSend {
+                    key,
+                    invocable,
+                    cleared,
+                    resolution,
+                    receiver,
+                    name: name.into(),
+                    args: args.to_vec(),
+                };
+                return self.wait_for_other_guard(owner, send);
+            }
+        }
+        self.run_other_guarded(guard, invocable, cleared, resolution, receiver, name, args)
+    }
+
+    /// The guard lock a send to `invocable` reserves: a generated getter,
+    /// setter or `DELEGATE` and an external method, where guarded
+    /// (`execution/CPPCode.cpp:288-298`, `:344-358`, `:612-620`;
+    /// `NativeActivation::methodVariables`).
+    fn other_guard(
+        &self,
+        invocable: &Invocable,
+        resolution: Resolution,
+        receiver: ObjRef,
+    ) -> Option<crate::guards::GuardKey> {
+        let guarded = match invocable {
+            Invocable::Generated(generated) => {
+                matches!(
+                    generated.kind,
+                    crate::GeneratedKind::Getter
+                        | crate::GeneratedKind::Setter
+                        | crate::GeneratedKind::Delegate
+                ) && self.programs[generated.program.0]
+                    .directives
+                    .get(generated.directive)
+                    .is_some_and(|directive| crate::guards::directive_guarded(&directive.kind))
+            }
+            Invocable::External(_) | Invocable::Library(_) => {
+                self.guarded_externals.contains(&resolution.method)
+            }
+            Invocable::Rexx(_) | Invocable::Native(_) => false,
+        };
+        guarded.then_some(crate::guards::GuardKey {
+            object: receiver,
+            scope: resolution.scope,
+        })
+    }
+
+    /// `send`'s wait for its guard lock, owned by `owner`: 98.905 where the
+    /// waits it would join lead back here, else parked until a release
+    /// grants it, then run.
+    #[cold]
+    #[inline(never)]
+    fn wait_for_other_guard(
+        &mut self,
+        owner: crate::scheduler::ActivityId,
+        send: GuardedSend,
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
+        if self.deadlocks(owner) {
+            return Err(Raised::deadlock().into());
+        }
+        let (key, receiver) = (send.key, send.receiver);
+        let me = self.running_activity();
+        self.activities.guards.enqueue(key, me);
+        self.activity.guarded_send = Some(Box::new(send));
+        match self.park_native(
+            crate::scheduler::ParkReason::Guard(key),
+            resume_guarded_send,
+            receiver,
+        ) {
+            Ok(NativeStarted::Ran(value)) => Ok(Started::Ran(value)),
+            Ok(NativeStarted::Entered(_)) => Ok(Started::Entered),
+            Err(failure) => {
+                self.activity.guarded_send = None;
+                Err(failure)
+            }
+        }
+    }
+
+    /// [`Interp::run_other`] holding `guard`, which it releases: a
+    /// `DELEGATE` method's once it has read its target, before the send
+    /// (`DelegateCode::run`), anything else's once it has run.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the send's own parts, and the lock it holds"
+    )]
+    fn run_other_guarded(
+        &mut self,
+        guard: Option<crate::guards::GuardKey>,
+        invocable: Invocable,
+        cleared: Cleared,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
+        let Some(key) = guard else {
+            return self.run_other(invocable, cleared, resolution, receiver, name, args);
+        };
+        if let Invocable::Generated(generated) = &invocable
+            && generated.kind == crate::GeneratedKind::Delegate
+        {
+            let target = self.delegate_target(*generated, resolution, receiver);
+            self.release_guard(key);
+            return self
+                .send_to_delegate_target(target?, name, args)
+                .map(Started::Ran);
+        }
+        let outcome = self.run_other(invocable, cleared, resolution, receiver, name, args);
+        self.release_guard(key);
+        outcome
+    }
+
+    /// The body of a method that is neither Rexx nor native.
+    fn run_other(
         &mut self,
         invocable: Invocable,
         cleared: Cleared,
@@ -2706,6 +2915,17 @@ impl Interp {
         name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
+        let target = self.delegate_target(generated, resolution, receiver)?;
+        self.send_to_delegate_target(target, name, args)
+    }
+
+    /// The value of a `DELEGATE` method's variable, rooted as a temp.
+    fn delegate_target(
+        &mut self,
+        generated: crate::GeneratedMethod,
+        resolution: Resolution,
+        receiver: ObjRef,
+    ) -> Result<ObjRef, Failure> {
         let variable = self.delegate_variable(generated)?;
         let owner = self.pool_owner(receiver)?;
         let stored = self
@@ -2716,6 +2936,16 @@ impl Interp {
             None => self.text(&variable),
         };
         self.roots.activity_mut().push_temp(target);
+        Ok(target)
+    }
+
+    /// A `DELEGATE` method's send to `target`.
+    fn send_to_delegate_target(
+        &mut self,
+        target: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
         let caller = self.caller();
         pinned!(
             self,
@@ -2794,6 +3024,7 @@ impl Interp {
         let Some(body) = body_of(&program, Some(installed.directive)) else {
             return Err(Loud::missing_body().into());
         };
+        let guarded = crate::guards::directive_guarded(&directive.kind);
         // D19/I6, the same guard `Interp::invoke_call` takes and for the same
         // reason: a method that sends itself a message is an unbounded
         // recursion, and it must become a reportable condition rather than a
@@ -2863,8 +3094,15 @@ impl Interp {
             &mut callee,
             self.running_activation().map(|caller| &caller.settings),
         );
+        callee.guarded = guarded;
         self.push_activation(callee);
         self.trace_package_invocation_entry();
+        if guarded {
+            self.reserve_for_method(crate::guards::GuardKey {
+                object: receiver,
+                scope: resolution.scope,
+            });
+        }
 
         // `SELF` and `SUPER`, the two locals `RexxActivation::run` sets on a
         // method activation before its first instruction
@@ -2980,7 +3218,11 @@ impl Interp {
             TraceEntry::Spent
         };
         activation.first_instruction_pending = false;
+        let transfer = self.transfer_on_reply(&mut activation);
         let resumed = &mut continuation.activity;
+        if let crate::guards::Transfer::Again(wait) = transfer {
+            resumed.guard_waits.push(wait);
+        }
         resumed.trace_cache =
             crate::trace::TraceCache::of(activation.trace_mode, resumed.debug_pause);
         resumed.running = Some(activation);
@@ -2995,7 +3237,10 @@ impl Interp {
         resumed.first = Some(crate::scheduler::First::Reply);
         resumed.root_then = Some(Then::Pass);
         let others_ready = self.any_ready();
-        self.spawn(continuation);
+        let spawned = self.spawn(continuation);
+        if let crate::guards::Transfer::Moved(key) = transfer {
+            self.activities.guards.transfer(key, spawned);
+        }
         if others_ready {
             self.timer.requests().set(crate::timer::SLICE);
         }

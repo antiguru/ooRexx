@@ -569,7 +569,12 @@ impl Interp {
     ) -> Result<ExecOutcome, Failure> {
         #[cfg(test)]
         if let Some(crate::scheduler::Scripted::Park) = crate::scheduler::take_scripted() {
-            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard));
+            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard(
+                crate::guards::GuardKey {
+                    object: ObjRef::NIL,
+                    scope: ObjRef::NIL,
+                },
+            )));
         }
         match &instruction.kind {
             InstructionKind::Guard(guard) => self.exec_guard(code, guard),
@@ -1909,6 +1914,7 @@ impl Interp {
                 None => guard.on.then_some(crate::pinning::ParkKind::GuardOn),
             }
         );
+        self.set_guard_state(guard.on)?;
         let Some(condition) = &guard.condition else {
             return Ok(ExecOutcome::Done(Flow::Next));
         };

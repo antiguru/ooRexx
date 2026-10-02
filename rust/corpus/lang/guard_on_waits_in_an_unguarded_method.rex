@@ -1,0 +1,39 @@
+/* GUARD ON in an unguarded method waits for the lock another activity's
+   guarded method holds; GUARD OFF gives it up. */
+o = .k~new
+qa = .queue~new
+qb = .queue~new
+m = o~start('hold', qa, qb)
+call until qa
+o~u(qb)
+m~wait
+exit
+until:
+  use arg queue
+  do while queue~items = 0
+    call SysSleep 0.01
+  end
+  return
+::class k
+::method hold
+  use arg qa, qb
+  say 'hold in'
+  qa~queue('in')
+  call until qb
+  call SysSleep 0.1
+  say 'hold out'
+  return
+until:
+  use arg queue
+  do while queue~items = 0
+    call SysSleep 0.01
+  end
+  return
+::method u unguarded
+  use arg qb
+  say 'u in'
+  qb~queue('in')
+  guard on
+  say 'u locked'
+  guard off
+  say 'u off'

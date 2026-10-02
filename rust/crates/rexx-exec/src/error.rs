@@ -274,6 +274,12 @@ impl Raised {
         )
     }
 
+    /// 98.905: a wait for a guard lock or a message whose chain of waits
+    /// leads back to the waiting activity (`Activity::checkDeadLock`).
+    pub(crate) fn deadlock() -> Raised {
+        Raised::syntax(98, 905, Vec::new())
+    }
+
     /// 98.988: a namespace that resolved and whose public classes do not hold
     /// the name. Two substitutions, the class name and the namespace.
     pub(crate) fn namespace_class_not_found(name: &[u8], namespace: &[u8]) -> Raised {

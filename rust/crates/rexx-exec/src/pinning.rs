@@ -250,7 +250,7 @@ mod counter {
         /// The park point a wait for `reason` reached.
         fn of(reason: crate::scheduler::ParkReason) -> ParkKind {
             match reason {
-                crate::scheduler::ParkReason::Guard => ParkKind::GuardOn,
+                crate::scheduler::ParkReason::Guard(_) => ParkKind::GuardOn,
                 crate::scheduler::ParkReason::MessageResult(_) => ParkKind::MessageResult,
                 crate::scheduler::ParkReason::MessageWait(_) => ParkKind::MessageWait,
                 crate::scheduler::ParkReason::Sleep { .. } => ParkKind::SysSleep,

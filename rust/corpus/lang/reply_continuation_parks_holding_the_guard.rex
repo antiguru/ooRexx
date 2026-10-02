@@ -1,0 +1,21 @@
+/* A REPLY continuation that parks before writing still holds its object's
+   guard lock, so the sender's guarded read waits for the write. */
+q = .queue~new
+o = .k~new(q)
+say 'made' o~class~id o~v
+do until q~items >= 1
+  call SysSleep 0.01
+end
+say 'rest' q~pull o~v
+::class k
+::method init
+  expose v
+  use arg q
+  v = 'first'
+  reply
+  call SysSleep 0.02
+  v = 'second'
+  q~queue('init rest ran')
+::method v
+  expose v
+  return v

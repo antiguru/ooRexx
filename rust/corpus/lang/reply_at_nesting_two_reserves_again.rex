@@ -1,0 +1,22 @@
+/* A REPLY in a guarded method entered while its sender already held the
+   lock releases one level only: the continuation reserves the lock again
+   and runs once the sender's own method has ended. */
+o = .k~new
+o~outer
+say 'after' o~var
+exit
+::class k
+::method outer
+  expose var
+  var = 'first'
+  self~waiter
+  call SysSleep 0.1
+  say 'outer sees' var
+::method waiter
+  expose var
+  reply
+  var = 'second'
+  say 'waiter wrote'
+::method var
+  expose var
+  return var

@@ -1,0 +1,51 @@
+/* A TraceObject's guard entries: ATTRIBUTEPOOL numbers each object's pool
+   for each scope when first traced, ISGUARDED and HASSCOPELOCK are the
+   traced method's, SCOPELOCKCOUNT is the lock's nesting count. */
+s = .sink~new
+zz = .traceoutput~destination(s)
+a = .k~new
+b = .k~new
+a~g
+b~u
+a~s
+b~g
+a~u
+b~late
+zz = .traceoutput~destination(.stderr)
+do ln over s~seen
+  say ln
+end
+exit
+::class sink
+::method init
+  expose seen
+  seen = .array~new
+::method seen
+  expose seen
+  return seen
+::method lineout unguarded
+  expose seen
+  use arg v
+  if v~hasEntry('ISGUARDED') then
+    seen~append(subword(v~traceline, 1, 3) '| pool' v~attributepool 'guarded' v~isguarded 'count' v~scopelockcount 'lock' v~hasscopelock)
+  return 0
+::class j
+::method s
+  trace a
+  return
+::class k subclass j
+::method g
+  trace a
+  self~h
+  return
+::method h
+  trace a
+  return
+::method u unguarded
+  trace a
+  self~h
+  return
+::method late
+  nop
+  trace a
+  return

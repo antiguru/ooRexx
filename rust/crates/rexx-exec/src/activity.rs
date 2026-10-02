@@ -301,6 +301,12 @@ pub(crate) struct Activity {
     /// The messages whose send failed with the condition now unwinding,
     /// until its condition object is built.
     pub(crate) failed_sends: Vec<ObjRef>,
+    /// The guard locks methods entered by a send wait to reserve, until a
+    /// clause boundary of each takes it or parks for it.
+    pub(crate) guard_waits: Vec<crate::guards::GuardWait>,
+    /// A send to a guarded method other than a Rexx body, run once its
+    /// guard lock is granted.
+    pub(crate) guarded_send: Option<Box<crate::dispatch::GuardedSend>>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
 }
@@ -390,6 +396,8 @@ impl Activity {
             spawner: None,
             splits_owed: 0,
             failed_sends: Vec::new(),
+            guard_waits: Vec::new(),
+            guarded_send: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -491,9 +499,15 @@ impl Activity {
             spawner,
             splits_owed: _,
             failed_sends,
+            // Each key's object is its waiting activation's receiver.
+            guard_waits: _,
+            guarded_send,
             #[cfg(feature = "pinning")]
                 pins: _,
         } = self;
+        if let Some(send) = guarded_send {
+            send.object_roots(out);
+        }
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);

@@ -493,3 +493,16 @@ lang/trace_object_activity_fields.rex
 lang/uninit_after_every_activity.rex
 # Task 9 fix round 1: the primitive method that entered a traced method.
 lang/trace_object_native_caller.rex
+# Phase 6 S3 Task 11: guard locks. Guarded sends from two activities run one
+# after the other, unguarded ones interleave; a REPLY moves the lock at
+# nesting 1 and reserves again at nesting 2; a guarded getter and GUARD ON
+# wait; a cycle of waits raises 98.905; TraceObject guard entries.
+lang/guard_serializes_started_sends.rex
+lang/reply_seen_by_a_guarded_send.rex
+lang/reply_continuation_parks_holding_the_guard.rex
+lang/reply_at_nesting_two_reserves_again.rex
+lang/guarded_getter_waits_for_reply.rex
+lang/guard_on_waits_in_an_unguarded_method.rex
+lang/guard_deadlock_two_activities.rex
+lang/message_wait_deadlock.rex
+lang/trace_object_guard_fields.rex

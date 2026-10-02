@@ -1,0 +1,24 @@
+/* A Message~wait on a send whose activity waits for a guard lock the
+   waiter holds raises 98.905. */
+o = .k~new
+o~run
+call SysSleep 0.2
+say 'end'
+::class k
+::method run
+  signal on syntax
+  m = .w~new~start('x', self)
+  call SysSleep 0.1
+  m~wait
+  say 'no deadlock'
+  return
+syntax:
+  say 'trapped' condition('o')~code
+  return
+::method poke
+  say 'poked'
+::class w
+::method x
+  use arg o
+  o~poke
+  say 'x done'
