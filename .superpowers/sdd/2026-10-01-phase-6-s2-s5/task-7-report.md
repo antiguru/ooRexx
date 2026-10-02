@@ -194,3 +194,42 @@ collect_stress (release) 36 passed alongside the corpus (release) 732 of 732; co
 passed; outer_context (gate) release and debug 22 passed; refusal_sites re-derived, no change;
 sourceline_oracle passed; method_bodies (release) passed, no drift. Bench "it works": every
 `bench-programs/*.rex` identical to base 83c0a6ff1 except `heapshape`'s timings.
+
+## Fix round 2
+
+Commit a9c6544fd (re-review in `task-7-review.md`).
+
+- **N1.** `innermost_activation` answers `Option`: for a thread context whose activity's innermost
+  call is busy while another activity's call runs, the member does nothing and returns what the
+  oracle's stubs return on failure (`or_nothing!`, trait `Nothing`), as `Activity::validateThread`
+  throws before the member runs. The running call is given 98.983 only where it holds no
+  condition of its own (`raise_invalid_thread`, also used by the call-context members), so a
+  condition it raised first stays, as on the oracle. Test
+  `outer_context::a_kept_thread_context_used_by_another_activity_does_nothing`
+  (`tests/outer_context/kthr.cpp`, the reviewer's forge): SendMessage0 (counter 0), DirectoryPut
+  (no entry), ClearCondition, RaiseException0(93900), String all trap 98.983; H (the call's own
+  93.900, then `kept->ClearCondition`) traps 93.900; plain and collect stress. Red before: the
+  re-review's run at 8924fce34 (counter 1, entry present, `cleared`, 93.900, `hc`).
+- **N2.** A failed held send's notifiers run when the failure reaches the activation whose notify
+  slot holds the message (`Interp::notify_slot_failure`, called from `offer_to_trap`, as
+  `RexxActivation::trap` calls `notifyObject->error`), not in `record_held`; the slot keeps the
+  message until then. The condition object is therefore built after the native `SEND` level, the
+  same as without a notifier, and a notifier's failure is offered to that activation's traps in
+  place of the send's. Witness `message_notify_error_traceback` (the `tb1` shape, with and without
+  `~notify`): 6 traceback items both, SEND line included; 30/30 oracle, ours unswitched and every.
+  Red before: the re-review's `tb1` at 8924fce34, 4 items against 5. e1-e5, n1, n4, n4b, n5, n6,
+  re2a, re2b, ss1, tb0, tb1 identical to the oracle on all three descriptors.
+- Not fixed, pre-existing: `y1` and `y2` (the failing started activity inside main's pinned
+  notifier wait) differ from the oracle at a9c6544fd and equally at 8924fce34, rebuilt and run
+  (`notifier sees 97.1` before `outer waited`; y2 also rc 214 against 0). Main is buried below
+  the round the started activity runs in, so the round after a notifier failure cannot run it
+  (ruling P30). The re-review's "identical" for these does not reproduce.
+
+P28 checks at a9c6544fd: `cargo fmt --all --check` exit 0; clippy `-p rexx-exec -p rexx-api
+--all-targets -D warnings` exit 0, `--features pinning` exit 0; `cargo test -p rexx-exec --lib`
+908 passed; `cargo test -p rexx-api` green; corpus release unswitched, release every and debug
+every 733 of 733; collect_stress (release) 36 passed alongside the corpus (release) 733 of 733;
+concurrency_tests (gate) 27 passed, Message table unchanged; pinning `measured::` 16 passed;
+outer_context (gate) release and debug 23 passed; refusal_sites re-derived, no change;
+sourceline_oracle and method_bodies passed. Bench "it works": identical to base except
+`heapshape`'s timings.
