@@ -1,0 +1,36 @@
+/* A failed send's errorCondition has the native SEND level in its
+   traceback whether or not ~notify named anything. */
+call try 0
+call try 1
+exit
+try: procedure
+  use arg notified
+  m = .message~new(.t~new, 'boom')
+  if notified then m~notify(.n~new)
+  signal on syntax
+  call outer m
+  return
+syntax:
+  c = condition('o')
+  e = m~errorCondition
+  say 'notified' notified 'items' c~traceback~items e~traceback~items 'pos' e~position
+  do l over e~traceback
+    say ' ' l
+  end
+  return
+outer:
+  use arg msg
+  call inner msg
+  return
+inner:
+  use arg msg
+  msg~send
+  return
+::class t
+::method boom
+  x = 1
+  return 1/0
+::class n inherit MessageNotification
+::method messageComplete
+  use arg msg
+  say 'notifier sees' msg~errorCondition~traceback~items

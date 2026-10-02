@@ -262,6 +262,11 @@ impl Interp {
         let Failure::Raised(raised) = &failure else {
             return Err(failure);
         };
+        if raised.condition == "SYNTAX"
+            && let Some(replaced) = self.notify_slot_failure(raised)
+        {
+            return self.offer_to_trap(code, replaced);
+        }
         match raised.delivery.search {
             Search::Here => {}
             // One level up, and this is that level's turn to decline. The

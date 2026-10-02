@@ -996,21 +996,16 @@ pub(super) fn record_held(
         // Only a `SYNTAX` condition notifies the message, and only the one in
         // the activation's single slot (`execution/RexxActivation.cpp:2470`):
         // a send made later from the same activation took it over. Any other
-        // leaves the message uncompleted.
+        // leaves the message uncompleted. The slot keeps it for the
+        // activation's trap search ([`Interp::notify_slot_failure`]).
         Err(Failure::Raised(raised))
-            if raised.condition == "SYNTAX" && interp.set_notify_message(None) == Some(message) =>
+            if raised.condition == "SYNTAX" && interp.notify_slot() == Some(message) =>
         {
             interp.activity.failed_sends.push(message);
             interp
                 .message_outcomes
                 .insert(message, Some(raised.clone()));
             interp.message_completed(message);
-            // A notifier reads the condition object, so it is built now; its
-            // own failure replaces the send's.
-            if interp.native_entry(message, MESSAGE_PARTIES).is_some() {
-                interp.settle_failed_sends(&raised)?;
-                interp.notify_failed_send(message, true)?;
-            }
             Err(Failure::Raised(raised))
         }
         Err(other) => Err(other),
@@ -1233,16 +1228,54 @@ impl Interp {
     /// (`ActivationBase::setObjNotify`), and neither has an activity with no
     /// activation.
     fn set_notify_message(&mut self, message: Option<ObjRef>) -> Option<ObjRef> {
+        if !self.has_notify_slot() {
+            return None;
+        }
         let running = self.activity.running.as_deref_mut()?;
-        let native_above = self
+        std::mem::replace(&mut running.notify_message, message)
+    }
+
+    /// What the running activation's notify slot holds.
+    fn notify_slot(&self) -> Option<ObjRef> {
+        if !self.has_notify_slot() {
+            return None;
+        }
+        self.activity.running.as_deref()?.notify_message
+    }
+
+    /// Whether the top frame is a Rexx activation, which has a notify slot.
+    fn has_notify_slot(&self) -> bool {
+        let Some(running) = self.activity.running.as_deref() else {
+            return false;
+        };
+        !self
             .activity
             .native_handles
             .last()
-            .is_some_and(|native| native.caller == Some(running.id));
-        if native_above {
+            .is_some_and(|native| native.caller == Some(running.id))
+    }
+
+    /// `RexxActivation::trap`'s `notifyObject->error` (`execution/RexxActivation.cpp:2470`)
+    /// as a `SYNTAX` failure reaches the running activation: the message in
+    /// its slot, failed by this condition, is given the condition object
+    /// and its notifiers run, the levels the failure left below them. A
+    /// notifier's failure is answered, to be offered in place of this one.
+    pub(crate) fn notify_slot_failure(&mut self, raised: &Raised) -> Option<Failure> {
+        let message = self
+            .activity
+            .running
+            .as_deref_mut()?
+            .notify_message
+            .take()?;
+        if !self.activity.failed_sends.contains(&message)
+            || self.native_entry(message, MESSAGE_PARTIES).is_none()
+        {
             return None;
         }
-        std::mem::replace(&mut running.notify_message, message)
+        if let Err(failure) = self.settle_failed_sends(raised) {
+            return Some(failure);
+        }
+        self.notify_failed_send(message, true).err()
     }
 
     /// Whether `object` is a `Message` this crate built.

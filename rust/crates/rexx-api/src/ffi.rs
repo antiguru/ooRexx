@@ -938,7 +938,7 @@ unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> Option<&'a Activa
     match unsafe { addressed(context) } {
         Addressed::Here(activation, _) => Some(activation),
         Addressed::Elsewhere(running, _) => {
-            running.raise_syntax(INVALID_THREAD);
+            raise_invalid_thread(running);
             None
         }
     }
@@ -957,7 +957,7 @@ unsafe fn variables_of<'a, C: CallLinked>(
     match unsafe { addressed(context) } {
         Addressed::Here(activation, frame) => Some((activation, frame)),
         Addressed::Elsewhere(running, _) => {
-            running.raise_syntax(INVALID_THREAD);
+            raise_invalid_thread(running);
             None
         }
     }
@@ -966,7 +966,8 @@ unsafe fn variables_of<'a, C: CallLinked>(
 /// The activation of the innermost native call in flight, reached through a
 /// thread context. Where that call is busy and another, entered later, runs
 /// on another activity, the member came from there: that call is given the
-/// oracle's 98.983 and answers it.
+/// oracle's 98.983, and the member does nothing (`None`), as
+/// `Activity::validateThread` throws before it runs.
 ///
 /// # Panics
 /// Where no native call is in flight. The oracle aborts there too: measured,
@@ -983,14 +984,69 @@ unsafe fn variables_of<'a, C: CallLinked>(
 unsafe fn innermost_activation<'a>(
     context: *mut RexxThreadContext_,
     slot: &str,
-) -> &'a Activation<'a> {
+) -> Option<&'a Activation<'a>> {
     // SAFETY: as the caller guarantees.
     let (innermost, elsewhere) = unsafe { innermost_or_running(context, slot) };
     let Some(running) = elsewhere else {
-        return innermost;
+        return Some(innermost);
     };
-    running.raise_syntax(INVALID_THREAD);
-    running
+    raise_invalid_thread(running);
+    None
+}
+
+/// Gives `running` the oracle's 98.983 for a member reached through a context
+/// of another activity's call, unless it already holds a condition: the
+/// oracle raises it against that other activity, so a condition the running
+/// call raised itself is the one it ends with.
+fn raise_invalid_thread(running: &Activation<'_>) {
+    if !running.check_condition() {
+        running.raise_syntax(INVALID_THREAD);
+    }
+}
+
+/// What a member reached through a context of another activity's call
+/// answers: what the oracle's stubs answer on their failure paths.
+pub(crate) trait Nothing {
+    fn nothing() -> Self;
+}
+
+impl Nothing for () {
+    fn nothing() -> Self {}
+}
+
+impl<T> Nothing for *mut T {
+    fn nothing() -> Self {
+        std::ptr::null_mut()
+    }
+}
+
+impl<T> Nothing for *const T {
+    fn nothing() -> Self {
+        std::ptr::null()
+    }
+}
+
+impl Nothing for usize {
+    fn nothing() -> Self {
+        0
+    }
+}
+
+impl Nothing for isize {
+    fn nothing() -> Self {
+        0
+    }
+}
+
+/// The activation an [`innermost_activation`] answered, or a return of
+/// [`Nothing`] from the member where it answered none.
+macro_rules! or_nothing {
+    ($activation:expr) => {
+        match $activation {
+            Some(activation) => activation,
+            None => return crate::ffi::Nothing::nothing(),
+        }
+    };
 }
 
 /// The innermost native call of `context`'s activity, and, where it is busy,
@@ -1081,7 +1137,7 @@ unsafe extern "C" fn whole_number_to_object(
 ) -> RexxObjectPtr {
     // SAFETY: the caller guarantees the context, and `invoke::run` and
     // `invoke::hook` hold no conversion state across the call they make.
-    unsafe { innermost_activation(context, "WholeNumberToObject") }.whole_number(value)
+    or_nothing!(unsafe { innermost_activation(context, "WholeNumberToObject") }).whole_number(value)
 }
 
 /// # Safety
@@ -1091,7 +1147,7 @@ unsafe extern "C" fn string_data(
     string: RexxStringObject,
 ) -> CSTRING {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "StringData") }.string_data(string.cast())
+    or_nothing!(unsafe { innermost_activation(context, "StringData") }).string_data(string.cast())
 }
 
 /// # Safety
@@ -1101,7 +1157,8 @@ unsafe extern "C" fn string_length(
     string: RexxStringObject,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "StringLength") }.string_length(string.cast())
+    or_nothing!(unsafe { innermost_activation(context, "StringLength") })
+        .string_length(string.cast())
 }
 
 /// # Safety
@@ -1111,7 +1168,7 @@ unsafe extern "C" fn new_pointer(
     value: POINTER,
 ) -> RexxPointerObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "NewPointer") }
+    or_nothing!(unsafe { innermost_activation(context, "NewPointer") })
         .new_pointer(value)
         .cast()
 }
@@ -1137,7 +1194,7 @@ unsafe extern "C" fn double_to_object_with_precision(
     precision: usize,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "DoubleToObjectWithPrecision") }
+    or_nothing!(unsafe { innermost_activation(context, "DoubleToObjectWithPrecision") })
         .double_object(value, precision)
 }
 
@@ -1178,7 +1235,7 @@ unsafe fn numeric_of(context: *mut RexxCallContext_) -> crate::values::Numeric {
     match unsafe { addressed(context) } {
         Addressed::Here(activation, _) => activation.numeric(),
         Addressed::Elsewhere(running, frame) => running.kept_numeric(frame).unwrap_or_else(|| {
-            running.raise_syntax(INVALID_THREAD);
+            raise_invalid_thread(running);
             crate::values::Numeric {
                 digits: 0,
                 fuzz: 0,
@@ -1192,7 +1249,7 @@ unsafe fn numeric_of(context: *mut RexxCallContext_) -> crate::values::Numeric {
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn raise_exception0(context: *mut RexxThreadContext_, number: usize) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "RaiseException0") }.raise_syntax(number);
+    or_nothing!(unsafe { innermost_activation(context, "RaiseException0") }).raise_syntax(number);
 }
 
 /// # Safety
@@ -1203,7 +1260,7 @@ unsafe extern "C" fn raise_exception1(
     first: RexxObjectPtr,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "RaiseException1") }.raise_with(
+    or_nothing!(unsafe { innermost_activation(context, "RaiseException1") }).raise_with(
         "RexxThreadInterface.RaiseException1",
         number,
         &[first],
@@ -1219,7 +1276,7 @@ unsafe extern "C" fn raise_exception2(
     second: RexxObjectPtr,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "RaiseException2") }.raise_with(
+    or_nothing!(unsafe { innermost_activation(context, "RaiseException2") }).raise_with(
         "RexxThreadInterface.RaiseException2",
         number,
         &[first, second],
@@ -1234,7 +1291,7 @@ unsafe extern "C" fn raise_exception(
     substitutions: RexxArrayObject,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "RaiseException") }
+    or_nothing!(unsafe { innermost_activation(context, "RaiseException") })
         .raise_with_array(number, substitutions.cast());
 }
 
@@ -1248,7 +1305,7 @@ unsafe extern "C" fn raise_condition(
     result: RexxObjectPtr,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "RaiseCondition") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "RaiseCondition") });
     // SAFETY: the caller guarantees the terminator.
     let name = unsafe { name_of(name) }.unwrap_or_default();
     activation.raise_condition(name, description.cast(), additional, result);
@@ -1388,21 +1445,23 @@ unsafe extern "C-unwind" fn throw_condition<C: CallLinked>(
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn check_condition(context: *mut RexxThreadContext_) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    logical_t::from(unsafe { innermost_activation(context, "CheckCondition") }.check_condition())
+    logical_t::from(
+        or_nothing!(unsafe { innermost_activation(context, "CheckCondition") }).check_condition(),
+    )
 }
 
 /// # Safety
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn clear_condition(context: *mut RexxThreadContext_) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ClearCondition") }.clear_condition();
+    or_nothing!(unsafe { innermost_activation(context, "ClearCondition") }).clear_condition();
 }
 
 /// # Safety
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn get_condition_info(context: *mut RexxThreadContext_) -> RexxDirectoryObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "GetConditionInfo") }
+    or_nothing!(unsafe { innermost_activation(context, "GetConditionInfo") })
         .condition_info()
         .cast()
 }
@@ -1411,7 +1470,7 @@ unsafe extern "C" fn get_condition_info(context: *mut RexxThreadContext_) -> Rex
 /// As [`whole_number_to_object`].
 unsafe extern "C" fn display_condition(context: *mut RexxThreadContext_) -> wholenumber_t {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "DisplayCondition") }.display_condition()
+    or_nothing!(unsafe { innermost_activation(context, "DisplayCondition") }).display_condition()
 }
 
 /// # Safety
@@ -1423,7 +1482,7 @@ unsafe extern "C" fn decode_condition_info(
     condition: *mut RexxCondition,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "DecodeConditionInfo") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "DecodeConditionInfo") });
     if condition.is_null() {
         return;
     }
@@ -1479,7 +1538,8 @@ unsafe extern "C" fn uintptr_to_object(
     value: usize,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "UintptrToObject") }.unsigned_object(value as u64)
+    or_nothing!(unsafe { innermost_activation(context, "UintptrToObject") })
+        .unsigned_object(value as u64)
 }
 
 /// # Safety
@@ -1489,7 +1549,8 @@ unsafe extern "C" fn intptr_to_object(
     value: isize,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "IntptrToObject") }.signed_object(value as i64)
+    or_nothing!(unsafe { innermost_activation(context, "IntptrToObject") })
+        .signed_object(value as i64)
 }
 
 /// # Safety
@@ -1499,7 +1560,8 @@ unsafe extern "C" fn string_size_to_object(
     value: stringsize_t,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "StringSizeToObject") }.unsigned_object(value as u64)
+    or_nothing!(unsafe { innermost_activation(context, "StringSizeToObject") })
+        .unsigned_object(value as u64)
 }
 
 /// # Safety
@@ -1509,7 +1571,7 @@ unsafe extern "C" fn int64_to_object(
     value: i64,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "Int64ToObject") }.signed_object(value)
+    or_nothing!(unsafe { innermost_activation(context, "Int64ToObject") }).signed_object(value)
 }
 
 /// # Safety
@@ -1519,7 +1581,8 @@ unsafe extern "C" fn unsigned_int64_to_object(
     value: u64,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "UnsignedInt64ToObject") }.unsigned_object(value)
+    or_nothing!(unsafe { innermost_activation(context, "UnsignedInt64ToObject") })
+        .unsigned_object(value)
 }
 
 /// # Safety
@@ -1529,7 +1592,8 @@ unsafe extern "C" fn int32_to_object(
     value: i32,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "Int32ToObject") }.signed_object(i64::from(value))
+    or_nothing!(unsafe { innermost_activation(context, "Int32ToObject") })
+        .signed_object(i64::from(value))
 }
 
 /// # Safety
@@ -1539,7 +1603,7 @@ unsafe extern "C" fn unsigned_int32_to_object(
     value: u32,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "UnsignedInt32ToObject") }
+    or_nothing!(unsafe { innermost_activation(context, "UnsignedInt32ToObject") })
         .unsigned_object(u64::from(value))
 }
 
@@ -1552,11 +1616,8 @@ unsafe extern "C" fn object_to_whole_number(
     result: *mut wholenumber_t,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToWholeNumber") }.signed_value(
-        object,
-        -MAX_WHOLENUMBER,
-        MAX_WHOLENUMBER,
-    );
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToWholeNumber") })
+        .signed_value(object, -MAX_WHOLENUMBER, MAX_WHOLENUMBER);
     // SAFETY: the caller guarantees `result`; the value is within the range.
     unsafe { answer_through(result, found.map(|number| number as isize)) }
 }
@@ -1569,7 +1630,7 @@ unsafe extern "C" fn object_to_string_size(
     result: *mut stringsize_t,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToStringSize") }
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToStringSize") })
         .unsigned_value(object, MAX_WHOLENUMBER.unsigned_abs());
     // SAFETY: the caller guarantees `result`; the value is within the range.
     unsafe { answer_through(result, found.map(|number| number as usize)) }
@@ -1583,11 +1644,8 @@ unsafe extern "C" fn object_to_int64(
     result: *mut i64,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToInt64") }.signed_value(
-        object,
-        i64::MIN,
-        i64::MAX,
-    );
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToInt64") })
+        .signed_value(object, i64::MIN, i64::MAX);
     // SAFETY: the caller guarantees `result`.
     unsafe { answer_through(result, found) }
 }
@@ -1600,7 +1658,7 @@ unsafe extern "C" fn object_to_unsigned_int64(
     result: *mut u64,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToUnsignedInt64") }
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToUnsignedInt64") })
         .unsigned_value(object, u64::MAX);
     // SAFETY: the caller guarantees `result`.
     unsafe { answer_through(result, found) }
@@ -1614,11 +1672,8 @@ unsafe extern "C" fn object_to_int32(
     result: *mut i32,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToInt32") }.signed_value(
-        object,
-        i64::from(i32::MIN),
-        i64::from(i32::MAX),
-    );
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToInt32") })
+        .signed_value(object, i64::from(i32::MIN), i64::from(i32::MAX));
     // SAFETY: the caller guarantees `result`; the value is within the range.
     unsafe { answer_through(result, found.map(|number| number as i32)) }
 }
@@ -1631,7 +1686,7 @@ unsafe extern "C" fn object_to_unsigned_int32(
     result: *mut u32,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToUnsignedInt32") }
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToUnsignedInt32") })
         .unsigned_value(object, u64::from(u32::MAX));
     // SAFETY: the caller guarantees `result`; the value is within the range.
     unsafe { answer_through(result, found.map(|number| number as u32)) }
@@ -1645,7 +1700,7 @@ unsafe extern "C" fn object_to_uintptr(
     result: *mut usize,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToUintptr") }
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToUintptr") })
         .unsigned_value(object, u64::MAX);
     // SAFETY: the caller guarantees `result`; a pointer is 64 bits.
     unsafe { answer_through(result, found.map(|number| number as usize)) }
@@ -1659,11 +1714,8 @@ unsafe extern "C" fn object_to_intptr(
     result: *mut isize,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToIntptr") }.signed_value(
-        object,
-        i64::MIN,
-        i64::MAX,
-    );
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToIntptr") })
+        .signed_value(object, i64::MIN, i64::MAX);
     // SAFETY: the caller guarantees `result`; a pointer is 64 bits.
     unsafe { answer_through(result, found.map(|number| number as isize)) }
 }
@@ -1676,7 +1728,8 @@ unsafe extern "C" fn object_to_logical(
     result: *mut logical_t,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToLogical") }.logical_value(object);
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToLogical") })
+        .logical_value(object);
     // SAFETY: the caller guarantees `result`.
     unsafe { answer_through(result, found.map(logical_t::from)) }
 }
@@ -1688,7 +1741,8 @@ unsafe extern "C" fn logical_to_object(
     value: logical_t,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "LogicalToObject") }.logical_object(value != 0)
+    or_nothing!(unsafe { innermost_activation(context, "LogicalToObject") })
+        .logical_object(value != 0)
 }
 
 /// # Safety
@@ -1698,7 +1752,8 @@ unsafe extern "C" fn double_to_object(
     value: f64,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "DoubleToObject") }.double_default_object(value)
+    or_nothing!(unsafe { innermost_activation(context, "DoubleToObject") })
+        .double_default_object(value)
 }
 
 /// # Safety
@@ -1709,7 +1764,8 @@ unsafe extern "C" fn object_to_double(
     result: *mut f64,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let found = unsafe { innermost_activation(context, "ObjectToDouble") }.double_value(object);
+    let found = or_nothing!(unsafe { innermost_activation(context, "ObjectToDouble") })
+        .double_value(object);
     // SAFETY: the caller guarantees `result`.
     unsafe { answer_through(result, found) }
 }
@@ -1736,7 +1792,7 @@ unsafe extern "C" fn new_string(
     length: usize,
 ) -> RexxStringObject {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "NewString") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "NewString") });
     // SAFETY: the caller guarantees the range.
     match unsafe { bytes_of(data, length) } {
         Some(bytes) => activation.string_object(bytes).cast(),
@@ -1751,7 +1807,7 @@ unsafe extern "C" fn new_string_from_asciiz(
     text: CSTRING,
 ) -> RexxStringObject {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "NewStringFromAsciiz") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "NewStringFromAsciiz") });
     // SAFETY: the caller guarantees the terminator.
     match unsafe { name_of(text) } {
         Some(bytes) => activation.string_object(bytes).cast(),
@@ -1790,7 +1846,7 @@ unsafe extern "C" fn value_to_object(
     descriptor: *mut ValueDescriptor,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "ValueToObject") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "ValueToObject") });
     if descriptor.is_null() {
         return std::ptr::null_mut();
     }
@@ -1808,7 +1864,7 @@ unsafe extern "C" fn values_to_object(
     count: usize,
 ) -> RexxArrayObject {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "ValuesToObject") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "ValuesToObject") });
     if descriptors.is_null() && count != 0 {
         return std::ptr::null_mut();
     }
@@ -1828,7 +1884,7 @@ unsafe extern "C" fn object_to_value(
     descriptor: *mut ValueDescriptor,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "ObjectToValue") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "ObjectToValue") });
     if descriptor.is_null() {
         return 0;
     }
@@ -1850,7 +1906,7 @@ unsafe extern "C" fn object_to_string(
     object: RexxObjectPtr,
 ) -> RexxStringObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ObjectToString") }
+    or_nothing!(unsafe { innermost_activation(context, "ObjectToString") })
         .object_to_string(object)
         .cast()
 }
@@ -1862,7 +1918,8 @@ unsafe extern "C" fn object_to_string_value(
     object: RexxObjectPtr,
 ) -> CSTRING {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ObjectToStringValue") }.object_to_string_value(object)
+    or_nothing!(unsafe { innermost_activation(context, "ObjectToStringValue") })
+        .object_to_string_value(object)
 }
 
 /// # Safety
@@ -1876,7 +1933,7 @@ unsafe extern "C" fn string_get(
     length: usize,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    let activation = unsafe { innermost_activation(context, "StringGet") };
+    let activation = or_nothing!(unsafe { innermost_activation(context, "StringGet") });
     let Some(bytes) = activation.string_bytes(string.cast()) else {
         return 0;
     };
@@ -1902,7 +1959,7 @@ unsafe extern "C" fn string_upper(
     string: RexxStringObject,
 ) -> RexxStringObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "StringUpper") }
+    or_nothing!(unsafe { innermost_activation(context, "StringUpper") })
         .string_case(string.cast(), true)
         .cast()
 }
@@ -1914,7 +1971,7 @@ unsafe extern "C" fn string_lower(
     string: RexxStringObject,
 ) -> RexxStringObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "StringLower") }
+    or_nothing!(unsafe { innermost_activation(context, "StringLower") })
         .string_case(string.cast(), false)
         .cast()
 }
@@ -1926,7 +1983,9 @@ unsafe extern "C" fn is_string(
     object: RexxObjectPtr,
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
-    logical_t::from(unsafe { innermost_activation(context, "IsString") }.is_string(object))
+    logical_t::from(
+        or_nothing!(unsafe { innermost_activation(context, "IsString") }).is_string(object),
+    )
 }
 
 /// # Safety
@@ -1936,7 +1995,7 @@ unsafe extern "C" fn new_buffer_string(
     length: usize,
 ) -> RexxBufferStringObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "NewBufferString") }
+    or_nothing!(unsafe { innermost_activation(context, "NewBufferString") })
         .new_buffer_string(length)
         .cast()
 }
@@ -1948,7 +2007,7 @@ unsafe extern "C" fn buffer_string_length(
     string: RexxBufferStringObject,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "BufferStringLength") }
+    or_nothing!(unsafe { innermost_activation(context, "BufferStringLength") })
         .buffer_string_length(string.cast())
 }
 
@@ -1959,7 +2018,8 @@ unsafe extern "C" fn buffer_string_data(
     string: RexxBufferStringObject,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "BufferStringData") }.buffer_string_data(string.cast())
+    or_nothing!(unsafe { innermost_activation(context, "BufferStringData") })
+        .buffer_string_data(string.cast())
 }
 
 /// # Safety
@@ -1970,7 +2030,7 @@ unsafe extern "C" fn finish_buffer_string(
     length: usize,
 ) -> RexxStringObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "FinishBufferString") }
+    or_nothing!(unsafe { innermost_activation(context, "FinishBufferString") })
         .finish_buffer_string(string.cast(), length)
         .cast()
 }
@@ -1982,7 +2042,7 @@ unsafe extern "C" fn new_buffer(
     length: usize,
 ) -> RexxBufferObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "NewBuffer") }
+    or_nothing!(unsafe { innermost_activation(context, "NewBuffer") })
         .new_buffer(length)
         .cast()
 }
@@ -1994,7 +2054,7 @@ unsafe extern "C" fn buffer_data(
     buffer: RexxBufferObject,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "BufferData") }
+    or_nothing!(unsafe { innermost_activation(context, "BufferData") })
         .buffer_data("RexxThreadInterface.BufferData", buffer.cast())
         .map_or(std::ptr::null_mut(), |(address, _)| address)
 }
@@ -2006,7 +2066,7 @@ unsafe extern "C" fn buffer_length(
     buffer: RexxBufferObject,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "BufferLength") }
+    or_nothing!(unsafe { innermost_activation(context, "BufferLength") })
         .buffer_data("RexxThreadInterface.BufferLength", buffer.cast())
         .map_or(0, |(_, length)| length)
 }
@@ -2019,7 +2079,7 @@ unsafe extern "C" fn is_buffer(
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
     logical_t::from(
-        unsafe { innermost_activation(context, "IsBuffer") }.is_of_class(
+        or_nothing!(unsafe { innermost_activation(context, "IsBuffer") }).is_of_class(
             "RexxThreadInterface.IsBuffer",
             object,
             "Buffer",
@@ -2034,7 +2094,8 @@ unsafe extern "C" fn pointer_value(
     pointer: RexxPointerObject,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "PointerValue") }.pointer_value(pointer.cast())
+    or_nothing!(unsafe { innermost_activation(context, "PointerValue") })
+        .pointer_value(pointer.cast())
 }
 
 /// # Safety
@@ -2045,7 +2106,7 @@ unsafe extern "C" fn is_pointer(
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
     logical_t::from(
-        unsafe { innermost_activation(context, "IsPointer") }.is_of_class(
+        or_nothing!(unsafe { innermost_activation(context, "IsPointer") }).is_of_class(
             "RexxThreadInterface.IsPointer",
             object,
             "Pointer",
@@ -2060,7 +2121,7 @@ unsafe extern "C" fn new_mutable_buffer(
     capacity: usize,
 ) -> RexxMutableBufferObject {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "NewMutableBuffer") }
+    or_nothing!(unsafe { innermost_activation(context, "NewMutableBuffer") })
         .new_mutable_buffer(capacity)
         .cast()
 }
@@ -2072,7 +2133,7 @@ unsafe extern "C" fn mutable_buffer_data(
     buffer: RexxMutableBufferObject,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "MutableBufferData") }
+    or_nothing!(unsafe { innermost_activation(context, "MutableBufferData") })
         .mutable_buffer("RexxThreadInterface.MutableBufferData", buffer.cast())
         .map_or(std::ptr::null_mut(), |(address, _, _)| address)
 }
@@ -2084,7 +2145,7 @@ unsafe extern "C" fn mutable_buffer_length(
     buffer: RexxMutableBufferObject,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "MutableBufferLength") }
+    or_nothing!(unsafe { innermost_activation(context, "MutableBufferLength") })
         .mutable_buffer("RexxThreadInterface.MutableBufferLength", buffer.cast())
         .map_or(0, |(_, length, _)| length)
 }
@@ -2096,7 +2157,7 @@ unsafe extern "C" fn mutable_buffer_capacity(
     buffer: RexxMutableBufferObject,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "MutableBufferCapacity") }
+    or_nothing!(unsafe { innermost_activation(context, "MutableBufferCapacity") })
         .mutable_buffer("RexxThreadInterface.MutableBufferCapacity", buffer.cast())
         .map_or(0, |(_, _, capacity)| capacity)
 }
@@ -2109,7 +2170,7 @@ unsafe extern "C" fn set_mutable_buffer_length(
     length: usize,
 ) -> usize {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "SetMutableBufferLength") }
+    or_nothing!(unsafe { innermost_activation(context, "SetMutableBufferLength") })
         .set_mutable_buffer_length(buffer.cast(), length)
 }
 
@@ -2121,7 +2182,7 @@ unsafe extern "C" fn set_mutable_buffer_capacity(
     capacity: usize,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "SetMutableBufferCapacity") }
+    or_nothing!(unsafe { innermost_activation(context, "SetMutableBufferCapacity") })
         .set_mutable_buffer_capacity(buffer.cast(), capacity)
 }
 
@@ -2133,7 +2194,7 @@ unsafe extern "C" fn is_mutable_buffer(
 ) -> logical_t {
     // SAFETY: as `whole_number_to_object`.
     logical_t::from(
-        unsafe { innermost_activation(context, "IsMutableBuffer") }.is_of_class(
+        or_nothing!(unsafe { innermost_activation(context, "IsMutableBuffer") }).is_of_class(
             "RexxThreadInterface.IsMutableBuffer",
             object,
             "MutableBuffer",
@@ -2148,7 +2209,8 @@ unsafe extern "C" fn object_to_cself(
     object: RexxObjectPtr,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ObjectToCSelf") }.object_cself(object, None)
+    or_nothing!(unsafe { innermost_activation(context, "ObjectToCSelf") })
+        .object_cself(object, None)
 }
 
 /// # Safety
@@ -2159,7 +2221,7 @@ unsafe extern "C" fn object_to_cself_scoped(
     scope: RexxObjectPtr,
 ) -> POINTER {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ObjectToCSelfScoped") }
+    or_nothing!(unsafe { innermost_activation(context, "ObjectToCSelfScoped") })
         .object_cself(object, Some(scope))
 }
 
@@ -2200,6 +2262,7 @@ mod collections {
                 name_of(name).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.table_put("RexxThreadInterface.DirectoryPut", table.cast(), item, name);
     }
 
@@ -2217,6 +2280,7 @@ mod collections {
                 name_of(name).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.table_at("RexxThreadInterface.DirectoryAt", table.cast(), name)
     }
 
@@ -2234,6 +2298,7 @@ mod collections {
                 name_of(name).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.table_remove("RexxThreadInterface.DirectoryRemove", table.cast(), name)
     }
 
@@ -2243,7 +2308,7 @@ mod collections {
         context: *mut RexxThreadContext_,
     ) -> RexxDirectoryObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "NewDirectory") }
+        or_nothing!(unsafe { innermost_activation(context, "NewDirectory") })
             .new_instance_of("RexxThreadInterface.NewDirectory", "Directory", &[])
             .cast()
     }
@@ -2256,7 +2321,7 @@ mod collections {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsDirectory") }.is_of_class(
+            or_nothing!(unsafe { innermost_activation(context, "IsDirectory") }).is_of_class(
                 "RexxThreadInterface.IsDirectory",
                 object,
                 "Directory",
@@ -2279,6 +2344,7 @@ mod collections {
                 name_of(name).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.table_put(
             "RexxThreadInterface.StringTablePut",
             table.cast(),
@@ -2301,6 +2367,7 @@ mod collections {
                 name_of(name).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.table_at("RexxThreadInterface.StringTableAt", table.cast(), name)
     }
 
@@ -2318,6 +2385,7 @@ mod collections {
                 name_of(name).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.table_remove("RexxThreadInterface.StringTableRemove", table.cast(), name)
     }
 
@@ -2327,7 +2395,7 @@ mod collections {
         context: *mut RexxThreadContext_,
     ) -> RexxStringTableObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "NewStringTable") }
+        or_nothing!(unsafe { innermost_activation(context, "NewStringTable") })
             .new_instance_of("RexxThreadInterface.NewStringTable", "StringTable", &[])
             .cast()
     }
@@ -2340,7 +2408,7 @@ mod collections {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsStringTable") }.is_of_class(
+            or_nothing!(unsafe { innermost_activation(context, "IsStringTable") }).is_of_class(
                 "RexxThreadInterface.IsStringTable",
                 object,
                 "StringTable",
@@ -2356,7 +2424,8 @@ mod collections {
         index: usize,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayAt") }.array_at(array.cast(), index)
+        or_nothing!(unsafe { innermost_activation(context, "ArrayAt") })
+            .array_at(array.cast(), index)
     }
 
     /// # Safety
@@ -2368,7 +2437,11 @@ mod collections {
         index: usize,
     ) {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayPut") }.array_put(array.cast(), item, index);
+        or_nothing!(unsafe { innermost_activation(context, "ArrayPut") }).array_put(
+            array.cast(),
+            item,
+            index,
+        );
     }
 
     /// # Safety
@@ -2379,7 +2452,7 @@ mod collections {
         item: RexxObjectPtr,
     ) -> usize {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayAppend") }.array_append(
+        or_nothing!(unsafe { innermost_activation(context, "ArrayAppend") }).array_append(
             "RexxThreadInterface.ArrayAppend",
             array.cast(),
             Argument::Handle(item),
@@ -2396,7 +2469,7 @@ mod collections {
         length: usize,
     ) -> usize {
         // SAFETY: as `whole_number_to_object`.
-        let activation = unsafe { innermost_activation(context, "ArrayAppendString") };
+        let activation = or_nothing!(unsafe { innermost_activation(context, "ArrayAppendString") });
         // SAFETY: the caller guarantees the range.
         let Some(bytes) = (unsafe { super::bytes_of(data, length) }) else {
             return 0;
@@ -2415,7 +2488,7 @@ mod collections {
         array: RexxArrayObject,
     ) -> usize {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArraySize") }.array_count(
+        or_nothing!(unsafe { innermost_activation(context, "ArraySize") }).array_count(
             "RexxThreadInterface.ArraySize",
             array.cast(),
             b"SIZE",
@@ -2429,7 +2502,7 @@ mod collections {
         array: RexxArrayObject,
     ) -> usize {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayItems") }.array_count(
+        or_nothing!(unsafe { innermost_activation(context, "ArrayItems") }).array_count(
             "RexxThreadInterface.ArrayItems",
             array.cast(),
             b"ITEMS",
@@ -2443,7 +2516,8 @@ mod collections {
         array: RexxArrayObject,
     ) -> usize {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayDimension") }.array_dimension(array.cast())
+        or_nothing!(unsafe { innermost_activation(context, "ArrayDimension") })
+            .array_dimension(array.cast())
     }
 
     /// # Safety
@@ -2453,7 +2527,7 @@ mod collections {
         size: usize,
     ) -> RexxArrayObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "NewArray") }
+        or_nothing!(unsafe { innermost_activation(context, "NewArray") })
             .new_array_sized(size)
             .cast()
     }
@@ -2465,7 +2539,7 @@ mod collections {
         first: RexxObjectPtr,
     ) -> RexxArrayObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayOfOne") }
+        or_nothing!(unsafe { innermost_activation(context, "ArrayOfOne") })
             .array_of("RexxThreadInterface.ArrayOfOne", &[first])
             .cast()
     }
@@ -2478,7 +2552,7 @@ mod collections {
         second: RexxObjectPtr,
     ) -> RexxArrayObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayOfTwo") }
+        or_nothing!(unsafe { innermost_activation(context, "ArrayOfTwo") })
             .array_of("RexxThreadInterface.ArrayOfTwo", &[first, second])
             .cast()
     }
@@ -2492,7 +2566,7 @@ mod collections {
         third: RexxObjectPtr,
     ) -> RexxArrayObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayOfThree") }
+        or_nothing!(unsafe { innermost_activation(context, "ArrayOfThree") })
             .array_of("RexxThreadInterface.ArrayOfThree", &[first, second, third])
             .cast()
     }
@@ -2507,7 +2581,7 @@ mod collections {
         fourth: RexxObjectPtr,
     ) -> RexxArrayObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "ArrayOfFour") }
+        or_nothing!(unsafe { innermost_activation(context, "ArrayOfFour") })
             .array_of(
                 "RexxThreadInterface.ArrayOfFour",
                 &[first, second, third, fourth],
@@ -2523,7 +2597,7 @@ mod collections {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsArray") }.is_of_class(
+            or_nothing!(unsafe { innermost_activation(context, "IsArray") }).is_of_class(
                 "RexxThreadInterface.IsArray",
                 object,
                 "Array",
@@ -2538,7 +2612,7 @@ mod collections {
         supplier: RexxSupplierObject,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "SupplierItem") }.supplier_object(
+        or_nothing!(unsafe { innermost_activation(context, "SupplierItem") }).supplier_object(
             "RexxThreadInterface.SupplierItem",
             supplier.cast(),
             b"ITEM",
@@ -2552,7 +2626,7 @@ mod collections {
         supplier: RexxSupplierObject,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "SupplierIndex") }.supplier_object(
+        or_nothing!(unsafe { innermost_activation(context, "SupplierIndex") }).supplier_object(
             "RexxThreadInterface.SupplierIndex",
             supplier.cast(),
             b"INDEX",
@@ -2567,7 +2641,7 @@ mod collections {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "SupplierAvailable") }
+            or_nothing!(unsafe { innermost_activation(context, "SupplierAvailable") })
                 .supplier_available(supplier.cast()),
         )
     }
@@ -2579,7 +2653,8 @@ mod collections {
         supplier: RexxSupplierObject,
     ) {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "SupplierNext") }.supplier_next(supplier.cast());
+        or_nothing!(unsafe { innermost_activation(context, "SupplierNext") })
+            .supplier_next(supplier.cast());
     }
 
     /// # Safety
@@ -2590,7 +2665,7 @@ mod collections {
         names: RexxArrayObject,
     ) -> RexxSupplierObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "NewSupplier") }
+        or_nothing!(unsafe { innermost_activation(context, "NewSupplier") })
             .new_supplier(values.cast(), names.cast())
             .cast()
     }
@@ -2604,6 +2679,7 @@ mod collections {
         // SAFETY: as `directory_put`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "NewStem"), name_of(name)) };
+        let activation = or_nothing!(activation);
         let arguments: &[Argument<'_>] = match &name {
             Some(name) => &[Argument::Text(name)],
             None => &[],
@@ -2628,6 +2704,7 @@ mod collections {
                 name_of(tail).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.stem_set(
             "RexxThreadInterface.SetStemElement",
             stem.cast(),
@@ -2650,6 +2727,7 @@ mod collections {
                 name_of(tail).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.stem_get(
             "RexxThreadInterface.GetStemElement",
             stem.cast(),
@@ -2671,6 +2749,7 @@ mod collections {
                 name_of(tail).unwrap_or_default(),
             )
         };
+        let activation = or_nothing!(activation);
         activation.stem_drop(
             "RexxThreadInterface.DropStemElement",
             stem.cast(),
@@ -2687,7 +2766,7 @@ mod collections {
         value: RexxObjectPtr,
     ) {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "SetStemArrayElement") }.stem_set(
+        or_nothing!(unsafe { innermost_activation(context, "SetStemArrayElement") }).stem_set(
             "RexxThreadInterface.SetStemArrayElement",
             stem.cast(),
             Argument::Number(index),
@@ -2703,7 +2782,7 @@ mod collections {
         index: usize,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetStemArrayElement") }.stem_get(
+        or_nothing!(unsafe { innermost_activation(context, "GetStemArrayElement") }).stem_get(
             "RexxThreadInterface.GetStemArrayElement",
             stem.cast(),
             Argument::Number(index),
@@ -2718,7 +2797,7 @@ mod collections {
         index: usize,
     ) {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "DropStemArrayElement") }.stem_drop(
+        or_nothing!(unsafe { innermost_activation(context, "DropStemArrayElement") }).stem_drop(
             "RexxThreadInterface.DropStemArrayElement",
             stem.cast(),
             Argument::Number(index),
@@ -2732,7 +2811,7 @@ mod collections {
         stem: RexxStemObject,
     ) -> RexxDirectoryObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetAllStemElements") }
+        or_nothing!(unsafe { innermost_activation(context, "GetAllStemElements") })
             .stem_whole(
                 "RexxThreadInterface.GetAllStemElements",
                 stem.cast(),
@@ -2748,7 +2827,7 @@ mod collections {
         stem: RexxStemObject,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetStemValue") }.stem_whole(
+        or_nothing!(unsafe { innermost_activation(context, "GetStemValue") }).stem_whole(
             "RexxThreadInterface.GetStemValue",
             stem.cast(),
             b"[]",
@@ -2763,7 +2842,7 @@ mod collections {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsStem") }.is_of_class(
+            or_nothing!(unsafe { innermost_activation(context, "IsStem") }).is_of_class(
                 "RexxThreadInterface.IsStem",
                 object,
                 "Stem",
@@ -2928,7 +3007,7 @@ mod variables {
         reference: RexxVariableReferenceObject,
     ) -> RexxStringObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "VariableReferenceName") }
+        or_nothing!(unsafe { innermost_activation(context, "VariableReferenceName") })
             .reference_answer(
                 "RexxThreadInterface.VariableReferenceName",
                 reference.cast(),
@@ -2944,11 +3023,12 @@ mod variables {
         reference: RexxVariableReferenceObject,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "VariableReferenceValue") }.reference_answer(
-            "RexxThreadInterface.VariableReferenceValue",
-            reference.cast(),
-            b"VALUE",
-        )
+        or_nothing!(unsafe { innermost_activation(context, "VariableReferenceValue") })
+            .reference_answer(
+                "RexxThreadInterface.VariableReferenceValue",
+                reference.cast(),
+                b"VALUE",
+            )
     }
 
     /// # Safety
@@ -2959,7 +3039,7 @@ mod variables {
         value: RexxObjectPtr,
     ) {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "SetVariableReferenceValue") }
+        or_nothing!(unsafe { innermost_activation(context, "SetVariableReferenceValue") })
             .set_reference_value(reference.cast(), value);
     }
 
@@ -2971,11 +3051,12 @@ mod variables {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsVariableReference") }.is_of_class(
-                "RexxThreadInterface.IsVariableReference",
-                object,
-                "VariableReference",
-            ),
+            or_nothing!(unsafe { innermost_activation(context, "IsVariableReference") })
+                .is_of_class(
+                    "RexxThreadInterface.IsVariableReference",
+                    object,
+                    "VariableReference",
+                ),
         )
     }
 }
@@ -3003,6 +3084,7 @@ mod messages {
         // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "SendMessage"), name_of(name)) };
+        let activation = or_nothing!(activation);
         let (Some(name), Some(arguments)) = (name, activation.arguments_of(arguments.cast()))
         else {
             return std::ptr::null_mut();
@@ -3032,6 +3114,7 @@ mod messages {
                 name_of(name),
             )
         };
+        let activation = or_nothing!(activation);
         let (Some(name), Some(arguments)) = (name, activation.arguments_of(arguments.cast()))
         else {
             return std::ptr::null_mut();
@@ -3055,6 +3138,7 @@ mod messages {
         // SAFETY: as `send_message`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "SendMessage0"), name_of(name)) };
+        let activation = or_nothing!(activation);
         let Some(name) = name else {
             return std::ptr::null_mut();
         };
@@ -3078,6 +3162,7 @@ mod messages {
         // SAFETY: as `send_message`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "SendMessage1"), name_of(name)) };
+        let activation = or_nothing!(activation);
         let Some(name) = name else {
             return std::ptr::null_mut();
         };
@@ -3103,6 +3188,7 @@ mod messages {
         // SAFETY: as `send_message`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "SendMessage2"), name_of(name)) };
+        let activation = or_nothing!(activation);
         let Some(name) = name else {
             return std::ptr::null_mut();
         };
@@ -3122,7 +3208,7 @@ mod messages {
         context: *mut RexxThreadContext_,
     ) -> RexxDirectoryObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetLocalEnvironment") }
+        or_nothing!(unsafe { innermost_activation(context, "GetLocalEnvironment") })
             .environment("RexxThreadInterface.GetLocalEnvironment", true)
             .cast()
     }
@@ -3133,7 +3219,7 @@ mod messages {
         context: *mut RexxThreadContext_,
     ) -> RexxDirectoryObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetGlobalEnvironment") }
+        or_nothing!(unsafe { innermost_activation(context, "GetGlobalEnvironment") })
             .environment("RexxThreadInterface.GetGlobalEnvironment", false)
             .cast()
     }
@@ -3147,7 +3233,7 @@ mod messages {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsInstanceOf") }
+            or_nothing!(unsafe { innermost_activation(context, "IsInstanceOf") })
                 .is_instance_of(object, class.cast()),
         )
     }
@@ -3162,6 +3248,7 @@ mod messages {
         // SAFETY: as `send_message`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "IsOfType"), name_of(name)) };
+        let activation = or_nothing!(activation);
         logical_t::from(name.is_some_and(|name| activation.is_of_type(object, name)))
     }
 
@@ -3175,6 +3262,7 @@ mod messages {
         // SAFETY: as `send_message`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "HasMethod"), name_of(name)) };
+        let activation = or_nothing!(activation);
         logical_t::from(name.is_some_and(|name| activation.has_method(object, name)))
     }
 
@@ -3187,6 +3275,7 @@ mod messages {
         // SAFETY: as `send_message`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "FindClass"), name_of(name)) };
+        let activation = or_nothing!(activation);
         name.map_or(std::ptr::null_mut(), |name| {
             activation
                 .find_class("RexxThreadInterface.FindClass", name, true)
@@ -3208,6 +3297,7 @@ mod messages {
                 name_of(name),
             )
         };
+        let activation = or_nothing!(activation);
         name.map_or(std::ptr::null_mut(), |name| {
             activation.find_package_class(package.cast(), name).cast()
         })
@@ -3221,7 +3311,8 @@ mod messages {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsMethod") }.is_executable(object, "Method"),
+            or_nothing!(unsafe { innermost_activation(context, "IsMethod") })
+                .is_executable(object, "Method"),
         )
     }
 
@@ -3233,7 +3324,8 @@ mod messages {
     ) -> logical_t {
         // SAFETY: as `whole_number_to_object`.
         logical_t::from(
-            unsafe { innermost_activation(context, "IsRoutine") }.is_executable(object, "Routine"),
+            or_nothing!(unsafe { innermost_activation(context, "IsRoutine") })
+                .is_executable(object, "Routine"),
         )
     }
 
@@ -3402,7 +3494,7 @@ mod messages {
             super::Addressed::Elsewhere(running, frame) => {
                 running.kept_executable(frame).map_or_else(
                     || {
-                        running.raise_syntax(super::INVALID_THREAD);
+                        super::raise_invalid_thread(running);
                         std::ptr::null_mut()
                     },
                     <*mut _>::cast,
@@ -3473,6 +3565,7 @@ mod packages {
         // SAFETY: as `whole_number_to_object`; the caller guarantees `name`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "LoadPackage"), name_of(name)) };
+        let activation = or_nothing!(activation);
         name.map_or(std::ptr::null_mut(), |name| {
             activation.load_package(name).cast()
         })
@@ -3495,6 +3588,7 @@ mod packages {
                 bytes_of(data, length),
             )
         };
+        let activation = or_nothing!(activation);
         let (Some(name), Some(source)) = (name, source) else {
             return std::ptr::null_mut();
         };
@@ -3514,6 +3608,7 @@ mod packages {
             // SAFETY: as `load_package`.
             let (activation, name) =
                 unsafe { (innermost_activation(context, "LoadLibrary"), name_of(name)) };
+            let activation = or_nothing!(activation);
             logical_t::from(name.is_some_and(|name| activation.load_library(name)))
         })
     }
@@ -3528,7 +3623,7 @@ mod packages {
                 package: RexxPackageObject,
             ) -> RexxDirectoryObject {
                 // SAFETY: as `whole_number_to_object`.
-                unsafe { innermost_activation(context, $member) }
+                or_nothing!(unsafe { innermost_activation(context, $member) })
                     .package_answer(
                         concat!("RexxThreadInterface.", $member),
                         package.cast(),
@@ -3560,7 +3655,7 @@ mod packages {
         routine: RexxRoutineObject,
     ) -> RexxPackageObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetRoutinePackage") }
+        or_nothing!(unsafe { innermost_activation(context, "GetRoutinePackage") })
             .package_answer(
                 "RexxThreadInterface.GetRoutinePackage",
                 routine.cast(),
@@ -3576,7 +3671,7 @@ mod packages {
         method: RexxMethodObject,
     ) -> RexxPackageObject {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "GetMethodPackage") }
+        or_nothing!(unsafe { innermost_activation(context, "GetMethodPackage") })
             .package_answer(
                 "RexxThreadInterface.GetMethodPackage",
                 method.cast(),
@@ -3593,7 +3688,7 @@ mod packages {
         arguments: RexxArrayObject,
     ) -> RexxObjectPtr {
         // SAFETY: as `whole_number_to_object`.
-        unsafe { innermost_activation(context, "CallRoutine") }
+        or_nothing!(unsafe { innermost_activation(context, "CallRoutine") })
             .call_routine(routine.cast(), arguments.cast())
     }
 
@@ -3607,6 +3702,7 @@ mod packages {
         // SAFETY: as `load_package`.
         let (activation, name) =
             unsafe { (innermost_activation(context, "CallProgram"), name_of(name)) };
+        let activation = or_nothing!(activation);
         name.map_or(std::ptr::null_mut(), |name| {
             activation.call_program(name, arguments.cast())
         })
@@ -3628,6 +3724,7 @@ mod packages {
                 bytes_of(source, length),
             )
         };
+        let activation = or_nothing!(activation);
         let (Some(name), Some(source)) = (name, source) else {
             return std::ptr::null_mut();
         };
@@ -3652,6 +3749,7 @@ mod packages {
                 bytes_of(source, length),
             )
         };
+        let activation = or_nothing!(activation);
         let (Some(name), Some(source)) = (name, source) else {
             return std::ptr::null_mut();
         };
@@ -3668,7 +3766,7 @@ unsafe extern "C" fn request_global_reference(
     object: RexxObjectPtr,
 ) -> RexxObjectPtr {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "RequestGlobalReference") }
+    or_nothing!(unsafe { innermost_activation(context, "RequestGlobalReference") })
         .global_reference("RexxThreadInterface.RequestGlobalReference", object)
 }
 
@@ -3679,7 +3777,7 @@ unsafe extern "C" fn release_global_reference(
     object: RexxObjectPtr,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ReleaseGlobalReference") }
+    or_nothing!(unsafe { innermost_activation(context, "ReleaseGlobalReference") })
         .global_reference("RexxThreadInterface.ReleaseGlobalReference", object);
 }
 
@@ -3690,7 +3788,7 @@ unsafe extern "C" fn release_local_reference(
     object: RexxObjectPtr,
 ) {
     // SAFETY: as `whole_number_to_object`.
-    unsafe { innermost_activation(context, "ReleaseLocalReference") }
+    or_nothing!(unsafe { innermost_activation(context, "ReleaseLocalReference") })
         .release_local_reference(object);
 }
 
@@ -3713,6 +3811,7 @@ unsafe extern "C-unwind" fn register_library(
                 name_of(name),
             )
         };
+        let activation = or_nothing!(activation);
         let Some(name) = name else {
             return 0;
         };
@@ -3810,6 +3909,7 @@ unsafe extern "C" fn add_command_environment(
     let activation = unsafe {
         innermost_activation((&raw mut (*thread).thread).cast(), "AddCommandEnvironment")
     };
+    let activation = or_nothing!(activation);
     // SAFETY: the caller guarantees the terminator.
     let (Some(name), Some(handler)) = (
         unsafe { name_of(name) },
@@ -4014,7 +4114,7 @@ mod redirector {
 unsafe extern "C" fn detach_thread(context: *mut RexxThreadContext_) {
     // SAFETY: as `whole_number_to_object`; the call aborts where no native
     // call is in flight.
-    unsafe { innermost_activation(context, "DetachThread") };
+    or_nothing!(unsafe { innermost_activation(context, "DetachThread") });
 }
 
 /// # Safety

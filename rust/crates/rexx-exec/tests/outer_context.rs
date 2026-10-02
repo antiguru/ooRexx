@@ -218,3 +218,64 @@ fn a_kept_call_context_used_by_another_activity_answers_or_raises() {
     }
     fs::remove_dir_all(&base).expect("cannot remove the run directory");
 }
+
+/// The program that calls the `kthr.cpp` member `member` from a started
+/// activity, through the thread context main's `KOuter` kept, with a counter
+/// and a directory a performed member would change.
+fn kept_thread_program(member: char) -> String {
+    format!(
+        "say KOuter(.c~new)\nsay 'end'\n::requires 'kthr' LIBRARY\n::class c\n::method run\n  \
+         m = self~start('other')\n  say 'started' m~result\n  return 'ret'\n\
+         ::method other unguarded\n  ctr = .ctr~new\n  d = .directory~new\n  obj = ctr\n  \
+         if '{member}' == 'D' then obj = d\n  signal on syntax\n  r = KM('{member}', obj)\n  \
+         say 'answered' r 'count' ctr~n 'dir' d~items\n  return 'ok'\n\
+         syntax:\n  say 'trapped' condition('o')~code 'count' ctr~n 'dir' d~items\n  \
+         return 'trapped'\n\
+         ::class ctr\n::attribute n\n::method init\n  expose n\n  n = 0\n\
+         ::method bump\n  expose n\n  n += 1\n  return n\n"
+    )
+}
+
+/// Each member of a thread context main's `KOuter` kept (`outer_context/kthr.cpp`'s
+/// `KM`), called from a started activity: `Activity::validateThread` throws
+/// before the member runs, so nothing it would do is done, and the running
+/// call raises 98.983 unless it already holds a condition of its own (`H`
+/// raises 93.900 first, which the oracle traps). The oracle then ends in
+/// 44.1 and hangs where it raised 98.983, so this is not a differential.
+#[test]
+fn a_kept_thread_context_used_by_another_activity_does_nothing() {
+    if !gate_mode() {
+        eprintln!("outer_context: skipped without {GATE_ENV}");
+        return;
+    }
+    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("outer-context-thread-{}", std::process::id()));
+    let (forge, run) = (base.join("forge"), base.join("run"));
+    fs::create_dir_all(&forge).expect("the forge directory");
+    fs::create_dir_all(&run).expect("the run directory");
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/outer_context");
+    build_library(&own.join("kthr.cpp"), &forge.join("libkthr.so"));
+    let library_path = forge.display().to_string();
+    for member in "MDCRSH".chars() {
+        let program = run.join(format!("t_{member}.rex"));
+        fs::write(&program, kept_thread_program(member)).expect("the program");
+        let code = if member == 'H' { "93.900" } else { "98.983" };
+        for stress in [false, true] {
+            let ours = run_ours(&program, &run, &library_path, stress);
+            assert_eq!(
+                (
+                    String::from_utf8_lossy(&ours.stdout).as_ref(),
+                    String::from_utf8_lossy(&ours.stderr).as_ref(),
+                    ours.exit_code
+                ),
+                (
+                    format!("trapped {code} count 0 dir 0\nstarted trapped\nret\nend\n").as_str(),
+                    "",
+                    0
+                ),
+                "{member}, collecting at every allocation: {stress}"
+            );
+        }
+    }
+    fs::remove_dir_all(&base).expect("cannot remove the run directory");
+}
