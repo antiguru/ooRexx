@@ -13,7 +13,7 @@
 //! `setMethod`, `copy`, `request`, and `run`/`send`/`start` with the `Message`
 //! readers.
 
-use crate::scheduler::{ParkReason, Scheduler, StartedSend};
+use crate::scheduler::{First, ParkReason, Scheduler, StartedSend};
 
 use super::{
     Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
@@ -844,7 +844,7 @@ fn started_message(
         args: args.to_vec(),
         caller,
     };
-    interp.spawn(send, Then::Started(object));
+    spawn_send(interp, send, object);
     Ok(NativeStarted::Ran(Some(object)))
 }
 
@@ -1041,8 +1041,17 @@ fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<Obj
         args,
         caller,
     };
-    interp.spawn(send, Then::Started(message));
+    spawn_send(interp, send, message);
     Ok(None)
+}
+
+/// Files a new activity whose first step is `send`, recording its outcome on
+/// `message`.
+fn spawn_send(interp: &mut Interp, send: StartedSend, message: ObjRef) {
+    let mut idle = interp.new_activity();
+    idle.activity.first = Some(First::Send(Box::new(send)));
+    idle.activity.root_then = Some(Then::Started(message));
+    interp.spawn(idle);
 }
 
 /// `Message~result`: the value the send answered, `.nil` for one that

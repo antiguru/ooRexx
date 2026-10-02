@@ -476,6 +476,32 @@ impl ActivityRoots {
         self.refresh_fast_serial();
     }
 
+    /// Moves `frame`, the top one, to the top of `to` with its serial kept,
+    /// and answers its handle there.
+    ///
+    /// # Panics
+    ///
+    /// If `frame` is not the top one, or one of its slots aliases a slot.
+    pub fn move_frame(&mut self, frame: SlotFrame, to: &mut ActivityRoots) -> SlotFrame {
+        assert_eq!(
+            self.segments.len(),
+            frame.depth + 1,
+            "move_frame on a frame that is not the top one"
+        );
+        assert_eq!(
+            self.frame_aliases(frame),
+            0,
+            "a moved frame aliases a slot its old record addresses"
+        );
+        let start = self.segment(frame).start;
+        let moved = to.push_segment(0, frame.serial);
+        to.slots.extend_from_slice(&self.slots[start..]);
+        let aliases = self.take_frame_aliases(frame);
+        to.put_frame_aliases(moved, &aliases);
+        self.pop_slots(frame);
+        moved
+    }
+
     /// The storage slot `index` of `frame` finally resolves to.
     pub fn slot_ref(&self, frame: SlotFrame, index: usize) -> SlotRef {
         SlotRef(self.resolve(frame, index))

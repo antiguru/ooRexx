@@ -43,13 +43,9 @@ pub(crate) enum ExecOutcome {
         reason = "constructed only by the test-only arm, and no arm reads the reason"
     )]
     Park(ParkReason),
-    /// Its continuation goes to a new activity, and the current one goes on
-    /// with this `Flow`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "constructed only by the test-only arm")
-    )]
-    Split(Flow),
+    /// A `REPLY` with this value: the rest of its body goes to a new
+    /// activity at the next clause boundary.
+    Split(Option<ObjRef>),
 }
 
 /// An activity's handle: its offset in the interpreter's activity table.
@@ -106,9 +102,24 @@ impl StartedSend {
 }
 
 /// An activity that is not running.
-struct Idle {
-    activity: Activity,
-    roots: ActivityRoots,
+pub(crate) struct Idle {
+    pub(crate) activity: Activity,
+    pub(crate) roots: ActivityRoots,
+}
+
+impl Idle {
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        self.activity.object_roots(out);
+        out.extend(self.roots.iter());
+    }
+}
+
+/// A new activity's first step.
+pub(crate) enum First {
+    /// The send `~start` asked for.
+    Send(Box<StartedSend>),
+    /// The rest of a replied method body, already on the activity's record.
+    Reply,
 }
 
 /// Every activity but the running one, and what the scheduler knows of them.
@@ -194,8 +205,7 @@ impl Activities {
             }
         }
         for idle in self.idle.iter().flatten() {
-            idle.activity.object_roots(out);
-            out.extend(idle.roots.iter());
+            idle.object_roots(out);
         }
     }
 
@@ -238,8 +248,8 @@ pub(crate) struct Switch {
 
 /// What the driver asks of whatever runs the interpreter's activities.
 pub(crate) trait Scheduler {
-    /// Files a new activity whose first step is `send`, as ready.
-    fn spawn(&mut self, send: StartedSend, then: Then) -> ActivityId;
+    /// Files `idle`, a record [`Interp::new_activity`] made, as ready.
+    fn spawn(&mut self, idle: Box<Idle>) -> ActivityId;
     /// Runs the running activity, a started one, until it parks, which
     /// answers `true`, or ends.
     fn run_until_park(&mut self) -> Result<bool, Failure>;
@@ -253,16 +263,10 @@ pub(crate) trait Scheduler {
 }
 
 impl Scheduler for Interp {
-    fn spawn(&mut self, send: StartedSend, then: Then) -> ActivityId {
+    fn spawn(&mut self, idle: Box<Idle>) -> ActivityId {
         // `Activity::setCallerStackFrameAsStringTable` numbers the spawner
         // (`concurrency/Activity.cpp:1206`).
         self.activity_number();
-        let mut activity = Activity::new();
-        activity.first_send = Some(Box::new(send));
-        activity.root_then = Some(then);
-        activity.number = self.activities.pooled.pop_front().flatten();
-        let mut roots = ActivityRoots::new();
-        roots.set_frame_block(self.roots.activity().frames().size());
         let table = &mut self.activities;
         let id = match table.free.pop() {
             Some(index) => ActivityId(index),
@@ -271,7 +275,7 @@ impl Scheduler for Interp {
                 ActivityId((table.idle.len() - 1) as u32)
             }
         };
-        table.idle[id.0 as usize] = Some(Box::new(Idle { activity, roots }));
+        table.idle[id.0 as usize] = Some(idle);
         table.ready.push_back(id);
         id
     }
@@ -309,6 +313,16 @@ impl Scheduler for Interp {
 }
 
 impl Interp {
+    /// A record for a new activity, with an empty arena of the running one's
+    /// block size and the oldest pooled number.
+    pub(crate) fn new_activity(&mut self) -> Box<Idle> {
+        let mut activity = Activity::new();
+        activity.number = self.activities.pooled.pop_front().flatten();
+        let mut roots = ActivityRoots::new();
+        roots.set_frame_block(self.roots.activity().frames().size());
+        Box::new(Idle { activity, roots })
+    }
+
     /// The running activity's number, which `.context~thread` answers: main
     /// is 1 and an activity is numbered when first asked, as the oracle
     /// numbers its threads (`Activity::getIdntfr`,
@@ -416,9 +430,18 @@ impl Interp {
 
     /// Measures this interpreter's Rust stack from `base`, an address near
     /// the base of a thread stack of `bytes`.
+    ///
+    /// # Panics
+    ///
+    /// If `bytes` does not exceed the margin kept free below the deepest
+    /// point.
     pub(crate) fn measure_stack(&mut self, base: usize, bytes: usize) {
+        assert!(
+            bytes > STACK_MARGIN,
+            "a thread stack of {bytes} bytes leaves nothing beyond the {STACK_MARGIN}-byte margin"
+        );
         self.stack_base = base;
-        self.stack_room = bytes.saturating_sub(STACK_MARGIN);
+        self.stack_room = bytes - STACK_MARGIN;
     }
 
     /// Whether `here`, an address on this thread's stack, lies deeper than
@@ -634,8 +657,8 @@ impl Interp {
             self.root_step(None);
             return Ok(Stopped::Parked);
         }
-        let sent = match self.activity.first_send.take() {
-            Some(send) => {
+        let sent = match self.activity.first.take() {
+            Some(First::Send(send)) => {
                 let frame = self.roots.activity_mut().push_frame();
                 let mut roots = Vec::new();
                 send.object_roots(&mut roots);
@@ -673,7 +696,12 @@ impl Interp {
                     },
                 }
             }
-            None => 'resumed: {
+            first => 'resumed: {
+                // The oracle's resumed activation announces itself again
+                // where it had before the `REPLY` (`RexxActivation.cpp:561`).
+                if matches!(first, Some(First::Reply)) {
+                    self.trace_invocation_entry();
+                }
                 let driven = match self.activity.sliced.take() {
                     Some((floor, at)) => self.drive_from(DriveStart::Sliced { floor, at }, true),
                     None => {
@@ -830,6 +858,14 @@ impl Interp {
         }
     }
 
+    /// Whether the running activation has replied and its split has yet to
+    /// run.
+    pub(crate) fn split_owed(&self) -> bool {
+        self.running_activation()
+            .and_then(|activation| activation.replied.as_ref())
+            .is_some_and(|replied| replied.continuation.is_none())
+    }
+
     /// Switches activities as `mode` says, and never on the timer's word.
     pub(crate) fn set_switch_mode(&mut self, mode: SwitchMode) {
         self.switch = Some(Switch { mode, clauses: 0 });
@@ -844,6 +880,14 @@ impl Interp {
     /// clause that does (spec 2026-09-29 P6-4), and a second slice that finds
     /// the activity still pinned takes a pinned yield (ruling P29).
     pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
+        if self.split_owed() {
+            if yields {
+                return Err(Failure::Slice);
+            }
+            // A boundary closing a construct's branch: the split waits for
+            // the next clause.
+            self.clause_countdown = 1;
+        }
         if self.stress_collect {
             self.collect_now();
         }
@@ -992,8 +1036,6 @@ impl Interp {
 pub(crate) enum Scripted {
     /// `Park`, without running the instruction.
     Park,
-    /// `Split`, with the instruction's own `Flow`.
-    Split,
 }
 
 #[cfg(test)]

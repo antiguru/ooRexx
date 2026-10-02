@@ -1,13 +1,7 @@
-/* Task 21, fix round 3: an activation parked by REPLY keeps its context
-   object across a collection taken while it is off every stack.
+/* Task 21, fix round 3: the rest of a method a REPLY moved to another
+   activity reads the context object its first half set.
 
-   That route -- `park_reply` into `ActivityRoots::park` into
-   `Activation::object_roots` -- is the one the running and suspended rows
-   cannot reach, and it had no differential row: no corpus program contained
-   both REPLY and `.context`, which is the same disjoint-sets shape that let
-   the forced-collection hole through.
-
-   The parked body prints nothing when it is right, and that is deliberate.
+   The moved body prints nothing when it is right, and that is deliberate.
    The oracle runs a replied-to body on another thread, so anything it says
    races with the main line's own output: a version whose parked body said
    its context unconditionally gave more than one distinct output over twenty

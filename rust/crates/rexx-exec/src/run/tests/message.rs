@@ -289,7 +289,7 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
     assert_eq!(outcome.exit_code, 7, "the compiled stream");
 
     // The adjacent success: a bare `RETURN` after a `REPLY` is legal, and the
-    // owed body's own `SAY` still reaches stdout.
+    // rest of the body's own `SAY` still reaches stdout.
     let outcome = crate::run_program(
         "/abs/bare-return-after-reply.rex",
         b"say .K~m\n::class K\n::method m class\n  reply 'replied'\n  say 'tail'\n  return\n"
@@ -360,12 +360,12 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
             stderr_contains: "wait for another activity",
         },
         Row {
-            name: "a REPLY under a construct, whose state an index cannot restore",
-            source: "say .K~m\n::class K\n::method m class\n  do 1\n    reply 'in-do'\n  \
-                     end\n  return 'no'\n",
+            name: "a REPLY in a labelled block, which runs on a nested Rust frame",
+            source: "say .K~m\n::class K\n::method m class\n  do label l\n    reply 'in-do'\n  \
+                     leave l\n  end\n",
             stdout: b"",
             exit_code: crate::NOT_IMPLEMENTED_EXIT,
-            stderr_contains: "a REPLY inside a DO, SELECT or IF",
+            stderr_contains: "a REPLY its method body runs on a nested Rust frame",
         },
     ];
     for row in rows {

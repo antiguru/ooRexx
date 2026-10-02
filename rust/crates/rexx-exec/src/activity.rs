@@ -269,11 +269,13 @@ pub(crate) struct Activity {
     /// How many Rust frames pin this activity between the scheduler and its
     /// running driver (spec 2026-09-29 section 2.6).
     pub(crate) pin_depth: u32,
+    /// The pin depth where the innermost running driver was entered.
+    pub(crate) driver_pins: u32,
     /// The park a primitive method answered, from its answer until the
     /// activity wakes.
     pub(crate) native_park: Option<Box<crate::dispatch::NativePark>>,
-    /// A started activity's send, until its first step makes it.
-    pub(crate) first_send: Option<Box<crate::scheduler::StartedSend>>,
+    /// A new activity's first step, until it runs.
+    pub(crate) first: Option<crate::scheduler::First>,
     /// Where a started activity records its send's outcome.
     pub(crate) root_then: Option<crate::dispatch::Then>,
     /// The floor of the driver a parked activity left, `None` where it parked
@@ -355,8 +357,9 @@ impl Activity {
             pending_elapsed_reset: false,
             requires_installing: Vec::new(),
             pin_depth: 0,
+            driver_pins: 0,
             native_park: None,
-            first_send: None,
+            first: None,
             root_then: None,
             drive_floor: None,
             sliced: None,
@@ -452,8 +455,9 @@ impl Activity {
             requires_installing: _,
             locals: _,
             pin_depth: _,
+            driver_pins: _,
             native_park,
-            first_send,
+            first,
             root_then,
             drive_floor: _,
             sliced: _,
@@ -483,7 +487,7 @@ impl Activity {
         if let Some(park) = native_park {
             park.object_roots(out);
         }
-        if let Some(send) = first_send {
+        if let Some(crate::scheduler::First::Send(send)) = first {
             send.object_roots(out);
         }
         if let Some(then) = root_then {
@@ -532,8 +536,6 @@ impl Activity {
         // activation because the alternative is a global root whose key has
         // to be minted, replaced and retired as activations come and go, and
         // this pays only when a collection actually happens.
-        // `Activation::object_roots` is the same objects' other route, for an
-        // activation a `REPLY` has parked.
         out.extend(
             running
                 .iter()
@@ -541,6 +543,16 @@ impl Activity {
                 .chain(suspended.iter().map(Box::as_ref))
                 .filter_map(|activation| activation.context_object),
         );
+        // A `REPLY`'s value and moved continuation, until its activation ends.
+        for activation in running
+            .iter()
+            .map(std::ops::Deref::deref)
+            .chain(suspended.iter().map(Box::as_ref))
+        {
+            if let Some(replied) = &activation.replied {
+                replied.object_roots(out);
+            }
+        }
         // The trapped condition's object, which a `CALL ON` handler's
         // activation and every callee that inherits its `CONDITION()` hold
         // once the queue has handed it over.

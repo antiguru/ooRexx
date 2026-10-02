@@ -50,6 +50,7 @@ const END_OF_BODY: Ended = Ended::Exited(None);
 const NO_GRANT: u32 = u32::MAX;
 
 /// One activation's compiled body, owned so that a parked level keeps it.
+#[derive(Clone)]
 pub(crate) struct Level {
     pub(crate) program: Rc<Program>,
     pub(crate) plan: Rc<Plan>,
@@ -2448,18 +2449,24 @@ impl Interp {
     }
 
     /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. An
-    /// instruction's park is loud. A split's continuation stays with this
-    /// activity.
+    /// instruction's park is loud. A split is recorded on the replying
+    /// activation and served at the next countdown visit, which this makes
+    /// the next clause boundary.
     #[cold]
     #[inline(never)]
-    fn exec_suspends(&self, outcome: ExecOutcome) -> Result<RegionEnd, Failure> {
+    fn exec_suspends(&mut self, outcome: ExecOutcome) -> Result<RegionEnd, Failure> {
         match outcome {
             ExecOutcome::Done(flow) => Ok(RegionEnd::Flowed(flow)),
             ExecOutcome::Park(_) => Err(Loud::op_not_driven("an activity park").into()),
-            ExecOutcome::Split(flow) => {
+            ExecOutcome::Split(value) => {
                 #[cfg(test)]
                 count_exec_split();
-                Ok(RegionEnd::Flowed(flow))
+                self.activation_mut().replied = Some(Box::new(crate::activation::Replied {
+                    value,
+                    continuation: None,
+                }));
+                self.clause_countdown = 1;
+                Ok(RegionEnd::Flowed(Flow::Next))
             }
         }
     }
@@ -2520,6 +2527,14 @@ impl Interp {
         start: DriveStart,
         parkable: bool,
     ) -> Result<Driven, Failure> {
+        let outer = std::mem::replace(&mut self.activity.driver_pins, self.activity.pin_depth);
+        let driven = self.drive_levels(start, parkable);
+        self.activity.driver_pins = outer;
+        driven
+    }
+
+    /// [`Interp::drive_from`]'s loop.
+    fn drive_levels(&mut self, start: DriveStart, parkable: bool) -> Result<Driven, Failure> {
         #[cfg(test)]
         count_run_chunk_entry();
 
@@ -2688,6 +2703,10 @@ impl Interp {
                                     continue;
                                 }
                                 Ok(Exit::Slice(at)) => {
+                                    if self.split_owed() {
+                                        self.split_level(&level, registers, base, at);
+                                        break 'ended Ok(END_OF_BODY);
+                                    }
                                     debug_assert!(
                                         parkable,
                                         "a slice ended in a driver no pinned frame counts"
@@ -2830,6 +2849,58 @@ impl Interp {
                     return Ok(Driven::Sliced { floor, at });
                 }
             }
+        }
+    }
+
+    /// Moves the replying level to a new activity's record, parked to resume
+    /// at the op `at`: its registers, the constructs it has open from `base`
+    /// with their loops, and its level and clause state.
+    /// Its activation and slot frame follow from
+    /// [`Interp::release_method_activation`].
+    #[cold]
+    #[inline(never)]
+    fn split_level(&mut self, level: &Level, registers: RegFrame<'_>, base: usize, at: u32) {
+        let mut idle = self.new_activity();
+        let arena = idle.roots.frames();
+        let moved = arena.reserve(registers.len());
+        for index in 0..registers.len() {
+            moved.set(index, registers.get(index));
+        }
+        let temps = idle.roots.push_frame();
+        let continuation = &mut idle.activity;
+        continuation.parked_levels.push(ParkedLevel {
+            level: Some(level.clone()),
+            registers: arena.park(moved),
+            temps,
+            base: 0,
+        });
+        continuation.sliced = Some((0, at));
+        let loops = self.activity.frames[base..]
+            .iter()
+            .filter(|frame| matches!(frame.kind, FrameKind::Loop))
+            .count();
+        continuation.frames = self.activity.frames.split_off(base);
+        if loops > 0 {
+            let outer = self.activity.flat_loops.len() + 1 - loops;
+            continuation.flat_loops = self.activity.flat_loops.split_off(outer);
+            let enclosing = self.activity.flat_loops.pop();
+            continuation.flat_top = std::mem::replace(&mut self.activity.flat_top, enclosing);
+        }
+        // A trap the `REPLY` clause queued was delivered at that clause's end.
+        debug_assert!(
+            !self
+                .activity
+                .pending_traps
+                .iter()
+                .any(|pending| pending.activation == self.activation().id),
+            "a trap queued for a replying activation outlived its clause"
+        );
+        continuation.clause_state = self.save_clause_state().into_state();
+        continuation.activation_indent = self.activity.activation_indent;
+        continuation.indent_offset = self.activity.indent_offset;
+        continuation.clause_line_override = self.activity.clause_line_override;
+        if let Some(replied) = self.activation_mut().replied.as_mut() {
+            replied.continuation = Some(idle);
         }
     }
 

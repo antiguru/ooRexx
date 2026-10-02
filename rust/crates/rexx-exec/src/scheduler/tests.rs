@@ -732,3 +732,58 @@ fn recursion_is_bounded_by_the_stack_remaining() {
     assert_eq!(outcome.exit_code, 245, "{}", stderr(&outcome));
     assert!(stderr(&outcome).contains("Error 11.1:"));
 }
+
+const REPLIED: &str = "say .c~new~m\nsay 'caller 1'\nsay 'caller 2'\n\
+                       ::class c\n::method m\n  reply 'answered'\n  say 'rest 1'\n  say 'rest 2'\n";
+
+/// The lines of `out` that start with `prefix`, in order.
+fn lines_of<'a>(out: &'a str, prefix: &str) -> Vec<&'a str> {
+    out.lines()
+        .filter(|line| line.starts_with(prefix))
+        .collect()
+}
+
+/// A `REPLY` asks for a switch, which its sender takes at its next clause
+/// boundary: the rest of the method runs before the sender's next line.
+#[test]
+fn a_reply_yields_to_its_continuation_at_the_senders_next_clause() {
+    let outcome = run(REPLIED);
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(
+        stdout(&outcome),
+        "answered\nrest 1\nrest 2\ncaller 1\ncaller 2\n"
+    );
+}
+
+/// The sender's and the continuation's lines interleave as the switch mode
+/// schedules them, each side's own lines in order, and more than one
+/// interleaving occurs across the modes.
+#[test]
+fn a_reply_continuation_interleaves_with_its_sender_under_the_switch_mode() {
+    let modes = std::iter::once(SwitchMode::EveryOpportunity)
+        .chain((1..=12).map(SwitchMode::AtClause))
+        .collect::<Vec<_>>();
+    let mut seen = std::collections::BTreeSet::new();
+    for mode in modes {
+        let outcome = run_with(REPLIED, Invocation::none().with_switch_mode(mode));
+        let out = stdout(&outcome);
+        assert_eq!(outcome.exit_code, 0, "{mode:?}: {}", stderr(&outcome));
+        assert_eq!(out.lines().next(), Some("answered"), "{mode:?}: {out}");
+        assert_eq!(
+            lines_of(&out, "caller"),
+            ["caller 1", "caller 2"],
+            "{mode:?}"
+        );
+        assert_eq!(lines_of(&out, "rest"), ["rest 1", "rest 2"], "{mode:?}");
+        assert_eq!(out.lines().count(), 5, "{mode:?}: {out}");
+        seen.insert(out);
+    }
+    assert!(seen.len() > 1, "one interleaving only: {seen:?}");
+}
+
+/// An interpreter thread no larger than the stack margin is refused.
+#[test]
+#[should_panic(expected = "leaves nothing beyond")]
+fn a_stack_within_the_margin_is_refused() {
+    Interp::new().measure_stack(0, super::STACK_MARGIN);
+}

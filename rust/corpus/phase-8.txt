@@ -397,8 +397,8 @@ lang/started_raises.rex
 lang/message_wait_then_completed.rex
 lang/message_two_waiters.rex
 lang/message_start.rex
-# Task 2 fix round 2: a replied body and an UNINIT run from Rust frames, so a
-# wait in either is a pinned wait.
+# Task 2 fix round 2: a wait in a replied body, and a pinned wait in an UNINIT,
+# which runs from Rust frames.
 lang/started_waited_in_a_replied_body.rex
 lang/started_waited_in_uninit.rex
 # Phase 6 S2 Task 3: activity numbers, the Message accessors, and an error in a
@@ -445,3 +445,12 @@ lang/sleep_parks_in_if_do_and_argument.rex
 lang/sleeper_wakes_busy_main.rex
 # Task 5 fix round 1: a wait in a tree-evaluated expression is a pinned wait.
 lang/sleep_in_parse_template_and_when.rex
+# Phase 6 S2 Task 6: REPLY moves the rest of its method to a new activity,
+# inside DO, SELECT and IF too; the sender waits for it before reading.
+lang/reply_then_wait.rex
+lang/reply_inside_constructs.rex
+lang/reply_continuation_error_trace.rex
+lang/reply_continuation_error_stderr.rex
+lang/reply_continuation_failed_send.rex
+lang/reply_seen_by_a_guarded_send.rex
+lang/reply_as_the_last_clause.rex

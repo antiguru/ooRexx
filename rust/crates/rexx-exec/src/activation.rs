@@ -220,9 +220,8 @@ pub(crate) enum ReplyState {
     /// A second `REPLY` is 98.935, and a `RETURN`/`EXIT` carrying a value is
     /// 98.936/98.937.
     Issued,
-    /// A `REPLY` has just handed its value out and the rest of the body is
-    /// owed. `Interp::release_method_activation` reads this to park the activation
-    /// instead of releasing it, and moves it to `Issued` as it does.
+    /// A `REPLY` ran here and the rest of the body has yet to move to a new
+    /// activity.
     Owed,
 }
 
@@ -294,6 +293,8 @@ pub(crate) struct Activation {
     pub(crate) reply: ReplyState,
     /// Whether the `REPLY` that ran here carried a value.
     pub(crate) replied_a_value: bool,
+    /// What a `REPLY` leaves here while [`ReplyState::Owed`].
+    pub(crate) replied: Option<Box<Replied>>,
     /// Whether this activation is performing the send of a `FORWARD` that
     /// does not `CONTINUE`, which makes it a phantom for condition delivery.
     pub(crate) forwarded: bool,
@@ -481,19 +482,21 @@ pub(crate) struct MethodIdentity {
     pub(crate) receiver: ObjRef,
 }
 
-/// One method body a `REPLY` left owed, off every stack until it is resumed.
-pub(crate) struct DeferredReply {
-    pub(crate) activation: Box<Activation>,
-    /// The calling convention the method was entered under: what `ARG()`,
-    /// `USE ARG` and a send's own caller resolution read. Restored around the
-    /// resumed body exactly as `Interp::finish_call` restores it around
-    /// the first half.
-    pub(crate) context: crate::CallContext,
-    pub(crate) slots: Vec<Option<ObjRef>>,
-    /// The frame's redirects, which a copy of its values does not carry --
-    /// `Interp::park_reply` says which one survives a pop and why.
-    pub(crate) aliases: rexx_core::FrameAliases,
-    pub(crate) parked: rexx_core::Parked,
+/// What a `REPLY` leaves its activation until the activation ends.
+pub(crate) struct Replied {
+    /// What the caller resumes with.
+    pub(crate) value: Option<ObjRef>,
+    /// The activity the rest of the body moved to, once the split ran.
+    pub(crate) continuation: Option<Box<crate::scheduler::Idle>>,
+}
+
+impl Replied {
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        out.extend(self.value);
+        if let Some(continuation) = &self.continuation {
+            continuation.object_roots(out);
+        }
+    }
 }
 
 /// One variable an `EXPOSE` bound: which object's pools hold it, which of that
@@ -537,6 +540,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            replied: None,
             forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -606,6 +610,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            replied: None,
             forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -665,6 +670,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            replied: None,
             forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -714,6 +720,7 @@ impl Activation {
             exposed: Vec::new(),
             reply: ReplyState::None,
             replied_a_value: false,
+            replied: None,
             forwarded: false,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
@@ -779,6 +786,7 @@ impl Activation {
             exposed,
             reply: _,
             replied_a_value: _,
+            replied,
             forwarded: _,
             first_instruction_pending: _,
             trace_entry: _,
@@ -805,6 +813,9 @@ impl Activation {
             streams,
         } = self;
         out.extend(*context_object);
+        if let Some(replied) = replied {
+            replied.object_roots(out);
+        }
         // The trapped condition's own object, destructured rather than
         // reached through a field: the exhaustive match above guards this
         // struct's fields, and an `ObjRef` added to `TrappedCondition` would
@@ -822,12 +833,9 @@ impl Activation {
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.
         out.extend(streams.values().copied());
-        // The convention's own values, which `Interp::park_reply` already
-        // hands over from `CallContext` while the activation is off every
-        // stack. Named here too because this activation now holds a
-        // refcount clone of the same slice, and a root the collector cannot
-        // see through one route is not made safe by the other route
-        // existing.
+        // The convention's own values, which a moved `REPLY` continuation
+        // also roots from its `CallContext`: this activation holds a
+        // refcount clone of the same slice.
         out.extend(
             call_arguments
                 .iter()

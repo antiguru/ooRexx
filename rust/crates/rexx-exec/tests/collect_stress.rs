@@ -528,31 +528,41 @@ fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
     }
 }
 
-/// A method body a `REPLY` left owed still reads its own variables when it
-/// resumes, with a collection at every allocation in between.
+/// The rest of a method body a `REPLY` moved to a new activity still reads
+/// its own variables and arguments after the routine that sent it has
+/// returned, with a collection at every allocation and switch in between.
 #[test]
 fn a_parked_reply_keeps_its_variables_across_a_collection() {
     let program = concat!(
-        "say .K~m('aaaaaaaaaaaaaaaa')\n",
+        "call send\n",
         "sender = 'bbbbbbbbbbbbbbbb' || 'cccccccccccccccc'\n",
+        "do until .local~done == 1\n",
+        "  call SysSleep 0.01\n",
+        "end\n",
         "say sender\n",
+        "exit\n",
+        "send: procedure\n",
+        "  say .K~m('aaaaaaaa' || 'aaaaaaaa')\n",
+        "  return\n",
         "::class K\n",
         "::method m class\n",
         "  expose held\n",
         "  local = 'dddddddddddddddd' || 'eeeeeeeeeeeeeeee'\n",
         "  held = 'ffffffffffffffff' || 'gggggggggggggggg'\n",
         "  reply 'replied'\n",
+        "  call SysSleep 0.05\n",
         "  say local\n",
         "  say held\n",
         "  say arg(1)\n",
+        "  .local~done = 1\n",
         "  return\n",
     );
     let expected = concat!(
         "replied\n",
-        "bbbbbbbbbbbbbbbbcccccccccccccccc\n",
         "ddddddddddddddddeeeeeeeeeeeeeeee\n",
         "ffffffffffffffffgggggggggggggggg\n",
         "aaaaaaaaaaaaaaaa\n",
+        "bbbbbbbbbbbbbbbbcccccccccccccccc\n",
     );
     let stress = run_program_collect_every_alloc(
         "<parked-reply-rooting>",
@@ -563,7 +573,7 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
     assert_eq!(
         String::from_utf8_lossy(&stress.stdout),
         expected,
-        "a parked REPLY lost a value under collect-on-every-allocation"
+        "a moved REPLY continuation lost a value under collect-on-every-allocation"
     );
     assert!(
         stress.collections > 0,

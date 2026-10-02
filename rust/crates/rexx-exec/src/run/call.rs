@@ -80,17 +80,15 @@ enum TailKind {
     Label,
     /// A `::ROUTINE`.
     Routine,
-    /// A `::METHOD` body entered by a send.
+    /// A `::METHOD` body entered by a send, or the rest of one a `REPLY`
+    /// moved to a new activity.
     Method,
-    /// The rest of a method body a `REPLY` left owed.
-    Resumed,
 }
 
 impl CallTail {
     /// The tail a method activation just pushed leaves, holding the
     /// caller's level state it replaced.
     pub(crate) fn method(
-        resumed: bool,
         saved_context: CallContext,
         saved_clause_state: crate::clause::SavedClauseState,
         saved_base: usize,
@@ -98,11 +96,7 @@ impl CallTail {
         saved_line: Option<usize>,
     ) -> CallTail {
         CallTail {
-            kind: if resumed {
-                TailKind::Resumed
-            } else {
-                TailKind::Method
-            },
+            kind: TailKind::Method,
             saved_clause_state,
             saved_base,
             saved_offset,
@@ -1042,9 +1036,14 @@ impl Interp {
         // trip that assertion in the caller rather than quietly running the
         // wrong frame's `pc`.
         let mut callee = self.pop_activation().expect("the activation just pushed");
+        let mut ended = ended;
         match kind {
-            TailKind::Method | TailKind::Resumed => {
-                self.release_method_activation(callee, kind == TailKind::Resumed, saved_context);
+            TailKind::Method => {
+                if let Some(replied) = self.release_method_activation(callee, saved_context)
+                    && ended.is_ok()
+                {
+                    ended = Ok(Ended::Returned(replied));
+                }
             }
             TailKind::Label | TailKind::Routine => {
                 // **The two halves of "was the pool shared" are one bool, and

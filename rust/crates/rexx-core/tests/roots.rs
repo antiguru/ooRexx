@@ -260,3 +260,58 @@ fn an_alias_that_does_not_descend_is_refused() {
     roots.activity_mut().alias_slot(outer, 0, target);
     roots.frame_slot(outer, 0);
 }
+
+/// A moved frame keeps its values, its promoted cells and its serial, and
+/// leaves the frame beneath it in the source untouched.
+#[test]
+fn a_moved_frame_keeps_its_values_and_cells() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let kept = ObjRef::heap(1, 0);
+    roots.set_frame_slot(outer, 0, kept);
+    let frame = roots.push_slots(3);
+    let plain = ObjRef::heap(2, 0);
+    let celled = ObjRef::heap(3, 0);
+    roots.set_frame_slot(frame, 0, plain);
+    roots.set_frame_slot(frame, 2, celled);
+    let cell = roots.promote(frame, 2);
+    let mut other = rexx_core::ActivityRoots::new();
+    let moved = roots.activity_mut().move_frame(frame, &mut other);
+    assert_eq!(roots.activity().live_frames(), 1);
+    assert_eq!(roots.frame_slot(outer, 0), Some(kept));
+    std::mem::swap(roots.activity_mut(), &mut other);
+    assert_eq!(roots.activity().frame_len(moved), 3);
+    assert_eq!(roots.frame_slot(moved, 0), Some(plain));
+    assert_eq!(roots.frame_slot(moved, 1), None);
+    assert_eq!(roots.frame_slot(moved, 2), Some(celled));
+    let written = ObjRef::heap(4, 0);
+    roots.set_frame_slot(moved, 2, written);
+    assert_eq!(roots.slot_value(cell), Some(written));
+    assert!(roots.iter().any(|r| r == plain));
+}
+
+/// The handle a frame had before its move is refused by its new record.
+#[test]
+#[should_panic]
+fn a_moved_frames_old_handle_is_refused() {
+    let mut roots = RootSet::new();
+    let _outer = roots.push_slots(1);
+    let frame = roots.push_slots(1);
+    let mut other = rexx_core::ActivityRoots::new();
+    roots.activity_mut().move_frame(frame, &mut other);
+    std::mem::swap(roots.activity_mut(), &mut other);
+    roots.frame_slot(frame, 0);
+}
+
+/// A frame one of whose slots aliases another slot cannot move.
+#[test]
+#[should_panic(expected = "aliases a slot")]
+fn a_frame_aliasing_a_slot_does_not_move() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let inner = roots.push_slots(1);
+    let target = roots.activity().slot_ref(outer, 0);
+    roots.activity_mut().alias_slot(inner, 0, target);
+    let mut other = rexx_core::ActivityRoots::new();
+    roots.activity_mut().move_frame(inner, &mut other);
+}

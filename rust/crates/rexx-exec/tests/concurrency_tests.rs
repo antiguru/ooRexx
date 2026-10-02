@@ -589,6 +589,31 @@ mod measured {
         );
     }
 
+    /// A `REPLY` in a labelled block is refused and counted with the
+    /// `NestedLoop` frame; one whose pins all lie below its method body's
+    /// driver moves and is not counted.
+    #[test]
+    fn an_immovable_reply_is_counted_with_its_frames() {
+        let report = report_of(
+            "say .c~new~m\n::class c\n::method m\n  do label l\n    reply 1\n    leave l\n  end\n",
+        );
+        let immovable = &report.immovable_replies;
+        assert_eq!(immovable.values().sum::<u64>(), 1, "{immovable:?}");
+        assert!(
+            immovable
+                .keys()
+                .all(|frames| frames.contains(&PinKind::NestedLoop)),
+            "{immovable:?}"
+        );
+        let report =
+            report_of(".c~new~~m\nsay 'main'\n::class c\n::method m\n  reply\n  say 'rest'\n");
+        assert!(
+            report.immovable_replies.is_empty(),
+            "{:?}",
+            report.immovable_replies
+        );
+    }
+
     /// A busy-wait inside `INTERPRET` takes pinned yields, counted with the
     /// `Interpret` frame, and no pinned yield is counted where nothing pins.
     #[test]
@@ -841,10 +866,6 @@ mod measured {
             "say f(0)\n::routine f\n  use arg n\n  return extf(n + 1)\n",
         ),
         ("OpExec", "interpret 'call SysSleep 0'\n"),
-        (
-            "DeferredReply",
-            "say .c~new~m\n::class c\n::method m\n  reply 1\n  call SysSleep 0\n",
-        ),
         (
             "Uninit",
             "u = .c~new\n::class c\n::method uninit\n  call SysSleep 0\n",
@@ -1237,6 +1258,11 @@ mod measured {
                 for ((park, frames), count) in map {
                     *waits.entry((what, *park, frames_text(frames))).or_default() += count;
                 }
+            }
+            for (frames, count) in &report.immovable_replies {
+                *waits
+                    .entry(("immovable", ParkKind::Reply, frames_text(frames)))
+                    .or_default() += count;
             }
         }
         let mut by_kind = String::from("| wait | park | frames | count |\n|---|---|---|---|\n");

@@ -125,6 +125,11 @@ impl ClauseState {
 pub(crate) struct SavedClauseState(ClauseState);
 
 impl SavedClauseState {
+    /// The state itself, for an activity that starts from it.
+    pub(crate) fn into_state(self) -> ClauseState {
+        self.0
+    }
+
     /// The saved intermediate-value indent, which `Interp::invoke_call`
     /// reads to compute the callee's own base indent (that clause's printed
     /// indent plus two, D2r).

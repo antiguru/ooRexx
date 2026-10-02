@@ -713,14 +713,14 @@ fn a_parked_exec_is_loud() {
     }
 }
 
-/// An `Op::Exec` that answers `Split` goes on with the `Flow` it carries.
+/// A `REPLY` answers `Split`, once, and its body goes on past it.
 #[test]
-fn a_split_exec_goes_on_with_its_flow() {
+fn a_reply_splits_once() {
     let (outcome, splits) = scripted(
-        b"interpret 'signal l'\nsay 'skipped'\nl:\nsay 'at l'\n",
-        &[Scripted::Split],
+        b"say .k~new~m\n::class k\n::method m\n  reply 1\n  say 'rest'\n",
+        &[],
     );
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "at l\n");
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1\nrest\n");
     assert_eq!(splits, 1);
 }

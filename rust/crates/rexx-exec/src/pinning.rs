@@ -169,6 +169,19 @@ macro_rules! inverted_yield {
     ($interp:expr) => {};
 }
 
+/// Records a `REPLY` refused because Rust frames lie inside its method body.
+#[cfg(feature = "pinning")]
+macro_rules! immovable_reply {
+    ($interp:expr) => {
+        $interp.pinning.immovable_reply(&$interp.activity.pins)
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! immovable_reply {
+    ($interp:expr) => {};
+}
+
 #[cfg(feature = "pinning")]
 pub use counter::{ParkKind, PinKind, PinReport};
 #[cfg(feature = "pinning")]
@@ -203,8 +216,6 @@ mod counter {
         TreeSend,
         OpExec,
         Program,
-        /// A replied body run at the program's end.
-        DeferredReply,
         /// An `UNINIT` method run by the collector's sweep or at termination.
         Uninit,
         /// A native method that runs Rexx, by message name.
@@ -289,6 +300,8 @@ mod counter {
         /// Pinned yields whose round set aside a buried activity that was
         /// ready, keyed as `pinned_yields` is.
         pub inverted_yields: BTreeMap<Vec<PinKind>, u64>,
+        /// `REPLY`s refused as immovable, keyed by the pinned frames at each.
+        pub immovable_replies: BTreeMap<Vec<PinKind>, u64>,
         /// Frames still pushed when the report was taken; zero unless a push
         /// has no matching pop.
         pub unbalanced: usize,
@@ -402,6 +415,15 @@ mod counter {
                 .or_default() += 1;
         }
 
+        pub(crate) fn immovable_reply(&self, pins: &PinStack) {
+            *self
+                .report
+                .borrow_mut()
+                .immovable_replies
+                .entry(frames_of(pins))
+                .or_default() += 1;
+        }
+
         /// Forgets the arrivals so far, keeping the frames pushed.
         pub(crate) fn reset(&self) {
             let mut report = self.report.borrow_mut();
@@ -412,6 +434,7 @@ mod counter {
             report.deferred_slices.clear();
             report.pinned_yields.clear();
             report.inverted_yields.clear();
+            report.immovable_replies.clear();
         }
 
         pub(crate) fn take(&self, pins: &PinStack) -> PinReport {

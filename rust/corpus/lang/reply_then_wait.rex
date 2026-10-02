@@ -1,0 +1,20 @@
+/* REPLY hands the sender its value and the rest of the method runs on an
+   activity of its own, as the same invocation; the sender waits for it
+   before reading what it did. */
+d = .directory~new
+say 'got' .k~new~m(d)
+do until d~hasIndex('done')
+  call SysSleep 0.01
+end
+say 'the rest wrote' d['said']
+say 'on the sender''s thread' (d['thread'] = .context~thread)
+say 'the same invocation' d['invocation']
+::class k
+::method m
+  use arg d
+  invocation = .context~invocation
+  reply 42
+  d['said'] = 'after the reply'
+  d['thread'] = .context~thread
+  d['invocation'] = (invocation = .context~invocation)
+  d['done'] = 1

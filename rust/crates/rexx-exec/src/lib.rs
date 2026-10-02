@@ -711,10 +711,12 @@ impl Loud {
         }
     }
 
-    /// A `REPLY` that is not a clause of its method body's own top level.
-    fn reply_inside_construct() -> Loud {
+    /// A `REPLY` with Rust frames between its method body's driver and
+    /// itself, which cannot move to a new activity (spec 2026-09-29 section
+    /// 5).
+    fn immovable_reply() -> Loud {
         Loud {
-            message: "a REPLY inside a DO, SELECT or IF is not implemented (Phase 6)".to_string(),
+            message: owned_message("a REPLY its method body runs on a nested Rust frame", None),
         }
     }
 
@@ -880,12 +882,13 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // answering.
         InstructionKind::Expose { .. } => None,
         // `GUARD` reserves and releases the receiver's scope and `REPLY`
-        // hands its value to the sender and leaves the rest of the body
-        // owed. `None` in the same sense `Expose` above is: both variants
-        // execute, and the sub-cases with no code here -- a `GUARD ... WHEN`
-        // that is false and so has to wait, a `REPLY` under a construct --
-        // fail loudly through `Loud::guard_when_false`/
-        // `Loud::reply_inside_construct` rather than answering.
+        // hands its value to the sender and moves the rest of the body to a
+        // new activity. `None` in the same sense `Expose` above is: both
+        // variants execute, and the sub-cases with no code here -- a
+        // `GUARD ... WHEN` that is false and so has to wait, a `REPLY` with
+        // Rust frames inside its method body -- fail loudly through
+        // `Loud::guard_when_false`/`Loud::immovable_reply` rather than
+        // answering.
         InstructionKind::Guard(_) | InstructionKind::Reply { .. } => None,
         // `FORWARD` is `None` in the sense `Guard` and `Reply` above are: the
         // instruction executes and every option is built, and the one
@@ -1143,8 +1146,6 @@ struct Interp {
     /// never because a body contains a construct the compiler does not
     /// know, which does not exist (D21: every instruction compiles).
     chunks_refused: usize,
-    /// Method bodies a `REPLY` has left owed, oldest first.
-    deferred: std::collections::VecDeque<crate::activation::DeferredReply>,
     /// Every `::ROUTINE` a program installs, keyed by the program and then by
     /// the routine's **upcased** name, holding its index in
     /// `Program::directives`.
@@ -1847,7 +1848,6 @@ impl Interp {
             slice_deferred: false,
             chunks: NameMap::default(),
             chunks_refused: 0,
-            deferred: std::collections::VecDeque::new(),
             routines: FxHashMap::default(),
             package_public_routines: FxHashMap::default(),
             merged_public_routines: FxHashMap::default(),
@@ -2503,8 +2503,6 @@ impl Interp {
             // A chunk's interned literals are allocated immortal.
             chunks: _,
             chunks_refused: _,
-            // `Interp::park_reply` hands each entry to `ActivityRoots::park`.
-            deferred: _,
             routines: _,
             package_public_routines: _,
             merged_public_routines: _,
@@ -2903,9 +2901,9 @@ fn report_late_failures(
 ) {
     for (failure, mut sites) in failures {
         match failure {
-            // `Interp::resume_reply` answers `Ok` for this variant, exactly as
-            // a send does; the arm is what makes this
-            // match exhaustive and nothing else.
+            // A started activity answers `Ok` for this variant, exactly as a
+            // send does; the arm is what makes this match exhaustive and
+            // nothing else.
             Failure::Exited(_) => {}
             // The guard below the `UNINIT` sweep is what reports this, for
             // the reason the main body's own arm gives.
@@ -3140,9 +3138,9 @@ fn execute_on(
             interp.write_trace_report(&raised.report(&site));
             raised.exit_code()
         }
-        // No report and no status here: the run may still have deferred
-        // bodies and `UNINIT`s to abandon, and the one place that says a
-        // deadline fired is the guard below them.
+        // No report and no status here: the run may still have activities
+        // and `UNINIT`s to abandon, and the one place that says a deadline
+        // fired is the guard below them.
         Err(Failure::Deadline) => 0,
     };
 
@@ -3151,22 +3149,9 @@ fn execute_on(
     let started = interp.run_started_to_end();
     report_late_failures(&mut interp, started, path, &mut exit_code);
 
-    // **After the main body's own report and after its exit status is
-    // settled**, which is the order the oracle produces: the main activity
-    // writes its traceback when it fails and the replied remainder runs on
-    // afterwards. Measured, oracle rc 7 on a program ending `exit 7` whose
-    // replied method then raises 98.936 -- the traceback is on stderr and the
-    // status is the main body's, so a raise here only writes.
-    let replied = interp.run_deferred_replies();
-    report_late_failures(&mut interp, replied, path, &mut exit_code);
-
-    // What a replied body started.
-    let started = interp.run_started_to_end();
-    report_late_failures(&mut interp, started, path, &mut exit_code);
-
     // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached
     // from `Interpreter::terminateInterpreter` (`runtime/Interpreter.cpp:279`)
-    // -- after everything the program and its replied bodies do, and reached
+    // -- after everything the program and its activities do, and reached
     // whatever the program's own outcome was. Measured, oracle: a program
     // whose main body raises 42.3 still prints its class `UNINIT` and exits
     // 214, and one ending `exit 7` prints it and exits 7.
@@ -3191,9 +3176,9 @@ fn execute_on(
         exit_code = DEADLINE_EXIT;
     }
 
-    // Read after the deferred bodies above, so a collection or a refused chunk
+    // Read after the activities above, so a collection or a refused chunk
     // inside one is counted: `run_program_collect_every_alloc` decides that its
-    // mode ran from `collections`, and a resumed body allocates like any other.
+    // mode ran from `collections`.
     let stack = interp.stack_span();
     let collections = interp.heap.collections_performed() - interp.collections_before_program;
     let chunks_refused = interp.chunks_refused;

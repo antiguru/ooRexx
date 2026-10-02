@@ -35,9 +35,9 @@ use rexx_core::{
 };
 use rexx_num::{ArithError, CompareOp, Form, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    CodeBody, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward,
-    Fragment, Guard, Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting,
-    ProgramSource, Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
+    ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward, Fragment, Guard,
+    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
+    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -61,7 +61,6 @@ pub(crate) use raised::{
 
 // `SELECT`'s own clauses, and where `IF`, `WHEN` and `SELECT` send control.
 mod select;
-use select::skip_else;
 pub(crate) use select::{
     Absorbed, SelectEscape, SelectResume, absorb, if_targets, otherwise_range, otherwise_resume,
     select_escape, select_parts, when_resume, when_targets,
@@ -569,21 +568,12 @@ impl Interp {
         first_instruction: bool,
     ) -> Result<ExecOutcome, Failure> {
         #[cfg(test)]
-        if let Some(scripted) = crate::scheduler::take_scripted() {
-            return match scripted {
-                crate::scheduler::Scripted::Park => {
-                    Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard))
-                }
-                crate::scheduler::Scripted::Split => self
-                    .exec_flow(code, index, instruction, source, first_instruction)
-                    .map(ExecOutcome::Split),
-            };
+        if let Some(crate::scheduler::Scripted::Park) = crate::scheduler::take_scripted() {
+            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard));
         }
         match &instruction.kind {
             InstructionKind::Guard(guard) => self.exec_guard(code, guard),
-            InstructionKind::Reply { expression } => {
-                self.exec_reply(code, index, expression.as_ref())
-            }
+            InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
             _ => self
                 .exec_flow(code, index, instruction, source, first_instruction)
                 .map(ExecOutcome::Done),
@@ -1940,16 +1930,12 @@ impl Interp {
     fn exec_reply(
         &mut self,
         code: &Code<'_>,
-        index: usize,
         expression: Option<&Expr>,
     ) -> Result<ExecOutcome, Failure> {
         if self.activation().method_identity.is_none() {
             return Err(Raised::reply_outside_method().into());
         }
         park_point!(self, crate::pinning::ParkKind::Reply);
-        if !top_level_clause(code.body, index) {
-            return Err(Loud::reply_inside_construct().into());
-        }
         let value = match expression {
             Some(expression) => Some(self.eval(code, expression)?),
             None => None,
@@ -1966,11 +1952,15 @@ impl Interp {
         if self.activation().reply != ReplyState::None {
             return Err(Raised::reply_twice().into());
         }
+        // Past its driver's level the only pin is this `Op::Exec`'s own.
+        if self.activity.pin_depth != self.activity.driver_pins + 1 {
+            immovable_reply!(self);
+            return Err(Loud::immovable_reply().into());
+        }
         let activation = self.activation_mut();
         activation.reply = ReplyState::Owed;
         activation.replied_a_value = value.is_some();
-        activation.pc = index + 1;
-        Ok(ExecOutcome::Done(Flow::Return(value)))
+        Ok(ExecOutcome::Split(value))
     }
 
     /// `FORWARD`, with any of `TO`, `MESSAGE`, `CLASS`, `ARGUMENTS`, `ARRAY`
@@ -3678,32 +3668,6 @@ fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
         _ => {}
     }
     Ok(word.to_ascii_uppercase())
-}
-
-/// Whether `index` is a clause of `body`'s own top level -- reached by
-/// falling from the instruction before it, with no `DO`, `LOOP`, `SELECT` or
-/// `IF` construct enclosing it.
-fn top_level_clause(body: &CodeBody, index: usize) -> bool {
-    let instructions = &body.instructions;
-    let len = instructions.len();
-    let mut at = 0;
-    while at < len {
-        if at == index {
-            return true;
-        }
-        at = match &instructions[at].kind {
-            InstructionKind::Do(body) | InstructionKind::Loop(body) => {
-                body.end.map_or(len, |end| end + 1)
-            }
-            InstructionKind::Select { end, .. } => end.map_or(len, |end| end + 1),
-            InstructionKind::If { false_target, .. } => match false_target {
-                Some(target) => skip_else(instructions, *target),
-                None => len,
-            },
-            _ => at + 1,
-        };
-    }
-    false
 }
 
 #[cfg(test)]
