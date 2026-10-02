@@ -626,6 +626,45 @@ fn a_pending_reply_keeps_its_registers_across_a_collection() {
     );
 }
 
+/// The stream builtins keep the stream and the argument they send to it
+/// while the send's body takes a pinned yield, here on a `REPLY`
+/// continuation under the switch mode with a collection at every allocation.
+#[test]
+fn a_stream_builtins_values_survive_a_pinned_yield() {
+    let program = concat!(
+        "say .k~new~m\n",
+        "call SysSleep 0.1\n",
+        "say 'main end'\n",
+        "::class k\n",
+        "::method m\n",
+        "  reply 'r'\n",
+        "  x = linein('/nonexistent/dir/file')\n",
+        "  say 'after' length(x)\n",
+        "  y = stream('/nonexistent/dir/file', 'c', 'query exists')\n",
+        "  say 'q' length(y) lines('/nonexistent/dir/file', 'C')\n",
+        "  return\n",
+    );
+    let stress = run_program_collect_every_alloc(
+        "<stream-pinned-yield>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none().with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
+    );
+    assert_eq!(
+        stress.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        "r\nafter 0\nq 0 0\nmain end\n"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
 /// A started activity parked on `~result` keeps the values its registers
 /// hold, in the level that parked and in the level below it, while the
 /// activity that completes the message allocates, with a collection at every

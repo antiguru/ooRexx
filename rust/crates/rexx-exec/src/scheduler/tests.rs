@@ -789,6 +789,31 @@ fn a_reply_leaves_its_sender_running_until_an_ordinary_switch() {
     );
 }
 
+/// With another activity ready, a `REPLY`'s sender yields at its next clause
+/// boundary, so the waiting continuation and the new one run before the
+/// sender's next line; the first `REPLY`, with none ready, does not yield
+/// (ruling P36). `AtClause` far past the program keeps the timer out.
+#[test]
+fn a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready() {
+    let program = "o = .k~new\nsay o~a\nsay o~b\nsay 'main 1'\nsay 'main 2'\n\
+                   ::class k\n::method a unguarded\n  reply 'ra'\n  say 'a rest'\n\
+                   ::method b unguarded\n  reply 'rb'\n  say 'b rest'\n";
+    let outcome = run_with(
+        program,
+        Invocation::none().with_switch_mode(SwitchMode::AtClause(1_000_000)),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "ra\nrb\na rest\nb rest\nmain 1\nmain 2\n");
+    let outcome = run_with(
+        REPLIED,
+        Invocation::none().with_switch_mode(SwitchMode::AtClause(1_000_000)),
+    );
+    assert_eq!(
+        stdout(&outcome),
+        "answered\ncaller 1\ncaller 2\nrest 1\nrest 2\n"
+    );
+}
+
 /// The sender's and the continuation's lines interleave as the switch mode
 /// schedules them, each side's own lines in order, and more than one
 /// interleaving occurs across the modes.
@@ -813,6 +838,38 @@ fn a_reply_continuation_interleaves_with_its_sender_under_the_switch_mode() {
         seen.insert(out);
     }
     assert!(seen.len() > 1, "one interleaving only: {seen:?}");
+}
+
+/// A stream builtin that builds its `Stream` runs that send's body on a
+/// nested driver under a pinned frame, so a switch-mode slice inside it is
+/// deferred: on a `REPLY` continuation and on a started activity, each with
+/// another activity ready.
+#[test]
+fn a_stream_a_builtin_builds_defers_the_slice_under_the_switch_mode() {
+    for (program, expected) in [
+        (
+            "say .k~new~m\ndo i = 1 to 20; nop; end\nsay 'main end'\n::class k\n::method m\n  \
+             reply 'r'\n  say stream('/nonexistent/dir/x', 'S')\n",
+            ["UNKNOWN", "main end", "r"].as_slice(),
+        ),
+        (
+            "m = .k~new~start('m')\ndo i = 1 to 20; nop; end\nsay m~result\n::class k\n\
+             ::method m\n  return stream('/nonexistent/dir/x', 'S')\n",
+            ["UNKNOWN"].as_slice(),
+        ),
+    ] {
+        let outcome = run_with(
+            program,
+            Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        );
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        let mut lines = stdout(&outcome)
+            .lines()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        lines.sort();
+        assert_eq!(lines, expected, "{program}");
+    }
 }
 
 /// An interpreter thread no larger than the stack margin is refused.

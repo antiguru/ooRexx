@@ -1,6 +1,7 @@
-count 66
+count 81
 /* A REPLY inside a DO, a SELECT branch and either arm of an IF: the rest of
-   the construct, and the body after it, run on the new activity. */
+   the construct, and the body after it, run on the new activity. The rest
+   waits until the sender has shown the reply value, so the order is fixed. */
 o = .k~new
 d = .directory~new
 say 'do:' o~indo(d)
@@ -19,6 +20,7 @@ say 'end main'
 exit
 wait: procedure
   use arg d
+  d['said'] = 1
   do until d~hasIndex('done')
     call SysSleep 0.01
   end
@@ -28,7 +30,10 @@ wait: procedure
 ::method indo
   use arg d
   do i = 1 to 3
-    if i = 2 then reply i
+    if i = 2 then do
+      reply i
+      call hold d
+    end
     say 'loop' i
   end
   say 'after loop' i
@@ -40,6 +45,7 @@ wait: procedure
     n = n + 1
     if n = 1 then do
       reply 'n='n
+      call hold d
       say 'in the do after the reply'
     end
     say 'pass' n
@@ -51,10 +57,12 @@ wait: procedure
     when n = 1 then say 'one'
     when n = 2 then do
       reply 'two'
+      call hold d
       say 'in when after reply'
     end
     otherwise
       reply 'other'
+      call hold d
       say 'in otherwise after reply'
   end
   say 'after select'
@@ -63,5 +71,12 @@ wait: procedure
   use arg d, c
   if c then reply 'yes'
   else reply 'no'
+  call hold d
   say 'after if' c
   d['done'] = 1
+::routine hold
+  use arg d
+  do until d~hasIndex('said')
+    call SysSleep 0.01
+  end
+  d~remove('said')

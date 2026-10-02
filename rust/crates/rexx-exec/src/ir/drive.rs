@@ -2521,6 +2521,12 @@ impl Interp {
     /// body of every callee a call op of a driven region enters, on this one
     /// Rust frame.
     pub(crate) fn drive(&mut self, root: Level) -> Result<Ended, Failure> {
+        // Once a second activity exists, a slice may end at any clause of
+        // this driver, and only a pinned frame defers it.
+        debug_assert!(
+            self.activity.pin_depth > 0 || self.activities_spawned() == 0,
+            "a nested driver runs under no pinned frame"
+        );
         match self.drive_from(DriveStart::Level(root), false)? {
             Driven::Ended(ended) => Ok(ended),
             Driven::Parked(_) | Driven::Sliced { .. } => Err(Loud::scheduler_inconsistency(

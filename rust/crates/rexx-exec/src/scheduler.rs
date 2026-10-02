@@ -338,6 +338,17 @@ impl Interp {
             .clone()
     }
 
+    /// Whether an activity waits in the ready queue.
+    pub(crate) fn any_ready(&self) -> bool {
+        !self.activities.ready.is_empty()
+    }
+
+    /// How many activity slots exist besides main's: none before the first
+    /// spawn.
+    pub(crate) fn activities_spawned(&self) -> usize {
+        self.activities.idle.len() - 1
+    }
+
     /// Moves the oldest pooled number to the pool's tail, as a spawned
     /// activity that ends at once does.
     pub(crate) fn rotate_pooled(&mut self) {

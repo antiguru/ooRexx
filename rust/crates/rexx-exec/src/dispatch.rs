@@ -2852,10 +2852,11 @@ impl Interp {
     }
 
     /// Files `continuation`, the record a `REPLY`'s split left, with
-    /// `activation` and its slot frame moved into it. The sender keeps
-    /// running: the oracle's replier yields only to a thread already waiting
-    /// (`ActivityManager.hpp:293`), which the continuation's is not, so the
-    /// continuation runs at the next ordinary switch (ruling P34).
+    /// `activation` and its slot frame moved into it. The oracle's replier
+    /// yields only to a thread already waiting (`ActivityManager.hpp:293`),
+    /// which the continuation's is not: the sender yields at its next clause
+    /// boundary where another activity is ready, and otherwise keeps running
+    /// (rulings P34, P36).
     #[cold]
     #[inline(never)]
     fn spawn_continuation(
@@ -2893,7 +2894,11 @@ impl Interp {
         ));
         resumed.first = Some(crate::scheduler::First::Reply);
         resumed.root_then = Some(Then::Pass);
+        let others_ready = self.any_ready();
         self.spawn(continuation);
+        if others_ready {
+            self.timer.requests().set(crate::timer::SLICE);
+        }
         // The split's own visit served no other request, so the sender's next
         // clause does: it arms the timer for the continuation now ready.
         self.clause_countdown = 1;

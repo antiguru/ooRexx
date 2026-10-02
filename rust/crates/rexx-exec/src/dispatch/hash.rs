@@ -985,9 +985,12 @@ fn run_stored_method(
         scope: ObjRef::NIL,
         method: rexx_core::MethodId(id as u32),
     };
-    Ok(interp
-        .invoke(resolution, receiver, name, args)?
-        .unwrap_or(ObjRef::NIL))
+    Ok(pinned!(
+        interp,
+        crate::pinning::PinKind::native(name),
+        interp.invoke(resolution, receiver, name, args)
+    )?
+    .unwrap_or(ObjRef::NIL))
 }
 
 /// `DirectoryClass::methodTableValue`: the result of the method stored under

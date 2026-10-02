@@ -110,7 +110,11 @@ impl Interp {
         let directory = self.security_arguments(entries)?;
         self.roots.activity_mut().push_temp(directory);
         let caller = self.caller();
-        let answer = self.send_message(manager, message, None, &[Some(directory)], caller)?;
+        let answer = pinned!(
+            self,
+            crate::pinning::PinKind::SecurityManager,
+            self.send_message(manager, message, None, &[Some(directory)], caller)
+        )?;
         let Some(answer) = answer else {
             return Err(Raised::no_result(message).into());
         };

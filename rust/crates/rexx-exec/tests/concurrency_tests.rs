@@ -884,6 +884,12 @@ mod measured {
             ".traceOutput~destination(.c~new)\ntrace r\nx = 1\n::class c\n::method lineout\n  call SysSleep 0\n",
         ),
         (
+            "SecurityManager",
+            "r = .routine~new('r', \"x = stream('/nonexistent/dir/x', 'S')\")\n\
+             r~setSecurityManager(.sm~new)\nr~call\n\
+             ::class sm\n::method unknown\n  call SysSleep 0\n  return 0\n",
+        ),
+        (
             "RedirectWrapper",
             "a = .d~new\naddress system 'echo hi' with output using (a)\n\
              ::class d subclass array\n::method append\n  call SysSleep 0\n  forward class (super)\n",

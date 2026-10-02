@@ -35,6 +35,7 @@ fn send_to_stream(
         None => Vec::new(),
     };
     let stream = interp.resolve_stream(&name, input, added)?;
+    interp.roots.activity_mut().push_temp(stream);
     // **Guarded**: `values_from` slices from its argument, so asking for the
     // tail of a call that wrote no positions at all panics rather than
     // answering an empty slice, and an omitted name is a call with none.
@@ -132,10 +133,12 @@ pub(crate) fn lines(
         None => Vec::new(),
     };
     let stream = interp.resolve_stream(&stream_name, true, true)?;
+    interp.roots.activity_mut().push_temp(stream);
     // **The two spellings are not symmetric**, measured against a route whose
     // destination answers `LINES` itself: the quick option goes out as
     // `NORMAL` and the counting one as `C`.
     let argument = interp.text(if option == b'C' { b"C" } else { b"NORMAL" });
+    interp.roots.activity_mut().push_temp(argument);
     let caller = interp.caller();
     let answer = pinned!(
         interp,
@@ -200,6 +203,7 @@ pub(crate) fn stream(
     // `stream('','S')` are both 40.27 above, so the empty name never gets
     // this far and no default stream is ever chosen for `STREAM`.
     let stream = interp.resolve_stream(&stream_name, true, touches)?;
+    interp.roots.activity_mut().push_temp(stream);
     let caller = interp.caller();
     let answer = match letter {
         b'S' => pinned!(
@@ -215,6 +219,7 @@ pub(crate) fn stream(
         _ => {
             let text = command.clone().unwrap_or_default();
             let argument = interp.text_built(text);
+            interp.roots.activity_mut().push_temp(argument);
             pinned!(
                 interp,
                 crate::pinning::PinKind::StreamWrapper,

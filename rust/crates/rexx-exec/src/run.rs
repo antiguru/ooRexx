@@ -2524,7 +2524,11 @@ impl Interp {
                 setter.push(b'=');
                 self.validate_scope_override(receiver, scope)?;
                 let caller = self.caller();
-                let answer = self.send_message(receiver, &setter, scope, &values, caller)?;
+                let answer = pinned!(
+                    self,
+                    crate::pinning::PinKind::TreeSend,
+                    self.send_message(receiver, &setter, scope, &values, caller)
+                )?;
                 if let Some(shown) = answer.and_then(|answer| self.intermediate_text(answer)) {
                     self.trace_assignment(indent, &setter, &shown);
                 }
@@ -3721,9 +3725,12 @@ impl Interp {
         let argument = self.text(name);
         self.roots.activity_mut().push_temp(argument);
         let caller = self.caller();
-        let built = self
-            .send_message(class, b"NEW", None, &[Some(argument)], caller)?
-            .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+        let built = pinned!(
+            self,
+            crate::pinning::PinKind::StreamWrapper,
+            self.send_message(class, b"NEW", None, &[Some(argument)], caller)
+        )?
+        .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
         if added && let Some(table) = self.stream_table_mut() {
             table.insert(qualified.into_boxed_slice(), built);
         }

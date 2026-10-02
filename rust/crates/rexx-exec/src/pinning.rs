@@ -209,6 +209,7 @@ mod counter {
         OutputWrapper,
         TraceWrapper,
         RedirectWrapper,
+        SecurityManager,
         LoopHeader,
         NestedLoop,
         Interpret,
