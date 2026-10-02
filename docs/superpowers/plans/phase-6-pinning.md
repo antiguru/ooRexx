@@ -684,6 +684,7 @@ Every opportunity:
 | pinned yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
 | pinned yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
 
-No immovable `REPLY` is counted in either mode. Under every opportunity the late wakes are
-`MessageResult` and `MessageWait`; the deferred slices and pinned yields have the same frame
-chains, and the inverted yields are those under `TraceWrapper` and `Notification`.
+No immovable `REPLY` and no inverted wait is counted in either mode. Under every opportunity the
+late wakes are `MessageResult` and `MessageWait`; the deferred slices and pinned yields have the
+same frame chains apart from the frameless deferred slices, and the inverted yields are those under
+`TraceWrapper` and `Notification`.

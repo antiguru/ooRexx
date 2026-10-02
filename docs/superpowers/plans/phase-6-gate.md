@@ -156,14 +156,15 @@ Command, from `rust/`:
 
 ```
 REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=<file> cargo test --release -p rexx-exec \
-  --test concurrency_tests -- group_runs::the_s2 --test-threads=1
+  --test concurrency_tests -- group_runs:: --test-threads=1
 ```
 
 Each derived-list row naming `REPLY`, `~start`, `Message~reply`, `SysSleep`, `.context~thread` or
-a TraceObject field runs one test per run on both sides, with the shipped scheduler and under
-`EveryOpportunity`. Task 1's starting table covers `base/class/Message` only; its refusals were
-the Message methods of Tasks 2 to 7, and the Message rows pass here apart from the two
-`makeArray` rows below. Passing in both modes, by group:
+a TraceObject field runs one test per run. The normal column compares the shipped scheduler with
+the oracle, one oracle run. The every-opportunity column compares this crate's two runs with each
+other: masked stdout, stderr and exit status. Task 1's starting table covers `base/class/Message`
+only; its refusals were the Message methods of Tasks 2 to 7 and `Object~makeArray`, and the Message
+rows pass here apart from the `makeArray` rows below. Passing, and the same in both modes, by group:
 
 - `base/bif/STREAM.testGroup`: TEST_QUERYDIR_EXISTS
 - `base/bif/TIME.testGroup`: TEST_2
@@ -183,71 +184,90 @@ the Message methods of Tasks 2 to 7, and the Message rows pass here apart from t
 
 Not passing:
 
-| group | test | normal | every opportunity | owner |
+| group | test | normal against the oracle | every against normal | owner |
 |---|---|---|---|---|
-| base/bif/TIME.testGroup | TEST_3 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
-| base/bif/TIME.testGroup | TEST_4 | rc 1, oracle 8 assertions, ours 5 | same | TIME('E')/TIME('R') value after SysSleep; not traced, same in both modes |
-| base/bif/TIME.testGroup | TEST_5 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
-| base/bif/TIME.testGroup | TEST_8 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
-| base/bif/TIME.testGroup | TEST_9 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
-| base/bif/TIME.testGroup | TEST_10 | rc 1, oracle 8 assertions, ours 5 | same | TIME('E')/TIME('R') value after SysSleep; not traced, same in both modes |
-| base/bif/TIME.testGroup | TEST_11 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline |
+| base/bif/TIME.testGroup | TEST_3 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
+| base/bif/TIME.testGroup | TEST_4 | rc 1, oracle 8 assertions, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/bif/TIME.testGroup | TEST_5 | oracle did not finish | same apart from elapsed values | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
+| base/bif/TIME.testGroup | TEST_8 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
+| base/bif/TIME.testGroup | TEST_9 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
+| base/bif/TIME.testGroup | TEST_10 | rc 1, oracle 8 assertions, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/bif/TIME.testGroup | TEST_11 | oracle did not finish | same apart from elapsed values | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
 | base/class/Alarm.testGroup | TEST_BASE_ALARM | oracle did not finish | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/class/EventSemaphore.testGroup | TEST_WAIT_CONCURRENT | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/class/Message.testGroup | TEST_STARTWITH_NOT_ARRAY | refused: Object~MAKEARRAY | same | Phase 9 (Object~makeArray) |
 | base/class/Message.testGroup | TEST_REPLYWITH_NOT_ARRAY | refused: Object~MAKEARRAY | same | Phase 9 (Object~makeArray) |
-| base/class/Method.testGroup | TESTDIRECTIVES | refused: DO is not implemented | same | loop DO, not a concurrency feature |
+| base/class/Method.testGroup | TESTDIRECTIVES | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
 | base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/directives/ATTRIBUTE.testGroup | TESTDELEGATE | rc 1, oracle 122 assertions, ours 95 | same | Method delegate attributes; the row matched on `isGuarded` |
-| base/directives/METHOD.testGroup | TESTGUARDEDACCESS | rc 1, oracle 1 assertions, ours 0 | same | unguarded attribute read beside a REPLY activity (`BAD` for 21); S3 by feature, not traced |
-| base/directives/METHOD.testGroup | TESTDELEGATE | rc 1, oracle 116 assertions, ours 66 | same | Method delegate attributes; the row matched on `isGuarded` |
-| base/keyword/CALL.testGroup | TEST_4 | rc 1, oracle 18 assertions, ours 7 | same | TIME('E')/TIME('R') value after SysSleep; not traced, same in both modes |
+| base/directives/ATTRIBUTE.testGroup | TESTDELEGATE | rc 1, oracle 122 assertions, ours 95 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
+| base/directives/METHOD.testGroup | TESTGUARDEDACCESS | rc 1, oracle 1 assertions, ours 0 | same | Task 11: a guarded attribute read does not wait for the lock a REPLY continuation holds (`BAD` where the oracle gives `GOOD`, 10 of 10) |
+| base/directives/METHOD.testGroup | TESTDELEGATE | rc 1, oracle 116 assertions, ours 66 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
+| base/keyword/CALL.testGroup | TEST_4 | rc 1, oracle 18 assertions, ours 7 | same | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
 | base/keyword/GUARD.testGroup | TEST_ON_DEFAULT | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/keyword/GUARD.testGroup | TEST_ON | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE_TRIGGER | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE | rc 1, oracle 2 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
 | base/keyword/GUARD.testGroup | TEST_WAIT_MULTIPLE | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/keyword/RAISE.testGroup | TEST_RAISE_INSERT_CRLF | rc 1, oracle 1 assertions, ours 0 | same | message text conversion (`?` for non-ASCII), not scheduling |
-| base/keyword/REPLY.testGroup | TEST_REPLY_TWICE_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
-| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
-| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
-| base/keyword/REPLY.testGroup | TEST_REPLY_EXIT_CODE_REPLYASSERT | pass | rc 0, oracle 0 assertions, ours 1 | S2, mode difference below |
-| base/keyword/REPLY.testGroup | TEST_REPLY_STACK_REPLYASSERT | pass | rc 0, oracle 1 assertions, ours 2 | S2, mode difference below |
-| base/keyword/REPLY.testGroup | TEST_REPLY_SAME_REPLYASSERT | pass | rc 0, oracle 6 assertions, ours 5 | S2, mode difference below |
-| base/keyword/TRACE_TraceObject.testGroup | TEST_TRACEOBJECT_COLLECTOR | refused: DO is not implemented | same | loop DO, not a concurrency feature |
-| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/RAISE.testGroup | TEST_RAISE_INSERT_CRLF | rc 1, oracle 1 assertions, ours 0 | same | message text conversion (`?` for non-ASCII); fails at S1 close too, outside Phase 6 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_TWICE_REPLYASSERT | pass | assertions 0 then 1 | S2, mode difference below (P41) |
+| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_REPLYASSERT | pass | assertions 0 then 1 | S2, mode difference below (P41) |
+| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass | assertions 0 then 1 | S2, mode difference below (P41) |
+| base/keyword/REPLY.testGroup | TEST_REPLY_EXIT_CODE_REPLYASSERT | rc 0, oracle 1 assertions, ours 0 | assertions 0 then 1 | S2, mode difference below (P41) |
+| base/keyword/REPLY.testGroup | TEST_REPLY_STACK_REPLYASSERT | pass | assertions 1 then 2 | S2, mode difference below (P41) |
+| base/keyword/REPLY.testGroup | TEST_REPLY_SAME_REPLYASSERT | pass | assertions 1 then 5 | S2, mode difference below (P41) |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_TRACEOBJECT_COLLECTOR | refused: DO is not implemented | trace lines on stderr differ | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused at GUARD WHEN | trace lines on stderr differ | S3 (GUARD WHEN, semaphores, Alarm) |
 | regressions/bug2003_guard_when.testGroup | TEST_GUARD_WHEN_1 | fails on both | same | S3 (GUARD WHEN, semaphores, Alarm) |
 
 The rows marked `oracle did not finish` are the oracle's run exceeding the runner's 10 s deadline
-(`TIME` TEST_3 takes 13.5 s on the oracle). In process, in both pinning tables, `TIME` TEST_3,
-TEST_8 and TEST_9 pass, TEST_5 and TEST_11 fail as TEST_4 and TEST_10 do, and `Alarm`
-TEST_BASE_ALARM is refused at the GUARD WHEN, each the same in both modes.
+(`TIME` TEST_3 takes 13.5 s on the oracle); this crate's two runs are still compared. `Alarm`
+TEST_BASE_ALARM is refused at the GUARD WHEN in process in both modes.
+
+The check against inverted-wait refusals matches the crate's message (`pinned below it can end`,
+`lib.rs` `inverted_wait`). To show it live, its text was temporarily replaced by `a GUARD that has
+to wait`, a refusal these rows do reach: the test failed naming those rows in both modes, and the
+text was restored. With the real text no row is stuck in either mode, so no inverted-wait refusal
+occurs in these rows.
 
 #### Mode differences
 
-Six `REPLY` rows, each asserting after the `REPLY` in the continuation, which races the end of the
-program: TEST_REPLY_TWICE_REPLYASSERT, TEST_REPLY_RETURN_CODE_REPLYASSERT,
-TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT, TEST_REPLY_EXIT_CODE_REPLYASSERT,
-TEST_REPLY_STACK_REPLYASSERT and TEST_REPLY_SAME_REPLYASSERT. `rexx-run` (with `REXX_SWITCH_MODE=every`
-for the second), 20 runs each, assertions counted:
+Ruling P41: the differences in the `*_REPLYASSERT` rows below are a licensed scheduling
+divergence of the P32/P36 class. Each asserts after the `REPLY`, in the continuation, which races
+the end of the program. Ours is deterministic: the shipped scheduler ends the program first and
+every opportunity runs the continuation first. The oracle varies. Assertions counted, ours 20 runs
+per mode through `rexx-run` (`REXX_SWITCH_MODE=every` for the second), the oracle as many runs as
+shown, each at rc 0:
 
 | test | ours normal | ours every | oracle |
 |---|---|---|---|
-| TWICE | 0 x20 | 1 x20 | 0 x16, 1 x4 |
-| RETURN_CODE | 0 x20 | 1 x20 | 0 x18, 1 x2 |
-| RETURN_CODE_SAME | 0 x20 | 1 x20 | 0 x19, 1 x1 |
-| EXIT_CODE | 0 x20 | 1 x20 | 0 x18, 1 x2 |
-| STACK | 1 x20 | 2 x20 | 1 x20 |
-| SAME | 1 x20 | 5 x20 | 1 x18, 6 x2 |
+| TWICE | 0 x20 | 1 x20 | 0 x22, 1 x8 (30 runs) |
+| RETURN_CODE | 0 x20 | 1 x20 | 0 x26, 1 x4 (30) |
+| RETURN_CODE_SAME | 0 x20 | 1 x20 | 0 x24, 1 x6 (30) |
+| EXIT_CODE | 0 x20 | 1 x20 | 0 x21, 1 x9 (30) |
+| STACK | 1 x20 | 2 x20 | 1 x42, 2 x8 (50) |
+| SAME | 1 x20 | 5 x20 | 1 x28, 6 x2 (30); 1 x81, 6 x19 (100 more) |
 
-The shipped scheduler ends the program before the continuation asserts; the oracle does so in most
-runs and not in all. Under `EveryOpportunity` the continuation always asserts. For STACK the
-oracle's 20 runs never show the continuation's assertion that every opportunity always shows, and
-SAME counts 5 where the oracle's runs count 1 or 6 (a race of the `u5` kind). The test
-`the_s2_rows_of_the_derived_list_in_both_modes` allows a difference for these six rows only.
+Every count of ours is one the oracle also gives, except SAME's 5, which the oracle did not give in
+the runs above. The oracle does interleave a `REPLY` continuation with its sender clause by clause:
+for a sender of three `say`s and a continuation of five `say`s, a SysSleep and a `say`, 50 oracle
+runs gave 40 sequential, 9 alternating and 1 continuation first, while ours alternates only under
+every opportunity. The test allows a difference between the modes in these rows only when both runs
+end at rc 0 with the same stderr and the same stdout apart from the `Assertions:` line.
+
+Further differences are allowed by row:
+
+- `TIME` TEST_4, TEST_5, TEST_10 and TEST_11 print an elapsed time in their failure output, which
+  differs between any two runs. Compared without the `[failure]`, `Expected:`, `Actual:` and
+  `Message:` lines they agree.
+- `TEST_TRACEOBJECT_COLLECTOR` and `TEST_CALLER_STACK_FRAME_REPLY_START` are refused at rc 120 in
+  both modes with the same stdout; the trace lines on stderr differ. In the first the lines of
+  `reply` and the next clause swap places; in the second every opportunity prints one more line, a
+  `>I> Method "M_S"` entry, before the refusal ends the run. Not covered by P41.
 
 Over the whole derived list, the two pinning tables give the same per-test outcome except the
-`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows, S3): normal refuses each at
-the GUARD WHEN; under every opportunity each is refused at `DO is not implemented` except
-TEST_REQUEST_STRING_MESSAGE, which passes. Both are loud refusals; which one a program reaches first
-depends on the schedule.
+`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows, owned by S3 because
+unswitched they stop at GUARD WHEN): under every opportunity the continuation sets the Alarm's
+`timerStarted` first, the GUARD WHEN is satisfied, and each reaches the DO WITH ... OVER refusal
+instead, except TEST_REQUEST_STRING_MESSAGE, which passes. Both are loud refusals. Probe `a2.rex`,
+which stops before the DO, matches the oracle under every opportunity 10 of 10 (queued
+`2026-10-02-do-with-over-refusal`).

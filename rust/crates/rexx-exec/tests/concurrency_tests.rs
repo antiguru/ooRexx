@@ -1342,8 +1342,9 @@ mod group_runs {
     use std::path::{Path, PathBuf};
 
     use super::group_runner::{
-        GATE_ENV, Outcome, SwitchMode, TestResult, excerpt, first_difference, gate_mode,
-        group_file, masked, reaching_rxapi, run_tests, source_test_names, test_names,
+        GATE_ENV, Outcome, Run, SwitchMode, TestResult, VERBOSITY, excerpt, first_difference,
+        fresh_copy, gate_mode, group_file, masked, reaching_rxapi, run_crate, run_tests,
+        source_test_names, test_names,
     };
     use super::support::oracle;
 
@@ -1598,11 +1599,10 @@ mod group_runs {
     /// Where the both-modes table of the S2 rows is written when set.
     const CRITERION_ONE_TABLE_ENV: &str = "REXX_CRITERION_ONE_TABLE";
 
-    /// The S2 rows whose outcome differs between the two modes: each asserts
-    /// after a `REPLY` in the continuation, which races the end of the
-    /// program. The shipped scheduler ends first; `EveryOpportunity` runs the
-    /// continuation first. The oracle's own count varies between runs, so a
-    /// row of this list can also agree in both modes.
+    /// The S2 rows whose runs differ between the two modes, in the assertion
+    /// count alone: each asserts after a `REPLY` in the continuation, which
+    /// races the end of the program. The shipped scheduler ends first;
+    /// `EveryOpportunity` runs the continuation first (ruling P41).
     const MODE_DIFFERING: &[&str] = &[
         "base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT",
         "base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_REPLYASSERT",
@@ -1611,6 +1611,97 @@ mod group_runs {
         "base/keyword/REPLY.testGroup TEST_REPLY_STACK_REPLYASSERT",
         "base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT",
     ];
+
+    /// The text of the crate's inverted-wait refusal (`lib.rs`, `inverted_wait`).
+    const INVERTED_WAIT: &str = "that only an activity pinned below it can end";
+
+    /// Whether `run` ended with the inverted-wait refusal.
+    fn inverted(run: &Run) -> bool {
+        String::from_utf8_lossy(&run.stderr).contains(INVERTED_WAIT)
+    }
+
+    /// The rows whose failure output prints an elapsed time, which differs
+    /// between any two runs.
+    const PRINTS_ELAPSED: &[&str] = &[
+        "base/bif/TIME.testGroup TEST_4",
+        "base/bif/TIME.testGroup TEST_5",
+        "base/bif/TIME.testGroup TEST_10",
+        "base/bif/TIME.testGroup TEST_11",
+    ];
+
+    /// The rows refused in both modes whose trace output, on stderr, comes
+    /// from a `REPLY` continuation and its sender: the lines interleave
+    /// differently and the refused run ends after a different number.
+    const TRACE_INTERLEAVES: &[&str] = &[
+        "base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR",
+        "base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START",
+    ];
+
+    /// `run`'s stdout without the lines `drop` selects.
+    fn without(run: &Run, drop: impl Fn(&str) -> bool) -> String {
+        String::from_utf8_lossy(&masked(&run.stdout))
+            .lines()
+            .filter(|line| !drop(line))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn assertions(run: &Run) -> String {
+        String::from_utf8_lossy(&run.stdout)
+            .lines()
+            .find_map(|line| line.strip_prefix("Assertions:"))
+            .map_or_else(|| "none".to_string(), |count| count.trim().to_string())
+    }
+
+    /// How two runs of this crate compare, and whether the difference, if
+    /// any, is one `row` is listed for.
+    fn compare_modes(row: &str, normal: &Run, every: &Run) -> (String, bool) {
+        if masked(&normal.stdout) == masked(&every.stdout)
+            && normal.stderr == every.stderr
+            && normal.status == every.status
+        {
+            return ("same".to_string(), true);
+        }
+        let quiet = normal.stderr == every.stderr && normal.status == every.status;
+        if quiet && normal.status == Some(0) && MODE_DIFFERING.contains(&row) {
+            let count = |line: &str| line.starts_with("Assertions:");
+            if without(normal, count) == without(every, count) {
+                return (
+                    format!(
+                        "assertions {} then {}",
+                        assertions(normal),
+                        assertions(every)
+                    ),
+                    true,
+                );
+            }
+        }
+        if quiet && PRINTS_ELAPSED.contains(&row) {
+            let timed = |line: &str| {
+                let line = line.trim_start();
+                line.starts_with("[failure]")
+                    || line.starts_with("Expected:")
+                    || line.starts_with("Actual:")
+                    || line.starts_with("Message:")
+            };
+            if without(normal, timed) == without(every, timed) {
+                return ("same apart from elapsed values".to_string(), true);
+            }
+        }
+        if normal.status == every.status
+            && masked(&normal.stdout) == masked(&every.stdout)
+            && TRACE_INTERLEAVES.contains(&row)
+        {
+            return ("trace lines on stderr differ".to_string(), true);
+        }
+        (
+            format!(
+                "differs: status {:?} then {:?}",
+                normal.status, every.status
+            ),
+            false,
+        )
+    }
 
     /// A result as a key and a detail. Two results agree when their keys do:
     /// the label, and the refusal or the status of a difference. The detail
@@ -1651,7 +1742,8 @@ mod group_runs {
                 .push(row.test.clone());
         }
         let oracle = oracle::locate();
-        let mut table = String::from("group\ttest\tnormal\tevery opportunity\n");
+        let mut table =
+            String::from("group\ttest\tnormal against the oracle\tevery against normal\n");
         let mut differing = Vec::new();
         let mut stuck = Vec::new();
         for (file, tests) in &groups {
@@ -1660,31 +1752,50 @@ mod group_runs {
                 .rsplit_once('/')
                 .expect("a group below a directory");
             let run = scratch("criterion-one");
+            let not_run = reaching_rxapi(dir, &[group]);
             for test in tests {
                 let one = std::slice::from_ref(test);
-                let mut cells = Vec::new();
-                for mode in [SwitchMode::None, SwitchMode::EveryOpportunity] {
-                    // The runner asserts that the oracle finishes within the
-                    // deadline; a test it outlasts is recorded as such.
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        run_tests(&oracle, &run, dir, group, one, mode, None)
-                    }));
-                    match result {
-                        Ok(results) => cells.push(cell(&results[0].outcome)),
-                        Err(_) => {
-                            let none = ("oracle did not finish".to_string(), String::new());
-                            cells = vec![none.clone(), none];
-                            break;
+                // The runner asserts that the oracle finishes within the
+                // deadline; a test it outlasts is recorded as such.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_tests(&oracle, &run, dir, group, one, SwitchMode::None, None)
+                }));
+                let normal = match result {
+                    Ok(results) => cell(&results[0].outcome),
+                    Err(payload) => {
+                        let deadline = payload
+                            .downcast_ref::<String>()
+                            .is_some_and(|m| m.starts_with("the oracle did not finish"));
+                        if !deadline {
+                            std::panic::resume_unwind(payload);
+                        }
+                        ("oracle did not finish".to_string(), String::new())
+                    }
+                };
+                let mut modes = ("not run".to_string(), true);
+                if !not_run.contains(&format!("{group}.{test}")) {
+                    let group_path = group_file(&run, dir, group);
+                    let args = [
+                        "-f",
+                        group_path.as_str(),
+                        "-U",
+                        "-V",
+                        VERBOSITY,
+                        "-t",
+                        test.as_str(),
+                    ];
+                    fresh_copy(&run, dir);
+                    let shipped = run_crate(&run, &args, SwitchMode::None);
+                    fresh_copy(&run, dir);
+                    let every = run_crate(&run, &args, SwitchMode::EveryOpportunity);
+                    for (name, ours) in [("normal", &shipped), ("every", &every)] {
+                        if inverted(ours) || ours.status.is_none() {
+                            stuck.push(format!("{file} {test}: {name}"));
                         }
                     }
+                    modes = compare_modes(&format!("{file} {test}"), &shipped, &every);
                 }
-                let (normal, every) = (&cells[0], &cells[1]);
-                for (text, _) in [normal, every] {
-                    if text.contains("inverted") || text == "differ: did not finish" {
-                        stuck.push(format!("{file} {test}: {text}"));
-                    }
-                }
-                if normal.0 != every.0 {
+                if !modes.1 {
                     differing.push(format!("{file} {test}"));
                 }
                 let show = |(key, detail): &(String, String)| {
@@ -1694,11 +1805,7 @@ mod group_runs {
                         format!("{key}: {detail}")
                     }
                 };
-                table.push_str(&format!(
-                    "{file}\t{test}\t{}\t{}\n",
-                    show(normal),
-                    show(every)
-                ));
+                table.push_str(&format!("{file}\t{test}\t{}\t{}\n", show(&normal), modes.0));
             }
             fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
         }
@@ -1707,13 +1814,9 @@ mod group_runs {
             fs::write(path, &table).expect("cannot write the table");
         }
         assert!(stuck.is_empty(), "an inverted wait or a hang: {stuck:?}");
-        let unexpected: Vec<&String> = differing
-            .iter()
-            .filter(|row| !MODE_DIFFERING.contains(&row.as_str()))
-            .collect();
         assert!(
-            unexpected.is_empty(),
-            "tests differing between the modes: {unexpected:?}"
+            differing.is_empty(),
+            "tests differing between the modes: {differing:?}"
         );
     }
 
