@@ -263,3 +263,53 @@ debug-gated).
 - Corpus (release) while collect_stress (release) ran alongside: 722 of 722; collect_stress 34.
 - Bench "it works": every `rust/bench-programs/*.rex` has the same stdout+stderr+rc as
   939fdace1, except `heapshape`, which prints its own timings.
+
+## Fix round 1b
+
+Code at a8173be99. A pending continuation no longer holds an arena block.
+- `split_level` parks the replying level's register values on the new record
+  (`ActivityRoots::park`) inside a `RepliedLevel` (level, parked values, temps frame) on
+  `Activity::replied_level`.
+- The continuation's first step (`First::Reply`) calls `Interp::open_replied_level`. It takes
+  the values back (`ActivityRoots::take_parked`, new in rexx-core), reserves the frame in the
+  continuation's own arena, and pushes the `ParkedLevel` the slice resumes. Opening the block
+  there matches what a started activity does at its first frame.
+- The frames moved at the split are unchanged: the slot frame still moves in
+  `spawn_continuation`, and only the register copy is deferred.
+
+RSS, release, `t6b/rss.sh BIN t6b/p/FILE` (`/usr/bin/time -f %M`, `ulimit -v 8388608`):
+
+| program | 939fdace1 | ff3637e2a | a8173be99 |
+|---|---|---|---|
+| `memreply100000` (100k REPLYs, unswitched) | 145,608 kB | 881,164 / 901,628 kB | 89,944 / 91,460 / 89,568 kB |
+| `memstartnowait100000` (100k `~start`) | 187,560 kB | 73,920 / 74,052 kB | 75,632 kB |
+| `memstart100000` (100k `~start~wait`) | 168,008 kB | 41,932 kB | 41,896 / 41,960 kB |
+| REPLY+FORWARD self-loop, `VmRSS` at 1..5 s (`t6b/grow.sh`) | 96 .. 387 MB | 21 MB flat | 19 MB flat |
+
+Rooting while pending: `a_pending_reply_keeps_its_registers_across_a_collection`
+(collect_stress) replies inside a `DO OVER` whose array only a register holds, and the sender
+allocates under collect-every-allocation before the continuation runs. It is green. With the
+values kept in the `RepliedLevel` but not parked, it is red: "a message send to a value whose
+object is no longer live", rc 120. The existing collect_stress suite stayed green under that
+mutation, so this test is the only one that sees the pending window.
+`taken_parked_values_stop_being_roots` (rexx-core) covers `take_parked`.
+
+Debug arena assertions under collect-every-allocation: a scratch driver
+(`t6b/stressdrv`, debug build of this tree, `run_program_collect_every_alloc`) ran each corpus
+REPLY program. Those are `reply*.rex`, `method_reply_chain.rex`,
+`started_waited_in_a_replied_body.rex` and the round-1 witnesses. It also ran the review's
+frame-move probes: `deep`, `loops`, `ref`, `settings`, `nested`, `fwd`, `started`,
+`whileside`, `untilside`, `loopstep`, `parkedin`, `pinwait` and `treesend`. Every run had the
+oracle's stdout and rc, with no panic or assertion on stderr and a non-zero collection count.
+
+P28 checks at a8173be99:
+- fmt 0.
+- Clippy `-D warnings --all-targets` is clean for `-p rexx-exec`, for `-p rexx-exec`
+  `--features pinning`, and for `-p rexx-core`.
+- Lib tests: 902 passed. rexx-core is green in debug and release.
+- Corpus (release, gate): 722/722 unswitched and 722/722 under `every`.
+- collect_stress (release): 35 passed. Run alongside it, the corpus gave 722/722.
+- Other suites: concurrency_tests 27 passed, pinning `measured::` 16 passed, refusal_sites 5
+  passed, sourceline_oracle passed.
+- Bench "it works": every program matches 939fdace1 except `heapshape`, which prints its own
+  timings.
