@@ -145,3 +145,121 @@ identical for every program but `heapshape`, which prints its own timings.
 - `refusal_sites`, `deadline`, `coverage`, `sourceline_oracle`: green.
 - Corpus (release) while collect_stress (release) ran alongside: 719 of 719; collect_stress 34
   passed. Debug corpus (`cargo test -p rexx-exec --test corpus`, gate): 719 of 719.
+
+## Fix round 1
+
+By s2-t6b, base 939fdace1. Code at ff3637e2a. Probes and scripts: scratchpad `t6b/` (`run.sh`
+runs one mode from a fresh empty dir, `stab.sh` hashes N runs, `rss.sh` peak RSS through
+`/usr/bin/time -f %M`, `grow.sh` samples `VmRSS` at 1..5 s). "939fdace1" below is a release
+build of a `git archive` of that commit in its own target dir (`Compiling rexx-exec` seen).
+
+### I1: the owed split is the activity's
+
+`Activity::splits_owed` counts activations that replied and wait for their split: incremented by
+`exec_suspends`' Split arm, decremented by `split_level` and by `release_method_activation`'s
+no-split arm. `serve_requests` keeps the countdown at 1 while it is non-zero and serves the
+split only where the running activation owes it, so a `CALL ON` handler's clauses no longer
+reload the countdown. Witnesses (oracle 30/30, ours 30/30 unswitched and `every`, one hash
+each, the oracle's): `reply_split_after_a_trap_at_the_reply.rex` (`trapatreply`),
+`reply_split_after_a_trap_takes_the_failure.rex` (`traperr`), `reply_split_after_a_trap_does_
+not_wait.rex` (`trapdelay`). Red at 939fdace1: `after reply on main 1`; rc 5 `sender caught`;
+`rest done` before `got v after 0`. Mutation (the `splits_owed > 0` test put back to
+`split_owed()`): all three red the same way; restored, green.
+
+### I2: an empty rest numbers the replier
+
+`release_method_activation`'s no-split arm calls `activity_number()` and `rotate_pooled()`
+(the oldest pooled number to the tail, under `MAX_POOLED`). Witness
+`reply_as_the_last_clause_numbers_the_replier.rex` (`r1spawner`): oracle 30/30 `t 3` / `s 2`,
+ours the same 30/30 unswitched and `every`; 939fdace1 `t 2` / `s 3`. The pool rotation half
+(`r1pool`) is racy on the oracle and has no witness.
+
+### I3 (P34): sender first
+
+`spawn_continuation` no longer sets `SLICE`. Its comment now names the oracle's
+`hasWaiters` gate (`ActivityManager.hpp:293`). It keeps `clause_countdown = 1`: the split's own
+countdown visit returns before serving any other request, so with REPLYs closer together than
+`CLAUSES_PER_CHECK` clauses no visit ever armed the timer. Measured with the line removed:
+`memreply100000` (100k REPLYs in a loop) never switched (6000 REPLYs, 48 ms, no continuation
+ran) and aborted at 0.10 s, rc 134, allocating an arena block. With it the continuations run at
+each 24 ms slice.
+- `a_reply_yields_to_its_continuation_at_the_senders_next_clause` became
+  `a_reply_leaves_its_sender_running_until_an_ordinary_switch` (`caller 1, caller 2, rest 1,
+  rest 2`). The switch-mode interleaving test is unchanged and green.
+- `reply_seen_by_a_guarded_send.rex` and its sourceline file left the corpus, to
+  `.superpowers/sdd/queued/2026-10-02-reply-guard-transfer-witness.md` with the program, the
+  oracle's output, ours (`after none`), and the review's `init.rex` shape. R-T6-4 no longer
+  holds: the sender now reads `none`.
+- `p04b` unswitched now prints the sender's lines first, the oracle's majority order (23/30 in
+  the review).
+
+### I4 (P35): one table, contexts made on first use
+
+- `rexx_api::ffi::ThreadTable`: one heap `RexxThreadInterface`, shared by `Rc`.
+  `ThreadContext::linking(&table)` points the context's `functions` at it and keeps it alive;
+  `ThreadContext::new()` links a table of its own. The data members are still written at the
+  first `enter` while null, now once per table.
+- `Activity::thread` is `Option<ThreadContext>`, made by `Interp::thread_context()` (the four
+  native-call sites in `dispatch/library.rs` and the two `keep_thread_context` sites in
+  `install.rs`) from the table on `Activities`. An ended activity's context is retained only if
+  it was made (`retired.extend(thread.take())`).
+- Tests: `an_activity_without_a_native_call_retains_no_thread_context` (a started send and a
+  REPLY continuation end, `retired()` is empty; red when retirement pushes a default context for
+  an unmade one); `contexts_linking_one_table_share_its_constants` (rexx-api).
+  `an_ended_activitys_thread_context_is_kept` stays green.
+
+RSS, release, `ulimit -v 8388608`, probes in `t6b/p/` (the review's), two runs each:
+
+| program | 939fdace1 | ff3637e2a |
+|---|---|---|
+| `memstart100000` (100k `~start~wait`) | 168,008 / 167,828 kB | 41,932 / 42,184 kB |
+| `memstartnowait100000` (100k `~start`) | 187,560 kB | 74,052 / 73,920 kB |
+| `memreply100000` (100k REPLYs) | 145,608 / 145,632 kB | 901,628 / 881,164 kB |
+| `memreply100000`, `REXX_SWITCH_MODE=every` | | 20,136 kB |
+| REPLY+FORWARD self-loop, `VmRSS` at 1..5 s | 96, 168, 239, 311, 387 MB | 21, 21, 21, 21, 21 MB |
+
+Commands: `t6b/rss.sh BIN FILE` and `t6b/grow.sh BIN t6b/p/selfloop.rex`.
+
+The REPLY row is worse, and the cause is I3, not I4. Sender-first leaves a slice's worth of
+continuations pending, about 1,300 at 24 ms and roughly 18 µs per REPLY. Each pending
+continuation holds the arena block `split_level` opened for its registers. The block is
+`FrameBlock::DEFAULT` + `GUARD` cells, 1 MB, zeroed. The `every` row shows the contexts are
+not the cost: there each continuation runs at once and the peak is 20 MB. The oracle
+accumulates the same way. It cannot run this program: `Error 48.1: ERROR CREATING THREAD`,
+rc 208, at 3.7 s under its 1 GB `ulimit -v`. `~start` does not pay this, because a started
+activity opens its block when it first runs. This makes Task 26's `open_block` item larger,
+and it gains a second remedy: the continuation could open its block when it first runs.
+
+### G4: moved-handle refusal in release
+
+`a_moved_frames_old_handle_is_refused` is now `#[cfg(debug_assertions)]` with
+`expected = "the cached top record disagrees"`. The moved frame keeps its serial, so in the old
+record's position the top-frame fast path of `frame_slot` matches on serial alone, and only
+`debug_assert_top` checks the depth. A release refusal would add a depth compare to every
+fast-path slot access. rexx-core tests: debug, roots 20 passed; release, roots 18 passed (two
+debug-gated).
+
+### Minors
+
+- `2026-10-01-reply-continuation-state-visibility.md` rewritten: the continuation is its own
+  activity, and the remaining divergence is the guard, carried to Task 11. Now tracked.
+- Queued `2026-10-02-uninit-reply-at-termination.md`: the oracle gave the third line 3/3 this
+  round (the review measured it 2/3); ours gives the first two lines, rc 0.
+- `oracle-crashes.txt`: the self-loop entry re-measured (flat RSS).
+
+### P28 checks (at ff3637e2a)
+
+- `cargo fmt --all --check`: 0. Clippy `-D warnings`, `--all-targets`: `-p rexx-exec`,
+  `-p rexx-exec --features pinning`, `-p rexx-core`, `-p rexx-api`: clean (`Checking` seen).
+- `memcap 8G cargo test -p rexx-exec --lib`: 902 passed. Under `ulimit -v 8388608` instead of
+  memcap, many lib tests fail at once and pass alone: virtual address space across parallel
+  interpreter threads. This is not a regression, the same as Task 5's note.
+- `cargo test -p rexx-core`, debug and `--release`: green. `cargo test -p rexx-api`: green.
+- `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus`: 722 of 722;
+  `REXX_CORPUS_SWITCH=every`: 722 of 722.
+- `collect_stress` (release, gate): 34 passed.
+- `concurrency_tests` (gate): 27 passed. `--features pinning ... measured::`: 16 passed.
+- `refusal_sites` 5 passed, `sourceline_oracle` (rexx-parse) passed.
+- Corpus (release) while collect_stress (release) ran alongside: 722 of 722; collect_stress 34.
+- Bench "it works": every `rust/bench-programs/*.rex` has the same stdout+stderr+rc as
+  939fdace1, except `heapshape`, which prints its own timings.
