@@ -155,3 +155,68 @@ exists and materialising held locks at the first spawn.
 4. A contended `GUARD ON` waits pinned (counted as a pinned `GuardOn` park), not stackless.
 5. Deadlock 98.905 from a guarded `EXTERNAL` or generated method carries no method traceback line
    beyond the sender's.
+
+## Fix round 1
+
+Commits `bbb0fcc68` (I1, I2, I3 mechanism, M3, M4, witnesses) and `0daf32063` (per-send cost cut).
+
+- **I1.** `Interp::sends_guarded` (dispatch/executable.rs): the directive's answer, overruled by
+  `setGuarded`/`setUnguarded` on the `Method` object whose `installed` is the send's `MethodId`.
+  Behind `method_flag_writes.is_empty()`, the search out of line. Used in `begin_method` and for
+  generated and external methods. Witnesses `method_set_unguarded_is_not_reserved.rex` (su.rex)
+  and `method_set_guarded_is_reserved.rex` (sg.rex).
+- **I2.** A body with no clause serves its pending reserve where the driver finds `entry >= len`
+  (`ir/drive.rs`, only on that path): parked through the slice at the body's end op, or a pinned
+  wait. Witness `guarded_empty_method_waits.rex` (emp.rex).
+- **I3 (P43), remedy (a).** `GuardTable` has a `live` flag, set by the first `spawn` and by a
+  REPLY's split (`guards_go_live`), which puts into the table the locks the running activity's
+  activations hold, the replying activation included. Until then a reserve is the activation's flag
+  (set in `begin_method` with the other flags, unless an early or package-traced `>I>` has to come
+  first), a release touches nothing, and `SCOPELOCKCOUNT` counts the activations holding the key
+  (`guard_count`). The method end calls `guard_off_at_end` only when the table is live or a reserve
+  is pending; a traced `<I<` runs it first. `Activation` is 512 bytes again: `forwarded`,
+  guarded and reserved share `ActivationFlags`, a const assertion holds the size. Witness
+  `guard_held_before_the_first_start.rex`: a lock taken at nesting 2 with one activity, contended
+  by a `~start` made inside it.
+- **M3.** A pinned wait that fails after a release granted the lock records it on the activation
+  (method entry, `GUARD ON`), so the activation's end gives it back, or releases it (generated and
+  external sends). Not reached by a test: the failure `run_others` returns there is another
+  activity's non-condition failure (a loud refusal or the run's deadline), and both end the program
+  (P40), so a kept lock cannot be observed afterwards.
+- **M4.** The S2 row is back as measured; an `## S3` entry in `phase-6-gate.md` records
+  TESTGUARDEDACCESS, TEST_ON_DEFAULT and TEST_ON passing, TEST_WAIT_SIMPLE at the WHEN refusal,
+  and the allowed REPLY_START row.
+- M1 and M5 left for Task 12, unchanged.
+
+### Callgrind
+
+`bench-programs/callgrind.sh -r 1 -j 6 -p "<programs>" base=<b> head=<h>`, each binary built
+release from a `git archive` of its commit in its own `CARGO_TARGET_DIR` (one `Compiling rexx-exec`
+line each), spreads 0.0000%:
+
+| program | base `b62155373` | `bbb0fcc68` | head `0daf32063` |
+|---|---|---|---|
+| dispatch | 21,014,368,690 | +2.7841% | 21,269,421,031 (+1.2137%) |
+| dispatchclass | 15,870,847,733 | +2.9490% | 16,074,884,300 (+1.2856%) |
+| sendloop | 14,098,735,164 | +4.0786% | 14,343,767,819 (+1.7380%) |
+| fibcall | 8,491,425,101 | +0.3852% | 8,524,130,123 (+0.3852%) |
+| fibfunc | 8,291,835,921 | +0.4127% | 8,326,052,376 (+0.4127%) |
+| emptyloop, varlookup, alloc, startup | | | within +0.06% |
+
+Review head `14232a817` for comparison: +5.71%, +6.02%, +8.48%. What is left is about 49-51 Ir
+per guarded send, the same absolute on all three; `sendloop` sends an empty method, so the same
+cost is a larger share there (+1.74%, over the ruling's +1.5%). Most of the fibcall/fibfunc
+residue is `drive_levels`, which grew with the empty-body branch (+24 M against the `drive_from`
+shift). Both are for Task 26.
+
+### Checks at `0daf32063`
+
+- `cargo fmt --all --check` 0; both clippy runs 0; lib 931 passed.
+- Corpus with `REXX_CORPUS_GATE=1`: release 756 of 756, release `every` 756 of 756, debug `every`
+  756 of 756.
+- `collect_stress` 36 passed; pinning `measured::` 17 passed; `concurrency_tests` with the gate
+  29 passed (TESTGUARDEDACCESS, TEST_ON_DEFAULT, TEST_ON `pass | same`).
+- `refusal_sites` 5, `sourceline_oracle` 1, `method_bodies` 23, `gate_table_c` 22 passed.
+- Witnesses, all thirteen: oracle 30 of 30 each; ours 30 of 30 unswitched and 30 of 30 `every`,
+  with the oracle's hashes.
+- Bench "it works": head against base, stdout and rc identical but `heapshape` (timings).
