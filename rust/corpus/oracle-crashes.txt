@@ -1026,27 +1026,22 @@ crash. The other runs exit 0 with the started activity's 4.1 report alone. Witho
 Phase 6 S2-S5 Task 4. **Cause not established.** This crate answers `1` for the last halt (the
 started activity has no Rexx frame) and exits 0. No upstream ticket.
 
-## 24. `.traceOutput` redirected to a Rexx object's `lineout` under `trace r`, with a started activity running
+## 24. `.traceOutput` redirected to a Rexx object's `lineout` under `trace r`
 
-    b = .busy~new~start("spin")
     .traceOutput~destination(.tc~new)
     trace r
     x = 1
     trace o
     .traceOutput~destination
     say 'trace lines' .local~tl
-    .local~stop = 1
-    say b~result
     exit
     ::class tc
     ::method lineout
       .local~tl = .local~tl~string + 1
-    ::class busy
-    ::method spin
-      do until .local~stop = 1; nop; end
-      return "busy done"
 
-SIGSEGV, rc 139, 3 runs of 3, stdout `     4 *-* x = 1` and `       >>>   "1"`, stderr empty.
-Found by the Phase 6 S2-S5 Task 6 re-review 2 (`rr-t6/p2/traceobj.rex`) and reproduced 3 of 3
-in Task 6 fix round 3. **Cause not established.** This crate exits 0 and prints the two trace
-lines, `     5 *-* trace o`, `trace lines The NIL object` and `busy done`. No upstream ticket.
+SIGSEGV, rc 139, 6 runs of 6, after the program's last line: stdout `     3 *-* x = 1`,
+`       >>>   "1"`, `     4 *-* trace o` and `trace lines The NIL object`, stderr empty. The trace
+lines go to stdout and the object's `lineout` is never run. This crate prints the same four lines
+and exits 0. First found with a started activity spinning alongside (the Phase 6 S2-S5 Task 6
+re-review 2, `rr-t6/p2/traceobj.rex`); the started activity is not needed. **Cause not
+established.** No upstream ticket.
