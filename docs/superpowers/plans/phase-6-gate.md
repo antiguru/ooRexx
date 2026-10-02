@@ -186,11 +186,11 @@ Not passing:
 
 | group | test | normal against the oracle | every against normal | owner |
 |---|---|---|---|---|
-| base/bif/TIME.testGroup | TEST_3 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
+| base/bif/TIME.testGroup | TEST_3 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; passes in process (the pinning tables, and one driver run at rc 0) |
 | base/bif/TIME.testGroup | TEST_4 | rc 1, oracle 8 assertions, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
 | base/bif/TIME.testGroup | TEST_5 | oracle did not finish | same apart from elapsed values | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
-| base/bif/TIME.testGroup | TEST_8 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
-| base/bif/TIME.testGroup | TEST_9 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
+| base/bif/TIME.testGroup | TEST_8 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; passes in process (the pinning tables, and one driver run at rc 0) |
+| base/bif/TIME.testGroup | TEST_9 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; passes in process (the pinning tables, and one driver run at rc 0) |
 | base/bif/TIME.testGroup | TEST_10 | rc 1, oracle 8 assertions, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
 | base/bif/TIME.testGroup | TEST_11 | oracle did not finish | same apart from elapsed values | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
 | base/class/Alarm.testGroup | TEST_BASE_ALARM | oracle did not finish | same | S3 (GUARD WHEN, semaphores, Alarm) |
@@ -260,7 +260,8 @@ Further differences are allowed by row:
   differs between any two runs. Compared without the `[failure]`, `Expected:`, `Actual:` and
   `Message:` lines they agree.
 - `TEST_TRACEOBJECT_COLLECTOR` and `TEST_CALLER_STACK_FRAME_REPLY_START` are refused at rc 120 in
-  both modes with the same stdout; the trace lines on stderr differ. In the first the lines of
+  both modes with the same `rexx-exec: ` refusal line and the same stdout; the trace lines on stderr
+  differ. In the first the lines of
   `reply` and the next clause swap places; in the second every opportunity prints one more line, a
   `>I> Method "M_S"` entry, before the refusal ends the run. Not covered by P41.
 

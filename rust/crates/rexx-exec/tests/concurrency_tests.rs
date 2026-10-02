@@ -1631,7 +1631,8 @@ mod group_runs {
 
     /// The rows refused in both modes whose trace output, on stderr, comes
     /// from a `REPLY` continuation and its sender: the lines interleave
-    /// differently and the refused run ends after a different number.
+    /// differently and the refused run ends after a different number. Allowed
+    /// only while both runs end in the same `rexx-exec: ` refusal.
     const TRACE_INTERLEAVES: &[&str] = &[
         "base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR",
         "base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START",
@@ -1688,8 +1689,16 @@ mod group_runs {
                 return ("same apart from elapsed values".to_string(), true);
             }
         }
+        let refusal = |run: &Run| {
+            String::from_utf8_lossy(&run.stderr)
+                .lines()
+                .find(|line| line.starts_with("rexx-exec: "))
+                .map(str::to_string)
+        };
         if normal.status == every.status
             && masked(&normal.stdout) == masked(&every.stdout)
+            && refusal(normal).is_some()
+            && refusal(normal) == refusal(every)
             && TRACE_INTERLEAVES.contains(&row)
         {
             return ("trace lines on stderr differ".to_string(), true);
