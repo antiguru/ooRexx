@@ -360,7 +360,9 @@ fn started_activities_interleave_under_every_opportunity() {
     for _ in 0..3 {
         let outcome = run_with(
             INTERLEAVED,
-            Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+            Invocation::none()
+                .with_deadline(RUN_DEADLINE)
+                .with_switch_mode(SwitchMode::EveryOpportunity),
         );
         assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
         assert_eq!(stdout(&outcome), "a 1\nb 1\na 2\nb 2\na 3\nb 3\ndone\n");
@@ -400,7 +402,9 @@ fn a_slice_inside_a_sort_comparator_waits_for_the_sort() {
     for clause in 4..=12 {
         let outcome = run_with(
             SORTED,
-            Invocation::none().with_switch_mode(SwitchMode::AtClause(clause)),
+            Invocation::none()
+                .with_deadline(RUN_DEADLINE)
+                .with_switch_mode(SwitchMode::AtClause(clause)),
         );
         assert_eq!(
             stdout(&outcome),
@@ -410,7 +414,9 @@ fn a_slice_inside_a_sort_comparator_waits_for_the_sort() {
     }
     let outcome = run_with(
         SORTED,
-        Invocation::none().with_switch_mode(SwitchMode::AtClause(3)),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::AtClause(3)),
     );
     assert_eq!(
         stdout(&outcome),
@@ -436,7 +442,9 @@ fn message_halt_in_the_shape_of_test_halt_start() {
          ::class t\n::method delayValueReturn\n  do i = 1 to 50\n  end\n  return arg(1)\n\
          ::method delayHaltReturn\n  signal on halt\n  do i = 1 to 50\n  end\n  x = 123\n\
          \x20 return .nil\n  halt:\n  return condition('o')\n",
-        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
     );
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
     assert_eq!(
@@ -471,12 +479,16 @@ fn the_stress_mode_collects_at_every_visit_and_switch() {
     };
     let switching = stressed(
         INTERLEAVED,
-        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
     );
     assert_eq!(stdout(&switching), "a 1\nb 1\na 2\nb 2\na 3\nb 3\ndone\n");
     let unswitched = stressed(
         INTERLEAVED,
-        Invocation::none().with_switch_mode(SwitchMode::AtClause(u64::MAX)),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::AtClause(u64::MAX)),
     );
     assert!(
         switching.collections > unswitched.collections,
@@ -487,9 +499,11 @@ fn the_stress_mode_collects_at_every_visit_and_switch() {
     let lone = "do i = 1 to 20\n  nop\nend\n";
     let visiting = stressed(
         lone,
-        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
     );
-    let unvisited = stressed(lone, Invocation::none());
+    let unvisited = stressed(lone, Invocation::none().with_deadline(RUN_DEADLINE));
     assert!(
         visiting.collections > unvisited.collections,
         "{} collections visiting every clause, {} not",
@@ -658,8 +672,10 @@ const SLEEPERS: &str = "a = .t~new~start('nap', 'A', 2)\nb = .t~new~start('nap',
 #[test]
 fn sleepers_wake_in_deadline_order_and_overlap() {
     for invocation in [
-        Invocation::none(),
-        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        Invocation::none().with_deadline(RUN_DEADLINE),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
     ] {
         let began = std::time::Instant::now();
         let outcome = run_with(SLEEPERS, invocation);
@@ -685,8 +701,10 @@ fn a_sleep_in_a_sort_comparator_runs_the_others_meanwhile() {
                   ::class cmp\n::method compare\n  use arg l, r\n  call SysSleep 0.3\n  \
                   return l - r\n";
     for invocation in [
-        Invocation::none(),
-        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        Invocation::none().with_deadline(RUN_DEADLINE),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
     ] {
         let outcome = run_with(source, invocation);
         assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
@@ -741,7 +759,9 @@ fn a_deadline_ends_the_programs_wait_on_a_started_sleeper() {
 fn an_inverted_pinned_wait_is_refused_under_every_opportunity() {
     let outcome = run_with(
         &HIDDEN_INVERSION.replace("$MAIN", "interpret \"say 'main got' m0~result\""),
-        Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
     );
     assert_eq!(outcome.exit_code, 120);
     assert_eq!(stdout(&outcome), "s3 sent m0\n");
@@ -759,7 +779,7 @@ fn nested_pinned_waits_are_bounded_by_the_stack_remaining() {
           if n = 0 then return 0\n  m = .w~new~start('chain', n - 1)\n  \
           interpret 'r = m~result'\n  return r + 1\n"
             .to_vec(),
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
         64 * 1024 * 1024,
     );
     assert_eq!(outcome.exit_code, 245, "{}", stderr(&outcome));
@@ -779,7 +799,7 @@ fn recursion_is_bounded_by_the_stack_remaining() {
         b"say f(1)\nexit\nf: procedure\n  use arg n\n  if n >= 9000 then return n\n  \
           interpret 'r = f(n + 1)'\n  return r\n"
             .to_vec(),
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
         64 * 1024 * 1024,
     );
     assert_eq!(outcome.exit_code, 245, "{}", stderr(&outcome));
@@ -819,13 +839,17 @@ fn a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready() {
                    ::method b unguarded\n  reply 'rb'\n  say 'b rest'\n";
     let outcome = run_with(
         program,
-        Invocation::none().with_switch_mode(SwitchMode::AtClause(1_000_000)),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::AtClause(1_000_000)),
     );
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
     assert_eq!(stdout(&outcome), "ra\nrb\na rest\nb rest\nmain 1\nmain 2\n");
     let outcome = run_with(
         REPLIED,
-        Invocation::none().with_switch_mode(SwitchMode::AtClause(1_000_000)),
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::AtClause(1_000_000)),
     );
     assert_eq!(
         stdout(&outcome),
@@ -843,7 +867,12 @@ fn a_reply_continuation_interleaves_with_its_sender_under_the_switch_mode() {
         .collect::<Vec<_>>();
     let mut seen = std::collections::BTreeSet::new();
     for mode in modes {
-        let outcome = run_with(REPLIED, Invocation::none().with_switch_mode(mode));
+        let outcome = run_with(
+            REPLIED,
+            Invocation::none()
+                .with_deadline(RUN_DEADLINE)
+                .with_switch_mode(mode),
+        );
         let out = stdout(&outcome);
         assert_eq!(outcome.exit_code, 0, "{mode:?}: {}", stderr(&outcome));
         assert_eq!(out.lines().next(), Some("answered"), "{mode:?}: {out}");
@@ -879,7 +908,9 @@ fn a_stream_a_builtin_builds_defers_the_slice_under_the_switch_mode() {
     ] {
         let outcome = run_with(
             program,
-            Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+            Invocation::none()
+                .with_deadline(RUN_DEADLINE)
+                .with_switch_mode(SwitchMode::EveryOpportunity),
         );
         assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
         let mut lines = stdout(&outcome)
@@ -908,12 +939,14 @@ fn in_modes(source: &str, switched: bool, expected: &str) {
             crate::run_program_collect_every_alloc(
                 "/tmp/scheduler.rex",
                 source.as_bytes().to_vec(),
-                Invocation::none(),
+                Invocation::none().with_deadline(RUN_DEADLINE),
             ),
         ),
     ];
     if switched {
-        let invocation = Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity);
+        let invocation = Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity);
         outcomes.push(("every", run_with(source, invocation)));
     }
     for (mode, outcome) in outcomes {
@@ -1018,17 +1051,23 @@ fn a_notifier_failing_on_a_started_success_is_the_sends_failure() {
     assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 2);
 }
 
-/// A `REPLY` in an `UNINIT` run at termination has its continuation run
-/// before the program ends, as the oracle's does (29 runs of 30).
+/// The program does not wait for an activity a termination `UNINIT` starts:
+/// it ends at once with the `UNINIT`'s own lines, as the oracle's does.
 #[test]
-fn a_reply_in_a_termination_uninit_runs_its_continuation() {
-    let outcome = run("o = .k~new\nsay 'main end'\n::class k\n::method uninit\n  \
-                       say 'uninit before reply'\n  reply\n  say 'uninit after reply'\n");
-    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+fn an_activity_a_termination_uninit_starts_is_not_waited_for() {
+    let began = std::time::Instant::now();
+    let outcome = run(
+        "o = .k~new\nsay 'main end'\nexit 7\n::class k\n::method uninit\n  \
+                       say 'uninit starts'\n  .z~new~start('go')\n  say 'uninit after start'\n\
+                       ::class z\n::method go\n  do forever\n    call SysSleep 1\n  end\n",
+    );
+    assert!(began.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(outcome.exit_code, 7, "{}", stderr(&outcome));
     assert_eq!(
         stdout(&outcome),
-        "main end\nuninit before reply\nuninit after reply\n"
+        "main end\nuninit starts\nuninit after start\n"
     );
+    assert_eq!(stderr(&outcome), "");
 }
 
 /// An object a collection readied while a started activity ran is
@@ -1046,4 +1085,27 @@ fn an_uninit_a_collection_readied_runs_when_its_activity_ends() {
     );
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
     assert_eq!(stdout(&outcome), "activity end\nuninit\nmain after\n");
+}
+
+/// Every refusal the `UNINIT`s at an activity's end meet is reported, in
+/// order, not only the first.
+#[test]
+fn every_refusal_of_the_uninits_at_an_activitys_end_is_reported() {
+    let outcome = crate::run_program_collect_every_alloc(
+        "/tmp/scheduler.rex",
+        b"m = .w~new~start('run')\nm~wait\nsay 'main end'\n\
+          ::class k\n::method uninit\n  say 'uninit'\n  do counter c over .array~of(1)\n  end\n\
+          ::class w\n::method run\n  a = .k~new\n  b = .k~new\n  drop a b\n  \
+          s = 'a' || random()\n  say 'activity end'\n"
+            .to_vec(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
+    let refusal = "rexx-exec: DO is not implemented\n";
+    assert_eq!(
+        stderr(&outcome).matches(refusal).count(),
+        2,
+        "{}",
+        stderr(&outcome)
+    );
+    assert_eq!(stdout(&outcome), "activity end\nuninit\nuninit\n");
 }

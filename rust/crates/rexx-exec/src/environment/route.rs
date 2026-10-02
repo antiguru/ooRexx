@@ -221,10 +221,17 @@ impl Interp {
             Some(&level) => Some(self.frame_record(level)?),
             None => None,
         };
-        let caller = match (entry, levels.get(1)) {
-            (false, _) => None,
-            (true, Some(&level)) => Some(CallerFrame::Of(self.frame_record(level)?)),
-            (true, None) => Some(CallerFrame::Spawner),
+        let native = match (entry, levels.first()) {
+            (true, Some(crate::dispatch::context::LiveLevel::Activation(0))) => {
+                self.entering_native_frame()
+            }
+            _ => None,
+        };
+        let caller = match (entry, native, levels.get(1)) {
+            (false, ..) => None,
+            (true, Some(frame), _) => Some(CallerFrame::Of(frame)),
+            (true, None, Some(&level)) => Some(CallerFrame::Of(self.frame_record(level)?)),
+            (true, None, None) => Some(CallerFrame::Spawner),
         };
         let receiver = match (levels.first(), self.frame_at(0)) {
             (Some(crate::dispatch::context::LiveLevel::Activation(0)), Some(activation))

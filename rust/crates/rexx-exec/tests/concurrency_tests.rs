@@ -546,7 +546,9 @@ mod measured {
         let outcome = run_program(
             "probe.rex",
             source.as_bytes().to_vec(),
-            Invocation::none().with_directory(dir),
+            Invocation::none()
+                .with_deadline(super::support::oracle::RUN_DEADLINE)
+                .with_directory(dir),
         );
         assert_eq!(outcome.pinning.unbalanced, 0, "a pinned frame left pushed");
         outcome.pinning
@@ -573,7 +575,9 @@ mod measured {
         let outcome = run_program(
             "probe.rex",
             source.as_bytes().to_vec(),
-            Invocation::none().with_switch_mode(SwitchMode::AtClause(4)),
+            Invocation::none()
+                .with_deadline(super::support::oracle::RUN_DEADLINE)
+                .with_switch_mode(SwitchMode::AtClause(4)),
         );
         assert_eq!(
             String::from_utf8_lossy(&outcome.stdout),
@@ -630,7 +634,9 @@ mod measured {
             run_program(
                 "probe.rex",
                 source(wait).into_bytes(),
-                Invocation::none().with_switch_mode(SwitchMode::EveryOpportunity),
+                Invocation::none()
+                    .with_deadline(super::support::oracle::RUN_DEADLINE)
+                    .with_switch_mode(SwitchMode::EveryOpportunity),
             )
         };
         let pinned = run("interpret \"do while \\self~done; end\"");
@@ -1010,8 +1016,11 @@ mod measured {
                  ::class k subclass {class}\n::method init\n  .local~n = .local~n - 1\n  \
                  if .local~n > 0 then y = .k~new({args})\n"
             );
-            let outcome: Outcome =
-                run_program("probe.rex", program.into_bytes(), Invocation::none());
+            let outcome: Outcome = run_program(
+                "probe.rex",
+                program.into_bytes(),
+                Invocation::none().with_deadline(super::support::oracle::RUN_DEADLINE),
+            );
             assert_eq!(outcome.exit_code, 0, "{class}: {:?}", outcome.stderr);
             assert_eq!(String::from_utf8_lossy(&outcome.stdout), "0\n", "{class}");
             outcome.stack.bytes

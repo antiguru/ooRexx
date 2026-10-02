@@ -20,6 +20,10 @@ use super::{
 use crate::scheduler::{Scripted, script, take_scripted};
 use crate::{Invocation, Outcome, execute, run_program};
 
+/// A bound on every run here: some start activities, and a program end
+/// waits for an activity nothing can wake.
+const RUN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// The path these programs are reported under. Nothing reads it back: no
 /// program below raises, so it never reaches a report.
 const TEST_PATH: &str = "/nonexistent/ir-drive-test.rex";
@@ -40,7 +44,12 @@ sub:
 /// Runs [`THREE_BODIES`] on `engine`, on **this** thread.
 fn drive() -> (Outcome, usize) {
     let before = run_chunk_entries();
-    let outcome = execute(TEST_PATH, THREE_BODIES.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        THREE_BODIES.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     (outcome, run_chunk_entries() - before)
 }
 
@@ -64,7 +73,12 @@ fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
     const COUNTED_LOOP: &[u8] = b"do i = 1 to 3\n  nop\nend\n";
 
     let before = clause_op_entries();
-    let outcome = execute(TEST_PATH, COUNTED_LOOP.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        COUNTED_LOOP.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     let stepped = clause_op_entries() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -84,7 +98,7 @@ fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
         TEST_PATH,
         b"do\n  nop\n  nop\nend\n".to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     let stepped = clause_op_entries() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -103,7 +117,12 @@ fn the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk() {
     for (condition, expected, path) in [("1 = 1", 4, "then"), ("1 = 0", 4, "else")] {
         let program = format!("if {condition} then say 'a'\nelse say 'b'\nsay 'c'\n");
         let before = clause_op_entries();
-        let outcome = execute(TEST_PATH, program.into_bytes(), false, Invocation::none());
+        let outcome = execute(
+            TEST_PATH,
+            program.into_bytes(),
+            false,
+            Invocation::none().with_deadline(RUN_DEADLINE),
+        );
         let stepped = clause_op_entries() - before;
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
@@ -140,7 +159,7 @@ fn the_ir_engine_steps_a_selects_chosen_branch_from_the_chunk() {
             TEST_PATH,
             program.as_bytes().to_vec(),
             false,
-            Invocation::none(),
+            Invocation::none().with_deadline(RUN_DEADLINE),
         );
         let stepped = clause_op_entries() - before;
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -171,7 +190,7 @@ sub:
         TEST_PATH,
         ENTERED_TRACED.to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     let echoed = trace_op_echoes() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -195,7 +214,7 @@ fn no_trace_op_echoes_without_the_setting() {
         TEST_PATH,
         ENTERED_UNTRACED.to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     let echoed = trace_op_echoes() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -233,7 +252,7 @@ end
         TEST_PATH,
         QUICKENED_THEN_WIDENED.to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     let skipped = arith_hint_skips() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -257,7 +276,11 @@ end
 /// widths, so the counter `Interp::chunk_for` bumps on a refusal stays at zero.
 #[test]
 fn no_body_is_refused() {
-    let outcome = run_program(TEST_PATH, THREE_BODIES.to_vec(), Invocation::none());
+    let outcome = run_program(
+        TEST_PATH,
+        THREE_BODIES.to_vec(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     assert_eq!(
         outcome.chunks_refused, 0,
         "the compiler refused a body of a three-body program {} times",
@@ -287,7 +310,7 @@ zsub:
         TEST_PATH,
         TWO_SITES_IN_A_LOOP.to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     let hits = call_site_hits() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
@@ -336,7 +359,7 @@ sub: procedure expose zg
         TEST_PATH,
         GROWS_UNDER_A_CACHED_SLOT.to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -361,7 +384,12 @@ end
 say zi za.1 za.2 za.3 za.8
 ";
 
-    let outcome = execute(TEST_PATH, A_MOVING_TAIL.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        A_MOVING_TAIL.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         String::from_utf8_lossy(&outcome.stdout),
@@ -400,7 +428,7 @@ signal retry
         TEST_PATH,
         TRAPS_OUT_OF_LOOPS.to_vec(),
         false,
-        Invocation::none(),
+        Invocation::none().with_deadline(RUN_DEADLINE),
     );
     // The adjacent success: five traps fired and the handler ran to its own
     // `EXIT`, so the frames really were opened and really were escaped. Without
@@ -440,7 +468,12 @@ say zs zt
 ";
 
     let before = const_builds();
-    let outcome = execute(TEST_PATH, ONE_CONSTANT.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        ONE_CONSTANT.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     let one = const_builds() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -455,7 +488,12 @@ say zs zt
     );
 
     let before = const_builds();
-    let outcome = execute(TEST_PATH, TWO_CONSTANTS.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        TWO_CONSTANTS.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     let two = const_builds() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
@@ -497,7 +535,12 @@ say zs zt
 
     fn builds(program: &[u8], expected: &str) -> usize {
         let before = load_constant_builds();
-        let outcome = execute(TEST_PATH, program.to_vec(), false, Invocation::none());
+        let outcome = execute(
+            TEST_PATH,
+            program.to_vec(),
+            false,
+            Invocation::none().with_deadline(RUN_DEADLINE),
+        );
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
             String::from_utf8_lossy(&outcome.stdout),
@@ -531,7 +574,12 @@ say zs zt
 /// by parking their caller's level.
 fn stackless(program: &[u8]) -> (Outcome, usize) {
     let before = stackless_entries();
-    let outcome = execute(TEST_PATH, program.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        program.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     (outcome, stackless_entries() - before)
 }
 
@@ -572,7 +620,11 @@ fn recursion_by_function_call_keeps_the_native_stack_flat() {
             "say f({depth})\nexit\nf: procedure\n  if arg(1) = 0 then return 0\n  \
              return f(arg(1) - 1) + 1\n"
         );
-        let outcome = crate::run_program("flat.rex", program.into_bytes(), Invocation::none());
+        let outcome = crate::run_program(
+            "flat.rex",
+            program.into_bytes(),
+            Invocation::none().with_deadline(RUN_DEADLINE),
+        );
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
             String::from_utf8_lossy(&outcome.stdout),
@@ -636,7 +688,11 @@ fn recursion_by_new_into_init_keeps_the_native_stack_flat() {
                  ::class k subclass {class}\n::method init\n  .local~n = .local~n - 1\n  \
                  if .local~n > 0 then y = .k~new({args})\n"
             );
-            let outcome = crate::run_program("flat.rex", program.into_bytes(), Invocation::none());
+            let outcome = crate::run_program(
+                "flat.rex",
+                program.into_bytes(),
+                Invocation::none().with_deadline(RUN_DEADLINE),
+            );
             assert_eq!(outcome.exit_code, 0, "{class}: {:?}", outcome.stderr);
             assert_eq!(String::from_utf8_lossy(&outcome.stdout), "0\n", "{class}");
             assert!(
@@ -662,7 +718,11 @@ fn recursion_by_send_keeps_the_native_stack_flat() {
             "say .c~new~f({depth})\nexit\n::class c\n::method f\n  use arg n\n  \
              if n = 0 then return 0\n  return self~f(n - 1) + 1\n"
         );
-        let outcome = crate::run_program("flat.rex", program.into_bytes(), Invocation::none());
+        let outcome = crate::run_program(
+            "flat.rex",
+            program.into_bytes(),
+            Invocation::none().with_deadline(RUN_DEADLINE),
+        );
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
             String::from_utf8_lossy(&outcome.stdout),
@@ -683,7 +743,12 @@ fn recursion_by_send_keeps_the_native_stack_flat() {
 fn scripted(program: &[u8], outcomes: &[Scripted]) -> (Outcome, usize) {
     let splits = exec_splits();
     script(outcomes);
-    let outcome = execute(TEST_PATH, program.to_vec(), false, Invocation::none());
+    let outcome = execute(
+        TEST_PATH,
+        program.to_vec(),
+        false,
+        Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     assert!(
         take_scripted().is_none(),
         "a scripted outcome was not taken"

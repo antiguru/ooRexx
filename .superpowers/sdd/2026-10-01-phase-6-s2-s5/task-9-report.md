@@ -66,9 +66,7 @@ sinks, so `rexx-run` shows main's output while it waits (the oracle writes it as
 
 UNINIT: readied `UNINIT`s run when a started activity ends (`run_until_park`, `Activity.cpp:249`)
 and when main ends (`execute_on`, `:324`); then the wait for every activity; then the termination
-sweep; then the activities the sweep started run to their end (resolves the parked
-"UNINIT-spawned activities never run" and the queued `2026-10-02-uninit-reply-at-termination.md`);
-then the unloaders. `Interp::terminate` is `cfg(test)` now; only tests call it.
+sweep and the unloaders (`Interp::terminate`).
 
 Parked item "nested pinned-loop depth guard": confirmed done, `run_round` measures the remaining
 stack (`stack_exhausted`) on every nested round (P33, Task 5).
@@ -98,11 +96,12 @@ stack (`stack_exhausted`) on every nested round (P33, Task 5).
 
 ## Rulings
 
-- R-T9-1: deadlines go on every harness whose program set it does not write, and on the
-  scheduler tests; the other in-process sites run fixed inline programs that start no activity and
-  stay as they are (a blocked end needs a started activity; `grep -rn 'run_program(' --include=*.rs
-  rust/crates` lists the sites) -- cost
-  if wrong: a defect in one of those fixed programs hangs its test binary instead of failing it.
+- R-T9-1 (corrected in fix round 1): deadlines go on every harness whose program set it does not
+  write, on every lib test file whose programs start an activity or REPLY (`scheduler/tests.rs`,
+  `run/tests/message.rs`, `ir/drive/tests.rs`) and on the integration files that start them
+  (`concurrency_tests.rs`, `collect_stress.rs`); the first version claimed the rest started no
+  activity, and the review found five sites that did -- cost if wrong: a defect in a remaining
+  unbounded program hangs its test binary instead of failing it.
 - R-T9-2: ATTRIBUTEPOOL reads 0 with the guard entries: the variable pool's number is keyed by
   (object, scope), Task 11's guard table key; written into Task 11's plan text -- cost if wrong: one
   wrong TraceObject value on method lines until Task 11.
@@ -113,8 +112,7 @@ stack (`stack_exhausted`) on every nested round (P33, Task 5).
 - R-T9-4: EXECUTABLE in a frame table is `.nil` for a native or INTERPRET level and where
   `executable_at` refuses (StackFrame~EXECUTABLE is excluded in class-methods.txt) -- cost if wrong:
   `.nil` where the oracle answers an object, in those frames only.
-- R-T9-5: activities an end-of-run UNINIT starts are run to their end (the oracle runs the u5
-  continuation 29/30, racing process exit) -- cost if wrong: one more line than the oracle's 1-in-30.
+- R-T9-5: withdrawn in fix round 1 (ruling P39).
 
 ## Witnesses
 
@@ -161,5 +159,48 @@ copied in:
 - R-T9-1 leaves fixed-program harnesses without a deadline; the lead may want them too.
 - The collector/option path (R-T9-3) is what most of TRACE_TraceObject's thread tests read, so
   Task 10's table will show them differing for that, not for THREAD.
-- `.superpowers/sdd/queued/2026-10-02-uninit-reply-at-termination.md` is resolved by this task and
-  left in place.
+
+## Fix round 1 (review task-9-review.md)
+
+- I1, ruling P39: the program end does not wait for activities a termination `UNINIT` starts. The
+  second `run_started_to_end` after the sweep is gone (R-T9-5 withdrawn); `execute_on` calls
+  `Interp::terminate` again. Reviewer probes, oracle against this tree, stdout/stderr/rc each
+  compared: `t2_startfail`, `t3_start`, `t5_mainfail`, `t7_forever` identical unswitched and
+  `every` (`t7` ends at once, rc 0). `u5` now differs from the oracle's majority (no third line).
+  Test `an_activity_a_termination_uninit_starts_is_not_waited_for` (t7 shape with `exit 7`; oracle
+  10/10 `main end|uninit starts|uninit after start`, rc 7). Red at 826b07b45 (built from `git
+  archive` with the test copied in): the run reached the 60 s test deadline,
+  `began.elapsed() < 10 s` failed. The queued `2026-10-02-uninit-reply-at-termination.md` stays,
+  with P39 and the review's load-dependent race added.
+- I2: the probe sources are committed as
+  `docs/superpowers/records/2026-10-01-phase-6-s2-s5/uninit-ordering-probes.md` (u1-u5, t3, t7);
+  `phase-6-gate.md` `## S2` points there, states u5 as a load-dependent race without a frequency,
+  and records t3 (10/10, rc 7, the activity prints nothing) and t7 (10/10, rc 0, 10 runs in
+  0.11 s), measured on the oracle this round.
+- Deadlines: `run/tests/message.rs` and `ir/drive/tests.rs` (every run), the remaining unbounded
+  runs of `scheduler/tests.rs`, `concurrency_tests.rs` and `collect_stress.rs` (stress 600 s); a
+  run that already set its own deadline keeps it. R-T9-1 corrected above.
+- CALLERSTACKFRAME names the primitive method that entered the traced method
+  (`Interp::entering_native_frame`, from the native tail the send left: `METHOD SEND`/`TRIGGERED`,
+  LINE and INVOCATION `.nil`, its `Method` object, target the message, its arguments, the
+  `Compiled method` line). Reviewer probes z1-z4 now differ from the oracle only in the guard
+  entries of a guarded method (Task 11) and z6's unrouted `<I<` (queued). Witness
+  `corpus/lang/trace_object_native_caller.rex` (Message~send in main and in a started activity):
+  oracle 30/30 one hash, ours unswitched and `every` 30/30 the same; at 826b07b45 the caller was the
+  Rexx frame below (`PROGRAM ... 5`, `METHOD ONE 18`).
+- `run_ending_uninits` answers the first refusal and keeps the later ones for the program's end, in
+  order. Test `every_refusal_of_the_uninits_at_an_activitys_end_is_reported` (two refused `UNINIT`s
+  under collect-every-alloc); with the later ones dropped (mutation, restored from a copy) it fails
+  `left: 1, right: 2`.
+- Queued (pre-existing, measured this round): `2026-10-02-frame-executable-invocation-and-native-levels.md`
+  (an internal call's executable `Routine` vs `Method`; an INTERPRET frame's invocation re-minted,
+  `1 2|3 2` vs `1 2|1 2`; `.context~stackFrames` without `METHOD SEND`) and
+  `2026-10-02-triggered-exit-trace-line-unrouted.md` (z6).
+
+P28 after the round (exit statuses read): `cargo fmt --all --check` 0; clippy `-p rexx-exec
+--all-targets -D warnings` 0 and with `--features pinning` 0 (`Checking rexx-exec` in both); lib
+release 927 passed; corpus release 743 of 743, `REXX_CORPUS_SWITCH=every` 743 of 743, debug under
+every 743 of 743; `collect_stress` 36 passed with the corpus (743 of 743) alongside;
+`concurrency_tests` `--features pinning`, gate: 44 passed; `gate_table_c` 22 (16.75 s),
+`gate_table_d` 23, `refusal_sites` 5, `native_entries` 24, `closed_phases` 5, `owners` 6, `loud`
+9, `program_end` 2, `method_bodies` 23 (0 regressions, 0 drift); `sourceline_oracle` 1.

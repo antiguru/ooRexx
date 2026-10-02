@@ -491,3 +491,5 @@ lang/timer_remainder_modulo_2_32.rex
 # entries across activities, and UNINIT at termination after every activity.
 lang/trace_object_activity_fields.rex
 lang/uninit_after_every_activity.rex
+# Task 9 fix round 1: the primitive method that entered a traced method.
+lang/trace_object_native_caller.rex

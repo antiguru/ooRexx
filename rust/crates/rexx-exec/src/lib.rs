@@ -3165,12 +3165,8 @@ fn execute_on(
     // whatever the program's own outcome was. Measured, oracle: a program
     // whose main body raises 42.3 still prints its class `UNINIT` and exits
     // 214, and one ending `exit 7` prints it and exits 7.
-    refused.extend(interp.run_termination_uninits());
-    // An activity those `UNINIT`s started, a `REPLY`'s continuation among
-    // them, runs to its end before the unloaders.
-    let started = interp.run_started_to_end();
-    report_late_failures(&mut interp, started, path, &mut exit_code);
-    refused.extend(interp.run_package_unloaders());
+    // An activity those `UNINIT`s start is not waited for (ruling P39).
+    refused.extend(interp.terminate());
     for loud in refused {
         interp
             .trace

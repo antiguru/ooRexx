@@ -331,6 +331,31 @@ impl NativeTail {
     }
 }
 
+impl Interp {
+    /// The `StackFrame` of the primitive method that entered the running
+    /// activation (`InternalActivationFrame::createStackFrame`,
+    /// `concurrency/ActivationFrame.cpp:100`) and its `Method` object (`.nil`
+    /// where this crate has none), where one did.
+    pub(crate) fn entering_native_frame(&mut self) -> Option<(ObjRef, ObjRef)> {
+        let depth = self.activity.call_tails.len();
+        let tail = self.activity.native_tails.last()?;
+        let blame = tail.blame.as_ref().filter(|_| tail.depth == depth)?;
+        let (name, scope, receiver, args) = (
+            blame.name.clone(),
+            blame.scope,
+            blame.receiver,
+            blame.args.clone(),
+        );
+        let scope_name = self.classes().id_string(scope).to_string();
+        let trace_text = Raised::compiled_method_line(&name, &scope_name);
+        let frame =
+            context::build_native_level_frame(self, true, &name, receiver, &args, &trace_text);
+        let executable = self.method_executable(scope, &name).unwrap_or(ObjRef::NIL);
+        self.roots.activity_mut().push_temp(executable);
+        Some((frame, executable))
+    }
+}
+
 /// What a primitive method that parked answers once its activity wakes.
 pub(crate) type NativeResume = fn(&mut Interp, ObjRef) -> Result<Option<ObjRef>, Failure>;
 

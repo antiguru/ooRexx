@@ -116,8 +116,9 @@ G4 release: 2803 passed, 0 failed. G6 debug: 2805 passed, 0 failed (sums of `tes
 
 ### UNINIT ordering (spec section 6, the *(verify)* item)
 
-Oracle, 30 runs each, from a fresh directory; each line is one run's stdout, `|`-joined, with its
-count. Probes: `S/t9/v/u1.rex` to `u5.rex` (`S` as above).
+Probe sources: `docs/superpowers/records/2026-10-01-phase-6-s2-s5/uninit-ordering-probes.md`.
+Oracle, 30 runs each (t3 and t7 10 each), from a fresh directory; stdout `|`-joined, with its
+count.
 
 - `u1`, an object main holds, and a started activity still sleeping when main ends:
   30 `main end|activity end|uninit live`. Termination waits for the activity, then runs the
@@ -129,14 +130,21 @@ count. Probes: `S/t9/v/u1.rex` to `u5.rex` (`S` as above).
 - `u4`, the same with a loop allocating 200000 arrays, then a `call`: 30 `activity loop
   done|uninit dropped|activity end|main end`. A collection readies it and the next activation
   return runs it, on the started activity.
-- `u5`, `REPLY` inside an `UNINIT` run at termination: 29 `main end|uninit before reply|uninit
-  after reply`, 1 without the last line (the continuation races process exit).
+- `u5`, `REPLY` inside an `UNINIT` run at termination: `main end|uninit before reply`, then
+  `uninit after reply` or not: the continuation races process exit, and how often it wins
+  depends on machine load.
+- `t3`, an `UNINIT` run at termination starts an activity that sleeps 0.2 s, then prints:
+  10 `main end|uninit starts|uninit after start`, rc 7 (its `exit 7`). The activity prints
+  nothing.
+- `t7`, an `UNINIT` run at termination starts an activity that never ends: 10 `main end|uninit
+  starts a poller`, rc 0, at once.
 
 Rule (`concurrency/Activity.cpp:249`, `:324`, `runtime/InterpreterInstance.cpp:562-581`):
 readied `UNINIT`s run when an activity's dispatch ends, main's included, and termination waits for
-every activity before its collection and sweep. This crate runs readied `UNINIT`s when an activity
-ends and when main ends, waits for every activity, sweeps, then runs to their end the activities
-the sweep started. The oracle's further run at an activation return (`RexxActivation.cpp:705`) is
-collection timing, which is not a specified observable; `u3` and `u4` answer differently here for
-that reason. Witnesses: `corpus/lang/uninit_after_every_activity.rex`; `u5` and the ending
-activity are crate-side (`scheduler/tests.rs`).
+every activity before its collection and sweep; it does not wait for the activities the sweep's
+`UNINIT`s start. This crate runs readied `UNINIT`s when an activity ends and when main ends, waits
+for every activity, then sweeps, and does not run what the sweep started (ruling P39). The
+oracle's further run at an activation return (`RexxActivation.cpp:705`) is collection timing,
+which is not a specified observable; `u3` and `u4` answer differently here for that reason.
+Witnesses: `corpus/lang/uninit_after_every_activity.rex`; the ending activity and `t7`'s shape
+are crate-side (`scheduler/tests.rs`).

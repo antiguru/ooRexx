@@ -306,7 +306,7 @@ fn a_clause_value_survives_the_handler_its_boundary_runs() {
         let stress = run_program_collect_every_alloc(
             &path,
             text.as_bytes().to_vec(),
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
         );
         assert_eq!(
             String::from_utf8_lossy(&stress.stdout),
@@ -384,7 +384,7 @@ fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation()
         let stress = run_program_collect_every_alloc(
             &path,
             text.as_bytes().to_vec(),
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
         );
         assert_eq!(
             String::from_utf8_lossy(&stress.stdout),
@@ -439,7 +439,7 @@ fn values_environment_write_roots_the_old_value_before_the_stores_allocation() {
         let stress = run_program_collect_every_alloc(
             &path,
             text.as_bytes().to_vec(),
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
         );
         assert_eq!(
             String::from_utf8_lossy(&stress.stdout),
@@ -510,7 +510,7 @@ fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
         let stress = run_program_collect_every_alloc(
             &path,
             row.program.as_bytes().to_vec(),
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
         );
         assert_eq!(
             String::from_utf8_lossy(&stress.stdout),
@@ -569,7 +569,7 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
     let stress = run_program_collect_every_alloc(
         "<parked-reply-rooting>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(stress.exit_code, 0);
     assert_eq!(
@@ -609,7 +609,7 @@ fn a_pending_reply_keeps_its_registers_across_a_collection() {
     let stress = run_program_collect_every_alloc(
         "<pending-reply-rooting>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(
         stress.exit_code,
@@ -649,7 +649,9 @@ fn a_stream_builtins_values_survive_a_pinned_yield() {
     let stress = run_program_collect_every_alloc(
         "<stream-pinned-yield>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none().with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
+        rexx_exec::Invocation::none()
+            .with_deadline(support::oracle::RUN_DEADLINE * 10)
+            .with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
     );
     assert_eq!(
         stress.exit_code,
@@ -701,7 +703,7 @@ fn a_parked_activitys_registers_survive_the_activity_that_wakes_it() {
     let stress = run_program_collect_every_alloc(
         "<parked-activity-rooting>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(
         stress.exit_code,
@@ -755,7 +757,7 @@ fn a_pinned_activitys_registers_survive_the_activity_its_wait_runs() {
     let stress = run_program_collect_every_alloc(
         "<pinned-activity-rooting>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(
         stress.exit_code,
@@ -793,7 +795,7 @@ fn a_running_activation_keeps_its_context_object_across_a_collection() {
     let stress = run_program_collect_every_alloc(
         "<running-context-rooting>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(stress.exit_code, 0);
     assert_eq!(
@@ -837,7 +839,7 @@ fn a_method_that_assigns_over_self_keeps_its_exposed_variables() {
     let stress = run_program_collect_every_alloc(
         "<self-reassigned-rooting>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(stress.exit_code, 0);
     assert_eq!(
@@ -874,7 +876,7 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
     let stress = run_program_collect_every_alloc(
         "<weak-reference-clearing>",
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(stress.exit_code, 0);
     assert_eq!(
@@ -916,7 +918,7 @@ fn a_trapped_conditions_object_survives_collect_on_every_allocation() {
         let stress = run_program_collect_every_alloc(
             "<condition-object-rooting>",
             program.as_bytes().to_vec(),
-            rexx_exec::Invocation::none(),
+            rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
         );
         assert_eq!(
             stress.exit_code,

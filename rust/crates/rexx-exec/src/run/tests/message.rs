@@ -11,6 +11,10 @@
 
 use super::*;
 
+/// A bound on every run here: some start activities, and a program end
+/// waits for an activity nothing can wake.
+const RUN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// [`Interp::chunk_node_at`]'s steps land on the node the path names, and
 /// answer `None` for a step that has nowhere to go.
 #[test]
@@ -100,7 +104,7 @@ fn a_message_sends_two_indents_are_the_oracles_own_and_normalisation_cannot_see_
     let outcome = crate::run_program(
         "/abs/nested.rex",
         b"do ii = 1 to 1\n  do jj = 1 to 1\n    say 'abc'~length(1)\n  end\nend\n".to_vec(),
-        crate::Invocation::none(),
+        crate::Invocation::none().with_deadline(RUN_DEADLINE),
     );
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the report is UTF-8"),
@@ -125,7 +129,11 @@ macro_rules! corpus_source {
 
 /// Runs `source` at `path` and asserts stderr is exactly `expected`.
 fn assert_stderr(path: &str, source: &str, expected: &str) {
-    let outcome = crate::run_program(path, source.as_bytes().to_vec(), crate::Invocation::none());
+    let outcome = crate::run_program(
+        path,
+        source.as_bytes().to_vec(),
+        crate::Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the trace is UTF-8"),
         expected,
@@ -284,7 +292,7 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
         corpus_source!("lang/method_reply_exit_status.rex")
             .as_bytes()
             .to_vec(),
-        crate::Invocation::none(),
+        crate::Invocation::none().with_deadline(RUN_DEADLINE),
     );
     assert_eq!(outcome.exit_code, 7, "the compiled stream");
 
@@ -294,7 +302,7 @@ fn a_value_returned_after_a_reply_reports_the_oracles_own_98_936() {
         "/abs/bare-return-after-reply.rex",
         b"say .K~m\n::class K\n::method m class\n  reply 'replied'\n  say 'tail'\n  return\n"
             .to_vec(),
-        crate::Invocation::none(),
+        crate::Invocation::none().with_deadline(RUN_DEADLINE),
     );
     assert_eq!(outcome.stderr, b"", "the compiled stream");
     assert_eq!(outcome.stdout, b"replied\ntail\n", "the compiled stream");
@@ -372,7 +380,7 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
         let outcome = crate::run_program(
             "/abs/guard-surface.rex",
             row.source.as_bytes().to_vec(),
-            crate::Invocation::none(),
+            crate::Invocation::none().with_deadline(RUN_DEADLINE),
         );
         let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
         assert_eq!(outcome.stdout, row.stdout, "{}", row.name);
@@ -404,7 +412,11 @@ fn a_started_method_that_raises_has_an_error_and_reraises_at_result() {
                    ::class K\n\
                    ::method M\n\
                    \x20 return 1/0\n";
-    let outcome = crate::run_program(PATH, source.to_vec(), crate::Invocation::none());
+    let outcome = crate::run_program(
+        PATH,
+        source.to_vec(),
+        crate::Invocation::none().with_deadline(RUN_DEADLINE),
+    );
     assert_eq!(outcome.exit_code, 214, "256 - 42");
     assert_eq!(
         String::from_utf8_lossy(&outcome.stdout),
