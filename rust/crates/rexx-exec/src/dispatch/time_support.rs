@@ -35,12 +35,18 @@ pub(super) fn alarm_start_timer(
 ) -> Result<NativeStarted, Failure> {
     let days = whole_number_argument(interp, args, 0)?;
     let millis = whole_number_argument(interp, args, 1)?;
-    let id = interp.create_timer();
+    let id = interp.create_timer(true);
     let handle = handle_object(interp, id);
     set_object_variable(interp, receiver, scope, b"EVENTSEMHANDLE", handle)?;
     let started = interp.counted(1);
     set_object_variable(interp, receiver, scope, b"TIMERSTARTED", started)?;
-    timed_wait(interp, id, handle, days, millis, alarm_woken)
+    let wait = TimedWait {
+        id,
+        handle,
+        receiver,
+        scope,
+    };
+    timed_wait(interp, wait, days, millis, alarm_woken)
 }
 
 /// An alarm's wait is over, whichever way: its timer ends with the call.
@@ -53,18 +59,20 @@ fn alarm_woken(interp: &mut Interp, handle: ObjRef) -> Result<Option<ObjRef>, Fa
 }
 
 /// `alarm_stopTimer(eventSemHandle)` and `ticker_stopTimer(eventSemHandle)`:
-/// posts the timer.
+/// posts the timer, each waiter reading its own object's `CANCELED`.
 pub(super) fn stop_timer(
     interp: &mut Interp,
     _cleared: Cleared,
-    receiver: ObjRef,
-    scope: ObjRef,
+    _receiver: ObjRef,
+    _scope: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<NativeStarted, Failure> {
-    let id = pointer_argument(interp, args, 0)?;
-    let cancelled = is_cancelled(interp, receiver, scope)?;
-    if let Some(id) = id {
-        interp.post_timer(id, cancelled);
+    if let Some(id) = pointer_argument(interp, args, 0)? {
+        let mut cancelled = Vec::new();
+        for (receiver, scope) in interp.timer_waiters(id) {
+            cancelled.push(is_cancelled(interp, receiver, scope)?);
+        }
+        interp.post_timer(id, &cancelled);
     }
     Ok(NativeStarted::Ran(Some(interp.counted(0))))
 }
@@ -78,7 +86,7 @@ pub(super) fn ticker_create_timer(
     scope: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<NativeStarted, Failure> {
-    let id = interp.create_timer();
+    let id = interp.create_timer(false);
     let handle = handle_object(interp, id);
     set_object_variable(interp, receiver, scope, b"EVENTSEMHANDLE", handle)?;
     Ok(NativeStarted::Ran(Some(interp.counted(0))))
@@ -120,7 +128,13 @@ pub(super) fn ticker_wait_timer(
             days -= 1;
         }
     }
-    timed_wait(interp, id, handle, days, millis, ticker_woken)
+    let wait = TimedWait {
+        id,
+        handle,
+        receiver,
+        scope,
+    };
+    timed_wait(interp, wait, days, millis, ticker_woken)
 }
 
 /// A ticker's wait is over: a cancel ends its timer.
@@ -134,12 +148,21 @@ fn ticker_woken(interp: &mut Interp, handle: ObjRef) -> Result<Option<ObjRef>, F
     Ok(Some(interp.counted(0)))
 }
 
-/// Parks the running activity on `id` for `days` whole days and `millis`
-/// milliseconds, with `woken` as the native's answer after.
-fn timed_wait(
-    interp: &mut Interp,
+/// A wait on a timer: the timer, its handle object, and the waiting call's
+/// receiver and method scope.
+struct TimedWait {
     id: TimerId,
     handle: ObjRef,
+    receiver: ObjRef,
+    scope: ObjRef,
+}
+
+/// Parks the running activity on `wait`'s timer for `days` whole days and
+/// `millis` milliseconds, taken modulo 2^32 as the oracle's `uint32_t`
+/// timeout takes them, with `woken` as the native's answer after.
+fn timed_wait(
+    interp: &mut Interp,
+    wait: TimedWait,
     days: i64,
     millis: i64,
     woken: NativeResume,
@@ -147,17 +170,19 @@ fn timed_wait(
     park_point!(interp, crate::pinning::ParkKind::Timer);
     let now = Instant::now();
     let whole_days = TIMER_DAY.saturating_mul(u32::try_from(days.max(0)).unwrap_or(u32::MAX));
-    let remainder = Duration::from_millis(u64::try_from(millis).unwrap_or(0));
+    let remainder = Duration::from_millis(
+        u64::try_from(millis.rem_euclid(1 << 32)).expect("a remainder modulo 2^32 is positive"),
+    );
     let days_end = later(now, whole_days);
     let deadline = later(days_end, remainder);
-    interp.begin_timer_wait(id, days_end);
+    interp.begin_timer_wait(wait.id, wait.receiver, wait.scope, days_end);
     interp.park_native(
         ParkReason::Timer {
             deadline,
-            cancel: id,
+            cancel: wait.id,
         },
         woken,
-        handle,
+        wait.handle,
     )
 }
 

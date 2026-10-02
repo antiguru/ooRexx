@@ -68,16 +68,30 @@ impl TimerId {
 }
 
 /// A timer's state: the oracle's event semaphore (`SysSemaphore`), posted
-/// until reset, and the activity waiting on it.
+/// until reset, and the activities waiting on it.
 #[derive(Default)]
 struct Timer {
     posted: bool,
-    /// Whether a post was a cancel.
+    /// Whether a post woke a waiter whose object was cancelled.
     cancelled: bool,
-    /// The waiting activity and its sleeper's park order.
-    waiter: Option<(ActivityId, u64)>,
-    /// When the whole days of the wait end and its remainder begins.
-    days_end: Option<Instant>,
+    /// Whether the timer ends with a wait on it, as an alarm's does.
+    ends_with_wait: bool,
+    /// The wait about to park: its receiver, scope and the end of its whole
+    /// days.
+    pending: Option<(ObjRef, ObjRef, Instant)>,
+    waiters: Vec<TimerWaiter>,
+}
+
+/// One activity waiting on a timer.
+struct TimerWaiter {
+    activity: ActivityId,
+    /// Its sleeper's park order.
+    order: u64,
+    /// The waiting call's receiver and method scope, whose `CANCELED` a post
+    /// reads.
+    receiver: ObjRef,
+    scope: ObjRef,
+    days_end: Instant,
 }
 
 /// A message object's identity among the activities waiting on it.
@@ -254,6 +268,20 @@ impl Activities {
         for idle in self.idle.iter().flatten() {
             idle.object_roots(out);
         }
+        for timer in self.timers.values() {
+            out.extend(
+                timer
+                    .pending
+                    .iter()
+                    .flat_map(|(receiver, scope, _)| [*receiver, *scope]),
+            );
+            out.extend(
+                timer
+                    .waiters
+                    .iter()
+                    .flat_map(|waiter| [waiter.receiver, waiter.scope]),
+            );
+        }
     }
 
     /// The identity `message`'s waiters park under.
@@ -350,8 +378,16 @@ impl Scheduler for Interp {
                 table.next_sleeper += 1;
                 let order = table.next_sleeper;
                 table.sleepers.push(Reverse((deadline, order, running)));
-                if let Some(timer) = table.timers.get_mut(&cancel) {
-                    timer.waiter = Some((running, order));
+                if let Some(timer) = table.timers.get_mut(&cancel)
+                    && let Some((receiver, scope, days_end)) = timer.pending.take()
+                {
+                    timer.waiters.push(TimerWaiter {
+                        activity: running,
+                        order,
+                        receiver,
+                        scope,
+                        days_end,
+                    });
                 }
             }
         }
@@ -599,12 +635,11 @@ impl Interp {
         for waiters in self.activities.waiters.values_mut() {
             waiters.retain(|waiter| *waiter != running);
         }
-        for timer in self.activities.timers.values_mut() {
-            if timer.waiter.is_some_and(|(waiter, _)| waiter == running) {
-                timer.waiter = None;
-                timer.days_end = None;
-            }
-        }
+        self.activities.timers.retain(|_, timer| {
+            let before = timer.waiters.len();
+            timer.waiters.retain(|waiter| waiter.activity != running);
+            !(timer.ends_with_wait && timer.waiters.len() < before)
+        });
         self.activities
             .sleepers
             .retain(|Reverse((_, _, sleeper))| *sleeper != running);
@@ -634,12 +669,17 @@ impl Interp {
         self.stack_base.abs_diff(here as usize) > self.stack_room
     }
 
-    /// A new timer, not posted.
-    pub(crate) fn create_timer(&mut self) -> TimerId {
+    /// A new timer, not posted, which ends with a wait on it where
+    /// `ends_with_wait`.
+    pub(crate) fn create_timer(&mut self, ends_with_wait: bool) -> TimerId {
         let table = &mut self.activities;
         table.next_timer += 1;
         let id = TimerId(table.next_timer);
-        table.timers.insert(id, Timer::default());
+        let timer = Timer {
+            ends_with_wait,
+            ..Timer::default()
+        };
+        table.timers.insert(id, timer);
         id
     }
 
@@ -660,68 +700,94 @@ impl Interp {
         }
     }
 
-    /// Records that a wait on `id` whose whole days end at `days_end` is
-    /// about to park.
-    pub(crate) fn begin_timer_wait(&mut self, id: TimerId, days_end: Instant) {
+    /// Records the wait on `id` about to park: the call's receiver and method
+    /// scope, and when its whole days end.
+    pub(crate) fn begin_timer_wait(
+        &mut self,
+        id: TimerId,
+        receiver: ObjRef,
+        scope: ObjRef,
+        days_end: Instant,
+    ) {
         if let Some(timer) = self.activities.timers.get_mut(&id) {
-            timer.days_end = Some(days_end);
+            timer.pending = Some((receiver, scope, days_end));
         }
     }
 
-    /// Ends the running activity's wait on `id`: whether it was posted, and
-    /// whether that post was a cancel.
+    /// Ends the running activity's wait on `id`: whether the timer is
+    /// posted, and whether a post woke a cancelled waiter.
     pub(crate) fn end_timer_wait(&mut self, id: TimerId) -> (bool, bool) {
+        let running = self.activities.running;
         let Some(timer) = self.activities.timers.get_mut(&id) else {
             return (false, false);
         };
-        timer.waiter = None;
-        timer.days_end = None;
+        timer.waiters.retain(|waiter| waiter.activity != running);
         (timer.posted, timer.cancelled)
     }
 
-    /// Posts `id`, `cancelled` where the receiver's `CANCELED` is `.true`,
-    /// and wakes its waiter. During a wait's whole days a post that is not a
-    /// cancel is reset and ends the current day, as the oracle's day loop
-    /// does.
-    pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: bool) {
+    /// The receiver and scope of each wait on `id`, in park order.
+    pub(crate) fn timer_waiters(&self, id: TimerId) -> Vec<(ObjRef, ObjRef)> {
+        self.activities
+            .timers
+            .get(&id)
+            .map_or_else(Vec::new, |timer| {
+                timer
+                    .waiters
+                    .iter()
+                    .map(|waiter| (waiter.receiver, waiter.scope))
+                    .collect()
+            })
+    }
+
+    /// Posts `id`, `cancelled` saying for each of [`Interp::timer_waiters`]
+    /// whether its object's `CANCELED` is `.true`, and wakes every waiter. A
+    /// waiter in its whole days whose object is not cancelled resets the post
+    /// and has its current day end instead, as the oracle's day loop does.
+    pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: &[bool]) {
         let table = &mut self.activities;
         let Some(timer) = table.timers.get_mut(&id) else {
             return;
         };
         let now = Instant::now();
-        if !cancelled
-            && let Some(end) = timer.days_end
-            && now < end
+        let mut moved: Vec<(u64, Instant, Instant)> = Vec::new();
+        let mut woken: Vec<u64> = Vec::new();
+        let mut waiting = Vec::new();
+        for (waiter, &cancelled) in std::mem::take(&mut timer.waiters)
+            .into_iter()
+            .zip(cancelled)
         {
-            let begun = (end - now).as_nanos().div_ceil(TIMER_DAY.as_nanos());
-            let left = u32::try_from(begun - 1).unwrap_or(u32::MAX);
-            let ended = now + TIMER_DAY * left;
-            timer.days_end = Some(ended);
-            let Some((_, order)) = timer.waiter else {
-                return;
-            };
-            let mut sleepers = std::mem::take(&mut table.sleepers).into_vec();
-            for Reverse((deadline, parked, _)) in &mut sleepers {
-                if *parked == order {
-                    *deadline = ended + (*deadline - end);
-                }
+            let end = waiter.days_end;
+            if !cancelled && now < end {
+                let begun = (end - now).as_nanos().div_ceil(TIMER_DAY.as_nanos());
+                let left = u32::try_from(begun - 1).unwrap_or(u32::MAX);
+                let ended = now + TIMER_DAY * left;
+                moved.push((waiter.order, end, ended));
+                waiting.push(TimerWaiter {
+                    days_end: ended,
+                    ..waiter
+                });
+            } else {
+                timer.cancelled |= cancelled;
+                woken.push(waiter.order);
+                table.ready.extend(
+                    table
+                        .sleepers
+                        .iter()
+                        .find(|Reverse((_, parked, _))| *parked == waiter.order)
+                        .map(|Reverse((_, _, activity))| *activity),
+                );
             }
-            table.sleepers = BinaryHeap::from(sleepers);
-            return;
         }
-        timer.posted = true;
-        timer.cancelled |= cancelled;
-        let Some((waiter, order)) = timer.waiter.take() else {
-            return;
-        };
-        timer.days_end = None;
-        let before = table.sleepers.len();
-        table
-            .sleepers
-            .retain(|Reverse((_, parked, _))| *parked != order);
-        if table.sleepers.len() < before {
-            table.ready.push_back(waiter);
+        timer.posted = moved.is_empty();
+        timer.waiters = waiting;
+        let mut sleepers = std::mem::take(&mut table.sleepers).into_vec();
+        sleepers.retain(|Reverse((_, parked, _))| !woken.contains(parked));
+        for Reverse((deadline, parked, _)) in &mut sleepers {
+            if let Some((_, end, ended)) = moved.iter().find(|(order, ..)| order == parked) {
+                *deadline = *ended + (*deadline - *end);
+            }
         }
+        table.sleepers = BinaryHeap::from(sleepers);
     }
 
     /// Moves every sleeper whose deadline is due to the ready queue, in
@@ -784,6 +850,7 @@ impl Interp {
             table.waiters.clear();
             table.message_ids.clear();
             table.sleepers.clear();
+            table.timers.clear();
             return Err(Loud::unsatisfiable_wait().into());
         }
         Ok(())

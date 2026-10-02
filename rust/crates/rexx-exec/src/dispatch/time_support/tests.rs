@@ -115,15 +115,82 @@ fn a_post_ends_the_remainder_or_the_current_day() {
     );
 }
 
-/// A stop once an alarm's wait is over does nothing: its timer has ended.
+/// A stop once an alarm's wait is over reaches nothing: its timer has ended,
+/// and a later timer's wait runs its full time through it.
 #[test]
-fn a_cancel_after_due_does_nothing() {
+fn a_cancel_after_due_does_not_reach_a_later_timer() {
     check(
         "o = .t~new\nsay o~alarmStart(0, 10)\nh = o~handle\no~cancelNow\n\
-         say o~alarmStop(h)\nsay o~alarmStart(0, 10)\n",
+         m = o~start('alarmStart', 0, 300)\ncall waitStarted2 o, h\nsay o~alarmStop(h)\n\
+         call SysSleep 0.1\nsay m~completed (o~handle \\== h)\nsay m~result\nexit\n\
+         waitStarted2: procedure\n  use arg o, h\n  do while o~handle == h\n    \
+         call SysSleep 0.01\n  end\n  return\n",
         "",
-        "0\n0\n0\n",
-        Duration::from_millis(20),
+        "0\n0\n0 1\n0\n",
+        Duration::from_millis(310),
+    );
+}
+
+/// One post wakes every wait on the timer: in the remainder at once, and in
+/// the whole days by ending the current day.
+#[test]
+fn a_post_wakes_every_waiter_of_a_timer() {
+    for (days, millis, slept) in [(0, 20_000, "0.2"), (1, 300, "0.6")] {
+        check(
+            &format!(
+                "o = .t~new\nr = o~tickerCreate\nh = o~handle\n\
+                 m1 = .message~new(o, 'tickerWait', 'I', h, {days}, {millis})\nm1~start\n\
+                 m2 = .message~new(o, 'tickerWait', 'I', h, {days}, {millis})\nm2~start\n\
+                 call SysSleep 0.2\nr = o~tickerStop(h)\ncall SysSleep {slept}\n\
+                 say m1~completed m2~completed\n"
+            ),
+            "",
+            "1 1\n",
+            Duration::from_millis(400),
+        );
+    }
+}
+
+/// A post reads `CANCELED` from the object whose call waits, not from the
+/// object that posts: a cancelled waiter's whole days end at once, and an
+/// uncancelled one's last day ends, leaving the remainder.
+#[test]
+fn a_post_reads_the_waiting_objects_cancel() {
+    check(
+        "a = .t~new\nb = .t~new\nm = .message~new(a, 'alarmStart', 'I', 2, 300)\nm~start\n\
+         call waitStarted a\na~cancelNow\nr = b~alarmStop(a~handle)\ncall SysSleep 0.1\n\
+         say m~completed\n",
+        "",
+        "1\n",
+        Duration::from_millis(100),
+    );
+    check(
+        "a = .t~new\nb = .t~new\nm = .message~new(a, 'alarmStart', 'I', 1, 300)\nm~start\n\
+         call waitStarted a\nb~cancelNow\nr = b~alarmStop(a~handle)\ncall SysSleep 0.1\n\
+         say m~completed\nsay m~result\n",
+        "",
+        "0\n0\n",
+        Duration::from_millis(300),
+    );
+}
+
+/// The remainder is taken modulo 2^32 milliseconds, as the oracle's
+/// `uint32_t` timeout takes it: 2^32 + 100 waits 100 ms, and -1 waits until
+/// a cancel.
+#[test]
+fn the_remainder_is_taken_modulo_2_to_the_32() {
+    check(
+        "o = .t~new\nsay o~alarmStart(0, 4294967396)\n",
+        "",
+        "0\n",
+        Duration::from_millis(100),
+    );
+    check(
+        "o = .t~new\nm = o~start('alarmStart', 0, -1)\ncall waitStarted o\ncall SysSleep 0.2\n\
+         say m~completed\no~cancelNow\nr = o~alarmStop(o~handle)\nsay m~result\n",
+        "",
+        "0\n0\n",
+        Duration::from_millis(200),
     );
 }
 

@@ -2312,54 +2312,30 @@ impl Interp {
             // "SEP" with scope "K".` line.
             Invocable::External(entry) => match &entry.body {
                 native::ExternalBody::Deferred { owner } => {
-                    park_point!(self, crate::pinning::ParkKind::entry_point(entry.name));
                     Err(native::deferred_send(entry, owner).into())
                 }
                 native::ExternalBody::Implemented { arity, run } => {
-                    let outcome = match arity {
-                        Arity::Fixed(arity) if args.len() > *arity => {
-                            Err(Raised::too_many_external_arguments(*arity).into())
-                        }
-                        Arity::Fixed(_) | Arity::Counted => pinned!(
-                            self,
+                    self.run_external(*arity, resolution, receiver, name, args, |interp| {
+                        pinned!(
+                            interp,
                             crate::pinning::PinKind::native(name),
-                            run(self, cleared, receiver, args)
-                        ),
-                    };
-                    if let Err(failure) = &outcome {
-                        let scope = self.classes().id_string(resolution.scope).to_string();
-                        let method = resolution.method;
-                        let reraised = failure.reraised_by_native_call();
-                        self.blame_external_method(name, &scope, method, receiver, args, reraised);
-                    }
-                    outcome
+                            run(interp, cleared, receiver, args)
+                        )
+                    })
                 }
                 native::ExternalBody::Scoped { arity, begin } => {
-                    let outcome = match arity {
-                        Arity::Fixed(arity) if args.len() > *arity => {
-                            Err(Raised::too_many_external_arguments(*arity).into())
-                        }
-                        Arity::Fixed(_) | Arity::Counted => {
-                            begin(self, cleared, receiver, resolution.scope, args)
-                        }
-                    };
-                    match outcome {
-                        Ok(NativeStarted::Ran(value)) => Ok(value),
-                        Ok(NativeStarted::Entered(then)) => {
+                    let started =
+                        self.run_external(*arity, resolution, receiver, name, args, |interp| {
+                            begin(interp, cleared, receiver, resolution.scope, args)
+                        })?;
+                    match started {
+                        NativeStarted::Ran(value) => Ok(value),
+                        NativeStarted::Entered(then) => {
                             match self.activity.native_park.as_mut() {
                                 Some(park) => park.thens.push((then, None)),
                                 None => self.push_native_tail(then, None),
                             }
                             return Ok(Started::Entered);
-                        }
-                        Err(failure) => {
-                            let scope = self.classes().id_string(resolution.scope).to_string();
-                            let method = resolution.method;
-                            let reraised = failure.reraised_by_native_call();
-                            self.blame_external_method(
-                                name, &scope, method, receiver, args, reraised,
-                            );
-                            Err(failure)
                         }
                     }
                 }
@@ -2392,6 +2368,32 @@ impl Interp {
             },
         };
         outcome.map(Started::Ran)
+    }
+
+    /// A `LIBRARY REXX` entry's `run` after the arity check `CPPCode`-style
+    /// externals make, with the method blamed for a failure.
+    fn run_external<T>(
+        &mut self,
+        arity: Arity,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+        run: impl FnOnce(&mut Interp) -> Result<T, Failure>,
+    ) -> Result<T, Failure> {
+        let outcome = match arity {
+            Arity::Fixed(arity) if args.len() > arity => {
+                Err(Raised::too_many_external_arguments(arity).into())
+            }
+            Arity::Fixed(_) | Arity::Counted => run(self),
+        };
+        if let Err(failure) = &outcome {
+            let scope = self.classes().id_string(resolution.scope).to_string();
+            let method = resolution.method;
+            let reraised = failure.reraised_by_native_call();
+            self.blame_external_method(name, &scope, method, receiver, args, reraised);
+        }
+        outcome
     }
 
     /// Runs a started send's Rexx body on this Rust stack, and answers the

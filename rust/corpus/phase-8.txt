@@ -482,3 +482,8 @@ lang/alarm_fires_after_reply.rex
 lang/ticker_cancelled_by_its_target.rex
 lang/timer_cancel_in_whole_days.rex
 lang/timer_native_arguments.rex
+# Task 8 fix round 1: a post wakes every waiter and reads each waiter's
+# CANCELED; the remainder is a uint32_t of milliseconds.
+lang/timer_post_wakes_every_waiter.rex
+lang/timer_post_reads_the_waiters_cancel.rex
+lang/timer_remainder_modulo_2_32.rex

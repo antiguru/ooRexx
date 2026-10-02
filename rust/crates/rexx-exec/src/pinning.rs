@@ -276,11 +276,6 @@ mod counter {
                 .any(|wait| wait.eq_ignore_ascii_case(name))
                 .then_some(ParkKind::SysSemWait)
         }
-
-        /// The park point the `LIBRARY REXX` entry point `entry` reaches.
-        pub(crate) fn entry_point(entry: &str) -> Option<ParkKind> {
-            matches!(entry, "alarm_startTimer" | "ticker_waitTimer").then_some(ParkKind::Timer)
-        }
     }
 
     /// Arrivals keyed by park kind and the pinned frames at the arrival,

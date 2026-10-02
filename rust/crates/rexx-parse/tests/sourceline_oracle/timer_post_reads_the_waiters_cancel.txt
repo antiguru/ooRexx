@@ -1,0 +1,41 @@
+count 40
+/* A post reads CANCELED from the object whose call waits on the timer, not
+   from the object that posts: a cancelled waiter's two days end at once, an
+   uncancelled waiter's last day ends and its remainder runs. */
+a = .t~new; b = .t~new
+m = .message~new(a, 'alarmStart', 'I', 2, 300); m~start
+call waitStarted a
+a~cancelNow
+r = b~alarmStop(a~handle)
+call SysSleep 0.1
+say 'waiter cancelled' m~completed
+a = .t~new; b = .t~new
+m = .message~new(a, 'alarmStart', 'I', 1, 300); m~start
+call waitStarted a
+b~cancelNow
+r = b~alarmStop(a~handle)
+call SysSleep 0.1
+say 'poster cancelled' m~completed
+say 'remainder ran' m~result
+exit
+waitStarted: procedure
+  use arg o
+  do while o~started \== 1
+    call SysSleep 0.01
+  end
+  return
+::class t
+::method alarmStart unguarded external 'LIBRARY REXX alarm_startTimer'
+::method alarmStop unguarded external 'LIBRARY REXX alarm_stopTimer'
+::method tickerCreate unguarded external 'LIBRARY REXX ticker_createTimer'
+::method tickerWait unguarded external 'LIBRARY REXX ticker_waitTimer'
+::method tickerStop unguarded external 'LIBRARY REXX ticker_stopTimer'
+::method handle unguarded
+  expose eventSemHandle
+  return eventSemHandle
+::method started unguarded
+  expose timerStarted
+  return timerStarted
+::method cancelNow unguarded
+  expose canceled
+  canceled = .true

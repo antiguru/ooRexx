@@ -1,0 +1,36 @@
+count 35
+/* A timer's remainder is a uint32_t count of milliseconds: 2**32 + 100 waits
+   100 ms, and -1 waits until a cancel. */
+o = .t~new
+t0 = time('e')
+say o~alarmStart(0, 4294967396) (time('e') - t0 >= 0.1)
+o = .t~new
+m = o~start('alarmStart', 0, -1)
+call waitStarted o
+call SysSleep 0.2
+say 'still waiting' m~completed
+o~cancelNow
+r = o~alarmStop(o~handle)
+say 'cancelled' m~result
+exit
+waitStarted: procedure
+  use arg o
+  do while o~started \== 1
+    call SysSleep 0.01
+  end
+  return
+::class t
+::method alarmStart unguarded external 'LIBRARY REXX alarm_startTimer'
+::method alarmStop unguarded external 'LIBRARY REXX alarm_stopTimer'
+::method tickerCreate unguarded external 'LIBRARY REXX ticker_createTimer'
+::method tickerWait unguarded external 'LIBRARY REXX ticker_waitTimer'
+::method tickerStop unguarded external 'LIBRARY REXX ticker_stopTimer'
+::method handle unguarded
+  expose eventSemHandle
+  return eventSemHandle
+::method started unguarded
+  expose timerStarted
+  return timerStarted
+::method cancelNow unguarded
+  expose canceled
+  canceled = .true

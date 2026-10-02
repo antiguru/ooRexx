@@ -167,3 +167,52 @@ both (its library is not on the run directory's path).
   its errors.
 - A loud refusal in main no longer ends quickly where a timer is pending: the program's end waits
   for it (spec's end rule; Task 9 owns it).
+
+## Fix round 1 (review task-8-review.md)
+
+- I1: a timer holds a list of waiters (`TimerWaiter`: activity, sleeper order, the waiting call's
+  receiver and scope, end of its whole days); a post wakes every one. A waiter in its whole days
+  whose object is not cancelled has its current day end instead and resets the post, as each
+  oracle waiter's day loop does.
+- I2: `stop_timer` reads `CANCELED` from each waiter's own receiver and scope (rooted through
+  `Activities::object_roots` while it waits), not from the poster.
+- I3: the remainder is taken modulo 2^32 (`rem_euclid`), the oracle's `uint32_t` timeout.
+- M1: `ParkKind::entry_point` is gone with its call in the deferred arm (it answered `None` for
+  every deferred entry); the timer park is `park_point!(.., ParkKind::Timer)` in `timed_wait`.
+- M2: `cancel_wait` (a pinned or root wait that failed) drops an alarm's timer with its waiter;
+  the program end's abandonment clears the timers with the sleepers. A ticker's timer outlives a
+  failed wait, as its handle stays set. No test observes the table.
+- M3: `Interp::run_external` holds the arity check and the blame for the `Implemented` and
+  `Scoped` arms.
+- M4: `a_cancel_after_due_does_nothing` became `a_cancel_after_due_does_not_reach_a_later_timer`:
+  a stop of the ended handle during a later alarm's wait leaves that wait running its full 300 ms
+  (`completed` 0 after 0.1 s; the run takes at least 310 ms). Not run on the oracle: there the stop
+  posts the freed stack semaphore (measured, `Fatal glibc error: pthread_mutex_lock.c:88`
+  assertion, 10/10), R-T8-2.
+
+Tests: `a_post_wakes_every_waiter_of_a_timer` (remainder and whole days),
+`a_post_reads_the_waiting_objects_cancel` (both directions), `the_remainder_is_taken_modulo_2_to_the_32`.
+Red before: the reviewer's `d4.rex` and `f1.rex` on the `abf33a371` release binary: `after one
+post 0 1`, `both ended early 0`; `f1` killed at 8 s. Mutations (restored by copy): MI1, a post
+wakes only the last waiter: red `a_post_wakes_every_waiter_of_a_timer`; MI2, `CANCELED` read from
+the poster: red `a_post_reads_the_waiting_objects_cancel`; MI3, the untruncated remainder: red
+`the_remainder_is_taken_modulo_2_to_the_32`.
+
+Oracle, the tests' shapes as programs (scratch `fr1/v2`-`v4`), 10 runs each: the reads-the-waiter
+and modulo shapes one hash 10/10, ours 10/10 that hash unswitched and under every. The two-waiter
+shape: 9/10 one hash and 1/10 killed at 20 s: with two waiters in their whole days the oracle's
+first waiter to wake resets the semaphore and the second can miss the post and wait out its day.
+That case stays a crate test (ours ends both, the majority schedule); the corpus witness uses the
+remainder only.
+
+New corpus witnesses (phase-8.txt), oracle 30/30 one hash, ours 30/30 that hash unswitched and
+30/30 under every: `timer_post_wakes_every_waiter`, `timer_post_reads_the_waiters_cancel`,
+`timer_remainder_modulo_2_32`. Stdout read: `after one post 1 1`; `waiter cancelled 1`, `poster
+cancelled 0`, `remainder ran 0`; `0 1`, `still waiting 0`, `cancelled 0`.
+
+P28 checks after the fix: `cargo fmt --all --check` 0; clippy `-p rexx-exec --all-targets -D
+warnings` 0 and with `--features pinning` 0 (`Checking rexx-exec` in both); lib 923 passed; corpus
+(gated) 740 of 740 release unswitched, release under every and debug under every; collect_stress
+36 passed; concurrency_tests (gated, pinning) 43 passed; method_bodies 23 passed (no refresh, no
+drift); refusal_sites 5 passed (table unchanged); native_entries, closed_phases, owners, loud
+passed; sourceline_oracle 1 passed.
