@@ -1638,6 +1638,18 @@ mod group_runs {
         "base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START",
     ];
 
+    /// The rows refused in both modes where the schedule decides which
+    /// refusal comes first: under `EveryOpportunity` the started `M_S` takes
+    /// the guard lock before `M_WAIT`'s `GUARD ON`, which waits for it and
+    /// finds `COUNT` already 0, so the run goes on to a later refusal; the
+    /// shipped scheduler reaches the `GUARD ON` first and is refused at its
+    /// `WHEN`. Allowed only while one of the two refusals is that `WHEN`'s.
+    const REFUSAL_FOLLOWS_THE_SCHEDULE: &[&str] =
+        &["base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START"];
+
+    /// The crate's refusal of a `GUARD WHEN` whose expression is false.
+    const GUARD_WHEN_REFUSAL: &str = "a GUARD that has to wait for another activity";
+
     /// `run`'s stdout without the lines `drop` selects.
     fn without(run: &Run, drop: impl Fn(&str) -> bool) -> String {
         String::from_utf8_lossy(&masked(&run.stdout))
@@ -1702,6 +1714,14 @@ mod group_runs {
             && TRACE_INTERLEAVES.contains(&row)
         {
             return ("trace lines on stderr differ".to_string(), true);
+        }
+        if let (Some(first), Some(second)) = (refusal(normal), refusal(every))
+            && normal.status == every.status
+            && masked(&normal.stdout) == masked(&every.stdout)
+            && (first.contains(GUARD_WHEN_REFUSAL) || second.contains(GUARD_WHEN_REFUSAL))
+            && REFUSAL_FOLLOWS_THE_SCHEDULE.contains(&row)
+        {
+            return (format!("refused: {first} then {second}"), true);
         }
         (
             format!(
