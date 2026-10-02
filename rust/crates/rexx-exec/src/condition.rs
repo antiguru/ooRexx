@@ -206,7 +206,7 @@ impl Interp {
                 self.build_condition_object_from(raised, None, false, Some(&unwound))
             }
         };
-        let attached = object.and_then(|object| self.attach_condition(object));
+        let attached = object.map(|object| self.attach_condition(object));
         if attached.is_err() {
             self.activity.failed_sends.clear();
         }
@@ -215,28 +215,33 @@ impl Interp {
     }
 
     /// `MessageClass::error` (`classes/MessageClass.cpp:706`) for every
-    /// message whose send the condition behind `object` ended, each then
-    /// notifying the objects its `~notify` named while the unwinding
-    /// failure's record is set aside.
-    pub(crate) fn attach_condition(&mut self, object: ObjRef) -> Result<(), Failure> {
-        let messages = std::mem::take(&mut self.activity.failed_sends);
-        if messages.is_empty() {
-            return Ok(());
-        }
-        let frame = self.roots.activity_mut().push_frame();
-        for &message in &messages {
+    /// message whose send the condition behind `object` ended.
+    pub(crate) fn attach_condition(&mut self, object: ObjRef) {
+        for message in std::mem::take(&mut self.activity.failed_sends) {
             self.set_native_entry(message, crate::dispatch::MESSAGE_CONDITION, object);
-            self.roots.activity_mut().push_temp(message);
         }
+    }
+
+    /// The objects `message`'s `~notify` named sent `messageComplete` while
+    /// the condition its send failed with unwinds, its record set aside
+    /// meanwhile. A notifier's failure is answered with its own record in
+    /// the activity's, and the set-aside one below it where `keep` is set:
+    /// on the oracle a held send's notifier runs above the levels the
+    /// condition was raised in, and a started one's after they have gone.
+    pub(crate) fn notify_failed_send(
+        &mut self,
+        message: ObjRef,
+        keep: bool,
+    ) -> Result<(), Failure> {
+        let frame = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(message);
         let unwinding = self.set_aside_unwinding();
-        let mut notified = Ok(());
-        for message in messages {
-            notified = self.notify_parties(message);
-            if notified.is_err() {
-                break;
-            }
+        let notified = self.notify_parties(message);
+        match &notified {
+            Ok(()) => self.restore_unwinding(unwinding),
+            Err(_) if keep => self.restore_unwinding_below(unwinding),
+            Err(_) => {}
         }
-        self.restore_unwinding(unwinding);
         self.roots.activity_mut().pop_frame(frame);
         notified
     }
@@ -265,6 +270,24 @@ impl Interp {
             temps.push_temp(object);
         }
         unwinding
+    }
+
+    /// Puts what [`Interp::set_aside_unwinding`] took below the record of
+    /// the failure unwinding now: its levels outside this one's.
+    fn restore_unwinding_below(&mut self, unwinding: Unwinding) {
+        let activity = &mut self.activity;
+        let site = activity.failure_site.take();
+        activity.failure_sites.extend(site);
+        activity.failure_sites.extend(unwinding.sites);
+        activity.failure_site = unwinding.site;
+        let frame = activity.failure_frame.take();
+        activity.failure_frames.extend(frame);
+        activity.failure_frames.extend(unwinding.frames);
+        activity.failure_frame = unwinding.frame;
+        if activity.failure_origin.is_none() {
+            activity.failure_origin = unwinding.origin;
+        }
+        activity.failure_propagated |= unwinding.propagated;
     }
 
     /// Puts back what [`Interp::set_aside_unwinding`] took.

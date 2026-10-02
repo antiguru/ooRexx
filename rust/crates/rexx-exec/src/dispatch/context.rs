@@ -405,7 +405,7 @@ fn context_executable(
 }
 
 /// [`context_executable`]'s answer for the activation at `depth`.
-fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
+pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
     let activation = interp
         .frame_at(depth)
         .ok_or_else(|| Failure::from(Raised::context_not_active()))?;

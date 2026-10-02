@@ -1,6 +1,8 @@
 # 2026-10-01-message-notify-single-slot
 
-Found by the Phase 6 S2-S5 Task 3 review (M2), ruled not that task's (queued 2026-10-01). Not fixed.
+RESOLVED by Phase 6 S2-S5 Task 7 fix round 1: each Rexx activation keeps a single notify slot (`Activation::notify_message`); `re2a` and `re2b` answer as the oracle, and witness `rust/corpus/lang/message_notify_single_slot.rex` covers both forms.
+
+Found by the Phase 6 S2-S5 Task 3 review (M2), ruled not that task's (queued 2026-10-01).
 
 The oracle notifies only the message a Rexx activation last recorded in its single `notifyObject`
 slot (`RexxActivation::setObjNotify` overwrites it; `MessageClass::dispatch`,
@@ -20,7 +22,7 @@ Probe `re2a` (fresh empty directory):
     ::method boom
       return 1/0
 
-Oracle: `1 0 0`, rc 0. This crate: `1 1 1`, rc 0.
+Oracle: `1 0 0`, rc 0. This crate before the fix: `1 1 1`, rc 0.
 
 Probe `re2b`:
 
@@ -34,6 +36,6 @@ Probe `re2b`:
     ::method boom
       return 1/0
 
-Oracle: `0 1 0 1 0`. This crate: `1 1 1 0 0`. Stderr (the started report) identical, rc 0 both.
+Oracle: `0 1 0 1 0`. This crate before the fix: `1 1 1 0 0`. Stderr (the started report) identical, rc 0 both.
 The hasError half predates Task 3 (base 9b06ca28a answers `1 1 1` on `re2a`); Task 3 added a
 condition object consistent with it.

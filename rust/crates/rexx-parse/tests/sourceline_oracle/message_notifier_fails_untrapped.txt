@@ -1,0 +1,15 @@
+count 14
+/* A notifier failing over an untrapped held send's failure is reported
+   from the notifier's line. */
+m = .message~new(.t~new, 'boom')
+m~notify(.bad~new)
+m~send
+say 'not reached'
+::class t
+::method boom
+  return 1/0
+::class bad inherit MessageNotification
+::method messageComplete
+  use arg msg
+  say 'notifier sees' msg~errorCondition~code
+  return .nil~foo

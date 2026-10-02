@@ -48,20 +48,26 @@ fn probes() -> PathBuf {
 
 /// Builds `libouter9b.so` into `dir` and checks it NEEDs no interpreter.
 fn build_forge(dir: &Path) {
+    build_library(&probes().join("outer9b.cpp"), &dir.join("libouter9b.so"));
+}
+
+/// Builds the extension `source` as `library` and checks it NEEDs no
+/// interpreter.
+fn build_library(source: &Path, library: &Path) {
     let api = worktree().join("api");
     let built = Command::new("g++")
         .args(["-shared", "-fPIC", "-O1", "-static-libstdc++"])
         .arg(format!("-I{}", api.display()))
         .arg(format!("-I{}", api.join("platform/unix").display()))
-        .arg(probes().join("outer9b.cpp"))
+        .arg(source)
         .arg("-o")
-        .arg(dir.join("libouter9b.so"))
+        .arg(library)
         .status()
         .expect("g++ runs");
     assert!(built.success(), "the forge did not build");
     let dynamic = Command::new("readelf")
         .arg("-d")
-        .arg(dir.join("libouter9b.so"))
+        .arg(library)
         .output()
         .expect("readelf runs");
     let dynamic = String::from_utf8_lossy(&dynamic.stdout);
@@ -148,30 +154,67 @@ fn a_kept_outer_context_reaches_its_callers_variables() {
     fs::remove_dir_all(&base).expect("cannot remove the run directory");
 }
 
-/// `outer_context/o9e.rex`: a started activity reads a variable through the
-/// call context main's `Outer` kept, and is answered nothing. The oracle
-/// raises 98.983 against main's activity, after which the started activity
-/// ends in 44.1 and the program hangs (3 runs of 3), so this is not a
-/// differential.
+/// The program that calls the `outer7.cpp` member `member` from a started
+/// activity, through the call context main's `Outer` kept.
+fn elsewhere_program(member: char) -> String {
+    format!(
+        "x = 'main'\nsay Outer(.c~new)\nsay 'end' x\n::requires 'outer7' LIBRARY\n\
+         ::class c\n::method run\n  x = 'run'\n  m = self~start('other')\n  \
+         say 'started' m~result\n  return 'ret'\n\
+         ::method other unguarded\n  x = 'other'\n  return OM('{member}')\n"
+    )
+}
+
+/// Each member of a call context main's `Outer` kept (`outer_context/outer7.cpp`'s
+/// `OM`), called from a started activity. The oracle's non-blocking members
+/// read the top frame of the context's activity, here main's `RUN`, and
+/// those answer the same here, except `GetContextFuzz`, which is 256 on the
+/// oracle because it reads that Rexx activation as a native one. Every other
+/// member raises the oracle's 98.983 in the started activity's call, where
+/// the oracle raises it against main's activity and then ends in SIGSEGV or
+/// hangs, so this is not a differential.
 #[test]
-fn a_kept_outer_context_used_by_another_activity_answers_nothing() {
+fn a_kept_call_context_used_by_another_activity_answers_or_raises() {
     if !gate_mode() {
         eprintln!("outer_context: skipped without {GATE_ENV}");
         return;
     }
-    let (base, run, library_path) = forged("outer-context-elsewhere");
-    let program = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/outer_context/o9e.rex");
-    for stress in [false, true] {
-        let ours = run_ours(&program, &run, &library_path, stress);
-        assert_eq!(
-            (
+    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("outer-context-elsewhere-{}", std::process::id()));
+    let (forge, run) = (base.join("forge"), base.join("run"));
+    fs::create_dir_all(&forge).expect("the forge directory");
+    fs::create_dir_all(&run).expect("the run directory");
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/outer_context");
+    build_library(&own.join("outer7.cpp"), &forge.join("libouter7.so"));
+    let library_path = forge.display().to_string();
+    let answered = [('d', "9"), ('f', "0"), ('o', "0"), ('r', "a Method")];
+    for member in "abnrdfockvsitSg".chars() {
+        let program = run.join(format!("k_{member}.rex"));
+        fs::write(&program, elsewhere_program(member)).expect("the program");
+        for stress in [false, true] {
+            let ours = run_ours(&program, &run, &library_path, stress);
+            let (stdout, stderr) = (
                 String::from_utf8_lossy(&ours.stdout),
                 String::from_utf8_lossy(&ours.stderr),
-                ours.exit_code
-            ),
-            ("started null\nret\nend main\n".into(), "".into(), 0),
-            "collecting at every allocation: {stress}"
-        );
+            );
+            let context = format!("{member}, collecting at every allocation: {stress}");
+            match answered.iter().find(|(answering, _)| *answering == member) {
+                Some((_, value)) => assert_eq!(
+                    (stdout.as_ref(), stderr.as_ref(), ours.exit_code),
+                    (format!("started {value}\nret\nend main\n").as_str(), "", 0),
+                    "{context}"
+                ),
+                None => {
+                    assert_eq!((stdout.as_ref(), ours.exit_code), ("", 158), "{context}");
+                    assert!(
+                        stderr.contains(
+                            "Error 98.983:  Execution thread does not match API thread context."
+                        ),
+                        "{context}: {stderr}"
+                    );
+                }
+            }
+        }
     }
     fs::remove_dir_all(&base).expect("cannot remove the run directory");
 }

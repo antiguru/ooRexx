@@ -964,6 +964,7 @@ fn dispatch_held_message(
     let values = interp.array_slots_of(arguments).unwrap_or_default();
     clear_completion(interp, message);
     interp.validate_scope_override(target, scope)?;
+    interp.set_notify_message(Some(message));
     let caller = interp.caller();
     let sent = match interp.begin_send(target, &name, scope, &values, caller) {
         Ok(Started::Entered) => return Ok(NativeStarted::Entered(then)),
@@ -981,6 +982,7 @@ pub(super) fn record_held(
 ) -> Result<Option<ObjRef>, Failure> {
     match sent {
         Ok(answer) => {
+            interp.set_notify_message(None);
             if let Some(answer) = answer {
                 interp.set_native_entry(message, MESSAGE_RESULT, answer);
             }
@@ -991,15 +993,24 @@ pub(super) fn record_held(
             interp.notify_parties(message)?;
             Ok(answer)
         }
-        // Only a `SYNTAX` condition notifies the message
-        // (`execution/RexxActivation.cpp:2470`); any other leaves it
-        // uncompleted.
-        Err(Failure::Raised(raised)) if raised.condition == "SYNTAX" => {
+        // Only a `SYNTAX` condition notifies the message, and only the one in
+        // the activation's single slot (`execution/RexxActivation.cpp:2470`):
+        // a send made later from the same activation took it over. Any other
+        // leaves the message uncompleted.
+        Err(Failure::Raised(raised))
+            if raised.condition == "SYNTAX" && interp.set_notify_message(None) == Some(message) =>
+        {
             interp.activity.failed_sends.push(message);
             interp
                 .message_outcomes
                 .insert(message, Some(raised.clone()));
             interp.message_completed(message);
+            // A notifier reads the condition object, so it is built now; its
+            // own failure replaces the send's.
+            if interp.native_entry(message, MESSAGE_PARTIES).is_some() {
+                interp.settle_failed_sends(&raised)?;
+                interp.notify_failed_send(message, true)?;
+            }
             Err(Failure::Raised(raised))
         }
         Err(other) => Err(other),
@@ -1010,7 +1021,7 @@ pub(super) fn record_held(
 /// outcome of an earlier send forgotten.
 fn clear_completion(interp: &mut Interp, message: ObjRef) {
     interp.message_outcomes.remove(&message);
-    interp.notified_messages.remove(&message);
+    interp.unnotified_messages.remove(&message);
     interp.remove_native_entry(message, MESSAGE_RESULT);
     interp.remove_native_entry(message, MESSAGE_CONDITION);
 }
@@ -1187,7 +1198,9 @@ pub(super) fn native_message_notify(
     {
         slots.push(Some(target));
     }
-    if interp.notified_messages.contains(&receiver) {
+    let notified = interp.message_outcomes.contains_key(&receiver)
+        && !interp.unnotified_messages.contains(&receiver);
+    if notified {
         let caller = interp.caller();
         interp.send_message(target, MESSAGE_COMPLETE, None, &[Some(receiver)], caller)?;
     }
@@ -1215,6 +1228,23 @@ pub(super) fn native_message_message_complete(
 const MESSAGE_COMPLETE: &[u8] = b"MESSAGECOMPLETE";
 
 impl Interp {
+    /// Puts `message` in the running activation's notify slot and answers
+    /// what it held; a native call above that activation has no slot
+    /// (`ActivationBase::setObjNotify`), and neither has an activity with no
+    /// activation.
+    fn set_notify_message(&mut self, message: Option<ObjRef>) -> Option<ObjRef> {
+        let running = self.activity.running.as_deref_mut()?;
+        let native_above = self
+            .activity
+            .native_handles
+            .last()
+            .is_some_and(|native| native.caller == Some(running.id));
+        if native_above {
+            return None;
+        }
+        std::mem::replace(&mut running.notify_message, message)
+    }
+
     /// Whether `object` is a `Message` this crate built.
     pub(crate) fn is_message(&mut self, object: ObjRef) -> bool {
         let message = self.object_model().message;
@@ -1226,9 +1256,11 @@ impl Interp {
 
     /// `MessageClass::sendNotification` (`classes/MessageClass.cpp:645`) once
     /// the waiters are woken: `messageComplete` sent to each object `~notify`
-    /// had named when it began, in order, and `message` marked as notified.
+    /// had named when it began, in order. `message` stays unnotified where
+    /// one of them fails.
     pub(crate) fn notify_parties(&mut self, message: ObjRef) -> Result<(), Failure> {
         if let Some(parties) = self.native_entry(message, MESSAGE_PARTIES) {
+            self.unnotified_messages.insert(message);
             let frame = self.roots.activity_mut().push_frame();
             self.roots.activity_mut().push_temp(message);
             self.roots.activity_mut().push_temp(parties);
@@ -1253,8 +1285,8 @@ impl Interp {
             }
             self.roots.activity_mut().pop_frame(frame);
             sent?;
+            self.unnotified_messages.remove(&message);
         }
-        self.notified_messages.insert(message);
         Ok(())
     }
 }

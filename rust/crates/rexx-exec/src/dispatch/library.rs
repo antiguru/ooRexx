@@ -486,8 +486,7 @@ impl Interp {
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
         frame.code = code;
         frame.caller = self.running_activation().map(|activation| activation.id);
-        frame.id = self.activity.next_native;
-        self.activity.next_native = self.activity.next_native.wrapping_add(1);
+        frame.id = self.next_native_id();
         frame.packaged = false;
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
@@ -789,12 +788,7 @@ impl Host for Interp {
     }
 
     fn numeric(&self) -> Numeric {
-        let settings = &self.activation().settings;
-        Numeric {
-            digits: usize::try_from(settings.digits()).unwrap_or(usize::MAX),
-            fuzz: usize::try_from(settings.fuzz()).unwrap_or(usize::MAX),
-            engineering: settings.form() == rexx_num::Form::Engineering,
-        }
+        numeric_of(&self.activation().settings)
     }
 
     fn double_value(&mut self, object: ObjRef) -> Result<Option<f64>, Condition> {
@@ -1125,6 +1119,16 @@ impl Interp {
             .native_handles
             .last()
             .expect("a native activation is running")
+    }
+}
+
+/// The `NUMERIC` settings a call context reports for an activation's
+/// `settings`.
+pub(super) fn numeric_of(settings: &rexx_num::Settings) -> Numeric {
+    Numeric {
+        digits: usize::try_from(settings.digits()).unwrap_or(usize::MAX),
+        fuzz: usize::try_from(settings.fuzz()).unwrap_or(usize::MAX),
+        engineering: settings.form() == rexx_num::Form::Engineering,
     }
 }
 

@@ -162,6 +162,9 @@ pub(crate) struct Activities {
     pooled: VecDeque<Option<u32>>,
     /// The last number assigned (`Activity::getIdntfr`'s counter).
     last_number: u32,
+    /// The next [`crate::NativeFrame`] number, wrapping: one counter for
+    /// every activity, so a frame token names its call on one of them.
+    next_native: u32,
     /// Failures kept by [`Interp::keep_late_failure`].
     late_failures: Vec<Failure>,
 }
@@ -197,6 +200,7 @@ impl Activities {
             thread_table: rexx_api::ffi::ThreadTable::new(),
             pooled: VecDeque::new(),
             last_number: 0,
+            next_native: 0,
             late_failures: Vec::new(),
         }
     }
@@ -367,10 +371,30 @@ impl Interp {
     ) -> R {
         self.swap_idle(id);
         let frame = self.roots.activity_mut().push_frame();
+        let before = self.idle_read_state();
         let answer = read(self);
+        debug_assert!(
+            self.idle_read_state() == before,
+            "a read of an idle activity parked, switched or ran Rexx"
+        );
         self.roots.activity_mut().pop_frame(frame);
         self.swap_idle(id);
         answer
+    }
+
+    /// What [`Interp::with_idle_activity`]'s `read` may not change: the
+    /// running handle, the ready queue's length, the pin depth, the
+    /// activation stack and the open driver constructs.
+    fn idle_read_state(&self) -> (ActivityId, usize, u32, usize, Option<u64>, usize) {
+        let activity = &self.activity;
+        (
+            self.activities.running,
+            self.activities.ready.len(),
+            activity.pin_depth,
+            activity.suspended.len(),
+            activity.running.as_ref().map(|running| running.id.0),
+            activity.frames.len(),
+        )
     }
 
     fn swap_idle(&mut self, id: ActivityId) {
@@ -379,6 +403,32 @@ impl Interp {
         };
         std::mem::swap(&mut self.activity, &mut idle.activity);
         std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
+    }
+
+    /// A number for a new native frame.
+    pub(crate) fn next_native_id(&mut self) -> u32 {
+        let id = self.activities.next_native;
+        self.activities.next_native = id.wrapping_add(1);
+        id
+    }
+
+    /// The idle activity whose native call the frame token `frame`
+    /// ([`Interp::native_token`]) names, and that call's row.
+    pub(crate) fn idle_native_owner(&self, frame: u64) -> Option<(ActivityId, usize)> {
+        let row = usize::try_from(frame >> 32).ok()?;
+        let id = frame & u64::from(u32::MAX);
+        let index = self.activities.idle.iter().position(|idle| {
+            idle.as_deref().is_some_and(|idle| {
+                idle.activity
+                    .native_handles
+                    .get(row)
+                    .is_some_and(|native| u64::from(native.id) == id)
+            })
+        })?;
+        Some((
+            ActivityId(u32::try_from(index).expect("handles fit u32")),
+            row,
+        ))
     }
 
     /// Whether an activity waits in the ready queue.
@@ -809,22 +859,65 @@ impl Interp {
         let Some(then) = self.activity.root_then.take() else {
             unreachable!("a started activity records its outcome");
         };
-        let recorded = self.apply_then(then, sent);
-        // A condition a notification raised is the activity's own untrapped
-        // failure, reported after the one it was notifying of.
-        let notified = match untrapped {
-            Some(raised) => {
-                let settled = self.settle_failed_sends(&raised);
-                self.report_started_failure(&raised);
-                settled
-            }
-            None => recorded.map(|_| ()),
+        let started = match then {
+            Then::Started(message) => Some(message),
+            _ => None,
         };
-        match notified {
-            Ok(()) => Ok(Stopped::Ended),
-            Err(Failure::Raised(raised)) => {
-                self.report_started_failure(&raised);
-                Ok(Stopped::Ended)
+        let recorded = self.apply_then(then, sent);
+        let failed = match (untrapped, recorded) {
+            (Some(raised), _) => raised,
+            // A notification of the send's completion failed, which the
+            // message is told of as the send's own failure.
+            (None, Err(Failure::Raised(raised))) => {
+                self.yield_after_notifier_failure()?;
+                if let Some(message) = started {
+                    self.activity.failed_sends.push(message);
+                    self.message_outcomes.insert(message, Some(raised.clone()));
+                }
+                raised
+            }
+            (None, Err(failure)) => return Err(failure),
+            (None, Ok(_)) => return Ok(Stopped::Ended),
+        };
+        self.end_failed_started(started, failed)?;
+        Ok(Stopped::Ended)
+    }
+
+    /// Settles and reports `failed`, the failure a started activity ended
+    /// with, as the oracle's `Activity::run` handler and then the thread's own
+    /// do (`concurrency/Activity.cpp:3423`, `:233`): the message `started`
+    /// is told of it, and where a notifier fails, that failure replaces it,
+    /// the message is told of the replacement and both are reported, with a
+    /// second notifier failure reported too.
+    fn end_failed_started(
+        &mut self,
+        started: Option<ObjRef>,
+        failed: Box<Raised>,
+    ) -> Result<(), Failure> {
+        self.settle_failed_sends(&failed)?;
+        let Some(message) = started else {
+            self.report_started_failure(&failed);
+            return Ok(());
+        };
+        let replaced = match self.notify_failed_send(message, false) {
+            Ok(()) => {
+                self.report_started_failure(&failed);
+                return Ok(());
+            }
+            Err(Failure::Raised(replaced)) => replaced,
+            Err(failure) => return Err(failure),
+        };
+        self.yield_after_notifier_failure()?;
+        self.activity.failed_sends.push(message);
+        self.message_outcomes
+            .insert(message, Some(replaced.clone()));
+        self.settle_failed_sends(&replaced)?;
+        self.report_started_failure(&replaced);
+        match self.notify_failed_send(message, false) {
+            Ok(()) => Ok(()),
+            Err(Failure::Raised(again)) => {
+                self.report_started_failure(&again);
+                Ok(())
             }
             Err(failure) => Err(failure),
         }
@@ -1025,6 +1118,18 @@ impl Interp {
         }
         self.clause_countdown = 1;
         Ok(())
+    }
+
+    /// One round of the other ready activities, where a started activity
+    /// ending holds no Rust frame of its own: on the oracle the activity a
+    /// notifier failed in gives up the kernel lock while the failure
+    /// unwinds, and an activity the completion woke runs then.
+    fn yield_after_notifier_failure(&mut self) -> Result<(), Failure> {
+        if !self.any_ready() {
+            return Ok(());
+        }
+        self.yield_at_slice();
+        self.run_round(false).map(|_| ())
     }
 
     /// A pinned activity's yield (ruling P29): one round of the other ready

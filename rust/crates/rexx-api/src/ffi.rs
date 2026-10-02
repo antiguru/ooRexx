@@ -495,7 +495,13 @@ pub struct ThreadContext {
 #[derive(Clone)]
 pub struct ThreadTable {
     home: Rc<TableHome>,
+    running: Rc<Running>,
 }
+
+/// The activation of the native call entered last and not yet returned on
+/// any context linking one table: the call running on the running
+/// activity. Null where none is. Erased as [`Innermost`]'s is.
+struct Running(Cell<*const Activation<'static>>);
 
 /// Owns a [`ThreadTable`]'s allocation, which extensions read through the
 /// contexts linking it.
@@ -520,6 +526,7 @@ impl ThreadTable {
             home: Rc::new(TableHome(
                 NonNull::new(raw).expect("Box::into_raw answers a non-null pointer"),
             )),
+            running: Rc::new(Running(Cell::new(std::ptr::null()))),
         }
     }
 
@@ -560,12 +567,13 @@ struct Thread {
     home: std::thread::ThreadId,
 }
 
-/// The activation of the innermost native call in flight, null where none is.
+/// The activation of the innermost native call in flight on this context,
+/// null where none is, and the table's [`Running`] call.
 ///
-/// The lifetime is erased: the pointer is written only by
+/// The lifetime is erased: the pointers are written only by
 /// [`ThreadContext::enter`], for the length of a borrow of the activation,
 /// and put back before that borrow ends.
-struct Innermost(Cell<*const Activation<'static>>);
+struct Innermost(Cell<*const Activation<'static>>, Rc<Running>);
 
 impl ThreadContext {
     /// A thread context with no native call in flight, linking a table of its
@@ -594,7 +602,7 @@ impl ThreadContext {
                 owner: std::ptr::null_mut(),
             },
             table: table.clone(),
-            innermost: Innermost(Cell::new(std::ptr::null())),
+            innermost: Innermost(Cell::new(std::ptr::null()), Rc::clone(&table.running)),
             home: std::thread::current().id(),
         }));
         // SAFETY: `raw` is the allocation just made and nothing else addresses
@@ -671,11 +679,11 @@ impl ThreadContext {
         debug_assert_eq!(self.constants(), constants, "a constant's handle moved");
         // SAFETY: as above; the reference covers only the cell.
         let innermost = unsafe { &(*raw).innermost };
+        let entered = std::ptr::from_ref(activation).cast::<Activation<'static>>();
         let _entered = Entered {
             innermost,
-            previous: innermost
-                .0
-                .replace(std::ptr::from_ref(activation).cast::<Activation<'static>>()),
+            previous: innermost.0.replace(entered),
+            running: innermost.1.0.replace(entered),
         };
         let mut contexts = Contexts {
             thread: self.pointer(),
@@ -739,11 +747,13 @@ impl Default for ThreadContext {
 struct Entered<'a> {
     innermost: &'a Innermost,
     previous: *const Activation<'static>,
+    running: *const Activation<'static>,
 }
 
 impl Drop for Entered<'_> {
     fn drop(&mut self) {
         self.innermost.0.set(self.previous);
+        self.innermost.1.0.set(self.running);
     }
 }
 
@@ -872,15 +882,32 @@ impl ContextVariables for RexxExitContext_ {
     const REFERENCE: &'static str = "ExitContextInterface.GetContextVariableReference";
 }
 
-/// The activation a method or call context addresses, or, while a call
-/// nested inside that one holds its conversion state, the innermost
-/// activation, which is the one the oracle's non-blocking members answer
-/// for (`ApiContext(RexxCallContext *, bool)`, `interpreter/api/ContextApi.hpp:135`).
+/// `Error_Execution_invalid_thread` (`messages/RexxErrorCodes.h:651`): what
+/// `Activity::validateThread` (`concurrency/Activity.cpp:3620`) raises for a
+/// member reached through a context another activity's call was handed.
+const INVALID_THREAD: usize = 98983;
+
+/// What a method or call context addresses.
+enum Addressed<'a> {
+    /// Its own activation, or, while a call nested inside that one holds its
+    /// conversion state, the innermost activation of its activity, which is
+    /// the one the oracle's non-blocking members answer for
+    /// (`ApiContext(RexxCallContext *, bool)`,
+    /// `interpreter/api/ContextApi.hpp:135`); with the host frame of the
+    /// context's own call in the second case.
+    Here(&'a Activation<'a>, Option<u64>),
+    /// A context kept by a call of another activity, whose innermost call is
+    /// busy there: the call running now, and the host frame of the kept call.
+    Elsewhere(&'a Activation<'a>, Option<u64>),
+}
+
+/// What `context` addresses.
 ///
 /// # Safety
-/// `context` is a method or call context a [`Contexts`] handed out, used
-/// during the call it was handed to, whose thread context link was written.
-unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> &'a Activation<'a> {
+/// `context` is a method or call context a [`Contexts`] handed out, whose
+/// thread context link was written, and the call it was handed to has not
+/// returned.
+unsafe fn addressed<'a, C: CallLinked>(context: *mut C) -> Addressed<'a> {
     // SAFETY: the caller guarantees `context` came from a live `Contexts`,
     // whose wrappers `ThreadContext::enter` built with `owner` pointing at the
     // `&'a Activation` it was given. That reference is shared, so forming
@@ -888,38 +915,58 @@ unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> &'a Activation<'a
     // activation's own cells.
     let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
     if !own.is_busy() {
-        return own;
+        return Addressed::Here(own, None);
     }
     // SAFETY: the caller guarantees the link to a live thread context, and a
     // held conversion means a call is in flight on it.
-    unsafe { innermost_activation(C::thread_of(context), "nested call") }
+    let (innermost, elsewhere) =
+        unsafe { innermost_or_running(C::thread_of(context), "nested call") };
+    match elsewhere {
+        Some(running) => Addressed::Elsewhere(running, own.frame()),
+        None => Addressed::Here(innermost, own.frame()),
+    }
+}
+
+/// The activation `context` addresses ([`addressed`]). Where that is a call of
+/// another activity, the running call is given the oracle's 98.983 and the
+/// member answers nothing: `None`.
+///
+/// # Safety
+/// As [`addressed`].
+unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> Option<&'a Activation<'a>> {
+    // SAFETY: as `addressed`.
+    match unsafe { addressed(context) } {
+        Addressed::Here(activation, _) => Some(activation),
+        Addressed::Elsewhere(running, _) => {
+            running.raise_syntax(INVALID_THREAD);
+            None
+        }
+    }
 }
 
 /// [`activation_of`] for the context-variable members, with the host frame
 /// of the call the context was handed to where that call is not the
-/// innermost one: the members then reach that call's caller. `None` where the
-/// innermost call of the context's activity is itself busy, so the member came
-/// from another activity: the oracle raises 98.983 against the context's own
-/// activity (`Activity::validateThread`, `concurrency/Activity.cpp:3620`) and
-/// the member answers nothing.
+/// innermost one: the members then reach that call's caller.
 ///
 /// # Safety
-/// As [`activation_of`].
+/// As [`addressed`].
 unsafe fn variables_of<'a, C: CallLinked>(
     context: *mut C,
 ) -> Option<(&'a Activation<'a>, Option<u64>)> {
-    // SAFETY: as `activation_of`.
-    let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
-    if !own.is_busy() {
-        return Some((own, None));
+    // SAFETY: as `addressed`.
+    match unsafe { addressed(context) } {
+        Addressed::Here(activation, frame) => Some((activation, frame)),
+        Addressed::Elsewhere(running, _) => {
+            running.raise_syntax(INVALID_THREAD);
+            None
+        }
     }
-    // SAFETY: as `activation_of`.
-    let innermost = unsafe { innermost_activation(C::thread_of(context), "nested call") };
-    (!innermost.is_busy()).then_some((innermost, own.frame()))
 }
 
 /// The activation of the innermost native call in flight, reached through a
-/// thread context.
+/// thread context. Where that call is busy and another, entered later, runs
+/// on another activity, the member came from there: that call is given the
+/// oracle's 98.983 and answers it.
 ///
 /// # Panics
 /// Where no native call is in flight. The oracle aborts there too: measured,
@@ -932,24 +979,53 @@ unsafe fn variables_of<'a, C: CallLinked>(
 /// # Safety
 /// `context` is a thread context a [`ThreadContext`] handed out, some clone
 /// of which is alive. A caller holding the innermost call's conversion state
-/// is caught by its `RefCell`, a panic.
+/// on its own activity is caught by its `RefCell`, a panic.
 unsafe fn innermost_activation<'a>(
     context: *mut RexxThreadContext_,
     slot: &str,
 ) -> &'a Activation<'a> {
+    // SAFETY: as the caller guarantees.
+    let (innermost, elsewhere) = unsafe { innermost_or_running(context, slot) };
+    let Some(running) = elsewhere else {
+        return innermost;
+    };
+    running.raise_syntax(INVALID_THREAD);
+    running
+}
+
+/// The innermost native call of `context`'s activity, and, where it is busy,
+/// the running call of another activity that is not.
+///
+/// # Panics
+/// Where no native call is in flight on `context`.
+///
+/// # Safety
+/// As [`innermost_activation`].
+unsafe fn innermost_or_running<'a>(
+    context: *mut RexxThreadContext_,
+    slot: &str,
+) -> (&'a Activation<'a>, Option<&'a Activation<'a>>) {
     // SAFETY: the caller guarantees `context` came from a live
     // `ThreadContext`, whose wrapper's `owner` is its `Innermost`, a field of
     // the same allocation.
-    let innermost = unsafe { &*owner_of::<RexxThreadContext_, Innermost>(context) };
-    let activation = innermost.0.get();
+    let cell = unsafe { &*owner_of::<RexxThreadContext_, Innermost>(context) };
+    let activation = cell.0.get();
     assert!(
         !activation.is_null(),
         "RexxThreadInterface.{slot} was called with no native call in flight"
     );
     // SAFETY: a non-null pointer is the activation `ThreadContext::enter` is
     // running a call for, which is borrowed for as long as the pointer is
-    // there. The reference is shared, as in `activation_of`.
-    unsafe { &*activation.cast::<Activation<'a>>() }
+    // there. The reference is shared, as in `addressed`.
+    let innermost = unsafe { &*activation.cast::<Activation<'a>>() };
+    let running = cell.1.0.get();
+    if !innermost.is_busy() || running.is_null() || running == activation {
+        return (innermost, None);
+    }
+    // SAFETY: as for `activation`: `Running` holds the call entered last, on
+    // whichever context, for as long as it runs.
+    let running = unsafe { &*running.cast::<Activation<'a>>() };
+    (innermost, (!running.is_busy()).then_some(running))
 }
 
 /// The bytes of a name an extension passed, or `None` for a null pointer.
@@ -977,7 +1053,8 @@ unsafe extern "C" fn set_object_variable(
     // SAFETY: the caller guarantees the context and the name, and
     // `invoke::method` holds no conversion state across the call the context
     // was handed to.
-    let (activation, Some(name)) = (unsafe { activation_of(context) }, unsafe { name_of(name) })
+    let (Some(activation), Some(name)) =
+        (unsafe { activation_of(context) }, unsafe { name_of(name) })
     else {
         return;
     };
@@ -988,7 +1065,8 @@ unsafe extern "C" fn set_object_variable(
 /// As [`set_object_variable`].
 unsafe extern "C" fn drop_object_variable(context: *mut RexxMethodContext_, name: CSTRING) {
     // SAFETY: as `set_object_variable`.
-    let (activation, Some(name)) = (unsafe { activation_of(context) }, unsafe { name_of(name) })
+    let (Some(activation), Some(name)) =
+        (unsafe { activation_of(context) }, unsafe { name_of(name) })
     else {
         return;
     };
@@ -1069,21 +1147,45 @@ unsafe extern "C" fn double_to_object_with_precision(
 unsafe extern "C" fn get_context_digits(context: *mut RexxCallContext_) -> stringsize_t {
     // SAFETY: the caller guarantees the context, and `invoke::routine` holds no
     // conversion state across the call it was handed to.
-    unsafe { activation_of(context) }.numeric().digits
+    unsafe { numeric_of(context) }.digits
 }
 
 /// # Safety
 /// As [`get_context_digits`].
 unsafe extern "C" fn get_context_fuzz(context: *mut RexxCallContext_) -> stringsize_t {
     // SAFETY: as `get_context_digits`.
-    unsafe { activation_of(context) }.numeric().fuzz
+    unsafe { numeric_of(context) }.fuzz
 }
 
 /// # Safety
 /// As [`get_context_digits`].
 unsafe extern "C" fn get_context_form(context: *mut RexxCallContext_) -> logical_t {
     // SAFETY: as `get_context_digits`.
-    logical_t::from(unsafe { activation_of(context) }.numeric().engineering)
+    logical_t::from(unsafe { numeric_of(context) }.engineering)
+}
+
+/// The `NUMERIC` settings `context` reports. A context another activity's
+/// call kept reports that activity's top frame's ([`Surface::kept_numeric`]);
+/// where no live call has its frame, the running call is given 98.983 and
+/// the settings are zero.
+///
+/// [`Surface::kept_numeric`]: crate::callbacks::Surface::kept_numeric
+///
+/// # Safety
+/// As [`addressed`].
+unsafe fn numeric_of(context: *mut RexxCallContext_) -> crate::values::Numeric {
+    // SAFETY: as `addressed`.
+    match unsafe { addressed(context) } {
+        Addressed::Here(activation, _) => activation.numeric(),
+        Addressed::Elsewhere(running, frame) => running.kept_numeric(frame).unwrap_or_else(|| {
+            running.raise_syntax(INVALID_THREAD);
+            crate::values::Numeric {
+                digits: 0,
+                fuzz: 0,
+                engineering: false,
+            }
+        }),
+    }
 }
 
 /// # Safety
@@ -1201,7 +1303,11 @@ fn loading<R>(load: impl FnOnce() -> R) -> R {
 /// As [`activation_of`].
 unsafe extern "C-unwind" fn throw_exception0<C: CallLinked>(context: *mut C, number: usize) {
     // SAFETY: as `activation_of`.
-    throw_after(|| unsafe { activation_of(context) }.raise_syntax(number))
+    throw_after(|| {
+        if let Some(activation) = unsafe { activation_of(context) } {
+            activation.raise_syntax(number);
+        }
+    })
 }
 
 /// `ThrowException1`: [`raise_exception1`], then out of the extension.
@@ -1214,7 +1320,11 @@ unsafe extern "C-unwind" fn throw_exception1<C: CallLinked>(
     first: RexxObjectPtr,
 ) {
     // SAFETY: as `activation_of`.
-    throw_after(|| unsafe { activation_of(context) }.raise_with(C::THROW[1], number, &[first]))
+    throw_after(|| {
+        if let Some(activation) = unsafe { activation_of(context) } {
+            activation.raise_with(C::THROW[1], number, &[first]);
+        }
+    })
 }
 
 /// `ThrowException2`: [`raise_exception2`], then out of the extension.
@@ -1229,7 +1339,9 @@ unsafe extern "C-unwind" fn throw_exception2<C: CallLinked>(
 ) {
     throw_after(|| {
         // SAFETY: as `activation_of`.
-        unsafe { activation_of(context) }.raise_with(C::THROW[2], number, &[first, second]);
+        if let Some(activation) = unsafe { activation_of(context) } {
+            activation.raise_with(C::THROW[2], number, &[first, second]);
+        }
     })
 }
 
@@ -1244,7 +1356,9 @@ unsafe extern "C-unwind" fn throw_exception<C: CallLinked>(
 ) {
     throw_after(|| {
         // SAFETY: as `activation_of`.
-        unsafe { activation_of(context) }.raise_with_array(number, substitutions.cast());
+        if let Some(activation) = unsafe { activation_of(context) } {
+            activation.raise_with_array(number, substitutions.cast());
+        }
     })
 }
 
@@ -1261,7 +1375,9 @@ unsafe extern "C-unwind" fn throw_condition<C: CallLinked>(
 ) {
     throw_after(|| {
         // SAFETY: as `activation_of`.
-        let activation = unsafe { activation_of(context) };
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return;
+        };
         // SAFETY: the caller guarantees the terminator.
         let name = unsafe { name_of(name) }.unwrap_or_default();
         activation.raise_condition(name, description.cast(), additional, result);
@@ -2051,7 +2167,10 @@ unsafe extern "C" fn object_to_cself_scoped(
 /// As [`set_object_variable`].
 unsafe extern "C" fn get_cself(context: *mut RexxMethodContext_) -> POINTER {
     // SAFETY: as `set_object_variable`.
-    unsafe { activation_of(context) }.cself()
+    let Some(activation) = (unsafe { activation_of(context) }) else {
+        return std::ptr::null_mut();
+    };
+    activation.cself()
 }
 
 /// The thread-table members over a collection, each of whose bodies is one
@@ -2729,9 +2848,10 @@ mod variables {
         object: RexxObjectPtr,
     ) -> RexxStemObject {
         // SAFETY: as `get_context_variable`.
-        unsafe { activation_of(context) }
-            .resolve_stem(object)
-            .cast()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.resolve_stem(object).cast()
     }
 
     /// # Safety
@@ -2741,7 +2861,11 @@ mod variables {
         name: CSTRING,
     ) -> RexxVariableReferenceObject {
         // SAFETY: as `get_context_variable`.
-        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        let (Some(activation), name) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
         name.map_or(std::ptr::null_mut(), |name| {
             activation
                 .variable_reference(C::REFERENCE, name, false)
@@ -2756,7 +2880,11 @@ mod variables {
         name: CSTRING,
     ) -> RexxObjectPtr {
         // SAFETY: as `set_object_variable`.
-        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        let (Some(activation), name) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
         name.map_or(std::ptr::null_mut(), |name| {
             activation.object_variable(name)
         })
@@ -2769,7 +2897,11 @@ mod variables {
         name: CSTRING,
     ) -> RexxVariableReferenceObject {
         // SAFETY: as `set_object_variable`.
-        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        let (Some(activation), name) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
         name.map_or(std::ptr::null_mut(), |name| {
             activation
                 .variable_reference(
@@ -3111,7 +3243,10 @@ mod messages {
         context: *mut RexxMethodContext_,
     ) -> RexxArrayObject {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }.arguments().cast()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.arguments().cast()
     }
 
     /// # Safety
@@ -3121,14 +3256,20 @@ mod messages {
         index: usize,
     ) -> RexxObjectPtr {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }.argument(index)
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.argument(index)
     }
 
     /// # Safety
     /// As [`super::set_object_variable`].
     pub(super) unsafe extern "C" fn message_name(context: *mut RexxMethodContext_) -> CSTRING {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }.message_name()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null();
+        };
+        activation.message_name()
     }
 
     /// # Safety
@@ -3137,7 +3278,10 @@ mod messages {
         context: *mut RexxMethodContext_,
     ) -> RexxMethodObject {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation
             .executable("MethodContextInterface.GetMethod")
             .cast()
     }
@@ -3146,23 +3290,30 @@ mod messages {
     /// As [`super::set_object_variable`].
     pub(super) unsafe extern "C" fn get_self(context: *mut RexxMethodContext_) -> RexxObjectPtr {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }.method_object(MethodObject::Receiver)
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.method_object(MethodObject::Receiver)
     }
 
     /// # Safety
     /// As [`super::set_object_variable`].
     pub(super) unsafe extern "C" fn get_super(context: *mut RexxMethodContext_) -> RexxClassObject {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }
-            .method_object(MethodObject::Super)
-            .cast()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.method_object(MethodObject::Super).cast()
     }
 
     /// # Safety
     /// As [`super::set_object_variable`].
     pub(super) unsafe extern "C" fn get_scope(context: *mut RexxMethodContext_) -> RexxObjectPtr {
         // SAFETY: as `set_object_variable`.
-        unsafe { activation_of(context) }.method_object(MethodObject::Scope)
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.method_object(MethodObject::Scope)
     }
 
     /// # Safety
@@ -3176,7 +3327,11 @@ mod messages {
         arguments: RexxArrayObject,
     ) -> RexxObjectPtr {
         // SAFETY: as `set_object_variable`.
-        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        let (Some(activation), name) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
         activation.forward_message(receiver, name, scope.cast(), arguments.cast())
     }
 
@@ -3187,7 +3342,11 @@ mod messages {
         name: CSTRING,
     ) -> RexxClassObject {
         // SAFETY: as `set_object_variable`.
-        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        let (Some(activation), name) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
         name.map_or(std::ptr::null_mut(), |name| {
             activation
                 .find_class("MethodContextInterface.FindContextClass", name, true)
@@ -3201,7 +3360,10 @@ mod messages {
         context: *mut RexxCallContext_,
     ) -> RexxArrayObject {
         // SAFETY: as `get_context_digits`.
-        unsafe { activation_of(context) }.arguments().cast()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.arguments().cast()
     }
 
     /// # Safety
@@ -3211,14 +3373,20 @@ mod messages {
         index: usize,
     ) -> RexxObjectPtr {
         // SAFETY: as `get_context_digits`.
-        unsafe { activation_of(context) }.argument(index)
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.argument(index)
     }
 
     /// # Safety
     /// As [`super::get_context_digits`].
     pub(super) unsafe extern "C" fn routine_name(context: *mut RexxCallContext_) -> CSTRING {
         // SAFETY: as `get_context_digits`.
-        unsafe { activation_of(context) }.message_name()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null();
+        };
+        activation.message_name()
     }
 
     /// # Safety
@@ -3226,10 +3394,21 @@ mod messages {
     pub(super) unsafe extern "C" fn current_routine(
         context: *mut RexxCallContext_,
     ) -> RexxRoutineObject {
-        // SAFETY: as `get_context_digits`.
-        unsafe { activation_of(context) }
-            .executable("CallContextInterface.GetRoutine")
-            .cast()
+        const SLOT: &str = "CallContextInterface.GetRoutine";
+        // SAFETY: as `get_context_digits`; a kept context of another
+        // activity's call answers that activity's top frame's executable.
+        match unsafe { super::addressed(context) } {
+            super::Addressed::Here(activation, _) => activation.executable(SLOT).cast(),
+            super::Addressed::Elsewhere(running, frame) => {
+                running.kept_executable(frame).map_or_else(
+                    || {
+                        running.raise_syntax(super::INVALID_THREAD);
+                        std::ptr::null_mut()
+                    },
+                    <*mut _>::cast,
+                )
+            }
+        }
     }
 
     /// # Safety
@@ -3239,7 +3418,10 @@ mod messages {
         context: *mut C,
     ) -> RexxObjectPtr {
         // SAFETY: as `get_context_digits`.
-        unsafe { activation_of(context) }.caller_context()
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return std::ptr::null_mut();
+        };
+        activation.caller_context()
     }
 
     /// # Safety
@@ -3250,7 +3432,11 @@ mod messages {
         name: CSTRING,
     ) -> RexxClassObject {
         // SAFETY: as `get_context_digits`; the caller guarantees `name`.
-        let (activation, name) = unsafe { (activation_of(context), name_of(name)) };
+        let (Some(activation), name) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
         name.map_or(std::ptr::null_mut(), |name| {
             activation
                 .find_class("CallContextInterface.FindContextClass", name, false)
@@ -3262,7 +3448,10 @@ mod messages {
     /// As [`super::get_context_digits`].
     pub(super) unsafe extern "C" fn invalid_routine(context: *mut RexxCallContext_) {
         // SAFETY: as `get_context_digits`.
-        unsafe { activation_of(context) }.invalid_routine();
+        let Some(activation) = (unsafe { activation_of(context) }) else {
+            return;
+        };
+        activation.invalid_routine();
     }
 }
 
@@ -3835,14 +4024,20 @@ unsafe extern "C" fn allocate_object_memory(
     size: usize,
 ) -> POINTER {
     // SAFETY: as `set_object_variable`.
-    unsafe { activation_of(context) }.allocate_object_memory(size)
+    let Some(activation) = (unsafe { activation_of(context) }) else {
+        return std::ptr::null_mut();
+    };
+    activation.allocate_object_memory(size)
 }
 
 /// # Safety
 /// As [`set_object_variable`].
 unsafe extern "C" fn free_object_memory(context: *mut RexxMethodContext_, pointer: POINTER) {
     // SAFETY: as `set_object_variable`.
-    unsafe { activation_of(context) }.free_object_memory(pointer);
+    let Some(activation) = (unsafe { activation_of(context) }) else {
+        return;
+    };
+    activation.free_object_memory(pointer);
 }
 
 /// # Safety
@@ -3853,7 +4048,10 @@ unsafe extern "C" fn reallocate_object_memory(
     size: usize,
 ) -> POINTER {
     // SAFETY: as `set_object_variable`.
-    unsafe { activation_of(context) }.reallocate_object_memory(pointer, size)
+    let Some(activation) = (unsafe { activation_of(context) }) else {
+        return std::ptr::null_mut();
+    };
+    activation.reallocate_object_memory(pointer, size)
 }
 
 /// What a stub read through the context, which is the channel

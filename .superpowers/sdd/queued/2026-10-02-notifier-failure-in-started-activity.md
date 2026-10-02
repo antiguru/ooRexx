@@ -1,6 +1,8 @@
 # A notifier that raises in a started activity
 
-Found by Phase 6 S2-S5 Task 7. Not fixed.
+RESOLVED by Phase 6 S2-S5 Task 7 fix round 1: a notifier failure replaces the started send's failure in two stages, as `Activity::run`'s handler and the thread's own do (`Interp::end_failed_started`); the probe below now matches the oracle (crate test `a_notifier_failing_on_a_started_success_is_the_sends_failure`).
+
+Found by Phase 6 S2-S5 Task 7.
 
 When a started message completes and an object its `~notify` named raises from
 `messageComplete`, the oracle runs the notifier three times and reports the
@@ -23,5 +25,5 @@ say 'end'
 ```
 
 Oracle stdout `in notifier`, `main 3`, `in notifier`, `in notifier`, `end`, rc 0,
-stderr the 42.3 report twice. This crate: `in notifier`, `main 3`, `end`, rc 0,
+stderr the 42.3 report twice. This crate before the fix: `in notifier`, `main 3`, `end`, rc 0,
 the report once.

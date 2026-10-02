@@ -954,3 +954,47 @@ fn a_context_follows_its_activation_to_a_reply_continuation() {
     );
     in_modes(&waiting, true, "24 after 2 1\n");
 }
+
+/// A started send's failure whose notifier fails is replaced by the
+/// notifier's failure: the message is told of that one, both runs of the
+/// notifier fail and both are reported, the send's own failure never; the
+/// waiter the completion woke runs once the first notifier failure has
+/// unwound. Unswitched, the order the oracle shows.
+#[test]
+fn a_notifier_failing_in_a_started_activity_replaces_its_failure() {
+    let outcome = run(
+        "m = .message~new(.t~new, 'boom')\nm~notify(.bad~new)\nm~start\nm~wait\n\
+                       say 'main' m~hasError m~completed m~errorCondition~code\n\
+                       ::class t\n::method boom\n  return 1/0\n\
+                       ::class bad inherit MessageNotification\n::method messageComplete\n  \
+                       use arg msg\n  say 'notifier sees' msg~errorCondition~code\n  \
+                       return .nil~foo\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(
+        stdout(&outcome),
+        "notifier sees 42.3\nmain 1 1 42.3\nnotifier sees 97.1\n"
+    );
+    let reports = stderr(&outcome);
+    assert_eq!(reports.matches("Error 97.1:").count(), 2, "{reports}");
+    assert!(!reports.contains("42.3"), "{reports}");
+}
+
+/// A started send's success notification that fails is the send's failure:
+/// the notifier runs again for it and once more for its own failure, the
+/// last two are reported, and the waiter reads the result between.
+#[test]
+fn a_notifier_failing_on_a_started_success_is_the_sends_failure() {
+    let outcome = run(
+        "m = .message~new('abc', 'length')\nm~notify(.bad~new)\nm~start\nm~wait\n\
+                       say 'main' m~result\n\
+                       ::class bad inherit MessageNotification\n::method messageComplete\n  \
+                       say 'in notifier'\n  return 1/0\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(
+        stdout(&outcome),
+        "in notifier\nmain 3\nin notifier\nin notifier\n"
+    );
+    assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 2);
+}

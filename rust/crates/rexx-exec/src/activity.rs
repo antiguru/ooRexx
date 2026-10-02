@@ -63,8 +63,6 @@ pub(crate) struct Activity {
     /// Frames popped off [`Activity::native_handles`] with the buffers that held
     /// objects cleared, whose allocations the next native call reuses.
     pub(crate) native_spares: Vec<NativeFrame>,
-    /// The next [`NativeFrame`] number, wrapping.
-    pub(crate) next_native: u32,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs;
     /// made by the first ([`crate::Interp::thread_context`]).
@@ -315,7 +313,6 @@ impl Activity {
             thread: None,
             native_handles: Vec::new(),
             native_spares: Vec::new(),
-            next_native: 0,
             clause_state: ClauseState::new(),
             flat_loops: Vec::new(),
             flat_top: None,
@@ -402,7 +399,6 @@ impl Activity {
             // overwrites the handle fields before anything reads them, so a
             // spare names nothing to root.
             native_spares: _,
-            next_native: _,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
             // lifetime, and `RootSet` reaches a register as a temp.

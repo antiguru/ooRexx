@@ -470,6 +470,14 @@ impl Surface for FakeHost {
         serve(self);
     }
 
+    fn kept_numeric(&mut self, _frame: u64) -> Option<Numeric> {
+        None
+    }
+
+    fn kept_executable(&mut self, _frame: u64) -> Option<ObjRef> {
+        None
+    }
+
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef> {
         let name = name.to_ascii_uppercase();
         self.object_variables

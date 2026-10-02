@@ -15,6 +15,7 @@ use std::borrow::Cow;
 
 use rexx_api::callbacks::Surface;
 use rexx_api::layout::POINTER;
+use rexx_api::values::Numeric;
 use rexx_core::{
     BehaviourId, Body, BufferState, Bytes, Decoded, NativeState, ObjRef, ScopePools, VarRef,
     VarRefHome,
@@ -495,14 +496,28 @@ impl Surface for Interp {
     }
 
     fn executable(&mut self) -> Option<ObjRef> {
-        let frame = self.native_frame();
-        let (method, scope, name, code) =
-            (frame.method, frame.scope, frame.name.clone(), frame.code);
-        let object = if method {
-            self.method_executable(scope, &name).ok()?
-        } else {
-            self.library_routine_object(code?)
-        };
+        let row = self.activity.native_handles.len().checked_sub(1)?;
+        self.executable_at(row)
+    }
+
+    fn kept_numeric(&mut self, frame: u64) -> Option<Numeric> {
+        let (owner, _) = self.idle_native_owner(frame)?;
+        self.with_idle_activity(owner, |interp| {
+            let activation = interp.running_activation()?;
+            Some(super::numeric_of(&activation.settings))
+        })
+    }
+
+    fn kept_executable(&mut self, frame: u64) -> Option<ObjRef> {
+        let (owner, _) = self.idle_native_owner(frame)?;
+        let object = self.with_idle_activity(owner, |interp| {
+            let running = interp.running_activation()?.id;
+            let top = interp.activity.native_handles.len().checked_sub(1);
+            match top.filter(|&row| interp.activity.native_handles[row].caller == Some(running)) {
+                Some(row) => interp.executable_at(row),
+                None => crate::dispatch::context::executable_at(interp, 0).ok(),
+            }
+        })?;
         self.roots.activity_mut().push_temp(object);
         Some(object)
     }
@@ -727,6 +742,21 @@ impl Interp {
         let stem = upper[..=dot].to_vec();
         let key = crate::builtin::datatype::resolve_compound_key(self, &upper[dot + 1..]);
         (stem, key)
+    }
+
+    /// [`Surface::executable`] for the native call at `row`, left on the
+    /// temps.
+    fn executable_at(&mut self, row: usize) -> Option<ObjRef> {
+        let frame = &self.activity.native_handles[row];
+        let (method, scope, name, code) =
+            (frame.method, frame.scope, frame.name.clone(), frame.code);
+        let object = if method {
+            self.method_executable(scope, &name).ok()?
+        } else {
+            self.library_routine_object(code?)
+        };
+        self.roots.activity_mut().push_temp(object);
+        Some(object)
     }
 
     /// The index in [`Activity::suspended`] of the activation that made the

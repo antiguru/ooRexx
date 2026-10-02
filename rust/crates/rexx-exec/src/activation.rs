@@ -383,6 +383,10 @@ pub(crate) struct Activation {
     /// `RexxActivation::getContextObject`, which fills its own field the
     /// same way.
     pub(crate) context_object: Option<ObjRef>,
+    /// The `Message` whose held send this activation made last and that has
+    /// not completed: `RexxActivation`'s single `notifyObject`
+    /// (`execution/RexxActivation.cpp:4630`), told of a `SYNTAX` failure.
+    pub(crate) notify_message: Option<ObjRef>,
     /// The clause this activation is executing. [`ClauseSnapshot`] carries
     /// where it is written and why it is carried rather than derived.
     pub(crate) clause: ClauseSnapshot,
@@ -560,6 +564,7 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            notify_message: None,
             clause: ClauseSnapshot::default(),
             invocation: None,
             call_name: None,
@@ -631,6 +636,7 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            notify_message: None,
             clause: ClauseSnapshot::default(),
             invocation: None,
             call_name: None,
@@ -686,6 +692,7 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            notify_message: None,
             clause: ClauseSnapshot::default(),
             invocation: None,
             call_name: None,
@@ -736,6 +743,7 @@ impl Activation {
             cached_clock: None,
             clock_stale: true,
             context_object: None,
+            notify_message: None,
             clause: ClauseSnapshot::default(),
             invocation: None,
             call_name: None,
@@ -806,6 +814,7 @@ impl Activation {
             cached_clock: _,
             clock_stale: _,
             context_object,
+            notify_message,
             clause: _,
             invocation: _,
             call_name: _,
@@ -813,6 +822,7 @@ impl Activation {
             streams,
         } = self;
         out.extend(*context_object);
+        out.extend(*notify_message);
         if let Some(replied) = replied {
             replied.object_roots(out);
         }

@@ -24,7 +24,7 @@ pub(crate) mod fake;
 
 use crate::layout::{CSTRING, POINTER, RexxObjectPtr, refuse};
 use crate::values::{
-    self, ARGUMENT_TERMINATOR, Activation, Conversion, Source, Value, is_optional,
+    self, ARGUMENT_TERMINATOR, Activation, Conversion, Numeric, Source, Value, is_optional,
 };
 
 /// What the callback tables need from the interpreter beyond what the
@@ -179,6 +179,17 @@ pub trait Surface {
 
     /// The `Method` or `Routine` object the running native call runs.
     fn executable(&mut self) -> Option<ObjRef>;
+
+    /// The `NUMERIC` settings of the top frame of the other activity whose
+    /// native call is in the host's frame `frame`, or `None` where no live
+    /// call of another activity has that frame: the oracle's non-blocking
+    /// members read the context's activity's top frame
+    /// (`Activity::getApiContext`, `concurrency/Activity.hpp:318`).
+    fn kept_numeric(&mut self, frame: u64) -> Option<Numeric>;
+
+    /// The `Method` or `Routine` object that top frame runs, as
+    /// [`Surface::kept_numeric`] finds it.
+    fn kept_executable(&mut self, frame: u64) -> Option<ObjRef>;
 
     /// The calling activation's `RexxContext`.
     fn caller_context(&mut self) -> Option<ObjRef>;
@@ -1523,6 +1534,20 @@ impl Activation<'_> {
             MethodObject::Super => cx.host.super_scope(),
         };
         cx.host.locals().register(object)
+    }
+
+    /// [`Surface::kept_numeric`] for `frame`, `None` without one.
+    pub fn kept_numeric(&self, frame: Option<u64>) -> Option<Numeric> {
+        let mut cx = self.conversion();
+        cx.host.surface()?.kept_numeric(frame?)
+    }
+
+    /// [`Surface::kept_executable`] for `frame`, registered, `None` without
+    /// one.
+    pub fn kept_executable(&self, frame: Option<u64>) -> Option<RexxObjectPtr> {
+        let mut cx = self.conversion();
+        let object = cx.host.surface()?.kept_executable(frame?)?;
+        Some(cx.host.locals().register(object))
     }
 
     /// `GetMethod` and `GetRoutine`.
