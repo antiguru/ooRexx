@@ -835,7 +835,9 @@ impl Interp {
         // native abort. `Raised::insufficient_stack` already existed
         // (`error.rs`); measured, the oracle answers the same 11.1 at rc 245
         // for the same program, at its own depth of 27,314.
-        if self.stack_depth() >= MAX_ACTIVATION_DEPTH {
+        let probe = 0u8;
+        if self.activation_depth() >= MAX_ACTIVATION_DEPTH || self.stack_exhausted(&raw const probe)
+        {
             return Err(Raised::insufficient_stack().into());
         }
 

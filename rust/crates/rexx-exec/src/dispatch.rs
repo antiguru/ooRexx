@@ -2699,7 +2699,9 @@ impl Interp {
         // reason: a method that sends itself a message is an unbounded
         // recursion, and it must become a reportable condition rather than a
         // native abort.
-        if self.stack_depth() >= MAX_ACTIVATION_DEPTH {
+        let probe = 0u8;
+        if self.activation_depth() >= MAX_ACTIVATION_DEPTH || self.stack_exhausted(&raw const probe)
+        {
             return Err(Raised::insufficient_stack().into());
         }
         let plan = self.plan_for(

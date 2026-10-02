@@ -1,0 +1,29 @@
+-- SysSleep and a started message's ~result in PARSE template positions and
+-- in SELECT CASE WHEN values: each wait ends and the clause goes on.
+x = 'abcdef'
+parse var x a (.t~new~start('val', 'c')~result) b
+say 'pattern' a b
+parse var x a (SysSleep(0.1)) b
+say 'sleep pattern' a '|' b
+parse var x a =(SysSleep(0.1) + 3) b
+say 'absolute' a b
+parse var x 3 a +(SysSleep(0.1) + 2) b
+say 'relative' a b
+parse var x 5 a -(.t~new~start('val', 3)~result) b
+say 'backward' a b
+parse value 'one two' with c (SysSleep(0)) d
+say 'value' c '|' d
+select case 1
+  when SysSleep(0.1) + 2 then say 'when 2'
+  when SysSleep(0.1) + 1 then say 'when 1'
+  otherwise say 'none'
+end
+select case 'c'
+  when .t~new~start('val', 'c')~result then say 'when result'
+  otherwise say 'none'
+end
+::class t
+::method val
+  use arg v
+  call SysSleep 0.1
+  return v

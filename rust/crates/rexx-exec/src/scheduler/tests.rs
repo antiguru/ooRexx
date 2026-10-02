@@ -695,20 +695,40 @@ fn an_inverted_pinned_wait_is_refused_under_every_opportunity() {
     assert_eq!(stderr(&outcome), INVERTED);
 }
 
-/// Nested pinned waits share one Rust stack, so their depth is bounded by
-/// 11.1 rather than by the stack: each started method waits pinned on the
-/// next, deeper than the bound lets the chain go.
+/// Nested pinned waits share one Rust stack, so the stack remaining bounds
+/// their depth with 11.1: each started method waits pinned on the next, on
+/// an interpreter thread small enough for the bound to fire.
 #[test]
-fn nested_pinned_waits_are_bounded_by_insufficient_stack() {
-    let outcome = run(
-        "say .w~new~chain(20000)\n::class w\n::method chain unguarded\n  use arg n\n  \
-         if n = 0 then return 0\n  m = .w~new~start('chain', n - 1)\n  \
-         interpret 'r = m~result'\n  return r + 1\n",
+fn nested_pinned_waits_are_bounded_by_the_stack_remaining() {
+    let outcome = crate::run_program_on_stack(
+        "/tmp/scheduler.rex",
+        b"say .w~new~chain(10500)\n::class w\n::method chain unguarded\n  use arg n\n  \
+          if n = 0 then return 0\n  m = .w~new~start('chain', n - 1)\n  \
+          interpret 'r = m~result'\n  return r + 1\n"
+            .to_vec(),
+        Invocation::none(),
+        64 * 1024 * 1024,
     );
-    assert_eq!(outcome.exit_code, 245);
+    assert_eq!(outcome.exit_code, 245, "{}", stderr(&outcome));
     assert_eq!(stdout(&outcome), "");
     assert!(
         stderr(&outcome)
             .contains("Error 11.1:  Insufficient control stack space; cannot continue execution.")
     );
+}
+
+/// One activity's recursion through `INTERPRET` stops at the stack remaining
+/// before its activation count reaches the limit.
+#[test]
+fn recursion_is_bounded_by_the_stack_remaining() {
+    let outcome = crate::run_program_on_stack(
+        "/tmp/scheduler.rex",
+        b"say f(1)\nexit\nf: procedure\n  use arg n\n  if n >= 9000 then return n\n  \
+          interpret 'r = f(n + 1)'\n  return r\n"
+            .to_vec(),
+        Invocation::none(),
+        64 * 1024 * 1024,
+    );
+    assert_eq!(outcome.exit_code, 245, "{}", stderr(&outcome));
+    assert!(stderr(&outcome).contains("Error 11.1:"));
 }

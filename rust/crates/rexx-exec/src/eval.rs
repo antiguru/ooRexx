@@ -86,7 +86,7 @@ impl Interp {
         // one level *above* the one the oracle is known to handle, or the
         // one depth we are supposed to match becomes the first one we
         // refuse.
-        if self.activity.depth > MAX_EVAL_DEPTH {
+        if self.activity.depth > MAX_EVAL_DEPTH || self.stack_exhausted(anchor) {
             self.activity.depth -= 1;
             return Err(Raised::insufficient_stack().into());
         }
@@ -451,8 +451,10 @@ impl Interp {
                 super_class,
                 args,
                 cascade,
-            } => self
-                .message_term(
+            } => pinned!(
+                self,
+                crate::pinning::PinKind::TreeSend,
+                self.message_term(
                     code,
                     &crate::dispatch::MessageTerm {
                         target,
@@ -462,8 +464,9 @@ impl Interp {
                         cascade: *cascade,
                         assigned: None,
                     },
-                )?
-                .ok_or_else(|| Raised::no_result(name).into()),
+                )
+            )?
+            .ok_or_else(|| Raised::no_result(name).into()),
 
             _ => self.eval_cold(code, expr),
         }
@@ -551,7 +554,8 @@ impl Interp {
         self.eval_call_resolved(code, Self::unkept_resolution(fixed), name, args)
     }
 
-    /// [`eval_call`]'s second half: everything after the resolution.
+    /// [`eval_call`]'s second half: everything after the resolution, on
+    /// this Rust stack, so a pinned frame.
     pub(crate) fn eval_call_resolved(
         &mut self,
         code: &Code<'_>,
@@ -559,8 +563,10 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
-        let started = self.begin_eval_call(code, resolution, name, args)?;
-        self.complete_function(started)
+        pinned!(self, crate::pinning::PinKind::TreeEval, {
+            let started = self.begin_eval_call(code, resolution, name, args);
+            started.and_then(|started| self.complete_function(started))
+        })
     }
 
     /// [`Interp::eval_call_resolved`] up to the point its callee's body would

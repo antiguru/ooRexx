@@ -12,7 +12,10 @@
 //! The scheduler seam (spec 2026-09-29 section 2.1) and the activity table:
 //! the running activity sits inline on `Interp`, every other one boxed here,
 //! and a switch swaps the two where a driver has exited or, for a pinned
-//! wait, inside the Rust frames that pin the outgoing activity.
+//! wait, inside the Rust frames that pin the outgoing activity. A pinned
+//! waiter that becomes ready while a loop nested above its own runs waits
+//! for that loop to return, so a buried sleeper can wake after a later
+//! deadline: a recorded divergence from the oracle, counted as a late wake.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, VecDeque};
@@ -122,14 +125,6 @@ pub(crate) struct Activities {
     sleepers: BinaryHeap<Reverse<(Instant, u64, ActivityId)>>,
     /// The order the next sleeper parks in.
     next_sleeper: u64,
-    /// The activation depth of the activities whose loops of
-    /// [`Interp::run_others`] are on the Rust stack above live frames of
-    /// theirs: the depth guard's share of the stack below the running
-    /// activity.
-    buried_depth: usize,
-    /// The address of a local of the outermost loop of
-    /// [`Interp::run_others`] on the Rust stack, while there is one.
-    nest_floor: Option<usize>,
     /// The activities whose loops of [`Interp::run_others`] are on the Rust
     /// stack, outermost first, each with whether it is buried: whether it
     /// entered its loop from Rust frames that stay live below it (ruling P30).
@@ -161,10 +156,10 @@ pub(crate) struct Activities {
 /// program.
 const MAIN: ActivityId = ActivityId(0);
 
-/// The Rust stack the loops of [`Interp::run_others`] nested above the
-/// outermost one may span before a further one raises 11.1 instead: half the
-/// interpreter thread's, leaving the other half to the activation depth guard.
-const NESTED_LOOP_STACK_BYTES: usize = crate::INTERPRETER_STACK_BYTES / 2;
+/// The Rust stack kept free below the deepest point
+/// [`Interp::stack_exhausted`] admits, for the work between two of its
+/// checks and the raise of 11.1.
+const STACK_MARGIN: usize = 32 * 1024 * 1024;
 
 /// `ActivityManager::MAX_THREAD_POOL_SIZE` (`ActivityManager.hpp:358`): an
 /// ended activity is pooled while the pool holds no more than this.
@@ -179,8 +174,6 @@ impl Activities {
             ready: VecDeque::new(),
             sleepers: BinaryHeap::new(),
             next_sleeper: 0,
-            buried_depth: 0,
-            nest_floor: None,
             owners: Vec::new(),
             set_aside: Vec::new(),
             message_ids: FxHashMap::default(),
@@ -394,7 +387,9 @@ impl Interp {
     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
         pinned_park!(self, reason);
         self.park(reason);
-        let failure = match self.run_others(true) {
+        let waited = self.run_others(true);
+        pinned_unpark!(self);
+        let failure = match waited {
             Ok(Waited::Woken) => return None,
             Ok(Waited::Blocked { inverted: false }) => Loud::unsatisfiable_wait().into(),
             Ok(Waited::Blocked { inverted: true }) => {
@@ -419,6 +414,21 @@ impl Interp {
             .retain(|Reverse((_, _, sleeper))| *sleeper != running);
     }
 
+    /// Measures this interpreter's Rust stack from `base`, an address near
+    /// the base of a thread stack of `bytes`.
+    pub(crate) fn measure_stack(&mut self, base: usize, bytes: usize) {
+        self.stack_base = base;
+        self.stack_room = bytes.saturating_sub(STACK_MARGIN);
+    }
+
+    /// Whether `here`, an address on this thread's stack, lies deeper than
+    /// the stack may reach: past it a call, a nested scheduler loop or an
+    /// expression level raises 11.1 rather than risk the thread's end.
+    #[inline(always)]
+    pub(crate) fn stack_exhausted<T>(&self, here: *const T) -> bool {
+        self.stack_base.abs_diff(here as usize) > self.stack_room
+    }
+
     /// Moves every sleeper whose deadline is due to the ready queue, in
     /// deadline order.
     fn wake_due_sleepers(&mut self) {
@@ -431,13 +441,6 @@ impl Interp {
             table.sleepers.pop();
             table.ready.push_back(sleeper);
         }
-    }
-
-    /// The activation depth the guard against unbounded recursion counts:
-    /// the running activity's, and that of every activity whose frames lie
-    /// below it on this Rust stack.
-    pub(crate) fn stack_depth(&self) -> usize {
-        self.activation_depth() + self.activities.buried_depth
     }
 
     /// [`Interp::run_started_activities`] until it has nothing left to run,
@@ -503,21 +506,13 @@ impl Interp {
         let me = self.activities.running;
         let level = self.activities.owners.len();
         let probe = 0u8;
-        let here = &raw const probe as usize;
-        match self.activities.nest_floor {
-            None => self.activities.nest_floor = Some(here),
-            Some(floor) if floor.abs_diff(here) > NESTED_LOOP_STACK_BYTES => {
-                self.activities.ready.retain(|ready| *ready != me);
-                return Err(Raised::insufficient_stack().into());
-            }
-            Some(_) => {}
+        if self.stack_exhausted(&raw const probe) {
+            self.activities.ready.retain(|ready| *ready != me);
+            return Err(Raised::insufficient_stack().into());
         }
-        let depth = if buried { self.activation_depth() } else { 0 };
         self.activities.owners.push((me, buried));
-        self.activities.buried_depth += depth;
         let waited = self.run_others_from(me, level);
         let table = &mut self.activities;
-        table.buried_depth -= depth;
         let mine = table
             .set_aside
             .iter()
@@ -528,9 +523,6 @@ impl Interp {
             table.ready.push_front(activity);
         }
         table.owners.pop();
-        if table.owners.is_empty() {
-            table.nest_floor = None;
-        }
         waited.map(|waited| (waited, set_aside))
     }
 
@@ -624,6 +616,10 @@ impl Interp {
                 .any(|&(owner, buried)| owner == ready && buried);
             if ready == me || !buried {
                 return Ok(Some(ready));
+            }
+            #[cfg(feature = "pinning")]
+            if let Some(Some(idle)) = self.activities.idle.get(ready.0 as usize) {
+                late_wake!(self, idle.activity);
             }
             self.activities.set_aside.push((ready, level));
         }
@@ -842,11 +838,11 @@ impl Interp {
     }
 
     /// The requests a visit of the clause countdown serves, before the clause
-    /// begins: the switch mode's count, the timer's arming, and `SLICE`. A
-    /// slice ends where the clause `yields` and nothing pins the activity;
-    /// anywhere else it is deferred to the next clause that does (spec
-    /// 2026-09-29 P6-4), and a second slice that finds the activity still
-    /// pinned takes a pinned yield (ruling P29).
+    /// begins: the sleepers now due, the switch mode's count, the timer's
+    /// arming, and `SLICE`. A slice ends where the clause `yields` and
+    /// nothing pins the activity; anywhere else it is deferred to the next
+    /// clause that does (spec 2026-09-29 P6-4), and a second slice that finds
+    /// the activity still pinned takes a pinned yield (ruling P29).
     pub(crate) fn serve_requests(&mut self, yields: bool) -> Result<(), Failure> {
         if self.stress_collect {
             self.collect_now();

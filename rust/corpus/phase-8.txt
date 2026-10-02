@@ -443,3 +443,5 @@ lang/main_fails_in_pinned_yield.rex
 lang/sleepers_wake_in_deadline_order.rex
 lang/sleep_parks_in_if_do_and_argument.rex
 lang/sleeper_wakes_busy_main.rex
+# Task 5 fix round 1: a wait in a tree-evaluated expression is a pinned wait.
+lang/sleep_in_parse_template_and_when.rex

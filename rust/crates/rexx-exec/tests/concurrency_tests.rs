@@ -738,6 +738,51 @@ mod measured {
         );
     }
 
+    /// A sleep in a PARSE template position or a SELECT CASE `WHEN` value is
+    /// evaluated on the Rust stack, so it is a pinned wait under `TreeEval`.
+    #[test]
+    fn a_sleep_in_a_tree_evaluated_expression_is_a_pinned_wait() {
+        for program in [
+            "parse value 'ab' with x (SysSleep(0)) y\n",
+            "select case 1\n  when SysSleep(0) + 1 then nop\nend\n",
+        ] {
+            let report = report_of(program);
+            let parks: Vec<_> = report.pinned_parks.iter().collect();
+            assert!(
+                parks.len() == 1
+                    && parks[0].0.0 == ParkKind::SysSleep
+                    && parks[0].0.1.contains(&PinKind::TreeEval),
+                "{program:?}: {report:?}"
+            );
+        }
+    }
+
+    /// A pinned sleeper due while a later sleeper's loop runs above its own
+    /// is set aside until that loop returns, and counted as a late wake.
+    #[test]
+    fn a_buried_sleeper_due_first_is_a_late_wake() {
+        let report = report_of(
+            "b = .t~new~start('srt', 1.0, 0.05)\na = .t~new~start('srt', 0.2, 0)\n\
+             a~wait\nb~wait\n::class t\n::method srt\n  use arg secs, pre\n  \
+             call SysSleep pre\n  x = .array~of(2, 1)\n  x~sortWith(.c~new(secs))\n\
+             ::class c\n::method init\n  expose s\n  use arg s\n\
+             ::method compare\n  expose s\n  use arg l, r\n  call SysSleep s\n  return l - r\n",
+        );
+        let late = &report.late_wakes;
+        assert!(
+            !late.is_empty()
+                && late.keys().all(|(kind, frames)| {
+                    *kind == ParkKind::SysSleep && frames.contains(&PinKind::SortComparator)
+                }),
+            "{report:?}"
+        );
+        let report = report_of(
+            "a = .array~of(2, 1)\na~sortWith(.c~new)\n\
+             ::class c\n::method compare\n  use arg l, r\n  call SysSleep 0\n  return l - r\n",
+        );
+        assert!(report.late_wakes.is_empty(), "{report:?}");
+    }
+
     /// One program per frame kind reachable from Rexx, each reaching `SysSleep`
     /// under that kind.
     const FRAME_PROBES: &[(&str, &str)] = &[
@@ -1187,6 +1232,7 @@ mod measured {
             for (what, map) in [
                 ("pinned", &report.pinned_parks),
                 ("inverted", &report.inverted),
+                ("late wake", &report.late_wakes),
             ] {
                 for ((park, frames), count) in map {
                     *waits.entry((what, *park, frames_text(frames))).or_default() += count;

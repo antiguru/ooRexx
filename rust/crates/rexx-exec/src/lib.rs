@@ -1121,6 +1121,12 @@ struct Interp {
     deadline: Option<crate::clause::Deadline>,
     /// Clauses left before `Interp::countdown_reached` runs.
     clause_countdown: u32,
+    /// The address of a local at the base of the thread running this
+    /// interpreter, and how far below it the stack may reach before
+    /// [`Interp::stack_exhausted`]; `usize::MAX` where the thread's stack is
+    /// not known.
+    stack_base: usize,
+    stack_room: usize,
     /// This interpreter's entry in the live-interpreter registry, with the
     /// request word the timer sets.
     timer: crate::timer::Registration,
@@ -1834,6 +1840,8 @@ impl Interp {
             last_plan: None,
             deadline: None,
             clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
+            stack_base: 0,
+            stack_room: usize::MAX,
             timer: crate::timer::Registration::new(),
             switch: None,
             slice_deferred: false,
@@ -2163,7 +2171,11 @@ impl Interp {
         // D19/I6, as `Interp::begin_call` takes it: this body runs on a nested
         // driver, so recursion through programs is bounded by the same count.
         let nested = self.running_activation().is_some();
-        if nested && self.stack_depth() >= crate::run::MAX_ACTIVATION_DEPTH {
+        let probe = 0u8;
+        if nested
+            && (self.activation_depth() >= crate::run::MAX_ACTIVATION_DEPTH
+                || self.stack_exhausted(&raw const probe))
+        {
             return Err(Raised::insufficient_stack().into());
         }
         if let Err(failure) = self.install_directives(program_id, &program) {
@@ -2483,6 +2495,8 @@ impl Interp {
             last_plan: _,
             deadline: _,
             clause_countdown: _,
+            stack_base: _,
+            stack_room: _,
             timer: _,
             switch: _,
             slice_deferred: _,
@@ -2755,7 +2769,29 @@ impl Interp {
 /// Runs a Rexx program and returns what it produced.
 pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, false, invocation))
+    on_interpreter_thread(move || {
+        execute_on(
+            &path,
+            text,
+            false,
+            invocation,
+            Some(INTERPRETER_STACK_BYTES),
+        )
+    })
+}
+
+/// [`run_program`] on an interpreter thread of `stack` bytes.
+#[cfg(test)]
+pub(crate) fn run_program_on_stack(
+    path: &str,
+    text: Vec<u8>,
+    invocation: Invocation,
+    stack: usize,
+) -> Outcome {
+    let path = path.to_string();
+    on_thread_of(stack, move || {
+        execute_on(&path, text, false, invocation, Some(stack))
+    })
 }
 
 /// `run_program`, except that `Heap::collect` runs after every allocation
@@ -2770,7 +2806,9 @@ pub fn run_program_collect_every_alloc(
     invocation: Invocation,
 ) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, true, invocation))
+    on_interpreter_thread(move || {
+        execute_on(&path, text, true, invocation, Some(INTERPRETER_STACK_BYTES))
+    })
 }
 
 /// Every body of `text`, compiled to a chunk and rendered as text: what the
@@ -2905,9 +2943,14 @@ fn report_late_failures(
 
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
 fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Outcome {
+    on_thread_of(INTERPRETER_STACK_BYTES, body)
+}
+
+/// Runs `body` on a thread with `stack` bytes of stack.
+fn on_thread_of(stack: usize, body: impl FnOnce() -> Outcome + Send + 'static) -> Outcome {
     let interpreter = std::thread::Builder::new()
         .name("rexx-interp".to_string())
-        .stack_size(INTERPRETER_STACK_BYTES)
+        .stack_size(stack)
         .spawn(body)
         .expect("spawning the interpreter thread");
     match interpreter.join() {
@@ -2916,13 +2959,28 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
     }
 }
 
-/// Everything that happens on the interpreter thread: parse, run, report.
+/// [`execute_on`] on a thread whose stack size is not known.
+#[cfg(test)]
 fn execute(
     path: &str,
     text: Vec<u8>,
     collect_every_alloc: bool,
     invocation: Invocation,
 ) -> Outcome {
+    execute_on(path, text, collect_every_alloc, invocation, None)
+}
+
+/// Everything that happens on the interpreter thread: parse, run, report.
+/// `stack` is the thread's stack size, where known.
+fn execute_on(
+    path: &str,
+    text: Vec<u8>,
+    collect_every_alloc: bool,
+    invocation: Invocation,
+    stack: Option<usize>,
+) -> Outcome {
+    let probe = 0u8;
+    let base = &raw const probe as usize;
     let program = match parse_program(text) {
         Ok(program) => program,
         // **A top-level parse failure stays loud, and that was checked rather
@@ -2963,6 +3021,9 @@ fn execute(
     };
 
     let mut interp = Interp::new();
+    if let Some(stack) = stack {
+        interp.measure_stack(base, stack);
+    }
     interp.program_path = path.to_string();
     if collect_every_alloc {
         interp.enable_stress_collect();

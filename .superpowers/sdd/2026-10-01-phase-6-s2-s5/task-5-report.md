@@ -26,10 +26,7 @@ Status: DONE. Base 157da9660. Code commit c0ded9538; this report in the commit a
 * Pinning report: `PinReport::pinned_parks` (pinned waits by park kind and frames, counted in
   `pinned_wait`); `ParkKind::of(reason)` shared with `inverted` (Sleep maps to `SysSleep`).
   `pinned_parks_over_the_derived_list`'s table gains a pinned/inverted waits-by-kind section.
-* Carried 3 (nested-loop depth guard): `stack_depth()` = activation depth + the depth of every
-  buried activity whose loop is on the stack; the three `MAX_ACTIVATION_DEPTH` guards use it. And a
-  loop nested more than `INTERPRETER_STACK_BYTES / 2` of Rust stack above the outermost raises 11.1
-  (`run_round`).
+* Carried 3 (nested-loop depth guard): replaced in fix round 1 (P33), see there.
 
 ## Rulings recorded (spec does not settle)
 
@@ -42,12 +39,7 @@ Status: DONE. Base 157da9660. Code commit c0ded9538; this report in the commit a
 * R-T5-3: `Message~halt` does not wake a sleeping target; the halt lands when its sleep ends. The
   oracle's `SysSleep` is `SysThread::longSleep` (`RexxUtilCommon.cpp:1922`), which `Message~halt`
   does not interrupt. TEST_HALT_START passes on that basis.
-* R-T5-4: the nested-loop bound is a Rust-stack span (half the interpreter stack) plus the buried
-  activation share, both raising 11.1. Cost: dev-profile (`target/debug`) nesting capacity drops;
-  measured chain (each started method waits pinned in `INTERPRET` on the next): 2000 completes,
-  3000/4000/10000 raise 11.1 (rc 245), where the base overflowed at 7000 (5000 completed). Release:
-  6000 completes, 12000 and 20000 raise 11.1 (9999 reports each). Every-mode
-  `deep.rex` (Task 4 review) dev profile: 2000 completes, 5000 raises 11.1 (it completed before).
+* R-T5-4: superseded by P33 (fix round 1).
 * `SysSleep 0` parks with a due deadline: the activity goes to the back of the ready queue.
 * No inbox exists (Task 15), so the nested loop drains nothing.
 
@@ -57,7 +49,7 @@ New lib tests (`scheduler/tests.rs`): `sleepers_wake_in_deadline_order_and_overl
 EveryOpportunity; 2 s <= wall < 2.9 s, sum 3 s), `a_sleep_in_a_sort_comparator_runs_the_others_meanwhile`,
 `a_sleeper_wakes_while_main_is_busy`, `a_deadline_ends_a_wait_on_a_later_sleeper`,
 `an_inverted_pinned_wait_is_refused_under_every_opportunity`,
-`nested_pinned_waits_are_bounded_by_insufficient_stack` (chain 20000; rc 245, 11.1, empty stdout).
+and the depth-bound tests listed under fix round 1.
 New measured test (`--features pinning`): `a_sleep_is_a_pinned_wait_only_under_a_pinned_frame`
 (IF/DO, loop, function argument, assignment: frames empty and no pinned park; comparator: pinned
 parks equal the SysSleep arrivals, all under `SortComparator`).
@@ -70,9 +62,7 @@ Mutations (applied to a copy, restored by copying back; diffs checked after):
   `sleeper_wakes_busy_main` stays green (it witnesses M2).
 * M2 no sleeper wake in `serve_requests`: red `a_sleeper_wakes_while_main_is_busy` (deadline);
   corpus `sleeper_wakes_busy_main` hangs (timeout rc 124).
-* M3 bounds: removing the stack-span bound alone leaves the test green in the test profile (opt 3),
-  where the buried activation share fires; removing both reddens it. In the dev profile the span
-  bound is the one that fires: with only the activation share, chain 7000 overflowed (rc 134).
+* M3 bounds: see fix round 1.
 * Group runner: TEST_START (EveryOpportunity) and TEST_HALT_START (unswitched) were listed differing
   at base (Task 4 tables); now `pass`, lists emptied.
 
@@ -126,9 +116,6 @@ in its own target dir (`Compiling rexx-exec` seen): stdout and rc identical for 
 
 ## Concerns
 
-* Single-activity `INTERPRET` recursion still overflows the stack in the dev profile (measured:
-  `f` recursing through `interpret 'r = f(n + 1)'`, rc 134 debug, 11.1 rc 245 release). Pre-existing
-  and outside nested loops; the activation guard's 10000 does not fit interpret frames in debug.
 * Release chains of several thousand started activities exhaust address space under `ulimit -v 8G`
   (chain 8000 aborts with a failed 1 MB allocation at 495 MB resident), the licensed OOM divergence
   Task 2's review recorded.
@@ -136,3 +123,61 @@ in its own target dir (`Compiling rexx-exec` seen): stdout and rc identical for 
   (98.903; `findRoutine('SysSleep')` is `.nil` on both sides), so the `Routine~call` composition
   arm of `executable.rs` has no witness.
 * A sleeper far in the future delays an inverted or unsatisfiable refusal until it wakes.
+
+## Fix round 1 (review task-5-review.md)
+
+Code and this section are one commit.
+
+* I1: tree-evaluated calls and sends are pinned frames. `eval_call_resolved` (`eval.rs`) runs under
+  `PinKind::TreeEval` and the expression `ExprKind::Message` arm under `PinKind::TreeSend`, so a
+  park there takes the pinned wait. Witness `corpus/lang/sleep_in_parse_template_and_when.rex`
+  (phase-8.txt): `SysSleep` and a started `~result` in PARSE pattern, `=( )`, `+( )`, `-( )`
+  positions and SELECT CASE WHEN values. Oracle 30/30 one hash; ours 30/30 that hash unswitched and
+  30/30 under every. Red before: base and c0ded9538 refuse rc 120 ("a wait outside every root
+  driver and pinned frame"); removing the `TreeEval` pin reproduces it at the first `SysSleep`
+  pattern. The reviewer's I1 probes (`c1`, `q201`-`q205`, `r1`, `pr`) now match the oracle.
+  Measured test `a_sleep_in_a_tree_evaluated_expression_is_a_pinned_wait`: pinned park under
+  `TreeEval`; red with the pin removed.
+* I2 (P33): the buried activation share is gone; 11.1 counts each activity's own activation depth.
+  The stack remaining bounds Rust recursion instead: `execute_on` records the address of a local at
+  the interpreter thread's entry and the thread's stack size (`Interp::measure_stack`);
+  `stack_exhausted` is true past the stack size less `STACK_MARGIN` (32 MiB). It is checked at
+  every nested scheduler round (`run_round`), at the three activation guards beside
+  `MAX_ACTIVATION_DEPTH`, and at `enter_eval_node` beside `MAX_EVAL_DEPTH`. Past it the round, call
+  or expression level raises 11.1 (ruling: oracle-shaped 11.1 over a loud refusal, as the oracle's
+  `stackLimit` raises 11 on its threads). An interpreter whose thread stack is unknown (an embedder's
+  thread, or a test calling `execute` directly) is bounded by the activation counts alone.
+  Measured, chain program (each started method waits pinned in `INTERPRET` on the next), all under
+  `ulimit -v 67108864` (64 GiB address space):
+  release: 10500, 12000, 20000, 30000 complete (RSS 0.67, 0.76, 1.26, 1.87 GB);
+  dev profile (`target/debug`): 3000 and 5000 complete, 6000, 7000 and 10000 raise 11.1 (base: 5000
+  completed, 7000 overflowed); every-mode `deep.rex` 5000 completes in the dev profile.
+  Single-activity INTERPRET recursion to 20000 in the dev profile now raises 11.1 rc 245 (it
+  overflowed at c0ded9538).
+  Tests (`scheduler/tests.rs`), on a 64 MiB interpreter thread (`run_program_on_stack`) so the
+  bound fires in every profile and the chain stays small in memory:
+  `nested_pinned_waits_are_bounded_by_the_stack_remaining` (chain 10500: rc 245, 11.1, empty
+  stdout) and `recursion_is_bounded_by_the_stack_remaining` (INTERPRET recursion to 9000: 11.1).
+  Both pass under `ulimit -v 8388608` (M1). Red: with `stack_exhausted` answering false, the chain
+  test aborts the test binary (SIGABRT, stack overflow) and the recursion test fails. M2 closed by
+  these (the bound is witnessed in the optimized test profile).
+* M3: a pinned waiter set aside by a loop above its own is counted in `PinReport::late_wakes`
+  (park kind of its pinned wait, its pinned frames), and the scheduler's module doc states the late
+  wake as a recorded divergence (spec 2.6's LIFO nesting). Measured test
+  `a_buried_sleeper_due_first_is_a_late_wake` (the reviewer's nested-comparator shape): late wakes
+  under `SysSleep` with `SortComparator`; none for a single comparator sleep. Red with the count
+  removed. The pinning table's waits-by-kind section gains the late-wake rows.
+* M4: `serve_requests` doc names the due-sleeper move.
+* M5: the depth figures above state their limit (64 GiB address space). The first-round release
+  figures (8000 aborting) were under `ulimit -v 8388608`.
+
+Rulings ratified by the controller: R-T5-2, R-T5-3. The `Routine~call` arm stays unwitnessed.
+
+P28 checks after the fix: `cargo fmt --all --check` 0; clippy `-p rexx-exec --all-targets -D
+warnings` 0 and with `--features pinning` 0 (re-linted after touching sources); lib 898 passed;
+corpus 712 of 712 unswitched and under `REXX_CORPUS_SWITCH=every`; collect_stress 34 passed;
+concurrency_tests (gated, pinning) 42 passed, Message 52 pass / 16 refused, switched start tests
+18 pass / 1 refused, Object start tests 40 pass; refusal_sites 5 passed; sourceline_oracle 1
+passed. The reviewer's other probes rerun against the new release: 80 match the oracle; `q108`
+(ADDRESS WITH STEM expression, 20.932 report shape) and `q211` (`LOOP` not implemented) differ the
+same at base; `k_reply` is the known deferred-REPLY ordering (Task 6); `e4`'s oracle run timed out.

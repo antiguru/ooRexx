@@ -94,7 +94,8 @@ macro_rules! inverted_wait {
     ($interp:expr, $reason:expr) => {};
 }
 
-/// Records a pinned wait for the park reason `$reason`.
+/// Records a pinned wait for the park reason `$reason`, which [`pinned_unpark!`]
+/// ends.
 #[cfg(feature = "pinning")]
 macro_rules! pinned_park {
     ($interp:expr, $reason:expr) => {
@@ -105,6 +106,27 @@ macro_rules! pinned_park {
 #[cfg(not(feature = "pinning"))]
 macro_rules! pinned_park {
     ($interp:expr, $reason:expr) => {};
+}
+
+#[cfg(feature = "pinning")]
+macro_rules! pinned_unpark {
+    ($interp:expr) => {
+        $interp.activity.pins.unpark()
+    };
+}
+
+#[cfg(not(feature = "pinning"))]
+macro_rules! pinned_unpark {
+    ($interp:expr) => {};
+}
+
+/// Records that a loop above the pinned wait of the idle activity `$idle`
+/// found it ready and set it aside: a late wake.
+#[cfg(feature = "pinning")]
+macro_rules! late_wake {
+    ($interp:expr, $idle:expr) => {
+        $interp.pinning.late_wake(&$idle.pins)
+    };
 }
 
 /// Records a `SLICE` deferred because the activity is pinned.
@@ -253,6 +275,10 @@ mod counter {
         pub parks: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Pinned waits, keyed as `parks` is.
         pub pinned_parks: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
+        /// Pinned waits whose activity was ready while a loop above its own
+        /// ran, which set it aside until that loop returned, keyed as `parks`
+        /// is.
+        pub late_wakes: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Inverted pinned waits refused, keyed as `parks` is.
         pub inverted: BTreeMap<(ParkKind, Vec<PinKind>), u64>,
         /// Slices deferred to the next unpinned clause boundary, keyed by the
@@ -274,13 +300,18 @@ mod counter {
         report: RefCell<PinReport>,
     }
 
-    /// One activity's pinned frames, innermost last.
+    /// One activity's pinned frames, innermost last, and its pinned waits.
     #[derive(Default)]
     pub(crate) struct PinStack {
         stack: RefCell<Vec<Option<PinKind>>>,
+        waits: RefCell<Vec<ParkKind>>,
     }
 
     impl PinStack {
+        pub(crate) fn unpark(&self) {
+            self.waits.borrow_mut().pop();
+        }
+
         pub(crate) fn enter(&self, kind: impl Into<Option<PinKind>>) {
             self.stack.borrow_mut().push(kind.into());
         }
@@ -313,7 +344,20 @@ mod counter {
                 .or_default() += 1;
         }
 
+        pub(crate) fn late_wake(&self, pins: &PinStack) {
+            let Some(kind) = pins.waits.borrow().last().copied() else {
+                return;
+            };
+            *self
+                .report
+                .borrow_mut()
+                .late_wakes
+                .entry((kind, frames_of(pins)))
+                .or_default() += 1;
+        }
+
         pub(crate) fn pinned_park(&self, pins: &PinStack, reason: crate::scheduler::ParkReason) {
+            pins.waits.borrow_mut().push(ParkKind::of(reason));
             *self
                 .report
                 .borrow_mut()
@@ -363,6 +407,7 @@ mod counter {
             let mut report = self.report.borrow_mut();
             report.parks.clear();
             report.pinned_parks.clear();
+            report.late_wakes.clear();
             report.inverted.clear();
             report.deferred_slices.clear();
             report.pinned_yields.clear();
