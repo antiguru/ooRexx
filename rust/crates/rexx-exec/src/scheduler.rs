@@ -725,6 +725,7 @@ impl Interp {
                 // The oracle's resumed activation announces itself again
                 // where it had before the `REPLY` (`RexxActivation.cpp:561`).
                 if matches!(first, Some(First::Reply)) {
+                    self.open_replied_level();
                     self.trace_invocation_entry();
                 }
                 let driven = match self.activity.sliced.take() {

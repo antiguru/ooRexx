@@ -332,6 +332,15 @@ impl ActivityRoots {
         self.parked_free.push(parked.0);
     }
 
+    /// Answers what `parked` was rooting, which it roots no longer.
+    pub fn take_parked(&mut self, parked: Parked) -> Vec<ObjRef> {
+        let values = self.parked[parked.0]
+            .take()
+            .expect("take_parked on a parked entry that was already released");
+        self.parked_free.push(parked.0);
+        values
+    }
+
     /// How many parked entries are currently rooting anything.
     pub fn live_parked(&self) -> usize {
         self.parked.iter().flatten().count()

@@ -95,6 +95,9 @@ pub(crate) struct Activity {
     pub(crate) parked_calls: Vec<crate::ir::drive::ParkedCall>,
     /// The levels `Interp::drive` left for a callee, innermost last.
     pub(crate) parked_levels: Vec<crate::ir::drive::ParkedLevel>,
+    /// A `REPLY` continuation's level, until its first run parks it
+    /// ([`crate::Interp::open_replied_level`]).
+    pub(crate) replied_level: Option<Box<crate::ir::drive::RepliedLevel>>,
     /// The work each primitive method whose Rexx activation is running has
     /// left, innermost last.
     pub(crate) native_tails: Vec<crate::dispatch::NativeTail>,
@@ -321,6 +324,7 @@ impl Activity {
             call_tails: Vec::new(),
             parked_calls: Vec::new(),
             parked_levels: Vec::new(),
+            replied_level: None,
             native_tails: Vec::new(),
             pending_traps: VecDeque::new(),
             active_condition: None,
@@ -412,6 +416,8 @@ impl Activity {
             call_tails: _,
             parked_calls: _,
             parked_levels: _,
+            // Its registers are the record's parked values.
+            replied_level: _,
             native_tails,
             // Overwritten at reuse, as `spare_activations` is.
             flat_spares: _,

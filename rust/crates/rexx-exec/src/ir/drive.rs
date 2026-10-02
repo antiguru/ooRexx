@@ -96,6 +96,15 @@ pub(crate) struct ParkedLevel {
     base: usize,
 }
 
+/// The replying level a `REPLY`'s continuation resumes, its registers rooted
+/// as parked values until the continuation first runs: a pending
+/// continuation opens no arena block.
+pub(crate) struct RepliedLevel {
+    level: Level,
+    registers: rexx_core::Parked,
+    temps: FrameId,
+}
+
 /// A clause region stopped at a call op whose callee has yet to run.
 pub(crate) struct ParkedCall {
     /// The region's own `Op::Clause`.
@@ -2862,19 +2871,17 @@ impl Interp {
     #[inline(never)]
     fn split_level(&mut self, level: &Level, registers: RegFrame<'_>, base: usize, at: u32) {
         let mut idle = self.new_activity();
-        let arena = idle.roots.frames();
-        let moved = arena.reserve(registers.len());
-        for index in 0..registers.len() {
-            moved.set(index, registers.get(index));
-        }
+        let values = (0..registers.len())
+            .map(|index| registers.get(index))
+            .collect();
+        let registers = idle.roots.park(values);
         let temps = idle.roots.push_frame();
         let continuation = &mut idle.activity;
-        continuation.parked_levels.push(ParkedLevel {
-            level: Some(level.clone()),
-            registers: arena.park(moved),
+        continuation.replied_level = Some(Box::new(RepliedLevel {
+            level: level.clone(),
+            registers,
             temps,
-            base: 0,
-        });
+        }));
         continuation.sliced = Some((0, at));
         let loops = self.activity.frames[base..]
             .iter()
@@ -2904,6 +2911,34 @@ impl Interp {
             replied.continuation = Some(idle);
         }
         self.activity.splits_owed -= 1;
+    }
+
+    /// Parks the level [`Interp::split_level`] moved, its registers now in
+    /// this activity's arena, for the continuation's first slice to resume.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn open_replied_level(&mut self) {
+        let Some(replied) = self.activity.replied_level.take() else {
+            return;
+        };
+        let RepliedLevel {
+            level,
+            registers,
+            temps,
+        } = *replied;
+        let values = self.roots.activity_mut().take_parked(registers);
+        let arena = self.roots.activity().frames();
+        let len = u16::try_from(values.len()).expect("a register frame's length is a u16");
+        let moved = arena.reserve(len);
+        for (index, value) in (0..len).zip(values) {
+            moved.set(index, value);
+        }
+        self.activity.parked_levels.push(ParkedLevel {
+            level: Some(level),
+            registers: arena.park(moved),
+            temps,
+            base: 0,
+        });
     }
 
     /// The body the callee a call op of `caller` entered runs: [`Interp::

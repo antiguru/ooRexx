@@ -319,3 +319,15 @@ fn a_frame_aliasing_a_slot_does_not_move() {
     let mut other = rexx_core::ActivityRoots::new();
     roots.activity_mut().move_frame(inner, &mut other);
 }
+
+/// Parked values are roots until taken back, and taking them frees the entry.
+#[test]
+fn taken_parked_values_stop_being_roots() {
+    let mut roots = RootSet::new();
+    let value = ObjRef::heap(7, 0);
+    let parked = roots.activity_mut().park(vec![value]);
+    assert!(roots.iter().any(|r| r == value));
+    assert_eq!(roots.activity_mut().take_parked(parked), vec![value]);
+    assert!(!roots.iter().any(|r| r == value));
+    assert_eq!(roots.activity().live_parked(), 0);
+}

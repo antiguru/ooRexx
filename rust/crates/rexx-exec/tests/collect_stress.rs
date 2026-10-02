@@ -581,6 +581,51 @@ fn a_parked_reply_keeps_its_variables_across_a_collection() {
     );
 }
 
+/// A `REPLY` continuation that has yet to run keeps the values its moved
+/// registers hold, here the array a `DO OVER` walks, while its sender
+/// allocates with a collection at every allocation.
+#[test]
+fn a_pending_reply_keeps_its_registers_across_a_collection() {
+    let program = concat!(
+        "say .K~m\n",
+        "x = ''\n",
+        "do i = 1 to 20\n",
+        "  x = x || 'zzzzzzzzzzzzzzzz' || i\n",
+        "end\n",
+        "do until .local~done == 1\n",
+        "  call SysSleep 0.01\n",
+        "end\n",
+        "exit\n",
+        "::class K\n",
+        "::method m class\n",
+        "  do w over ('alpha' || 'alphaalpha beta' || 'betabetabeta')~makeArray(' ')\n",
+        "    if w~left(1) == 'a' then reply 'replied'\n",
+        "    say w\n",
+        "  end\n",
+        "  .local~done = 1\n",
+    );
+    let stress = run_program_collect_every_alloc(
+        "<pending-reply-rooting>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none(),
+    );
+    assert_eq!(
+        stress.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        "replied\nalphaalphaalpha\nbetabetabetabeta\n",
+        "a pending REPLY continuation lost a register value under collect-on-every-allocation"
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
 /// A started activity parked on `~result` keeps the values its registers
 /// hold, in the level that parked and in the level below it, while the
 /// activity that completes the message allocates, with a collection at every
