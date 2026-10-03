@@ -287,3 +287,70 @@ fn every_test_of_the_phase_8_groups_passes_and_matches_the_oracle_but_the_record
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
+
+/// Each line the framework's ticker starts, which its dots then follow.
+const TICKER_LINES: &[&str] = &[
+    "Searching for test containers",
+    "Executing automated test suite",
+];
+
+/// Exit criterion 2 of the Phase 6 spec: the framework's ticker, a `REPLY`
+/// thread and a `GUARD ON WHEN`, runs on this crate without `-U`. How many
+/// dots it prints depends on wall time, so they are checked for presence
+/// only; every other line equals the `-U` run's.
+#[test]
+fn the_framework_ticker_runs_without_dash_u() {
+    if !gate_mode() {
+        eprintln!("api_group_tests: skipped without {GATE_ENV}");
+        return;
+    }
+    let run = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("framework-ticker-{}", std::process::id()))
+        .join("run");
+    let shown = group_file(&run, DIR, "CONVERSION");
+    let mut runs = Vec::new();
+    for ticker in [false, true] {
+        let mut args = vec!["-f", shown.as_str(), "-V", VERBOSITY];
+        if !ticker {
+            args.push("-U");
+        }
+        fresh_copy(&run, DIR);
+        runs.push(run_crate(&run, &args, SwitchMode::None));
+    }
+    fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run directory");
+    let (quiet, ticking) = (&runs[0], &runs[1]);
+    assert_eq!(quiet.status, Some(0), "-U: {}", excerpt(&quiet.stderr));
+    assert_eq!(
+        ticking.status,
+        Some(0),
+        "ticker: {}",
+        excerpt(&ticking.stderr)
+    );
+    assert_eq!(ticking.stderr, quiet.stderr);
+
+    let ticking = String::from_utf8_lossy(&masked(&ticking.stdout)).into_owned();
+    let mut ticked = Vec::new();
+    let mut lines = Vec::new();
+    for line in ticking.lines() {
+        match TICKER_LINES.iter().find(|start| line.starts_with(**start)) {
+            Some(start) => {
+                let dots = &line[start.len()..];
+                assert!(
+                    !dots.is_empty() && dots.bytes().all(|b| b == b'.'),
+                    "the ticker's line {line:?} is not its text and dots"
+                );
+                ticked.push(*start);
+                lines.push(*start);
+            }
+            // Past 75 dots the ticker goes on on a line of its own.
+            None if !line.is_empty() && line.bytes().all(|b| b == b'.') => {}
+            None => lines.push(line),
+        }
+    }
+    assert_eq!(
+        ticked, TICKER_LINES,
+        "each ticker line, with dots, in order"
+    );
+    let quiet = String::from_utf8_lossy(&masked(&quiet.stdout)).into_owned();
+    assert_eq!(lines, quiet.lines().collect::<Vec<_>>());
+}

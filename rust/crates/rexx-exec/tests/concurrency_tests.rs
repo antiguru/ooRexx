@@ -1641,6 +1641,35 @@ mod group_runs {
         }
     }
 
+    /// Every test of the `Alarm` and `Ticker` groups passes with the shipped
+    /// scheduler and with a switch at every opportunity.
+    #[test]
+    fn the_alarm_and_ticker_groups_pass_in_both_modes() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let mut not_passing = Vec::new();
+        for group in ["Alarm", "Ticker"] {
+            for (name, mode) in [
+                ("timer-table", SwitchMode::None),
+                ("timer-table-switched", SwitchMode::EveryOpportunity),
+            ] {
+                let results =
+                    outcome_table(name, "base/class", group, "REXX_TIMER_TABLE", mode, |_| {
+                        true
+                    });
+                not_passing.extend(
+                    results
+                        .iter()
+                        .filter(|row| !matches!(row.outcome, Outcome::Pass))
+                        .map(|row| format!("{group} {name} {} {}", row.test, row.outcome.label())),
+                );
+            }
+        }
+        assert!(not_passing.is_empty(), "not passing: {not_passing:?}");
+    }
+
     #[test]
     fn the_outcome_table_of_the_object_group() {
         if !gate_mode() {

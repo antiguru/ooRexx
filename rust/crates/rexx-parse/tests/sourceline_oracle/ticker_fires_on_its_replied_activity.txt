@@ -1,0 +1,22 @@
+count 21
+/* A Ticker fires on the activity its REPLY made until main cancels it. */
+t = .target~new
+k = .ticker~new(0.05, t)
+t~await(2)
+k~cancel
+say 'main' k~canceled
+::class target inherit AlarmNotification
+::method init
+  expose count
+  count = 0
+::method triggered
+  expose count
+  count = count + 1
+  if count <= 2 then say 'tick' count (.context~thread \= 1)
+::method await
+  expose count
+  use arg n
+  guard on when count >= n
+::method cancel
+  use arg ticker
+  say 'cancel notified' ticker~canceled

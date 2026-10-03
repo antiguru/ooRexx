@@ -168,6 +168,17 @@ impl Oracle {
     /// [`Oracle::run`], with command-line words after the program path and a
     /// choice of standard input.
     pub fn run_with(&self, path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
+        self.run_within(path, args, stdin, ORACLE_DEADLINE)
+    }
+
+    /// [`Oracle::run_with`] under `deadline` instead of [`ORACLE_DEADLINE`].
+    pub fn run_within(
+        &self,
+        path: &Path,
+        args: &[&str],
+        stdin: Option<&[u8]>,
+        deadline: Duration,
+    ) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut command = self.wrapped(path, args);
         command
@@ -188,7 +199,7 @@ impl Oracle {
             let mut sink = child.stdin.take().expect("stdin was requested as a pipe");
             let _ = sink.write_all(bytes);
         }
-        let (stdout, stderr, termination) = wait_with_deadline(child, path);
+        let (stdout, stderr, termination) = wait_with_deadline(child, path, deadline);
         CppOutcome {
             stdout,
             stderr,
@@ -218,7 +229,7 @@ impl Oracle {
         // would have answered at once. `run_with`'s bytes path avoids the
         // same trap by dropping its own `sink` after writing.
         drop(child.stdin.take());
-        let (stdout, stderr, termination) = wait_with_deadline(child, path);
+        let (stdout, stderr, termination) = wait_with_deadline(child, path, ORACLE_DEADLINE);
         CppOutcome {
             stdout,
             stderr,
@@ -238,7 +249,7 @@ impl Oracle {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
-        let (stdout, stderr, termination) = wait_with_deadline(child, path);
+        let (stdout, stderr, termination) = wait_with_deadline(child, path, ORACLE_DEADLINE);
         CppOutcome {
             stdout,
             stderr,
@@ -282,7 +293,7 @@ impl Oracle {
             let mut pipe = child.stdin.take().expect("stdin was piped");
             let _ = pipe.write_all(bytes);
         }
-        let (stdout, stderr, termination) = wait_with_deadline(child, path);
+        let (stdout, stderr, termination) = wait_with_deadline(child, path, ORACLE_DEADLINE);
         CppOutcome {
             stdout,
             stderr,
@@ -331,9 +342,13 @@ pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::
         .unwrap_or_else(|e| panic!("failed to wait for {}: {e}", path.display()))
 }
 
-/// Waits for `child` under [`ORACLE_DEADLINE`], reading both output pipes
+/// Waits for `child` under `deadline`, reading both output pipes
 /// concurrently, and returns what it produced along with how it ended.
-fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termination) {
+fn wait_with_deadline(
+    mut child: Child,
+    path: &Path,
+    deadline: Duration,
+) -> (Vec<u8>, Vec<u8>, Termination) {
     let mut stdout_pipe = child.stdout.take().expect("stdout was requested as a pipe");
     let mut stderr_pipe = child.stderr.take().expect("stderr was requested as a pipe");
     let (stdout_tx, stdout_rx) = mpsc::channel();
@@ -354,7 +369,7 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
         match child.try_wait() {
             Ok(Some(status)) => break (status.code(), false),
             Ok(None) => {
-                if start.elapsed() >= ORACLE_DEADLINE {
+                if start.elapsed() >= deadline {
                     // The process is still running past its deadline: kill
                     // it, then bind the status `wait()` actually returns
                     // rather than assuming `None`. A process that exited in
@@ -383,7 +398,7 @@ fn wait_with_deadline(mut child: Child, path: &Path) -> (Vec<u8>, Vec<u8>, Termi
     // two channels share one clock rather than each getting a fresh
     // `ORACLE_DEADLINE`, so the pair together are bounded by it once, not
     // twice.
-    let read_deadline = Instant::now() + ORACLE_DEADLINE;
+    let read_deadline = Instant::now() + deadline;
     let stdout_result =
         stdout_rx.recv_timeout(read_deadline.saturating_duration_since(Instant::now()));
     let stderr_result =

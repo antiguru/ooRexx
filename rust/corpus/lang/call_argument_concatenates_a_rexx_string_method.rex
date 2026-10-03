@@ -1,0 +1,16 @@
+/* A Rexx STRING method run while a call's earlier arguments wait keeps them. */
+call m 1, 'a' .s~new, 3
+say f(1, .s~new 'b', 3)
+o = .s~new
+say .t~new~g(1, 'a' o, 3)
+say f(1, 2, 'c' || o)
+exit
+m: say arg() arg(1) arg(2) arg(3); return
+f: return arg() arg(1) arg(2) arg(3)
+::class s
+::method string
+  say 'string'
+  return 'S'
+::class t
+::method g
+  return arg() arg(1) arg(2) arg(3)

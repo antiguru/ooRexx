@@ -2564,7 +2564,12 @@ impl Interp {
             self.activity.pin_depth > 0 || self.activities_spawned() == 0,
             "a nested driver runs under no pinned frame"
         );
-        match self.drive_from(DriveStart::Level(root), false)? {
+        // The caller's pushed arguments are lent out: every clause of the
+        // body empties the buffer.
+        let lent = std::mem::take(&mut self.activity.value_buffer);
+        let driven = self.drive_from(DriveStart::Level(root), false);
+        self.activity.value_buffer = lent;
+        match driven? {
             Driven::Ended(ended) => Ok(ended),
             Driven::Parked(_) | Driven::Sliced { .. } => Err(Loud::scheduler_inconsistency(
                 "a wait outside every root driver and pinned frame",

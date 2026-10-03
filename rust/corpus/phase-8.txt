@@ -548,3 +548,10 @@ lang/sys_semaphores_across_activities.rex
 lang/sys_semaphore_poll_takes_at_its_poll.rex
 lang/sys_semaphore_post_waits_for_the_next_poll.rex
 lang/sys_wait_event_sem_timeout_not_int.rex
+# Phase 6 S3 Task 14: an Alarm cancel waits for its timer to start, an Alarm
+# sends its Message target, a Ticker fires on its replied activity; a call's
+# pushed arguments survive a Rexx STRING method an argument runs.
+lang/alarm_cancel_waits_for_the_timer.rex
+lang/alarm_message_target.rex
+lang/ticker_fires_on_its_replied_activity.rex
+lang/call_argument_concatenates_a_rexx_string_method.rex

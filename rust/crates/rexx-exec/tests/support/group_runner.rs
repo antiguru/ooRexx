@@ -382,8 +382,17 @@ pub fn agree(theirs: &Run, ours: &Run) -> bool {
         && theirs.status == ours.status
 }
 
+/// How long one oracle run of a test may take: `Alarm` TEST_BASE_ALARM waits
+/// out seven alarms of about two seconds each.
+pub const ORACLE_TEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub fn run_oracle(oracle: &oracle::Oracle, run: &Path, args: &[&str]) -> Run {
-    let outcome = oracle.run_with(&run.join("testOORexx.rex"), args, None);
+    let outcome = oracle.run_within(
+        &run.join("testOORexx.rex"),
+        args,
+        None,
+        ORACLE_TEST_DEADLINE,
+    );
     let status = (!did_not_finish(&outcome)).then(|| outcome.expect_exit_code());
     Run {
         stdout: outcome.stdout,
