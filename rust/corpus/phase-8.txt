@@ -536,7 +536,7 @@ lang/guard_when_unwatches_at_its_end.rex
 # EventSemaphore, MutexSemaphore and the unnamed Sys*Sem routines.
 lang/event_semaphore_post_reset_wait.rex
 lang/event_semaphore_post_wakes_every_waiter.rex
-lang/event_semaphore_timed_wait_retests_the_post.rex
+lang/event_semaphore_timed_wait_ended_by_a_post.rex
 lang/event_semaphore_wait_not_a_number.rex
 lang/mutex_semaphore_nesting_and_close.rex
 lang/mutex_semaphore_released_when_its_activity_ends.rex

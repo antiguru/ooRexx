@@ -139,3 +139,20 @@ fn a_name_sem_open_rejects_creates_nothing() {
         "<>\n<>\n<>\n<>\n<>\n",
     );
 }
+
+/// A timed wait a post woke tests the post again, so after a post and a reset
+/// in one clause it waits out its timeout, where the untimed waits answer 1.
+/// The oracle's timed waiter races the reset for the semaphore's mutex: this
+/// answer in 21 of 23 runs of this program, and in 6 of 10 with the post and
+/// reset as two clauses (ruling P47).
+#[test]
+fn a_timed_wait_tests_the_post_again_after_a_pulse() {
+    answers(
+        "e = .EventSemaphore~new\nt = .t~new\nm1 = t~start('w', e, '')\n\
+         m2 = t~start('w', e, 1)\nm3 = t~start('w', e, '')\ncall SysSleep 0.1\n\
+         e~~post~reset\nsay 'pulse' m1~result m2~result m3~result e~isPosted\n\
+         ::class t\n::method w unguarded\n  use arg e, t\n  if t == '' then return e~wait\n  \
+         return e~wait(t)\n",
+        "pulse 1 0 1 0\n",
+    );
+}
