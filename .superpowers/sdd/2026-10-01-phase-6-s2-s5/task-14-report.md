@@ -105,3 +105,42 @@ pinning table; per-test outcomes equal across the modes but TEST_EXCLUSION (P46)
   it only lets slower tests finish.
 - The `the_framework_ticker_runs_without_dash_u` test runs on this crate only (no oracle), as the
   plan specifies.
+
+## Fix round 1
+
+Review `task-14-review.md`; ruling P48. Commit `b461bf174`.
+
+- P48 / I1: `concurrency_tests.rs` `WALL_CLOCK`, the review's group 1, each row with its group
+  lines in a comment. `rows_in_both_modes`: a listed row whose two crate runs differ (or one is
+  stuck) runs both again once and the second result is judged; the cell ends `(P48 rerun)` and
+  `P48 rerun: <row>: ...` goes to stderr. `the_alarm_and_ticker_groups_pass_in_both_modes`: a
+  listed row that is not `Pass` in a mode runs again once through `run_tests` (oracle and ours in
+  that mode); it fails only if the rerun is not `Pass`; the rerun is logged. Unlisted rows strict.
+  Group 2 recorded in `phase-6-gate.md` S3 close, "Wall-clock rows (ruling P48)".
+  The `P48 rerun:` line is on stderr, which `cargo test` shows only for a failing test or under
+  `--nocapture`; the table cell carries it for the row tests in any case.
+- Live proof, temporary env-gated injections (removed; `/bin/grep -c T14_` on both files 0):
+  - `the_s3_rows` with a mismatch injected on the first judgement of TEST_TICKER_TWO_ARGS_STRING_CANCEL
+    (listed): exit 0, `P48 rerun: ... injected []`, cell `same (P48 rerun)`.
+  - Injected on both judgements of that row: exit 101, `tests differing between the modes:
+    [... TEST_TICKER_TWO_ARGS_STRING_CANCEL]`, cell `injected again (P48 rerun)`.
+  - Injected on TEST_TICKER_NO_ARGS (unlisted): exit 101, no rerun.
+  - `the_alarm_and_ticker_groups...` with TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE (listed)
+    treated as not passing on its first run in each mode: exit 0, rerun logged `pass` in both modes,
+    89 s. TEST_TICKER_NO_ARGS (unlisted): exit 101, `not passing: ["Ticker timer-table
+    TEST_TICKER_NO_ARGS pass", "Ticker timer-table-switched TEST_TICKER_NO_ARGS pass"]` (the label is
+    the real, injected-over outcome).
+- M1: `alarm_message_target.rex` alarm 0.5 s, sourceline file regenerated. Oracle 30/30, ours
+  unswitched 30/30, every 30/30: `main 0`, `ring 1 x 1`, rc 0, stderr empty.
+- M2: the S2 MethodArgs paragraph restored to its S2 text. M3: `phase-4-exclusions.txt` line
+  wrapped (gate line 271 went with M2). M4: "each ticker line carries dots"; "waits out its
+  alarms, about two seconds each". M5: "a fresh deadline".
+- Uncancelled ticker: deadline 2 s (three 50 ms triggers needed). Early-end mutation
+  (`run_started_activities` returning at once, env-gated, from a copy, restored): fails at
+  `scheduler/tests.rs:1162` (the elapsed assertion) in 0.02 s; restored, passes in 2.01 s.
+
+Checks at `b461bf174`: fmt 0; clippy workspace and pinning 0; lib 941 passed; corpus 787 of 787
+(release unswitched, release every, debug every); collect_stress 36/36 release and debug;
+`dispatch_seam` 6, `gate_table_c` 22, `method_bodies` 23, `refusal_sites` 5, `sourceline_oracle`
+1; `api_group_tests` gate 24; `concurrency_tests` gate `--test-threads=1 --nocapture` 32 passed,
+840 s, no `P48 rerun` line, S2 and S3 tables equal to the committed S3 close.
