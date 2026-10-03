@@ -95,6 +95,13 @@ pub(crate) mod stream;
 // `.Alarm`'s and `.Ticker`'s `LIBRARY REXX` entry points.
 mod time_support;
 
+// `EventSemaphore`'s and `MutexSemaphore`'s methods.
+mod semaphore;
+use semaphore::{
+    native_event_is_posted, native_event_post, native_event_reset, native_event_wait,
+    native_mutex_acquire, native_mutex_release, native_mutex_uninit,
+};
+
 /// `.File`'s entry points, whose Rexx half hands each one an already-qualified
 /// path.
 mod files;
@@ -650,12 +657,22 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `InheritInstanceMethods`. This is the entry-method mechanism: an entry
     // is reached by sending its name.
     ("Directory", "UNKNOWN", Arity::Fixed(2), native_hash_unknown),
-    // `EventSemaphoreClass::close` (`memory/Setup.cpp:1330`), which closes an
-    // operating system semaphore this crate never opened and answers no
-    // value. A row here rather than nothing, because the class declares
-    // `UNINIT` and so every instance of it is registered for the finalizer
-    // sweep, where a method with no row is a loud refusal at collection time
-    // rather than at the send.
+    (
+        "EventSemaphore",
+        "ISPOSTED",
+        Arity::Fixed(0),
+        native_event_is_posted,
+    ),
+    ("EventSemaphore", "POST", Arity::Fixed(0), native_event_post),
+    (
+        "EventSemaphore",
+        "RESET",
+        Arity::Fixed(0),
+        native_event_reset,
+    ),
+    // `EventSemaphoreClass::close` (`memory/Setup.cpp:1330`), which leaves
+    // the post as it was: measured, a posted semaphore still answers
+    // `isPosted` with `1` after its `UNINIT`.
     ("EventSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
     // `HashCollection::initRexx` at the class that declares it
     // (`memory/Setup.cpp:841`), and `ListClass::initRexx` (`:1011`), which
@@ -726,8 +743,18 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // alone, and the scope is a `MethodClass` field rather than a
     // `BaseExecutable` one (`classes/MethodClass.hpp:168`).
     ("Method", "SCOPE", Arity::Fixed(0), native_scope),
-    // `MutexSemaphoreClass::close`, `EventSemaphore`'s partner above.
-    ("MutexSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
+    (
+        "MutexSemaphore",
+        "RELEASE",
+        Arity::Fixed(0),
+        native_mutex_release,
+    ),
+    (
+        "MutexSemaphore",
+        "UNINIT",
+        Arity::Fixed(0),
+        native_mutex_uninit,
+    ),
     // `Setup.cpp:521`-`:530`, each declared at count 1. These are what an
     // operator applied to an instance resolves against when its class defines
     // none of its own; `Interp::operator_message_receiver` is the send, and
@@ -931,6 +958,13 @@ static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
     ("Object", "START", Arity::Counted, native_start),
     ("Object", "STARTWITH", Arity::Fixed(2), native_start_with),
     ("Message", "WAIT", Arity::Fixed(0), native_message_wait),
+    ("EventSemaphore", "WAIT", Arity::Fixed(1), native_event_wait),
+    (
+        "MutexSemaphore",
+        "ACQUIRE",
+        Arity::Fixed(1),
+        native_mutex_acquire,
+    ),
 ];
 
 /// [`RESUMABLE_METHODS`] for the class dictionary: every `NEW` that sends
@@ -2292,10 +2326,6 @@ impl Interp {
         // successful send has no use for it, and every send would otherwise
         // pay for the copy.
         let scope = self.classes().id_string(resolution.scope).to_string();
-        park_point!(
-            self,
-            crate::pinning::ParkKind::unimplemented_method(&scope, name)
-        );
         Err(Loud::native_method(name, &scope).into())
     }
 
@@ -2714,8 +2744,22 @@ impl Interp {
         reason: crate::scheduler::ParkReason,
         answer: ObjRef,
     ) -> Result<ObjRef, Failure> {
-        self.park_native(reason, |_, answer| Ok(Some(answer)), answer)?;
-        Ok(answer)
+        self.park_routine_with(reason, |_, answer| Ok(Some(answer)), answer)
+    }
+
+    /// A park for `reason` by a routine whose answer, once woken, is what
+    /// `resume` answers for `receiver`: that answer after a pinned wait, or
+    /// `receiver` with the park recorded on the activity.
+    pub(crate) fn park_routine_with(
+        &mut self,
+        reason: crate::scheduler::ParkReason,
+        resume: NativeResume,
+        receiver: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        Ok(match self.park_native(reason, resume, receiver)? {
+            NativeStarted::Ran(answer) => answer.unwrap_or(receiver),
+            NativeStarted::Entered(_) => receiver,
+        })
     }
 
     /// `park`'s primitive methods, run once their activity has woken: the

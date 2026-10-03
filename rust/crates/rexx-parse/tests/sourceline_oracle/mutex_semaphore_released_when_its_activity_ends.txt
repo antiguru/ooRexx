@@ -1,0 +1,12 @@
+count 11
+/* A mutex an activity still holds when it ends is released, every nesting
+   level of it. */
+m = .MutexSemaphore~new
+msg = .w~new~start('go', m)
+msg~wait
+say 'main acquire0' m~acquire(0)
+say m~release m~release
+::class w
+::method go
+  use arg m
+  say 'worker' m~acquire m~acquire

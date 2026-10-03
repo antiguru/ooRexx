@@ -1,0 +1,4 @@
+/* A timeout that is not an int is the routine's 88.907, under its own
+   traceback line. */
+h = SysCreateEventSem()
+say SysWaitEventSem(h, 'x')

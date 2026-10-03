@@ -1,0 +1,30 @@
+count 29
+/* An unnamed RexxUtil semaphore across activities: a post ends a wait for
+   ever and a polled wait, a held mutex semaphore times a request out, and
+   any activity can release it. */
+h = SysCreateEventSem()
+w = .w~new
+m1 = w~start('wait', h, 0)
+call SysSleep 0.2
+say 'post' SysPostEventSem(h)
+say 'for ever' m1~result
+say 'nothing left' SysWaitEventSem(h, 1)
+m2 = w~start('wait', h, 2000)
+call SysSleep 0.25
+say 'post' SysPostEventSem(h)
+say 'polled' m2~result
+m = SysCreateMutexSem('')
+say 'main request' SysRequestMutexSem(m)
+m3 = w~start('wait', m, 300)
+say 'contended' m3~result
+m4 = w~start('release', m)
+say 'worker release' m4~result
+say 'main request again' SysRequestMutexSem(m, 100)
+say 'close' SysCloseEventSem(h) SysCloseMutexSem(m)
+::class w
+::method wait unguarded
+  use arg h, t
+  return SysWaitEventSem(h, t)
+::method release unguarded
+  use arg h
+  return SysReleaseMutexSem(h)

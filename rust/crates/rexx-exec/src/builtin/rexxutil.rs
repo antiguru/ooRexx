@@ -9,14 +9,19 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The `REXXUTIL` package's file-system, sleep and version routines --
+//! The `REXXUTIL` package's file-system, sleep, semaphore and version routines --
 //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
 
-use rexx_core::ObjRef;
+use std::time::{Duration, Instant};
+
+use rexx_core::{Decoded, ObjRef};
+use rexx_num::{DIGITS64, Number};
 
 use crate::error::Raised;
-use crate::{Failure, Interp};
+use crate::scheduler::ParkReason;
+use crate::semaphores::{SemaphoreKey, SemaphoreWait};
+use crate::{Failure, Interp, Loud};
 
 /// The one path argument these routines take, resolved against the
 /// interpreter's own directory rather than the process's.
@@ -184,6 +189,216 @@ pub(crate) fn sleep(
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
     let done = answer(interp, 0);
     interp.park_routine(crate::scheduler::ParkReason::Sleep { deadline }, done)
+}
+
+/// How often a timed `Sys*Sem` wait tries its semaphore
+/// (`SEM_WAIT_PERIOD`, `platform/unix/SysRexxUtil.cpp:800`).
+const SEM_POLL: Duration = Duration::from_millis(100);
+
+/// `ERROR_SEM_TIMEOUT`: a timed wait ended with nothing taken.
+const SEM_TIMEOUT: i64 = 121;
+
+/// `ERROR_INVALID_HANDLE`: a handle no create made, or one closed since.
+const INVALID_HANDLE: i64 = 6;
+
+/// `SysCreateEventSem([name] [, reset])`: an unnamed semaphore of value zero,
+/// by its handle. The reset argument means nothing on Unix.
+pub(crate) fn create_event_sem(
+    interp: &mut Interp,
+    name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    if args.len() > 2 {
+        return Err(Raised::too_many_internal_arguments(2).into());
+    }
+    if args.first().copied().flatten().is_some() {
+        return Err(Loud::named_semaphore(name).into());
+    }
+    let handle = interp.create_counting(0);
+    Ok(handle_answer(interp, handle))
+}
+
+/// `SysCreateMutexSem([name])`: an unnamed semaphore of value one, by its
+/// handle. The oracle's unnamed form is an empty name; with no argument at
+/// all it crashes (`corpus/oracle-crashes.txt` entry 27), and here it is
+/// unnamed too.
+pub(crate) fn create_mutex_sem(
+    interp: &mut Interp,
+    name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    if args.len() > 1 {
+        return Err(Raised::too_many_internal_arguments(1).into());
+    }
+    if let Some(Some(value)) = args.first().copied()
+        && !interp.to_text(value).is_empty()
+    {
+        return Err(Loud::named_semaphore(name).into());
+    }
+    let handle = interp.create_counting(1);
+    Ok(handle_answer(interp, handle))
+}
+
+/// `SysPostEventSem(handle)`: `sem_post`.
+pub(crate) fn post_event_sem(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let handle = only_handle(interp, args)?;
+    let code = if interp.post_counting(handle) {
+        0
+    } else {
+        INVALID_HANDLE
+    };
+    Ok(answer(interp, code))
+}
+
+/// `SysResetEventSem(handle)`: the value back to zero, answering `0` whatever
+/// the handle.
+pub(crate) fn reset_event_sem(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let handle = only_handle(interp, args)?;
+    interp.reset_counting(handle);
+    Ok(answer(interp, 0))
+}
+
+/// `SysReleaseMutexSem(handle)`: a post only where the value is zero, so it
+/// never exceeds one.
+pub(crate) fn release_mutex_sem(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let handle = only_handle(interp, args)?;
+    let code = match interp.counting_value(handle) {
+        None => INVALID_HANDLE,
+        Some(0) => {
+            interp.post_counting(handle);
+            0
+        }
+        Some(_) => 0,
+    };
+    Ok(answer(interp, code))
+}
+
+/// `SysCloseEventSem(handle)` and `SysCloseMutexSem(handle)`, one body.
+pub(crate) fn close_sem(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let handle = only_handle(interp, args)?;
+    let code = if interp.close_counting(handle) {
+        0
+    } else {
+        INVALID_HANDLE
+    };
+    Ok(answer(interp, code))
+}
+
+/// `SysWaitEventSem(handle [, timeout])` and `SysRequestMutexSem(handle [,
+/// timeout])`, one body: a timeout of zero waits for ever, one below zero
+/// answers `0` at once and takes nothing, and one above zero tries every
+/// `SEM_POLL` until it has passed, answering `121` where nothing was taken.
+pub(crate) fn wait_sem(
+    interp: &mut Interp,
+    _name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    if args.len() > 2 {
+        return Err(Raised::too_many_internal_arguments(2).into());
+    }
+    let handle = handle_argument(interp, args)?;
+    let timeout = match args.get(1).copied().flatten() {
+        None => 0,
+        Some(value) => int_argument(interp, value, 2)?,
+    };
+    if timeout < 0 {
+        return Ok(answer(interp, 0));
+    }
+    match interp.take_counting(handle) {
+        None => return Ok(answer(interp, INVALID_HANDLE)),
+        Some(true) => return Ok(answer(interp, 0)),
+        Some(false) => {}
+    }
+    let timed = (timeout > 0).then(|| {
+        let polls = u32::try_from(timeout.unsigned_abs().div_ceil(100)).unwrap_or(u32::MAX);
+        let now = Instant::now();
+        (now + SEM_POLL * polls, now + SEM_POLL * (polls - 1))
+    });
+    park_point!(interp, crate::pinning::ParkKind::SysSemWait);
+    let wait = SemaphoreWait {
+        key: SemaphoreKey::Handle(handle),
+        timed,
+    };
+    let receiver = handle_answer(interp, handle);
+    interp.park_routine_with(ParkReason::Semaphore(wait), sem_woken, receiver)
+}
+
+fn sem_woken(interp: &mut Interp, handle: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let taken = match handle.decode() {
+        Decoded::SmallInt(handle) => u64::try_from(handle)
+            .is_ok_and(|handle| interp.end_semaphore_wait(SemaphoreKey::Handle(handle))),
+        _ => false,
+    };
+    Ok(Some(answer(interp, if taken { 0 } else { SEM_TIMEOUT })))
+}
+
+/// A semaphore handle, as text.
+fn handle_answer(interp: &mut Interp, handle: u64) -> ObjRef {
+    answer(interp, i64::try_from(handle).expect("handles fit i64"))
+}
+
+/// The one handle argument of a routine that takes nothing else.
+fn only_handle(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<u64, Failure> {
+    if args.len() > 1 {
+        return Err(Raised::too_many_internal_arguments(1).into());
+    }
+    handle_argument(interp, args)
+}
+
+/// The first argument as the oracle's `uintptr_t`: 88.901 where it is
+/// missing, 88.907 where it is not a whole number from zero to `2^64 - 1`.
+fn handle_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<u64, Failure> {
+    let Some(Some(value)) = args.first().copied() else {
+        return Err(Raised::missing_internal_argument("1").into());
+    };
+    let handle = match value.decode() {
+        Decoded::SmallInt(number) => u64::try_from(number).ok(),
+        _ => Number::parse_bytes(&interp.to_text(value))
+            .and_then(|number| number.unsigned_int64_value(DIGITS64)),
+    };
+    handle.ok_or_else(|| {
+        let found = interp.string_value_text(value);
+        outside_range(1, 0, u64::MAX.into(), &found)
+    })
+}
+
+/// `value`, the argument at `position`, as the oracle's `int`.
+fn int_argument(interp: &mut Interp, value: ObjRef, position: usize) -> Result<i64, Failure> {
+    let number = match value.decode() {
+        Decoded::SmallInt(number) => Some(number),
+        _ => Number::parse_bytes(&interp.to_text(value))
+            .and_then(|number| number.int64_value(DIGITS64)),
+    };
+    let (min, max) = (i64::from(i32::MIN), i64::from(i32::MAX));
+    number
+        .filter(|number| (min..=max).contains(number))
+        .ok_or_else(|| {
+            let found = interp.string_value_text(value);
+            outside_range(position, min.into(), max.into(), &found)
+        })
+}
+
+/// 88.907 for an argument of a routine of this package.
+fn outside_range(position: usize, min: i128, max: i128, found: &[u8]) -> Failure {
+    let mut raised = Raised::native_argument_outside_range(position, min, max, found);
+    raised.delivery.internal_package = true;
+    raised.into()
 }
 
 /// `SysVersion()` and `SysLinVer()`, which are one entry point: `uname`'s

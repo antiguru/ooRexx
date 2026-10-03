@@ -1,0 +1,15 @@
+count 14
+/* A mutex acquired before a REPLY stays with the caller: the continuation
+   can neither release it nor take it. */
+o = .c~new
+m = .MutexSemaphore~new
+say 'caller' o~f(m)
+call SysSleep 0.3
+say 'caller release' m~release m~release
+::class c
+::method f unguarded
+  use arg m
+  say 'acq' m~acquire
+  reply 'r'
+  say 'cont release' m~release
+  say 'cont acquire0' m~acquire(0)

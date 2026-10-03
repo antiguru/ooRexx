@@ -116,6 +116,9 @@ pub(crate) enum ParkReason {
     Sleep { deadline: Instant },
     /// A timer's wait, until `deadline` or a post to `cancel`.
     Timer { deadline: Instant, cancel: TimerId },
+    /// A semaphore's wait, until a post or release hands it over or a timed
+    /// wait's end.
+    Semaphore(crate::semaphores::SemaphoreWait),
 }
 
 impl ParkReason {
@@ -127,6 +130,7 @@ impl ParkReason {
             ParkReason::MessageResult(_) | ParkReason::MessageWait(_) => "a message's completion",
             ParkReason::Sleep { .. } => "a sleep's end",
             ParkReason::Timer { .. } => "a timer's end",
+            ParkReason::Semaphore(_) => "a semaphore",
         }
     }
 }
@@ -219,6 +223,7 @@ pub(crate) struct Activities {
     late_failures: Vec<Failure>,
     /// The guard locks, and what each parked activity waits on.
     pub(crate) guards: crate::guards::GuardTable,
+    pub(crate) semaphores: crate::semaphores::Semaphores,
 }
 
 /// The oracle's `msecInADay`: a timer's wait is whole days of this, then a
@@ -261,6 +266,7 @@ impl Activities {
             next_native: 0,
             late_failures: Vec::new(),
             guards: crate::guards::GuardTable::default(),
+            semaphores: crate::semaphores::Semaphores::default(),
         }
     }
 
@@ -288,6 +294,7 @@ impl Activities {
                     .flat_map(|waiter| [waiter.receiver, waiter.scope]),
             );
         }
+        self.semaphores.object_roots(out);
     }
 
     /// The identity `message`'s waiters park under.
@@ -363,11 +370,13 @@ impl Scheduler for Interp {
     }
 
     fn run_until_park(&mut self) -> Result<bool, Failure> {
-        let stopped = self.run_started()?;
-        if matches!(stopped, Stopped::Ended) {
-            self.run_ending_uninits()?;
-        }
-        Ok(matches!(stopped, Stopped::Parked))
+        let ended = match self.run_started() {
+            Ok(Stopped::Parked) => return Ok(true),
+            Ok(Stopped::Ended) => self.run_ending_uninits(),
+            Err(failure) => Err(failure),
+        };
+        self.release_ended_mutexes();
+        ended.map(|()| false)
     }
 
     fn park(&mut self, reason: ParkReason) {
@@ -403,6 +412,21 @@ impl Scheduler for Interp {
                         days_end,
                     });
                 }
+            }
+            ParkReason::Semaphore(wait) => {
+                let timed = wait.timed.map(|(deadline, takes_until)| {
+                    table.next_sleeper += 1;
+                    let order = table.next_sleeper;
+                    table.sleepers.push(Reverse((deadline, order, running)));
+                    (order, takes_until)
+                });
+                table.semaphores.enqueue(
+                    wait.key,
+                    crate::semaphores::Waiter {
+                        activity: running,
+                        timed,
+                    },
+                );
             }
         }
     }
@@ -717,7 +741,8 @@ impl Interp {
     }
 
     /// Withdraws the running activity from every message's waiters, from the
-    /// guard queues, from the sleepers and from the timers.
+    /// guard queues, from the sleepers, from the timers and from the
+    /// semaphores.
     fn cancel_wait(&mut self) {
         let running = self.activities.running;
         self.activity.when_parked = false;
@@ -727,6 +752,7 @@ impl Interp {
         for waiters in self.activities.waiters.values_mut() {
             waiters.retain(|waiter| *waiter != running);
         }
+        self.activities.semaphores.withdraw(running);
         self.activities.timers.retain(|_, timer| {
             let before = timer.waiters.len();
             timer.waiters.retain(|waiter| waiter.activity != running);
@@ -889,6 +915,28 @@ impl Interp {
             }
         }
         table.sleepers = BinaryHeap::from(sleepers);
+    }
+
+    /// Readies `waiter`, parked on a semaphore, where a post can still end its
+    /// wait, answering whether it could: an untimed one, or a timed one still
+    /// asleep and within its last instant.
+    pub(crate) fn wake_semaphore_waiter(&mut self, waiter: crate::semaphores::Waiter) -> bool {
+        if let Some((order, takes_until)) = waiter.timed {
+            if Instant::now() > takes_until {
+                return false;
+            }
+            let table = &mut self.activities;
+            let mut sleepers = std::mem::take(&mut table.sleepers).into_vec();
+            let before = sleepers.len();
+            sleepers.retain(|Reverse((_, parked, _))| *parked != order);
+            let asleep = sleepers.len() < before;
+            table.sleepers = BinaryHeap::from(sleepers);
+            if !asleep {
+                return false;
+            }
+        }
+        self.unpark(waiter.activity);
+        true
     }
 
     /// Moves every sleeper whose deadline is due to the ready queue, in

@@ -95,6 +95,9 @@ mod scheduler;
 // The guard locks and the deadlock check.
 mod guards;
 
+// The semaphore classes' and the unnamed `Sys*Sem` routines' state.
+mod semaphores;
+
 // The live-interpreter registry and the timer thread.
 mod timer;
 
@@ -349,6 +352,18 @@ impl Loud {
         let shown = String::from_utf8_lossy(name).into_owned();
         Loud {
             message: owned_message(&format!("routine \"{shown}\""), Some(owner)),
+        }
+    }
+
+    /// A `Sys*Sem` routine given a name: a named semaphore is `sem_open`'s,
+    /// shared between processes (roadmap D11).
+    fn named_semaphore(name: &[u8]) -> Loud {
+        let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
+        Loud {
+            message: owned_message(
+                &format!("routine \"{shown}\" with a named semaphore"),
+                Some("Phase 10"),
+            ),
         }
     }
 
@@ -2691,6 +2706,10 @@ impl Interp {
         self.drop_loose_kept_strings();
         let heap = &self.heap;
         self.activities.guards.prune_pools(|object| {
+            !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                || heap.get(object).is_some()
+        });
+        self.activities.semaphores.prune(|object| {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
                 || heap.get(object).is_some()
         });

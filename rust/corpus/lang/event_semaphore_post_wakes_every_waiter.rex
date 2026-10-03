@@ -1,0 +1,11 @@
+/* A post wakes every activity waiting on the semaphore. */
+e = .EventSemaphore~new
+a = .w~new~start('go', e, 'a')
+b = .w~new~start('go', e, 'b')
+call SysSleep 0.2
+e~post
+say a~result b~result e~isPosted
+::class w
+::method go
+  use arg e, n
+  return n e~wait

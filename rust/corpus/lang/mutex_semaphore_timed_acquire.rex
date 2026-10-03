@@ -1,0 +1,16 @@
+/* An acquire with a timeout answers 0 when the holder keeps the lock past
+   it, and 1 when a release hands it over before it. */
+m = .MutexSemaphore~new
+e = .EventSemaphore~new
+msg = .w~new~start('go', m, e)
+e~wait
+say 'main timed' m~acquire(0.3)
+say 'main long' m~acquire(3)
+say 'main release' m~release
+::class w
+::method go
+  use arg m, e
+  say 'worker' m~acquire
+  e~post
+  call SysSleep 1
+  say 'worker release' m~release

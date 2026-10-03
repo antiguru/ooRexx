@@ -1154,7 +1154,7 @@ pub(super) fn numeric_of(settings: &rexx_num::Settings) -> Numeric {
 /// `Number::format` takes the exponential form where the plain one would
 /// pad the integer part with zeros or put more zeros after the point than
 /// there are digits, so the text stays within about twice the digits.
-fn double_of(number: &Number) -> f64 {
+pub(super) fn double_of(number: &Number) -> f64 {
     let written = double_literal(number);
     written
         .parse()

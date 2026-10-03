@@ -351,8 +351,16 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
             "routine \"SYSSTEMSORT\" is not implemented (Phase 10)",
         ),
         (
-            b"say SysWaitEventSem(1)\n",
-            "routine \"SYSWAITEVENTSEM\" is not implemented (Phase 6)",
+            b"say SysOpenEventSem('sem')\n",
+            "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 10)",
+        ),
+        (
+            b"say SysCreateEventSem('sem')\n",
+            "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 10)",
+        ),
+        (
+            b"say SysCreateMutexSem('sem')\n",
+            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore is not implemented (Phase 10)",
         ),
         (
             b"say rxqueue('G')\n",

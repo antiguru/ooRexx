@@ -1009,11 +1009,11 @@ DateTime	\<<	instance	answers	rc 163
 DateTime	\>	instance	answers	rc 163
 DateTime	\>>	instance	answers	rc 163
 EventSemaphore	new	class	answers	rc 0
-EventSemaphore	isPosted	instance	loud	method "ISPOSTED" of class "EventSemaphore"
-EventSemaphore	post	instance	loud	method "POST" of class "EventSemaphore"
-EventSemaphore	reset	instance	loud	method "RESET" of class "EventSemaphore"
+EventSemaphore	isPosted	instance	answers	rc 0
+EventSemaphore	post	instance	answers	rc 165
+EventSemaphore	reset	instance	answers	rc 165
 EventSemaphore	uninit	instance	answers	rc 165
-EventSemaphore	wait	instance	loud	method "WAIT" of class "EventSemaphore"
+EventSemaphore	wait	instance	loud	a wait that nothing left to run can end
 File	isCaseSensitive	class	answers	rc 0
 File	listRoots	class	answers	rc 0
 File	pathSeparator	class	answers	rc 0
@@ -1132,8 +1132,8 @@ MutableBuffer	wordLength	instance	answers	rc 163
 MutableBuffer	wordPos	instance	answers	rc 163
 MutableBuffer	words	instance	answers	rc 0
 MutexSemaphore	new	class	answers	rc 0
-MutexSemaphore	acquire	instance	loud	method "ACQUIRE" of class "MutexSemaphore"
-MutexSemaphore	release	instance	loud	method "RELEASE" of class "MutexSemaphore"
+MutexSemaphore	acquire	instance	answers	rc 0
+MutexSemaphore	release	instance	answers	rc 0
 MutexSemaphore	uninit	instance	answers	rc 165
 Orderable	=	instance	answers	rc 163
 Orderable	==	instance	answers	rc 163

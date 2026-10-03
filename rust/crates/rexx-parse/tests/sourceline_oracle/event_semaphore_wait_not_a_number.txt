@@ -1,0 +1,5 @@
+count 4
+/* A timeout that is not a number is the method's 88.902, under its own
+   traceback line. */
+e = .EventSemaphore~new
+say e~wait('abc')

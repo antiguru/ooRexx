@@ -256,26 +256,11 @@ mod counter {
                 crate::scheduler::ParkReason::MessageWait(_) => ParkKind::MessageWait,
                 crate::scheduler::ParkReason::Sleep { .. } => ParkKind::SysSleep,
                 crate::scheduler::ParkReason::Timer { .. } => ParkKind::Timer,
+                crate::scheduler::ParkReason::Semaphore(wait) => match wait.key {
+                    crate::semaphores::SemaphoreKey::Object(_) => ParkKind::SemaphoreWait,
+                    crate::semaphores::SemaphoreKey::Handle(_) => ParkKind::SysSemWait,
+                },
             }
-        }
-
-        /// The park point a send of `name` to a method of class `scope`
-        /// with no body reaches.
-        pub(crate) fn unimplemented_method(scope: &str, name: &[u8]) -> Option<ParkKind> {
-            match (scope, name) {
-                ("EventSemaphore", b"WAIT") | ("MutexSemaphore", b"ACQUIRE") => {
-                    Some(ParkKind::SemaphoreWait)
-                }
-                _ => None,
-            }
-        }
-
-        /// The park point the external routine `name` reaches.
-        pub(crate) fn routine(name: &[u8]) -> Option<ParkKind> {
-            [&b"SysWaitEventSem"[..], b"SysRequestMutexSem"]
-                .iter()
-                .any(|wait| wait.eq_ignore_ascii_case(name))
-                .then_some(ParkKind::SysSemWait)
         }
     }
 

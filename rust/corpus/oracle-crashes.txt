@@ -1109,3 +1109,14 @@ semaphore when a wait ends early without `CANCELED`; the post wakes both waiters
 second's `pthread_cond_timedwait` loop re-tests `postedCount` (`:291`-`:306`), the second goes
 back to waiting out its day. Measured 2026-10-02 by Phase 6 S2-S5 Task 8. This crate ends both
 waits' current day (`a_post_wakes_every_waiter_of_a_timer`). No upstream ticket.
+
+## 27. `SysCreateMutexSem()` with no argument
+
+    say 'before'
+    h = SysCreateMutexSem()
+
+SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper: stdout `before`, nothing on stderr. Cause:
+`SysCreateMutexSem` tests its optional name with `strlen(name) == 0`
+(`platform/unix/SysRexxUtil.cpp:878`), and an omitted `OPTIONAL_CSTRING` is a null pointer. The
+oracle's unnamed form is `SysCreateMutexSem('')`. Measured 2026-10-03 by Phase 6 S2-S5 Task 13.
+This crate creates an unnamed semaphore for both. No upstream ticket.

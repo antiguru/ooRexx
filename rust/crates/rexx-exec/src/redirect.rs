@@ -955,7 +955,7 @@ impl Interp {
 
     /// `isInstanceOf` against a class the `REXX` package defines, answering
     /// `false` where that class is not defined at all.
-    fn is_instance_of_rexx_class(&mut self, value: ObjRef, upper: &[u8]) -> bool {
+    pub(crate) fn is_instance_of_rexx_class(&mut self, value: ObjRef, upper: &[u8]) -> bool {
         let Some(class) = self.rexx_package_class(upper) else {
             return false;
         };
