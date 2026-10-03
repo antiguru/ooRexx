@@ -71,9 +71,10 @@ pub fn method(
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let native = prepare(&signature(entry, context)?, cx, arguments)?;
+    let mut native = NativeCall::empty();
+    prepare(&mut native, &signature(entry, context)?, cx, arguments)?;
     cx.conversion().host.between_halves();
-    let completion = call_method(native, entry, context);
+    let completion = call_method(&mut native, entry, context);
     cx.conversion().host.between_halves();
     finish(cx, completion)
 }
@@ -95,9 +96,15 @@ pub fn routine(
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let native = prepare(&routine_signature(entry, context)?, cx, arguments)?;
+    let mut native = NativeCall::empty();
+    prepare(
+        &mut native,
+        &routine_signature(entry, context)?,
+        cx,
+        arguments,
+    )?;
     cx.conversion().host.between_halves();
-    let completion = call_routine(native, entry, context);
+    let completion = call_routine(&mut native, entry, context);
     cx.conversion().host.between_halves();
     finish(cx, completion)
 }
@@ -163,13 +170,24 @@ pub fn command(
     Ok(cx.conversion().host.resolve(answered))
 }
 
-/// A native call with its arguments converted: the declared result type and
-/// the descriptor array the stub is handed.
+/// A native call's declared result type and the descriptor array its stub is
+/// handed, which [`prepare`] fills in place.
 ///
 /// It holds raw words only, never an `ObjRef`, so that it is `Send`.
 pub struct NativeCall {
     returns: u16,
     descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+}
+
+impl NativeCall {
+    /// A call with every descriptor empty.
+    #[inline(always)]
+    pub fn empty() -> NativeCall {
+        NativeCall {
+            returns: ARGUMENT_TERMINATOR,
+            descriptors: std::array::from_fn(|_| empty()),
+        }
+    }
 }
 
 /// What a native call left behind for [`finish`]: the declared result type,
@@ -196,22 +214,25 @@ const _: () = {
     require_send::<Completion>();
 };
 
-/// `processArguments`: `arguments` converted into the descriptors `signature`
-/// declares.
+/// `processArguments`: `arguments` converted into `native`'s descriptors as
+/// `signature` declares them. `native` is filled in place rather than
+/// answered, which keeps the descriptor array from being copied.
 ///
 /// # Errors
 /// As [`method`], for everything refused before the stub is entered.
 ///
 /// # Panics
 /// If the caller holds `cx`'s conversion state across this call.
+#[inline(always)]
 pub fn prepare(
+    native: &mut NativeCall,
     signature: &[u16],
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
-) -> Result<NativeCall, Failure> {
+) -> Result<(), Failure> {
     let returns = signature.first().copied().unwrap_or(ARGUMENT_TERMINATOR);
-
-    let mut descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS] = std::array::from_fn(|_| empty());
+    native.returns = returns;
+    let descriptors = &mut native.descriptors;
     // The result word as declared, optional bit and all
     // (`NativeActivation.cpp:228`).
     descriptors[0].r#type = returns;
@@ -242,15 +263,13 @@ pub fn prepare(
     if input < arguments.len() && !takes_list {
         return Err(Failure::TooManyArguments { expected: input });
     }
-    Ok(NativeCall {
-        returns,
-        descriptors,
-    })
+    Ok(())
 }
 
 /// `call` for the native method `entry`.
+#[inline(always)]
 pub fn call_method(
-    native: NativeCall,
+    native: &mut NativeCall,
     entry: &NativeMethodEntry,
     context: &MethodContext<'_>,
 ) -> Completion {
@@ -260,8 +279,9 @@ pub fn call_method(
 }
 
 /// `call` for the native routine `entry`.
+#[inline(always)]
 pub fn call_routine(
-    native: NativeCall,
+    native: &mut NativeCall,
     entry: &NativeRoutineEntry,
     context: &CallContext<'_>,
 ) -> Completion {
@@ -272,8 +292,9 @@ pub fn call_routine(
 
 /// Runs `stub` over `native`'s descriptors, recording the first unwritten
 /// member it reaches.
+#[inline(always)]
 fn call(
-    mut native: NativeCall,
+    native: &mut NativeCall,
     stub: impl FnOnce(
         &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
         Option<ResultRead>,
@@ -300,6 +321,7 @@ fn call(
 ///
 /// # Panics
 /// If the caller holds `cx`'s conversion state across this call.
+#[inline(always)]
 pub fn finish(cx: &Activation<'_>, completion: Completion) -> Result<Option<ObjRef>, Failure> {
     let Completion {
         returns,

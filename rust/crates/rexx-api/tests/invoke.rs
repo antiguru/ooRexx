@@ -745,11 +745,12 @@ fn the_records_between_the_halves_cross_threads() {
         session.thread.enter(&activation, |contexts| {
             let context = contexts.call();
             let signature = invoke::routine_signature(sqrt, &context)?;
-            let native = invoke::prepare(&signature, &activation, &[two, three])?;
-            let native = std::thread::spawn(move || native)
+            let mut native = invoke::NativeCall::empty();
+            invoke::prepare(&mut native, &signature, &activation, &[two, three])?;
+            let mut native = std::thread::spawn(move || native)
                 .join()
                 .expect("the thread returns what it was given");
-            let completion = invoke::call_routine(native, sqrt, &context);
+            let completion = invoke::call_routine(&mut native, sqrt, &context);
             let completion = std::thread::spawn(move || completion)
                 .join()
                 .expect("the thread returns what it was given");
