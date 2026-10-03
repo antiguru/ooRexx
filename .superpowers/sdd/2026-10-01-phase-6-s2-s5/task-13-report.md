@@ -304,10 +304,9 @@ Commit `59817d2c8`. Review: `task-13-review.md`. Ruling P47.
 
 ### Witnesses (oracle 30, ours 30 unswitched and 30 under every; one output each, ours = oracle)
 
-- `lang/event_semaphore_timed_wait_retests_the_post.rex` (I1): `pulse 1 0 1 0`, `post 1 1`. The
-  post and reset are one clause (`e~~post~reset`). In the reviewer's two-clause form, every mode
-  can run the timed waiter between the two clauses and answer 1, a schedule the oracle did not show
-  in 30 runs.
+- I1's pulse (`pulse 1 0 1 0`) is not a corpus witness: it splits on the oracle (see Fix round 2).
+  It is the crate test `a_timed_wait_tests_the_post_again_after_a_pulse`. The corpus keeps its
+  deterministic half, `lang/event_semaphore_timed_wait_ended_by_a_post.rex` (`post 1 1`).
 - `lang/sys_semaphore_poll_takes_at_its_poll.rex` (I2, the reviewer's h2): `main rel 0 req 0`,
   `main rel2 0`, `w 0 0`.
 - `lang/sys_semaphore_post_waits_for_the_next_poll.rex`: a post between two polls stays in the
@@ -337,9 +336,9 @@ Commit `59817d2c8`. Review: `task-13-review.md`. Ruling P47.
 | mutation | red |
 |---|---|
 | M0 control | nothing (6 lib tests pass) |
-| N1 post readies only the first waiter | event_semaphore_post_wakes_every_waiter, event_semaphore_timed_wait_retests_the_post |
-| N2 untimed event wait re-tests the post | event_semaphore_timed_wait_retests_the_post |
-| N3 timed event wait keeps a reset post | event_semaphore_timed_wait_retests_the_post |
+| N1 post readies only the first waiter | event_semaphore_post_wakes_every_waiter, and the pulse witness |
+| N2 untimed event wait re-tests the post | the pulse witness; after its move, lib a_timed_wait_tests_the_post_again_after_a_pulse (Fix round 2) |
+| N3 timed event wait keeps a reset post | the pulse witness; after its move, lib a_timed_wait_tests_the_post_again_after_a_pulse (Fix round 2) |
 | N4 a post readies a polling wait | sys_semaphore_post_waits_for_the_next_poll, unswitched and every (green before that witness existed) |
 | NM1 release hands the lock to its first waiter | lib a_releaser_takes_the_mutex_again_before_its_waiter, a_release_readies_the_mutex_waiters_in_park_order |
 | N6 every name refuses | lib a_name_sem_open_rejects_creates_nothing |
@@ -349,7 +348,7 @@ Commit `59817d2c8`. Review: `task-13-review.md`. Ruling P47.
 | N10 release readies the last waiter | lib a_release_readies_the_mutex_waiters_in_park_order |
 | N11 post readies without counting | sys_semaphores_unnamed, sys_semaphores_across_activities, sys_semaphore_poll_takes_at_its_poll; lib a_post_after_the_last_poll_is_left_for_the_next_wait |
 | M4, M5, M6, M7, M9, M13, M14, M15, M17, M18, M19 (as in the first table) | red as before |
-| M10 every woken wait answers 1 | event_semaphore_post_reset_wait, mutex_semaphore_timed_acquire, event_semaphore_timed_wait_retests_the_post |
+| M10 every woken wait answers 1 | event_semaphore_post_reset_wait, mutex_semaphore_timed_acquire, and the pulse witness |
 
 ### Checks at `59817d2c8`
 
@@ -403,3 +402,51 @@ Commit `59817d2c8`. Review: `task-13-review.md`. Ruling P47.
   No staged file was left behind.
   Because the race was never reproduced, no run demonstrates the fix; it rests on the mechanism.
 - After the change: fmt and both clippy runs are clean.
+
+## Gate fixes
+
+These are in `669b701cb`, described above under "Background gate failures on 18c2a2f47". The lead's
+two messages crossed it.
+
+- `dispatch_seam`: `src/dispatch/semaphore.rs` is in `CLEARANCE_CONSUMERS`.
+- The flaky `measured::` park-kind probe: `report_of` stages `extf.rex` and renames it into place.
+
+Rerun at `11b8a49d4`:
+- `cargo test -p rexx-exec --test dispatch_seam`: 6 passed.
+- `CARGO_TARGET_DIR=scratchpad/t13/target-pinning memcap 8G cargo test -p rexx-exec --features
+  pinning --test concurrency_tests -- measured::a_ measured::an_`, a fresh target dir with
+  `Compiling rexx-exec` in its log: 15 passed.
+- The failure did not reproduce at `59817d2c8` either: 45 of 45 runs passed.
+
+## Fix round 2 (R1, commit `11b8a49d4`)
+
+- **R1.** The pulse half of the I1 witness is not stable on the oracle. The reviewer measured, under
+  load, 21/23 `pulse 1 0 1 0` in one clause and 6/10 in two; the oracle's timed waiter races the
+  poster's reset for `semMutex`. It is now the crate test
+  `a_timed_wait_tests_the_post_again_after_a_pulse`, whose doc comment gives that split. The test
+  runs unswitched, collecting at every allocation, and under every; ours gives `pulse 1 0 1 0` in
+  all three.
+- **The deterministic half** stays in the corpus, renamed
+  `lang/event_semaphore_timed_wait_ended_by_a_post.rex` (`post 1 1`). Oracle 30/30, ours 30/30
+  unswitched and 30/30 every, run at load average 15-60.
+- **Report corrections.** I deleted the Fix round 1 sentence calling the pulse a 30/30 witness and
+  the claim that the oracle never showed the two-clause schedule. The mutation table now names the
+  pulse witness.
+- **Mutations rerun** (`mut2.py M0 N2 N3`):
+  - M0: nothing red, 7 lib tests pass.
+  - N2 (untimed event wait re-tests the post): red on the lib test
+    `a_timed_wait_tests_the_post_again_after_a_pulse`.
+  - N3 (timed event wait keeps a reset post): red on the same test.
+
+Checks at `11b8a49d4`:
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo clippy -p rexx-exec --all-targets --features pinning -- -D warnings`: exit 0.
+- `cargo test -p rexx-exec --lib`: 940 passed.
+- `dispatch_seam` 6, `refusal_sites` 5, `gate_table_c` 22, `sourceline_oracle` 1: all passed.
+- Corpus with `REXX_CORPUS_GATE=1`: 783 of 783 in release, in release with
+  `REXX_CORPUS_SWITCH=every`, and in debug with every.
+- `collect_stress`: 36 passed.
+- Pinning `measured::a_`/`an_` with its own target dir: 15 passed.
+- `REXX_CORPUS_GATE=1 ... cargo test --release -p rexx-exec --test concurrency_tests`: exit 0,
+  30 passed. TEST_WAIT_CONCURRENT is pass/same; TEST_EXCLUSION is pass/P46.
