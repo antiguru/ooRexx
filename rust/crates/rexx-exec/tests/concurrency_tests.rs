@@ -1719,10 +1719,8 @@ mod group_runs {
     /// from a `REPLY` continuation and its sender: the lines interleave
     /// differently and the refused run ends after a different number. Allowed
     /// only while both runs end in the same `rexx-exec: ` refusal.
-    const TRACE_INTERLEAVES: &[&str] = &[
-        "base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR",
-        "base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START",
-    ];
+    const TRACE_INTERLEAVES: &[&str] =
+        &["base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR"];
 
     /// `run`'s stdout without the lines `drop` selects.
     fn without(run: &Run, drop: impl Fn(&str) -> bool) -> String {
