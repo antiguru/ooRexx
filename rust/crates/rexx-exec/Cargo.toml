@@ -90,5 +90,10 @@ rexx-extract = { path = "../rexx-extract" }
 # fold that consumes it -- and so the emitted report -- untouched.
 rayon = "1.12.0"
 
+# Model checking of the baton, the inbox and the timer (spec 2026-09-29 R4):
+# `tests/loom.rs` compiles their sources against `loom`'s primitives under
+# `--cfg loom`. Test-only.
+loom = "0.7.2"
+
 [lints]
 workspace = true

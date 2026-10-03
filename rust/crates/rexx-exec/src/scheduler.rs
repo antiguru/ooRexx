@@ -348,6 +348,10 @@ pub(crate) trait Scheduler {
     /// Puts the running activity, whose slice is over, at the back of the
     /// ready queue.
     fn yield_at_slice(&mut self);
+    /// Stops every activity's driver for a collection (spec 2026-09-29
+    /// section 5): with the one thread holding the baton running a driver,
+    /// that is holding the baton.
+    fn stop_the_world(&self);
 }
 
 impl Scheduler for Interp {
@@ -441,6 +445,13 @@ impl Scheduler for Interp {
     fn yield_at_slice(&mut self) {
         let running = self.activities.running;
         self.activities.ready.push_back(running);
+    }
+
+    fn stop_the_world(&self) {
+        assert!(
+            self.baton.held_here(),
+            "a collection on a thread not holding the interpreter's baton"
+        );
     }
 }
 

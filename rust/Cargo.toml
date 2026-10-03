@@ -30,6 +30,10 @@ license = "CPL-1.0"
 # the reportable item `:32` asks for.
 unsafe_code = "deny"
 
+# `tests/loom.rs` builds the baton, inbox and timer sources under
+# `--cfg loom` (`rexx-exec/src/sync.rs`).
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+
 # Adopted from `TimelyDataflow/timely-dataflow`'s `Cargo.toml`, fetched
 # 2026-08-15. Levels follow that file except where a line below says otherwise.
 [workspace.lints.clippy]

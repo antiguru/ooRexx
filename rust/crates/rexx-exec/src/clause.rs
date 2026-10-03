@@ -313,21 +313,25 @@ impl Interp {
         self.serve_requests(yields)
     }
 
-    /// Blocks this thread until `due`, or fails where the run's deadline
-    /// comes first.
+    /// Blocks this thread until `due` or a post to the inbox, or fails where
+    /// the run's deadline comes first.
     pub(crate) fn idle_until(&mut self, due: Instant) -> Result<(), Failure> {
         self.hand_over_output();
         if let Some(deadline) = &mut self.deadline
             && (deadline.expired || deadline.at <= due)
         {
-            if !deadline.expired {
-                self.timer.idle_until(deadline.at);
+            if !deadline.expired
+                && let Some(posted) = self.timer.idle_until(deadline.at).pop_front()
+            {
+                match posted {}
             }
             deadline.expired = true;
             self.clause_countdown = 1;
             return Err(Failure::Deadline);
         }
-        self.timer.idle_until(due);
+        if let Some(posted) = self.timer.idle_until(due).pop_front() {
+            match posted {}
+        }
         Ok(())
     }
 

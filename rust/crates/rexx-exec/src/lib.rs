@@ -98,8 +98,12 @@ mod guards;
 // The semaphore classes' and the unnamed `Sys*Sem` routines' state.
 mod semaphores;
 
-// The live-interpreter registry and the timer thread.
+// The live-interpreter registry, the timer thread and the inbox.
 mod timer;
+
+// The baton, and the synchronisation shim it, the inbox and the timer use.
+mod baton;
+mod sync;
 
 // The `PARSE` template engine: the movement cursor (source-independent, one
 // struct, unit-tested against measured oracle bytes) and the driver that
@@ -1138,8 +1142,10 @@ struct Interp {
     stack_base: usize,
     stack_room: usize,
     /// This interpreter's entry in the live-interpreter registry, with the
-    /// request word the timer sets.
+    /// inbox and the request word the timer sets.
     timer: crate::timer::Registration,
+    /// The right to touch this interpreter's state.
+    baton: crate::baton::Baton,
     /// The deterministic switch mode, where a test set one.
     switch: Option<crate::scheduler::Switch>,
     /// Whether the pending `SLICE` has been counted as deferred.
@@ -1837,6 +1843,9 @@ impl Interp {
                 .map(|(name, value)| (name.as_bytes().to_vec(), value.as_bytes().to_vec()))
                 .collect()
         };
+        // The creating thread holds the baton until a driver exit releases it.
+        let baton = crate::baton::Baton::new();
+        baton.acquire();
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
@@ -1859,6 +1868,7 @@ impl Interp {
             stack_base: 0,
             stack_room: usize::MAX,
             timer: crate::timer::Registration::new(),
+            baton,
             switch: None,
             slice_deferred: false,
             chunks: NameMap::default(),
@@ -2515,6 +2525,7 @@ impl Interp {
             stack_base: _,
             stack_room: _,
             timer: _,
+            baton: _,
             switch: _,
             slice_deferred: _,
             // A chunk's interned literals are allocated immortal.
@@ -2688,6 +2699,7 @@ impl Interp {
     /// that what an allocation pays when nothing is due is the test alone.
     #[inline(never)]
     fn collect_now(&mut self) {
+        crate::scheduler::Scheduler::stop_the_world(self);
         // Everything the interpreter holds outside `RootSet`, handed to the
         // collector as temporaries for the length of the sweep.
         let mut anchor: Vec<ObjRef> = Vec::new();

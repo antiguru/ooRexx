@@ -1203,3 +1203,48 @@ fn a_store_wakes_a_parked_watcher_without_a_switch() {
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
     assert_eq!(stdout(&outcome), "a\nwoke\n");
 }
+
+/// `collect` stops the world, which asserts that the caller holds the baton.
+#[test]
+#[should_panic(expected = "a collection on a thread not holding the interpreter's baton")]
+fn a_collection_without_the_baton_fails_its_assertion() {
+    let mut interp = Interp::new();
+    interp.baton.release();
+    interp.collect_now();
+}
+
+/// The thread that creates an interpreter holds its baton, so it collects.
+#[test]
+fn the_creating_thread_holds_the_baton_and_collects() {
+    let mut interp = Interp::new();
+    assert!(interp.baton.held_here());
+    interp.collect_now();
+}
+
+/// Posts reach the holder in order, and the holder's `drain` answers nothing
+/// once `INBOX` is clear.
+#[test]
+fn the_inbox_answers_posts_in_order_then_nothing() {
+    let inbox = crate::timer::Inbox::<u32>::new();
+    assert!(inbox.drain().is_empty());
+    inbox.post(1);
+    inbox.post(2);
+    assert!(inbox.requests().pending(crate::timer::INBOX));
+    assert_eq!(Vec::from(inbox.drain()), [1, 2]);
+    assert!(!inbox.requests().pending(crate::timer::INBOX));
+    assert!(inbox.drain().is_empty());
+}
+
+/// A post from another thread ends the holder's idle.
+#[test]
+fn a_post_from_another_thread_ends_an_idle() {
+    let inbox = std::sync::Arc::new(crate::timer::Inbox::<u32>::new());
+    let poster = {
+        let inbox = std::sync::Arc::clone(&inbox);
+        std::thread::spawn(move || inbox.post(7))
+    };
+    let mut taken = Vec::from(inbox.idle());
+    taken.extend(inbox.drain());
+    poster.join().expect("the poster");
+    assert_eq!(taken, [7]);
+}
