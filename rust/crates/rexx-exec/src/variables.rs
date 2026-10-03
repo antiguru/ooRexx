@@ -105,20 +105,11 @@ impl Interp {
             self.roots.set_frame_slot(frame, slot, value);
             return;
         };
-        let pools = self
-            .heap
-            .get_mut(var.owner)
-            .map(|object| &mut object.body)
-            .and_then(|body| match body {
-                Body::Instance { pools, .. } => Some(pools),
-                _ => None,
-            })
-            .expect("an exposed variable's owner is a rooted Body::Instance");
-        pools.set(var.scope, &var.name, value);
-        if pools.watched() {
-            let (owner, scope, name) = (var.owner, var.scope, var.name.clone());
-            self.notify_watchers(owner, scope, &name);
+        let object = Interp::pool_object(&mut self.heap, var.owner);
+        if object.watched() {
+            return self.store_watched_exposed(frame, slot, Some(value));
         }
+        Interp::pools_in(object).set(var.scope, &var.name, value);
     }
 
     /// [`Interp::clear_variable`]'s exposed half.
@@ -134,20 +125,11 @@ impl Interp {
             self.roots.clear_frame_slot(frame, slot);
             return;
         };
-        let pools = self
-            .heap
-            .get_mut(var.owner)
-            .map(|object| &mut object.body)
-            .and_then(|body| match body {
-                Body::Instance { pools, .. } => Some(pools),
-                _ => None,
-            })
-            .expect("an exposed variable's owner is a rooted Body::Instance");
-        pools.clear(var.scope, &var.name);
-        if pools.watched() {
-            let (owner, scope, name) = (var.owner, var.scope, var.name.clone());
-            self.notify_watchers(owner, scope, &name);
+        let object = Interp::pool_object(&mut self.heap, var.owner);
+        if object.watched() {
+            return self.store_watched_exposed(frame, slot, None);
         }
+        Interp::pools_in(object).clear(var.scope, &var.name);
     }
 
     /// Assigns one name in one scope's pool on `owner`, outside any
@@ -160,63 +142,76 @@ impl Interp {
         name: &[u8],
         value: ObjRef,
     ) {
-        let pools = self
-            .heap
-            .get_mut(owner)
-            .map(|object| &mut object.body)
-            .and_then(|body| match body {
-                Body::Instance { pools, .. } => Some(pools),
-                _ => None,
-            })
-            .expect("Interp::pool_owner answers a rooted Body::Instance");
-        pools.set(scope, name, value);
-        if pools.watched() {
-            self.notify_watchers(owner, scope, name);
+        let object = Interp::pool_object(&mut self.heap, owner);
+        if object.watched() {
+            return self.store_watched(owner, scope, name, Some(value));
         }
+        Interp::pools_in(object).set(scope, name, value);
     }
 
     /// [`Interp::set_pool_variable`]'s other half: the name returns to the
     /// uninitialised state.
     pub(super) fn clear_pool_variable(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) {
-        let pools = self
-            .heap
-            .get_mut(owner)
-            .map(|object| &mut object.body)
-            .and_then(|body| match body {
-                Body::Instance { pools, .. } => Some(pools),
-                _ => None,
-            })
-            .expect("Interp::pool_owner answers a rooted Body::Instance");
-        pools.clear(scope, name);
-        if pools.watched() {
-            self.notify_watchers(owner, scope, name);
+        let object = Interp::pool_object(&mut self.heap, owner);
+        if object.watched() {
+            return self.store_watched(owner, scope, name, None);
+        }
+        Interp::pools_in(object).clear(scope, name);
+    }
+
+    /// `owner`, whose pools a variable lives in.
+    ///
+    /// # Panics
+    ///
+    /// Where `owner` is not live.
+    fn pool_object(heap: &mut rexx_core::Heap, owner: ObjRef) -> &mut rexx_core::Object {
+        heap.get_mut(owner)
+            .expect("an object variable's owner is rooted")
+    }
+
+    /// `object`'s pools.
+    ///
+    /// # Panics
+    ///
+    /// Where `object` is not a `Body::Instance`.
+    fn pools_in(object: &mut rexx_core::Object) -> &mut rexx_core::ScopePools {
+        match &mut object.body {
+            Body::Instance { pools, .. } => pools,
+            _ => panic!("an object variable's owner is a Body::Instance"),
         }
     }
 
-    /// A store or `DROP` of `name` in `scope`'s pool on
-    /// `owner`, whose pools some `GUARD WHEN` has watched: every watcher is
-    /// posted (`RexxVariable::notify`, `execution/RexxVariable.cpp:172-194`),
-    /// and where that woke one parked in its wait the activity asks for a
-    /// switch at its next clause boundary, where the oracle's notifier
-    /// yields at once. The oracle's yield hands over only to an activity
-    /// already queued for its kernel lock, which a started one measured not
-    /// to be, so a notify that wakes nobody does not switch.
+    /// A store of `value`, or a `DROP` where it is `None`, to the exposed
+    /// variable of slot `slot` of `frame`, on an object a `GUARD WHEN` has
+    /// watched.
     #[cold]
     #[inline(never)]
-    fn notify_watchers(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) {
-        let Some(watchers) = self
-            .pools_of(owner)
-            .and_then(|pools| pools.watchers(scope, name))
-            .map(<[u32]>::to_vec)
-        else {
+    fn store_watched_exposed(&mut self, frame: SlotFrame, slot: usize, value: Option<ObjRef>) {
+        let Some(var) = self.exposure(frame, slot) else {
             return;
         };
-        let mut woke = false;
-        for watcher in watchers {
-            woke |= self.post_guard(crate::scheduler::ActivityId::from_raw(watcher));
+        let (owner, scope, name) = (var.owner, var.scope, var.name.clone());
+        self.store_watched(owner, scope, &name, value);
+    }
+
+    /// A store of `value`, or a `DROP` where it is `None`, of `name` in
+    /// `scope`'s pool on `owner`, an object a `GUARD WHEN` has watched: every
+    /// watcher of the variable is posted (`RexxVariable::set`, `::drop`,
+    /// `::notify`, `execution/RexxVariable.cpp:158-194`). The oracle's
+    /// notifier then yields, which hands its kernel lock only to an activity
+    /// already queued for it; a woken watcher measured not to be one runs
+    /// at the next switch, so no switch is asked for here.
+    #[cold]
+    #[inline(never)]
+    fn store_watched(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8], value: Option<ObjRef>) {
+        let pools = Interp::pools_in(Interp::pool_object(&mut self.heap, owner));
+        match value {
+            Some(value) => pools.set(scope, name, value),
+            None => pools.clear(scope, name),
         }
-        if woke {
-            self.request_switch();
+        let watchers = self.activities.guards.watchers(owner, scope, name).to_vec();
+        for watcher in watchers {
+            self.post_guard(watcher);
         }
     }
 
@@ -236,14 +231,6 @@ impl Interp {
             .iter()
             .find(|(at, _)| *at == slot)
             .map(|(_, var)| var)
-    }
-
-    /// The scope pools `owner` holds, for a writer.
-    pub(crate) fn pools_of_mut(&mut self, owner: ObjRef) -> Option<&mut rexx_core::ScopePools> {
-        match self.heap.get_mut(owner).map(|object| &mut object.body) {
-            Some(Body::Instance { pools, .. }) => Some(pools),
-            _ => None,
-        }
     }
 
     /// The scope pools `owner` holds, for a reader.

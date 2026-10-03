@@ -448,16 +448,11 @@ impl Surface for Interp {
         if !matches!(classify(&upper), SymbolKind::Name | SymbolKind::Stem) {
             return None;
         }
-        let me = self.running_activity().raw();
-        if let Some(pools) = self.pools_of_mut(owner) {
-            pools.watch(scope, &upper, me);
-        }
+        self.watch_variable(owner, scope, &upper);
         let waited = self
             .native_guard(on)
             .and_then(|()| self.native_guard_wait());
-        if let Some(pools) = self.pools_of_mut(owner) {
-            pools.unwatch(scope, &upper, me);
-        }
+        self.unwatch_variable(owner, scope, &upper);
         if let Err(failure) = waited {
             self.hold_native_condition(failure);
             return None;

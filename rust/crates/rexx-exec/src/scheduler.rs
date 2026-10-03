@@ -48,17 +48,6 @@ pub(crate) enum ExecOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ActivityId(u32);
 
-impl ActivityId {
-    /// The handle as a variable's watch list holds it.
-    pub(crate) fn raw(self) -> u32 {
-        self.0
-    }
-
-    pub(crate) fn from_raw(raw: u32) -> ActivityId {
-        ActivityId(raw)
-    }
-}
-
 #[cfg(test)]
 impl ActivityId {
     pub(crate) fn test(index: u32) -> ActivityId {
@@ -633,28 +622,19 @@ impl Interp {
     }
 
     /// Posts `watcher`'s guard semaphore (`Activity::guardPost`): its next
-    /// `GUARD WHEN` wait ends at once, and one it is parked in ends now,
-    /// which is answered.
-    pub(crate) fn post_guard(&mut self, watcher: ActivityId) -> bool {
+    /// `GUARD WHEN` wait ends at once, and one it is parked in ends now.
+    pub(crate) fn post_guard(&mut self, watcher: ActivityId) {
         if watcher == self.activities.running {
             self.activity.guard_posted = true;
-            return false;
+            return;
         }
         let Some(Some(idle)) = self.activities.idle.get_mut(watcher.0 as usize) else {
-            return false;
+            return;
         };
         idle.activity.guard_posted = true;
-        let parked = std::mem::take(&mut idle.activity.when_parked);
-        if parked {
+        if std::mem::take(&mut idle.activity.when_parked) {
             self.unpark(watcher);
         }
-        parked
-    }
-
-    /// A switch at the next clause boundary, where another activity is ready.
-    pub(crate) fn request_switch(&mut self) {
-        self.timer.requests().set(SLICE);
-        self.clause_countdown = 1;
     }
 
     /// Wakes every activity waiting on `message`, whose send has completed.

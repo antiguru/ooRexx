@@ -2695,6 +2695,8 @@ impl Interp {
 
     /// A park for `reason` by an instruction its op runs again once the
     /// activity wakes, recorded on the activity for the root driver.
+    #[cold]
+    #[inline(never)]
     pub(crate) fn park_instruction(&mut self, reason: crate::scheduler::ParkReason) {
         self.activity.native_park = Some(Box::new(NativePark {
             reason,

@@ -1148,14 +1148,15 @@ fn a_blocked_guard_when_keeps_the_programs_end_waiting() {
     );
 }
 
-/// A store or `DROP` that wakes an activity parked in a `GUARD WHEN` asks
-/// for a switch at the next clause boundary, so the waiter runs before the
-/// storing activity's next clause; one that wakes nobody does not switch,
-/// whether the variable was watched once (`v`) or never (`w`), as the
-/// oracle's yield passes no lock to a started activity (30 of 30 runs each
-/// print `a` first). `AtClause` far past the program keeps the timer out.
+/// A store that wakes an activity parked in a `GUARD WHEN` makes it ready
+/// without a switch, so the storing activity runs on to its next wait or
+/// end before the waiter runs, as the oracle's notifier does in a run of
+/// clauses with no I/O (`TEST_BASE_ALARM`'s `triggered`); a store or `DROP`
+/// that wakes nobody does not switch either, whether the variable was
+/// watched once (`v`) or never (`w`): the oracle prints `a` first in 30 of 30
+/// runs of each. `AtClause` far past the program keeps the timer out.
 #[test]
-fn a_store_switches_only_where_it_wakes_a_parked_watcher() {
+fn a_store_wakes_a_parked_watcher_without_a_switch() {
     const CLASS: &str = "::class k\n::method arm\n  expose v\n  v = 0\n  guard on when v = 0\n\
                          ::method store unguarded\n  expose v\n  v = 1\n\
                          ::method dropit\n  expose v\n  drop v\n\
@@ -1183,5 +1184,5 @@ fn a_store_switches_only_where_it_wakes_a_parked_watcher() {
             .to_string(),
     );
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
-    assert_eq!(stdout(&outcome), "woke\na\n");
+    assert_eq!(stdout(&outcome), "a\nwoke\n");
 }

@@ -132,8 +132,8 @@ enum Deliver {
     Flow(usize),
     /// Where the [`Op::Send`] in front of the resume point says.
     Send,
-    /// Nowhere: the [`Op::Exec`] at the resume point runs its instruction
-    /// again.
+    /// Nowhere: the [`Op::Exec`] in front of the resume point runs its
+    /// instruction again.
     Exec,
 }
 
@@ -1383,21 +1383,12 @@ macro_rules! region_ops {
                         Ok(ExecOutcome::Done(flow)) => {
                             break $cold Ok(RegionEnd::Flowed(flow));
                         }
-                        Ok(ExecOutcome::Park(reason))
-                            if $top && $self.activity.pin_depth == 0 =>
-                        {
-                            $self.park_instruction(reason);
-                            break $park Park {
-                                at: op_after($ops, region_op, $from) - 1,
-                                $header: $header.take().map(Box::new),
-                                deliver: Deliver::Exec,
-                            };
-                        }
-                        Ok(outcome) => {
-                            break $cold $self.exec_suspends(
-                                outcome, $code, $index, $clause, $source,
-                            );
-                        }
+                        Ok(outcome) => match $self.exec_suspends(
+                            outcome, $top, $code, $index, $clause, $source,
+                        ) {
+                            Some(region) => break $cold region,
+                            None => break 'entered Deliver::Exec,
+                        },
                         Err(failure) => break $cold Err(failure),
                     }
                 }
@@ -2474,33 +2465,43 @@ impl Interp {
         });
     }
 
-    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. A
-    /// park here, under a pinned frame, is a pinned wait, after which the
-    /// instruction runs again. A split is recorded on the replying
-    /// activation and served at the next countdown visit, which this makes
-    /// the next clause boundary.
+    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer, or
+    /// `None` where the instruction parked its activity at a level of a root
+    /// driver (`top`) that nothing pins: the region parks at the op, which
+    /// runs the instruction again once the activity wakes. Anywhere else a
+    /// park is a pinned wait, after which the instruction runs again. A
+    /// split is recorded on the replying activation and served at the next
+    /// countdown visit, which this makes the next clause boundary.
     #[cold]
     #[inline(never)]
     fn exec_suspends(
         &mut self,
         mut outcome: ExecOutcome,
+        top: bool,
         code: &Code<'_>,
         index: usize,
         clause: &Instruction,
         source: Option<&ProgramSource>,
-    ) -> Result<RegionEnd, Failure> {
+    ) -> Option<Result<RegionEnd, Failure>> {
         while let ExecOutcome::Park(reason) = outcome {
+            if top && self.activity.pin_depth == 0 {
+                self.park_instruction(reason);
+                return None;
+            }
             if let Some(failure) = self.pinned_wait(reason) {
                 self.abandon_guard_exec();
-                return Err(failure);
+                return Some(Err(failure));
             }
-            outcome = pinned!(
+            outcome = match pinned!(
                 self,
                 crate::pinning::PinKind::OpExec,
                 self.exec_instruction(code, index, clause, source, false)
-            )?;
+            ) {
+                Ok(outcome) => outcome,
+                Err(failure) => return Some(Err(failure)),
+            };
         }
-        match outcome {
+        Some(match outcome {
             ExecOutcome::Done(flow) => Ok(RegionEnd::Flowed(flow)),
             ExecOutcome::Park(_) => unreachable!("the loop above runs every park"),
             ExecOutcome::Split(value) => {
@@ -2514,7 +2515,7 @@ impl Interp {
                 self.clause_countdown = 1;
                 Ok(RegionEnd::Flowed(Flow::Next))
             }
-        }
+        })
     }
 
     /// Closes the innermost `SELECT` branch if it runs out at `pc`.
@@ -3138,6 +3139,11 @@ impl Interp {
                 return self.leave_parked(code, chunk, source, base, len, parked, ran);
             }
         };
+        let mut parked = parked;
+        if matches!(parked.deliver, Deliver::Exec) {
+            // The region goes on from the instruction's own op.
+            parked.at -= 1;
+        }
         match delivered {
             Ok(()) => self.ops_loop_steady(
                 code,

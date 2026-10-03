@@ -233,12 +233,20 @@ impl Interp {
             value,
         );
         if keyword == "WHEN" {
-            self.activity.waiting_traced = Some(value.first() == Some(&b'0'));
-            self.route_trace_line(start);
-            self.activity.waiting_traced = None;
+            self.route_when_line(start, value);
         } else {
             self.route_trace_line(start);
         }
+    }
+
+    /// A `GUARD`'s `>K>` line, whose `TraceObject` carries `ISWAITING`: true
+    /// where `value` starts with `0`.
+    #[cold]
+    #[inline(never)]
+    fn route_when_line(&mut self, start: usize, value: &[u8]) {
+        self.activity.waiting_traced = Some(value.first() == Some(&b'0'));
+        self.route_trace_line(start);
+        self.activity.waiting_traced = None;
     }
 
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion

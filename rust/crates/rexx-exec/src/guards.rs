@@ -66,6 +66,16 @@ pub(crate) struct GuardTable {
     waiting: FxHashMap<ActivityId, Waiting>,
     pools: FxHashMap<GuardKey, u32>,
     last_pool: u32,
+    /// Each watched variable's watchers, by owning object, in the order they
+    /// began watching. An entry stays once made (`RexxVariable::dependents`).
+    watches: FxHashMap<ObjRef, Vec<Watch>>,
+}
+
+/// One variable a `GUARD WHEN` has watched, in one scope's pool.
+struct Watch {
+    scope: ObjRef,
+    name: Box<[u8]>,
+    watchers: Vec<ActivityId>,
 }
 
 impl GuardTable {
@@ -187,9 +197,56 @@ impl GuardTable {
         })
     }
 
-    /// Drops the pool numbers of objects `live` no longer answers for.
+    /// Drops the pool numbers and watches of objects `live` no longer
+    /// answers for.
     pub(crate) fn prune_pools(&mut self, live: impl Fn(ObjRef) -> bool) {
         self.pools.retain(|key, _| live(key.object));
+        self.watches.retain(|owner, _| live(*owner));
+    }
+
+    /// Adds `watcher` to the watchers of `name` in `scope`'s pool on
+    /// `owner`, once (`RexxVariable::inform`).
+    pub(crate) fn watch(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8], watcher: ActivityId) {
+        let watches = self.watches.entry(owner).or_default();
+        let at =
+            match (watches.iter()).position(|watch| watch.scope == scope && *watch.name == *name) {
+                Some(at) => at,
+                None => {
+                    watches.push(Watch {
+                        scope,
+                        name: name.into(),
+                        watchers: Vec::new(),
+                    });
+                    watches.len() - 1
+                }
+            };
+        let watchers = &mut watches[at].watchers;
+        if !watchers.contains(&watcher) {
+            watchers.push(watcher);
+        }
+    }
+
+    /// Removes `watcher` from the watchers of `name` in `scope`'s pool on
+    /// `owner` (`RexxVariable::uninform`).
+    pub(crate) fn unwatch(
+        &mut self,
+        owner: ObjRef,
+        scope: ObjRef,
+        name: &[u8],
+        watcher: ActivityId,
+    ) {
+        if let Some(watch) = (self.watches.get_mut(&owner).into_iter().flatten())
+            .find(|watch| watch.scope == scope && *watch.name == *name)
+        {
+            watch.watchers.retain(|seen| *seen != watcher);
+        }
+    }
+
+    /// The watchers of `name` in `scope`'s pool on `owner`.
+    pub(crate) fn watchers(&self, owner: ObjRef, scope: ObjRef, name: &[u8]) -> &[ActivityId] {
+        (self.watches.get(&owner).into_iter().flatten())
+            .find(|watch| watch.scope == scope && *watch.name == *name)
+            .map_or(&[], |watch| watch.watchers.as_slice())
     }
 }
 
@@ -544,13 +601,27 @@ impl Interp {
                     .map(|(_, var)| var.clone())
             })
             .collect();
-        let me = self.running_activity().raw();
         for var in &watched {
-            if let Some(pools) = self.pools_of_mut(var.owner) {
-                pools.watch(var.scope, &var.name, me);
-            }
+            self.watch_variable(var.owner, var.scope, &var.name);
         }
         watched
+    }
+
+    /// Registers the running activity as a watcher of `name` in `scope`'s
+    /// pool on `owner`, and marks `owner` as watched for the store barrier.
+    pub(crate) fn watch_variable(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) {
+        let me = self.running_activity();
+        if let Some(object) = self.heap.get_mut(owner) {
+            object.mark_watched();
+        }
+        self.activities.guards.watch(owner, scope, name, me);
+    }
+
+    /// Withdraws the running activity from the watchers of `name` in
+    /// `scope`'s pool on `owner`.
+    pub(crate) fn unwatch_variable(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) {
+        let me = self.running_activity();
+        self.activities.guards.unwatch(owner, scope, name, me);
     }
 
     /// The running activation's parked `GUARD` at instruction `index`, taken
@@ -569,11 +640,8 @@ impl Interp {
     /// The end of a `GUARD`'s run: its watches withdrawn
     /// (`RexxVariable::uninform`).
     pub(crate) fn end_guard_exec(&mut self, exec: GuardExec) {
-        let me = self.running_activity().raw();
         for var in &exec.watched {
-            if let Some(pools) = self.pools_of_mut(var.owner) {
-                pools.unwatch(var.scope, &var.name, me);
-            }
+            self.unwatch_variable(var.owner, var.scope, &var.name);
         }
     }
 

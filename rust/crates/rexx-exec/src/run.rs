@@ -1276,7 +1276,10 @@ impl Interp {
         Ok(Flow::Next)
     }
 
-    /// `PROCEDURE`, with or without an `EXPOSE` list (D9r).
+    /// `PROCEDURE`, with or without an `EXPOSE` list (D9r). Out of line:
+    /// measured, inlined into `exec_flow` it costs `bench-programs/fibcall.rex`
+    /// 2.4% in instructions.
+    #[inline(never)]
     fn exec_procedure(
         &mut self,
         code: &Code<'_>,
@@ -1903,6 +1906,7 @@ impl Interp {
     /// A reserve another activity holds the lock for, and a `WHEN` that is
     /// false, answer a park; the instruction's op runs it again once woken,
     /// and it goes on from the wait.
+    #[inline(never)]
     fn exec_guard(
         &mut self,
         code: &Code<'_>,

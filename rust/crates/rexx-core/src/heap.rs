@@ -355,6 +355,7 @@ impl Heap {
                         body,
                         has_uninit: false,
                         ready_for_uninit: false,
+                        watched: false,
                     },
                     generation,
                 };
@@ -368,6 +369,7 @@ impl Heap {
                         body,
                         has_uninit: false,
                         ready_for_uninit: false,
+                        watched: false,
                     },
                     generation: 0,
                 });

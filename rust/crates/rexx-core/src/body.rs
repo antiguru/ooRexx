@@ -534,7 +534,7 @@ impl BufferState {
 /// in it, found by walking the list (`ObjectClass.cpp:2489`, whose
 /// `objectVariables` is a linked list of `VariableDictionary`s chained by
 /// `nextDictionary` and searched the same way).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ScopePools {
     /// The scope's class identity, and the names it has bound. A name with no
     /// value is **absent** rather than present-and-empty: `DROP` removes the
@@ -543,91 +543,11 @@ pub struct ScopePools {
     /// `expose v` reading the derived name `V`, which is what a never-bound
     /// name reads as.
     pools: Vec<(ObjRef, Vec<(Box<[u8]>, ObjRef)>)>,
-    /// Every variable a `GUARD WHEN` has watched, with its watchers now. An
-    /// entry stays once made, as `RexxVariable::dependents` does
-    /// (`execution/RexxVariable.cpp:137-150`).
-    #[expect(
-        clippy::box_collection,
-        reason = "one word where the list's own three would push `Body` past its bound"
-    )]
-    watches: Option<Box<Vec<Watch>>>,
-}
-
-/// One watched variable: its scope, its name, and the activities watching
-/// it, in the order they began.
-#[derive(Debug)]
-struct Watch {
-    scope: ObjRef,
-    name: Box<[u8]>,
-    watchers: Vec<u32>,
-}
-
-/// A copy's variables are new ones, which nothing watches.
-impl Clone for ScopePools {
-    fn clone(&self) -> ScopePools {
-        ScopePools {
-            pools: self.pools.clone(),
-            watches: None,
-        }
-    }
 }
 
 impl ScopePools {
     pub fn new() -> ScopePools {
-        ScopePools {
-            pools: Vec::new(),
-            watches: None,
-        }
-    }
-
-    /// Whether any variable here has ever been watched: the one test a store
-    /// or drop makes before asking [`ScopePools::watchers`].
-    #[inline(always)]
-    pub fn watched(&self) -> bool {
-        self.watches.is_some()
-    }
-
-    /// The watchers of `name` in `scope`'s pool, or `None` where it has never
-    /// been watched.
-    pub fn watchers(&self, scope: ObjRef, name: &[u8]) -> Option<&[u32]> {
-        self.watches
-            .as_deref()?
-            .iter()
-            .find(|watch| watch.scope == scope && *watch.name == *name)
-            .map(|watch| watch.watchers.as_slice())
-    }
-
-    /// Adds `watcher` to `name`'s watchers in `scope`'s pool, once.
-    pub fn watch(&mut self, scope: ObjRef, name: &[u8], watcher: u32) {
-        let watches = self.watches.get_or_insert_default();
-        let at =
-            match (watches.iter()).position(|watch| watch.scope == scope && *watch.name == *name) {
-                Some(at) => at,
-                None => {
-                    watches.push(Watch {
-                        scope,
-                        name: name.into(),
-                        watchers: Vec::new(),
-                    });
-                    watches.len() - 1
-                }
-            };
-        let watchers = &mut watches[at].watchers;
-        if !watchers.contains(&watcher) {
-            watchers.push(watcher);
-        }
-    }
-
-    /// Removes `watcher` from `name`'s watchers in `scope`'s pool.
-    pub fn unwatch(&mut self, scope: ObjRef, name: &[u8], watcher: u32) {
-        if let Some(watch) = (self
-            .watches
-            .iter_mut()
-            .flat_map(|watches| watches.iter_mut()))
-        .find(|watch| watch.scope == scope && *watch.name == *name)
-        {
-            watch.watchers.retain(|seen| *seen != watcher);
-        }
+        ScopePools { pools: Vec::new() }
     }
 
     /// The value `name` holds in `scope`'s pool, or `None` when the pool does
@@ -695,11 +615,6 @@ impl ScopePools {
             out.push(*scope);
             out.extend(pool.iter().map(|(_, value)| *value));
         }
-        out.extend(
-            self.watches
-                .iter()
-                .flat_map(|watches| watches.iter().map(|watch| watch.scope)),
-        );
     }
 }
 
@@ -1047,9 +962,26 @@ pub struct Object {
     /// it again without reporting it twice -- oracle's `setReadyForUninit`
     /// (`classes/ObjectClass.hpp`), read by `MemoryObject::runUninits`.
     pub(crate) ready_for_uninit: bool,
+    /// Set once a `GUARD WHEN` has watched one of this object's variables,
+    /// and never cleared, as `RexxVariable::dependents` stays once created
+    /// (`execution/RexxVariable.cpp:137-150`): the one test a variable store
+    /// or drop makes before looking for watchers.
+    pub(crate) watched: bool,
 }
 
 impl Object {
+    /// Whether a `GUARD WHEN` has ever watched one of this object's
+    /// variables. See the field.
+    #[inline(always)]
+    pub fn watched(&self) -> bool {
+        self.watched
+    }
+
+    /// Marks this object as one whose variables a `GUARD WHEN` has watched.
+    pub fn mark_watched(&mut self) {
+        self.watched = true;
+    }
+
     /// Whether this object defines an `UNINIT` method. See the field.
     pub fn has_uninit(&self) -> bool {
         self.has_uninit
