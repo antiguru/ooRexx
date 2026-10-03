@@ -539,15 +539,19 @@ mod measured {
         "use arg n\nif n >= 3 then do\n  call SysSleep 0\n  return 'ok'\nend\nreturn extf(n + 1)\n";
 
     /// Runs `source` in a directory holding the external routine `extf.rex`.
-    /// The tests run in parallel and share the directory, so the routine is
-    /// written under a name of the thread's own and renamed into place: a
-    /// probe never reads it half written.
+    /// The tests run in parallel, and test processes share the directory, so
+    /// the routine is written under a name of the process's and thread's own
+    /// and renamed into place: a probe never reads it half written.
     fn report_of(source: &str) -> PinReport {
         let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pinning-probes");
         fs::create_dir_all(&dir).expect("the probe directory");
         let extf = dir.join("extf.rex");
         if fs::read(&extf).ok().as_deref() != Some(EXTF.as_bytes()) {
-            let staged = dir.join(format!("extf.{:?}.staged", std::thread::current().id()));
+            let staged = dir.join(format!(
+                "extf.{}.{:?}.staged",
+                std::process::id(),
+                std::thread::current().id()
+            ));
             fs::write(&staged, EXTF).expect("the external routine");
             fs::rename(&staged, &extf).expect("the external routine in place");
         }
