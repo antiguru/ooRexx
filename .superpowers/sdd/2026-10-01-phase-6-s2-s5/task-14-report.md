@@ -144,3 +144,20 @@ Checks at `b461bf174`: fmt 0; clippy workspace and pinning 0; lib 941 passed; co
 `dispatch_seam` 6, `gate_table_c` 22, `method_bodies` 23, `refusal_sites` 5, `sourceline_oracle`
 1; `api_group_tests` gate 24; `concurrency_tests` gate `--test-threads=1 --nocapture` 32 passed,
 840 s, no `P48 rerun` line, S2 and S3 tables equal to the committed S3 close.
+
+## Fix round 2
+
+R1: `the_alarm_and_ticker_groups_pass_in_both_modes` builds one table of both groups in both modes,
+`group mode test outcome`, a rerun row reading `<first>, then <rerun> (P48 rerun)`, prints it and
+writes it to `REXX_TIMER_TABLE` (over the last group's own `outcome_table` file). A rerun whose
+second outcome is not `pass` still fails the test.
+
+- Injection (temporary, removed; `/bin/grep -c injected` 0): TRIGGER_MULTIPLE's first outcome
+  treated as failing in each mode. `REXX_CORPUS_GATE=1 REXX_TIMER_TABLE=<file> memcap 8G cargo
+  test --release -p rexx-exec --test concurrency_tests -- group_runs::the_alarm_and_ticker`: exit 0,
+  90.8 s; the table has `Ticker timer-table TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE
+  injected, then pass (P48 rerun)` and the same row for `timer-table-switched`.
+- Clean, the same command: exit 0, 88.1 s; the table has a header and a row for each test of both
+  groups in both modes, every outcome `pass`, no `P48`.
+- `cargo fmt --all --check` 0; `cargo clippy --workspace --all-targets -- -D warnings` 0;
+  `cargo clippy -p rexx-exec --all-targets --features pinning -- -D warnings` 0.

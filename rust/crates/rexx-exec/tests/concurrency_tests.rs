@@ -1643,7 +1643,8 @@ mod group_runs {
 
     /// Every test of the `Alarm` and `Ticker` groups passes with the shipped
     /// scheduler and with a switch at every opportunity; a [`WALL_CLOCK`] row
-    /// that does not is run again once, the oracle too.
+    /// that does not is run again once, the oracle too, and the table written
+    /// to `REXX_TIMER_TABLE` names the rerun.
     #[test]
     fn the_alarm_and_ticker_groups_pass_in_both_modes() {
         if !gate_mode() {
@@ -1651,6 +1652,7 @@ mod group_runs {
             return;
         }
         let mut not_passing = Vec::new();
+        let mut table = String::from("group\tmode\ttest\toutcome\n");
         for group in ["Alarm", "Ticker"] {
             for (name, mode) in [
                 ("timer-table", SwitchMode::None),
@@ -1661,28 +1663,33 @@ mod group_runs {
                         true
                     });
                 let oracle = oracle::locate();
-                for row in results
-                    .iter()
-                    .filter(|row| !matches!(row.outcome, Outcome::Pass))
-                {
+                for row in &results {
+                    let mut label = row.outcome.label().to_string();
                     let key = format!("base/class/{group}.testGroup {}", row.test);
-                    let mut label = row.outcome.label();
-                    if WALL_CLOCK.contains(&key.as_str()) {
+                    if !matches!(row.outcome, Outcome::Pass) && WALL_CLOCK.contains(&key.as_str()) {
                         eprintln!("P48 rerun: {key} {name}: {label}");
                         let run = scratch(&format!("{name}-rerun"));
                         let one = std::slice::from_ref(&row.test);
                         let again = run_tests(&oracle, &run, "base/class", group, one, mode, None);
                         fs::remove_dir_all(run.parent().expect("a parent"))
                             .expect("cannot remove the run");
-                        if matches!(again[0].outcome, Outcome::Pass) {
-                            eprintln!("P48 rerun: {key} {name}: pass");
-                            continue;
+                        label = format!("{label}, then {} (P48 rerun)", again[0].outcome.label());
+                        eprintln!("P48 rerun: {key} {name}: {}", again[0].outcome.label());
+                        if !matches!(again[0].outcome, Outcome::Pass) {
+                            not_passing.push(format!("{group} {name} {} {label}", row.test));
                         }
-                        label = again[0].outcome.label();
+                    } else if !matches!(row.outcome, Outcome::Pass) {
+                        not_passing.push(format!("{group} {name} {} {label}", row.test));
                     }
-                    not_passing.push(format!("{group} {name} {} {label}", row.test));
+                    table.push_str(&format!("{group}\t{name}\t{}\t{label}\n", row.test));
                 }
             }
+        }
+        eprintln!("{table}");
+        // Written over the last group's own table, so the file holds both
+        // groups in both modes and each rerun.
+        if let Some(path) = std::env::var_os("REXX_TIMER_TABLE") {
+            fs::write(path, &table).expect("cannot write the table");
         }
         assert!(not_passing.is_empty(), "not passing: {not_passing:?}");
     }
