@@ -51,7 +51,6 @@ impl Baton {
     /// # Panics
     ///
     /// If this thread does not hold it.
-    #[cfg(test)]
     pub(crate) fn release(&self) {
         let mut holder = lock(&self.holder);
         assert_eq!(
@@ -67,5 +66,20 @@ impl Baton {
     /// Whether this thread holds the baton.
     pub(crate) fn held_here(&self) -> bool {
         *lock(&self.holder) == Some(thread::current().id())
+    }
+
+    /// Takes the baton unless this thread holds it, as a callback into the
+    /// interpreter does (spec 2026-09-29 2.4), answering whether it took it.
+    pub(crate) fn take_unless_held(&self) -> bool {
+        let me = thread::current().id();
+        let mut holder = lock(&self.holder);
+        if *holder == Some(me) {
+            return false;
+        }
+        while holder.is_some() {
+            holder = wait(&self.released, holder);
+        }
+        *holder = Some(me);
+        true
     }
 }

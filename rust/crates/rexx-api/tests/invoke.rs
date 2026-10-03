@@ -327,7 +327,7 @@ impl Session {
     ) -> Result<Option<ObjRef>, Failure> {
         let collecting = self.interpreter.collecting;
         let activation = Activation::new(Conversion {
-            host: &mut self.interpreter,
+            host: (&mut self.interpreter).into(),
             strings: &mut self.strings,
         });
         activation.set_between_halves(collecting);
@@ -348,7 +348,7 @@ impl Session {
     ) -> Result<Option<ObjRef>, Failure> {
         let collecting = self.interpreter.collecting;
         let activation = Activation::new(Conversion {
-            host: &mut self.interpreter,
+            host: (&mut self.interpreter).into(),
             strings: &mut self.strings,
         });
         activation.set_between_halves(collecting);
@@ -359,7 +359,7 @@ impl Session {
 
     fn signature(&mut self, entry: &NativeMethodEntry) -> Result<Vec<u16>, Failure> {
         let activation = Activation::new(Conversion {
-            host: &mut self.interpreter,
+            host: (&mut self.interpreter).into(),
             strings: &mut self.strings,
         });
         self.thread.enter(&activation, |contexts| {
@@ -743,7 +743,7 @@ fn the_records_between_the_halves_cross_threads() {
 
     let answered = {
         let activation = Activation::new(Conversion {
-            host: &mut session.interpreter,
+            host: (&mut session.interpreter).into(),
             strings: &mut session.strings,
         });
         session.thread.enter(&activation, |contexts| {

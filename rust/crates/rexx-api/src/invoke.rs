@@ -20,7 +20,8 @@ use rexx_core::ObjRef;
 use crate::ffi::{CallContext, Contexts, MethodContext, RedirectorContext};
 use crate::layout::ValueDescriptor;
 use crate::load::{
-    CommandHandler, Hook, Library, NativeMethodEntry, NativeRoutineEntry, ROUTINE_CLASSIC_STYLE,
+    CommandHandler, HeldMethod, HeldRoutine, Hook, Library, NativeMethodEntry, NativeRoutineEntry,
+    ROUTINE_CLASSIC_STYLE,
 };
 use crate::redirect::Redirector;
 use crate::values::{
@@ -71,12 +72,29 @@ pub fn method(
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    held_method(&entry.held(), context, cx, arguments)
+}
+
+/// [`method`] for a row already [held](NativeMethodEntry::held).
+///
+/// # Errors
+/// As [`method`].
+///
+/// # Panics
+/// As [`method`].
+#[inline(always)]
+pub fn held_method(
+    held: &HeldMethod,
+    context: &MethodContext<'_>,
+    cx: &Activation<'_>,
+    arguments: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
     let mut native = NativeCall::empty();
-    prepare(&mut native, &signature(entry, context)?, cx, arguments)?;
+    prepare(&mut native, &held_signature(held, context)?, cx, arguments)?;
     if cx.between_halves() {
         cx.conversion().host.between_halves();
     }
-    let completion = call_method(&mut native, entry, context);
+    let completion = call_held_method(&mut native, held, context);
     if cx.between_halves() {
         cx.conversion().host.between_halves();
     }
@@ -100,17 +118,34 @@ pub fn routine(
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    held_routine(&entry.held(), context, cx, arguments)
+}
+
+/// [`routine`] for a row already [held](NativeRoutineEntry::held).
+///
+/// # Errors
+/// As [`routine`].
+///
+/// # Panics
+/// As [`method`].
+#[inline(always)]
+pub fn held_routine(
+    held: &HeldRoutine,
+    context: &CallContext<'_>,
+    cx: &Activation<'_>,
+    arguments: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
     let mut native = NativeCall::empty();
     prepare(
         &mut native,
-        &routine_signature(entry, context)?,
+        &held_routine_signature(held, context)?,
         cx,
         arguments,
     )?;
     if cx.between_halves() {
         cx.conversion().host.between_halves();
     }
-    let completion = call_routine(&mut native, entry, context);
+    let completion = call_held_routine(&mut native, held, context);
     if cx.between_halves() {
         cx.conversion().host.between_halves();
     }
@@ -277,9 +312,7 @@ pub fn call_method(
     entry: &NativeMethodEntry,
     context: &MethodContext<'_>,
 ) -> Completion {
-    call(native, |descriptors, result| {
-        entry.call(context, descriptors, result)
-    })
+    call_held_method(native, &entry.held(), context)
 }
 
 /// `call` for the native routine `entry`.
@@ -289,8 +322,33 @@ pub fn call_routine(
     entry: &NativeRoutineEntry,
     context: &CallContext<'_>,
 ) -> Completion {
+    call_held_routine(native, &entry.held(), context)
+}
+
+/// `call` for a held method row. It reads and writes `native`, the stub's
+/// own context and nothing of the interpreter's, so it may run with the
+/// baton released; a callback the stub makes takes the baton through a
+/// [`GuardedHost`](crate::values::GuardedHost).
+#[inline(always)]
+pub fn call_held_method(
+    native: &mut NativeCall,
+    held: &HeldMethod,
+    context: &MethodContext<'_>,
+) -> Completion {
     call(native, |descriptors, result| {
-        entry.call(context, descriptors, result)
+        held.call(context, descriptors, result)
+    })
+}
+
+/// [`call_held_method`] for a held routine row.
+#[inline(always)]
+pub fn call_held_routine(
+    native: &mut NativeCall,
+    held: &HeldRoutine,
+    context: &CallContext<'_>,
+) -> Completion {
+    call(native, |descriptors, result| {
+        held.call(context, descriptors, result)
     })
 }
 
@@ -362,7 +420,15 @@ pub fn signature(
     entry: &NativeMethodEntry,
     context: &MethodContext<'_>,
 ) -> Result<Vec<u16>, Failure> {
-    bounded(|limit| entry.signature(context, limit))
+    held_signature(&entry.held(), context)
+}
+
+/// [`signature`] for a held method row.
+///
+/// # Errors
+/// As [`signature`].
+pub fn held_signature(held: &HeldMethod, context: &MethodContext<'_>) -> Result<Vec<u16>, Failure> {
+    bounded(|limit| held.signature(context, limit))
 }
 
 /// The types the routine `entry` declares, as [`signature`] answers a
@@ -375,10 +441,21 @@ pub fn routine_signature(
     entry: &NativeRoutineEntry,
     context: &CallContext<'_>,
 ) -> Result<Vec<u16>, Failure> {
-    if entry.style == ROUTINE_CLASSIC_STYLE {
+    held_routine_signature(&entry.held(), context)
+}
+
+/// [`routine_signature`] for a held routine row.
+///
+/// # Errors
+/// As [`routine_signature`].
+pub fn held_routine_signature(
+    held: &HeldRoutine,
+    context: &CallContext<'_>,
+) -> Result<Vec<u16>, Failure> {
+    if held.style == ROUTINE_CLASSIC_STYLE {
         return Err(Failure::ClassicStyle);
     }
-    bounded(|limit| entry.signature(context, limit))
+    bounded(|limit| held.signature(context, limit))
 }
 
 /// The signature `read` answers when it may read at most `limit` words.

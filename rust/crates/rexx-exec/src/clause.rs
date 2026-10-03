@@ -313,26 +313,49 @@ impl Interp {
         self.serve_requests(yields)
     }
 
-    /// Blocks this thread until `due` or a post to the inbox, or fails where
-    /// the run's deadline comes first.
+    /// Blocks this thread until `due` or a post to the inbox, whose
+    /// completions it files, or fails where the run's deadline comes first.
     pub(crate) fn idle_until(&mut self, due: Instant) -> Result<(), Failure> {
         self.hand_over_output();
-        if let Some(deadline) = &mut self.deadline
+        if let Some(deadline) = &self.deadline
             && (deadline.expired || deadline.at <= due)
         {
-            if !deadline.expired
-                && let Some(posted) = self.timer.idle_until(deadline.at).pop_front()
-            {
-                match posted {}
+            let at = deadline.at;
+            // A post ends the idle early; a wake with nothing posted may be
+            // one left from an earlier idle, so the clock decides.
+            while !self.deadline_expired() && Instant::now() < at {
+                let posted = self.timer.idle_until(at);
+                if !posted.is_empty() {
+                    self.file_completions(posted);
+                    return Ok(());
+                }
             }
-            deadline.expired = true;
-            self.clause_countdown = 1;
-            return Err(Failure::Deadline);
+            return Err(self.expire_deadline());
         }
-        if let Some(posted) = self.timer.idle_until(due).pop_front() {
-            match posted {}
-        }
+        let posted = self.timer.idle_until(due);
+        self.file_completions(posted);
         Ok(())
+    }
+
+    /// Blocks this thread until something is posted to the inbox, whose
+    /// completions it files, or fails where the run's deadline comes first.
+    pub(crate) fn idle_for_posts(&mut self) -> Result<(), Failure> {
+        if let Some(deadline) = &self.deadline {
+            return self.idle_until(deadline.at);
+        }
+        self.hand_over_output();
+        let posted = self.timer.idle();
+        self.file_completions(posted);
+        Ok(())
+    }
+
+    /// Marks the run's deadline passed, so every later clause fails too.
+    fn expire_deadline(&mut self) -> Failure {
+        if let Some(deadline) = &mut self.deadline {
+            deadline.expired = true;
+        }
+        self.clause_countdown = 1;
+        Failure::Deadline
     }
 
     /// Whether this run was cut short by its deadline.

@@ -598,7 +598,10 @@ fn begin_routine(
         let name = interp.library_code_key(code).procedure.clone();
         return interp
             .run_library_routine(code, &name, &values)
-            .map(NativeStarted::Ran);
+            .map(|started| match started {
+                crate::run::Started::Ran(value) => NativeStarted::Ran(value),
+                crate::run::Started::Entered => NativeStarted::Entered(super::Then::Pass),
+            });
     }
     let row = match record.routine {
         Some((program, directive)) => {

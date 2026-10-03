@@ -24,10 +24,10 @@ use crate::layout::{
     RexxThreadContext_, ValueDescriptor, ValueUnion,
 };
 use crate::values::{ARGUMENT_TERMINATOR, ResultRead, Written};
-use std::cell::{Cell, RefCell};
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// The C signature of the stub the `RexxMethodN` macros generate
 /// (`api/oorexxapi.h:4286`).
@@ -110,30 +110,34 @@ impl Failure {
 struct Mapping {
     /// `None` for this image's own stubs, which nothing closes, and once
     /// closed.
-    handle: RefCell<Option<libloading::Library>>,
-    open: Cell<bool>,
+    handle: Mutex<Option<libloading::Library>>,
+    open: AtomicBool,
     /// Calls into the mapping in flight, which a close waits out by refusing.
-    calls: Cell<usize>,
+    calls: AtomicUsize,
 }
 
 impl Mapping {
-    fn new(handle: Option<libloading::Library>) -> Rc<Mapping> {
-        Rc::new(Mapping {
-            handle: RefCell::new(handle),
-            open: Cell::new(true),
-            calls: Cell::new(0),
+    fn new(handle: Option<libloading::Library>) -> Arc<Mapping> {
+        Arc::new(Mapping {
+            handle: Mutex::new(handle),
+            open: AtomicBool::new(true),
+            calls: AtomicUsize::new(0),
         })
+    }
+
+    fn is_open(&self) -> bool {
+        self.open.load(Ordering::SeqCst)
     }
 
     /// Runs `call`, counted as in flight.
     fn hold<R>(&self, call: impl FnOnce() -> R) -> R {
-        struct InFlight<'a>(&'a Cell<usize>);
+        struct InFlight<'a>(&'a AtomicUsize);
         impl Drop for InFlight<'_> {
             fn drop(&mut self) {
-                self.0.set(self.0.get() - 1);
+                self.0.fetch_sub(1, Ordering::SeqCst);
             }
         }
-        self.calls.set(self.calls.get() + 1);
+        self.calls.fetch_add(1, Ordering::SeqCst);
         let _in_flight = InFlight(&self.calls);
         call()
     }
@@ -141,11 +145,16 @@ impl Mapping {
     /// Closes the mapping, or answers `false` where a call into it is in
     /// flight.
     fn close(&self) -> bool {
-        if self.calls.get() > 0 {
+        if self.calls.load(Ordering::SeqCst) > 0 {
             return false;
         }
-        self.open.set(false);
-        drop(self.handle.borrow_mut().take());
+        self.open.store(false, Ordering::SeqCst);
+        drop(
+            self.handle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take(),
+        );
         true
     }
 }
@@ -154,7 +163,7 @@ impl std::fmt::Debug for Mapping {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Mapping")
-            .field("open", &self.open.get())
+            .field("open", &self.is_open())
             .finish_non_exhaustive()
     }
 }
@@ -189,7 +198,7 @@ pub struct NativeMethodEntry {
     pub style: c_int,
     pub name: Vec<u8>,
     entry_point: *mut c_void,
-    mapping: Rc<Mapping>,
+    mapping: Arc<Mapping>,
 }
 
 impl NativeMethodEntry {
@@ -199,47 +208,18 @@ impl NativeMethodEntry {
         !self.entry_point.is_null()
     }
 
-    /// The type signature the stub publishes, terminator excluded, or `None`
-    /// where the row carries no address, the stub answers no array, or no
-    /// terminator appears in the first `limit` words.
-    ///
-    /// At most `limit - 1` words are answered, which is what bounds the
-    /// descriptor array the caller fills from them.
-    pub(crate) fn signature(&self, context: &MethodContext<'_>, limit: usize) -> Option<Vec<u16>> {
-        let stub = self.stub()?;
-        // SAFETY: `stub` is the address the extension's own method table gave
-        // for this row, in a mapping that is open and that a close leaves
-        // open while this call is held, and `context` is live for the borrow.
-        self.mapping
-            .hold(|| unsafe { signature_of(stub, context.as_ptr(), limit) })
-    }
-
-    /// Call the stub with `arguments`, which it reads and writes its result
-    /// into, and answer element zero read as `result` says, or `None` where
-    /// `result` is. A row with no address calls nothing.
-    ///
-    /// The array is published on `context` for the call and taken off again
-    /// afterwards, because it does not outlive this function.
-    pub(crate) fn call(
-        &self,
-        context: &MethodContext<'_>,
-        arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
-        result: Option<ResultRead>,
-    ) -> Option<Written> {
-        let pointer = context.as_ptr();
-        // SAFETY: `pointer` addresses the live struct `context` borrows, and
-        // naming a field's address reads and writes nothing.
-        let published = unsafe { &raw mut (*pointer).arguments };
-        let stub = self.stub();
-        // SAFETY: as `signature`, and `published` is `pointer`'s own field.
-        self.mapping
-            .hold(|| unsafe { call_stub(stub, pointer, published, arguments, result) })
+    /// The row held for one call, which may run with the baton released.
+    #[must_use]
+    pub fn held(&self) -> HeldMethod {
+        HeldMethod {
+            held: Held::new(self.stub(), &self.mapping),
+        }
     }
 
     /// The row's address as the callable it names, or `None` for a row that
     /// carries none or whose library has been closed.
     fn stub(&self) -> Option<NativeMethod> {
-        if self.entry_point.is_null() || !self.mapping.open.get() {
+        if self.entry_point.is_null() || !self.mapping.is_open() {
             return None;
         }
         // SAFETY: `REXX_METHOD_ENTRY` fills `entryPoint` with the stub the
@@ -398,7 +378,7 @@ pub struct NativeRoutineEntry {
     pub style: c_int,
     pub name: Vec<u8>,
     entry_point: *mut c_void,
-    mapping: Rc<Mapping>,
+    mapping: Arc<Mapping>,
 }
 
 impl NativeRoutineEntry {
@@ -406,35 +386,6 @@ impl NativeRoutineEntry {
     #[must_use]
     pub fn has_entry_point(&self) -> bool {
         !self.entry_point.is_null()
-    }
-
-    /// [`NativeMethodEntry::signature`] for a routine's stub. A row of any
-    /// style but [`ROUTINE_TYPED_STYLE`] publishes none, since its address is
-    /// a function of another signature.
-    pub(crate) fn signature(&self, context: &CallContext<'_>, limit: usize) -> Option<Vec<u16>> {
-        let stub = self.stub()?;
-        // SAFETY: as `NativeMethodEntry::signature`; `stub` answers only for a
-        // typed row.
-        self.mapping
-            .hold(|| unsafe { signature_of(stub, context.as_ptr(), limit) })
-    }
-
-    /// [`NativeMethodEntry::call`] for a routine's stub, which calls nothing
-    /// for a row [`NativeRoutineEntry::signature`] publishes nothing for.
-    pub(crate) fn call(
-        &self,
-        context: &CallContext<'_>,
-        arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
-        result: Option<ResultRead>,
-    ) -> Option<Written> {
-        let pointer = context.as_ptr();
-        // SAFETY: as `NativeMethodEntry::call`.
-        let published = unsafe { &raw mut (*pointer).arguments };
-        let stub = self.stub();
-        // SAFETY: as `NativeMethodEntry::call`; `stub` answers only for a
-        // typed row.
-        self.mapping
-            .hold(|| unsafe { call_stub(stub, pointer, published, arguments, result) })
     }
 
     /// The row's address as the typed stub it names, or `None` for a row that
@@ -447,7 +398,7 @@ impl NativeRoutineEntry {
     fn stub(&self) -> Option<NativeRoutine> {
         if self.entry_point.is_null()
             || self.style != ROUTINE_TYPED_STYLE
-            || !self.mapping.open.get()
+            || !self.mapping.is_open()
         {
             return None;
         }
@@ -456,6 +407,114 @@ impl NativeRoutineEntry {
         // (`api/oorexxapi.h:205`), whose C signature is `NativeRoutine`'s,
         // under the same D5 argument as `NativeMethodEntry::stub`.
         Some(unsafe { std::mem::transmute::<*mut c_void, NativeRoutine>(self.entry_point) })
+    }
+
+    /// The row held for one call, as [`NativeMethodEntry::held`] holds one.
+    #[must_use]
+    pub fn held(&self) -> HeldRoutine {
+        HeldRoutine {
+            style: self.style,
+            held: Held::new(self.stub(), &self.mapping),
+        }
+    }
+}
+
+/// A row's stub held for one call, which may run with the baton released:
+/// counted as a call in flight until it drops, so a close leaves the mapping
+/// open until then, and holding no state of the interpreter's.
+struct Held<S> {
+    stub: Option<S>,
+    mapping: Arc<Mapping>,
+}
+
+impl<S> Held<S> {
+    fn new(stub: Option<S>, mapping: &Arc<Mapping>) -> Held<S> {
+        mapping.calls.fetch_add(1, Ordering::SeqCst);
+        Held {
+            stub,
+            mapping: Arc::clone(mapping),
+        }
+    }
+}
+
+impl<S> Drop for Held<S> {
+    fn drop(&mut self) {
+        self.mapping.calls.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// A method row held for one call ([`NativeMethodEntry::held`]).
+pub struct HeldMethod {
+    held: Held<NativeMethod>,
+}
+
+impl HeldMethod {
+    /// The type signature the stub publishes, terminator excluded, or `None`
+    /// where the row carries no address, the stub answers no array, or no
+    /// terminator appears in the first `limit` words.
+    ///
+    /// At most `limit - 1` words are answered, which is what bounds the
+    /// descriptor array the caller fills from them.
+    pub(crate) fn signature(&self, context: &MethodContext<'_>, limit: usize) -> Option<Vec<u16>> {
+        let stub = self.held.stub?;
+        // SAFETY: `stub` is the address the extension's own method table gave
+        // for this row, resolved in an open mapping that this hold keeps
+        // open, and `context` is live for the borrow.
+        unsafe { signature_of(stub, context.as_ptr(), limit) }
+    }
+
+    /// Call the stub with `arguments`, which it reads and writes its result
+    /// into, and answer element zero read as `result` says, or `None` where
+    /// `result` is. A row with no address calls nothing.
+    ///
+    /// The array is published on `context` for the call and taken off again
+    /// afterwards, because it does not outlive this function.
+    pub(crate) fn call(
+        &self,
+        context: &MethodContext<'_>,
+        arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+        result: Option<ResultRead>,
+    ) -> Option<Written> {
+        let pointer = context.as_ptr();
+        // SAFETY: `pointer` addresses the live struct `context` borrows, and
+        // naming a field's address reads and writes nothing.
+        let published = unsafe { &raw mut (*pointer).arguments };
+        // SAFETY: as `signature`, and `published` is `pointer`'s own field.
+        unsafe { call_stub(self.held.stub, pointer, published, arguments, result) }
+    }
+}
+
+/// A routine row held for one call ([`NativeRoutineEntry::held`]).
+pub struct HeldRoutine {
+    /// The row's `style`.
+    pub style: c_int,
+    held: Held<NativeRoutine>,
+}
+
+impl HeldRoutine {
+    /// [`HeldMethod::signature`] for a routine's stub. A row of any style but
+    /// [`ROUTINE_TYPED_STYLE`] publishes none, since its address is a
+    /// function of another signature.
+    pub(crate) fn signature(&self, context: &CallContext<'_>, limit: usize) -> Option<Vec<u16>> {
+        let stub = self.held.stub?;
+        // SAFETY: as `HeldMethod::signature`; `stub` answers only for a typed
+        // row.
+        unsafe { signature_of(stub, context.as_ptr(), limit) }
+    }
+
+    /// [`HeldMethod::call`] for a routine's stub, which calls nothing for a
+    /// row [`HeldRoutine::signature`] publishes nothing for.
+    pub(crate) fn call(
+        &self,
+        context: &CallContext<'_>,
+        arguments: &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+        result: Option<ResultRead>,
+    ) -> Option<Written> {
+        let pointer = context.as_ptr();
+        // SAFETY: as `HeldMethod::call`.
+        let published = unsafe { &raw mut (*pointer).arguments };
+        // SAFETY: as `HeldMethod::call`; `stub` answers only for a typed row.
+        unsafe { call_stub(self.held.stub, pointer, published, arguments, result) }
     }
 }
 
@@ -577,7 +636,7 @@ impl CommandHandler {
 }
 
 /// What `stub` publishes for a signature request, read as
-/// [`NativeMethodEntry::signature`] describes.
+/// [`HeldMethod::signature`] describes.
 ///
 /// # Safety
 /// `stub` is a generated stub of this C signature in a library that stays
@@ -715,7 +774,7 @@ pub struct Library {
     /// The mapping every address above points into. No safe code outside
     /// this module can copy an address out of a row, which is what keeps one
     /// from outliving it.
-    mapping: Rc<Mapping>,
+    mapping: Arc<Mapping>,
     /// Declared last, so that it is dropped after the close, whose
     /// destructors may call through a thread context the extension kept.
     thread: Option<ThreadContext>,
@@ -768,7 +827,7 @@ impl Library {
         let Some(function) = self.hook(hook) else {
             return;
         };
-        if !self.mapping.open.get() {
+        if !self.mapping.is_open() {
             return;
         }
         // SAFETY: the address is the package entry's own `loader` or
@@ -802,7 +861,7 @@ impl Library {
     /// Whether [`Library::close`] has not yet closed it.
     #[must_use]
     pub fn is_open(&self) -> bool {
-        self.mapping.open.get()
+        self.mapping.is_open()
     }
 
     /// Keeps `thread` allocated until this library has been closed.
@@ -1109,7 +1168,7 @@ unsafe fn c_bytes(ptr: *const c_char) -> Option<Vec<u8>> {
 /// outlives the call.
 unsafe fn method_table(
     table: *mut RexxMethodEntry,
-    mapping: &Rc<Mapping>,
+    mapping: &Arc<Mapping>,
 ) -> Vec<NativeMethodEntry> {
     let mut rows = Vec::new();
     if table.is_null() {
@@ -1132,7 +1191,7 @@ unsafe fn method_table(
             // carries a non-null one, held in the library's own image.
             name: unsafe { CStr::from_ptr(row.name) }.to_bytes().to_vec(),
             entry_point: row.entry_point,
-            mapping: Rc::clone(mapping),
+            mapping: Arc::clone(mapping),
         });
         // SAFETY: `at` was not the terminator, so a further row follows it.
         at = unsafe { at.add(1) };
@@ -1146,7 +1205,7 @@ unsafe fn method_table(
 /// As [`method_table`].
 unsafe fn routine_table(
     table: *mut RexxRoutineEntry,
-    mapping: &Rc<Mapping>,
+    mapping: &Arc<Mapping>,
 ) -> Vec<NativeRoutineEntry> {
     let mut rows = Vec::new();
     if table.is_null() {
@@ -1168,7 +1227,7 @@ unsafe fn routine_table(
             // carries a non-null one, held in the library's own image.
             name: unsafe { CStr::from_ptr(row.name) }.to_bytes().to_vec(),
             entry_point: row.entry_point,
-            mapping: Rc::clone(mapping),
+            mapping: Arc::clone(mapping),
         });
         // SAFETY: `at` was not the terminator, so a further row follows it.
         at = unsafe { at.add(1) };

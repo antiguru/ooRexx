@@ -251,7 +251,7 @@ impl Host for Interpreter {
             let mut inner = Interpreter::new();
             let mut strings = CStringPool::new();
             let activation = Activation::new(Conversion {
-                host: &mut inner,
+                host: (&mut inner).into(),
                 strings: &mut strings,
             });
             self.nested = Some(thread.enter(&activation, |contexts| {
@@ -431,7 +431,7 @@ fn run(entry: &NativeMethodEntry, arguments: usize) -> Run {
     let mut context = method_context(&METHOD_CONTEXT_INTERFACE);
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         method(
@@ -465,7 +465,7 @@ fn run_routine(entry: &NativeRoutineEntry, arguments: usize) -> Run {
     };
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         routine(
@@ -526,10 +526,11 @@ fn a_classic_row_publishes_no_signature_and_calls_nothing() {
         arguments: std::ptr::null_mut(),
     };
     let bare = CallContext::bare(&mut context);
-    assert_eq!(entry.signature(&bare, MAX_NATIVE_ARGUMENTS + 1), None);
+    let held = entry.held();
+    assert_eq!(held.signature(&bare, MAX_NATIVE_ARGUMENTS + 1), None);
     let mut descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS] =
         std::array::from_fn(|_| super::empty());
-    let _ = entry.call(&bare, &mut descriptors, None);
+    let _ = held.call(&bare, &mut descriptors, None);
     assert_eq!(
         events(),
         Vec::new(),
@@ -565,7 +566,7 @@ fn a_routine_reads_numeric_settings_and_builds_a_double_through_its_contexts() {
     let mut strings = CStringPool::new();
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -671,7 +672,7 @@ fn a_stub_reaches_its_activation_through_the_context_it_was_handed() {
     let mut strings = CStringPool::new();
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -696,7 +697,7 @@ fn a_stub_reaches_its_activation_through_the_thread_context() {
     let mut strings = CStringPool::new();
     let (outcome, pending) = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         let outcome = crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -740,7 +741,7 @@ fn a_stub_reaches_the_instance_through_the_thread_context() {
     let mut strings = CStringPool::new();
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -773,7 +774,7 @@ fn a_refused_member_is_the_calls_answer_and_a_nested_call_keeps_its_own() {
     let mut strings = CStringPool::new();
     let (outcome, pending) = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         let outcome = crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -815,7 +816,7 @@ fn run_stub(
     let mut strings = CStringPool::new();
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -873,7 +874,7 @@ fn an_argument_list_parameter_takes_arguments_nothing_else_consumes() {
     let mut strings = CStringPool::new();
     let outcome = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         crate::ffi::ThreadContext::new().enter(&activation, |contexts| {
@@ -976,7 +977,7 @@ fn keep_the_thread_context(thread: &ThreadContext) {
     let mut interpreter = Interpreter::new();
     let mut strings = CStringPool::new();
     let activation = Activation::new(Conversion {
-        host: &mut interpreter,
+        host: (&mut interpreter).into(),
         strings: &mut strings,
     });
     let outcome = thread.enter(&activation, |contexts| {
@@ -999,7 +1000,7 @@ fn use_the_kept_thread_context(
     let mut interpreter = Interpreter::new();
     let mut strings = CStringPool::new();
     let activation = Activation::new(Conversion {
-        host: &mut interpreter,
+        host: (&mut interpreter).into(),
         strings: &mut strings,
     });
     thread.enter(&activation, |contexts| {
@@ -1037,7 +1038,7 @@ fn contexts_linking_one_table_share_its_constants() {
     let mut interpreter = Interpreter::new();
     let mut strings = CStringPool::new();
     let activation = Activation::new(Conversion {
-        host: &mut interpreter,
+        host: (&mut interpreter).into(),
         strings: &mut strings,
     });
     first.enter(&activation, |_| ());
@@ -1060,7 +1061,7 @@ fn a_nested_call_hands_the_thread_context_back_to_the_outer_call() {
     let mut strings = CStringPool::new();
     let (outcome, pending) = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         let outcome = thread.enter(&activation, |contexts| {
@@ -1091,7 +1092,7 @@ fn a_throw_unwinds_the_extension_and_holds_the_condition() {
     crate::ffi::THROWN.set((false, false));
     let (outcome, pending) = {
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         let outcome = thread.enter(&activation, |contexts| {
@@ -1116,7 +1117,7 @@ fn every_throw_member_unwinds_the_extension() {
         crate::ffi::THROWN.set((false, false));
         crate::ffi::THROW_WITH.set(which);
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         let _ = thread.enter(&activation, |contexts| {
@@ -1143,7 +1144,7 @@ fn every_call_context_throw_member_unwinds_the_routine() {
         crate::ffi::THROWN.set((false, false));
         crate::ffi::THROW_WITH.set(which);
         let activation = Activation::new(Conversion {
-            host: &mut interpreter,
+            host: (&mut interpreter).into(),
             strings: &mut strings,
         });
         let _ = thread.enter(&activation, |contexts| {
@@ -1164,7 +1165,7 @@ fn run_hook(
     let mut interpreter = Interpreter::new();
     let mut strings = CStringPool::new();
     let activation = Activation::new(Conversion {
-        host: &mut interpreter,
+        host: (&mut interpreter).into(),
         strings: &mut strings,
     });
     let answered = thread.enter(&activation, |contexts| {

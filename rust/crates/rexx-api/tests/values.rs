@@ -527,7 +527,7 @@ fn a_code_the_table_does_not_know_is_a_signature_error() {
     let supplied = host.text(b"supplied");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -557,7 +557,7 @@ fn a_result_word_carrying_the_optional_bit_is_a_signature_error() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -586,7 +586,7 @@ fn the_terminator_converts_to_no_object() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -607,7 +607,7 @@ fn the_cstring_row_points_at_a_copy_of_the_argument() {
     let subject = host.text(b"a string long enough to reach the heap");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, code::CSTRING, Some(subject), 1).expect("a string converts");
@@ -631,7 +631,7 @@ fn a_cstring_outlives_a_collection_and_the_object_it_came_from() {
     let mut strings = CStringPool::new();
     let pointer = {
         let mut cx = Conversion {
-            host: &mut host,
+            host: (&mut host).into(),
             strings: &mut strings,
         };
         let converted =
@@ -686,7 +686,7 @@ fn a_required_cstring_that_is_absent_is_88_901() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let refusal =
@@ -703,7 +703,7 @@ fn a_required_cstring_with_no_string_value_is_88_909() {
     host.speechless.push(subject);
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let refusal = to_native(&mut cx, code::CSTRING, Some(subject), 2)
@@ -723,7 +723,7 @@ fn a_raise_inside_the_string_conversion_is_not_a_missing_string_value() {
         host.raising.push(subject);
         let mut strings = CStringPool::new();
         let mut cx = Conversion {
-            host: &mut host,
+            host: (&mut host).into(),
             strings: &mut strings,
         };
         let refusal = to_native(&mut cx, declared, Some(subject), 1)
@@ -740,7 +740,7 @@ fn an_omitted_optional_cstring_is_a_zero_with_no_flags() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, OPTIONAL_ARGUMENT | code::CSTRING, None, 1)
@@ -756,7 +756,7 @@ fn an_optional_cstring_that_is_supplied_converts_like_a_required_one() {
     let subject = host.text(b"a string long enough to reach the heap");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let required = to_native(&mut cx, code::CSTRING, Some(subject), 1).expect("required converts");
@@ -780,7 +780,7 @@ fn an_omitted_optional_argument_does_not_need_its_row_filled() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, OPTIONAL_ARGUMENT | code::INT, None, 1)
@@ -802,7 +802,7 @@ fn an_omitted_optional_variable_reference_is_a_signature_error() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -825,7 +825,7 @@ fn the_cself_row_reads_the_seam_and_consumes_no_argument() {
     host.cself = Some(block);
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, code::CSELF, None, 1).expect("CSELF needs no argument");
@@ -840,7 +840,7 @@ fn a_receiver_with_no_cself_variable_converts_to_null() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted =
@@ -855,7 +855,7 @@ fn cself_outside_a_method_is_a_signature_error() {
     host.cself = Some(std::ptr::without_provenance_mut(0xC5E1F));
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let refusal = to_native(&mut cx, code::CSELF, None, 1).expect_err("a call has no CSELF");
@@ -871,7 +871,7 @@ fn the_string_object_row_round_trips_through_a_handle() {
     let subject = host.text(b"a string long enough to reach the heap");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted =
@@ -896,7 +896,7 @@ fn a_string_the_conversion_built_is_rooted_for_the_call() {
     let number = ObjRef::small_int(42).expect("42 is small");
     let handle = {
         let mut cx = Conversion {
-            host: &mut host,
+            host: (&mut host).into(),
             strings: &mut strings,
         };
         let converted = to_native(&mut cx, code::REXX_STRING_OBJECT, Some(number), 1)
@@ -925,7 +925,7 @@ fn the_same_string_is_swept_when_the_table_is_not_a_root() {
     let number = ObjRef::small_int(42).expect("42 is small");
     let handle = {
         let mut cx = Conversion {
-            host: &mut host,
+            host: (&mut host).into(),
             strings: &mut strings,
         };
         match to_native(&mut cx, code::REXX_STRING_OBJECT, Some(number), 1)
@@ -951,7 +951,7 @@ fn a_required_string_object_that_is_absent_is_88_901() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -967,7 +967,7 @@ fn a_string_object_with_no_string_value_is_88_909() {
     host.speechless.push(subject);
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -986,7 +986,7 @@ fn a_handle_the_table_dropped_does_not_convert_back() {
     let handle = host.locals().register(subject);
     host.locals().clear();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1002,7 +1002,7 @@ fn a_null_handle_converts_to_no_object() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1023,7 +1023,7 @@ fn the_double_row_converts_what_the_host_reads() {
     let subject = host.text(b"2.25");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, code::DOUBLE, Some(subject), 1).expect("2.25 converts");
@@ -1040,7 +1040,7 @@ fn a_double_the_host_cannot_read_is_88_921_naming_the_argument() {
     let subject = host.text(b"abc");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let refused = to_native(&mut cx, code::DOUBLE, Some(subject), 2).expect_err("abc is no double");
@@ -1061,7 +1061,7 @@ fn a_raise_reading_a_double_is_the_hosts_condition() {
     host.raising.push(subject);
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1077,7 +1077,7 @@ fn an_absent_double_is_88_901_or_a_zero() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1098,7 +1098,7 @@ fn the_positive_whole_number_row_converts_what_the_host_reads() {
     let subject = host.text(b"16");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted =
@@ -1115,7 +1115,7 @@ fn a_whole_number_below_one_is_88_905_naming_the_argument() {
     let subject = host.text(b"0");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let refused = to_native(&mut cx, code::POSITIVE_WHOLENUMBER_T, Some(subject), 2)
@@ -1135,7 +1135,7 @@ fn an_omitted_optional_whole_number_is_a_zero_with_no_flags() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let omitted = to_native(
@@ -1158,7 +1158,7 @@ fn a_returned_object_converts_back_through_its_handle() {
     let handle = host.locals().register(subject);
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1183,7 +1183,7 @@ fn a_returned_object_the_table_dropped_does_not_convert_back() {
     host.locals().clear();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1199,7 +1199,7 @@ fn the_int_row_converts_a_returned_value() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     for number in [0, 1, -1, 3, i32::MAX, i32::MIN] {
@@ -1218,7 +1218,7 @@ fn the_int_row_refuses_a_value_of_another_type() {
     let mut host = Interpreter::new();
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     assert_eq!(
@@ -1238,7 +1238,7 @@ fn a_descriptor_carries_the_stripped_code_and_the_flags() {
     let subject = host.text(b"a string long enough to reach the heap");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let declared = OPTIONAL_ARGUMENT | code::CSTRING;
@@ -1261,7 +1261,7 @@ fn a_descriptor_carries_the_stripped_code_and_the_flags() {
 fn back(host: &mut Interpreter, code: u16, value: Value) -> Result<Option<ObjRef>, Failure> {
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host,
+        host: host.into(),
         strings: &mut strings,
     };
     from_native(&mut cx, code, value)
@@ -1416,7 +1416,7 @@ fn special(host: &mut Interpreter, declared: u16) -> (Result<Converted, Failure>
     let mut strings = CStringPool::new();
     let converted = {
         let mut cx = Conversion {
-            host,
+            host: host.into(),
             strings: &mut strings,
         };
         to_native(&mut cx, declared, None, 1)
@@ -1527,7 +1527,7 @@ fn convert(host: &mut Interpreter, declared: u16, text: &str) -> Result<Converte
     let argument = host.text(text.as_bytes());
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host,
+        host: host.into(),
         strings: &mut strings,
     };
     to_native(&mut cx, declared, Some(argument), 2)
@@ -1731,7 +1731,7 @@ fn a_raise_reading_an_integer_is_the_hosts_condition() {
         host.raising.push(subject);
         let mut strings = CStringPool::new();
         let mut cx = Conversion {
-            host: &mut host,
+            host: (&mut host).into(),
             strings: &mut strings,
         };
         assert_eq!(
@@ -1811,7 +1811,7 @@ fn a_cstring_result_is_the_pools_bytes_up_to_the_first_nul() {
     let cut = strings.intern(b"ab\0cd");
     let foreign = std::ptr::without_provenance::<std::ffi::c_char>(0x5eed);
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let answered = from_native(&mut cx, code::CSTRING, Value::CString(whole))
@@ -1844,7 +1844,7 @@ fn the_object_row_hands_over_the_argument_itself() {
     let subject = host.text(b"a string long enough to reach the heap");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted =
@@ -1867,7 +1867,7 @@ fn the_array_row_hands_over_what_the_host_converts_and_refuses_the_rest() {
     host.raising.push(raising);
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, code::REXX_ARRAY_OBJECT, Some(array), 1).expect("converts");
@@ -1910,7 +1910,7 @@ fn the_stem_row_takes_a_stem_anywhere_and_a_name_only_in_a_call() {
     };
     {
         let mut cx = Conversion {
-            host: &mut host,
+            host: (&mut host).into(),
             strings: &mut strings,
         };
         let converted = to_native(&mut cx, code::REXX_STEM_OBJECT, Some(stem), 1).expect("a stem");
@@ -1932,7 +1932,7 @@ fn the_stem_row_takes_a_stem_anywhere_and_a_name_only_in_a_call() {
 
     host.method = false;
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, code::REXX_STEM_OBJECT, Some(name), 1).expect("a name");
@@ -1958,7 +1958,7 @@ fn an_instance_row(declared: u16, class: Class) {
     host.instances.push((instance, class));
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, declared, Some(instance), 1).expect("an instance");
@@ -2010,7 +2010,7 @@ fn the_pointer_row_unwraps_a_pointer_and_refuses_anything_else() {
     let other = host.text(b"x");
     let mut strings = CStringPool::new();
     let mut cx = Conversion {
-        host: &mut host,
+        host: (&mut host).into(),
         strings: &mut strings,
     };
     let converted = to_native(&mut cx, code::POINTER, Some(pointer), 1).expect("a pointer");

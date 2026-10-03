@@ -405,7 +405,7 @@ impl Interp {
                 Resolved::Internal(row) => Ok(internal_begun(self.run_internal(row, &arguments)?)),
                 Resolved::LibraryRoutine(slot) => self
                     .run_package_routine(slot, name, &arguments)
-                    .map(|value| Begun::Done(Ended::Returned(value))),
+                    .map(library_begun),
                 _ => unreachable!("only the two arms above reach here"),
             };
         }
@@ -612,12 +612,15 @@ impl Interp {
         }
         if let Resolved::LibraryRoutine(slot) = resolved {
             let answered = match self.call_checkpoint(name, values)? {
-                Some(handled) => handled,
+                Some(handled) => Started::Ran(handled),
                 None => self.run_package_routine(slot, name, values)?,
             };
-            return answered
-                .map(Started::Ran)
-                .ok_or_else(|| Raised::no_data_returned(name).into());
+            return match answered {
+                Started::Ran(value) => value
+                    .map(Started::Ran)
+                    .ok_or_else(|| Raised::no_data_returned(name).into()),
+                Started::Entered => Ok(Started::Entered),
+            };
         }
         let begun = self.begin_call(
             resolved,
@@ -772,13 +775,13 @@ impl Interp {
         if let Resolved::MergedLibraryRoutine(code) = resolved {
             return self
                 .run_library_routine(code, name, arguments)
-                .map(|value| Begun::Done(Ended::Returned(value)));
+                .map(library_begun);
         }
         if let Resolved::Routine(installed) = resolved {
             if let Some(code) = self.library_routine_code(installed) {
                 return self
                     .run_library_routine(code, name, arguments)
-                    .map(|value| Begun::Done(Ended::Returned(value)));
+                    .map(library_begun);
             }
             if let Some(row) = self.rexx_routine_row(installed) {
                 return self
@@ -1407,7 +1410,7 @@ impl Interp {
                 Ok(Some(handled)) => Ok(Started::Ran(Ended::Returned(handled))),
                 Ok(None) => self
                     .run_package_routine(slot, name, &values[mark..])
-                    .map(|value| Started::Ran(Ended::Returned(value))),
+                    .map(|started| subroutine_started(library_begun(started))),
                 Err(failure) => Err(failure),
             },
             _ => self
@@ -1438,6 +1441,15 @@ pub(crate) fn function_started(begun: Begun, name: &[u8]) -> Result<Started<ObjR
 fn internal_begun(started: Started<ObjRef>) -> Begun {
     match started {
         Started::Ran(value) => Begun::Done(Ended::Returned(Some(value))),
+        Started::Entered => Begun::Entered,
+    }
+}
+
+/// A library routine's start as a begun call: `Entered` where it parked for
+/// its driver exit.
+fn library_begun(started: Started<Option<ObjRef>>) -> Begun {
+    match started {
+        Started::Ran(value) => Begun::Done(Ended::Returned(value)),
         Started::Entered => Begun::Entered,
     }
 }

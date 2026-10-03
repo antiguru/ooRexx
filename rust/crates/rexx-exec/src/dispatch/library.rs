@@ -18,16 +18,15 @@
 //! receiver's pool and the local references.
 
 use std::borrow::Cow;
-use std::rc::Rc;
 
 use rexx_api::handles::Table;
-use rexx_api::invoke;
+use rexx_api::invoke::{self, Completion, NativeCall};
 use rexx_api::layout::POINTER;
-use rexx_api::load::{CommandHandler, Hook, Library};
+use rexx_api::load::{CommandHandler, HeldMethod, HeldRoutine, Hook, Library};
 use rexx_api::redirect::Redirector;
 use rexx_api::values::{
-    Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, Numeric,
-    Raised as Condition,
+    Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, GuardedHost, Host,
+    HostRef, Numeric, Raised as Condition,
 };
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
@@ -35,6 +34,7 @@ use rexx_num::{DIGITS64, Number};
 use super::Resolution;
 use crate::builtin::datatype::{SymbolKind, classify};
 use crate::error::Raised;
+use crate::run::Started;
 use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame, PendingTrap};
 
 /// The bytes a small integer or an inline string renders as, for a reader
@@ -65,7 +65,9 @@ fn pool_variable_name(name: &[u8]) -> Option<Vec<u8>> {
 
 impl Interp {
     /// Runs `binding`'s procedure against `args` with `receiver` as its self,
-    /// and answers what the extension returned.
+    /// and answers what the extension returned, or `Entered` with the
+    /// activity parked for the call's driver exit
+    /// ([`Interp::exits_for_native`]).
     ///
     /// # Errors
     /// The condition the extension raised, whatever converting an argument or
@@ -81,43 +83,46 @@ impl Interp {
         name: &[u8],
         args: &[Option<ObjRef>],
         reserved: bool,
-    ) -> Result<Option<ObjRef>, Failure> {
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
         let owner = self.pool_owner(receiver)?;
-        // Cloned out of the binding before the interpreter is borrowed as the
-        // host: the row is borrowed from the library, and the library has to
-        // outlive that borrow without being reachable through `self`.
-        let library = Rc::clone(&binding.library);
-        let Some(entry) = library.method(&binding.procedure) else {
+        let Some(entry) = binding.library.method(&binding.procedure) else {
             return Err(Loud::library_procedure_gone().into());
         };
+        let held = HeldCall::Method(entry.held(), resolution.method);
+        let exits = self.exits_for_native();
         self.push_native_frame(owner, resolution.scope, Some(receiver), name, args, None);
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let packaged = self.external_package_path(resolution.method).is_some();
         self.native_frame_mut().packaged = packaged;
         self.native_frame_mut().reserved = reserved;
-        let mut strings = CStringPool::new();
-        let thread = self.thread_context();
-        let stress = self.stress_collect;
-        let (answered, pending) = {
-            let frame = self.native_token();
-            let activation = Activation::new(Conversion {
-                host: self,
-                strings: &mut strings,
-            });
-            activation.set_frame(frame);
-            activation.set_between_halves(stress);
-            let answered = thread.enter(&activation, |contexts| {
-                invoke::method(entry, &contexts.method(), &activation, args)
-            });
-            (answered, activation.pending())
+        let Some((answered, pending)) =
+            self.native_call(held, args, exits, receiver, resume_library_method)
+        else {
+            return Ok(Started::Entered);
         };
+        self.end_library_method(answered, pending, receiver, resolution.scope, packaged)
+            .map(Started::Ran)
+    }
+
+    /// What a library method answers once its stub has returned `answered`,
+    /// with the call's frame still pushed and pinned: its frame popped, its
+    /// guard lock released where the frame still held it, and then its
+    /// condition or its value.
+    fn end_library_method(
+        &mut self,
+        answered: Result<Option<ObjRef>, Refused>,
+        pending: Option<usize>,
+        receiver: ObjRef,
+        scope: ObjRef,
+        packaged: bool,
+    ) -> Result<Option<ObjRef>, Failure> {
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
         if popped.reserved {
             self.release_guard(crate::guards::GuardKey {
                 object: receiver,
-                scope: resolution.scope,
+                scope,
             });
         }
         let trapped = trapped?;
@@ -145,13 +150,14 @@ impl Interp {
         slot: usize,
         name: &[u8],
         args: &[Option<ObjRef>],
-    ) -> Result<Option<ObjRef>, Failure> {
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
         let code = self.package_routine_code(slot);
         self.run_library_routine(code, &name.to_ascii_uppercase(), args)
     }
 
     /// Runs the library routine [`Interp::library_codes`] row `code` is
-    /// against `args`, and answers what the extension returned.
+    /// against `args`, and answers what the extension returned, or `Entered`
+    /// as [`Interp::run_library_method`] does.
     ///
     /// `name` is the name the traceback's `Compiled routine` line gives.
     ///
@@ -164,34 +170,41 @@ impl Interp {
         code: usize,
         name: &[u8],
         args: &[Option<ObjRef>],
-    ) -> Result<Option<ObjRef>, Failure> {
-        let key = self.library_code_key(code).clone();
-        let Some(library) = self.libraries.get(&key.library).map(Rc::clone) else {
+    ) -> Result<Started<Option<ObjRef>>, Failure> {
+        let key = self.library_code_key(code);
+        let Some(entry) = self
+            .libraries
+            .get(&key.library)
+            .and_then(|library| library.routine(&key.procedure))
+        else {
             return Err(Loud::library_procedure_gone().into());
         };
-        let Some(entry) = library.routine(&key.procedure) else {
-            return Err(Loud::library_procedure_gone().into());
-        };
+        let held = HeldCall::Routine(entry.held());
+        let exits = self.exits_for_native();
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args, Some(code));
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let program = self.library_code_program(code);
         self.native_frame_mut().packaged = program.is_some();
-        let mut strings = CStringPool::new();
-        let thread = self.thread_context();
-        let stress = self.stress_collect;
-        let (answered, pending) = {
-            let frame = self.native_token();
-            let activation = Activation::new(Conversion {
-                host: self,
-                strings: &mut strings,
-            });
-            activation.set_frame(frame);
-            activation.set_between_halves(stress);
-            let answered = thread.enter(&activation, |contexts| {
-                invoke::routine(entry, &contexts.call(), &activation, args)
-            });
-            (answered, activation.pending())
+        let Some((answered, pending)) =
+            self.native_call(held, args, exits, ObjRef::NIL, resume_library_routine)
+        else {
+            return Ok(Started::Entered);
         };
+        self.end_library_routine(answered, pending, name, program, args)
+            .map(Started::Ran)
+    }
+
+    /// What a library routine answers once its stub has returned `answered`,
+    /// as [`Interp::end_library_method`] does for a method, with the routine
+    /// blamed for a failure.
+    fn end_library_routine(
+        &mut self,
+        answered: Result<Option<ObjRef>, Refused>,
+        pending: Option<usize>,
+        name: &[u8],
+        program: Option<crate::ProgramId>,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
@@ -209,6 +222,153 @@ impl Interp {
             self.blame_native_routine(name, program, args);
         }
         outcome
+    }
+
+    /// The native call `held` against `args`, its frame pushed and pinned:
+    /// its answer and the condition it holds, run back to back on the baton;
+    /// or, where it `exits`, `None` with the call prepared on the activity's
+    /// record and the activity parked, its continuation `resume` on
+    /// `receiver`, and the frame unpinned.
+    fn native_call(
+        &mut self,
+        held: HeldCall,
+        args: &[Option<ObjRef>],
+        exits: bool,
+        receiver: ObjRef,
+        resume: super::NativeResume,
+    ) -> Option<(Result<Option<ObjRef>, Refused>, Option<usize>)> {
+        let mut strings = CStringPool::new();
+        let thread = self.thread_context();
+        let frame = self.native_token();
+        if !exits {
+            let stress = self.stress_collect;
+            let activation = Activation::new(Conversion {
+                host: self.into(),
+                strings: &mut strings,
+            });
+            activation.set_frame(frame);
+            activation.set_between_halves(stress);
+            let answered = thread.enter(&activation, |contexts| match &held {
+                HeldCall::Method(held, _) => {
+                    invoke::held_method(held, &contexts.method(), &activation, args)
+                }
+                HeldCall::Routine(held) => {
+                    invoke::held_routine(held, &contexts.call(), &activation, args)
+                }
+            });
+            return Some((answered, activation.pending()));
+        }
+        let mut native = NativeCall::empty();
+        let (prepared, pending) = {
+            let activation = Activation::new(Conversion {
+                host: self.into(),
+                strings: &mut strings,
+            });
+            activation.set_frame(frame);
+            let prepared = thread.enter(&activation, |contexts| {
+                let signature = match &held {
+                    HeldCall::Method(held, _) => invoke::held_signature(held, &contexts.method()),
+                    HeldCall::Routine(held) => {
+                        invoke::held_routine_signature(held, &contexts.call())
+                    }
+                };
+                signature.and_then(|signature| {
+                    invoke::prepare(&mut native, &signature, &activation, args)
+                })
+            });
+            (prepared, activation.pending())
+        };
+        if let Err(refused) = prepared {
+            return Some((Err(refused), pending));
+        }
+        pin_leave!(self);
+        self.activity.native_call = Some(Box::new(NativeInFlight {
+            call: Some(Box::new(OffBaton {
+                held,
+                native,
+                strings,
+            })),
+            frame,
+            pending,
+            stage: Stage::Prepared,
+            park: None,
+        }));
+        self.activity.native_park = Some(Box::new(super::NativePark {
+            reason: crate::scheduler::ParkReason::Native,
+            resume,
+            receiver,
+            thens: Vec::new(),
+        }));
+        None
+    }
+
+    /// Whether a native call made now leaves its driver (spec 2026-09-29
+    /// P6-3): from a resumable entry nothing pins, and where another activity
+    /// is alive or a test mode asks for every exit. A lone activity's call
+    /// runs on the baton, which costs a single-activity program nothing
+    /// (ruling P43).
+    fn exits_for_native(&self) -> bool {
+        self.activity.pin_depth == 0
+            && !self.activity.resuming
+            && (self.switch.is_some() || self.stress_collect || self.others_live())
+    }
+
+    /// The running activity's native call, its completion drained: its
+    /// record, with the call's frame pinned again and, under the collect
+    /// stress mode, a collection before `finish` reads it.
+    fn resume_native_call(&mut self) -> Result<(Box<NativeInFlight>, Completion), Failure> {
+        let mut call =
+            self.activity.native_call.take().ok_or_else(|| {
+                Loud::scheduler_inconsistency("a native call resumed with no record")
+            })?;
+        let Stage::Completed(completion) = std::mem::replace(&mut call.stage, Stage::Prepared)
+        else {
+            return Err(
+                Loud::scheduler_inconsistency("a native call resumed before it completed").into(),
+            );
+        };
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
+        if self.stress_collect {
+            self.collect_now();
+        }
+        Ok((call, completion))
+    }
+
+    /// `finish` for `call` as the activity that made it, and the condition
+    /// it then holds.
+    fn finish_native_call(
+        &mut self,
+        call: &NativeInFlight,
+        completion: Completion,
+    ) -> (Result<Option<ObjRef>, Refused>, Option<usize>) {
+        let mut strings = CStringPool::new();
+        let activation = Activation::new(Conversion {
+            host: self.into(),
+            strings: &mut strings,
+        });
+        activation.set_frame(call.frame);
+        if let Some(number) = call.pending {
+            activation.raise(number);
+        }
+        let answered = invoke::finish(&activation, completion);
+        (answered, activation.pending())
+    }
+
+    /// Drops the running activity's native call whose wait was ended by
+    /// `failure` in place of its completion: its frame popped and its guard
+    /// lock released, as the call's own end does.
+    pub(crate) fn abandon_native_call(&mut self, receiver: ObjRef) {
+        if self.activity.native_call.take().is_none() {
+            return;
+        }
+        let scope = self.native_frame().scope;
+        let popped = self.pop_native_frame();
+        if popped.reserved {
+            self.release_guard(crate::guards::GuardKey {
+                object: receiver,
+                scope,
+            });
+        }
     }
 
     /// Runs `library`'s `hook` in a native frame of its own, as
@@ -233,7 +393,7 @@ impl Interp {
         let (ran, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
-                host: self,
+                host: self.into(),
                 strings: &mut strings,
             });
             activation.set_frame(frame);
@@ -279,7 +439,7 @@ impl Interp {
         let (answered, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
-                host: self,
+                host: self.into(),
                 strings: &mut strings,
             });
             activation.set_frame(frame);
@@ -684,6 +844,207 @@ struct Popped {
     reserved: bool,
     additional: Option<ObjRef>,
     result: Option<ObjRef>,
+}
+
+/// A native call that leaves its driver, on its activity's record from
+/// `prepare` until `finish`.
+pub(crate) struct NativeInFlight {
+    /// What the call reads and writes, taken by the thread that runs it.
+    call: Option<Box<OffBaton>>,
+    /// The call's native frame, as [`Interp::native_token`] names it.
+    frame: u64,
+    /// The condition a host without a surface recorded during the call.
+    pending: Option<usize>,
+    stage: Stage,
+    /// The activity's park while the call runs, so that a park recorded by
+    /// Rexx code a callback runs is told apart from it.
+    park: Option<Box<super::NativePark>>,
+}
+
+/// The part of a native call its run off the baton takes.
+pub(crate) struct OffBaton {
+    held: HeldCall,
+    native: NativeCall,
+    /// The call's C strings, which its descriptors point into.
+    strings: CStringPool,
+}
+
+/// The row a [`NativeInFlight`] calls.
+enum HeldCall {
+    /// A method's row, with the resolved method a failure blames.
+    Method(HeldMethod, super::MethodId),
+    Routine(HeldRoutine),
+}
+
+/// Where a [`NativeInFlight`] has got to.
+enum Stage {
+    /// Prepared, its driver not yet exited.
+    Prepared,
+    /// Left its driver; its completion not yet drained.
+    Left,
+    Completed(Completion),
+}
+
+impl NativeInFlight {
+    /// Whether the call waits for its driver exit.
+    pub(crate) fn awaits_exit(&self) -> bool {
+        matches!(self.stage, Stage::Prepared)
+    }
+
+    /// Readies the call to leave its driver, keeping `park`, the
+    /// activity's, for the call's length, and answers what the call reads
+    /// and writes, its frame, and the condition recorded so far.
+    pub(crate) fn leave(
+        &mut self,
+        park: Option<Box<super::NativePark>>,
+    ) -> (Box<OffBaton>, u64, Option<usize>) {
+        self.park = park;
+        self.stage = Stage::Left;
+        let call = self
+            .call
+            .take()
+            .expect("a prepared call holds what it runs");
+        (call, self.frame, self.pending)
+    }
+
+    /// Takes back what [`NativeInFlight::leave`] answered once the call has
+    /// run, with the condition a host without a surface recorded during it,
+    /// and answers the activity's park.
+    pub(crate) fn back(
+        &mut self,
+        call: Box<OffBaton>,
+        pending: Option<usize>,
+    ) -> Option<Box<super::NativePark>> {
+        self.call = Some(call);
+        self.pending = pending;
+        self.park.take()
+    }
+
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        if let Some(park) = &self.park {
+            park.object_roots(out);
+        }
+    }
+
+    /// Records the call's drained completion.
+    pub(crate) fn complete(&mut self, completion: Completion) {
+        self.stage = Stage::Completed(completion);
+    }
+}
+
+/// A library method's continuation once its call has completed: `finish`,
+/// then its end and its blame, as [`Interp::run_other`] blames.
+fn resume_library_method(interp: &mut Interp, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let (mut call, completion) = interp.resume_native_call()?;
+    let frame = interp.native_frame();
+    let (scope, name, args, packaged) = (
+        frame.scope,
+        frame.name.clone(),
+        frame.arguments.clone(),
+        frame.packaged,
+    );
+    let (answered, pending) = interp.finish_native_call(&call, completion);
+    let Some(HeldCall::Method(_, method)) = call.call.take().map(|call| call.held) else {
+        return Err(Loud::scheduler_inconsistency("a method resumed from a routine's call").into());
+    };
+    drop(call);
+    let outcome = interp.end_library_method(answered, pending, receiver, scope, packaged);
+    if outcome.is_err() {
+        let scope_name = interp.classes().id_string(scope).to_string();
+        let reraised = std::mem::take(&mut interp.activity.native_reraise);
+        interp.blame_external_method(&name, &scope_name, method, receiver, &args, reraised);
+    }
+    outcome
+}
+
+/// A library routine's continuation once its call has completed, as
+/// [`resume_library_method`] is a method's.
+fn resume_library_routine(
+    interp: &mut Interp,
+    _receiver: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let (call, completion) = interp.resume_native_call()?;
+    let frame = interp.native_frame();
+    let (name, args, code) = (frame.name.clone(), frame.arguments.clone(), frame.code);
+    let program = code.and_then(|code| interp.library_code_program(code));
+    let (answered, pending) = interp.finish_native_call(&call, completion);
+    drop(call);
+    interp.end_library_routine(answered, pending, &name, program, &args)
+}
+
+impl OffBaton {
+    /// Runs the call with `baton` released, `host` reached only through a
+    /// [`GuardedHost`] for its length, as the native frame `frame` holding
+    /// the condition `pending`, and hands its completion to `post` before
+    /// taking the baton back; answers the condition then held.
+    pub(crate) fn run(
+        &mut self,
+        frame: u64,
+        pending: Option<usize>,
+        host: &mut Interp,
+        baton: &crate::baton::Baton,
+        thread: &rexx_api::ffi::ThreadContext,
+        post: impl FnOnce(Completion),
+    ) -> Option<usize> {
+        let OffBaton {
+            held,
+            native,
+            strings,
+        } = self;
+        let activation = Activation::new(Conversion {
+            host: HostRef::Guarded(GuardedHost::new(host, baton)),
+            strings,
+        });
+        activation.set_frame(frame);
+        if let Some(number) = pending {
+            activation.raise(number);
+        }
+        thread.enter(&activation, |contexts| {
+            baton.release();
+            let completion = match held {
+                HeldCall::Method(held, _) => {
+                    invoke::call_held_method(native, held, &contexts.method())
+                }
+                HeldCall::Routine(held) => {
+                    invoke::call_held_routine(native, held, &contexts.call())
+                }
+            };
+            post(completion);
+            baton.acquire();
+        });
+        activation.pending()
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many times a callback on this thread took the baton.
+    static CALLBACK_TAKES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// [`CALLBACK_TAKES`]'s count.
+#[cfg(test)]
+pub(crate) fn callback_takes() -> u64 {
+    CALLBACK_TAKES.with(std::cell::Cell::get)
+}
+
+impl rexx_api::values::Baton for crate::baton::Baton {
+    fn take_unless_held(&self) -> bool {
+        let took = crate::baton::Baton::take_unless_held(self);
+        #[cfg(test)]
+        if took {
+            CALLBACK_TAKES.with(|takes| takes.set(takes.get() + 1));
+        }
+        took
+    }
+
+    fn release(&self) {
+        crate::baton::Baton::release(self);
+    }
+
+    fn held_here(&self) -> bool {
+        crate::baton::Baton::held_here(self)
+    }
 }
 
 /// The condition an extension raised, whose number is the major and the minor

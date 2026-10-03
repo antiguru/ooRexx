@@ -324,7 +324,7 @@ impl Session {
         arguments: &[Option<ObjRef>],
     ) -> (Result<Option<ObjRef>, Failure>, Option<usize>) {
         let activation = Activation::new(Conversion {
-            host: &mut self.interpreter,
+            host: (&mut self.interpreter).into(),
             strings: &mut self.strings,
         });
         let outcome = self.thread.enter(&activation, |contexts| {
@@ -545,7 +545,7 @@ fn the_thread_table_carries_the_four_constant_objects() {
     let mut session = Session::new();
     let expected = session.interpreter.constants();
     let activation = Activation::new(Conversion {
-        host: &mut session.interpreter,
+        host: (&mut session.interpreter).into(),
         strings: &mut session.strings,
     });
     let thread = ThreadContext::new();
@@ -685,7 +685,7 @@ fn the_object_keyed_copy_outlives_the_object_it_came_from() {
 
     let pointer = {
         let activation = Activation::new(Conversion {
-            host: &mut session.interpreter,
+            host: (&mut session.interpreter).into(),
             strings: &mut session.strings,
         });
         let first = activation.string_data(handle);
@@ -717,7 +717,7 @@ fn a_handle_this_activation_does_not_hold_reads_as_nothing() {
     let mut session = Session::new();
     let stranger: rexx_api::layout::RexxObjectPtr = std::ptr::without_provenance_mut(0x5eed_0000);
     let activation = Activation::new(Conversion {
-        host: &mut session.interpreter,
+        host: (&mut session.interpreter).into(),
         strings: &mut session.strings,
     });
     assert!(activation.string_data(stranger).is_null());

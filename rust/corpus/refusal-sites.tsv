@@ -219,7 +219,7 @@ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1267	off-
 Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1288	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
 Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1366	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
 Loud	native_method	send	crates/rexx-exec/src/lib.rs:438	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
-Raised	no_data_returned	body	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
 Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1511	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
 Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1168	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
 Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1607	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)

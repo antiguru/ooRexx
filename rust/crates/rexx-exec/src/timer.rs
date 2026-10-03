@@ -17,7 +17,6 @@
 //! interpreter is registered.
 
 use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::time::{Duration, Instant};
 
 use crate::sync::{
@@ -33,8 +32,14 @@ pub(crate) const INBOX: u32 = 2;
 /// `ActivityManager::timeSliceLength` (`concurrency/ActivityManager.hpp:359`).
 const SLICE_LENGTH: Duration = Duration::from_millis(24);
 
-/// What other threads post to an interpreter's inbox.
-pub(crate) type Posted = Infallible;
+/// What other threads post to an interpreter's inbox: a native call's
+/// completion.
+#[cfg(not(all(loom, test)))]
+pub(crate) type Posted = crate::scheduler::Completed;
+
+/// A model's stand-in for a completion.
+#[cfg(all(loom, test))]
+pub(crate) type Posted = u32;
 
 /// An interpreter's request bits, which other threads set. No data is
 /// published through a bit: what a post carries is under the inbox's lock.
@@ -87,7 +92,6 @@ impl<T> Inbox<T> {
     }
 
     /// Queues `item` for the holder, and wakes it if it idles.
-    #[cfg(test)]
     pub(crate) fn post(&self, item: T) {
         let mut queue = lock(&self.queue);
         queue.posted.push_back(item);
@@ -98,7 +102,6 @@ impl<T> Inbox<T> {
 
     /// What was posted since the holder last took, in order; without
     /// locking while `INBOX` is clear.
-    #[cfg(test)]
     pub(crate) fn drain(&self) -> VecDeque<T> {
         if !self.requests.pending(INBOX) {
             return VecDeque::new();
@@ -273,6 +276,23 @@ impl Registration {
 
     pub(crate) fn requests(&self) -> &Requests {
         self.inbox.requests()
+    }
+
+    /// The inbox, for a thread that posts to it.
+    pub(crate) fn inbox(&self) -> Arc<Inbox<Posted>> {
+        Arc::clone(&self.inbox)
+    }
+
+    /// What was posted since the holder last took, in order.
+    pub(crate) fn drain(&self) -> VecDeque<Posted> {
+        self.inbox.drain()
+    }
+
+    /// Blocks this thread until something is posted, with no deadline for
+    /// the timer to find due, and answers what was posted.
+    pub(crate) fn idle(&self) -> VecDeque<Posted> {
+        self.inbox.expect_wake();
+        self.inbox.idle()
     }
 
     /// Has the timer set `SLICE` each slice from now on.

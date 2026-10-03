@@ -119,6 +119,8 @@ pub(crate) enum ParkReason {
     /// A semaphore's wait, until a post or release hands it over or a timed
     /// wait's end.
     Semaphore(crate::semaphores::SemaphoreWait),
+    /// A native call prepared on the baton, until its completion is drained.
+    Native,
 }
 
 impl ParkReason {
@@ -131,8 +133,16 @@ impl ParkReason {
             ParkReason::Sleep { .. } => "a sleep's end",
             ParkReason::Timer { .. } => "a timer's end",
             ParkReason::Semaphore(_) => "a semaphore",
+            ParkReason::Native => "a native call's return",
         }
     }
+}
+
+/// A native call's completion, posted to the inbox by the thread that ran
+/// the call, for the activity that made it.
+pub(crate) struct Completed {
+    pub(crate) activity: ActivityId,
+    pub(crate) completion: rexx_api::invoke::Completion,
 }
 
 /// A started activity's first step: the send `~start` asked for.
@@ -221,6 +231,12 @@ pub(crate) struct Activities {
     next_native: u32,
     /// Failures kept by [`Interp::keep_late_failure`].
     late_failures: Vec<Failure>,
+    /// Native calls that have left their driver and whose completions have
+    /// not been drained.
+    in_flight: usize,
+    /// Those of them whose run is on this thread's stack, under a callback,
+    /// so that no loop above them can wait for their completions.
+    runs_below: usize,
     /// The guard locks, and what each parked activity waits on.
     pub(crate) guards: crate::guards::GuardTable,
     pub(crate) semaphores: crate::semaphores::Semaphores,
@@ -265,6 +281,8 @@ impl Activities {
             last_number: 0,
             next_native: 0,
             late_failures: Vec::new(),
+            in_flight: 0,
+            runs_below: 0,
             guards: crate::guards::GuardTable::default(),
             semaphores: crate::semaphores::Semaphores::default(),
         }
@@ -352,6 +370,18 @@ pub(crate) trait Scheduler {
     /// section 5): with the one thread holding the baton running a driver,
     /// that is holding the baton.
     fn stop_the_world(&self);
+    /// Runs the native call the running activity, parked for it, prepared,
+    /// with the baton released (spec 2026-09-29 P6-3), and posts its
+    /// completion.
+    fn exit_for_native(&mut self);
+    /// Posts `completion`, of `activity`'s native call, to `inbox` for the
+    /// baton's holder to drain; it touches nothing else.
+    fn post_completion(
+        inbox: &crate::timer::Inbox<crate::timer::Posted>,
+        activity: ActivityId,
+        completion: rexx_api::invoke::Completion,
+    ) where
+        Self: Sized;
 }
 
 impl Scheduler for Interp {
@@ -375,7 +405,10 @@ impl Scheduler for Interp {
 
     fn run_until_park(&mut self) -> Result<bool, Failure> {
         let ended = match self.run_started() {
-            Ok(Stopped::Parked) => return Ok(true),
+            Ok(Stopped::Parked) => {
+                self.exit_if_awaited();
+                return Ok(true);
+            }
             Ok(Stopped::Ended) => self.run_ending_uninits(),
             Err(failure) => Err(failure),
         };
@@ -417,6 +450,7 @@ impl Scheduler for Interp {
                     });
                 }
             }
+            ParkReason::Native => {}
             ParkReason::Semaphore(wait) => {
                 let order = wait.deadline.map(|deadline| {
                     table.next_sleeper += 1;
@@ -452,6 +486,46 @@ impl Scheduler for Interp {
             self.baton.held_here(),
             "a collection on a thread not holding the interpreter's baton"
         );
+    }
+
+    fn exit_for_native(&mut self) {
+        if self.stress_collect {
+            self.collect_now();
+        }
+        let park = self.activity.native_park.take();
+        let Some(record) = self.activity.native_call.as_mut() else {
+            self.activity.native_park = park;
+            return;
+        };
+        let (mut call, frame, pending) = record.leave(park);
+        #[cfg(test)]
+        NATIVE_EXITS.with(|exits| exits.set(exits.get() + 1));
+        self.activities.in_flight += 1;
+        let thread = self.thread_context();
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
+        let baton = crate::sync::Arc::clone(&self.baton);
+        let inbox = self.timer.inbox();
+        let activity = self.activities.running;
+        self.activities.runs_below += 1;
+        let pending = call.run(frame, pending, self, &baton, &thread, |completion| {
+            Self::post_completion(&inbox, activity, completion);
+        });
+        self.activities.runs_below -= 1;
+        pin_leave!(self);
+        if let Some(record) = self.activity.native_call.as_mut() {
+            self.activity.native_park = record.back(call, pending);
+        }
+    }
+
+    fn post_completion(
+        inbox: &crate::timer::Inbox<crate::timer::Posted>,
+        activity: ActivityId,
+        completion: rexx_api::invoke::Completion,
+    ) {
+        inbox.post(Completed {
+            activity,
+            completion,
+        });
     }
 }
 
@@ -707,7 +781,7 @@ impl Interp {
         // A slice belongs to the activity it was set for.
         self.timer.requests().clear(SLICE);
         self.slice_deferred = false;
-        if self.activities.ready.is_empty() {
+        if self.activities.ready.is_empty() && self.activities.in_flight == 0 {
             self.timer.disarm();
         }
         if self.stress_collect {
@@ -948,6 +1022,55 @@ impl Interp {
         true
     }
 
+    /// The driver exit of the running activity, where its driver has just
+    /// parked it for a native call.
+    fn exit_if_awaited(&mut self) {
+        if self
+            .activity
+            .native_call
+            .as_ref()
+            .is_some_and(|call| call.awaits_exit())
+        {
+            self.exit_for_native();
+        }
+    }
+
+    /// Files the completions posted since the last drain.
+    pub(crate) fn drain_completions(&mut self) {
+        let posted = self.timer.drain();
+        self.file_completions(posted);
+    }
+
+    /// Hands each of `posted` to the parked activity that made its call, and
+    /// readies that activity.
+    pub(crate) fn file_completions(&mut self, posted: VecDeque<Completed>) {
+        for Completed {
+            activity,
+            completion,
+        } in posted
+        {
+            self.activities.in_flight -= 1;
+            let call = if activity == self.activities.running {
+                self.activity.native_call.as_mut()
+            } else {
+                self.activities
+                    .idle
+                    .get_mut(activity.0 as usize)
+                    .and_then(Option::as_mut)
+                    .and_then(|idle| idle.activity.native_call.as_mut())
+            };
+            if let Some(call) = call {
+                call.complete(completion);
+                self.unpark(activity);
+            }
+        }
+    }
+
+    /// Whether an activity other than the running one is alive.
+    pub(crate) fn others_live(&self) -> bool {
+        self.activities.idle.len() - 1 > self.activities.free.len()
+    }
+
     /// Moves every sleeper whose deadline is due to the ready queue, in
     /// deadline order.
     fn wake_due_sleepers(&mut self) {
@@ -1021,7 +1144,10 @@ impl Interp {
             if !others {
                 return Ok(());
             }
-            if table.ready.is_empty() && table.sleepers.is_empty() {
+            if table.ready.is_empty()
+                && table.sleepers.is_empty()
+                && table.in_flight == table.runs_below
+            {
                 return Err(self.idle_for_good());
             }
         }
@@ -1146,13 +1272,20 @@ impl Interp {
         me: ActivityId,
         level: usize,
     ) -> Result<Option<ActivityId>, Failure> {
+        if self.timer.requests().pending(crate::timer::INBOX) {
+            self.drain_completions();
+        }
         loop {
             if !self.activities.sleepers.is_empty() {
                 self.wake_due_sleepers();
             }
             let Some(ready) = self.activities.ready.pop_front() else {
                 let Some(Reverse((due, _, _))) = self.activities.sleepers.peek().copied() else {
-                    return Ok(None);
+                    if self.activities.in_flight == self.activities.runs_below {
+                        return Ok(None);
+                    }
+                    self.idle_for_posts()?;
+                    continue;
                 };
                 self.idle_until(due)?;
                 continue;
@@ -1424,6 +1557,7 @@ impl Interp {
         let level = self.prepare_level()?;
         let driven = self.drive_from(DriveStart::Level(level), true);
         self.root_driven(driven);
+        self.exit_if_awaited();
         loop {
             if let Some(end) = self.activity.root_end.take() {
                 return end;
@@ -1436,7 +1570,10 @@ impl Interp {
                 Some(failure) if self.activity.root_end.is_some() => {
                     self.keep_late_failure(failure);
                 }
-                failure if self.activity.root_end.is_none() => self.root_step(failure),
+                failure if self.activity.root_end.is_none() => {
+                    self.root_step(failure);
+                    self.exit_if_awaited();
+                }
                 _ => {}
             }
         }
@@ -1518,6 +1655,9 @@ impl Interp {
         if self.stress_collect {
             self.collect_now();
         }
+        if self.timer.requests().pending(crate::timer::INBOX) {
+            self.drain_completions();
+        }
         if !self.activities.sleepers.is_empty() {
             self.wake_due_sleepers();
         }
@@ -1531,7 +1671,7 @@ impl Interp {
             if due {
                 self.timer.requests().set(SLICE);
             }
-        } else if self.activities.ready.is_empty() {
+        } else if self.activities.ready.is_empty() && self.activities.in_flight == 0 {
             self.timer.disarm();
         } else {
             self.timer.arm();
@@ -1666,6 +1806,18 @@ impl Interp {
         });
         true
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many driver exits for a native call this thread has made.
+    static NATIVE_EXITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// [`NATIVE_EXITS`]'s count.
+#[cfg(test)]
+pub(crate) fn native_exits() -> u64 {
+    NATIVE_EXITS.with(std::cell::Cell::get)
 }
 
 /// An outcome [`crate::Interp::exec_instruction`] answers in place of running

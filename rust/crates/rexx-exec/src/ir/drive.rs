@@ -3101,6 +3101,33 @@ impl Interp {
         }
     }
 
+    /// 44.1 for the function call op in front of `parked`'s resume point,
+    /// whose callee parked and answered nothing, named as its spelling is.
+    #[cold]
+    fn no_data_from_parked_call(
+        &self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        parked: &ParkedCall,
+    ) -> Failure {
+        let op = parked
+            .at
+            .checked_sub(1)
+            .and_then(|call| chunk.ops_in(call, parked.at))
+            .and_then(<[Op]>::first);
+        let (Some(Op::CallArgs { slot, path, .. } | Op::CallExpr { slot, path, .. }), Some(clause)) =
+            (op, code.body.instructions.get(parked.index))
+        else {
+            return Loud::call_op_off_its_node().into();
+        };
+        match Interp::chunk_node_at(clause, *slot, *path).map(|node| &node.kind) {
+            Some(ExprKind::Call { target, .. }) => {
+                Raised::no_data_returned(call_target_name(code, target).0).into()
+            }
+            _ => Loud::call_op_off_its_node().into(),
+        }
+    }
+
     /// [`Interp::resume_region`] for a call or send op whose activity parked
     /// and has woken with `sent`.
     #[expect(
@@ -3130,10 +3157,7 @@ impl Interp {
                         registers.set(dst, value);
                         Ok(())
                     }
-                    Ok(None) => Err(Loud::scheduler_inconsistency(
-                        "a function's wait that answered no value",
-                    )
-                    .into()),
+                    Ok(None) => Err(self.no_data_from_parked_call(code, chunk, &parked)),
                     Err(failure) => Err(failure),
                 }
             }

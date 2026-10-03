@@ -30,7 +30,7 @@ use crate::layout::{
     wholenumber_t,
 };
 use crate::redirect::Redirector;
-use crate::values::{Activation, Converted, MAX_WHOLENUMBER, Repr, Value};
+use crate::values::{Activation, Baton, Converted, Host, MAX_WHOLENUMBER, Repr, Value};
 
 /// The state that owns the context `context` addresses.
 ///
@@ -110,6 +110,65 @@ unsafe impl Send for ValueDescriptor {}
 
 // SAFETY: as for `ValueDescriptor`: a `Value` is one member of that word.
 unsafe impl Send for Value {}
+
+/// The host a native call that runs with the baton released reaches it
+/// through (spec 2026-09-29 2.4, ruling P50): its address, from which each
+/// access derives a fresh `&mut` on a thread holding `baton`.
+pub struct GuardedHost<'a> {
+    host: NonNull<dyn Host + 'a>,
+    baton: &'a dyn Baton,
+    /// The borrow `host` was taken from, held for `'a`.
+    lent: PhantomData<&'a mut (dyn Host + 'a)>,
+}
+
+impl<'a> GuardedHost<'a> {
+    pub fn new(host: &'a mut (dyn Host + 'a), baton: &'a dyn Baton) -> GuardedHost<'a> {
+        GuardedHost {
+            host: NonNull::from(host),
+            baton,
+            lent: PhantomData,
+        }
+    }
+
+    pub fn baton(&self) -> &'a dyn Baton {
+        self.baton
+    }
+
+    /// Takes the baton unless this thread holds it, answering whether it
+    /// took it.
+    pub fn take_baton(&self) -> bool {
+        self.baton.take_unless_held()
+    }
+
+    /// The host.
+    ///
+    /// # Panics
+    /// In a debug build, where this thread does not hold the baton.
+    pub fn get(&self) -> &(dyn Host + 'a) {
+        debug_assert!(
+            self.baton.held_here(),
+            "a callback reached the host without the baton"
+        );
+        // SAFETY: `host` came from a `&'a mut` this value keeps borrowed for
+        // `'a`, so nothing else reaches the host meanwhile, and the answer
+        // borrows `self`, so no `&mut` from `get_mut` is live beside it.
+        unsafe { self.host.as_ref() }
+    }
+
+    /// The host, for writing.
+    ///
+    /// # Panics
+    /// As [`GuardedHost::get`].
+    pub fn get_mut(&mut self) -> &mut (dyn Host + 'a) {
+        debug_assert!(
+            self.baton.held_here(),
+            "a callback reached the host without the baton"
+        );
+        // SAFETY: as `get`, and the answer borrows `self` uniquely, so no two
+        // derived borrows are live at once.
+        unsafe { self.host.as_mut() }
+    }
+}
 
 /// The method-context table an extension is handed
 /// (`Activity::methodContextFunctions`,
@@ -4810,7 +4869,7 @@ mod tests {
     ) -> (R, Option<&'static str>) {
         let mut strings = CStringPool::new();
         let activation = values::Activation::new(Conversion {
-            host,
+            host: host.into(),
             strings: &mut strings,
         });
         ThreadContext::new().enter(&activation, |contexts| {
@@ -4833,7 +4892,7 @@ mod tests {
     ) -> (R, Option<&'static str>) {
         let mut strings = CStringPool::new();
         let activation = values::Activation::new(Conversion {
-            host,
+            host: host.into(),
             strings: &mut strings,
         });
         ThreadContext::new().enter(&activation, |contexts| {
@@ -4849,7 +4908,7 @@ mod tests {
     ) -> (R, Option<&'static str>) {
         let mut strings = CStringPool::new();
         let activation = values::Activation::new(Conversion {
-            host,
+            host: host.into(),
             strings: &mut strings,
         });
         ThreadContext::new().enter(&activation, |contexts| {
@@ -5787,7 +5846,7 @@ mod tests {
         let command = host.text(b"a command");
         let mut strings = CStringPool::new();
         let activation = values::Activation::new(Conversion {
-            host,
+            host: host.into(),
             strings: &mut strings,
         });
         let answered = ThreadContext::new().enter(&activation, |contexts| {
@@ -5886,5 +5945,68 @@ mod tests {
             ]
         );
         assert_eq!(error, [b"one".to_vec(), Vec::new(), b"three".to_vec()]);
+    }
+
+    /// A baton for one thread: held or not, counting its takes and releases.
+    #[derive(Default)]
+    struct CountedBaton {
+        held: std::cell::Cell<bool>,
+        takes: std::cell::Cell<u32>,
+        releases: std::cell::Cell<u32>,
+    }
+
+    impl values::Baton for CountedBaton {
+        fn take_unless_held(&self) -> bool {
+            if self.held.get() {
+                return false;
+            }
+            self.held.set(true);
+            self.takes.set(self.takes.get() + 1);
+            true
+        }
+
+        fn release(&self) {
+            assert!(self.held.replace(false), "released a baton not held");
+            self.releases.set(self.releases.get() + 1);
+        }
+
+        fn held_here(&self) -> bool {
+            self.held.get()
+        }
+    }
+
+    /// A callback through a guarded host takes the baton for the length of
+    /// its conversion and gives it back, and takes nothing where its thread
+    /// holds the baton already. The host's own check (a debug assertion)
+    /// sees the baton held.
+    #[test]
+    fn a_callback_through_a_guarded_host_takes_the_baton_for_its_length() {
+        let mut host = FakeHost::new();
+        let baton = CountedBaton::default();
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host: values::HostRef::Guarded(super::GuardedHost::new(&mut host, &baton)),
+            strings: &mut strings,
+        });
+        let handle = activation.whole_number(5);
+        assert!(!handle.is_null());
+        assert_eq!((baton.takes.get(), baton.releases.get()), (1, 1));
+        assert!(!baton.held.get());
+        baton.held.set(true);
+        let _ = activation.whole_number(6);
+        assert_eq!((baton.takes.get(), baton.releases.get()), (1, 1));
+        assert!(baton.held.get());
+    }
+
+    /// The host a guarded host reaches, asked for on a thread not holding
+    /// the baton, fails its check.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "a callback reached the host without the baton")]
+    fn a_guarded_host_reached_without_the_baton_fails() {
+        let mut host = FakeHost::new();
+        let baton = CountedBaton::default();
+        let mut guarded = super::GuardedHost::new(&mut host, &baton);
+        let _ = guarded.get_mut().numeric();
     }
 }

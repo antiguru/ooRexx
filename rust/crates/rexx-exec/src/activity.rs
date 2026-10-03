@@ -276,6 +276,12 @@ pub(crate) struct Activity {
     /// The park a primitive method answered, from its answer until the
     /// activity wakes.
     pub(crate) native_park: Option<Box<crate::dispatch::NativePark>>,
+    /// A native call that leaves its driver, from its `prepare` until its
+    /// `finish`.
+    pub(crate) native_call: Option<Box<crate::dispatch::library::NativeInFlight>>,
+    /// Whether a park's continuation is running, outside every driver, so a
+    /// native call it makes does not leave one.
+    pub(crate) resuming: bool,
     /// A new activity's first step, until it runs.
     pub(crate) first: Option<crate::scheduler::First>,
     /// Where a started activity records its send's outcome.
@@ -397,6 +403,8 @@ impl Activity {
             pin_depth: 0,
             driver_pins: 0,
             native_park: None,
+            native_call: None,
+            resuming: false,
             first: None,
             root_then: None,
             drive_floor: None,
@@ -504,6 +512,8 @@ impl Activity {
             pin_depth: _,
             driver_pins: _,
             native_park,
+            native_call,
+            resuming: _,
             first,
             root_then,
             drive_floor: _,
@@ -556,6 +566,9 @@ impl Activity {
         }
         if let Some(park) = native_park {
             park.object_roots(out);
+        }
+        if let Some(call) = native_call {
+            call.object_roots(out);
         }
         if let Some(crate::scheduler::First::Send(send)) = first {
             send.object_roots(out);

@@ -1149,7 +1149,7 @@ struct Interp {
     /// inbox and the request word the timer sets.
     timer: crate::timer::Registration,
     /// The right to touch this interpreter's state.
-    baton: crate::baton::Baton,
+    baton: crate::sync::Arc<crate::baton::Baton>,
     /// The deterministic switch mode, where a test set one.
     switch: Option<crate::scheduler::Switch>,
     /// Whether the pending `SLICE` has been counted as deferred.
@@ -1848,7 +1848,7 @@ impl Interp {
                 .collect()
         };
         // The creating thread holds the baton until a driver exit releases it.
-        let baton = crate::baton::Baton::new();
+        let baton = crate::sync::Arc::new(crate::baton::Baton::new());
         baton.acquire();
         Interp {
             heap: Heap::new(),

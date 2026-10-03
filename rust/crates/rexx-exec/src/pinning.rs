@@ -244,6 +244,7 @@ mod counter {
         SysSemWait,
         SysSleep,
         Timer,
+        NativeCall,
     }
 
     impl ParkKind {
@@ -260,6 +261,7 @@ mod counter {
                     crate::semaphores::SemaphoreKey::Object(_) => ParkKind::SemaphoreWait,
                     crate::semaphores::SemaphoreKey::Handle(_) => ParkKind::SysSemWait,
                 },
+                crate::scheduler::ParkReason::Native => ParkKind::NativeCall,
             }
         }
     }

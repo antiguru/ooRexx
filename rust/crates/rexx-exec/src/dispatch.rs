@@ -130,7 +130,7 @@ use package::{native_package_local, native_package_name};
 
 // Running a procedure of a loaded shared library, and the `Host` the boundary
 // reaches this interpreter through.
-mod library;
+pub(crate) mod library;
 
 // Array slot and subscript arithmetic, and `Array`'s primitive methods.
 mod array;
@@ -2626,8 +2626,13 @@ impl Interp {
             },
             Invocable::Rexx(_) | Invocable::Native(_) => return Err(Loud::missing_body().into()),
             Invocable::Library(binding) => {
-                let outcome =
-                    self.run_library_method(&binding, resolution, receiver, name, args, reserved);
+                let outcome = match self
+                    .run_library_method(&binding, resolution, receiver, name, args, reserved)
+                {
+                    Ok(Started::Entered) => return Ok(Started::Entered),
+                    Ok(Started::Ran(value)) => Ok(value),
+                    Err(failure) => Err(failure),
+                };
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
                     let method = resolution.method;
@@ -2798,8 +2803,16 @@ impl Interp {
             self.roots.activity_mut().push_temp(object);
         }
         let mut sent = match failure {
-            Some(failure) => Err(failure),
-            None => resume(self, receiver),
+            Some(failure) => {
+                self.abandon_native_call(receiver);
+                Err(failure)
+            }
+            None => {
+                self.activity.resuming = true;
+                let sent = resume(self, receiver);
+                self.activity.resuming = false;
+                sent
+            }
         };
         for (then, blame) in thens {
             if let Ok(Some(value)) = sent {

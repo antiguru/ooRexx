@@ -1248,3 +1248,5 @@ fn a_post_from_another_thread_ends_an_idle() {
     poster.join().expect("the poster");
     assert_eq!(taken, [7]);
 }
+
+mod native;

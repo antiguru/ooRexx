@@ -717,10 +717,100 @@ pub struct Constants<T> {
     pub null_string: T,
 }
 
+/// The right to touch a host's state, which one thread holds at a time
+/// (spec 2026-09-29 P6-3).
+pub trait Baton {
+    /// Takes the baton unless this thread holds it, waiting for it if
+    /// another thread does, and answers whether it took it.
+    fn take_unless_held(&self) -> bool;
+
+    /// Gives up the baton this thread holds.
+    fn release(&self);
+
+    /// Whether this thread holds the baton.
+    fn held_here(&self) -> bool;
+}
+
+/// How a native call's conversions reach the host: lent for a call that
+/// holds the baton throughout, or through [`GuardedHost`] for one that runs
+/// with the baton released (spec 2026-09-29 2.4).
+pub enum HostRef<'a> {
+    Lent(&'a mut (dyn Host + 'a)),
+    Guarded(GuardedHost<'a>),
+}
+
+impl<'a, H: Host + 'a> From<&'a mut H> for HostRef<'a> {
+    fn from(host: &'a mut H) -> HostRef<'a> {
+        HostRef::Lent(host)
+    }
+}
+
+impl<'a> From<&'a mut (dyn Host + 'a)> for HostRef<'a> {
+    fn from(host: &'a mut (dyn Host + 'a)) -> HostRef<'a> {
+        HostRef::Lent(host)
+    }
+}
+
+impl<'a> std::ops::Deref for HostRef<'a> {
+    type Target = dyn Host + 'a;
+
+    #[inline(always)]
+    fn deref(&self) -> &(dyn Host + 'a) {
+        match self {
+            HostRef::Lent(host) => &**host,
+            HostRef::Guarded(guarded) => guarded.get(),
+        }
+    }
+}
+
+impl<'a> std::ops::DerefMut for HostRef<'a> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut (dyn Host + 'a) {
+        match self {
+            HostRef::Lent(host) => &mut **host,
+            HostRef::Guarded(guarded) => guarded.get_mut(),
+        }
+    }
+}
+
+pub use crate::ffi::GuardedHost;
+
 /// What one native call's conversions read and write.
 pub struct Conversion<'a> {
-    pub host: &'a mut dyn Host,
+    pub host: HostRef<'a>,
     pub strings: &'a mut CStringPool,
+}
+
+/// [`Activation::conversion`]'s answer: the conversion state, and the baton
+/// a guarded host took for it, given up once the state is.
+pub struct Converting<'b, 'a> {
+    conversion: RefMut<'b, Conversion<'a>>,
+    _taken: Option<Taken<'a>>,
+}
+
+impl<'a> std::ops::Deref for Converting<'_, 'a> {
+    type Target = Conversion<'a>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Conversion<'a> {
+        &self.conversion
+    }
+}
+
+impl<'a> std::ops::DerefMut for Converting<'_, 'a> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Conversion<'a> {
+        &mut self.conversion
+    }
+}
+
+/// A baton a callback took, released when this drops.
+struct Taken<'a>(&'a dyn Baton);
+
+impl Drop for Taken<'_> {
+    fn drop(&mut self) {
+        self.0.release();
+    }
 }
 
 impl Conversion<'_> {
@@ -791,13 +881,24 @@ impl<'a> Activation<'a> {
         self.frame.get()
     }
 
-    /// The conversion state, for the length of one operation.
+    /// The conversion state, for the length of one operation. Through a
+    /// guarded host, this thread takes the baton for that length unless it
+    /// holds it.
     ///
     /// # Panics
     /// If the caller already holds it, which is an extension entering the
     /// interpreter while the interpreter is inside a conversion.
-    pub fn conversion(&self) -> RefMut<'_, Conversion<'a>> {
-        self.conversion.borrow_mut()
+    #[inline(always)]
+    pub fn conversion(&self) -> Converting<'_, 'a> {
+        let conversion = self.conversion.borrow_mut();
+        let taken = match &conversion.host {
+            HostRef::Lent(_) => None,
+            HostRef::Guarded(guarded) => guarded.take_baton().then(|| Taken(guarded.baton())),
+        };
+        Converting {
+            conversion,
+            _taken: taken,
+        }
     }
 
     /// Whether the conversion state is held, which is a call nested inside

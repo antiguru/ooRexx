@@ -171,3 +171,72 @@ fn a_sleeper_registers_as_the_timer_exits() {
         timer::join_timer();
     });
 }
+
+/// Touches interpreter state, failing if another thread is touching it.
+fn touch(inside: &AtomicUsize) {
+    assert_eq!(
+        inside.fetch_add(1, Ordering::SeqCst),
+        0,
+        "two threads touch interpreter state"
+    );
+    inside.fetch_sub(1, Ordering::SeqCst);
+}
+
+/// A native call runs with the baton released while another thread takes
+/// it; a callback the call makes takes the baton before touching
+/// interpreter state and gives it back, and the call's thread posts its
+/// completion and takes the baton back. No two threads touch that state at
+/// once.
+#[test]
+fn a_callback_during_an_off_baton_call_takes_the_baton_first() {
+    loom::model(|| {
+        let baton = Arc::new(Baton::new());
+        let inside = Arc::new(AtomicUsize::new(0));
+        let registration = Registration::new();
+        let inbox = registration.inbox();
+        baton.acquire();
+        let other = {
+            let (baton, inside) = (Arc::clone(&baton), Arc::clone(&inside));
+            thread::spawn(move || {
+                baton.acquire();
+                touch(&inside);
+                baton.release();
+            })
+        };
+        baton.release();
+        let took = baton.take_unless_held();
+        touch(&inside);
+        if took {
+            baton.release();
+        }
+        inbox.post(1);
+        baton.acquire();
+        touch(&inside);
+        baton.release();
+        other.join().expect("the other thread");
+        assert!(took);
+        assert_eq!(Vec::from(registration.drain()), [1]);
+    });
+}
+
+/// A loop with a native call in flight and nothing ready blocks on the
+/// inbox with no deadline, and the completion the call's thread posts,
+/// before or after the loop blocks, ends the wait.
+#[test]
+fn a_loop_with_a_call_in_flight_waits_for_its_completion() {
+    loom::model(|| {
+        let registration = Registration::new();
+        let caller = {
+            let inbox = registration.inbox();
+            thread::spawn(move || inbox.post(7))
+        };
+        let in_flight = 1;
+        let mut taken = Vec::from(registration.drain());
+        while taken.len() < in_flight {
+            taken.extend(registration.idle());
+        }
+        caller.join().expect("the call's thread");
+        assert_eq!(taken, [7]);
+        assert!(!registration.requests().pending(INBOX));
+    });
+}
