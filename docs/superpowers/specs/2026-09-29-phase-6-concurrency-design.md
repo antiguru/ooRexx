@@ -361,15 +361,19 @@ in the first task that needs it, with the command recorded.
   activity as a watcher of each **variable named in its expression**
   (`instructions/GuardInstruction.cpp:141-144`), releases one level, and parks; 99.913 for a WHEN
   naming no exposed variable is kept. A **set or DROP** of a watched variable notifies
-  (`RexxVariable.hpp:71-77`, `RexxVariable.cpp:158-169`), including a compound element of an exposed
-  stem (`expression/ExpressionCompoundVariable.cpp:348`). The barrier sits on every path that stores or
+  (`RexxVariable.hpp:71-77`, `RexxVariable.cpp:158-169`). A compound element store does not notify:
+  the oracle's parser watches only the stem and the simple tail variables a WHEN names (Phase 6 S3
+  Task 12, oracle 30 of 30). The barrier sits on every path that stores or
   drops an object variable: the pool path (`set_exposed_variable`, `rexx-exec/src/variables.rs:94`),
   stem element stores, attribute setters and `SetObjectVariable` (`dispatch/library.rs:718`); it is
   one "watched" test on those paths only, and is measured. The watched mark is **sticky for stores**,
   as the oracle's `dependents` table stays once created (`RexxVariable.cpp:137-150`): every later
   **set** of a once-watched variable notifies, while a DROP notifies only while watchers remain
-  (`RexxVariable.cpp:161-164`). The oracle's notifier then yields mid-clause (`RexxVariable.cpp:192-193`);
-  here the yield becomes a switch request taken at the next clause boundary, a licensed difference.
+  (`RexxVariable.cpp:161-164`). The oracle's notifier then yields mid-clause (`RexxVariable.cpp:192-193`),
+  but its `yieldControl` hands over only to an activity already queued for the kernel lock, which a
+  just-woken waiter is not; here a notify readies the waiter and asks for no switch, and the waiter
+  runs at the notifier's next wait, end or slice (ruling P44, a licensed cadence difference of the
+  P32 class).
   Each re-evaluation is traced as the oracle traces it (`GuardInstruction.cpp:176`, `:183`).
 * **REPLY** splits the continuation: the caller resumes with the reply value; the rest becomes a new
   activity (its frames move, section 5, keeping the activation's `invocation` number, which
