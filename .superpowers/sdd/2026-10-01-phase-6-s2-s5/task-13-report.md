@@ -383,3 +383,23 @@ Commit `59817d2c8`. Review: `task-13-review.md`. Ruling P47.
   append (`collection::append_slot` → `slots_of`/`occupied`). Building the reviewer's 80000-element
   array dominates its probes: a callgrind run of q1 spent 99% of its instructions there and had not
   reached the timed phase when stopped at 600 s.
+
+### Background gate failures on 18c2a2f47 (fix round 1, commit `669b701cb`)
+
+- **dispatch_seam** (G4, G6). `src/dispatch/semaphore.rs` named the seam token without being
+  listed in `CLEARANCE_CONSUMERS`. Its natives take `_cleared: Cleared` as a parameter only, as
+  `time_support.rs`'s do, so I added it to the list.
+  `cargo test -p rexx-exec --test dispatch_seam`: 6 passed, both debug and `--release`.
+  `dispatch_seam` is now in my per-task checks.
+- **measured::a_park_under_each_frame_kind_records_it** (G8, `Program: {}`). It did not reproduce
+  at 18c2a2f47 (15 of 15 passed, archived tree, own target dir) or at `59817d2c8` (45 of 45).
+  The cause is in the harness: every `report_of` call rewrote the shared `pinning-probes/extf.rex`
+  with a truncating `fs::write` while the parallel probes read it. A probe that reads it empty
+  parks nowhere: an empty `extf.rex` gives error 44 and no park, which is exactly `Program: {}`.
+  The fix stages the routine under the thread's own name and renames it into place, only where its
+  content differs. The test's expectation is unchanged.
+  After the fix, `cargo test -p rexx-exec --features pinning --test concurrency_tests --
+  measured::a_ measured::an_` passed 10 of 10 (15 each), and `--release ... measured::` passed 18.
+  No staged file was left behind.
+  Because the race was never reproduced, no run demonstrates the fix; it rests on the mechanism.
+- After the change: fmt and both clippy runs are clean.
