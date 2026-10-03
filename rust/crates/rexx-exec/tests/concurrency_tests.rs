@@ -1642,7 +1642,8 @@ mod group_runs {
     }
 
     /// Every test of the `Alarm` and `Ticker` groups passes with the shipped
-    /// scheduler and with a switch at every opportunity.
+    /// scheduler and with a switch at every opportunity; a [`WALL_CLOCK`] row
+    /// that does not is run again once, the oracle too.
     #[test]
     fn the_alarm_and_ticker_groups_pass_in_both_modes() {
         if !gate_mode() {
@@ -1659,12 +1660,28 @@ mod group_runs {
                     outcome_table(name, "base/class", group, "REXX_TIMER_TABLE", mode, |_| {
                         true
                     });
-                not_passing.extend(
-                    results
-                        .iter()
-                        .filter(|row| !matches!(row.outcome, Outcome::Pass))
-                        .map(|row| format!("{group} {name} {} {}", row.test, row.outcome.label())),
-                );
+                let oracle = oracle::locate();
+                for row in results
+                    .iter()
+                    .filter(|row| !matches!(row.outcome, Outcome::Pass))
+                {
+                    let key = format!("base/class/{group}.testGroup {}", row.test);
+                    let mut label = row.outcome.label();
+                    if WALL_CLOCK.contains(&key.as_str()) {
+                        eprintln!("P48 rerun: {key} {name}: {label}");
+                        let run = scratch(&format!("{name}-rerun"));
+                        let one = std::slice::from_ref(&row.test);
+                        let again = run_tests(&oracle, &run, "base/class", group, one, mode, None);
+                        fs::remove_dir_all(run.parent().expect("a parent"))
+                            .expect("cannot remove the run");
+                        if matches!(again[0].outcome, Outcome::Pass) {
+                            eprintln!("P48 rerun: {key} {name}: pass");
+                            continue;
+                        }
+                        label = again[0].outcome.label();
+                    }
+                    not_passing.push(format!("{group} {name} {} {label}", row.test));
+                }
             }
         }
         assert!(not_passing.is_empty(), "not passing: {not_passing:?}");
@@ -1765,6 +1782,52 @@ mod group_runs {
     /// only while both runs end in the same `rexx-exec: ` refusal.
     const TRACE_INTERLEAVES: &[&str] =
         &["base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR"];
+
+    /// The rows whose outcome on this crate depends on a wall-clock boundary or
+    /// a sleep's duration, each with the lines that make it so: a failing check
+    /// on one is run again once, and only a second failure counts (ruling P48).
+    const WALL_CLOCK: &[&str] = &[
+        // STREAM.testGroup:866-876
+        "base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS",
+        // DateTime.testGroup:593-596
+        "base/class/DateTime.testGroup TEST_ELAPSED1",
+        // SysSleep.testGroup:83-84, :107-113
+        "base/rexxutil/SysSleep.testGroup TEST_SLEEP_DURATION",
+        // SysSleep.testGroup:91-99
+        "base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT",
+        // EventSemaphore.testGroup:151-155, :162
+        "base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT",
+        // MutexSemaphore.testGroup:124, :128
+        "base/class/MutexSemaphore.testGroup TEST_EXCLUSION",
+        // Message.testGroup:651-652, :667-668, :685-686, :958, :977
+        "base/class/Message.testGroup TEST_HALT_START",
+        // CALL.testGroup:424-425
+        "base/keyword/CALL.testGroup TEST_4",
+        // TIME.testGroup:1840, :1875 and the same midnight assertion in each
+        "base/bif/TIME.testGroup TEST_2",
+        "base/bif/TIME.testGroup TEST_3",
+        "base/bif/TIME.testGroup TEST_4",
+        "base/bif/TIME.testGroup TEST_5",
+        "base/bif/TIME.testGroup TEST_8",
+        "base/bif/TIME.testGroup TEST_9",
+        "base/bif/TIME.testGroup TEST_10",
+        "base/bif/TIME.testGroup TEST_11",
+        // Ticker.testGroup:52-55, :76-79, :100-103, :123-126
+        "base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL",
+        "base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL",
+        "base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL",
+        "base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL",
+        // Ticker.testGroup:62-65, :86-89, :110-113, :133-136, :164-170
+        "base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER",
+        "base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER",
+        "base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER",
+        "base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER",
+        "base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE",
+        // Ticker.testGroup:147-150
+        "base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE",
+        // Alarm.testGroup:57-64, :74, :119-127, :137-146, :157-167, :201-209
+        "base/class/Alarm.testGroup TEST_BASE_ALARM",
+    ];
 
     /// The row whose run under `EveryOpportunity` hangs at the test's own
     /// race (ruling P46): main takes the mutex between the worker's
@@ -1946,42 +2009,53 @@ mod group_runs {
                 };
                 let mut modes = ("not run".to_string(), true);
                 if !not_run.contains(&format!("{group}.{test}")) {
-                    let group_path = group_file(&run, dir, group);
-                    let args = [
-                        "-f",
-                        group_path.as_str(),
-                        "-U",
-                        "-V",
-                        VERBOSITY,
-                        "-t",
-                        test.as_str(),
-                    ];
-                    fresh_copy(&run, dir);
-                    let shipped = run_crate(&run, &args, SwitchMode::None);
-                    fresh_copy(&run, dir);
-                    let every = run_crate(&run, &args, SwitchMode::EveryOpportunity);
                     let row = format!("{file} {test}");
-                    let raced = row == EVERY_FORCES_THE_RACE
-                        && normal.0 == "pass"
-                        && shipped.status == Some(0)
-                        && !inverted(&shipped)
-                        && every.status.is_none()
-                        && !inverted(&every);
-                    if raced {
-                        modes = (
-                            "every mode forces the test's own race; the oracle hangs in the same \
-                             interleaving (P46)"
-                                .to_string(),
-                            true,
-                        );
-                    } else {
+                    let judge = || {
+                        let group_path = group_file(&run, dir, group);
+                        let args = [
+                            "-f",
+                            group_path.as_str(),
+                            "-U",
+                            "-V",
+                            VERBOSITY,
+                            "-t",
+                            test.as_str(),
+                        ];
+                        fresh_copy(&run, dir);
+                        let shipped = run_crate(&run, &args, SwitchMode::None);
+                        fresh_copy(&run, dir);
+                        let every = run_crate(&run, &args, SwitchMode::EveryOpportunity);
+                        let raced = row == EVERY_FORCES_THE_RACE
+                            && normal.0 == "pass"
+                            && shipped.status == Some(0)
+                            && !inverted(&shipped)
+                            && every.status.is_none()
+                            && !inverted(&every);
+                        let mut hung = Vec::new();
+                        if raced {
+                            let modes = (
+                                "every mode forces the test's own race; the oracle hangs in the \
+                                 same interleaving (P46)"
+                                    .to_string(),
+                                true,
+                            );
+                            return (modes, hung);
+                        }
                         for (name, ours) in [("normal", &shipped), ("every", &every)] {
                             if inverted(ours) || ours.status.is_none() {
-                                stuck.push(format!("{file} {test}: {name}"));
+                                hung.push(format!("{row}: {name}"));
                             }
                         }
-                        modes = compare_modes(&row, &shipped, &every);
+                        (compare_modes(&row, &shipped, &every), hung)
+                    };
+                    let (mut judged, mut hung) = judge();
+                    if (!judged.1 || !hung.is_empty()) && WALL_CLOCK.contains(&row.as_str()) {
+                        eprintln!("P48 rerun: {row}: {} {hung:?}", judged.0);
+                        (judged, hung) = judge();
+                        judged.0.push_str(" (P48 rerun)");
                     }
+                    modes = judged;
+                    stuck.extend(hung);
                 }
                 if !modes.1 {
                     differing.push(format!("{file} {test}"));

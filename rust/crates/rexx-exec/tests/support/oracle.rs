@@ -396,7 +396,7 @@ fn wait_with_deadline(
     // and a read that has already outlasted one deadline is not handed a
     // second one on top by chaining off the first one's remaining time. The
     // two channels share one clock rather than each getting a fresh
-    // `ORACLE_DEADLINE`, so the pair together are bounded by it once, not
+    // deadline, so the pair together are bounded by it once, not
     // twice.
     let read_deadline = Instant::now() + deadline;
     let stdout_result =

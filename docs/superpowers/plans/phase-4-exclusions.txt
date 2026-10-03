@@ -4975,7 +4975,8 @@ crate passes every test RECORDED does not name, in the whole-group run
   OWNER: Phase 9.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
   framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking)
-  prints a number of dots that depends on wall time; -U starts no ticker. The summary -V 1 and above print calls RXFUNCQUERY, refused naming
+  prints a number of dots that depends on wall time; -U starts no ticker.
+  The summary -V 1 and above print calls RXFUNCQUERY, refused naming
   Phase 10, and the oracle answers rxfuncquery("SysWinVer") through
   RexxQueryFunction, which is rxapi (read:
   interpreter/package/PackageManager.cpp:618-635). The instrument removes

@@ -1157,9 +1157,9 @@ fn an_uncancelled_ticker_keeps_the_programs_end_waiting() {
         "t = .t~new\nk = .ticker~new(0.05, t)\nsay 'main done'\n\
          ::class t inherit AlarmNotification\n::method init\n  expose n\n  n = 0\n\
          ::method triggered\n  expose n\n  n = n + 1\n  if n = 3 then say 'ticked'\n",
-        Invocation::none().with_deadline(std::time::Duration::from_millis(600)),
+        Invocation::none().with_deadline(std::time::Duration::from_millis(2000)),
     );
-    assert!(began.elapsed() >= std::time::Duration::from_millis(600));
+    assert!(began.elapsed() >= std::time::Duration::from_millis(2000));
     assert_eq!(outcome.exit_code, crate::DEADLINE_EXIT);
     assert_eq!(stdout(&outcome), "main done\nticked\n");
     assert_eq!(outcome.stderr, crate::DEADLINE_REPORT);

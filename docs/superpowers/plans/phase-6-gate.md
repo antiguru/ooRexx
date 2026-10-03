@@ -266,9 +266,8 @@ Further differences are allowed by row:
   `>I> Method "M_S"` entry, before the refusal ends the run. Not covered by P41.
 
 Over the whole derived list, the two pinning tables give the same per-test outcome except the
-`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows; at the S3 close
-TEST_REQUEST_STRING_MESSAGE passes and the others are refused at DO WITH ... OVER in both modes,
-queued `2026-10-02-do-with-over-refusal`; at the S2 close unswitched they stopped at GUARD WHEN): under every opportunity the continuation sets the Alarm's
+`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows, owned by S3 because
+unswitched they stop at GUARD WHEN): under every opportunity the continuation sets the Alarm's
 `timerStarted` first, the GUARD WHEN is satisfied, and each reaches the DO WITH ... OVER refusal
 instead, except TEST_REQUEST_STRING_MESSAGE, which passes. Both are loud refusals. Probe `a2.rex`,
 which stops before the DO, matches the oracle under every opportunity 10 of 10 (queued
@@ -420,10 +419,31 @@ Review Focus 2, the uncancelled Ticker: `scheduler/tests.rs`
 on the same program: `main done`, `ticked`, killed at 3 s, rc 137, 3 of 3. This crate's
 `rexx-run` used 2 clock ticks (20 ms) of CPU in 3 s on it.
 
+#### Wall-clock rows (ruling P48)
+
+The rows whose outcome on this crate depends on a wall-clock boundary or a sleep's duration are
+`concurrency_tests.rs` `WALL_CLOCK`, each with the group lines that make it so. Where one of them
+fails its check, the S2 and S3 row tests run its two crate runs once more and the Alarm/Ticker test
+runs it once more on both sides; only a second failure fails the test. A rerun prints `P48 rerun:`
+on stderr and the row tests' table cell ends `(P48 rerun)`. Other rows stay strict.
+
+The rows below depend on the clock on the oracle only: there a `SysSleep` must outlast another
+activity's progress, which this crate's park runs at once. Their "normal against the oracle" cell
+can vary between runs; it is recorded and not asserted, and none is in the Alarm or Ticker group.
+
+- `base/keyword/GUARD` TEST_OFF (`GUARD.testGroup:139-143`), TEST_UNGUARDED (`:148-151`),
+  TEST_ON_OFF (`:156-160`), TEST_WAIT_SIMPLE_TRIGGER (`:240-246`, `:253-256`)
+- `base/class/RexxContext` TEST_INTERPRETER_THREAD_INVOCATION (`RexxContext.testGroup:250-253`)
+- `base/keyword/RAISE` TEST_RAISE_INSERT_CRLF (`RAISE.testGroup:481-482`)
+- `base/keyword/TRACE` TEST_TRACE_REPLY (`TRACE.testGroup:761-762`)
+- `base/directives/METHOD` TESTGUARDEDACCESS (`METHOD.testGroup:342-348`)
+- `base/keyword/TRACE_TraceObject` TEST_TRACEOBJECT_COLLECTOR (`TRACE_TraceObject.testGroup:227`),
+  TEST_CALLER_STACK_FRAME_REPLY_START (`:713`, `:732`)
+
 ### Criterion 2, the framework's ticker
 
 `api_group_tests.rs` `the_framework_ticker_runs_without_dash_u` (gate-only) runs `API/oo`
-`CONVERSION` on this crate with and without `-U`: both exit 0, the ticker's two lines carry dots,
+`CONVERSION` on this crate with and without `-U`: both exit 0, each ticker line carries dots,
 and every other line equals the `-U` run's. The differential keeps `-U`, since the dots depend on
 wall time (`ooTest.frm:2449-2465`): on `base/class/Ticker`, one run each, this crate printed one
 dot after `Searching for test containers` and the oracle two.
