@@ -141,9 +141,8 @@ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1757	off-send-surfac
 Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1751	off-send-surface	-	-	-
 Raised	from	body+send	crates/rexx-exec/src/error.rs:1837	agrees	yes	syntax(error.code	signal on syntax over .Routine~new('T', 'return arg(1') -- 36.901, the code the parse error carries, so the row's answer is the source of the code rather than an M.N
 Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1741	off-send-surface	-	-	-
-Loud	guard_when_false	body	crates/rexx-exec/src/lib.rs:682	off-send-surface	-	-	-
 Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:720	off-send-surface	-	-	-
+Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:711	off-send-surface	-	-	-
 Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1135	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
 Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
 Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
@@ -162,7 +161,7 @@ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.
 Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
 Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
 Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:708	off-send-surface	-	-	-
+Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:699	off-send-surface	-	-	-
 Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:617	off-send-surface	-	-	-
 Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
 Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
@@ -288,7 +287,7 @@ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1767	off-send-surfa
 Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
 Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
 Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:700	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:691	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
 Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1201	agrees	yes	88.914	o~m:v with v holding 5
 Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1207	agrees	yes	93.957	o~m:.Array
 Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:633	off-send-surface	-	-	-
@@ -315,7 +314,7 @@ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	
 Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1601	off-send-surface	-	-	-
 Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:447	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
 Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:331	off-send-surface	-	-	-
-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:692	off-send-surface	-	-	-
+Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:683	off-send-surface	-	-	-
 Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.967	.Pointer~new
 Loud	use_local_in_a_method	body	crates/rexx-exec/src/lib.rs:537	off-send-surface	-	-	-
 Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1784	off-send-surface	-	-	-

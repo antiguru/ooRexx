@@ -486,6 +486,12 @@ impl Surface for FakeHost {
             .map(|(_, value)| *value)
     }
 
+    fn set_guard(&mut self, _on: bool) {}
+
+    fn guard_when_updated(&mut self, _name: &[u8], _on: bool) -> Option<ObjRef> {
+        None
+    }
+
     fn variable_reference(&mut self, _name: &[u8], _object: bool) -> Option<ObjRef> {
         None
     }

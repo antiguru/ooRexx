@@ -132,6 +132,9 @@ enum Deliver {
     Flow(usize),
     /// Where the [`Op::Send`] in front of the resume point says.
     Send,
+    /// Nowhere: the [`Op::Exec`] at the resume point runs its instruction
+    /// again.
+    Exec,
 }
 
 /// Where [`Interp::drive`] goes on with the level it holds.
@@ -1380,7 +1383,21 @@ macro_rules! region_ops {
                         Ok(ExecOutcome::Done(flow)) => {
                             break $cold Ok(RegionEnd::Flowed(flow));
                         }
-                        Ok(outcome) => break $cold $self.exec_suspends(outcome),
+                        Ok(ExecOutcome::Park(reason))
+                            if $top && $self.activity.pin_depth == 0 =>
+                        {
+                            $self.park_instruction(reason);
+                            break $park Park {
+                                at: op_after($ops, region_op, $from) - 1,
+                                $header: $header.take().map(Box::new),
+                                deliver: Deliver::Exec,
+                            };
+                        }
+                        Ok(outcome) => {
+                            break $cold $self.exec_suspends(
+                                outcome, $code, $index, $clause, $source,
+                            );
+                        }
                         Err(failure) => break $cold Err(failure),
                     }
                 }
@@ -2457,16 +2474,35 @@ impl Interp {
         });
     }
 
-    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. An
-    /// instruction's park is loud. A split is recorded on the replying
+    /// An [`Op::Exec`] outcome other than `Done`, as its region's answer. A
+    /// park here, under a pinned frame, is a pinned wait, after which the
+    /// instruction runs again. A split is recorded on the replying
     /// activation and served at the next countdown visit, which this makes
     /// the next clause boundary.
     #[cold]
     #[inline(never)]
-    fn exec_suspends(&mut self, outcome: ExecOutcome) -> Result<RegionEnd, Failure> {
+    fn exec_suspends(
+        &mut self,
+        mut outcome: ExecOutcome,
+        code: &Code<'_>,
+        index: usize,
+        clause: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Result<RegionEnd, Failure> {
+        while let ExecOutcome::Park(reason) = outcome {
+            if let Some(failure) = self.pinned_wait(reason) {
+                self.abandon_guard_exec();
+                return Err(failure);
+            }
+            outcome = pinned!(
+                self,
+                crate::pinning::PinKind::OpExec,
+                self.exec_instruction(code, index, clause, source, false)
+            )?;
+        }
         match outcome {
             ExecOutcome::Done(flow) => Ok(RegionEnd::Flowed(flow)),
-            ExecOutcome::Park(_) => Err(Loud::op_not_driven("an activity park").into()),
+            ExecOutcome::Park(_) => unreachable!("the loop above runs every park"),
             ExecOutcome::Split(value) => {
                 #[cfg(test)]
                 count_exec_split();
@@ -2708,11 +2744,12 @@ impl Interp {
                                                 base_indent,
                                                 ended,
                                             ),
-                                            Deliver::Register(_) | Deliver::Send => self
-                                                .resume_region(
-                                                    code, chunk, registers, source, base, len,
-                                                    parked, ended,
-                                                ),
+                                            Deliver::Register(_)
+                                            | Deliver::Send
+                                            | Deliver::Exec => self.resume_region(
+                                                code, chunk, registers, source, base, len, parked,
+                                                ended,
+                                            ),
                                         },
                                         None => Err(Loud::op_not_driven("a parked call").into()),
                                     }
@@ -3039,6 +3076,7 @@ impl Interp {
                 .map(|value| registers.set(dst, value)),
             Deliver::Send => self.finish_send_op(chunk, registers, parked.at, ended),
             Deliver::Flow(_) => Err(Loud::op_not_driven("a parked CALL resumed mid-region").into()),
+            Deliver::Exec => Err(Loud::op_not_driven("a parked instruction with a callee").into()),
         };
         match delivered {
             Ok(()) => self.ops_loop_steady(
@@ -3078,6 +3116,7 @@ impl Interp {
     ) -> Result<Exit, Failure> {
         let delivered = match parked.deliver {
             Deliver::Send => self.deliver_woken_send(chunk, registers, parked.at, sent),
+            Deliver::Exec => sent.map(|_| ()).inspect_err(|_| self.abandon_guard_exec()),
             Deliver::Register(dst) => {
                 self.activity.depth -= 1;
                 match sent {

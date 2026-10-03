@@ -381,8 +381,6 @@ pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
     ("RexxInstanceInterface.SetTrace", "Phase 9"),
     ("RexxThreadInterface.HaltThread", "Phase 9"),
     ("RexxThreadInterface.SetThreadTrace", "Phase 9"),
-    ("MethodContextInterface.SetGuardOnWhenUpdated", "Phase 6"),
-    ("MethodContextInterface.SetGuardOffWhenUpdated", "Phase 6"),
 ];
 
 /// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and

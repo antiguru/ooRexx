@@ -1,0 +1,27 @@
+count 26
+/* GUARD ON WHEN gives up the object's lock while its expression is false,
+   which lets a guarded method of another activity in to change a watched
+   variable; each store wakes the waiter, which re-evaluates and holds the
+   lock again once the expression is true. */
+o = .k~new
+m = o~start('waiter')
+call SysSleep 0.1
+o~set(1)
+call SysSleep 0.1
+o~set(2)
+m~wait
+say 'result' m~result
+::class k
+::method init
+  expose v
+  v = 0
+::method waiter
+  expose v
+  say 'waiting'
+  guard on when v = 2
+  say 'woke at' v
+  return v
+::method set
+  expose v
+  use arg v
+  say 'set' v

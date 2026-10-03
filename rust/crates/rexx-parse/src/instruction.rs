@@ -910,6 +910,7 @@ impl<'a> Inst<'a> {
             Some(SUB_OFF) => false,
             _ => return Err(self.error(25, 913)),
         };
+        let mut watched = Vec::new();
         let condition = match self.next_real() {
             None => None,
             Some(token) => {
@@ -931,13 +932,18 @@ impl<'a> Inst<'a> {
                 // capture is unconditional over the whole expression and those
                 // two paths are reached for exactly the variable references in
                 // it.
-                if !self.guard_exposes(&condition, block) {
+                self.guard_exposes(&condition, block, &mut watched);
+                if watched.is_empty() {
                     return Err(self.error(99, 913));
                 }
                 Some(condition)
             }
         };
-        Ok(Guard { on, condition })
+        Ok(Guard {
+            on,
+            condition,
+            watched,
+        })
     }
 
     /// `forwardNew` (`InstructionParser.cpp:2427`): six options in any order,
@@ -1665,13 +1671,19 @@ impl<'a> Inst<'a> {
         Ok(instruction)
     }
 
-    /// Whether `condition` names at least one variable exposed at this point,
-    /// which is what `GUARD ... WHEN` requires.
-    fn guard_exposes(&self, condition: &Expr, block: &Block) -> bool {
-        let exposed = match &condition.kind {
-            ExprKind::Variable(id) | ExprKind::Stem(id) => {
-                block.is_exposed(self.ctx.symbols.name(*id).as_bytes())
+    /// Adds to `watched` each variable exposed at this point that `condition`
+    /// names, once: the variables `GUARD ... WHEN` watches, of which it
+    /// requires at least one.
+    fn guard_exposes(&self, condition: &Expr, block: &Block, watched: &mut Vec<Box<[u8]>>) {
+        let mut watch = |name: &str| {
+            if block.is_exposed(name.as_bytes())
+                && !watched.iter().any(|seen| **seen == *name.as_bytes())
+            {
+                watched.push(name.as_bytes().into());
             }
+        };
+        match &condition.kind {
+            ExprKind::Variable(id) | ExprKind::Stem(id) => watch(self.ctx.symbols.name(*id)),
             ExprKind::Compound(id) => {
                 let name = self.ctx.symbols.name(*id);
                 // A compound contributes NOTHING if this exact spelling was
@@ -1679,27 +1691,21 @@ impl<'a> Inst<'a> {
                 // the cached retriever before it reaches the calls that would
                 // capture. Measured, and it is the earlier reference that
                 // disqualifies the later guard, not the other way round.
-                if block.compound_is_cached(name.as_bytes()) {
-                    false
-                } else {
+                if !block.compound_is_cached(name.as_bytes()) {
                     let (stem, tails) = compound_parts(name);
-                    block.is_exposed(stem.as_bytes())
-                        || tails.iter().any(|tail| match tail {
-                            Tail::Variable(piece) => block.is_exposed(piece.as_bytes()),
-                            Tail::Constant(_) => false,
-                        })
+                    watch(stem);
+                    for tail in tails {
+                        if let Tail::Variable(piece) = tail {
+                            watch(piece);
+                        }
+                    }
                 }
             }
-            _ => false,
-        };
-        if exposed {
-            return true;
+            _ => {}
         }
-        let mut found = false;
         condition.kind.for_each_child(&mut |child| {
-            found = found || self.guard_exposes(child, block);
+            self.guard_exposes(child, block, watched);
         });
-        found
     }
 }
 

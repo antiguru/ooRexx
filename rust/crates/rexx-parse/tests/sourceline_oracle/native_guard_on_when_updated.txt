@@ -1,0 +1,24 @@
+count 23
+/* SetGuardOnWhenUpdated in a guarded native method waits without the lock
+   for a store to the object variable it names, then holds the lock again
+   and answers the new value; SetGuardOffWhenUpdated returns without it. */
+o = .k~new
+m = o~start('waitOn', 'V')
+call SysSleep 0.1
+say 'storing 5'
+o~setv(5)
+say 'on got' m~result
+m = o~start('waitOff', 'V')
+call SysSleep 0.1
+say 'storing 6'
+o~setv(6)
+say 'off got' m~result
+::class k
+::method init
+  expose v
+  v = 0
+::method setv
+  expose v
+  use arg v
+::method waitOn EXTERNAL "LIBRARY orxmethod TestSetGuardOnWhenUpdated"
+::method waitOff EXTERNAL "LIBRARY orxmethod TestSetGuardOffWhenUpdated"

@@ -307,6 +307,16 @@ pub(crate) struct Activity {
     /// A send to a guarded method other than a Rexx body, run once its
     /// guard lock is granted.
     pub(crate) guarded_send: Option<Box<crate::dispatch::GuardedSend>>,
+    /// A `GUARD` instruction parked for its lock or its `WHEN`.
+    pub(crate) guard_exec: Option<Box<crate::guards::GuardExec>>,
+    /// Whether a watched variable changed since the running `GUARD WHEN`
+    /// last began evaluating (`Activity::guardSem`).
+    pub(crate) guard_posted: bool,
+    /// Whether the activity is parked in a `GUARD WHEN`.
+    pub(crate) when_parked: bool,
+    /// For a `>K>` line of a `GUARD`'s `WHEN` being routed, whether its value
+    /// starts with `0`: the `TraceObject`'s `ISWAITING`.
+    pub(crate) waiting_traced: Option<bool>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
 }
@@ -398,6 +408,10 @@ impl Activity {
             failed_sends: Vec::new(),
             guard_waits: Vec::new(),
             guarded_send: None,
+            guard_exec: None,
+            guard_posted: false,
+            when_parked: false,
+            waiting_traced: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -502,9 +516,16 @@ impl Activity {
             // Each key's object is its waiting activation's receiver.
             guard_waits: _,
             guarded_send,
+            guard_exec,
+            guard_posted: _,
+            when_parked: _,
+            waiting_traced: _,
             #[cfg(feature = "pinning")]
                 pins: _,
         } = self;
+        if let Some(exec) = guard_exec {
+            out.extend(exec.watched.iter().flat_map(|var| [var.owner, var.scope]));
+        }
         if let Some(send) = guarded_send {
             send.object_roots(out);
         }

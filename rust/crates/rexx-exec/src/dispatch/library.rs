@@ -71,6 +71,8 @@ impl Interp {
     /// The condition the extension raised, whatever converting an argument or
     /// the result refuses, and [`Loud`] for a conversion this phase has not
     /// written.
+    /// `reserved` says the send holds the method's guard lock, which the
+    /// call's frame then holds and releases where it still does.
     pub(super) fn run_library_method(
         &mut self,
         binding: &LibraryBinding,
@@ -78,6 +80,7 @@ impl Interp {
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
+        reserved: bool,
     ) -> Result<Option<ObjRef>, Failure> {
         let owner = self.pool_owner(receiver)?;
         // Cloned out of the binding before the interpreter is borrowed as the
@@ -91,6 +94,7 @@ impl Interp {
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let packaged = self.external_package_path(resolution.method).is_some();
         self.native_frame_mut().packaged = packaged;
+        self.native_frame_mut().reserved = reserved;
         let mut strings = CStringPool::new();
         let thread = self.thread_context();
         let (answered, pending) = {
@@ -108,6 +112,12 @@ impl Interp {
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
+        if popped.reserved {
+            self.release_guard(crate::guards::GuardKey {
+                object: receiver,
+                scope: resolution.scope,
+            });
+        }
         let trapped = trapped?;
 
         // The condition first, because the oracle raises it in the caller's
@@ -479,6 +489,7 @@ impl Interp {
                 caller: None,
                 id: 0,
                 packaged: false,
+                reserved: false,
             });
         frame.owner = owner;
         frame.scope = scope;
@@ -488,6 +499,7 @@ impl Interp {
         frame.caller = self.running_activation().map(|activation| activation.id);
         frame.id = self.next_native_id();
         frame.packaged = false;
+        frame.reserved = false;
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
         self.activity.native_handles.push(frame);
@@ -505,6 +517,7 @@ impl Interp {
         let answer = Popped {
             raised: frame.raised.take(),
             method: frame.method,
+            reserved: std::mem::take(&mut frame.reserved),
             additional: frame.additional.take(),
             result: frame.result.take(),
         };
@@ -663,6 +676,8 @@ pub(crate) struct HandledCommand {
 struct Popped {
     raised: Option<Failure>,
     method: bool,
+    /// Whether the frame still held its method's guard lock.
+    reserved: bool,
     additional: Option<ObjRef>,
     result: Option<ObjRef>,
 }
@@ -1091,7 +1106,7 @@ impl Interp {
     ///
     /// # Panics
     /// As [`Interp::native_frame`].
-    fn native_frame_mut(&mut self) -> &mut NativeFrame {
+    pub(crate) fn native_frame_mut(&mut self) -> &mut NativeFrame {
         self.activity
             .native_handles
             .last_mut()
@@ -1114,7 +1129,7 @@ impl Interp {
     /// # Panics
     /// If no native activation is running, which is the only time the host is
     /// asked.
-    fn native_frame(&self) -> &NativeFrame {
+    pub(crate) fn native_frame(&self) -> &NativeFrame {
         self.activity
             .native_handles
             .last()

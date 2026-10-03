@@ -569,15 +569,12 @@ impl Interp {
     ) -> Result<ExecOutcome, Failure> {
         #[cfg(test)]
         if let Some(crate::scheduler::Scripted::Park) = crate::scheduler::take_scripted() {
-            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard(
-                crate::guards::GuardKey {
-                    object: ObjRef::NIL,
-                    scope: ObjRef::NIL,
-                },
-            )));
+            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Sleep {
+                deadline: std::time::Instant::now(),
+            }));
         }
         match &instruction.kind {
-            InstructionKind::Guard(guard) => self.exec_guard(code, guard),
+            InstructionKind::Guard(guard) => self.exec_guard(code, index, guard),
             InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
             _ => self
                 .exec_flow(code, index, instruction, source, first_instruction)
@@ -1903,32 +1900,126 @@ impl Interp {
 
     /// `GUARD ON`/`GUARD OFF`, with or without a `WHEN` expression
     /// (`RexxInstructionGuard::execute`, `instructions/GuardInstruction.cpp`).
-    fn exec_guard(&mut self, code: &Code<'_>, guard: &Guard) -> Result<ExecOutcome, Failure> {
-        if self.activation().method_identity.is_none() {
+    /// A reserve another activity holds the lock for, and a `WHEN` that is
+    /// false, answer a park; the instruction's op runs it again once woken,
+    /// and it goes on from the wait.
+    fn exec_guard(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        guard: &Guard,
+    ) -> Result<ExecOutcome, Failure> {
+        use crate::guards::{GuardExec, GuardExecWait};
+        let Some(key) = crate::guards::GuardKey::of(self.activation()) else {
             return Err(Raised::guard_outside_method().into());
-        }
-        park_point!(
-            self,
-            match guard.condition {
-                Some(_) => Some(crate::pinning::ParkKind::GuardWhen),
-                None => guard.on.then_some(crate::pinning::ParkKind::GuardOn),
-            }
-        );
-        self.set_guard_state(guard.on)?;
-        let Some(condition) = &guard.condition else {
-            return Ok(ExecOutcome::Done(Flow::Next));
         };
-        let holds = self.eval_condition(
-            code,
-            condition,
-            ConditionTrace::Keyword(self.activity.clause_state.current_value_indent, "WHEN"),
-            raised_guard_not_logical,
-        )?;
-        if holds {
-            Ok(ExecOutcome::Done(Flow::Next))
-        } else {
-            Err(Loud::guard_when_false().into())
+        #[derive(Clone, Copy)]
+        enum Step {
+            Reserve,
+            Evaluate,
+            Done,
         }
+        let reserved = if guard.condition.is_some() {
+            Step::Evaluate
+        } else {
+            Step::Done
+        };
+        let (mut exec, mut step) = match self.take_guard_exec(index) {
+            Some(exec) => {
+                let step = match exec.wait {
+                    GuardExecWait::Reserve => {
+                        debug_assert!(self.granted(key), "a GUARD woke without its lock");
+                        self.activation_mut().flags.set_reserved(true);
+                        reserved
+                    }
+                    GuardExecWait::When { reacquire: true } => Step::Reserve,
+                    GuardExecWait::When { reacquire: false } => Step::Evaluate,
+                };
+                (exec, step)
+            }
+            None => {
+                park_point!(
+                    self,
+                    match guard.condition {
+                        Some(_) => Some(crate::pinning::ParkKind::GuardWhen),
+                        None => guard.on.then_some(crate::pinning::ParkKind::GuardOn),
+                    }
+                );
+                let watched = self.watch_guard_variables(&guard.watched);
+                let exec = GuardExec {
+                    activation: self.activation().id,
+                    index,
+                    wait: GuardExecWait::Reserve,
+                    watched,
+                };
+                let step = if guard.on {
+                    Step::Reserve
+                } else {
+                    self.guard_off(key);
+                    reserved
+                };
+                (exec, step)
+            }
+        };
+        loop {
+            step = match step {
+                Step::Reserve => match self.guard_on(key) {
+                    Ok(true) => reserved,
+                    Ok(false) => {
+                        exec.wait = GuardExecWait::Reserve;
+                        self.activity.guard_exec = Some(Box::new(exec));
+                        return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Guard(key)));
+                    }
+                    Err(failure) => {
+                        self.end_guard_exec(exec);
+                        return Err(failure);
+                    }
+                },
+                Step::Evaluate => {
+                    let Some(condition) = &guard.condition else {
+                        break;
+                    };
+                    self.activity.guard_posted = false;
+                    let frame = self.roots.activity_mut().push_frame();
+                    let holds = self.eval_condition(
+                        code,
+                        condition,
+                        ConditionTrace::Keyword(
+                            self.activity.clause_state.current_value_indent,
+                            "WHEN",
+                        ),
+                        raised_guard_not_logical,
+                    );
+                    self.roots.activity_mut().pop_frame(frame);
+                    match holds {
+                        Ok(true) => Step::Done,
+                        Ok(false) => {
+                            let reacquire = self.activation().flags.reserved();
+                            self.guard_off(key);
+                            if !self.activity.guard_posted {
+                                exec.wait = GuardExecWait::When { reacquire };
+                                self.activity.guard_exec = Some(Box::new(exec));
+                                return Ok(ExecOutcome::Park(
+                                    crate::scheduler::ParkReason::GuardWhen,
+                                ));
+                            }
+                            if reacquire {
+                                Step::Reserve
+                            } else {
+                                Step::Evaluate
+                            }
+                        }
+                        Err(failure) => {
+                            self.end_guard_exec(exec);
+                            return Err(failure);
+                        }
+                    }
+                }
+                Step::Done => break,
+            };
+        }
+        self.end_guard_exec(exec);
+        Ok(ExecOutcome::Done(Flow::Next))
     }
 
     /// `REPLY`, bare or with a value (`RexxInstructionReply::execute`,

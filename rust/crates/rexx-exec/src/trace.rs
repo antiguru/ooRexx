@@ -232,7 +232,13 @@ impl Interp {
             " => ",
             value,
         );
-        self.route_trace_line(start);
+        if keyword == "WHEN" {
+            self.activity.waiting_traced = Some(value.first() == Some(&b'0'));
+            self.route_trace_line(start);
+            self.activity.waiting_traced = None;
+        } else {
+            self.route_trace_line(start);
+        }
     }
 
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion

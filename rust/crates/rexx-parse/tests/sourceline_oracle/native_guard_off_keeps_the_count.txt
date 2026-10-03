@@ -1,0 +1,19 @@
+count 18
+/* A guarded native method nested inside a guarded Rexx method that turns
+   its own lock off with SetGuardOff gives back only its own level: the
+   outer method keeps the lock, so another activity's guarded method waits
+   for it to end. */
+o = .k~new
+m = o~outer
+m~wait
+::class k
+::method outer
+  self~inner('X', 1)
+  m = self~start('other')
+  call SysSleep 0.2
+  say 'outer done'
+  return m
+::method other
+  expose x
+  say 'other ran, x =' x
+::method inner EXTERNAL "LIBRARY orxmethod TestSetGuardOff"

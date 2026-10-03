@@ -233,9 +233,13 @@ shortening this program to the `WHEN` clause alone measures the translation
 check instead of the block.
 
 Consequence for this crate: **there is no oracle behaviour to match**, so
-`rexx-exec` refuses the shape rather than answering it -- `Loud::
-guard_when_false`, whose own doc names `run/tests.rs`'s
-`the_guard_instructions_answers_and_the_phase_6_refusals` as the instrument. No
+`rexx-exec` refuses the shape rather than hanging: main parks in the wait,
+nothing is left to run, and the run ends at `Loud::unsatisfiable_wait` (ruling
+P27); `run/tests/message.rs`'s
+`the_guard_instructions_answers_and_the_phase_6_refusals` is the instrument. A
+started activity blocked the same way keeps the program's end waiting, as the
+oracle's does (`scheduler/tests.rs`'s
+`a_blocked_guard_when_keeps_the_programs_end_waiting`). No
 differential row can cover it, and there is not even an exit status to compare
 against: the rc 137 above is the deadline killing the process, not an answer.
 Entry 4 shares that much -- its rc is the OOM kill -- and differs in having a

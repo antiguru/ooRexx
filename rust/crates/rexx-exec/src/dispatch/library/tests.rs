@@ -544,6 +544,7 @@ fn a_signature_refusal_is_numbered_for_a_method_or_a_routine() {
         super::Popped {
             raised: None,
             method,
+            reserved: false,
             additional: None,
             result: None,
         },

@@ -1,0 +1,22 @@
+/* A store to a watched variable made while the WHEN expression itself is
+   being evaluated posts the waiting activity, so a false answer is
+   evaluated again at once instead of waiting. */
+o = .k~new
+say o~waiter
+::class k
+::method init
+  expose v tries
+  v = 0
+  tries = 0
+::method waiter
+  expose v tries
+  guard on when self~check(v)
+  return 'tries' tries 'v' v
+::method check
+  expose v tries
+  tries = tries + 1
+  if tries = 1 then do
+    v = 1
+    return 0
+  end
+  return v = 1

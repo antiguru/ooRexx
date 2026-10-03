@@ -1,0 +1,28 @@
+/* Each evaluation of a GUARD WHEN expression is traced, the first and the
+   one after every store that woke it, intermediates included under
+   TRACE I; the clause itself is echoed once. */
+trace o
+o = .k~new
+m = o~start('waiter')
+call SysSleep 0.1
+o~set(1)
+call SysSleep 0.1
+o~set(2)
+call SysSleep 0.1
+o~set(3)
+m~wait
+say 'result' m~result
+::class k
+::method init
+  expose v
+  trace o
+  v = 0
+::method waiter
+  expose v
+  guard on when v + 1 = 4
+  return v
+::method set
+  expose v
+  trace o
+  use arg v
+::options trace i

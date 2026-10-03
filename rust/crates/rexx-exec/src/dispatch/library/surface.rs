@@ -432,6 +432,39 @@ impl Surface for Interp {
         Some(fresh)
     }
 
+    fn set_guard(&mut self, on: bool) {
+        if let Err(failure) = self.native_guard(on) {
+            self.hold_native_condition(failure);
+        }
+    }
+
+    fn guard_when_updated(&mut self, name: &[u8], on: bool) -> Option<ObjRef> {
+        let frame = self.native_frame();
+        if !frame.method {
+            return None;
+        }
+        let (owner, scope) = (frame.owner, frame.scope);
+        let upper = name.to_ascii_uppercase();
+        if !matches!(classify(&upper), SymbolKind::Name | SymbolKind::Stem) {
+            return None;
+        }
+        let me = self.running_activity().raw();
+        if let Some(pools) = self.pools_of_mut(owner) {
+            pools.watch(scope, &upper, me);
+        }
+        let waited = self
+            .native_guard(on)
+            .and_then(|()| self.native_guard_wait());
+        if let Some(pools) = self.pools_of_mut(owner) {
+            pools.unwatch(scope, &upper, me);
+        }
+        if let Err(failure) = waited {
+            self.hold_native_condition(failure);
+            return None;
+        }
+        self.object_variable(&upper)
+    }
+
     fn variable_reference(&mut self, name: &[u8], object: bool) -> Option<ObjRef> {
         let upper = name.to_ascii_uppercase();
         if !matches!(classify(&upper), SymbolKind::Name | SymbolKind::Stem) {

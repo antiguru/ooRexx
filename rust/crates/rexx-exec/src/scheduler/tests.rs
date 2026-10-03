@@ -1124,3 +1124,64 @@ fn a_refusal_in_main_does_not_wait_for_the_other_activities() {
     assert_eq!(stdout(&outcome), "main\n");
     assert_eq!(stderr(&outcome), "rexx-exec: DO is not implemented\n");
 }
+
+/// A started activity blocked in a `GUARD WHEN` nothing can make true keeps
+/// the program's end waiting, as the oracle's does, until the run's deadline;
+/// main alone blocked there is the wait nothing left can end (ruling P27).
+#[test]
+fn a_blocked_guard_when_keeps_the_programs_end_waiting() {
+    let began = std::time::Instant::now();
+    let outcome = run_with(
+        "m = .k~new~start('m')\nsay 'main done'\n\
+         ::class k\n::method m\n  expose v\n  v = 0\n  say 'waits'\n  guard on when v = 1\n",
+        Invocation::none().with_deadline(std::time::Duration::from_millis(300)),
+    );
+    assert!(began.elapsed() >= std::time::Duration::from_millis(300));
+    assert_eq!(outcome.exit_code, crate::DEADLINE_EXIT);
+    assert_eq!(stdout(&outcome), "main done\nwaits\n");
+    assert_eq!(outcome.stderr, crate::DEADLINE_REPORT);
+    let outcome =
+        run("say .k~new~m\n::class k\n::method m\n  expose v\n  v = 0\n  guard on when v = 1\n");
+    assert_eq!(
+        stderr(&outcome),
+        "rexx-exec: a wait that nothing left to run can end is not implemented\n"
+    );
+}
+
+/// A store or `DROP` that wakes an activity parked in a `GUARD WHEN` asks
+/// for a switch at the next clause boundary, so the waiter runs before the
+/// storing activity's next clause; one that wakes nobody does not switch,
+/// whether the variable was watched once (`v`) or never (`w`), as the
+/// oracle's yield passes no lock to a started activity (30 of 30 runs each
+/// print `a` first). `AtClause` far past the program keeps the timer out.
+#[test]
+fn a_store_switches_only_where_it_wakes_a_parked_watcher() {
+    const CLASS: &str = "::class k\n::method arm\n  expose v\n  v = 0\n  guard on when v = 0\n\
+                         ::method store unguarded\n  expose v\n  v = 1\n\
+                         ::method dropit\n  expose v\n  drop v\n\
+                         ::method plain\n  expose w\n  w = 1\n\
+                         ::method waiter unguarded\n  expose v\n  guard off when v = 1\n  \
+                         say 'woke'\n\
+                         ::method b\n  say 'b'\n";
+    let run_switched = |main: String| {
+        run_with(
+            &format!("{main}{CLASS}"),
+            Invocation::none()
+                .with_deadline(RUN_DEADLINE)
+                .with_switch_mode(SwitchMode::AtClause(1_000_000)),
+        )
+    };
+    for step in ["store", "dropit", "plain"] {
+        let outcome = run_switched(format!(
+            "o = .k~new\no~arm\nm = .k~new~start('b')\no~{step}\nsay 'a'\nm~wait\n"
+        ));
+        assert_eq!(outcome.exit_code, 0, "{step}: {}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "a\nb\n", "{step}");
+    }
+    let outcome = run_switched(
+        "o = .k~new\nm = o~start('waiter')\ncall SysSleep 0.05\no~store\nsay 'a'\nm~wait\n"
+            .to_string(),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "woke\na\n");
+}

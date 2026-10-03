@@ -512,3 +512,21 @@ lang/method_set_unguarded_is_not_reserved.rex
 lang/method_set_guarded_is_reserved.rex
 lang/guarded_empty_method_waits.rex
 lang/guard_held_before_the_first_start.rex
+# Phase 6 S3 Task 12: a GUARD that waits parks its activity and runs again
+# once woken. A contended GUARD ON parks for the lock; GUARD WHEN watches the
+# exposed variables it names, gives the lock up while false, and wakes on a
+# store or DROP of one of them, a stem element store excepted; each
+# evaluation is traced, its >K> line's TraceObject carrying ISWAITING; a
+# store made while it evaluates makes it evaluate again at once. The native
+# SetGuardOnWhenUpdated/SetGuardOffWhenUpdated wait the same way.
+lang/guard_on_lock_passes_between_activities.rex
+lang/guard_when_waits_for_a_store.rex
+lang/guard_when_stem_element_store.rex
+lang/guard_when_attribute_setter.rex
+lang/guard_when_drop_wakes.rex
+lang/guard_when_traces_each_evaluation.rex
+lang/guard_when_trace_object_waiting.rex
+lang/guard_when_replies_take_turns.rex
+lang/guard_when_posted_while_evaluating.rex
+lang/native_guard_on_when_updated.rex
+lang/native_guard_off_keeps_the_count.rex

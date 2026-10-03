@@ -882,6 +882,9 @@ pub struct Guard {
     pub on: bool,
     /// `GUARD ON WHEN expr`.
     pub condition: Option<Expr>,
+    /// The exposed variables `condition` names, each once, upcased: what a
+    /// wait watches (`LanguageParser::captureGuardVariable`).
+    pub watched: Vec<Box<[u8]>>,
 }
 
 /// A `FORWARD` instruction's options, all of them optional.

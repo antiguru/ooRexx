@@ -375,6 +375,26 @@ fn a_guard_when_expression_must_name_an_exposed_variable() {
     ok("::method m\nguard off\n");
 }
 
+/// What a `GUARD WHEN` watches: each exposed variable its expression names,
+/// once, a compound contributing its stem and its variable tails where they
+/// are exposed.
+#[test]
+fn a_guard_when_watches_the_exposed_variables_it_names() {
+    let watched = |text: &str| match &ok(text).main.instructions[1].kind {
+        InstructionKind::Guard(guard) => guard
+            .watched
+            .iter()
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+            .collect::<Vec<_>>(),
+        other => panic!("{text:?}: {other:?}"),
+    };
+    assert_eq!(
+        watched("expose a b.\nguard on when a + b.c + q + a = 1\n"),
+        ["A", "B."]
+    );
+    assert_eq!(watched("expose i\nguard off when x.i = 1\n"), ["I"]);
+}
+
 #[test]
 fn use_local_inverts_the_exposure_rule_and_seeds_five_names() {
     // With a USE LOCAL, every name EXCEPT the listed ones is exposed, which is

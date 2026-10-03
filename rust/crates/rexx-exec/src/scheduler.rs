@@ -36,12 +36,8 @@ use crate::{Interp, Loud, PendingTrap, SwitchMode};
 pub(crate) enum ExecOutcome {
     /// It ran, and this is its `Flow`.
     Done(Flow),
-    /// The instruction would park the activity, which the driver refuses
-    /// loudly.
-    #[expect(
-        dead_code,
-        reason = "constructed only by the test-only arm, and no arm reads the reason"
-    )]
+    /// The instruction parks the activity for this reason, and runs again
+    /// once it wakes.
     Park(ParkReason),
     /// A `REPLY` with this value: the rest of its body goes to a new
     /// activity at the next clause boundary.
@@ -51,6 +47,17 @@ pub(crate) enum ExecOutcome {
 /// An activity's handle: its offset in the interpreter's activity table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ActivityId(u32);
+
+impl ActivityId {
+    /// The handle as a variable's watch list holds it.
+    pub(crate) fn raw(self) -> u32 {
+        self.0
+    }
+
+    pub(crate) fn from_raw(raw: u32) -> ActivityId {
+        ActivityId(raw)
+    }
+}
 
 #[cfg(test)]
 impl ActivityId {
@@ -110,6 +117,8 @@ pub(crate) struct MessageId(u32);
 pub(crate) enum ParkReason {
     /// A guard lock, until a release makes this activity its owner.
     Guard(crate::guards::GuardKey),
+    /// A `GUARD WHEN`, until a store or `DROP` of a variable it watches.
+    GuardWhen,
     /// `~result`, until the message's send completes.
     MessageResult(MessageId),
     /// `~wait`, until the message's send completes.
@@ -125,6 +134,7 @@ impl ParkReason {
     fn waits_for(self) -> &'static str {
         match self {
             ParkReason::Guard(_) => "a guard",
+            ParkReason::GuardWhen => "a guard's WHEN",
             ParkReason::MessageResult(_) | ParkReason::MessageWait(_) => "a message's completion",
             ParkReason::Sleep { .. } => "a sleep's end",
             ParkReason::Timer { .. } => "a timer's end",
@@ -376,6 +386,7 @@ impl Scheduler for Interp {
         let table = &mut self.activities;
         match reason {
             ParkReason::Guard(_) => {}
+            ParkReason::GuardWhen => self.activity.when_parked = true,
             ParkReason::MessageResult(id) | ParkReason::MessageWait(id) => {
                 table.waiters.entry(id).or_default().push(running);
                 table
@@ -621,6 +632,31 @@ impl Interp {
         Some(ActivityId(u32::try_from(index).expect("handles fit u32")))
     }
 
+    /// Posts `watcher`'s guard semaphore (`Activity::guardPost`): its next
+    /// `GUARD WHEN` wait ends at once, and one it is parked in ends now,
+    /// which is answered.
+    pub(crate) fn post_guard(&mut self, watcher: ActivityId) -> bool {
+        if watcher == self.activities.running {
+            self.activity.guard_posted = true;
+            return false;
+        }
+        let Some(Some(idle)) = self.activities.idle.get_mut(watcher.0 as usize) else {
+            return false;
+        };
+        idle.activity.guard_posted = true;
+        let parked = std::mem::take(&mut idle.activity.when_parked);
+        if parked {
+            self.unpark(watcher);
+        }
+        parked
+    }
+
+    /// A switch at the next clause boundary, where another activity is ready.
+    pub(crate) fn request_switch(&mut self) {
+        self.timer.requests().set(SLICE);
+        self.clause_countdown = 1;
+    }
+
     /// Wakes every activity waiting on `message`, whose send has completed.
     pub(crate) fn message_completed(&mut self, message: ObjRef) {
         let Some(id) = self.activities.message_ids.remove(&message) else {
@@ -704,6 +740,7 @@ impl Interp {
     /// guard queues, from the sleepers and from the timers.
     fn cancel_wait(&mut self) {
         let running = self.activities.running;
+        self.activity.when_parked = false;
         self.activities.guards.withdraw(running);
         self.activity.guard_waits.retain(|wait| !wait.queued);
         self.activity.guarded_send = None;
@@ -1570,7 +1607,7 @@ impl Interp {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Scripted {
-    /// `Park`, without running the instruction.
+    /// `Park` for a sleep already due, without running the instruction.
     Park,
 }
 

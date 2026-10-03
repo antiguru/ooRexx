@@ -142,6 +142,7 @@ fn a_stale_native_frame_token_is_refused() {
         caller: Some(caller),
         id,
         packaged: false,
+        reserved: false,
     };
     interp.activity.native_handles.push(frame(6));
     assert_eq!(interp.suspended_caller(6), Some(0));

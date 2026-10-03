@@ -325,8 +325,8 @@ fn a_second_reply_reports_the_oracles_own_98_935() {
     );
 }
 
-/// **What `GUARD` answers, and the Phase 6 refusals beside it, in every
-/// `cargo test`.**
+/// **What `GUARD` answers, and the refusals beside it, in every `cargo
+/// test`.**
 #[test]
 fn the_guard_instructions_answers_and_the_phase_6_refusals() {
     struct Row {
@@ -360,12 +360,13 @@ fn the_guard_instructions_answers_and_the_phase_6_refusals() {
             stderr_contains: "Value of expression following GUARD keyword must be exactly",
         },
         Row {
-            name: "a WHEN that does not hold, where the oracle blocks for ever",
+            name: "a WHEN that does not hold with no other activity, where the oracle \
+                   blocks for ever (ruling P27)",
             source: "say .K~m\n::class K\n::method m class\n  expose v\n  v = 0\n  \
                      guard on when v = 1\n  return 'no'\n",
             stdout: b"",
             exit_code: crate::NOT_IMPLEMENTED_EXIT,
-            stderr_contains: "wait for another activity",
+            stderr_contains: "a wait that nothing left to run can end",
         },
         Row {
             name: "a REPLY in a labelled block, which runs on a nested Rust frame",

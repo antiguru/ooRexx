@@ -756,24 +756,18 @@ fn scripted(program: &[u8], outcomes: &[Scripted]) -> (Outcome, usize) {
     (outcome, exec_splits() - splits)
 }
 
-/// An `Op::Exec` that answers `Park` is loud, whether the driver runs its
-/// region or a nested Rust frame does, and nothing after it runs.
+/// An `Op::Exec` that answers `Park` waits, whether the driver runs its
+/// region or a nested Rust frame does, and its instruction runs once the
+/// activity wakes, and only then.
 #[test]
-fn a_parked_exec_is_loud() {
+fn a_parked_exec_runs_its_instruction_once_woken() {
     for program in [
-        &b"say 'before'\ndrop z\nsay 'after'\n"[..],
-        b"say 'before'\ndo label l\n  drop z\nend\nsay 'after'\n",
+        &b"n = 0\nsay 'before'\ninterpret 'n = n + 1'\nsay 'after' n\n"[..],
+        b"n = 0\nsay 'before'\ndo label l\n  interpret 'n = n + 1'\nend\nsay 'after' n\n",
     ] {
-        let (plain, _) = scripted(program, &[]);
-        assert_eq!(plain.exit_code, 0, "stderr: {:?}", plain.stderr);
         let (parked, splits) = scripted(program, &[Scripted::Park]);
-        assert_ne!(parked.exit_code, 0);
-        assert!(
-            String::from_utf8_lossy(&parked.stderr).contains("an activity park"),
-            "stderr: {:?}",
-            parked.stderr
-        );
-        assert_eq!(String::from_utf8_lossy(&parked.stdout), "before\n");
+        assert_eq!(parked.exit_code, 0, "stderr: {:?}", parked.stderr);
+        assert_eq!(String::from_utf8_lossy(&parked.stdout), "before\nafter 1\n");
         assert_eq!(splits, 0);
     }
 }

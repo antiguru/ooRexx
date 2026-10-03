@@ -213,6 +213,7 @@ impl Interp {
         line: &[u8],
         entry: bool,
     ) -> Result<(), Failure> {
+        let waiting = self.activity.waiting_traced.take();
         let thread = self.activity_number();
         let invocation = self.invocation_of(0).unwrap_or(0);
         let levels = crate::dispatch::context::live_levels(self);
@@ -289,6 +290,9 @@ impl Interp {
             self.trace_object_put(object, b"SCOPELOCKCOUNT", count)?;
             self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(reserved))?;
             self.trace_object_put(object, b"RECEIVER", key.object)?;
+            if let Some(waiting) = waiting {
+                self.trace_object_put(object, b"ISWAITING", crate::eval::logical(waiting))?;
+            }
         }
         let caller_ref = self.caller();
         self.send_message(

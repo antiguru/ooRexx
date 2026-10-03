@@ -1,0 +1,45 @@
+/* A TraceObject for a GUARD WHEN's >K> line carries ISWAITING: true where
+   the expression is 0 and the activity goes on to wait, false where it is
+   1. Other lines carry no ISWAITING entry. The >I> and <I< lines are left
+   out. */
+s = .sink~new
+zz = .traceoutput~destination(s)
+o = .k~new
+m = o~start('waiter')
+call SysSleep 0.1
+o~set(1)
+m~wait
+zz = .traceoutput~destination(.stderr)
+do ln over s~seen
+  say ln
+end
+exit
+::class sink
+::method init
+  expose seen
+  seen = .array~new
+::method seen
+  expose seen
+  return seen
+::method lineout unguarded
+  expose seen
+  use arg v
+  if wordpos(word(v~traceline, 1), '>I> <I<') > 0 then
+    return 0
+  w = '-'
+  if v~hasEntry('ISWAITING') then
+    w = v~iswaiting
+  seen~append(subword(v~traceline, 1, 4) '| waiting' w)
+  return 0
+::class k
+::method init
+  expose v
+  v = 0
+::method waiter
+  expose v
+  trace r
+  guard on when v = 1
+  return
+::method set
+  expose v
+  use arg v

@@ -678,15 +678,6 @@ impl Loud {
         }
     }
 
-    /// A `GUARD ... WHEN` whose expression is false.
-    fn guard_when_false() -> Loud {
-        Loud {
-            message: "a GUARD that has to wait for another activity to make its WHEN \
-                      expression true is not implemented (Phase 6)"
-                .to_string(),
-        }
-    }
-
     /// A wait that nothing left to run can end. The oracle blocks for ever
     /// (`corpus/oracle-crashes.txt`, the unsent-message block).
     fn unsatisfiable_wait() -> Loud {
@@ -884,14 +875,12 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // object, fails loudly through `Loud::expose_receiver` rather than
         // answering.
         InstructionKind::Expose { .. } => None,
-        // `GUARD` reserves and releases the receiver's scope and `REPLY`
-        // hands its value to the sender and moves the rest of the body to a
-        // new activity. `None` in the same sense `Expose` above is: both
-        // variants execute, and the sub-cases with no code here -- a
-        // `GUARD ... WHEN` that is false and so has to wait, a `REPLY` with
-        // Rust frames inside its method body -- fail loudly through
-        // `Loud::guard_when_false`/`Loud::immovable_reply` rather than
-        // answering.
+        // `GUARD` reserves and releases the receiver's scope and waits for
+        // its `WHEN`, and `REPLY` hands its value to the sender and moves the
+        // rest of the body to a new activity. `None` in the same sense
+        // `Expose` above is: both variants execute, and the sub-case with no
+        // code here -- a `REPLY` with Rust frames inside its method body --
+        // fails loudly through `Loud::immovable_reply` rather than answering.
         InstructionKind::Guard(_) | InstructionKind::Reply { .. } => None,
         // `FORWARD` is `None` in the sense `Guard` and `Reply` above are: the
         // instruction executes and every option is built, and the one
@@ -1750,6 +1739,8 @@ struct NativeFrame {
     /// Whether the code reports a package, which then leads a condition it
     /// raises with no line, so the condition has no `POSITION`.
     packaged: bool,
+    /// Whether a method's call holds its guard lock (`objectScope`).
+    reserved: bool,
 }
 
 /// What one just-installed dictionary key resolves to, handed to

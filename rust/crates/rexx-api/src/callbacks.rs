@@ -162,6 +162,17 @@ pub trait Surface {
     /// The value of the running method's object variable `name`, or `None`.
     fn object_variable(&mut self, name: &[u8]) -> Option<ObjRef>;
 
+    /// `SetGuardOn` or, where `on` is unset, `SetGuardOff`: the running
+    /// method's guard lock reserved or released (`NativeActivation::guardOn`,
+    /// `guardOff`, `execution/NativeActivation.cpp:2395-2429`).
+    fn set_guard(&mut self, on: bool);
+
+    /// `SetGuardOnWhenUpdated` or, where `on` is unset,
+    /// `SetGuardOffWhenUpdated`: a wait for a store to the running method's
+    /// object variable `name`, holding the lock or not, then its value
+    /// (`NativeActivation::guardOnWhenUpdated`, `:2470`).
+    fn guard_when_updated(&mut self, name: &[u8], on: bool) -> Option<ObjRef>;
+
     /// A `VariableReference` to the simple or stem variable `name`: the
     /// running method's object variable where `object` is set, the calling
     /// activation's otherwise.
@@ -1345,6 +1356,21 @@ impl Activation<'_> {
         self.surface_handle("MethodContextInterface.GetObjectVariable", |surface| {
             surface.object_variable(name)
         })
+    }
+
+    /// `SetGuardOn` and `SetGuardOff`.
+    pub fn set_guard(&self, slot: &'static str, on: bool) {
+        self.with_surface(slot, (), |cx| {
+            cx.host
+                .surface()
+                .expect("checked by with_surface")
+                .set_guard(on);
+        });
+    }
+
+    /// `SetGuardOnWhenUpdated` and `SetGuardOffWhenUpdated`.
+    pub fn guard_when_updated(&self, slot: &'static str, name: &[u8], on: bool) -> RexxObjectPtr {
+        self.surface_handle(slot, |surface| surface.guard_when_updated(name, on))
     }
 
     /// `GetObjectVariableReference` and `GetContextVariableReference`.

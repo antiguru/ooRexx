@@ -115,6 +115,10 @@ impl Interp {
             })
             .expect("an exposed variable's owner is a rooted Body::Instance");
         pools.set(var.scope, &var.name, value);
+        if pools.watched() {
+            let (owner, scope, name) = (var.owner, var.scope, var.name.clone());
+            self.notify_watchers(owner, scope, &name);
+        }
     }
 
     /// [`Interp::clear_variable`]'s exposed half.
@@ -140,6 +144,10 @@ impl Interp {
             })
             .expect("an exposed variable's owner is a rooted Body::Instance");
         pools.clear(var.scope, &var.name);
+        if pools.watched() {
+            let (owner, scope, name) = (var.owner, var.scope, var.name.clone());
+            self.notify_watchers(owner, scope, &name);
+        }
     }
 
     /// Assigns one name in one scope's pool on `owner`, outside any
@@ -162,6 +170,9 @@ impl Interp {
             })
             .expect("Interp::pool_owner answers a rooted Body::Instance");
         pools.set(scope, name, value);
+        if pools.watched() {
+            self.notify_watchers(owner, scope, name);
+        }
     }
 
     /// [`Interp::set_pool_variable`]'s other half: the name returns to the
@@ -177,6 +188,36 @@ impl Interp {
             })
             .expect("Interp::pool_owner answers a rooted Body::Instance");
         pools.clear(scope, name);
+        if pools.watched() {
+            self.notify_watchers(owner, scope, name);
+        }
+    }
+
+    /// A store or `DROP` of `name` in `scope`'s pool on
+    /// `owner`, whose pools some `GUARD WHEN` has watched: every watcher is
+    /// posted (`RexxVariable::notify`, `execution/RexxVariable.cpp:172-194`),
+    /// and where that woke one parked in its wait the activity asks for a
+    /// switch at its next clause boundary, where the oracle's notifier
+    /// yields at once. The oracle's yield hands over only to an activity
+    /// already queued for its kernel lock, which a started one measured not
+    /// to be, so a notify that wakes nobody does not switch.
+    #[cold]
+    #[inline(never)]
+    fn notify_watchers(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) {
+        let Some(watchers) = self
+            .pools_of(owner)
+            .and_then(|pools| pools.watchers(scope, name))
+            .map(<[u32]>::to_vec)
+        else {
+            return;
+        };
+        let mut woke = false;
+        for watcher in watchers {
+            woke |= self.post_guard(crate::scheduler::ActivityId::from_raw(watcher));
+        }
+        if woke {
+            self.request_switch();
+        }
     }
 
     /// What an `EXPOSE` bound slot `slot` of `frame` to, if anything.
@@ -195,6 +236,14 @@ impl Interp {
             .iter()
             .find(|(at, _)| *at == slot)
             .map(|(_, var)| var)
+    }
+
+    /// The scope pools `owner` holds, for a writer.
+    pub(crate) fn pools_of_mut(&mut self, owner: ObjRef) -> Option<&mut rexx_core::ScopePools> {
+        match self.heap.get_mut(owner).map(|object| &mut object.body) {
+            Some(Body::Instance { pools, .. }) => Some(pools),
+            _ => None,
+        }
     }
 
     /// The scope pools `owner` holds, for a reader.

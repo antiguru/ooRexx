@@ -2514,7 +2514,7 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let Some(key) = guard else {
-            return self.run_other(invocable, cleared, resolution, receiver, name, args);
+            return self.run_other(invocable, cleared, resolution, receiver, name, args, false);
         };
         if let Invocable::Generated(generated) = &invocable
             && generated.kind == crate::GeneratedKind::Delegate
@@ -2525,12 +2525,21 @@ impl Interp {
                 .send_to_delegate_target(target?, name, args)
                 .map(Started::Ran);
         }
-        let outcome = self.run_other(invocable, cleared, resolution, receiver, name, args);
-        self.release_guard(key);
+        // A library method's own frame holds the lock, which `SetGuardOff`
+        // may give up, and releases it where it still holds it.
+        let library = matches!(invocable, Invocable::Library(_));
+        let outcome = self.run_other(invocable, cleared, resolution, receiver, name, args, true);
+        if !library {
+            self.release_guard(key);
+        }
         outcome
     }
 
     /// The body of a method that is neither Rexx nor native.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the send's own parts, and whether it holds its guard lock"
+    )]
     fn run_other(
         &mut self,
         invocable: Invocable,
@@ -2539,6 +2548,7 @@ impl Interp {
         receiver: ObjRef,
         name: &[u8],
         args: &[Option<ObjRef>],
+        reserved: bool,
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let outcome = match invocable {
             // **The refusal is the ordinary outcome here**, so unlike the
@@ -2582,7 +2592,8 @@ impl Interp {
             },
             Invocable::Rexx(_) | Invocable::Native(_) => return Err(Loud::missing_body().into()),
             Invocable::Library(binding) => {
-                let outcome = self.run_library_method(&binding, resolution, receiver, name, args);
+                let outcome =
+                    self.run_library_method(&binding, resolution, receiver, name, args, reserved);
                 if outcome.is_err() {
                     let scope = self.classes().id_string(resolution.scope).to_string();
                     let method = resolution.method;
@@ -2680,6 +2691,17 @@ impl Interp {
             thens: Vec::new(),
         }));
         Ok(NativeStarted::Entered(Then::Pass))
+    }
+
+    /// A park for `reason` by an instruction its op runs again once the
+    /// activity wakes, recorded on the activity for the root driver.
+    pub(crate) fn park_instruction(&mut self, reason: crate::scheduler::ParkReason) {
+        self.activity.native_park = Some(Box::new(NativePark {
+            reason,
+            resume: |_, _| Ok(None),
+            receiver: ObjRef::NIL,
+            thens: Vec::new(),
+        }));
     }
 
     /// A park for `reason` by a routine whose answer, once woken, is

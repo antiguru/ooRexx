@@ -769,6 +769,34 @@ mod measured {
         );
     }
 
+    /// A `GUARD WHEN` wait at a level the driver entered stacklessly parks
+    /// its activity with no pinned wait; inside a sort comparator it is a
+    /// pinned wait under the comparator's frame.
+    #[test]
+    fn a_guard_when_is_a_pinned_wait_only_under_a_pinned_frame() {
+        const SETTER: &str = "o = .k~new\nm = o~start('waiter')\ncall SysSleep 0.05\no~set\nm~wait\n\
+                              ::class k\n::method set unguarded\n  expose v\n  v = 1\n";
+        let report = report_of(&format!(
+            "{SETTER}::method waiter unguarded\n  expose v\n  guard off when v = 1\n"
+        ));
+        assert!(
+            !frames_at(&report, ParkKind::GuardWhen).is_empty() && report.pinned_parks.is_empty(),
+            "{report:?}"
+        );
+        let report = report_of(&format!(
+            "{SETTER}::method waiter unguarded\n  a = .array~of(2, 1)\n  a~sortWith(self)\n\
+             ::method compare unguarded\n  expose v\n  use arg l, r\n  guard off when v = 1\n  \
+             return l - r\n"
+        ));
+        let parks = &report.pinned_parks;
+        assert!(
+            parks.keys().any(|(kind, frames)| {
+                *kind == ParkKind::GuardWhen && frames.contains(&PinKind::SortComparator)
+            }) && parks.keys().all(|(kind, _)| *kind == ParkKind::GuardWhen),
+            "{report:?}"
+        );
+    }
+
     /// A sleep in a PARSE template position or a SELECT CASE `WHEN` value is
     /// evaluated on the Rust stack, so it is a pinned wait under `TreeEval`.
     #[test]
@@ -1540,6 +1568,64 @@ mod group_runs {
         }
     }
 
+    /// The GUARD group's tests that pass, `TEST_WAIT_MULTIPLE` and the other
+    /// `WHEN` waits among them. The rest are refused: a translation error
+    /// inside the test's own `INTERPRET`, or `USE LOCAL` in a method.
+    const GUARD_PASSING: &[&str] = &[
+        "TEST_OFF",
+        "TEST_ON",
+        "TEST_ON_DEFAULT",
+        "TEST_ON_OFF",
+        "TEST_ON_OFF_CONSECUTIVE",
+        "TEST_UNGUARDED",
+        "TEST_WAIT_MULTIPLE",
+        "TEST_WAIT_SIMPLE",
+        "TEST_WAIT_SIMPLE_TRIGGER",
+        "TEST_WHEN_MULTIPLE_NO_WAIT",
+        "TEST_WHEN_NOT_BOOLEAN",
+        "TEST_WHEN_NOVALUE",
+        "TEST_WHEN_SINGLE_NO_WAIT",
+        "TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT",
+    ];
+
+    /// [`GUARD_PASSING`] with the shipped scheduler and with a switch at every
+    /// opportunity, and every other test refused.
+    #[test]
+    fn the_outcome_table_of_the_guard_group_in_both_modes() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        for (name, mode) in [
+            ("guard-table", SwitchMode::None),
+            ("guard-table-switched", SwitchMode::EveryOpportunity),
+        ] {
+            let results = outcome_table(
+                name,
+                "base/keyword",
+                "GUARD",
+                "REXX_GUARD_TABLE",
+                mode,
+                |_| true,
+            );
+            let passing: Vec<&str> = results
+                .iter()
+                .filter(|row| matches!(row.outcome, Outcome::Pass))
+                .map(|row| row.test.as_str())
+                .collect();
+            assert_eq!(passing, GUARD_PASSING, "{name}");
+            let other: Vec<String> = results
+                .iter()
+                .filter(|row| !matches!(row.outcome, Outcome::Pass | Outcome::Refused { .. }))
+                .map(|row| format!("{} {}", row.test, row.outcome.label()))
+                .collect();
+            assert!(
+                other.is_empty(),
+                "{name}: neither passing nor refused: {other:?}"
+            );
+        }
+    }
+
     #[test]
     fn the_outcome_table_of_the_object_group() {
         if !gate_mode() {
@@ -1638,18 +1724,6 @@ mod group_runs {
         "base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START",
     ];
 
-    /// The rows refused in both modes where the schedule decides which
-    /// refusal comes first: under `EveryOpportunity` the started `M_S` takes
-    /// the guard lock before `M_WAIT`'s `GUARD ON`, which waits for it and
-    /// finds `COUNT` already 0, so the run goes on to a later refusal; the
-    /// shipped scheduler reaches the `GUARD ON` first and is refused at its
-    /// `WHEN`. Allowed only while one of the two refusals is that `WHEN`'s.
-    const REFUSAL_FOLLOWS_THE_SCHEDULE: &[&str] =
-        &["base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START"];
-
-    /// The crate's refusal of a `GUARD WHEN` whose expression is false.
-    const GUARD_WHEN_REFUSAL: &str = "a GUARD that has to wait for another activity";
-
     /// `run`'s stdout without the lines `drop` selects.
     fn without(run: &Run, drop: impl Fn(&str) -> bool) -> String {
         String::from_utf8_lossy(&masked(&run.stdout))
@@ -1714,14 +1788,6 @@ mod group_runs {
             && TRACE_INTERLEAVES.contains(&row)
         {
             return ("trace lines on stderr differ".to_string(), true);
-        }
-        if let (Some(first), Some(second)) = (refusal(normal), refusal(every))
-            && normal.status == every.status
-            && masked(&normal.stdout) == masked(&every.stdout)
-            && (first.contains(GUARD_WHEN_REFUSAL) || second.contains(GUARD_WHEN_REFUSAL))
-            && REFUSAL_FOLLOWS_THE_SCHEDULE.contains(&row)
-        {
-            return (format!("refused: {first} then {second}"), true);
         }
         (
             format!(

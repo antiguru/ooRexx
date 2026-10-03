@@ -133,8 +133,10 @@ pub static METHOD_CONTEXT: MethodContextInterface = {
     table.GetCSelf = get_cself;
     table.GetObjectVariable = variables::get_object_variable;
     table.GetObjectVariableReference = variables::get_object_variable_reference;
-    table.SetGuardOn = variables::set_guard;
-    table.SetGuardOff = variables::set_guard;
+    table.SetGuardOn = variables::set_guard_on;
+    table.SetGuardOff = variables::set_guard_off;
+    table.SetGuardOnWhenUpdated = variables::set_guard_on_when_updated;
+    table.SetGuardOffWhenUpdated = variables::set_guard_off_when_updated;
     table.GetArguments = messages::method_arguments;
     table.GetArgument = messages::method_argument;
     table.GetMessageName = messages::message_name;
@@ -2992,13 +2994,53 @@ mod variables {
         })
     }
 
-    /// `SetGuardOn` and `SetGuardOff`, which do what this interpreter's own
-    /// `GUARD ON` and `GUARD OFF` do with no other activity to exclude:
-    /// nothing a program can see.
-    ///
     /// # Safety
-    /// As [`super::set_object_variable`]; the context is not read.
-    pub(super) unsafe extern "C" fn set_guard(_context: *mut RexxMethodContext_) {}
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn set_guard_on(context: *mut RexxMethodContext_) {
+        // SAFETY: as `set_object_variable`.
+        if let Some(activation) = unsafe { activation_of(context) } {
+            activation.set_guard("MethodContextInterface.SetGuardOn", true);
+        }
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn set_guard_off(context: *mut RexxMethodContext_) {
+        // SAFETY: as `set_object_variable`.
+        if let Some(activation) = unsafe { activation_of(context) } {
+            activation.set_guard("MethodContextInterface.SetGuardOff", false);
+        }
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn set_guard_on_when_updated(
+        context: *mut RexxMethodContext_,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        let (Some(activation), Some(name)) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
+        activation.guard_when_updated("MethodContextInterface.SetGuardOnWhenUpdated", name, true)
+    }
+
+    /// # Safety
+    /// As [`super::set_object_variable`].
+    pub(super) unsafe extern "C" fn set_guard_off_when_updated(
+        context: *mut RexxMethodContext_,
+        name: CSTRING,
+    ) -> RexxObjectPtr {
+        // SAFETY: as `set_object_variable`.
+        let (Some(activation), Some(name)) =
+            (unsafe { activation_of(context) }, unsafe { name_of(name) })
+        else {
+            return std::ptr::null_mut();
+        };
+        activation.guard_when_updated("MethodContextInterface.SetGuardOffWhenUpdated", name, false)
+    }
 
     /// # Safety
     /// As [`super::whole_number_to_object`].

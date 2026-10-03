@@ -1,0 +1,28 @@
+count 27
+/* A WHEN naming a compound of an exposed stem watches the stem variable: a
+   store to one of its elements leaves the waiter parked, an assignment of
+   the whole stem wakes it. */
+o = .k~new
+m = o~start('waiter')
+call SysSleep 0.1
+say 'setting element'
+o~setElement
+call SysSleep 0.1
+say 'completed after element?' m~completed
+o~setWhole
+m~wait
+say 'done' m~result
+::class k
+::method init
+  expose a.
+  a. = 0
+::method waiter
+  expose a.
+  guard on when a.1 = 5
+  return 'woke' a.1
+::method setElement
+  expose a.
+  a.1 = 5
+::method setWhole
+  expose a.
+  a. = 5

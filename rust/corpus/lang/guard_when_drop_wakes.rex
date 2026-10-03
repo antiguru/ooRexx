@@ -1,0 +1,27 @@
+/* A DROP of a watched variable wakes a GUARD WHEN, which re-evaluates with
+   the variable unset; GUARD OFF WHEN waits without the lock and returns
+   without it, so a guarded method of another activity runs meanwhile. */
+o = .k~new
+m = o~start('waiter')
+call SysSleep 0.1
+o~clear
+m~wait
+say m~result
+::class k
+::method init
+  expose v
+  v = 1
+::method waiter
+  expose v
+  signal off novalue
+  guard off when v == 'V'
+  say 'woke, v set?' var('V')
+  o = self~start('poke')
+  call SysSleep 0.1
+  say 'poked' o~completed
+  return 'done'
+::method clear
+  expose v
+  drop v
+::method poke
+  say 'poke ran'

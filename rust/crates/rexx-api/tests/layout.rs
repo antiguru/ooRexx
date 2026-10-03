@@ -943,20 +943,14 @@ fn the_wrapper_scan_follows_one_wrapper_into_another() {
     assert!(reached.contains("IORedirectorInterface.WriteErrorBuffer"));
 }
 
-/// **What the test extensions call is filled first**: every member they reach
-/// that still refuses is one this list names, each with the reason it is not
-/// filled here.
+/// **What the test extensions call is filled first**: no member they reach
+/// still refuses.
 #[test]
 fn the_test_extensions_reach_only_members_that_answer() {
-    const STILL_REFUSING: &[&str] = &[
-        "MethodContextInterface.SetGuardOffWhenUpdated",
-        "MethodContextInterface.SetGuardOnWhenUpdated",
-    ];
     let refusing = refusing_members();
     let reached: BTreeSet<String> = members_the_test_extensions_call()
         .into_iter()
         .filter(|member| refusing.contains(member))
         .collect();
-    let expected: BTreeSet<String> = STILL_REFUSING.iter().map(|m| (*m).to_string()).collect();
-    assert_eq!(reached, expected);
+    assert!(reached.is_empty(), "reached and refusing: {reached:?}");
 }

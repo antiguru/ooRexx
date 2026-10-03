@@ -1,0 +1,39 @@
+count 38
+/* A contended GUARD ON parks its activity until a release hands it the
+   lock: C holds y and then x, main waits for x and B for y, C gives x up
+   to main and then waits for it back, main's release hands it back. */
+x = .k~new; y = .k~new
+c = y~start('cy', x)
+call syssleep 0.05
+b = y~start('by')
+call syssleep 0.1
+x~ax
+b~wait
+c~wait
+say 'end'
+::class k
+::method cy unguarded
+  use arg x
+  guard on
+  say 'C holds y'
+  x~cx
+  guard off
+::method cx unguarded
+  guard on
+  say 'C holds x'
+  call syssleep 0.6
+  guard off
+  say 'C released x'
+  call syssleep 0.1
+  guard on
+  say 'C has x again'
+::method by unguarded
+  call syssleep 0.3
+  say 'B wants y'
+  guard on
+  say 'B has y'
+::method ax unguarded
+  say 'A wants x'
+  guard on
+  say 'A has x'
+  guard off
