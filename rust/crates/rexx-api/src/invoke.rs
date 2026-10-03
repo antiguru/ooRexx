@@ -48,7 +48,7 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 ///
 /// The halves are [`prepare`], [`call_method`] and [`finish`], with
 /// [`Host::between_halves`](crate::values::Host::between_halves) run between
-/// each.
+/// each where [`Activation::between_halves`] says so.
 ///
 /// # Errors
 /// Whatever converting an argument or the result refuses;
@@ -73,9 +73,13 @@ pub fn method(
 ) -> Result<Option<ObjRef>, Failure> {
     let mut native = NativeCall::empty();
     prepare(&mut native, &signature(entry, context)?, cx, arguments)?;
-    cx.conversion().host.between_halves();
+    if cx.between_halves() {
+        cx.conversion().host.between_halves();
+    }
     let completion = call_method(&mut native, entry, context);
-    cx.conversion().host.between_halves();
+    if cx.between_halves() {
+        cx.conversion().host.between_halves();
+    }
     finish(cx, completion)
 }
 
@@ -103,9 +107,13 @@ pub fn routine(
         cx,
         arguments,
     )?;
-    cx.conversion().host.between_halves();
+    if cx.between_halves() {
+        cx.conversion().host.between_halves();
+    }
     let completion = call_routine(&mut native, entry, context);
-    cx.conversion().host.between_halves();
+    if cx.between_halves() {
+        cx.conversion().host.between_halves();
+    }
     finish(cx, completion)
 }
 
@@ -194,14 +202,10 @@ impl NativeCall {
 /// what the stub wrote into element zero, and the first interface member it
 /// reached that this phase has not written.
 ///
-/// It holds raw words only, never an `ObjRef`, so that it is `Send`. A
-/// condition the stub raised is held by the call's [`Activation`].
-///
-/// ```compile_fail,E0277
-/// fn require_send<T: Send>() {}
-/// struct Widened(rexx_api::invoke::Completion, rexx_core::ObjRef);
-/// require_send::<Widened>();
-/// ```
+/// It holds raw words only, never an `ObjRef`, so that it is `Send`; the
+/// `const` block below asserts that for it and for [`NativeCall`]. A
+/// condition the stub raised is held by the host, in the call's native frame
+/// (or, for a host without a surface, by the call's [`Activation`]).
 pub struct Completion {
     returns: u16,
     written: Option<Written>,

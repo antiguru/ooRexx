@@ -97,6 +97,7 @@ impl Interp {
         self.native_frame_mut().reserved = reserved;
         let mut strings = CStringPool::new();
         let thread = self.thread_context();
+        let stress = self.stress_collect;
         let (answered, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
@@ -104,6 +105,7 @@ impl Interp {
                 strings: &mut strings,
             });
             activation.set_frame(frame);
+            activation.set_between_halves(stress);
             let answered = thread.enter(&activation, |contexts| {
                 invoke::method(entry, &contexts.method(), &activation, args)
             });
@@ -176,6 +178,7 @@ impl Interp {
         self.native_frame_mut().packaged = program.is_some();
         let mut strings = CStringPool::new();
         let thread = self.thread_context();
+        let stress = self.stress_collect;
         let (answered, pending) = {
             let frame = self.native_token();
             let activation = Activation::new(Conversion {
@@ -183,6 +186,7 @@ impl Interp {
                 strings: &mut strings,
             });
             activation.set_frame(frame);
+            activation.set_between_halves(stress);
             let answered = thread.enter(&activation, |contexts| {
                 invoke::routine(entry, &contexts.call(), &activation, args)
             });

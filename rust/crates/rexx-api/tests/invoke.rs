@@ -325,10 +325,12 @@ impl Session {
         entry: &NativeMethodEntry,
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
+        let collecting = self.interpreter.collecting;
         let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
+        activation.set_between_halves(collecting);
         let outcome = self.thread.enter(&activation, |contexts| {
             invoke::method(entry, &contexts.method(), &activation, arguments)
         });
@@ -344,10 +346,12 @@ impl Session {
         entry: &NativeRoutineEntry,
         arguments: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
+        let collecting = self.interpreter.collecting;
         let activation = Activation::new(Conversion {
             host: &mut self.interpreter,
             strings: &mut self.strings,
         });
+        activation.set_between_halves(collecting);
         self.thread.enter(&activation, |contexts| {
             invoke::routine(entry, &contexts.call(), &activation, arguments)
         })

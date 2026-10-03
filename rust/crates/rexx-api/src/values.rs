@@ -755,6 +755,7 @@ pub struct Activation<'a> {
     conversion: RefCell<Conversion<'a>>,
     pending: Cell<Option<usize>>,
     frame: Cell<Option<u64>>,
+    between_halves: Cell<bool>,
 }
 
 impl<'a> Activation<'a> {
@@ -763,7 +764,19 @@ impl<'a> Activation<'a> {
             conversion: RefCell::new(conversion),
             pending: Cell::new(None),
             frame: Cell::new(None),
+            between_halves: Cell::new(false),
         }
+    }
+
+    /// Whether [`Host::between_halves`] runs for this call.
+    pub fn set_between_halves(&self, on: bool) {
+        self.between_halves.set(on);
+    }
+
+    /// [`Activation::set_between_halves`]'s flag, `false` until it is set.
+    #[inline(always)]
+    pub fn between_halves(&self) -> bool {
+        self.between_halves.get()
     }
 
     /// Names the host's native frame this call runs in, which is what a

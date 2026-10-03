@@ -111,10 +111,12 @@ R4.
   (`rexx-api/src/values.rs:716-719`, `dispatch/library.rs:96-106`) and then runs
   `values::from_native` (`rexx-api/src/invoke.rs:218-224`); it splits into those halves. Prepare runs
   under the baton; the driver exits; the call runs holding no island value; its completion record
-  carries the declared result type, the `Written` payload, the refused slot (captured from the
-  thread-local `REFUSED` on the calling thread) and the `pending` conditions (`values.rs:749-802`).
+  carries the declared result type, the `Written` payload and the refused slot (captured from the
+  thread-local `REFUSED` on the calling thread).
   The call's native frame stays pushed and rooted as that activity's until the finish half pops it,
   since a returned handle resolves only in that frame's `locals` (`rexx-api/src/handles.rs:43-52`).
+  `Completion` carries no pending condition: it stays in island state (the native frame), read by
+  finish, since `RaiseException` callbacks hold the baton (2.4).
   Builtins that work on island data (SysStemSort sorts a stem) copy it out in prepare and back in
   finish, or stay on the baton. This applies where the operation is reached from a resumable entry.
   **Wrappers that keep the baton** (reached only through nested Rust frames today, so pinned): the
