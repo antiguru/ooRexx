@@ -534,15 +534,23 @@ mod measured {
     use super::derive;
     use super::group_runner::{fresh_copy, worktree};
 
+    /// The external routine every probe of [`report_of`] can call.
+    const EXTF: &str =
+        "use arg n\nif n >= 3 then do\n  call SysSleep 0\n  return 'ok'\nend\nreturn extf(n + 1)\n";
+
     /// Runs `source` in a directory holding the external routine `extf.rex`.
+    /// The tests run in parallel and share the directory, so the routine is
+    /// written under a name of the thread's own and renamed into place: a
+    /// probe never reads it half written.
     fn report_of(source: &str) -> PinReport {
         let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pinning-probes");
         fs::create_dir_all(&dir).expect("the probe directory");
-        fs::write(
-            dir.join("extf.rex"),
-            "use arg n\nif n >= 3 then do\n  call SysSleep 0\n  return 'ok'\nend\nreturn extf(n + 1)\n",
-        )
-        .expect("the external routine");
+        let extf = dir.join("extf.rex");
+        if fs::read(&extf).ok().as_deref() != Some(EXTF.as_bytes()) {
+            let staged = dir.join(format!("extf.{:?}.staged", std::thread::current().id()));
+            fs::write(&staged, EXTF).expect("the external routine");
+            fs::rename(&staged, &extf).expect("the external routine in place");
+        }
         let outcome = run_program(
             "probe.rex",
             source.as_bytes().to_vec(),

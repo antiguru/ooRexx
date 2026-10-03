@@ -222,6 +222,7 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
     "src/dispatch/class_protocol.rs",
     "src/dispatch/object_protocol.rs",
     "src/dispatch/time_support.rs",
+    "src/dispatch/semaphore.rs",
 ];
 
 /// **Every consumer of the seam's token is written in one of
