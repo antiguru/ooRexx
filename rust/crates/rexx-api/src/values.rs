@@ -691,6 +691,11 @@ pub trait Host {
     fn kept_name(&mut self, _name: &[u8]) -> Option<CSTRING> {
         None
     }
+
+    /// Runs after a native call's arguments are converted and again after
+    /// its stub returns, while the call's frame alone holds what it was
+    /// handed and what it answered.
+    fn between_halves(&mut self) {}
 }
 
 /// The `NUMERIC` settings a call context reports.

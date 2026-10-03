@@ -1042,6 +1042,12 @@ impl Host for Interp {
             .or_insert_with(|| terminated(name));
         Some(kept.as_ptr().cast())
     }
+
+    fn between_halves(&mut self) {
+        if self.stress_collect {
+            self.collect_now();
+        }
+    }
 }
 
 impl Interp {

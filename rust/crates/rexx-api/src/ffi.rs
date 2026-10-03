@@ -102,6 +102,15 @@ pub unsafe fn value_of(descriptor: &ValueDescriptor, repr: Repr) -> Value {
     }
 }
 
+// SAFETY: a descriptor is one word and two integers, and no member owns or
+// borrows anything. A pointer member is an address: reading through it is
+// `unsafe` at its own site, and a handle names an object only through the
+// locals of the call that minted it, so sending the word sends no access.
+unsafe impl Send for ValueDescriptor {}
+
+// SAFETY: as for `ValueDescriptor`: a `Value` is one member of that word.
+unsafe impl Send for Value {}
+
 /// The method-context table an extension is handed
 /// (`Activity::methodContextFunctions`,
 /// `interpreter/api/MethodContextStubs.cpp:374`).
@@ -1137,7 +1146,7 @@ unsafe extern "C" fn whole_number_to_object(
     context: *mut RexxThreadContext_,
     value: wholenumber_t,
 ) -> RexxObjectPtr {
-    // SAFETY: the caller guarantees the context, and `invoke::run` and
+    // SAFETY: the caller guarantees the context, and `invoke::call` and
     // `invoke::hook` hold no conversion state across the call they make.
     or_nothing!(unsafe { innermost_activation(context, "WholeNumberToObject") }).whole_number(value)
 }
@@ -4488,7 +4497,7 @@ pub(crate) extern "C-unwind" fn arglist_stub(
     if arguments.is_null() {
         return ARGLIST_TYPES.as_ptr().cast_mut();
     }
-    // SAFETY: the array is `invoke::run`'s, whose element one this signature
+    // SAFETY: the array is `invoke::prepare`'s, whose element one this signature
     // declares an `int` that `values::descriptor` wrote in full.
     unsafe { (*arguments).value.value_int = (*arguments.add(1)).value.value_int };
     std::ptr::null_mut()

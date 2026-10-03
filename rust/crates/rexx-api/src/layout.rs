@@ -426,7 +426,7 @@ thread_local! {
     /// one call it records, on the thread making that call, so it holds no
     /// state beyond that call: a nested call saves the outer record and puts it
     /// back. Every place extension code runs reads the record and refuses
-    /// loudly on it: `invoke::run` for a method or routine, `invoke::hook` for
+    /// loudly on it: `invoke::call` for a method or routine, `invoke::hook` for
     /// a loader or unloader.
     static REFUSED: Cell<Option<&'static str>> = const { Cell::new(None) };
 }

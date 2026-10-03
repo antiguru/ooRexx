@@ -46,6 +46,10 @@ pub const MAX_NATIVE_ARGUMENTS: usize = 16;
 /// which is where `NativeActivation::checkConditions`
 /// (`interpreter/execution/NativeActivation.cpp:1787`) raises it.
 ///
+/// The halves are [`prepare`], [`call_method`] and [`finish`], with
+/// [`Host::between_halves`](crate::values::Host::between_halves) run between
+/// each.
+///
 /// # Errors
 /// Whatever converting an argument or the result refuses;
 /// [`Failure::Signature`] for a signature the descriptor array cannot hold,
@@ -67,10 +71,11 @@ pub fn method(
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let signature = signature(entry, context)?;
-    run(&signature, cx, arguments, |descriptors, result| {
-        entry.call(context, descriptors, result)
-    })
+    let native = prepare(&signature(entry, context)?, cx, arguments)?;
+    cx.conversion().host.between_halves();
+    let completion = call_method(native, entry, context);
+    cx.conversion().host.between_halves();
+    finish(cx, completion)
 }
 
 /// Run the native routine `entry` against `arguments`, as [`method`] runs a
@@ -90,13 +95,11 @@ pub fn routine(
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if entry.style == ROUTINE_CLASSIC_STYLE {
-        return Err(Failure::ClassicStyle);
-    }
-    let signature = bounded(|limit| entry.signature(context, limit))?;
-    run(&signature, cx, arguments, |descriptors, result| {
-        entry.call(context, descriptors, result)
-    })
+    let native = prepare(&routine_signature(entry, context)?, cx, arguments)?;
+    cx.conversion().host.between_halves();
+    let completion = call_routine(native, entry, context);
+    cx.conversion().host.between_halves();
+    finish(cx, completion)
 }
 
 /// Run `library`'s `hook`, where its package entry declares one, with the
@@ -160,17 +163,52 @@ pub fn command(
     Ok(cx.conversion().host.resolve(answered))
 }
 
-/// The half of the protocol both calls share once the signature is in hand:
-/// `processArguments`, then `call`, then `valueToObject`.
-fn run(
+/// A native call with its arguments converted: the declared result type and
+/// the descriptor array the stub is handed.
+///
+/// It holds raw words only, never an `ObjRef`, so that it is `Send`.
+pub struct NativeCall {
+    returns: u16,
+    descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+}
+
+/// What a native call left behind for [`finish`]: the declared result type,
+/// what the stub wrote into element zero, and the first interface member it
+/// reached that this phase has not written.
+///
+/// It holds raw words only, never an `ObjRef`, so that it is `Send`. A
+/// condition the stub raised is held by the call's [`Activation`].
+///
+/// ```compile_fail,E0277
+/// fn require_send<T: Send>() {}
+/// struct Widened(rexx_api::invoke::Completion, rexx_core::ObjRef);
+/// require_send::<Widened>();
+/// ```
+pub struct Completion {
+    returns: u16,
+    written: Option<Written>,
+    refused: Option<&'static str>,
+}
+
+const _: () = {
+    const fn require_send<T: Send>() {}
+    require_send::<NativeCall>();
+    require_send::<Completion>();
+};
+
+/// `processArguments`: `arguments` converted into the descriptors `signature`
+/// declares.
+///
+/// # Errors
+/// As [`method`], for everything refused before the stub is entered.
+///
+/// # Panics
+/// If the caller holds `cx`'s conversion state across this call.
+pub fn prepare(
     signature: &[u16],
     cx: &Activation<'_>,
     arguments: &[Option<ObjRef>],
-    call: impl FnOnce(
-        &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
-        Option<ResultRead>,
-    ) -> Option<Written>,
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<NativeCall, Failure> {
     let returns = signature.first().copied().unwrap_or(ARGUMENT_TERMINATOR);
 
     let mut descriptors: [ValueDescriptor; MAX_NATIVE_ARGUMENTS] = std::array::from_fn(|_| empty());
@@ -192,7 +230,7 @@ fn run(
             None
         };
         // **The conversion state is taken for one argument and given back**,
-        // never held across the call below: the context that call hands the
+        // never held across the call: the context the call hands the
         // extension reaches this same state.
         let converted = values::to_native(&mut cx.conversion(), declared, argument, input + 1)?;
         descriptors[output] = values::descriptor(declared, converted);
@@ -204,9 +242,70 @@ fn run(
     if input < arguments.len() && !takes_list {
         return Err(Failure::TooManyArguments { expected: input });
     }
+    Ok(NativeCall {
+        returns,
+        descriptors,
+    })
+}
 
-    let (written, refused) =
-        crate::layout::recording_refusals(|| call(&mut descriptors, values::result_read(returns)));
+/// `call` for the native method `entry`.
+pub fn call_method(
+    native: NativeCall,
+    entry: &NativeMethodEntry,
+    context: &MethodContext<'_>,
+) -> Completion {
+    call(native, |descriptors, result| {
+        entry.call(context, descriptors, result)
+    })
+}
+
+/// `call` for the native routine `entry`.
+pub fn call_routine(
+    native: NativeCall,
+    entry: &NativeRoutineEntry,
+    context: &CallContext<'_>,
+) -> Completion {
+    call(native, |descriptors, result| {
+        entry.call(context, descriptors, result)
+    })
+}
+
+/// Runs `stub` over `native`'s descriptors, recording the first unwritten
+/// member it reaches.
+fn call(
+    mut native: NativeCall,
+    stub: impl FnOnce(
+        &mut [ValueDescriptor; MAX_NATIVE_ARGUMENTS],
+        Option<ResultRead>,
+    ) -> Option<Written>,
+) -> Completion {
+    let returns = native.returns;
+    let (written, refused) = crate::layout::recording_refusals(|| {
+        stub(&mut native.descriptors, values::result_read(returns))
+    });
+    Completion {
+        returns,
+        written,
+        refused,
+    }
+}
+
+/// `valueToObject`: the object `completion`'s result describes, resolved in
+/// `cx`.
+///
+/// # Errors
+/// [`Failure::UnfilledSlot`] where the call reached an unwritten member, which
+/// also forgets any condition it raised; otherwise as [`method`] for the
+/// result.
+///
+/// # Panics
+/// If the caller holds `cx`'s conversion state across this call.
+pub fn finish(cx: &Activation<'_>, completion: Completion) -> Result<Option<ObjRef>, Failure> {
+    let Completion {
+        returns,
+        written,
+        refused,
+    } = completion;
     if let Some(entry) = refused {
         // Ahead of the result and of any condition the extension raised
         // during the call, before the refused member or after it.
@@ -237,6 +336,22 @@ pub fn signature(
     entry: &NativeMethodEntry,
     context: &MethodContext<'_>,
 ) -> Result<Vec<u16>, Failure> {
+    bounded(|limit| entry.signature(context, limit))
+}
+
+/// The types the routine `entry` declares, as [`signature`] answers a
+/// method's.
+///
+/// # Errors
+/// [`Failure::ClassicStyle`] for a `ROUTINE_CLASSIC_STYLE` row, whose stub
+/// is not entered; otherwise as [`signature`].
+pub fn routine_signature(
+    entry: &NativeRoutineEntry,
+    context: &CallContext<'_>,
+) -> Result<Vec<u16>, Failure> {
+    if entry.style == ROUTINE_CLASSIC_STYLE {
+        return Err(Failure::ClassicStyle);
+    }
     bounded(|limit| entry.signature(context, limit))
 }
 

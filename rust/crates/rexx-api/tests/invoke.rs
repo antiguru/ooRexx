@@ -24,7 +24,7 @@ use rexx_api::values::{
     Activation, CStringPool, Class, Constants, Conversion, Failure, Host, Numeric,
     OPTIONAL_ARGUMENT, Raised, code,
 };
-use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef};
+use rexx_core::{BehaviourHandle, Body, Bytes, Heap, ObjRef, RootSet};
 
 /// `Rexx_Error_Invalid_template` (`api/oorexxerrors.h:362`), which
 /// `RegExp_Init` raises for an expression it cannot parse
@@ -97,6 +97,10 @@ struct Interpreter {
     doubles: Vec<(f64, usize)>,
     /// The one empty string every call's `RexxNullString` names.
     null_string: ObjRef,
+    /// Whether `between_halves` collects, with the call's locals as the
+    /// only roots.
+    collecting: bool,
+    collections: usize,
 }
 
 impl Interpreter {
@@ -114,6 +118,8 @@ impl Interpreter {
             digits: 9,
             doubles: Vec::new(),
             null_string,
+            collecting: false,
+            collections: 0,
         }
     }
 
@@ -275,6 +281,19 @@ impl Host for Interpreter {
 
     fn locals(&mut self) -> &mut Table {
         &mut self.locals
+    }
+
+    fn between_halves(&mut self) {
+        if self.collecting {
+            let mut roots = RootSet::new();
+            roots.add_global("RexxNullString", self.null_string);
+            roots.activity_mut().push_frame();
+            for object in self.locals.roots() {
+                roots.activity_mut().push_temp(object);
+            }
+            self.heap.collect(&roots);
+            self.collections += 1;
+        }
     }
 }
 
@@ -655,4 +674,88 @@ fn the_array_is_as_long_as_the_oracles() {
         })
         .expect("MaxNativeArguments is declared in that header");
     assert_eq!(invoke::MAX_NATIVE_ARGUMENTS, declared);
+}
+
+// ------------------------------------------------------- the split halves
+
+/// **What a native call is handed and what it answers are rooted by its
+/// locals alone between the halves.** `RxCalcSqrt` builds its answer through
+/// `DoubleToObjectWithPrecision` during the call, so only the handle in the
+/// locals keeps it, and the host collects after `prepare` and again before
+/// `finish`.
+#[test]
+fn a_handle_built_during_the_call_resolves_after_collections_between_the_halves() {
+    let library = rxmath();
+    let sqrt = library.routine(b"RxCalcSqrt").expect("RxCalcSqrt");
+    let mut session = Session::new();
+    session.interpreter.collecting = true;
+    let sixteen = session.text(b"16");
+
+    let answered = session
+        .call_routine(sqrt, &[sixteen])
+        .expect("the routine answers")
+        .expect("the routine answers an object");
+    assert_eq!(session.interpreter.collections, 2);
+    assert_eq!(
+        session.interpreter.string_bytes(answered).as_deref(),
+        Some(&b"4"[..]),
+        "the object the call built was collected before `finish` resolved it"
+    );
+}
+
+/// **A condition raised during the call is still pending after `finish`**,
+/// with collections between the halves, and the result the stub wrote is
+/// still read: `RegExp_Init('[')` raises 38 and answers zero.
+#[test]
+fn a_native_call_that_raises_keeps_its_condition_across_the_halves() {
+    let library = rxregexp();
+    let init = library.method(b"RegExp_Init").expect("RegExp_Init");
+    let uninit = library.method(b"RegExp_Uninit").expect("RegExp_Uninit");
+    let mut session = Session::new();
+    session.interpreter.collecting = true;
+    let expression = session.text(b"[");
+
+    assert_eq!(session.call(init, &[expression]), returned(0));
+    assert_eq!(session.interpreter.collections, 2);
+    assert_eq!(
+        RAISED.with(|seen| seen.borrow().clone()),
+        vec![INVALID_TEMPLATE]
+    );
+    session.interpreter.collecting = false;
+    session.interpreter.cself = Some(allocated());
+    assert_eq!(session.call(uninit, &[]), returned(0));
+}
+
+/// The halves run one at a time, the `NativeCall` and the `Completion` each
+/// carried to another OS thread and back between them, answer what
+/// [`invoke::routine`] answers.
+#[test]
+fn the_records_between_the_halves_cross_threads() {
+    let library = rxmath();
+    let sqrt = library.routine(b"RxCalcSqrt").expect("RxCalcSqrt");
+    let mut session = Session::new();
+    let two = session.text(b"2");
+    let three = session.text(b"3");
+
+    let answered = {
+        let activation = Activation::new(Conversion {
+            host: &mut session.interpreter,
+            strings: &mut session.strings,
+        });
+        session.thread.enter(&activation, |contexts| {
+            let context = contexts.call();
+            let signature = invoke::routine_signature(sqrt, &context)?;
+            let native = invoke::prepare(&signature, &activation, &[two, three])?;
+            let native = std::thread::spawn(move || native)
+                .join()
+                .expect("the thread returns what it was given");
+            let completion = invoke::call_routine(native, sqrt, &context);
+            let completion = std::thread::spawn(move || completion)
+                .join()
+                .expect("the thread returns what it was given");
+            invoke::finish(&activation, completion)
+        })
+    };
+    assert!(matches!(answered, Ok(Some(_))), "{answered:?}");
+    assert_eq!(session.interpreter.doubles, vec![(2f64.sqrt(), 3)]);
 }
