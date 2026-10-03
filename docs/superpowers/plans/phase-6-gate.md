@@ -319,14 +319,15 @@ WITH ... OVER refusal in both modes (queued 2026-10-02-do-with-over-refusal).
 ### Criterion 1 rows after Task 13
 
 Measured by `the_s2_rows_of_the_derived_list_in_both_modes` (`REXX_CRITERION_ONE_TABLE`) at
-`7451743ce`, the rows whose cells Task 13 changed. The `c80ad0eab` allowance is gone.
+`7451743ce`, the rows whose cells Task 13 changed, with the P46 allowance applied. The `c80ad0eab`
+allowance is gone.
 
 | group | test | normal against the oracle | every against normal | owner |
 |---|---|---|---|---|
 | base/class/EventSemaphore.testGroup | TEST_WAIT_CONCURRENT | pass | same | - |
-| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | pass | did not finish | ruling pending (Task 13 report) |
+| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | pass | every mode forces the test's own race; the oracle hangs in the same interleaving (P46) | - |
 
 `MutexSemaphore` TEST_EXCLUSION under every opportunity: main runs between the worker's `step = 6`
 and its last `acquire`, takes the mutex with `acquire(1)` and, never ending, never releases it, so
 the worker waits for ever and the program's end waits for the worker. The oracle hangs the same
-way when the worker yields there (`call SysSleep 0.01` after `step = 6`: 3 of 3 killed, rc 137, under `timeout -k 5 20`; the probe is in the Task 13 report).
+way when the worker yields there (`call SysSleep 0.01` after `step = 6`: 3 of 3 killed, rc 137, under `timeout -k 5 20`; `docs/superpowers/records/2026-10-01-phase-6-s2-s5/exclusion-every-hang.rex`).

@@ -1725,6 +1725,15 @@ mod group_runs {
     const TRACE_INTERLEAVES: &[&str] =
         &["base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR"];
 
+    /// The row whose run under `EveryOpportunity` hangs at the test's own
+    /// race (ruling P46): main takes the mutex between the worker's
+    /// `step = 6` and its last `acquire` and never releases it. The oracle
+    /// hangs in the same interleaving, 3 of 3 at rc 137, on
+    /// `docs/superpowers/records/2026-10-01-phase-6-s2-s5/exclusion-every-hang.rex`.
+    /// Allowed only while the unswitched run passes at rc 0 and the switched
+    /// one ends at the deadline.
+    const EVERY_FORCES_THE_RACE: &str = "base/class/MutexSemaphore.testGroup TEST_EXCLUSION";
+
     /// `run`'s stdout without the lines `drop` selects.
     fn without(run: &Run, drop: impl Fn(&str) -> bool) -> String {
         String::from_utf8_lossy(&masked(&run.stdout))
@@ -1884,12 +1893,28 @@ mod group_runs {
                     let shipped = run_crate(&run, &args, SwitchMode::None);
                     fresh_copy(&run, dir);
                     let every = run_crate(&run, &args, SwitchMode::EveryOpportunity);
-                    for (name, ours) in [("normal", &shipped), ("every", &every)] {
-                        if inverted(ours) || ours.status.is_none() {
-                            stuck.push(format!("{file} {test}: {name}"));
+                    let row = format!("{file} {test}");
+                    let raced = row == EVERY_FORCES_THE_RACE
+                        && normal.0 == "pass"
+                        && shipped.status == Some(0)
+                        && !inverted(&shipped)
+                        && every.status.is_none()
+                        && !inverted(&every);
+                    if raced {
+                        modes = (
+                            "every mode forces the test's own race; the oracle hangs in the same \
+                             interleaving (P46)"
+                                .to_string(),
+                            true,
+                        );
+                    } else {
+                        for (name, ours) in [("normal", &shipped), ("every", &every)] {
+                            if inverted(ours) || ours.status.is_none() {
+                                stuck.push(format!("{file} {test}: {name}"));
+                            }
                         }
+                        modes = compare_modes(&row, &shipped, &every);
                     }
-                    modes = compare_modes(&format!("{file} {test}"), &shipped, &every);
                 }
                 if !modes.1 {
                     differing.push(format!("{file} {test}"));
