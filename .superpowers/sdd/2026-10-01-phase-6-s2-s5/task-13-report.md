@@ -230,3 +230,28 @@ o~test_exclusion
   call SysSleep 0.01
   say 'w8' sem~acquire
 ```
+
+## P46
+
+Ruling P46 applied at `b5e6e01d1`. `EVERY_FORCES_THE_RACE` in `tests/concurrency_tests.rs` names
+MutexSemaphore TEST_EXCLUSION alone. It applies only when the oracle cell is `pass`, the unswitched
+run exits 0 without the inverted-wait refusal, and the every run ends at the deadline (status None)
+without that refusal. Any other outcome on that row goes through the strict path: the stuck check
+and `compare_modes`. Any other row that hangs still fails.
+
+The reproduction is recorded at
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/exclusion-every-hang.rex`: probe x2, with a
+header comment. It is TEST_EXCLUSION reshaped outside ooTest, with `call SysSleep 0.01` after the
+worker's `step = 6`. On the oracle it hung 3 of 3 (rc 137 under `timeout -k 5 20`) both times it
+ran: as the scratchpad probe, and again from the recorded file after the comment was added.
+
+The gate record row reads "every mode forces the test's own race; the oracle hangs in the same
+interleaving (P46)".
+
+Gate rerun at `b5e6e01d1`: `REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=... memcap 16G cargo test
+--release -p rexx-exec --test concurrency_tests` exits 0, 30 passed, 0 failed. Against the
+`7451743ce` table, two rows differ:
+- the TEST_EXCLUSION row, now the P46 label;
+- REPLY TEST_REPLY_TWICE_REPLYASSERT. Its oracle cell reads `differ: rc 0, oracle 1 assertion,
+  ours 0`; at `7451743ce` it read `pass`. The oracle's own count varies between runs (P41 class),
+  and the test does not gate on that cell.

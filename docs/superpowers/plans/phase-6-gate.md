@@ -319,7 +319,7 @@ WITH ... OVER refusal in both modes (queued 2026-10-02-do-with-over-refusal).
 ### Criterion 1 rows after Task 13
 
 Measured by `the_s2_rows_of_the_derived_list_in_both_modes` (`REXX_CRITERION_ONE_TABLE`) at
-`7451743ce`, the rows whose cells Task 13 changed, with the P46 allowance applied. The `c80ad0eab`
+`b5e6e01d1`, the rows whose cells Task 13 changed, with the P46 allowance applied. The `c80ad0eab`
 allowance is gone.
 
 | group | test | normal against the oracle | every against normal | owner |
