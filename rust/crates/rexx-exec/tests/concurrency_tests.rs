@@ -1722,6 +1722,15 @@ mod group_runs {
     const TRACE_INTERLEAVES: &[&str] =
         &["base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR"];
 
+    /// The rows refused in both modes where the schedule decides which of
+    /// two refusals comes first, with the refusal both must name: the
+    /// started worker's `sem~wait` and main's `sem~post` race once the
+    /// worker's store wakes main's `GUARD OFF WHEN`. Task 13 builds both.
+    const REFUSAL_FOLLOWS_THE_SCHEDULE: &[(&str, &str)] = &[(
+        "base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT",
+        "of class \"EventSemaphore\" is not implemented",
+    )];
+
     /// `run`'s stdout without the lines `drop` selects.
     fn without(run: &Run, drop: impl Fn(&str) -> bool) -> String {
         String::from_utf8_lossy(&masked(&run.stdout))
@@ -1786,6 +1795,15 @@ mod group_runs {
             && TRACE_INTERLEAVES.contains(&row)
         {
             return ("trace lines on stderr differ".to_string(), true);
+        }
+        if let (Some(first), Some(second)) = (refusal(normal), refusal(every))
+            && normal.status == every.status
+            && masked(&normal.stdout) == masked(&every.stdout)
+            && REFUSAL_FOLLOWS_THE_SCHEDULE.iter().any(|(listed, named)| {
+                *listed == row && first.contains(named) && second.contains(named)
+            })
+        {
+            return (format!("refused: {first} then {second}"), true);
         }
         (
             format!(
