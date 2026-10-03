@@ -328,7 +328,7 @@ pub fn call_routine(
 /// `call` for a held method row. It reads and writes `native`, the stub's
 /// own context and nothing of the interpreter's, so it may run with the
 /// baton released; a callback the stub makes takes the baton through a
-/// [`GuardedHost`](crate::values::GuardedHost).
+/// [guarded](crate::values::HostRef::guarded) host.
 #[inline(always)]
 pub fn call_held_method(
     native: &mut NativeCall,
@@ -427,6 +427,7 @@ pub fn signature(
 ///
 /// # Errors
 /// As [`signature`].
+#[inline(always)]
 pub fn held_signature(held: &HeldMethod, context: &MethodContext<'_>) -> Result<Vec<u16>, Failure> {
     bounded(|limit| held.signature(context, limit))
 }
@@ -448,6 +449,7 @@ pub fn routine_signature(
 ///
 /// # Errors
 /// As [`routine_signature`].
+#[inline(always)]
 pub fn held_routine_signature(
     held: &HeldRoutine,
     context: &CallContext<'_>,

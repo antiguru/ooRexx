@@ -731,49 +731,7 @@ pub trait Baton {
     fn held_here(&self) -> bool;
 }
 
-/// How a native call's conversions reach the host: lent for a call that
-/// holds the baton throughout, or through [`GuardedHost`] for one that runs
-/// with the baton released (spec 2026-09-29 2.4).
-pub enum HostRef<'a> {
-    Lent(&'a mut (dyn Host + 'a)),
-    Guarded(GuardedHost<'a>),
-}
-
-impl<'a, H: Host + 'a> From<&'a mut H> for HostRef<'a> {
-    fn from(host: &'a mut H) -> HostRef<'a> {
-        HostRef::Lent(host)
-    }
-}
-
-impl<'a> From<&'a mut (dyn Host + 'a)> for HostRef<'a> {
-    fn from(host: &'a mut (dyn Host + 'a)) -> HostRef<'a> {
-        HostRef::Lent(host)
-    }
-}
-
-impl<'a> std::ops::Deref for HostRef<'a> {
-    type Target = dyn Host + 'a;
-
-    #[inline(always)]
-    fn deref(&self) -> &(dyn Host + 'a) {
-        match self {
-            HostRef::Lent(host) => &**host,
-            HostRef::Guarded(guarded) => guarded.get(),
-        }
-    }
-}
-
-impl<'a> std::ops::DerefMut for HostRef<'a> {
-    #[inline(always)]
-    fn deref_mut(&mut self) -> &mut (dyn Host + 'a) {
-        match self {
-            HostRef::Lent(host) => &mut **host,
-            HostRef::Guarded(guarded) => guarded.get_mut(),
-        }
-    }
-}
-
-pub use crate::ffi::GuardedHost;
+pub use crate::ffi::HostRef;
 
 /// What one native call's conversions read and write.
 pub struct Conversion<'a> {
@@ -891,9 +849,9 @@ impl<'a> Activation<'a> {
     #[inline(always)]
     pub fn conversion(&self) -> Converting<'_, 'a> {
         let conversion = self.conversion.borrow_mut();
-        let taken = match &conversion.host {
-            HostRef::Lent(_) => None,
-            HostRef::Guarded(guarded) => guarded.take_baton().then(|| Taken(guarded.baton())),
+        let taken = match conversion.host.baton() {
+            Some(baton) if baton.take_unless_held() => Some(Taken(baton)),
+            _ => None,
         };
         Converting {
             conversion,

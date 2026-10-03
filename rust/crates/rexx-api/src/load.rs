@@ -455,6 +455,7 @@ impl HeldMethod {
     ///
     /// At most `limit - 1` words are answered, which is what bounds the
     /// descriptor array the caller fills from them.
+    #[inline(always)]
     pub(crate) fn signature(&self, context: &MethodContext<'_>, limit: usize) -> Option<Vec<u16>> {
         let stub = self.held.stub?;
         // SAFETY: `stub` is the address the extension's own method table gave
@@ -495,6 +496,7 @@ impl HeldRoutine {
     /// [`HeldMethod::signature`] for a routine's stub. A row of any style but
     /// [`ROUTINE_TYPED_STYLE`] publishes none, since its address is a
     /// function of another signature.
+    #[inline(always)]
     pub(crate) fn signature(&self, context: &CallContext<'_>, limit: usize) -> Option<Vec<u16>> {
         let stub = self.held.stub?;
         // SAFETY: as `HeldMethod::signature`; `stub` answers only for a typed

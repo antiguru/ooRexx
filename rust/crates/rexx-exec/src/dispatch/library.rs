@@ -25,8 +25,8 @@ use rexx_api::layout::POINTER;
 use rexx_api::load::{CommandHandler, HeldMethod, HeldRoutine, Hook, Library};
 use rexx_api::redirect::Redirector;
 use rexx_api::values::{
-    Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, GuardedHost, Host,
-    HostRef, Numeric, Raised as Condition,
+    Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, HostRef,
+    Numeric, Raised as Condition,
 };
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
@@ -108,6 +108,7 @@ impl Interp {
     /// with the call's frame still pushed and pinned: its frame popped, its
     /// guard lock released where the frame still held it, and then its
     /// condition or its value.
+    #[inline(always)]
     fn end_library_method(
         &mut self,
         answered: Result<Option<ObjRef>, Refused>,
@@ -197,6 +198,7 @@ impl Interp {
     /// What a library routine answers once its stub has returned `answered`,
     /// as [`Interp::end_library_method`] does for a method, with the routine
     /// blamed for a failure.
+    #[inline(always)]
     fn end_library_routine(
         &mut self,
         answered: Result<Option<ObjRef>, Refused>,
@@ -229,6 +231,7 @@ impl Interp {
     /// or, where it `exits`, `None` with the call prepared on the activity's
     /// record and the activity parked, its continuation `resume` on
     /// `receiver`, and the frame unpinned.
+    #[inline(always)]
     fn native_call(
         &mut self,
         held: HeldCall,
@@ -974,7 +977,7 @@ fn resume_library_routine(
 
 impl OffBaton {
     /// Runs the call with `baton` released, `host` reached only through a
-    /// [`GuardedHost`] for its length, as the native frame `frame` holding
+    /// [`HostRef::guarded`] for its length, as the native frame `frame` holding
     /// the condition `pending`, and hands its completion to `post` before
     /// taking the baton back; answers the condition then held.
     pub(crate) fn run(
@@ -992,7 +995,7 @@ impl OffBaton {
             strings,
         } = self;
         let activation = Activation::new(Conversion {
-            host: HostRef::Guarded(GuardedHost::new(host, baton)),
+            host: HostRef::guarded(host, baton),
             strings,
         });
         activation.set_frame(frame);

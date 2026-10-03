@@ -111,61 +111,84 @@ unsafe impl Send for ValueDescriptor {}
 // SAFETY: as for `ValueDescriptor`: a `Value` is one member of that word.
 unsafe impl Send for Value {}
 
-/// The host a native call that runs with the baton released reaches it
-/// through (spec 2026-09-29 2.4, ruling P50): its address, from which each
-/// access derives a fresh `&mut` on a thread holding `baton`.
-pub struct GuardedHost<'a> {
+/// How a native call's conversions reach the host: its address, from which
+/// each access derives a fresh `&mut`, and for a call that runs with the
+/// baton released (spec 2026-09-29 2.4, ruling P50) the baton, which a
+/// thread holds while it reaches the host.
+pub struct HostRef<'a> {
     host: NonNull<dyn Host + 'a>,
-    baton: &'a dyn Baton,
+    baton: Option<&'a dyn Baton>,
     /// The borrow `host` was taken from, held for `'a`.
     lent: PhantomData<&'a mut (dyn Host + 'a)>,
 }
 
-impl<'a> GuardedHost<'a> {
-    pub fn new(host: &'a mut (dyn Host + 'a), baton: &'a dyn Baton) -> GuardedHost<'a> {
-        GuardedHost {
+impl<'a> HostRef<'a> {
+    /// The host, for a call that holds the baton throughout.
+    pub fn lent(host: &'a mut (dyn Host + 'a)) -> HostRef<'a> {
+        HostRef {
             host: NonNull::from(host),
-            baton,
+            baton: None,
             lent: PhantomData,
         }
     }
 
-    pub fn baton(&self) -> &'a dyn Baton {
+    /// The host, for a call that runs with `baton` released.
+    pub fn guarded(host: &'a mut (dyn Host + 'a), baton: &'a dyn Baton) -> HostRef<'a> {
+        HostRef {
+            host: NonNull::from(host),
+            baton: Some(baton),
+            lent: PhantomData,
+        }
+    }
+
+    /// The baton a guarded host is reached under.
+    #[inline(always)]
+    pub fn baton(&self) -> Option<&'a dyn Baton> {
         self.baton
     }
+}
 
-    /// Takes the baton unless this thread holds it, answering whether it
-    /// took it.
-    pub fn take_baton(&self) -> bool {
-        self.baton.take_unless_held()
+impl<'a, H: Host + 'a> From<&'a mut H> for HostRef<'a> {
+    fn from(host: &'a mut H) -> HostRef<'a> {
+        HostRef::lent(host)
     }
+}
 
-    /// The host.
-    ///
+impl<'a> From<&'a mut (dyn Host + 'a)> for HostRef<'a> {
+    fn from(host: &'a mut (dyn Host + 'a)) -> HostRef<'a> {
+        HostRef::lent(host)
+    }
+}
+
+impl<'a> std::ops::Deref for HostRef<'a> {
+    type Target = dyn Host + 'a;
+
     /// # Panics
-    /// In a debug build, where this thread does not hold the baton.
-    pub fn get(&self) -> &(dyn Host + 'a) {
+    /// In a debug build, for a guarded host on a thread not holding its baton.
+    #[inline(always)]
+    fn deref(&self) -> &(dyn Host + 'a) {
         debug_assert!(
-            self.baton.held_here(),
+            self.baton.is_none_or(|baton| baton.held_here()),
             "a callback reached the host without the baton"
         );
         // SAFETY: `host` came from a `&'a mut` this value keeps borrowed for
         // `'a`, so nothing else reaches the host meanwhile, and the answer
-        // borrows `self`, so no `&mut` from `get_mut` is live beside it.
+        // borrows `self`, so no `&mut` from `deref_mut` is live beside it.
         unsafe { self.host.as_ref() }
     }
+}
 
-    /// The host, for writing.
-    ///
+impl<'a> std::ops::DerefMut for HostRef<'a> {
     /// # Panics
-    /// As [`GuardedHost::get`].
-    pub fn get_mut(&mut self) -> &mut (dyn Host + 'a) {
+    /// As [`HostRef::deref`].
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut (dyn Host + 'a) {
         debug_assert!(
-            self.baton.held_here(),
+            self.baton.is_none_or(|baton| baton.held_here()),
             "a callback reached the host without the baton"
         );
-        // SAFETY: as `get`, and the answer borrows `self` uniquely, so no two
-        // derived borrows are live at once.
+        // SAFETY: as `deref`, and the answer borrows `self` uniquely, so no
+        // two derived borrows are live at once.
         unsafe { self.host.as_mut() }
     }
 }
@@ -5985,7 +6008,7 @@ mod tests {
         let baton = CountedBaton::default();
         let mut strings = CStringPool::new();
         let activation = values::Activation::new(Conversion {
-            host: values::HostRef::Guarded(super::GuardedHost::new(&mut host, &baton)),
+            host: values::HostRef::guarded(&mut host, &baton),
             strings: &mut strings,
         });
         let handle = activation.whole_number(5);
@@ -6006,7 +6029,7 @@ mod tests {
     fn a_guarded_host_reached_without_the_baton_fails() {
         let mut host = FakeHost::new();
         let baton = CountedBaton::default();
-        let mut guarded = super::GuardedHost::new(&mut host, &baton);
-        let _ = guarded.get_mut().numeric();
+        let guarded = values::HostRef::guarded(&mut host, &baton);
+        let _ = guarded.numeric();
     }
 }

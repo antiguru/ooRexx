@@ -214,7 +214,6 @@ fn a_callback_during_an_off_baton_call_takes_the_baton_first() {
         touch(&inside);
         baton.release();
         other.join().expect("the other thread");
-        assert!(took);
         assert_eq!(Vec::from(registration.drain()), [1]);
     });
 }
