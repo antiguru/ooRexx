@@ -118,6 +118,7 @@ impl<T> Inbox<T> {
         lock(&self.queue).woken = false;
     }
 
+    /// Called with the registry locked: never take the registry under `queue`.
     fn wake(&self) {
         lock(&self.queue).woken = true;
         self.arrived.notify_one();
@@ -149,10 +150,10 @@ struct State {
     next_id: u64,
     live: Vec<Live>,
     timer_running: bool,
-    /// The timer thread, for a model to join: a `loom` model ends only once
-    /// every thread has, and the shipped timer thread is detached.
+    /// Every timer thread started, for a model to join: a `loom` model ends
+    /// only once every thread has, and the shipped timer thread is detached.
     #[cfg(all(loom, test))]
-    timer: Option<thread::JoinHandle<()>>,
+    timers: Vec<thread::JoinHandle<()>>,
 }
 
 impl State {
@@ -165,15 +166,13 @@ impl State {
         if self.timer_running {
             return;
         }
-        self.timer_running = true;
         let timer = thread::Builder::new()
             .name("rexx-timer".to_string())
             .spawn(run_timer)
             .expect("spawning the timer thread");
+        self.timer_running = true;
         #[cfg(all(loom, test))]
-        {
-            self.timer = Some(timer);
-        }
+        self.timers.push(timer);
         #[cfg(not(all(loom, test)))]
         drop(timer);
     }
@@ -220,7 +219,7 @@ impl Registry {
                 live: Vec::new(),
                 timer_running: false,
                 #[cfg(all(loom, test))]
-                timer: None,
+                timers: Vec::new(),
             }),
             changed: Condvar::new(),
         }
@@ -328,11 +327,11 @@ impl Registration {
     }
 }
 
-/// Waits for the timer thread started last to end.
+/// Waits for every timer thread started to end.
 #[cfg(all(loom, test))]
 pub(crate) fn join_timer() {
-    let timer = live().timer.take();
-    if let Some(timer) = timer {
+    let timers = std::mem::take(&mut live().timers);
+    for timer in timers {
         timer.join().expect("the timer thread");
     }
 }

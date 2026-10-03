@@ -154,3 +154,20 @@ fn an_idle_deadline_is_never_lost() {
         timer::join_timer();
     });
 }
+
+/// One interpreter's registration leaves, so the timer thread may decide to
+/// end, while another registers and idles: the idle still ends.
+#[test]
+fn a_sleeper_registers_as_the_timer_exits() {
+    loom::model(|| {
+        let first = Registration::new();
+        assert!(first.idle_until(sync::now()).is_empty());
+        let other = thread::spawn(|| {
+            let second = Registration::new();
+            assert!(second.idle_until(sync::now()).is_empty());
+        });
+        drop(first);
+        other.join().expect("the other interpreter");
+        timer::join_timer();
+    });
+}

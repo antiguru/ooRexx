@@ -11,9 +11,9 @@
 
 //! The synchronisation the baton, the inbox and the timer use across threads:
 //! `std`'s, or `loom`'s where `tests/loom.rs` compiles these same sources
-//! under `--cfg loom` (spec 2026-09-29 R4). `loom` stays a dev-dependency,
-//! so only a test build ever selects it, and the clock is a model clock
-//! there.
+//! under `--cfg loom` (spec 2026-09-29 R4), with a model clock. Under
+//! `--cfg loom` the library's own unit tests compile to nothing (`lib.rs`),
+//! so only `tests/loom.rs` selects `loom`.
 
 #[cfg(all(loom, test))]
 pub(crate) use loom::sync::atomic::{AtomicU32, Ordering};

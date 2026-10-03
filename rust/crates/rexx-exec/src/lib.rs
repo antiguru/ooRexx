@@ -11,6 +11,10 @@
 
 //! The executor.
 
+// Under `--cfg loom` only `tests/loom.rs` runs: the unit tests would meet
+// `loom`'s primitives outside a model (`sync.rs`).
+#![cfg(not(all(loom, test)))]
+
 use rexx_classes::MethodId;
 use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotRef};
 use rexx_num::Settings;
