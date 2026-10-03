@@ -51,10 +51,10 @@ fn answers(source: &str, expected: &str) {
     }
 }
 
-/// A release hands the lock to the activities waiting for it in the order
+/// Each release readies the next activity waiting for the lock, in the order
 /// they parked.
 #[test]
-fn a_release_hands_the_mutex_to_its_waiters_in_park_order() {
+fn a_release_readies_the_mutex_waiters_in_park_order() {
     answers(
         "m = .MutexSemaphore~new\nsay m~acquire\n\
          a = .w~new~start('take', m, 'a')\nb = .w~new~start('take', m, 'b')\n\
@@ -109,5 +109,33 @@ fn a_held_mutex_is_not_collected() {
          ::class mm subclass MutexSemaphore\n::method uninit\n  say 'uninit'\n  \
          forward class (super)\n",
         "main done\nuninit\n",
+    );
+}
+
+/// A release readies the waiter without giving it the lock, so the
+/// releaser's acquire in the same clause takes it again: the oracle's answer
+/// in 18 of 30 runs of this program and 28 of 30 of the two-clause form
+/// (ruling P47).
+#[test]
+fn a_releaser_takes_the_mutex_again_before_its_waiter() {
+    answers(
+        "m = .MutexSemaphore~new\nsay m~acquire\nmsg = .t~new~start('w', m)\n\
+         call SysSleep 0.1\nsay 'main' m~release m~acquire(0)\ncall SysSleep 0.05\n\
+         say 'main rel2' m~release\nsay 'w' msg~result\n\
+         ::class t\n::method w\n  use arg m\n  r = m~acquire\n  return r m~release\n",
+        "1\nmain 1 1\nmain rel2 1\nw 1 1\n",
+    );
+}
+
+/// A name `sem_open` rejects without creating anything answers the empty
+/// string: glibc's `EINVAL` for nothing left once the leading slashes go, or
+/// a slash after them.
+#[test]
+fn a_name_sem_open_rejects_creates_nothing() {
+    answers(
+        "say '<'SysCreateEventSem('')'>'\nsay '<'SysCreateEventSem('///')'>'\n\
+         say '<'SysCreateEventSem('a/b', 1)'>'\nsay '<'SysCreateMutexSem('/')'>'\n\
+         say '<'SysCreateMutexSem('/a/b')'>'\n",
+        "<>\n<>\n<>\n<>\n<>\n",
     );
 }

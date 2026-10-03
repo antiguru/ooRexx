@@ -11,9 +11,10 @@
 
 //! The state of `MutexSemaphore` and `EventSemaphore` instances and of the
 //! unnamed RexxUtil semaphores, and the activities waiting on each. A post or
-//! release hands the semaphore to a waiter directly.
+//! release readies waiters, and each re-tests its condition when it resumes,
+//! as the oracle's wait loops do.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use rexx_core::ObjRef;
 use rustc_hash::FxHashMap;
@@ -30,14 +31,34 @@ pub(crate) enum SemaphoreKey {
     Handle(u64),
 }
 
+/// How a semaphore wait re-tests its condition when it resumes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WaitKind {
+    /// `EventSemaphore~wait`: a timed one re-tests the post, as
+    /// `SysSemaphore::wait(t)` loops (`common/platform/unix/SysSemaphore.cpp:298`);
+    /// an untimed one does not (`:250`).
+    Event,
+    /// `MutexSemaphore~acquire`: takes the lock where it is free.
+    Mutex,
+    /// An untimed `Sys*Sem` wait (`sem_wait`): takes a unit where there is one.
+    Counting,
+    /// A timed `Sys*Sem` wait, with this many polls left: it tries the
+    /// semaphore at each poll and a post never wakes it.
+    Poll(u32),
+}
+
 /// A semaphore wait about to park.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SemaphoreWait {
     pub(crate) key: SemaphoreKey,
-    /// A timed wait's end, and the last instant a post or release still ends
-    /// it early.
-    pub(crate) timed: Option<(Instant, Instant)>,
+    pub(crate) kind: WaitKind,
+    /// When a timed wait ends, or a polling one next polls.
+    pub(crate) deadline: Option<Instant>,
 }
+
+/// How often a timed `Sys*Sem` wait tries its semaphore
+/// (`SEM_WAIT_PERIOD`, `platform/unix/SysRexxUtil.cpp:800`).
+pub(crate) const SEM_POLL: Duration = Duration::from_millis(100);
 
 /// One semaphore's state: an event's post, a counting semaphore's value, or a
 /// mutex's lock (`classes/MutexSemaphore.cpp`).
@@ -61,14 +82,21 @@ struct Semaphore {
 #[derive(Clone, Copy)]
 pub(crate) struct Waiter {
     pub(crate) activity: ActivityId,
-    /// A timed wait's sleeper order and the last instant a post ends it.
-    pub(crate) timed: Option<(u64, Instant)>,
+    /// A timed wait's sleeper order.
+    pub(crate) order: Option<u64>,
 }
 
 /// Every semaphore with state, per interpreter.
 #[derive(Default)]
 pub(crate) struct Semaphores {
     table: FxHashMap<SemaphoreKey, Semaphore>,
+    /// The queue each parked waiter is on.
+    parked: FxHashMap<ActivityId, SemaphoreKey>,
+    /// The mutexes each activity holds.
+    held: FxHashMap<ActivityId, Vec<SemaphoreKey>>,
+    /// The answer each re-test that ended a wait gave, until its resume reads
+    /// it.
+    answers: FxHashMap<ActivityId, bool>,
     handles: u64,
 }
 
@@ -78,14 +106,26 @@ pub(crate) struct Semaphores {
 const FIRST_HANDLE: u64 = 1 << 40;
 
 impl Semaphores {
-    /// Files `waiter` on `key`'s queue.
+    /// Files `waiter` on `key`'s queue; a closed handle has none.
     pub(crate) fn enqueue(&mut self, key: SemaphoreKey, waiter: Waiter) {
-        self.table.entry(key).or_default().waiters.push(waiter);
+        let semaphore = match key {
+            SemaphoreKey::Object(_) => self.table.entry(key).or_default(),
+            SemaphoreKey::Handle(_) => match self.table.get_mut(&key) {
+                Some(semaphore) => semaphore,
+                None => return,
+            },
+        };
+        semaphore.waiters.push(waiter);
+        self.parked.insert(waiter.activity, key);
     }
 
-    /// Withdraws `activity` from every queue.
+    /// Withdraws `activity` from the queue it is on, and drops an answer no
+    /// resume read.
     pub(crate) fn withdraw(&mut self, activity: ActivityId) {
-        for semaphore in self.table.values_mut() {
+        self.answers.remove(&activity);
+        if let Some(key) = self.parked.remove(&activity)
+            && let Some(semaphore) = self.table.get_mut(&key)
+        {
             semaphore
                 .waiters
                 .retain(|waiter| waiter.activity != activity);
@@ -95,10 +135,25 @@ impl Semaphores {
     /// Appends each mutex semaphore an activity holds, as the oracle's
     /// `heldMutexes` marks it.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
-        out.extend(self.table.iter().filter_map(|(key, semaphore)| match key {
-            SemaphoreKey::Object(object) if semaphore.owner.is_some() => Some(*object),
-            _ => None,
+        out.extend(self.held.values().flatten().filter_map(|key| match key {
+            SemaphoreKey::Object(object) => Some(*object),
+            SemaphoreKey::Handle(_) => None,
         }));
+    }
+
+    /// Records that `owner` now holds the mutex `key`.
+    fn hold(&mut self, key: SemaphoreKey, owner: ActivityId) {
+        self.held.entry(owner).or_default().push(key);
+    }
+
+    /// Records that `owner` no longer holds the mutex `key`.
+    fn unhold(&mut self, key: SemaphoreKey, owner: ActivityId) {
+        if let Some(keys) = self.held.get_mut(&owner) {
+            keys.retain(|held| *held != key);
+            if keys.is_empty() {
+                self.held.remove(&owner);
+            }
+        }
     }
 
     /// Drops the state of every instance `live` says the collector freed.
@@ -122,17 +177,6 @@ impl Semaphores {
             semaphore.waiters = waiters;
         }
     }
-
-    /// Whether the running activity's wait on `key` was ended by a post or
-    /// release rather than its deadline; it leaves the queue either way.
-    fn end_wait(&mut self, key: SemaphoreKey, me: ActivityId) -> bool {
-        let Some(semaphore) = self.table.get_mut(&key) else {
-            return false;
-        };
-        let before = semaphore.waiters.len();
-        semaphore.waiters.retain(|waiter| waiter.activity != me);
-        semaphore.waiters.len() == before
-    }
 }
 
 /// What a request for a mutex semaphore's lock answers before any wait.
@@ -143,15 +187,79 @@ pub(crate) enum Request {
 }
 
 impl Interp {
-    /// Wakes the first waiter on `key` a post can still end, answering it.
-    fn hand_off(&mut self, key: SemaphoreKey) -> Option<ActivityId> {
+    /// Readies the waiters on `key` still parked, every one where `all`,
+    /// else the first.
+    fn wake_waiters(&mut self, key: SemaphoreKey, all: bool) {
         let mut waiters = self.activities.semaphores.take_waiters(key);
-        let taker = waiters
-            .iter()
-            .position(|waiter| self.wake_semaphore_waiter(*waiter))
-            .map(|index| waiters.remove(index).activity);
+        let mut woken = false;
+        waiters.retain(|waiter| {
+            if woken && !all || !self.wake_semaphore_waiter(*waiter) {
+                return true;
+            }
+            self.activities.semaphores.parked.remove(&waiter.activity);
+            woken = true;
+            false
+        });
         self.activities.semaphores.put_waiters(key, waiters);
-        taker
+    }
+
+    /// The re-test a woken wait makes when it resumes: `Some` wait to park
+    /// again, else `None` with the wait's answer kept for its resume.
+    pub(crate) fn retest_semaphore(&mut self, wait: SemaphoreWait) -> Option<SemaphoreWait> {
+        let me = self.running_activity();
+        self.activities.semaphores.withdraw(me);
+        let expired = wait
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline);
+        let answer = match (wait.kind, wait.key) {
+            (WaitKind::Event, SemaphoreKey::Object(object)) => {
+                if wait.deadline.is_none() || self.event_posted(object) {
+                    true
+                } else if expired {
+                    false
+                } else {
+                    return Some(wait);
+                }
+            }
+            (WaitKind::Mutex, SemaphoreKey::Object(object)) => {
+                match self.request_mutex(object, false) {
+                    Request::Acquired => true,
+                    Request::Refused => false,
+                    Request::Wait if expired => false,
+                    Request::Wait => return Some(wait),
+                }
+            }
+            (WaitKind::Counting, SemaphoreKey::Handle(handle)) => {
+                if self.take_counting(handle) != Some(true) {
+                    return Some(wait);
+                }
+                true
+            }
+            (WaitKind::Poll(0), _) => false,
+            (WaitKind::Poll(left), SemaphoreKey::Handle(handle)) => {
+                if self.take_counting(handle) != Some(true) {
+                    return Some(SemaphoreWait {
+                        kind: WaitKind::Poll(left - 1),
+                        deadline: wait.deadline.map(|deadline| deadline + SEM_POLL),
+                        ..wait
+                    });
+                }
+                true
+            }
+            _ => unreachable!("a wait's kind and key are made together"),
+        };
+        self.activities.semaphores.answers.insert(me, answer);
+        None
+    }
+
+    /// The answer the running activity's last re-test ended its wait with.
+    pub(crate) fn take_semaphore_answer(&mut self) -> bool {
+        let me = self.running_activity();
+        self.activities
+            .semaphores
+            .answers
+            .remove(&me)
+            .unwrap_or(false)
     }
 
     /// Whether the event semaphore `object` is posted.
@@ -164,8 +272,8 @@ impl Interp {
             .is_some_and(|semaphore| semaphore.posted)
     }
 
-    /// Posts the event semaphore `object` and wakes every waiter a post can
-    /// still end (`SysSemaphore::post`, a broadcast).
+    /// Posts the event semaphore `object` and readies every waiter
+    /// (`SysSemaphore::post`, a broadcast).
     pub(crate) fn post_event(&mut self, object: ObjRef) {
         let key = SemaphoreKey::Object(object);
         self.activities
@@ -174,9 +282,7 @@ impl Interp {
             .entry(key)
             .or_default()
             .posted = true;
-        let mut waiters = self.activities.semaphores.take_waiters(key);
-        waiters.retain(|waiter| !self.wake_semaphore_waiter(*waiter));
-        self.activities.semaphores.put_waiters(key, waiters);
+        self.wake_waiters(key, true);
     }
 
     /// Clears the event semaphore `object`'s post.
@@ -189,13 +295,6 @@ impl Interp {
         {
             semaphore.posted = false;
         }
-    }
-
-    /// Ends the running activity's wait on `key`: whether a post or release
-    /// ended it.
-    pub(crate) fn end_semaphore_wait(&mut self, key: SemaphoreKey) -> bool {
-        let me = self.running_activity();
-        self.activities.semaphores.end_wait(key, me)
     }
 
     /// `MutexSemaphoreClass::request` before any wait: the running activity
@@ -213,9 +312,15 @@ impl Interp {
             return Request::Refused;
         }
         if semaphore.owner == Some(me) || semaphore.depth == 0 {
+            let taken = semaphore.depth == 0;
             semaphore.owner = Some(me);
             semaphore.depth += 1;
             semaphore.nest += 1;
+            if taken {
+                self.activities
+                    .semaphores
+                    .hold(SemaphoreKey::Object(object), me);
+            }
             return Request::Acquired;
         }
         if immediate {
@@ -223,19 +328,6 @@ impl Interp {
         } else {
             Request::Wait
         }
-    }
-
-    /// Ends the running activity's wait for `object`'s lock: whether a
-    /// release handed it over.
-    pub(crate) fn end_mutex_wait(&mut self, object: ObjRef) -> bool {
-        let me = self.running_activity();
-        let key = SemaphoreKey::Object(object);
-        self.activities.semaphores.end_wait(key, me);
-        self.activities
-            .semaphores
-            .table
-            .get(&key)
-            .is_some_and(|semaphore| semaphore.owner == Some(me))
     }
 
     /// `MutexSemaphoreClass::release`: `false` where the lock is not held at
@@ -253,22 +345,10 @@ impl Interp {
         semaphore.depth -= 1;
         if semaphore.depth == 0 {
             semaphore.owner = None;
-            self.pass_mutex(key);
+            self.activities.semaphores.unhold(key, me);
+            self.wake_waiters(key, false);
         }
         true
-    }
-
-    /// Gives the free lock of `key` to its first waiter a release can still
-    /// end.
-    fn pass_mutex(&mut self, key: SemaphoreKey) {
-        let Some(taker) = self.hand_off(key) else {
-            return;
-        };
-        if let Some(semaphore) = self.activities.semaphores.table.get_mut(&key) {
-            semaphore.owner = Some(taker);
-            semaphore.depth = 1;
-            semaphore.nest += 1;
-        }
     }
 
     /// `MutexSemaphoreClass::close`: the nesting goes and only a trylock can
@@ -289,19 +369,20 @@ impl Interp {
     pub(crate) fn release_ended_mutexes(&mut self) {
         let me = self.running_activity();
         let mut freed = Vec::new();
-        for (key, semaphore) in &mut self.activities.semaphores.table {
-            if semaphore.owner != Some(me) {
+        let held = self.activities.semaphores.held.remove(&me);
+        for key in held.into_iter().flatten() {
+            let Some(semaphore) = self.activities.semaphores.table.get_mut(&key) else {
                 continue;
-            }
+            };
             semaphore.depth -= semaphore.nest.min(semaphore.depth);
             semaphore.nest = 0;
             semaphore.owner = None;
             if semaphore.depth == 0 {
-                freed.push(*key);
+                freed.push(key);
             }
         }
         for key in freed {
-            self.pass_mutex(key);
+            self.wake_waiters(key, false);
         }
     }
 
@@ -331,18 +412,15 @@ impl Interp {
             .map(|semaphore| semaphore.count)
     }
 
-    /// `sem_post` on `handle`: its first waiter a post can still end takes
-    /// the unit, else the value grows. `false` for an unknown handle.
+    /// `sem_post` on `handle`: the value grows and the first untimed waiter
+    /// is readied. `false` for an unknown handle.
     pub(crate) fn post_counting(&mut self, handle: u64) -> bool {
         let key = SemaphoreKey::Handle(handle);
-        if self.counting_value(handle).is_none() {
+        let Some(semaphore) = self.activities.semaphores.table.get_mut(&key) else {
             return false;
-        }
-        if self.hand_off(key).is_none()
-            && let Some(semaphore) = self.activities.semaphores.table.get_mut(&key)
-        {
-            semaphore.count += 1;
-        }
+        };
+        semaphore.count += 1;
+        self.wake_waiters(key, false);
         true
     }
 

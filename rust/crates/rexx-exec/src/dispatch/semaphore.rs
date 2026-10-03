@@ -21,7 +21,7 @@ use rexx_num::Number;
 use super::{Cleared, NativeStarted};
 use crate::error::Raised;
 use crate::scheduler::ParkReason;
-use crate::semaphores::{Request, SemaphoreKey, SemaphoreWait};
+use crate::semaphores::{Request, SemaphoreKey, SemaphoreWait, WaitKind};
 use crate::{Failure, Interp};
 
 /// `EventSemaphoreClass::post`.
@@ -73,13 +73,14 @@ pub(super) fn native_event_wait(
         )));
     }
     park_point!(interp, crate::pinning::ParkKind::SemaphoreWait);
-    let wait = semaphore_wait(receiver, timeout);
-    interp.park_native(ParkReason::Semaphore(wait), event_woken, receiver)
+    let wait = semaphore_wait(receiver, WaitKind::Event, timeout);
+    interp.park_native(ParkReason::Semaphore(wait), woken, receiver)
 }
 
-fn event_woken(interp: &mut Interp, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    let posted = interp.end_semaphore_wait(SemaphoreKey::Object(receiver));
-    Ok(Some(interp.counted(usize::from(posted))))
+/// A woken wait's answer, which its re-test kept.
+fn woken(interp: &mut Interp, _receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let answer = interp.take_semaphore_answer();
+    Ok(Some(interp.counted(usize::from(answer))))
 }
 
 /// `MutexSemaphoreClass::request(timeout)`, the method `ACQUIRE`: the lock
@@ -97,18 +98,13 @@ pub(super) fn native_mutex_acquire(
         Request::Refused => false,
         Request::Wait => {
             park_point!(interp, crate::pinning::ParkKind::SemaphoreWait);
-            let wait = semaphore_wait(receiver, timeout);
-            return interp.park_native(ParkReason::Semaphore(wait), mutex_woken, receiver);
+            let wait = semaphore_wait(receiver, WaitKind::Mutex, timeout);
+            return interp.park_native(ParkReason::Semaphore(wait), woken, receiver);
         }
     };
     Ok(NativeStarted::Ran(Some(
         interp.counted(usize::from(acquired)),
     )))
-}
-
-fn mutex_woken(interp: &mut Interp, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    let acquired = interp.end_mutex_wait(receiver);
-    Ok(Some(interp.counted(usize::from(acquired))))
 }
 
 /// `MutexSemaphoreClass::release`.
@@ -133,14 +129,12 @@ pub(super) fn native_mutex_uninit(
     Ok(None)
 }
 
-/// A wait on `object` for `timeout`, or for ever.
-fn semaphore_wait(object: ObjRef, timeout: Option<Duration>) -> SemaphoreWait {
+/// A wait of `kind` on `object` for `timeout`, or for ever.
+fn semaphore_wait(object: ObjRef, kind: WaitKind, timeout: Option<Duration>) -> SemaphoreWait {
     SemaphoreWait {
         key: SemaphoreKey::Object(object),
-        timed: timeout.map(|timeout| {
-            let deadline = Instant::now() + timeout;
-            (deadline, deadline)
-        }),
+        kind,
+        deadline: timeout.map(|timeout| Instant::now() + timeout),
     }
 }
 

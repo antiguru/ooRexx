@@ -414,19 +414,21 @@ impl Scheduler for Interp {
                 }
             }
             ParkReason::Semaphore(wait) => {
-                let timed = wait.timed.map(|(deadline, takes_until)| {
+                let order = wait.deadline.map(|deadline| {
                     table.next_sleeper += 1;
                     let order = table.next_sleeper;
                     table.sleepers.push(Reverse((deadline, order, running)));
-                    (order, takes_until)
+                    order
                 });
-                table.semaphores.enqueue(
-                    wait.key,
-                    crate::semaphores::Waiter {
-                        activity: running,
-                        timed,
-                    },
-                );
+                if !matches!(wait.kind, crate::semaphores::WaitKind::Poll(_)) {
+                    table.semaphores.enqueue(
+                        wait.key,
+                        crate::semaphores::Waiter {
+                            activity: running,
+                            order,
+                        },
+                    );
+                }
             }
         }
     }
@@ -917,14 +919,10 @@ impl Interp {
         table.sleepers = BinaryHeap::from(sleepers);
     }
 
-    /// Readies `waiter`, parked on a semaphore, where a post can still end its
-    /// wait, answering whether it could: an untimed one, or a timed one still
-    /// asleep and within its last instant.
+    /// Readies `waiter`, parked on a semaphore, where it is still parked,
+    /// answering whether it was: an untimed one, or a timed one still asleep.
     pub(crate) fn wake_semaphore_waiter(&mut self, waiter: crate::semaphores::Waiter) -> bool {
-        if let Some((order, takes_until)) = waiter.timed {
-            if Instant::now() > takes_until {
-                return false;
-            }
+        if let Some(order) = waiter.order {
             let table = &mut self.activities;
             let mut sleepers = std::mem::take(&mut table.sleepers).into_vec();
             let before = sleepers.len();
@@ -1228,6 +1226,9 @@ impl Interp {
                 let driven = match self.activity.sliced.take() {
                     Some((floor, at)) => self.drive_from(DriveStart::Sliced { floor, at }, true),
                     None => {
+                        if self.parked_again() {
+                            return Ok(Stopped::Parked);
+                        }
                         let sent = self.resume_parked(None);
                         let Some(floor) = self.activity.drive_floor.take() else {
                             break 'resumed sent;
@@ -1347,6 +1348,31 @@ impl Interp {
         Loud::scheduler_inconsistency("a wait outside every root driver and pinned frame").into()
     }
 
+    /// The re-test a woken wait makes before it resumes: `Some` reason to
+    /// park again for.
+    pub(crate) fn retest_wait(&mut self, reason: ParkReason) -> Option<ParkReason> {
+        match reason {
+            ParkReason::Semaphore(wait) => self.retest_semaphore(wait).map(ParkReason::Semaphore),
+            _ => None,
+        }
+    }
+
+    /// Parks the running activity, woken from a park its root driver
+    /// recorded, again where its re-test says so, answering whether it did.
+    fn parked_again(&mut self) -> bool {
+        let Some(reason) = self.activity.native_park.as_ref().map(|park| park.reason()) else {
+            return false;
+        };
+        let Some(again) = self.retest_wait(reason) else {
+            return false;
+        };
+        if let Some(park) = self.activity.native_park.as_mut() {
+            park.set_reason(again);
+        }
+        self.park(again);
+        true
+    }
+
     /// The running activity's park, resumed now that it has woken.
     fn resume_parked(&mut self, failure: Option<Failure>) -> Result<Option<ObjRef>, Failure> {
         match self.activity.native_park.take() {
@@ -1416,6 +1442,7 @@ impl Interp {
                 }
                 self.drive_from(DriveStart::Sliced { floor, at }, true)
             }
+            (None, None) if self.parked_again() => return,
             (None, failure) => match self.activity.drive_floor.take() {
                 Some(floor) => {
                     let sent = self.resume_parked(failure);

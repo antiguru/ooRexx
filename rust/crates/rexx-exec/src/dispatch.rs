@@ -454,6 +454,10 @@ impl NativePark {
         self.reason
     }
 
+    pub(crate) fn set_reason(&mut self, reason: crate::scheduler::ParkReason) {
+        self.reason = reason;
+    }
+
     /// Whether a primitive method between the park and the driver records
     /// its outcome on `message`.
     pub(crate) fn records(&self, message: ObjRef) -> bool {
@@ -2707,9 +2711,15 @@ impl Interp {
         if self.activity.pin_depth > 0 {
             let frame = self.roots.activity_mut().push_frame();
             self.roots.activity_mut().push_temp(receiver);
-            let sent = match self.pinned_wait(reason) {
-                None => resume(self, receiver),
-                Some(failure) => Err(failure),
+            let mut reason = reason;
+            let sent = loop {
+                if let Some(failure) = self.pinned_wait(reason) {
+                    break Err(failure);
+                }
+                match self.retest_wait(reason) {
+                    Some(again) => reason = again,
+                    None => break resume(self, receiver),
+                }
             };
             self.roots.activity_mut().pop_frame(frame);
             return sent.map(NativeStarted::Ran);

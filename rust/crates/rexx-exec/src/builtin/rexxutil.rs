@@ -13,14 +13,14 @@
 //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use rexx_core::{Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
 
 use crate::error::Raised;
 use crate::scheduler::ParkReason;
-use crate::semaphores::{SemaphoreKey, SemaphoreWait};
+use crate::semaphores::{SEM_POLL, SemaphoreKey, SemaphoreWait, WaitKind};
 use crate::{Failure, Interp, Loud};
 
 /// The one path argument these routines take, resolved against the
@@ -191,10 +191,6 @@ pub(crate) fn sleep(
     interp.park_routine(crate::scheduler::ParkReason::Sleep { deadline }, done)
 }
 
-/// How often a timed `Sys*Sem` wait tries its semaphore
-/// (`SEM_WAIT_PERIOD`, `platform/unix/SysRexxUtil.cpp:800`).
-const SEM_POLL: Duration = Duration::from_millis(100);
-
 /// `ERROR_SEM_TIMEOUT`: a timed wait ended with nothing taken.
 const SEM_TIMEOUT: i64 = 121;
 
@@ -211,8 +207,8 @@ pub(crate) fn create_event_sem(
     if args.len() > 2 {
         return Err(Raised::too_many_internal_arguments(2).into());
     }
-    if args.first().copied().flatten().is_some() {
-        return Err(Loud::named_semaphore(name).into());
+    if let Some(Some(value)) = args.first().copied() {
+        return refuse_name(interp, name, value);
     }
     let handle = interp.create_counting(0);
     Ok(handle_answer(interp, handle))
@@ -233,10 +229,22 @@ pub(crate) fn create_mutex_sem(
     if let Some(Some(value)) = args.first().copied()
         && !interp.to_text(value).is_empty()
     {
-        return Err(Loud::named_semaphore(name).into());
+        return refuse_name(interp, name, value);
     }
     let handle = interp.create_counting(1);
     Ok(handle_answer(interp, handle))
+}
+
+/// A create given the name `value`: the empty string where `sem_open` rejects
+/// the name and creates nothing (glibc: nothing left once leading slashes go,
+/// or a slash after them, `EINVAL`), else the named-semaphore refusal.
+fn refuse_name(interp: &mut Interp, name: &[u8], value: ObjRef) -> Result<ObjRef, Failure> {
+    let text = interp.to_text(value);
+    let rest = &text[text.iter().take_while(|&&byte| byte == b'/').count()..];
+    if rest.is_empty() || rest.contains(&b'/') {
+        return Ok(interp.text_built(Vec::new()));
+    }
+    Err(Loud::named_semaphore(name).into())
 }
 
 /// `SysPostEventSem(handle)`: `sem_post`.
@@ -302,8 +310,9 @@ pub(crate) fn close_sem(
 
 /// `SysWaitEventSem(handle [, timeout])` and `SysRequestMutexSem(handle [,
 /// timeout])`, one body: a timeout of zero waits for ever, one below zero
-/// answers `0` at once and takes nothing, and one above zero tries every
-/// `SEM_POLL` until it has passed, answering `121` where nothing was taken.
+/// answers `0` at once and takes nothing, and one above zero tries now and
+/// every `SEM_POLL` while the timeout lasts, answering `121` one `SEM_POLL`
+/// after its last try where nothing was taken.
 pub(crate) fn wait_sem(
     interp: &mut Interp,
     _name: &'static [u8],
@@ -325,26 +334,24 @@ pub(crate) fn wait_sem(
         Some(true) => return Ok(answer(interp, 0)),
         Some(false) => {}
     }
-    let timed = (timeout > 0).then(|| {
+    let (kind, deadline) = if timeout > 0 {
         let polls = u32::try_from(timeout.unsigned_abs().div_ceil(100)).unwrap_or(u32::MAX);
-        let now = Instant::now();
-        (now + SEM_POLL * polls, now + SEM_POLL * (polls - 1))
-    });
+        (WaitKind::Poll(polls - 1), Some(Instant::now() + SEM_POLL))
+    } else {
+        (WaitKind::Counting, None)
+    };
     park_point!(interp, crate::pinning::ParkKind::SysSemWait);
     let wait = SemaphoreWait {
         key: SemaphoreKey::Handle(handle),
-        timed,
+        kind,
+        deadline,
     };
     let receiver = handle_answer(interp, handle);
     interp.park_routine_with(ParkReason::Semaphore(wait), sem_woken, receiver)
 }
 
-fn sem_woken(interp: &mut Interp, handle: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    let taken = match handle.decode() {
-        Decoded::SmallInt(handle) => u64::try_from(handle)
-            .is_ok_and(|handle| interp.end_semaphore_wait(SemaphoreKey::Handle(handle))),
-        _ => false,
-    };
+fn sem_woken(interp: &mut Interp, _handle: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let taken = interp.take_semaphore_answer();
     Ok(Some(answer(interp, if taken { 0 } else { SEM_TIMEOUT })))
 }
 
