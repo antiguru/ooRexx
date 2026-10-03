@@ -1,0 +1,34 @@
+/* A GUARD WHEN stops watching its variables once its expression is true:
+   a later store to one of them does not wake the same activity's next
+   GUARD WHEN, which watches another variable. */
+o = .k~new
+m = o~start('waiter')
+call SysSleep 0.1
+o~setv(1)
+call SysSleep 0.1
+o~setv(2)
+call SysSleep 0.1
+o~setw(1)
+say 'evaluations' m~result
+::class k
+::method init
+  expose v w evals
+  v = 0
+  w = 0
+  evals = 0
+::method waiter
+  expose v w evals
+  guard on when v = 1
+  guard on when self~check(w)
+  return evals
+::method check
+  expose evals
+  use arg x
+  evals = evals + 1
+  return x = 1
+::method setv
+  expose v
+  use arg v
+::method setw
+  expose w
+  use arg w

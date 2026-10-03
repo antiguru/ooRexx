@@ -1,8 +1,9 @@
-count 18
+count 19
 /* A guarded native method nested inside a guarded Rexx method that turns
    its own lock off with SetGuardOff gives back only its own level: the
    outer method keeps the lock, so another activity's guarded method waits
-   for it to end. */
+   for it to end. The started send first makes the lock table count. */
+.k~new~start('other')~wait
 o = .k~new
 m = o~outer
 m~wait

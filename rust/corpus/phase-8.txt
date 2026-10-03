@@ -530,3 +530,6 @@ lang/guard_when_replies_take_turns.rex
 lang/guard_when_posted_while_evaluating.rex
 lang/native_guard_on_when_updated.rex
 lang/native_guard_off_keeps_the_count.rex
+# A woken GUARD ON WHEN holds the lock again; a finished one stops watching.
+lang/guard_when_holds_the_lock_again.rex
+lang/guard_when_unwatches_at_its_end.rex
