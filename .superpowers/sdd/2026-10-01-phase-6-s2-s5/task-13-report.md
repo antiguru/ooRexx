@@ -255,3 +255,131 @@ Gate rerun at `b5e6e01d1`: `REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=... memc
 - REPLY TEST_REPLY_TWICE_REPLYASSERT. Its oracle cell reads `differ: rc 0, oracle 1 assertion,
   ours 0`; at `7451743ce` it read `pass`. The oracle's own count varies between runs (P41 class),
   and the test does not gate on that cell.
+
+## Fix round 1 (P47)
+
+Commit `59817d2c8`. Review: `task-13-review.md`. Ruling P47.
+
+### Design
+
+- **Wake, then re-test.** A post or release now only readies waiters. The semaphore's state is not
+  handed over. Each woken waiter re-tests its condition before it resumes and parks again where the
+  condition no longer holds; a timed waiter parks again until its original deadline.
+- **Where the re-test runs.** There are three resume paths:
+  - a started activity's resume, in `run_started`;
+  - main's root step;
+  - the pinned wait in `park_native`, which loops `pinned_wait` and re-tests.
+  The re-test (`Interp::retest_semaphore`) records its answer by activity, and the native's resume
+  reads it back.
+- **EventSemaphore.**
+  - A timed wait re-tests the post: `SysSemaphore::wait(t)` loops while `!postedCount`
+    (`SysSemaphore.cpp:298-301`).
+  - An untimed wait does not re-test: `wait()` tests with `if` (`:250-253`), checked in the
+    source. The witness below shows this deterministically (oracle 30/30): after a post and reset
+    in one clause, the untimed waiters answer 1 and the timed one 0.
+- **MutexSemaphore.** A release frees the lock and readies its first waiter. The waiter takes the
+  lock only if it is still free when it runs, so the releaser's next acquire wins (M1).
+- **Sys*Sem.**
+  - A post adds to the value and readies the first untimed waiter. That waiter is a `sem_wait`,
+    which in glibc retries the decrement after its futex wake, so the value is never handed over
+    directly.
+  - A timed wait (`WaitKind::Poll`) wakes only at its own poll times, t0 + k·100 ms. It tries
+    `take_counting` there and answers 121 one period after its last try. No post wakes it. The old
+    `takes_until` window is gone.
+- **M2.** `SysCreateEventSem(name)` and `SysCreateMutexSem(nonempty name)` answer `''` and create
+  nothing when glibc `sem_open` rejects the name with `EINVAL`: nothing is left once the leading
+  slashes go, or a slash follows them. Checked on glibc alone with a C program using
+  `O_CREAT|O_EXCL`; never run on the oracle; `/dev/shm` held 0 entries before and after. Any other
+  name keeps the Phase 10 refusal.
+- **M3.** Parked waiters are indexed by activity (`Semaphores::parked`), so `withdraw` touches one
+  queue. Held mutexes are indexed by owner (`Semaphores::held`), so an activity's end and the
+  collector's roots touch only the mutexes held.
+  The reviewer attributed the cost to `withdraw`, but indexing the waiters alone left the probe
+  unchanged. Before the fix, q0/q1 measured 0.46/0.81 s (three runs: 0.81, 0.89, 0.78); with
+  waiters indexed, 0.46/0.80. perf on 30000 round trips put 20.75% self time in `run_round`, which
+  is `release_ended_mutexes` scanning every entry at every activity end. With held mutexes indexed
+  by owner, q0/q1 measure 0.46/0.47 and 0.46/0.46.
+  Disabling the per-collection `prune` and `object_roots` scans instead did not change q1 (0.89,
+  0.94 and 0.87, 0.86), so neither was the cost.
+
+### Witnesses (oracle 30, ours 30 unswitched and 30 under every; one output each, ours = oracle)
+
+- `lang/event_semaphore_timed_wait_retests_the_post.rex` (I1): `pulse 1 0 1 0`, `post 1 1`. The
+  post and reset are one clause (`e~~post~reset`). In the reviewer's two-clause form, every mode
+  can run the timed waiter between the two clauses and answer 1, a schedule the oracle did not show
+  in 30 runs.
+- `lang/sys_semaphore_poll_takes_at_its_poll.rex` (I2, the reviewer's h2): `main rel 0 req 0`,
+  `main rel2 0`, `w 0 0`.
+- `lang/sys_semaphore_post_waits_for_the_next_poll.rex`: a post between two polls stays in the
+  semaphore, so main's own try 30 ms later takes it (`main took 0`, `w 0`). Added because
+  mutant N4 (a post readies a polling wait) survived every other witness in both modes.
+- M1 is not a corpus witness, because the oracle splits on it. The reviewer's two-clause h1 gave
+  28/30 for `reacq0 1`; the one-clause form gave 18/30 `main 1 1`, 12/30 `main 1 0`. Ours is
+  deterministic in both modes and matches the majority. It is a crate test,
+  `a_releaser_takes_the_mutex_again_before_its_waiter`; the minority schedule is recorded under
+  P47.
+- M2 is a crate test, `a_name_sem_open_rejects_creates_nothing`: `''`, `'///'`, `'a/b'`, `'/'`,
+  `'/a/b'` all answer the empty string. The Phase 10 refusal for a valid name stays in
+  `run/tests/directives.rs`.
+- The 11 earlier corpus witnesses, rerun on the fix build, each give one output 30/30, unswitched
+  and every, with the same hashes as before. The reviewer's probes e1, h1, h2, h3, pin1, pin3, pin4,
+  pin5, a1, s1, g1 and g2 were rerun against the oracle (3 runs each side).
+  - Every one matches the oracle unswitched.
+  - Under every, all match except pin3. Its pre-fix binary gives the same line order (`init waits 1`
+    before `w posted`), so the difference is not from this round: it is the P44 cadence of a woken
+    waiter, and the values agree.
+  - e1 two-clause and h1 under every give the oracle-observed minority, as described above.
+- ooTest: TEST_WAIT_CONCURRENT passes in both modes (2 assertions). TEST_EXCLUSION passes
+  unswitched (13 assertions) and under every is the P46 deadline hang.
+
+### Mutation evidence (`mut2.py`, `mut3.py`; corpus runs compared with stored oracle output)
+
+| mutation | red |
+|---|---|
+| M0 control | nothing (6 lib tests pass) |
+| N1 post readies only the first waiter | event_semaphore_post_wakes_every_waiter, event_semaphore_timed_wait_retests_the_post |
+| N2 untimed event wait re-tests the post | event_semaphore_timed_wait_retests_the_post |
+| N3 timed event wait keeps a reset post | event_semaphore_timed_wait_retests_the_post |
+| N4 a post readies a polling wait | sys_semaphore_post_waits_for_the_next_poll, unswitched and every (green before that witness existed) |
+| NM1 release hands the lock to its first waiter | lib a_releaser_takes_the_mutex_again_before_its_waiter, a_release_readies_the_mutex_waiters_in_park_order |
+| N6 every name refuses | lib a_name_sem_open_rejects_creates_nothing |
+| N7 held mutexes not indexed | mutex_semaphore_released_when_its_activity_ends, ..._end_hands_over_to_a_waiter; lib a_held_mutex_is_not_collected |
+| N8 timed Sys*Sem wait has one poll | sys_semaphores_unnamed, sys_semaphores_across_activities, sys_semaphore_poll_takes_at_its_poll |
+| N9 a poll takes nothing | sys_semaphores_across_activities, sys_semaphore_poll_takes_at_its_poll |
+| N10 release readies the last waiter | lib a_release_readies_the_mutex_waiters_in_park_order |
+| N11 post readies without counting | sys_semaphores_unnamed, sys_semaphores_across_activities, sys_semaphore_poll_takes_at_its_poll; lib a_post_after_the_last_poll_is_left_for_the_next_wait |
+| M4, M5, M6, M7, M9, M13, M14, M15, M17, M18, M19 (as in the first table) | red as before |
+| M10 every woken wait answers 1 | event_semaphore_post_reset_wait, mutex_semaphore_timed_acquire, event_semaphore_timed_wait_retests_the_post |
+
+### Checks at `59817d2c8`
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo clippy -p rexx-exec --all-targets --features pinning -- -D warnings`: exit 0.
+- `cargo test -p rexx-exec --lib`: 939 passed.
+- `refusal_sites` 5, `gate_table_c` 22, `internal_routines` 2, `closed_phases` 5, `loud` 9,
+  `native_entries` 24, `sourceline_oracle` 1, `method_bodies` (release) 23: all passed, with no
+  table drift.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -p rexx-exec --test corpus`: 783 of 783.
+  The same under `REXX_CORPUS_SWITCH=every`: 783 of 783. Debug under every: 783 of 783.
+- `memcap 8G cargo test -p rexx-exec --test collect_stress`: 36 passed.
+- `memcap 8G cargo test --release -p rexx-exec --features pinning --test concurrency_tests
+  measured::`: 18 passed.
+- `REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=... memcap 16G cargo test --release -p rexx-exec
+  --test concurrency_tests`: exit 0, 30 passed, 0 failed.
+  - The semaphore rows are unchanged: TEST_WAIT_CONCURRENT pass/same, TEST_EXCLUSION pass/P46.
+  - Against the P46 table, only two REPLY REPLYASSERT oracle cells moved, both oracle-count
+    variance (P41).
+- Callgrind, 3 rounds, pre-fix head `18c2a2f47` against `59817d2c8`: dispatch, fibcall, rexxcps,
+  emptyloop and sendloop all +0.0000% (at most 172 Ir), spreads 0.0000%.
+- Bench "it works" against the pre-fix head: identical except the timing lines of `heapshape`
+  and `rexxcps`.
+
+### Recorded (P47)
+
+- **M1 minority schedule.** The oracle's releaser loses the race 2/30 in the two-clause form and
+  12/30 in the one-clause form; ours always wins it.
+- **Pre-existing, outside Task 13.** `native_array_append` copies the array's slots on every
+  append (`collection::append_slot` → `slots_of`/`occupied`). Building the reviewer's 80000-element
+  array dominates its probes: a callgrind run of q1 spent 99% of its instructions there and had not
+  reached the timed phase when stopped at 600 s.
