@@ -28,23 +28,24 @@ inline), and this report.
   site, and a handle names an object only through the minting call's locals. Neither record gets an
   `unsafe impl` of its own, so `Send` stays derived from the fields, and an `ObjRef` field
   (`!Send`) would remove it.
-- **Enforcement:**
-  - a `const` block in `invoke.rs` asserts `NativeCall: Send` and `Completion: Send`;
-  - a `compile_fail,E0277` doctest on `Completion` shows that a record carrying a `Completion` beside
-    an `ObjRef` is not `Send`.
+- **Enforcement:** a `const` block in `invoke.rs` asserts `NativeCall: Send` and
+  `Completion: Send`.
 - **The native frame** stays pushed by `run_library_method` and `run_library_routine` from before
   `prepare` until after `finish`, as before. A returned handle resolves in that frame's `locals`
   inside `finish`.
-- **`Host::between_halves`** has a default no-op. rexx-exec's `Interp` runs `collect_now()` there
-  when `stress_collect` is set, so the collect-stress mode collects between prepare and finish (after
-  the arguments are converted, and after the stub returns).
+- **`Host::between_halves`** has a default no-op. It runs only where `Activation::between_halves`
+  is set, which `run_library_*` copy from `stress_collect`. rexx-exec's `Interp` runs
+  `collect_now()` there, so the collect-stress mode collects between prepare and finish (after the
+  arguments are converted, and after the stub returns).
 
-### Departure: pending conditions are not in `Completion`
+### Departures
 
-The brief lists "pending conditions" among `Completion`'s fields. A condition the stub raises is
-recorded by `RaiseException*` into the call's `Activation`, which is a callback into island state,
-and `finish` reads it there. Copying it into the `Completion` would mean reading the `Activation`
-from the thread that ran the call. This is stated on `Completion`'s doc.
+- **Pending conditions are not in `Completion`.** In rexx-exec a condition the stub raises is
+  recorded by the `RaiseException*` callbacks, through `Host::surface`, in the native frame
+  (`NativeFrame::raised`, `additional`, `result`, `condition`), and `finish`'s caller reads it there.
+  `Activation::pending` serves only hosts without a surface. Those callbacks hold the baton (spec
+  2.4), so the condition stays island state. Spec 2.1 now says so.
+- **The `Conversion` split** (`values.rs` in the brief's Files) is moved to Task 17 by P50.
 
 ### Performance remedy
 
@@ -150,7 +151,61 @@ All runs are from `rust/` at `5eeb97fa1` (the tree as committed), with statuses 
 
 ## Concerns
 
-- `Completion` carries no pending condition (see the departure above).
-- `between_halves` costs extcall about +0.9% Ir on every native call. This is within the brief's
-  ~+1%. Making the hook free outside the stress mode would need a flag the `Activation` reads
-  without a dynamic call.
+- `Completion` carries no pending condition (see Departures).
+- With the flag (fix round 1), the hook's guard costs extcall +0.3322% Ir, 9 Ir per call. The
+  reviewer found this figure sensitive to codegen.
+
+## Fix round 1
+
+Commit `7794b4628`, under the review `task-16-review.md` and ruling P50.
+
+- **I1:** no code change. The `Conversion` split is listed under Departures as moved to Task 17 by
+  P50.
+- **M1:** `Completion`'s doc and the Departures section place the condition in the native frame,
+  with `Activation::pending` for surface-less hosts. In spec 2.1, the clause listing "the `pending`
+  conditions (`values.rs:749-802`)" among the completion record's fields is deleted, because it
+  contradicts the new sentence. The new sentence reads: "`Completion` carries no pending condition: it
+  stays in island state (the native frame), read by finish, since `RaiseException` callbacks hold
+  the baton (2.4)."
+- **M2:** the reviewer's prototype, adopted. `Activation` has a `between_halves: Cell<bool>`, set by
+  `set_between_halves`, with an `#[inline(always)]` getter. `invoke::method` and `invoke::routine`
+  test it before each hook. `run_library_method` and `run_library_routine` copy `stress_collect`
+  into it after `set_frame`, and the integration test's `Session` helpers copy `collecting`.
+- **M3:** the doctest is removed. `Completion`'s doc names the `const` block as the enforcement.
+
+Callgrind, same command and build discipline as above:
+- base `1e323ead0` is rebuilt from its archive;
+- head `7794b4628` is from its own archive;
+- both builds printed `Compiling rexx-api` and `Compiling rexx-exec`.
+
+| program | base | head | delta |
+|---|---|---|---|
+| extcall | 8128604564 | 8155604627 | +0.3322% |
+| dispatch | 21264385155 | 21264384971 | -0.0000% |
+| fibcall | 8494020441 | 8494020504 | +0.0000% |
+
+`cgdiff` on extcall: self `run_library_routine` +27000000 (9 Ir per call). No `between_halves`
+symbol appears.
+
+Mutants (in a `git archive` of `7794b4628`, `--profile mutation`):
+
+| mutant | result |
+|---|---|
+| native frame `locals` unrooted (`activity.rs:572`) | `collect_stress` exit 101, `the_l0_subset_passes_again_under_collect_on_every_allocation`, panic `dispatch.rs:1660` |
+| the same, and `set_between_halves(false && stress)` in both `run_library_*` | `collect_stress` exit 0, 36 passed |
+| the integration `Session::call_routine` does not set the flag | `a_handle_built_during_the_call_resolves_after_collections_between_the_halves` fails |
+
+Checks at `7794b4628`, from `rust/`:
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo clippy -p rexx-exec --all-targets --features pinning -- -D warnings`: exit 0.
+- `memcap 8G cargo test -p rexx-api`, exit 0:
+  - lib 64;
+  - context 14, handles 5, invoke 16, layout 23, load 11, values 83;
+  - doctests 1 and 4.
+- `memcap 8G cargo test -p rexx-exec --lib`: 945 passed.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -p rexx-exec --test corpus`: `787 of 787
+  matching`, exit 0.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -p rexx-exec --test collect_stress`: 36 passed.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -p rexx-exec --test api_group_tests`: 24
+  passed.
