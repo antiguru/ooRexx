@@ -688,3 +688,82 @@ No immovable `REPLY` and no inverted wait is counted in either mode. Under every
 late wakes are `MessageResult` and `MessageWait`; the deferred slices and pinned yields have the
 same frame chains apart from the frameless deferred slices, and the inverted yields are those under
 `TraceWrapper` and `Notification`.
+
+## S3 close
+
+At the Task 14 tree (`7266ae03c` plus the S3 rows test, which these runs do not reach), from
+`rust/`:
+
+```
+RAYON_NUM_THREADS=4 CARGO_TARGET_DIR=<own dir> cargo test --release -p rexx-exec --features pinning \
+  --test concurrency_tests -- measured:: --nocapture --test-threads=1
+```
+
+Exit 0, every `measured::` test passed. Arrivals per park, beside the S2 close:
+
+| park | S2 normal | S2 every opportunity | S3 normal | S3 every opportunity |
+|---|---:|---:|---:|---:|
+| GuardOn | 27 | 59 | 36 | 67 |
+| GuardWhen | 31 | 31 | 54 | 54 |
+| Reply | 67 | 77 | 91 | 91 |
+| MessageResult | 96 | 96 | 98 | 98 |
+| MessageWait | 11 | 11 | 11 | 11 |
+| SemaphoreWait | 6 | 6 | 8 | 7 |
+| SysSleep | 135 | 134 | 173 | 172 |
+| Timer | 19 | 52 | 37 | 59 |
+
+Every park the S2 close counted is reached in both modes. The waits by kind, normal:
+
+| wait | park | frames | count |
+|---|---|---|---|
+| deferred slice | - | Program | 9 |
+| deferred slice | - | Program > OpExec | 10 |
+| pinned | GuardOn | Program | 4 |
+| pinned | GuardWhen | Program | 44 |
+| pinned | GuardWhen | Program > OpExec | 10 |
+| pinned | MessageResult | Program | 77 |
+| pinned | MessageResult | Program > TreeSend | 18 |
+| pinned | MessageWait | Program | 8 |
+| pinned | SemaphoreWait | Program | 4 |
+| pinned | SysSleep | Program | 103 |
+| pinned yield | - | Program | 2 |
+
+Every opportunity:
+
+| wait | park | frames | count |
+|---|---|---|---|
+| deferred slice | - | - | 31 |
+| deferred slice | - | Notification | 8 |
+| deferred slice | - | Program | 360 |
+| deferred slice | - | Program > OpExec | 140 |
+| deferred slice | - | Program > TreeEval > TreeSend | 7 |
+| deferred slice | - | TraceWrapper | 697 |
+| deferred slice | - | TraceWrapper > Unknown | 80 |
+| deferred slice | - | TraceWrapper > Unknown > OpExec > Forward | 33 |
+| deferred slice | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+| inverted yield | - | Notification | 6 |
+| inverted yield | - | TraceWrapper | 697 |
+| inverted yield | - | TraceWrapper > Unknown | 43 |
+| inverted yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+| inverted yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+| late wake | MessageResult | Program | 456 |
+| late wake | MessageWait | Program | 234 |
+| pinned | GuardOn | Program | 15 |
+| pinned | GuardWhen | Program | 42 |
+| pinned | MessageResult | Program | 76 |
+| pinned | MessageResult | Program > TreeSend | 18 |
+| pinned | MessageWait | Program | 8 |
+| pinned | SemaphoreWait | Program | 4 |
+| pinned | SysSleep | Program | 102 |
+| pinned yield | - | Notification | 6 |
+| pinned yield | - | Program | 277 |
+| pinned yield | - | Program > OpExec | 140 |
+| pinned yield | - | Program > TreeEval > TreeSend | 7 |
+| pinned yield | - | TraceWrapper | 697 |
+| pinned yield | - | TraceWrapper > Unknown | 43 |
+| pinned yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+| pinned yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+
+No immovable `REPLY` and no inverted wait is counted in either mode. Every test's outcome is the
+same in the two tables but `MutexSemaphore` TEST_EXCLUSION, which passes normally and ends at the
+run's deadline under every opportunity (P46).

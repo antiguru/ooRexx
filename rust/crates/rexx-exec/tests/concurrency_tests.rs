@@ -1868,20 +1868,46 @@ mod group_runs {
         }
     }
 
+    /// The features of criterion 1's list that S3 covers.
+    const S3_FEATURES: &[&str] = &["GUARD", "semaphore class", "Sys*Sem", "Alarm", "Ticker"];
+
+    /// Where the both-modes table of the S3 rows is written when set.
+    const S3_TABLE_ENV: &str = "REXX_CRITERION_ONE_S3_TABLE";
+
     /// Every S2 row of the derived list, run on both sides with the shipped
     /// scheduler and under `EveryOpportunity`.
     #[test]
     fn the_s2_rows_of_the_derived_list_in_both_modes() {
+        rows_in_both_modes("criterion-one", CRITERION_ONE_TABLE_ENV, |features| {
+            features.iter().any(|f| S2_FEATURES.contains(f))
+        });
+    }
+
+    /// Every row of the derived list naming an S3 feature and no S2 one, as
+    /// [`the_s2_rows_of_the_derived_list_in_both_modes`] runs the others.
+    #[test]
+    fn the_s3_rows_of_the_derived_list_in_both_modes() {
+        rows_in_both_modes("criterion-one-s3", S3_TABLE_ENV, |features| {
+            !features.iter().any(|f| S2_FEATURES.contains(f))
+                && features.iter().any(|f| S3_FEATURES.contains(f))
+        });
+    }
+
+    /// The rows of the derived list whose features `chosen` accepts, run in
+    /// the scratch directory `name`, with the table written to the file
+    /// `table_env` names where set.
+    fn rows_in_both_modes(
+        name: &str,
+        table_env: &str,
+        chosen: impl Fn(&BTreeSet<&'static str>) -> bool,
+    ) {
         if !gate_mode() {
             eprintln!("group_runs: skipped without {GATE_ENV}");
             return;
         }
         let (list, _) = super::derive(&super::worktree().join("ootest/ooRexx"));
         let mut groups: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-        for row in list
-            .iter()
-            .filter(|row| row.features.iter().any(|f| S2_FEATURES.contains(f)))
-        {
+        for row in list.iter().filter(|row| chosen(&row.features)) {
             groups
                 .entry(row.group.clone())
                 .or_default()
@@ -1897,7 +1923,7 @@ mod group_runs {
                 .trim_end_matches(".testGroup")
                 .rsplit_once('/')
                 .expect("a group below a directory");
-            let run = scratch("criterion-one");
+            let run = scratch(name);
             let not_run = reaching_rxapi(dir, &[group]);
             for test in tests {
                 let one = std::slice::from_ref(test);
@@ -1972,7 +1998,7 @@ mod group_runs {
             fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
         }
         eprintln!("{table}");
-        if let Some(path) = std::env::var_os(CRITERION_ONE_TABLE_ENV) {
+        if let Some(path) = std::env::var_os(table_env) {
             fs::write(path, &table).expect("cannot write the table");
         }
         assert!(stuck.is_empty(), "an inverted wait or a hang: {stuck:?}");

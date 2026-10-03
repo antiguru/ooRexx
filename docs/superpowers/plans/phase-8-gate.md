@@ -546,5 +546,6 @@ could not see the second. **L2 is still not reached**, and what blocks it is not
 unmodified, stops at its ticker, a `GUARD ... WHEN` that another activity satisfies (Phase 6),
 and with `-U` it runs a group's tests and stops in `printSummary` at `RXFUNCQUERY`, which the
 oracle answers through rxapi (Phase 10); both measured 2026-09-28 at `2ae06085c` with
-`testOORexx.rex -f METHOD.testGroup -V 1` from a scratch copy. The Rung column reads
-`L2 -> 6, 10`.
+`testOORexx.rex -f METHOD.testGroup -V 1` from a scratch copy. At Phase 6 S3 (2026-10-03,
+`7266ae03c`) the ticker runs and the same command stops only at `RXFUNCQUERY`; the Rung column
+reads `L2 -> 10`.

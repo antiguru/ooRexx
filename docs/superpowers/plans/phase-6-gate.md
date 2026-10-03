@@ -193,21 +193,21 @@ Not passing:
 | base/bif/TIME.testGroup | TEST_9 | oracle did not finish | same | oracle run exceeds the 10 s runner deadline; passes in process (the pinning tables, and one driver run at rc 0) |
 | base/bif/TIME.testGroup | TEST_10 | rc 1, oracle 8 assertions, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
 | base/bif/TIME.testGroup | TEST_11 | oracle did not finish | same apart from elapsed values | oracle run exceeds the 10 s runner deadline; fails in process like TEST_4 (same elapsed-clock cause) |
-| base/class/Alarm.testGroup | TEST_BASE_ALARM | oracle did not finish | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/class/EventSemaphore.testGroup | TEST_WAIT_CONCURRENT | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/class/Alarm.testGroup | TEST_BASE_ALARM | oracle did not finish | same | S3; passes in both modes at the S3 close |
+| base/class/EventSemaphore.testGroup | TEST_WAIT_CONCURRENT | refused at GUARD WHEN | same | S3; passes in both modes at the S3 close |
 | base/class/Message.testGroup | TEST_STARTWITH_NOT_ARRAY | refused: Object~MAKEARRAY | same | Phase 9 (Object~makeArray) |
 | base/class/Message.testGroup | TEST_REPLYWITH_NOT_ARRAY | refused: Object~MAKEARRAY | same | Phase 9 (Object~makeArray) |
 | base/class/Method.testGroup | TESTDIRECTIVES | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
-| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | refused at GUARD WHEN | same | S3; passes at the S3 close, every mode as P46 |
 | base/directives/ATTRIBUTE.testGroup | TESTDELEGATE | rc 1, oracle 122 assertions, ours 95 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
 | base/directives/METHOD.testGroup | TESTGUARDEDACCESS | rc 1, oracle 1 assertions, ours 0 | same | Task 11: a guarded attribute read does not wait for the lock a REPLY continuation holds (`BAD` where the oracle gives `GOOD`, 10 of 10) |
 | base/directives/METHOD.testGroup | TESTDELEGATE | rc 1, oracle 116 assertions, ours 66 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
 | base/keyword/CALL.testGroup | TEST_4 | rc 1, oracle 18 assertions, ours 7 | same | elapsed-clock defect, pre-existing (fails at S1 close 1a81353e3); queued 2026-10-02-elapsed-clock-per-routine-and-reset |
-| base/keyword/GUARD.testGroup | TEST_ON_DEFAULT | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/keyword/GUARD.testGroup | TEST_ON | rc 1, oracle 1 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE_TRIGGER | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE | rc 1, oracle 2 assertions, ours 0 | same | S3 (GUARD WHEN, semaphores, Alarm) |
-| base/keyword/GUARD.testGroup | TEST_WAIT_MULTIPLE | refused at GUARD WHEN | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/GUARD.testGroup | TEST_ON_DEFAULT | rc 1, oracle 1 assertions, ours 0 | same | S3; passes in both modes at the S3 close |
+| base/keyword/GUARD.testGroup | TEST_ON | rc 1, oracle 1 assertions, ours 0 | same | S3; passes in both modes at the S3 close |
+| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE_TRIGGER | refused at GUARD WHEN | same | S3; passes in both modes at the S3 close |
+| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE | rc 1, oracle 2 assertions, ours 0 | same | S3; passes in both modes at the S3 close |
+| base/keyword/GUARD.testGroup | TEST_WAIT_MULTIPLE | refused at GUARD WHEN | same | S3; passes in both modes at the S3 close |
 | base/keyword/RAISE.testGroup | TEST_RAISE_INSERT_CRLF | rc 1, oracle 1 assertions, ours 0 | same | message text conversion (`?` for non-ASCII); fails at S1 close too, outside Phase 6 |
 | base/keyword/REPLY.testGroup | TEST_REPLY_TWICE_REPLYASSERT | pass | assertions 0 then 1 | S2, mode difference below (P41) |
 | base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_REPLYASSERT | pass | assertions 0 then 1 | S2, mode difference below (P41) |
@@ -216,8 +216,8 @@ Not passing:
 | base/keyword/REPLY.testGroup | TEST_REPLY_STACK_REPLYASSERT | pass | assertions 1 then 2 | S2, mode difference below (P41) |
 | base/keyword/REPLY.testGroup | TEST_REPLY_SAME_REPLYASSERT | pass | assertions 1 then 5 | S2, mode difference below (P41) |
 | base/keyword/TRACE_TraceObject.testGroup | TEST_TRACEOBJECT_COLLECTOR | refused: DO is not implemented | trace lines on stderr differ | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
-| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused at GUARD WHEN | trace lines on stderr differ | S3 (GUARD WHEN, semaphores, Alarm) |
-| regressions/bug2003_guard_when.testGroup | TEST_GUARD_WHEN_1 | fails on both | same | S3 (GUARD WHEN, semaphores, Alarm) |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused at GUARD WHEN | trace lines on stderr differ | refused at DO in both modes at the S3 close; queued 2026-10-02-do-with-over-refusal |
+| regressions/bug2003_guard_when.testGroup | TEST_GUARD_WHEN_1 | fails on both | same | fails on both sides alike at the S3 close |
 
 The rows marked `oracle did not finish` are the oracle's run exceeding the runner's 10 s deadline
 (`TIME` TEST_3 takes 13.5 s on the oracle); this crate's two runs are still compared. `Alarm`
@@ -266,8 +266,9 @@ Further differences are allowed by row:
   `>I> Method "M_S"` entry, before the refusal ends the run. Not covered by P41.
 
 Over the whole derived list, the two pinning tables give the same per-test outcome except the
-`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows, owned by S3 because
-unswitched they stop at GUARD WHEN): under every opportunity the continuation sets the Alarm's
+`base/class/MethodArgs` TEST_REQUEST_STRING_* rows (Alarm and Ticker rows; at the S3 close
+TEST_REQUEST_STRING_MESSAGE passes and the others are refused at DO WITH ... OVER in both modes,
+queued `2026-10-02-do-with-over-refusal`; at the S2 close unswitched they stopped at GUARD WHEN): under every opportunity the continuation sets the Alarm's
 `timerStarted` first, the GUARD WHEN is satisfied, and each reaches the DO WITH ... OVER refusal
 instead, except TEST_REQUEST_STRING_MESSAGE, which passes. Both are loud refusals. Probe `a2.rex`,
 which stops before the DO, matches the oracle under every opportunity 10 of 10 (queued
@@ -331,3 +332,102 @@ allowance is gone.
 and its last `acquire`, takes the mutex with `acquire(1)` and, never ending, never releases it, so
 the worker waits for ever and the program's end waits for the worker. The oracle hangs the same
 way when the worker yields there (`call SysSleep 0.01` after `step = 6`: 3 of 3 killed, rc 137, under `timeout -k 5 20`; `docs/superpowers/records/2026-10-01-phase-6-s2-s5/exclusion-every-hang.rex`).
+
+### S3 close
+
+Measured at `7266ae03c` from `rust/`; the S3 rows test at the Task 14 tree:
+
+```
+REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=<file> cargo test --release -p rexx-exec \
+  --test concurrency_tests -- --test-threads=1
+REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_S3_TABLE=<file> cargo test --release -p rexx-exec \
+  --test concurrency_tests -- group_runs::the_s3_rows
+```
+
+The runner's oracle deadline is 30 s per test (`group_runner.rs`, `ORACLE_TEST_DEADLINE`), so the
+rows the S2 table marks `oracle did not finish` are compared: `TIME` TEST_3, TEST_8 and TEST_9
+and `Alarm` TEST_BASE_ALARM pass, and `TIME` TEST_5 and TEST_11 differ as TEST_4 does.
+`the_s3_rows_of_the_derived_list_in_both_modes` runs each row naming a GUARD, a semaphore class,
+`Sys*Sem`, Alarm or Ticker and no S2 feature, as the S2 test runs the rest. Every row of either
+test not below passes and is the same in both modes.
+
+S2 rows:
+
+| group | test | normal against the oracle | every against normal | owner |
+|---|---|---|---|---|
+| base/bif/TIME.testGroup | TEST_4 | differ: rc 1: oracle 8, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing; queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/bif/TIME.testGroup | TEST_5 | differ: rc 1: oracle 12, ours 7 | same apart from elapsed values | elapsed-clock defect, pre-existing; queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/bif/TIME.testGroup | TEST_10 | differ: rc 1: oracle 8, ours 5 | same apart from elapsed values | elapsed-clock defect, pre-existing; queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/bif/TIME.testGroup | TEST_11 | differ: rc 1: oracle 12, ours 7 | same apart from elapsed values | elapsed-clock defect, pre-existing; queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/class/Message.testGroup | TEST_STARTWITH_NOT_ARRAY | refused: method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | same | Phase 9 (Object~makeArray) |
+| base/class/Message.testGroup | TEST_REPLYWITH_NOT_ARRAY | refused: method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | same | Phase 9 (Object~makeArray) |
+| base/class/Method.testGroup | TESTDIRECTIVES | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | pass | every mode forces the test's own race; the oracle hangs in the same interleaving (P46) | -; P46 |
+| base/directives/ATTRIBUTE.testGroup | TESTDELEGATE | differ: rc 1: oracle 122, ours 95 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
+| base/directives/METHOD.testGroup | TESTDELEGATE | differ: rc 1: oracle 116, ours 66 | same | Method delegate attributes; the row matched on `isGuarded`, outside Phase 6 |
+| base/keyword/CALL.testGroup | TEST_4 | differ: rc 1: oracle 18, ours 7 | same | elapsed-clock defect, pre-existing; queued 2026-10-02-elapsed-clock-per-routine-and-reset |
+| base/keyword/RAISE.testGroup | TEST_RAISE_INSERT_CRLF | differ: rc 1: oracle 1, ours 0 | same | message text conversion (`?` for non-ASCII), outside Phase 6 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_TWICE_REPLYASSERT | pass | assertions 0 then 1 | -; P41 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_REPLYASSERT | pass | assertions 0 then 1 | -; P41 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass | assertions 0 then 1 | -; P41 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_EXIT_CODE_REPLYASSERT | pass | assertions 0 then 1 | -; P41 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_STACK_REPLYASSERT | pass | assertions 1 then 2 | -; P41 |
+| base/keyword/REPLY.testGroup | TEST_REPLY_SAME_REPLYASSERT | pass | assertions 1 then 6 | -; P41 |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_TRACEOBJECT_COLLECTOR | refused: DO is not implemented | trace lines on stderr differ | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| regressions/bug2003_guard_when.testGroup | TEST_GUARD_WHEN_1 | fails on both | same | -; fails on the oracle the same way |
+
+S3 rows:
+
+| group | test | normal against the oracle | every against normal | owner |
+|---|---|---|---|---|
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_CLASS | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_OBJECT | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_STRING | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_METHOD | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_ROUTINE | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_PACKAGE | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_STREAM | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_MUTABLEBUFFER | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/class/MethodArgs.testGroup | TEST_REQUEST_STRING_FILE | refused: DO is not implemented | same | DO WITH / DO COUNTER refusal, outside Phase 6; queued 2026-10-02-do-with-over-refusal |
+| base/keyword/GUARD.testGroup | TEST_WHEN_USE_LOCAL_NO_WAIT | refused: USE LOCAL in a ::METHOD body is not implemented (Phase 5) | same | `USE LOCAL` in a method body, outside Phase 6 |
+
+`TEST_REPLY_SAME_REPLYASSERT` under every opportunity now counts 6 assertions, where the S2 close
+counted 5; 6 is a count the oracle gives (the P41 table above), so every count of ours in those
+rows is now one the oracle also gives.
+
+`the_alarm_and_ticker_groups_pass_in_both_modes`: every test of `base/class/Alarm` and
+`base/class/Ticker` passes against the oracle with the shipped scheduler and under every
+opportunity (gate-only, `concurrency_tests.rs`). In process, `Alarm` TEST_BASE_ALARM passed its
+`GUARD WHEN` waits from Task 12 on and then refused at `a compiled call op does not name a call of
+its own body`; that was a nested driver's clauses emptying the caller's pushed call arguments
+(fixed, `Interp::drive`; witness `corpus/lang/call_argument_concatenates_a_rexx_string_method.rex`).
+
+Witnesses, stdout and exit status the same in every run (oracle under `timeout -k 5 20`, this
+crate's `rexx-run` unswitched and with `REXX_SWITCH_MODE=every`, 30 runs each; one run each
+under `collect_stress`, which runs `phase-8.txt`):
+
+- `alarm_cancel_waits_for_the_timer.rex`: a cancel sent at once waits in `guard on when
+  timerStarted` until the replied activity has started the timer, then cancels it.
+- `alarm_message_target.rex`: an Alarm whose target is a Message sends it when it fires
+  (`msgobj~triggered(self)`, `CoreClasses.orx:1565`), on the replied activity.
+- `ticker_fires_on_its_replied_activity.rex`: a Ticker triggers on the activity its `REPLY` made
+  until main cancels it.
+- `call_argument_concatenates_a_rexx_string_method.rex`, single activity.
+
+Review Focus 2, the uncancelled Ticker: `scheduler/tests.rs`
+`an_uncancelled_ticker_keeps_the_programs_end_waiting` (killed by the run's deadline). The oracle
+on the same program: `main done`, `ticked`, killed at 3 s, rc 137, 3 of 3. This crate's
+`rexx-run` used 2 clock ticks (20 ms) of CPU in 3 s on it.
+
+### Criterion 2, the framework's ticker
+
+`api_group_tests.rs` `the_framework_ticker_runs_without_dash_u` (gate-only) runs `API/oo`
+`CONVERSION` on this crate with and without `-U`: both exit 0, the ticker's two lines carry dots,
+and every other line equals the `-U` run's. The differential keeps `-U`, since the dots depend on
+wall time (`ooTest.frm:2449-2465`): on `base/class/Ticker`, one run each, this crate printed one
+dot after `Searching for test containers` and the oracle two.
+Unmodified, `testOORexx.rex -f METHOD.testGroup -V 1` from a scratch copy runs the ticker and the
+tests and stops at rc 120 at `routine "RXFUNCQUERY" is not implemented (Phase 10)` only; the L2
+rows (`phase-4-exclusions.txt`, the roadmap's row 8, `phase-8-gate.md`) record it, and the Rung
+reads `L2 -> 10`.

@@ -4575,6 +4575,11 @@ ticker, the tests run and the summary stops at rc 120 with "routine
 rxapi. So L2 is blocked by Phase 6's GUARD WHEN and Phase 10's RXFUNCQUERY;
 rust/crates/rexx-exec/tests/api_group_tests.rs runs the groups with -U and
 without the two rxfuncquery probes, which is how the groups are gated.
+AT PHASE 6 S3 (measured 2026-10-03 at 7266ae03c): the same command runs the
+ticker and the group's tests and stops at rc 120 only at the summary's
+"routine "RXFUNCQUERY" is not implemented (Phase 10)". L2 is blocked by
+Phase 10's RXFUNCQUERY alone. api_group_tests.rs's
+the_framework_ticker_runs_without_dash_u runs a group without -U.
 
 THE ROUTINE HALF OF THE NATIVE CALLING PROTOCOL: BUILT by Task 2 of
 docs/superpowers/plans/2026-09-14-phase-8-surface.md and its fix round. A
@@ -4969,9 +4974,8 @@ crate passes every test RECORDED does not name, in the whole-group run
   Roadmap row 9: "`rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship".
   OWNER: Phase 9.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
-  framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking) is
-  a REPLY thread and a GUARD ON WHEN, refused naming Phase 6; -U starts no
-  ticker. The summary -V 1 and above print calls RXFUNCQUERY, refused naming
+  framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking)
+  prints a number of dots that depends on wall time; -U starts no ticker. The summary -V 1 and above print calls RXFUNCQUERY, refused naming
   Phase 10, and the oracle answers rxfuncquery("SysWinVer") through
   RexxQueryFunction, which is rxapi (read:
   interpreter/package/PackageManager.cpp:618-635). The instrument removes
