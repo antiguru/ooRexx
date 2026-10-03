@@ -287,3 +287,31 @@ Measured by `the_s2_rows_of_the_derived_list_in_both_modes` (`REXX_CRITERION_ONE
 | base/keyword/GUARD.testGroup | TEST_ON | pass | same |
 | base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE | refused at GUARD WHEN | same |
 | base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused at GUARD WHEN | refused at DO (allowed, `457a292e8`) |
+
+### Criterion 1 rows after Task 12
+
+Measured by `the_s2_rows_of_the_derived_list_in_both_modes` (`REXX_CRITERION_ONE_TABLE`) at
+`c80ad0eab`, the rows whose cells Task 12 changed. The `457a292e8` allowance is gone; the P42
+trace allowance keeps `TEST_TRACEOBJECT_COLLECTOR` only.
+
+| group | test | normal against the oracle | every against normal | owner |
+|---|---|---|---|---|
+| base/class/EventSemaphore.testGroup | TEST_WAIT_CONCURRENT | refused: EventSemaphore `WAIT` | refused: `WAIT` then `POST` (allowed, `c80ad0eab`) | Task 13 |
+| base/class/MutexSemaphore.testGroup | TEST_EXCLUSION | refused: MutexSemaphore `ACQUIRE` | same | Task 13 |
+| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE_TRIGGER | pass | same | - |
+| base/keyword/GUARD.testGroup | TEST_WAIT_SIMPLE | pass | same | - |
+| base/keyword/GUARD.testGroup | TEST_WAIT_MULTIPLE | pass | same | - |
+| base/keyword/TRACE_TraceObject.testGroup | TEST_CALLER_STACK_FRAME_REPLY_START | refused: DO is not implemented | same | queued 2026-10-02-do-with-over-refusal |
+
+`EventSemaphore` TEST_WAIT_CONCURRENT: the worker's store wakes main's `GUARD OFF WHEN`, and which
+unbuilt method is refused first, the worker's `WAIT` or main's `POST`, follows the schedule. The
+allowance holds only while both refusals name an `EventSemaphore` method.
+
+`Alarm` TEST_BASE_ALARM is still `oracle did not finish` / same. In process it now passes its
+`GUARD WHEN` waits and is refused at `a compiled call op does not name a call of its own body`,
+a defect present at `217f33a2c` in a single activity: `self~assertTrue(1, 'a' d)` with `d` a
+`.DateTime` (an argument concatenating an object whose `STRING` is Rexx).
+
+The `base/class/MethodArgs` TEST_REQUEST_STRING_* rows (pinning tables, both modes) are no longer
+refused at GUARD WHEN: TEST_REQUEST_STRING_MESSAGE passes and the others are refused at the DO
+WITH ... OVER refusal in both modes (queued 2026-10-02-do-with-over-refusal).
