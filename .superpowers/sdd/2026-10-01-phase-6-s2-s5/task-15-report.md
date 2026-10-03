@@ -156,14 +156,52 @@ oracle's `build/lib`): stdout and rc identical except `heapshape.rex`'s `build_s
   `Interp::new` and nothing releases it; spec P6-3 releases only at a driver exit, `Interp::new`
   already touches state, and the crate's unit tests drive an `Interp` directly.
 - `post`, `drain` and `release` are `#[cfg(test)]` until their first callers (Tasks 17 and 19).
+- The timer thread ends when no interpreter is registered and is spawned again by the next arm or
+  idle (ruling P49; spec section 4 amended in fix round 1). Spec section 4 had it sleep with no
+  deadline for the process's life.
 
 ## Concerns
 
-- The timer thread now ends whenever the registry empties and is spawned again by the next arm or
-  idle. A harness running many short multi-activity interpreters pays a thread spawn per such
-  interpreter.
 - `Interp::idle_until`'s deadline branch marks the run expired once `idle_until` returns. Today
   only the timer ends an idle (`Posted` is uninhabited); once posts exist, an idle ended by a post
   before the run's deadline must loop rather than expire.
 - No request-bit ordering is load-bearing (M9 green), so `loom` cannot distinguish the chosen
   orderings from `Relaxed`.
+
+## Fix round 1
+
+Commit `d502c140c` (review `task-15-review.md`).
+
+- **I1.** New model `a_sleeper_registers_as_the_timer_exits` (the reviewer's scratch model): one
+  registration leaves, so the timer may decide to end, while another thread registers and idles.
+  `join_timer` now joins every timer thread started (`State::timers` under `loom`), since a model
+  can start a second timer while the first is ending. Mutation, the timer's exit clearing
+  `timer_running` after dropping the registry lock (`drop(live); lock(&registry.state).timer_running
+  = false; return;`): `cargo test --test loom -- --exact a_sleeper_registers_as_the_timer_exits`
+  fails with loom's `deadlock; threads = [(Id(0), Blocked), (Id(1), Terminated), (Id(2),
+  Blocked)]`; `an_idle_deadline_is_never_lost` stays green under it (1 passed). Restored from a
+  copy, byte-compared.
+- **M1.** `start_timer` sets `timer_running` only after `spawn` returns.
+- **M2.** Ruling P49: listed under Plan departures; spec section 4's timer sentence amended, citing
+  P49.
+- **M3.** Gated: `lib.rs` carries `#![cfg(not(all(loom, test)))]`, so under `--cfg loom` the
+  library's unit-test crate compiles to nothing and never meets `loom`'s primitives outside a model;
+  `sync.rs`'s doc says so. The normal library build, which the integration tests link, is
+  unaffected. `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --lib`: 0 tests, exit 0.
+- **M4.** `Inbox::wake`: "Called with the registry locked: never take the registry under `queue`."
+- `corpus/refusal-sites.tsv` re-derived (`REXX_REFUSAL_SITES_REFRESH=1`) for the 4 lines `lib.rs`
+  gained; with `lib.rs:<n>` masked the removed and added rows are identical (46 each).
+
+Checks at `d502c140c`, from `rust/`:
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0; `-p rexx-exec --all-targets
+  --features pinning`: exit 0; `RUSTFLAGS="--cfg loom" cargo clippy -p rexx-exec --all-targets -- -D
+  warnings`: exit 0.
+- `memcap 8G cargo test -p rexx-exec --lib`: 945 passed.
+- `loom`, the gate command from an empty target dir: 6 passed, models 9.06 s, 45.5 s wall
+  (`/usr/bin/time`).
+- `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --lib`: 0 passed, exit 0.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -p rexx-exec --test corpus`: `787 of 787
+  matching`, 29 passed.
+- `--release --test refusal_sites`: 5 passed.
