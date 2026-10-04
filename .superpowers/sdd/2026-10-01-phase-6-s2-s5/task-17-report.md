@@ -323,3 +323,126 @@ inline path.
     level.
 - **The thread-context clones remain** (Step 2 departure, above).
 - **extcall +3.27%** under spec 7's instrument (−1.94% with libc counted); remedy above.
+
+## Fix round 1
+
+Commit `94266cb68`, under `task-17-review.md`.
+
+### I1 (P50): a callback takes the baton before it reads shared state
+
+- **Recovering the activation.** `innermost_or_running` (`ffi.rs`) first recovers the activation
+  from its own context's `Innermost` cell. That thread wrote the cell on the baton, before the
+  release.
+- **Taking the baton.** It then calls `Activation::hold_baton`, which takes the baton unless this
+  thread holds it and gives it back on drop. Only after that does it read the table's `Running`
+  cell or `is_busy` of another call. `addressed` likewise holds the baton before `own.is_busy()`.
+- **Where the baton is kept.** `Activation` keeps the baton in a field of its own (`baton`, next to
+  the conversion state), so it can be read while a conversion is held.
+- **Enforcement.** A debug assertion, "a callback read the interpreter's state without the baton",
+  stands before the `Running` read.
+- **Test.** `a_thread_member_off_the_baton_takes_it_before_reading_the_table` (rexx-api `ffi.rs`)
+  enters a guarded activation and releases the baton. It then calls `WholeNumberToObject` through
+  the thread table and gets a handle, with takes/releases `(2, 3)`: one take for the table read, one
+  for the conversion, and the test's own release.
+- **Mutant.** With the hold removed, that test panics at the assertion.
+- **No new loom model.** These are rexx-api functions over `Activation`, which `tests/loom.rs`
+  cannot compile. The existing model covers the baton protocol they use.
+
+### I2: routine and method rows resolved once
+
+The change is based on the reviewer's prototype.
+- **New lookups.** `Library::routine_index` / `routine_at` and `method_index` / `method_at`
+  (`load.rs`). `routine` and `method` now go through them.
+- **Routine rows.** `Interp::library_code_routines` (`Vec<Option<u32>>`, alongside
+  `library_code_keys`) holds each code row's routine index. `Interp::library_code_routine` resolves
+  it by name on the first call.
+- **Method rows.** `LibraryBinding` keeps `method: Option<usize>` in place of the procedure name,
+  resolved where the binding is built (`install.rs`, `environment/identities.rs`).
+
+**What keeps the cached row valid:**
+- `Libraries::hold` writes a name's library once, and later holds answer the earlier library.
+  Nothing removes or replaces it (`libraries.rs`).
+- A `Library`'s tables are private and never change after load.
+- A code row always names the same library and procedure; a binding holds its own `Rc<Library>`.
+- So no library reload or package change can make a cached index name another row.
+
+**Tests:**
+- `libraries::tests::a_held_name_keeps_its_first_library`: a second hold answers the first.
+- `library_code_routine` debug-asserts at every call that the cached index is the one the name
+  finds. The debug corpus run, the debug lib tests, and
+  `a_library_routine_called_again_reaches_the_row_its_name_finds` (`1\n2\n3\nTESTNAMEARG\n4\n`,
+  which equals the oracle's output) all exercise it.
+- Mutant: caching `index + 1` makes that test fail with the assertion.
+
+**Callgrind (Ir, libc and ld-linux excluded).** Base and head were each built from `git archive
+<sha> rust interpreter api` into their own `CARGO_TARGET_DIR`, with every file touched; both printed
+`Compiling rexx-api` and `Compiling rexx-exec`. The command:
+`bench-programs/callgrind.sh -r 1 -j 4 -p "extcall dispatch fibcall rexxcps" base=<base> head=<head>`
+
+| program | base `f13f15122` | head `94266cb68` | delta |
+|---|---|---|---|
+| extcall | 8155604627 | 7309638996 | −10.3728% |
+| dispatch | 21264384971 | 21224499964 | −0.1876% |
+| fibcall | 8494020504 | 8494088858 | +0.0008% |
+| rexxcps | 17800626282 | 17800743146 | +0.0007% |
+
+Notes on the table:
+- The script compared stdout with base's and exited 0.
+- Spread was 0.0000%.
+- No benchmark sends a library method.
+- dispatch makes no native call, and the two commits between `7790acc96` and `94266cb68` are
+  plan and docs only. So its −0.19% is a codegen shift; it is within the ~4% per-axis layout band
+  and is not claimed as a gain.
+
+### M1: the abandon path has a test
+
+`a_failure_ending_a_native_park_abandons_the_call` runs the review's program:
+- it gets rc 120, an empty stdout, and the stderr line `rexx-exec: a method source that is neither
+  a string nor an array is not implemented (Phase 5)`;
+- it counts `exits == 1`.
+
+A mutant that panics in `abandon_native_call` makes this test fail, so the test reaches the path.
+
+**The missing `5` / `after` lines.** Base printed `5\nafter\n` before the refusal. The oracle prints
+`5`, `after`, then the started activity's Error 93.974, at rc 0. Head prints only the refusal.
+- This task caused it. Main's call is now a switch point, and the started activity, ready since
+  `~start`, runs while main waits for its completion.
+- On the oracle that is also a possible schedule, because the native call releases the kernel lock.
+- What keeps main's lines from appearing is that this crate's refusal is loud and ends the run. A
+  condition in the started activity would not end it.
+- So it is an artifact of an unimplemented path, not of the exit. Changing the schedule to hide it
+  would undo the switch point the spec asks for, so I left it.
+- The report's line "no test observes it" now reads: no failure that ends a native park lets the
+  run continue, so the frame pop and the guard release are clean-up.
+
+### M2: the held row's order
+
+- `Held::new` now takes a closure. It counts the call first, then resolves the stub, which reads
+  `open`.
+- `Mapping::close` clears `open` first, then reads `calls`. If it finds a call, it restores `open`
+  and refuses.
+- `run_hook` now checks `open` inside `Mapping::hold`, after the count.
+- So of a close and a call that race, one always sees the other. A call that races a refused close
+  may see the mapping closed and call nothing. That race needs two threads, and none exist yet.
+- Test: `load::tests::a_held_row_keeps_its_mapping_open`.
+
+### Checks at `94266cb68`
+
+`scratchpad/t17/checks.sh`, statuses unpiped, all exit 0:
+- fmt; clippy for the workspace, `--features pinning`, and `--cfg loom`;
+- `cargo test -p rexx-api`:
+  - lib 68;
+  - context 14, handles 5, invoke 16, layout 23, load 11, values 83;
+  - doctests 1 and 4;
+- `cargo test -p rexx-exec --lib`: 957 passed;
+- corpus, with `REXX_CORPUS_GATE=1`: release 787/787, release under every 787/787, debug under
+  every 787/787;
+- collect_stress: 36;
+- refusal_sites 5, method_bodies 23, gate_table_c 22, dispatch_seam 6;
+- sourceline_oracle 1; unsafe_sites 2; api_group_tests 24; loom 8;
+- pinning `measured::`: 18; concurrency_tests: 32.
+
+"It works": every `bench-programs/*.rex` and `rexxcps` on the two release builds above.
+- Every exit status is 0 on both.
+- stdout and stderr are identical except the timing lines of `heapshape` and `rexxcps`.
+- extcall prints `3000000`.
