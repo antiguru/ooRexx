@@ -150,14 +150,20 @@ pub(crate) enum Posted {
         activity: ActivityId,
         ended: crate::command::Waited,
     },
+    /// What a command's child off the baton wrote, to standard error where
+    /// `error`, written to the interpreter's own as it arrives.
+    Output {
+        error: bool,
+        bytes: Vec<u8>,
+    },
+    /// A pool thread's job panicked; the baton's holder panics with it.
+    Panicked(Box<dyn std::any::Any + Send>),
 }
 
 /// A native call's completion, posted to the inbox by the thread that ran
 /// the call, for the activity that made it.
 pub(crate) struct Completed {
     pub(crate) activity: ActivityId,
-    /// The call's native frame, as [`Interp::native_token`] names it.
-    pub(crate) frame: u64,
     pub(crate) completion: rexx_api::invoke::Completion,
 }
 
@@ -405,21 +411,18 @@ pub(crate) trait Scheduler {
     /// Runs the native call the running activity, parked for it, prepared,
     /// off the baton (spec 2026-09-29 P6-3): on a pool thread, which this
     /// thread lends the baton to while it enters the call, or, where no pool
-    /// thread is free, here with the baton released. Its completion is
-    /// posted.
+    /// thread is free, here on the baton. Its completion is posted.
     fn exit_for_native(&mut self);
     /// Runs `block`, a blocking operation of the running activity's that
     /// touches no island value, on a pool thread, which posts what it ended
     /// with; `Err(block)` where no pool thread is free.
     fn exit_for_block(&mut self, block: crate::command::Block)
     -> Result<(), crate::command::Block>;
-    /// Posts `completion`, of `activity`'s native call in the native frame
-    /// `frame`, to `inbox` for the baton's holder to drain; it touches
-    /// nothing else.
+    /// Posts `completion`, of `activity`'s native call, to `inbox` for the
+    /// baton's holder to drain; it touches nothing else.
     fn post_completion(
         inbox: &crate::timer::Inbox<crate::timer::Posted>,
         activity: ActivityId,
-        frame: u64,
         completion: rexx_api::invoke::Completion,
     ) where
         Self: Sized;
@@ -549,16 +552,24 @@ impl Scheduler for Interp {
         if let Some(worker) = self.pool.reserve() {
             let to = worker.thread();
             let pooled = crate::dispatch::library::PooledCall::new(
-                call, thread, frame, pending, activity, &baton, inbox,
+                call,
+                thread,
+                frame,
+                pending,
+                activity,
+                &baton,
+                crate::sync::Arc::clone(&inbox),
             );
-            worker.run(Box::new(move || pooled.run()));
+            worker.run(Box::new(move || {
+                pool::posting_panics(&inbox, || pooled.run());
+            }));
             baton.lend(to, crate::island::Island::of(self));
             return;
         }
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         self.activities.runs_below += 1;
         let pending = call.run(frame, pending, self, &baton, &thread, |completion| {
-            Self::post_completion(&inbox, activity, frame, completion);
+            Self::post_completion(&inbox, activity, completion);
         });
         self.activities.runs_below -= 1;
         pin_leave!(self);
@@ -578,8 +589,12 @@ impl Scheduler for Interp {
         let inbox = self.timer.inbox();
         let activity = self.activities.running;
         worker.run(Box::new(move || {
-            let ended = block.wait();
-            inbox.post(Posted::Unblocked { activity, ended });
+            pool::posting_panics(&inbox, || {
+                let ended = block.stream(&|error, bytes| {
+                    inbox.post(Posted::Output { error, bytes });
+                });
+                inbox.post(Posted::Unblocked { activity, ended });
+            });
         }));
         Ok(())
     }
@@ -587,12 +602,10 @@ impl Scheduler for Interp {
     fn post_completion(
         inbox: &crate::timer::Inbox<crate::timer::Posted>,
         activity: ActivityId,
-        frame: u64,
         completion: rexx_api::invoke::Completion,
     ) {
         inbox.post(Posted::Completed(Completed {
             activity,
-            frame,
             completion,
         }));
     }
@@ -1118,20 +1131,24 @@ impl Interp {
             match posted {
                 Posted::Completed(Completed {
                     activity,
-                    frame,
                     completion,
                 }) => {
                     self.activities.in_flight -= 1;
                     if let Some(call) = self
                         .record_of(activity)
                         .and_then(|record| record.native_call.as_mut())
-                        .filter(|call| call.frame() == frame)
                     {
                         call.complete(completion);
                         self.unpark(activity);
                     }
                 }
                 Posted::Recall(recall) => self.serve_recall(recall),
+                Posted::Output {
+                    error: false,
+                    bytes,
+                } => self.write_out(&bytes),
+                Posted::Output { error: true, bytes } => self.write_err(&bytes),
+                Posted::Panicked(payload) => std::panic::resume_unwind(payload),
                 Posted::Unblocked { activity, ended } => {
                     self.activities.in_flight -= 1;
                     if let Some(blocked) = self
@@ -1187,7 +1204,7 @@ impl Interp {
         self.activities.runs_below += 1;
         let stack = (self.stack_base, self.stack_room);
         self.stack_base = base;
-        self.stack_room = pool::POOL_STACK_BYTES - pool::POOL_STACK_MARGIN;
+        self.stack_room = self.pool.stack().saturating_sub(STACK_MARGIN);
         let baton = crate::sync::Arc::clone(&self.baton);
         baton.lend(thread, crate::island::Island::of(self));
         (self.stack_base, self.stack_room) = stack;
@@ -2004,7 +2021,7 @@ pub(crate) fn take_scripted() -> Option<Scripted> {
 }
 
 mod pool;
-pub(crate) use pool::{POOL_STACK_BYTES, Pool};
+pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool};
 
 #[cfg(test)]
 mod tests;

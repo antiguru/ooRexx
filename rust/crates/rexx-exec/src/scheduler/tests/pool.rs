@@ -127,8 +127,33 @@ fn library() -> rexx_api::load::Library {
         ("NAP", nap),
         ("HERE", here),
         ("SENDTHENAWAIT", rexx_api::load::send_then_await),
+        ("BOOM", boom),
     ])
 }
+
+extern "C-unwind" fn boom(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    panic!("a native panicked");
+}
+
+/// The pool a run gets, where a test sets it, and the run's deadline.
+#[derive(Clone, Copy)]
+struct Shape {
+    stack: Option<usize>,
+    bound: Option<usize>,
+    deadline: Duration,
+}
+
+const SHAPE: Shape = Shape {
+    stack: None,
+    bound: None,
+    deadline: Duration::from_secs(60),
+};
 
 /// A run: its outcome, its driver exits, and the interpreter's thread.
 struct Ran {
@@ -151,12 +176,25 @@ impl Ran {
 /// routines as the library `pooltest`, the test libraries on its library
 /// path, and its pool threads given `pool_stack` bytes where that is set.
 fn run(source: &str, pool_stack: Option<usize>) -> Ran {
+    run_shaped(
+        source,
+        Shape {
+            stack: pool_stack,
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic")
+}
+
+/// [`run`] with the pool and deadline `shape` gives, answering whether the
+/// interpreter thread panicked.
+fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran> {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
         .expect("the worktree's build/lib is three directories above this crate");
     let invocation = Invocation::none()
-        .with_deadline(Duration::from_secs(60))
+        .with_deadline(shape.deadline)
         .with_environment(vec![
             (
                 b"LD_LIBRARY_PATH".to_vec(),
@@ -169,8 +207,11 @@ fn run(source: &str, pool_stack: Option<usize>) -> Ran {
         .stack_size(crate::INTERPRETER_STACK_BYTES)
         .spawn(move || {
             crate::install::offer_library(b"pooltest", library);
-            if let Some(bytes) = pool_stack {
+            if let Some(bytes) = shape.stack {
                 crate::set_pool_stack(bytes);
+            }
+            if let Some(threads) = shape.bound {
+                crate::set_pool_bound(threads);
             }
             let outcome = crate::execute_on(
                 "/tmp/pool.rex",
@@ -187,7 +228,6 @@ fn run(source: &str, pool_stack: Option<usize>) -> Ran {
         })
         .expect("the interpreter thread")
         .join()
-        .expect("the run did not panic")
 }
 
 const MEETING: &str = "m = .t~new~start('other')\ncall MEET\nsay 'main'\nsay m~result\n\
@@ -220,25 +260,108 @@ fn a_spawn_failure_leaves_ready_activities_to_the_next_baton_holder() {
     assert_eq!(MEETINGS[1].outcome(), (0, 2));
 }
 
+const DEEP: &str = "m = .t~new~start('idle')\nsay .k~new~send0(.r~new, 'deep')\n\
+                    ::class t\n::method idle\n  call SysSleep 0.1\n\
+                    ::class r\n::method deep\n  return .k~new~send0(self, 'deep')\n\
+                    ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n";
+
 /// Rexx code a callback runs on a pool thread, recursing without bound
 /// through native calls that call back, raises 11.1 when that thread's stack
 /// runs low, rather than overflowing it.
 #[test]
 fn deep_pinned_recursion_on_a_pool_thread_raises_11() {
+    let ran = run(DEEP, Some(40 * 1024 * 1024));
+    assert_eq!(ran.exits, 1);
+    assert_eq!(ran.outcome.exit_code, 245, "{}", ran.stderr());
+    assert!(ran.stderr().contains("Error 11.1:"), "{}", ran.stderr());
+    let levels = ran.stderr().matches("SEND0").count();
+    assert!(
+        levels < crate::run::MAX_ACTIVATION_DEPTH / 2,
+        "{levels} levels: the depth cap fired, not the pool thread's stack check"
+    );
+}
+
+/// The same recursion on a pool thread of the shipped size reaches the
+/// activation depth cap, as it does on the interpreter's thread.
+#[test]
+fn callback_recursion_on_a_pool_thread_reaches_the_depth_cap() {
+    let ran = run(DEEP, None);
+    assert_eq!(ran.outcome.exit_code, 245, "{}", ran.stderr());
+    let levels = ran.stderr().matches("SEND0").count();
+    assert!(
+        levels + 2 >= crate::run::MAX_ACTIVATION_DEPTH,
+        "{levels} levels"
+    );
+}
+
+/// The translator, run by a callback on a pool thread, has the interpreter
+/// thread's stack: deep nesting and long operator chains translate as they
+/// do there.
+#[test]
+fn the_translator_on_a_pool_thread_has_the_interpreter_threads_stack() {
     let ran = run(
         "m = .t~new~start('idle')\nsay .k~new~send0(.r~new, 'deep')\n\
          ::class t\n::method idle\n  call SysSleep 0.1\n\
-         ::class r\n::method deep\n  return .k~new~send0(self, 'deep')\n\
+         ::class r\n::method deep\n  \
+         interpret 'x =' copies('(', 3000)'1'copies(')', 3000)\n  \
+         interpret 'y =' copies('1+', 5000)'1'\n  return x y\n\
          ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
         None,
     );
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "1 5001\n");
     assert_eq!(ran.exits, 1);
-    assert!(
-        ran.stderr().contains("Error 11.1:"),
-        "{}: {}",
-        ran.outcome.exit_code,
-        ran.stderr()
+}
+
+/// A pool thread whose callback's nested loop starts another call when no
+/// pool thread is free runs that call on the baton it holds by a lend.
+#[test]
+fn a_call_on_a_pool_thread_with_no_thread_free_runs_on_its_lend() {
+    let ran = run_shaped(
+        "n = 4\ndo i = 1 to n\n  a.i = .w~new~start('go')\nend\ns = 0\n\
+         do i = 1 to n\n  s = s + a.i~result\nend\nsay 'ok' s\n\
+         ::class w\n::method go\n  return .k~new~send0(.r~new, 'cb')\n\
+         ::class r\n::method cb\n  call SysSleep 0.3\n  return 1\n\
+         ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
+        Shape {
+            bound: Some(2),
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "ok 4\n");
+}
+
+/// What a command's child writes off the baton reaches the output as it
+/// arrives, ahead of what another activity says later.
+#[test]
+fn an_off_baton_commands_output_keeps_its_place() {
+    let ran = run(
+        "m = .t~new~start('tick')\n'echo child; sleep 0.3'\nsay m~result\n\
+         ::class t\n::method tick\n  call SysSleep 0.1\n  say 'tick'\n  return 'done'\n",
+        None,
     );
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "child\ntick\ndone\n");
+}
+
+/// A panic on a pool thread ends the run as it would on the interpreter's
+/// thread, rather than leaving the call's activity waiting.
+#[test]
+fn a_panic_on_a_pool_thread_reaches_the_interpreter_thread() {
+    let ran = run_shaped(
+        "m = .t~new~start('idle')\ncall BOOM\nsay 'after'\n\
+         ::requires 'pooltest' LIBRARY\n::class t\n::method idle\n  call SysSleep 0.1\n",
+        Shape {
+            deadline: Duration::from_secs(10),
+            ..SHAPE
+        },
+    );
+    let Err(payload) = ran else {
+        panic!("the run ended without the native's panic");
+    };
+    assert_eq!(payload.downcast_ref::<&str>(), Some(&"a native panicked"));
 }
 
 /// A pinned waiter whose wait an activity's native call satisfies: the call

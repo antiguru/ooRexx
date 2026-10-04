@@ -212,29 +212,42 @@ pub(crate) const LIBRARY_PACKAGE_NAME: &[u8] = b"REXX";
 /// ```
 pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
 
-/// The stack a new interpreter's pool threads get.
+/// A new interpreter's pool.
 #[cfg(not(test))]
-fn pool_stack() -> usize {
-    crate::scheduler::POOL_STACK_BYTES
+fn new_pool() -> crate::scheduler::Pool {
+    crate::scheduler::Pool::new(
+        crate::scheduler::POOL_STACK_BYTES,
+        crate::scheduler::POOL_BOUND,
+    )
 }
 
 #[cfg(test)]
 thread_local! {
-    /// A pool stack size a test sets for the interpreters this thread makes.
-    static POOL_STACK: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    /// The pool stack size and bound a test sets for the interpreters this
+    /// thread makes.
+    static POOL_SHAPE: std::cell::Cell<(Option<usize>, Option<usize>)> =
+        const { std::cell::Cell::new((None, None)) };
 }
 
 #[cfg(test)]
-fn pool_stack() -> usize {
-    POOL_STACK
-        .with(std::cell::Cell::get)
-        .unwrap_or(crate::scheduler::POOL_STACK_BYTES)
+fn new_pool() -> crate::scheduler::Pool {
+    let (stack, bound) = POOL_SHAPE.with(std::cell::Cell::get);
+    crate::scheduler::Pool::new(
+        stack.unwrap_or(crate::scheduler::POOL_STACK_BYTES),
+        bound.unwrap_or(crate::scheduler::POOL_BOUND),
+    )
 }
 
 /// Gives the pool threads of interpreters this thread makes `bytes` of stack.
 #[cfg(test)]
 pub(crate) fn set_pool_stack(bytes: usize) {
-    POOL_STACK.with(|stack| stack.set(Some(bytes)));
+    POOL_SHAPE.with(|shape| shape.set((Some(bytes), shape.get().1)));
+}
+
+/// Bounds the pools of interpreters this thread makes at `threads`.
+#[cfg(test)]
+pub(crate) fn set_pool_bound(threads: usize) {
+    POOL_SHAPE.with(|shape| shape.set((shape.get().0, Some(threads))));
 }
 
 /// The arena size below which no ordinary run ever collects, and the floor
@@ -2013,7 +2026,7 @@ impl Interp {
             required_paths: FxHashMap::default(),
             required_packages: FxHashMap::default(),
             untranslated: rustc_hash::FxHashSet::default(),
-            pool: crate::scheduler::Pool::new(pool_stack()),
+            pool: new_pool(),
         }
     }
 

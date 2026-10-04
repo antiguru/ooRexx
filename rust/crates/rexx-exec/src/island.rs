@@ -23,7 +23,6 @@ use crate::Interp;
 pub(crate) type InterpBaton = crate::baton::Baton<Island>;
 
 /// A value of the interpreter's that moves to another OS thread.
-#[derive(Clone, Copy)]
 pub(crate) struct Islanded<T>(T);
 
 // SAFETY: D-U2. The island is reachable only through one root pointer and the
@@ -41,19 +40,27 @@ unsafe impl<T> Send for Islanded<T> {}
 impl<T> Islanded<T> {
     /// `value`, made by the baton's holder.
     pub(crate) fn new(value: T, baton: &InterpBaton) -> Islanded<T> {
-        debug_assert!(baton.held_here(), "an island value moved off the baton");
+        assert!(baton.held_here(), "an island value moved off the baton");
         Islanded(value)
     }
 
     /// The value, for the baton's holder.
     pub(crate) fn take(self, baton: &InterpBaton) -> T {
-        debug_assert!(baton.held_here(), "an island value taken off the baton");
+        assert!(baton.held_here(), "an island value taken off the baton");
         self.0
     }
 }
 
 /// The interpreter's root pointer, which the baton's holder lends with it.
 pub(crate) type Island = Islanded<NonNull<Interp>>;
+
+impl Clone for Island {
+    fn clone(&self) -> Island {
+        *self
+    }
+}
+
+impl Copy for Island {}
 
 impl Island {
     /// The root pointer of `interp`, which its holder lends while it waits.
@@ -96,5 +103,34 @@ impl<'b> Lent<'b> {
 impl Drop for Lent<'_> {
     fn drop(&mut self) {
         self.baton.give_back();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InterpBaton, Islanded};
+
+    /// An island value is made only by the baton's holder, in every build.
+    #[test]
+    #[should_panic(expected = "an island value moved off the baton")]
+    fn an_island_value_is_made_only_on_the_baton() {
+        let baton = InterpBaton::new();
+        let _ = Islanded::new(1, &baton);
+    }
+
+    /// An island value is taken out only by the baton's holder, in every
+    /// build.
+    #[test]
+    #[should_panic(expected = "an island value taken off the baton")]
+    fn an_island_value_is_taken_only_on_the_baton() {
+        let baton = InterpBaton::new();
+        baton.acquire();
+        let value = Islanded::new(1, &baton);
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| value.take(&baton))
+                .join()
+                .unwrap_or_else(|payload| std::panic::resume_unwind(payload))
+        });
     }
 }

@@ -16,25 +16,29 @@
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{JoinHandle, ThreadId};
 
-/// A pool thread's stack: `SysThread::THREAD_STACK_SIZE`
-/// (`common/platform/unix/SysThread.hpp:67`).
-pub(crate) const POOL_STACK_BYTES: usize = 512 * 1024;
-
-/// The stack a pool thread keeps free below the deepest point
-/// [`crate::Interp::stack_exhausted`] admits there: the oracle's
-/// `Activity::errorRecoveryStack` on a 64-bit build
-/// (`concurrency/Activity.hpp:445`).
-pub(crate) const POOL_STACK_MARGIN: usize = 64 * 1024;
+/// A pool thread's stack: the interpreter thread's, since a callback runs
+/// Rexx code there, and the translator's and the collector's depth limits
+/// are measured against that size.
+pub(crate) const POOL_STACK_BYTES: usize = crate::INTERPRETER_STACK_BYTES;
 
 /// The most threads an interpreter's pool runs.
-const POOL_BOUND: usize = 64;
+pub(crate) const POOL_BOUND: usize = 64;
 
 /// What a pool thread runs.
 pub(crate) type Job = Box<dyn FnOnce() + Send>;
 
+/// Runs `job`, posting a panic it ends in to `inbox` for the baton's holder
+/// to panic with.
+pub(crate) fn posting_panics(inbox: &crate::timer::Inbox<super::Posted>, job: impl FnOnce()) {
+    if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
+        inbox.post(super::Posted::Panicked(payload));
+    }
+}
+
 pub(crate) struct Pool {
     shared: Arc<Shared>,
     stack: usize,
+    bound: usize,
 }
 
 struct Shared {
@@ -68,8 +72,9 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Pool {
-    /// An empty pool whose threads get `stack` bytes of stack.
-    pub(crate) fn new(stack: usize) -> Pool {
+    /// An empty pool of at most `bound` threads, each with `stack` bytes of
+    /// stack.
+    pub(crate) fn new(stack: usize, bound: usize) -> Pool {
         Pool {
             shared: Arc::new(Shared {
                 state: Mutex::new(State {
@@ -79,7 +84,13 @@ impl Pool {
                 }),
             }),
             stack,
+            bound,
         }
+    }
+
+    /// The stack each thread gets.
+    pub(crate) fn stack(&self) -> usize {
+        self.stack
     }
 
     /// An idle thread, or a new one, for one job; `None` where the bound is
@@ -89,7 +100,7 @@ impl Pool {
         if let Some(worker) = state.idle.pop() {
             return Some(worker);
         }
-        if state.threads.len() >= POOL_BOUND {
+        if state.threads.len() >= self.bound {
             return None;
         }
         let mailbox = Arc::new(Mailbox {

@@ -6084,6 +6084,49 @@ mod tests {
         assert!(baton.held.get());
     }
 
+    /// A baton that, when taken, records whether its call's conversion
+    /// state was already borrowed.
+    #[derive(Default)]
+    struct ProbingBaton {
+        activation: std::cell::Cell<*const values::Activation<'static>>,
+        busy_at_take: std::cell::Cell<Option<bool>>,
+    }
+
+    impl values::Baton for ProbingBaton {
+        fn take_unless_held(&self) -> bool {
+            // SAFETY: the test sets the pointer to an activation that
+            // outlives every conversion it makes.
+            let activation = unsafe { &*self.activation.get() };
+            self.busy_at_take.set(Some(activation.is_busy()));
+            true
+        }
+
+        fn release(&self) {}
+
+        fn held_here(&self) -> bool {
+            true
+        }
+    }
+
+    /// A callback takes the baton before it borrows the call's conversion
+    /// state, which a thread holding the baton may test from another call
+    /// (ruling P50).
+    #[test]
+    fn a_callback_takes_the_baton_before_it_borrows_the_conversion() {
+        let mut host = FakeHost::new();
+        let baton = ProbingBaton::default();
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host: values::HostRef::guarded(&mut host, &baton),
+            strings: &mut strings,
+        });
+        baton
+            .activation
+            .set(std::ptr::from_ref(&activation).cast::<values::Activation<'static>>());
+        let _ = activation.whole_number(5);
+        assert_eq!(baton.busy_at_take.get(), Some(false));
+    }
+
     /// A thread-context member called during a call that runs with the
     /// baton released takes the baton before it reads the thread table's
     /// running call, and again for its conversion, giving it back each time.

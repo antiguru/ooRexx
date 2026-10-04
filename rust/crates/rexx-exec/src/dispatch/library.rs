@@ -992,10 +992,11 @@ fn resume_library_routine(
 }
 
 impl OffBaton {
-    /// Runs the call with `baton` released, `host` reached only through a
-    /// [`HostRef::guarded`] for its length, as the native frame `frame` holding
-    /// the condition `pending`, and hands its completion to `post` before
-    /// taking the baton back; answers the condition then held.
+    /// Runs the call on the thread holding `baton`, which keeps it: a thread
+    /// may hold it by a lend, which only a give-back ends. `host` is reached
+    /// through a [`HostRef::guarded`], as the native frame `frame` holding the
+    /// condition `pending`; the completion goes to `post`. Answers the
+    /// condition then held.
     pub(crate) fn run(
         &mut self,
         frame: u64,
@@ -1018,11 +1019,7 @@ impl OffBaton {
         if let Some(number) = pending {
             activation.raise(number);
         }
-        thread.enter(&activation, |contexts| {
-            baton.release();
-            post(held.call(native, contexts));
-            baton.acquire();
-        });
+        thread.enter(&activation, |contexts| post(held.call(native, contexts)));
         activation.pending()
     }
 }
@@ -1121,7 +1118,7 @@ impl PooledCall {
             interp.activity.native_park = record.back(call, pending);
         }
         drop(thread);
-        Interp::post_completion(&self.inbox, self.activity, self.frame, completion);
+        Interp::post_completion(&self.inbox, self.activity, completion);
     }
 }
 

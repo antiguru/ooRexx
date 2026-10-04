@@ -194,3 +194,94 @@ At `2fd6b05b3`'s tree, from `rust/`:
 - **Test helpers in `rexx-api`**: `routines_only`, `send_then_await` and `pub` `NativeRoutine` /
   `Stub` types, `doc(hidden)`.
 - Filesystem builtins stay on the baton (gate record).
+
+## Fix round 1
+
+Under `task-18-review.md`; rulings P52 and P53 taken as given.
+
+### Findings
+
+1. **The fallback on a lend.** Where no pool thread is free, `OffBaton::run` now runs the call on
+   the thread holding the baton and keeps it (`dispatch/library.rs`), whether that thread holds it
+   plainly or by a lend. The reviewer's 65-call program (`scratchpad/t18rev/p3/c.rex`) now ends
+   `ok 66` and `ok 70`, rc 0, on a release `rexx-run`. A call made this way blocks every recall
+   for its length; that is recorded with the migration divergences in `phase-6-gate.md`. Test:
+   `a_call_on_a_pool_thread_with_no_thread_free_runs_on_its_lend` (pool bound 2, four activities).
+2. **Command output order.** `Block::stream` hands each piece the child writes to the pool thread,
+   which posts it as `Posted::Output`; the holder writes it to its own sinks at the next drain.
+   `scratchpad/t18/fr1o/b.rex` (the reviewer's program): the oracle printed `child tick done` in 30
+   of 30 runs from a fresh directory, and this crate printed the same, also 30 of 30. Test:
+   `an_off_baton_commands_output_keeps_its_place`.
+3. **The translator on a pool thread.** Pool threads now get `INTERPRETER_STACK_BYTES`, with the
+   interpreter thread's 32 MiB margin. Every depth limit in this crate (the parser's
+   `MAX_EXPR_DEPTH`, `MAX_EVAL_DEPTH`, `MAX_ACTIVATION_DEPTH`) is calibrated against that stack,
+   and the compiler and drops of deep trees have no check of their own. So the translator answers
+   as it does on the interpreter thread. It raises 11.1 where that thread does. The reviewer's
+   `p6` probes, on a release `rexx-run`:
+   - `g.rex`, `g1000.rex` and `g300.rex` print `1`, rc 0;
+   - `i.rex 10000` prints `1`;
+   - `f.rex` raises Error 11, rc 245;
+   - `j.rex` prints `churned`.
+   This departs from the brief's 512 KiB: the stacks are reserved and not committed, and the pool
+   is bounded at 64. Test: `the_translator_on_a_pool_thread_has_the_interpreter_threads_stack`,
+   which covers 3000 nested parentheses and a 5000-term chain.
+4. **`Islanded`.** It no longer derives `Clone` and `Copy`; only `Island` has them. `new` and
+   `take` now `assert!` the baton in every build. Tests: `an_island_value_is_made_only_on_the_baton`
+   and `an_island_value_is_taken_only_on_the_baton`, both `should_panic`.
+5. **Unwitnessed guards.**
+   - The completion's `frame` filter is removed, along with `Completed::frame`. A call is abandoned
+     only when its park is ended by a loud refusal or the run's deadline, and both end the run, so
+     no later completion reaches a record.
+   - The buried-owner push in `serve_recall` stays. It matters only when the outgoing activity is
+     in the ready queue at the time of a recall. That is the case at a drain in `next_runnable`
+     after a slice, when the recall arrives after the slice's own cold-visit drain. Without the
+     push, a nested loop in the callback could run that activity; if the activity ended there, the
+     swap back would find no record and hit `unreachable!`.
+   - A test of that window was written. It is a switch-mode run whose callback sleeps. It stayed
+     green with the push removed (3 of 3), because under switch mode the recall is served at the
+     cold visit before the slice. So it does not witness the push, and I deleted it. No test
+     witnesses this guard.
+6. **Order in `Activation::conversion`.** The baton is taken before the conversion state is
+   borrowed. The guarded host is still refreshed after the borrow. Test (rexx-api `ffi.rs`):
+   `a_callback_takes_the_baton_before_it_borrows_the_conversion`. A baton that records `is_busy()`
+   at its take sees `false`.
+7. **A panic on a pool thread.** Pool jobs run inside `pool::posting_panics`. It posts
+   `Posted::Panicked`, and the holder re-raises the panic at its next drain, so the run ends as it
+   would on the interpreter thread. Test: `a_panic_on_a_pool_thread_reaches_the_interpreter_thread`,
+   which uses a test native that panics.
+8. **Callback recursion depth.** This is fixed by finding 3's stack. The reviewer's `p9` programs,
+   on a release `rexx-run`, end at 9999, 9999, 10000, 9999, 9999, 9998 and 10000 for a to g, all
+   at rc 245, which equals base. Test: `callback_recursion_on_a_pool_thread_reaches_the_depth_cap`.
+   `deep_pinned_recursion_on_a_pool_thread_raises_11` now runs with a 40 MiB pool stack, so the
+   pool thread's own stack check fires first, below half the cap. The gate record's
+   migration-divergence entry now states these figures.
+
+### Red without each fix
+
+The harness is `scratchpad/t18/mut/run2.py`. Each mutant is applied to the working tree and
+restored from a saved copy. Each is run with `CARGO_TARGET_DIR=<scratch> memcap 8G cargo test
+--release` on the named test.
+
+| Mutant | Result |
+|---|---|
+| fallback releases and reacquires again | exit 101, panic `baton.rs:94` (a thread released a baton lent to it) |
+| output not streamed (`block.wait()`) | exit 101, stdout `tick\nchild\ndone\n` |
+| pool stack 512 KiB, translator test | exit 101, rc 245 against 0 |
+| pool stack 512 KiB, depth-cap test | exit 101 |
+| pool stack unchecked (`stack_room = usize::MAX`), 40 MiB test | exit 101, `has overflowed its stack` |
+| `debug_assert!` in `Islanded::new`, then in `take` | exit 101 each (`--release`) |
+| borrow before take in `conversion` | exit 101, `Some(true)` against `Some(false)` |
+| no `catch_unwind` in pool jobs | exit 101: the run ends at its 10 s deadline with no panic |
+
+### Checks
+
+From `rust/`, at the fix commit:
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo test --workspace --release --no-run` (outside `memcap`), then
+  `memcap 8G cargo test --workspace --release --no-fail-fast`: exit 0, 141 test binaries, 2955
+  passed, 0 failed.
+- `corpus/refusal-sites.tsv` re-derived; only line numbers changed.
+- The Step 3 command re-run: still 123 lines, with one new hit (`command.rs:466`, `read_all`) and
+  one gone (`scheduler.rs`'s `block.wait()`). The gate record's list and table were updated, and
+  every cited line was checked against the output.

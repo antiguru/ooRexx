@@ -857,22 +857,20 @@ impl<'a> Activation<'a> {
 
     /// The conversion state, for the length of one operation. Through a
     /// guarded host, this thread takes the baton for that length unless it
-    /// holds it.
+    /// holds it, before it borrows the state another thread may test.
     ///
     /// # Panics
     /// If the caller already holds it, which is an extension entering the
     /// interpreter while the interpreter is inside a conversion.
     #[inline(always)]
     pub fn conversion(&self) -> Converting<'_, 'a> {
+        let taken = self
+            .baton
+            .and_then(|baton| baton.take_unless_held().then(|| Taken(baton)));
         let mut conversion = self.conversion.borrow_mut();
-        let taken = match self.baton {
-            Some(baton) => {
-                let taken = baton.take_unless_held().then(|| Taken(baton));
-                conversion.host.refresh();
-                taken
-            }
-            None => None,
-        };
+        if self.baton.is_some() {
+            conversion.host.refresh();
+        }
         Converting {
             conversion,
             _taken: taken,

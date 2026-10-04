@@ -439,7 +439,35 @@ pub(crate) struct Block {
 impl Block {
     /// Waits for the child, collecting what it wrote.
     pub(crate) fn wait(self) -> Waited {
-        collect(self.running, None, None)
+        collect(self.running, None, None, None)
+    }
+
+    /// Waits for the child, handing each piece it writes to `written`, with
+    /// whether it went to standard error, as it arrives; the answer holds
+    /// the return code alone.
+    pub(crate) fn stream(self, written: &(dyn Fn(bool, Vec<u8>) + Sync)) -> Waited {
+        collect(self.running, None, None, Some(written))
+    }
+}
+
+/// Reads `reader` to its end, into `kept`, or piece by piece into `written`
+/// with `error` where there is one.
+fn read_all(
+    mut reader: impl Read,
+    kept: &mut Vec<u8>,
+    written: Option<&(dyn Fn(bool, Vec<u8>) + Sync)>,
+    error: bool,
+) {
+    let Some(written) = written else {
+        let _ = reader.read_to_end(kept);
+        return;
+    };
+    let mut piece = [0u8; 4096];
+    while let Ok(count) = reader.read(&mut piece) {
+        if count == 0 {
+            return;
+        }
+        written(error, piece[..count].to_vec());
     }
 }
 
@@ -559,6 +587,7 @@ fn collect(
     mut running: std::process::Child,
     input: Option<Vec<u8>>,
     merged: Option<std::io::PipeReader>,
+    written: Option<&(dyn Fn(bool, Vec<u8>) + Sync)>,
 ) -> Waited {
     let stdin = running.stdin.take();
     let stdout = running.stdout.take();
@@ -575,18 +604,16 @@ fn collect(
         }
         let collector = scope.spawn(|| {
             let mut bytes = Vec::new();
-            if let Some(mut stderr) = stderr {
-                let _ = stderr.read_to_end(&mut bytes);
+            if let Some(stderr) = stderr {
+                read_all(stderr, &mut bytes, written, true);
             }
             bytes
         });
         match merged {
-            Some(mut merged) => {
-                let _ = merged.read_to_end(&mut out);
-            }
+            Some(merged) => read_all(merged, &mut out, written, false),
             None => {
-                if let Some(mut stdout) = stdout {
-                    let _ = stdout.read_to_end(&mut out);
+                if let Some(stdout) = stdout {
+                    read_all(stdout, &mut out, written, false);
                 }
             }
         }
@@ -667,7 +694,7 @@ impl Interp {
                 running,
                 input,
                 merged,
-            } => collect(running, input, merged),
+            } => collect(running, input, merged, None),
         };
         if let Some(context) = io {
             context.finish(self, &spawned.out, &spawned.err)?;
