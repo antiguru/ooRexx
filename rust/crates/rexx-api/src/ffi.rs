@@ -141,10 +141,32 @@ impl<'a> HostRef<'a> {
         }
     }
 
+    /// The host lent with `baton`, for a call whose thread holds the baton
+    /// only by lends; each lend's host replaces the last
+    /// ([`HostRef::refresh`]).
+    ///
+    /// # Panics
+    /// If `baton` was lent no host.
+    pub fn through(baton: &'a dyn Baton) -> HostRef<'a> {
+        HostRef {
+            host: baton.host().expect("a baton lent with a host"),
+            baton: Some(baton),
+            lent: PhantomData,
+        }
+    }
+
     /// The baton a guarded host is reached under.
     #[inline(always)]
     pub fn baton(&self) -> Option<&'a dyn Baton> {
         self.baton
+    }
+
+    /// Takes the host lent with the baton this thread now holds, where it was
+    /// lent one: the address the lender derived from its own borrow.
+    pub(crate) fn refresh(&mut self) {
+        if let Some(host) = self.baton.and_then(Baton::host) {
+            self.host = host;
+        }
     }
 }
 
@@ -658,6 +680,10 @@ struct Thread {
     /// The thread the interpreter runs on, which is the only one an
     /// extension may attach to it.
     home: std::thread::ThreadId,
+    /// The thread running the innermost call in flight with the baton
+    /// released, which may attach as the home thread does. Written by
+    /// [`ThreadContext::enter`] on the baton and read by that thread.
+    runner: Cell<Option<std::thread::ThreadId>>,
 }
 
 /// The activation of the innermost native call in flight on this context,
@@ -697,6 +723,7 @@ impl ThreadContext {
             table: table.clone(),
             innermost: Innermost(Cell::new(std::ptr::null()), Rc::clone(&table.running)),
             home: std::thread::current().id(),
+            runner: Cell::new(None),
         }));
         // SAFETY: `raw` is the allocation just made and nothing else addresses
         // it yet. Every link is taken from `raw` itself, so its provenance is
@@ -773,8 +800,14 @@ impl ThreadContext {
         // SAFETY: as above; the reference covers only the cell.
         let innermost = unsafe { &(*raw).innermost };
         let entered = std::ptr::from_ref(activation).cast::<Activation<'static>>();
+        // SAFETY: as above; the reference covers only the cell.
+        let runner = unsafe { &(*raw).runner };
+        let ran = activation
+            .released()
+            .then(|| runner.replace(Some(std::thread::current().id())));
         let _entered = Entered {
             innermost,
+            runner: ran.map(|ran| (runner, ran)),
             previous: innermost.0.replace(entered),
             running: innermost.1.0.replace(entered),
         };
@@ -839,6 +872,12 @@ impl Default for ThreadContext {
 /// [`ThreadContext::enter`].
 struct Entered<'a> {
     innermost: &'a Innermost,
+    /// The thread's runner cell and what it held, for a call with the baton
+    /// released.
+    runner: Option<(
+        &'a Cell<Option<std::thread::ThreadId>>,
+        Option<std::thread::ThreadId>,
+    )>,
     previous: *const Activation<'static>,
     running: *const Activation<'static>,
 }
@@ -847,6 +886,9 @@ impl Drop for Entered<'_> {
     fn drop(&mut self) {
         self.innermost.0.set(self.previous);
         self.innermost.1.0.set(self.running);
+        if let Some((runner, ran)) = self.runner {
+            runner.set(ran);
+        }
     }
 }
 
@@ -3973,9 +4015,20 @@ unsafe extern "C" fn get_interpreter_instance(
     unsafe { (*context).instance }
 }
 
-/// `AttachThread` from the thread the interpreter runs on while a native
-/// call is in flight: that thread is attached already, so the context it
-/// answers is the one the running call has.
+/// Whether this thread is `thread`'s home or runs its innermost call.
+///
+/// # Safety
+/// `thread` is a live `Thread`.
+unsafe fn runs_here(thread: *const Thread) -> bool {
+    let me = std::thread::current().id();
+    // SAFETY: the caller guarantees `thread`; `home` is written only when it
+    // is made, and `runner` names this thread only while it runs a call.
+    unsafe { (*thread).home == me || (*thread).runner.get() == Some(me) }
+}
+
+/// `AttachThread` from the thread the interpreter runs on, or the one running
+/// the call, while a native call is in flight: that thread is attached
+/// already, so the context it answers is the one the running call has.
 ///
 /// # Panics
 /// Called from another thread, or with no native call in flight, which is
@@ -3999,11 +4052,12 @@ unsafe extern "C" fn attach_thread(
     };
     let refused = "RexxInstanceInterface.AttachThread is not implemented (Phase 9)";
     // SAFETY: as above; `home` is written only when the thread is made, so
-    // any thread may read it.
-    let home = unsafe { (*thread).home };
-    assert!(home == std::thread::current().id(), "{refused}");
-    // SAFETY: as above, and this is the home thread, the only one that
-    // touches the innermost cell.
+    // any thread may read it, and `runner` is this thread's own while it
+    // runs a call.
+    let home = unsafe { runs_here(thread) };
+    assert!(home, "{refused}");
+    // SAFETY: as above, and this thread is the one whose call wrote the
+    // innermost cell.
     let idle = unsafe { (*thread).innermost.0.get().is_null() };
     assert!(!idle, "{refused}");
     if !attached.is_null() {
@@ -4041,9 +4095,9 @@ unsafe extern "C" fn add_command_environment(
             .cast::<Thread>()
     };
     // SAFETY: as in `attach_thread`.
-    let home = unsafe { (*thread).home };
+    let home = unsafe { runs_here(thread) };
     assert!(
-        home == std::thread::current().id(),
+        home,
         "RexxInstanceInterface.AddCommandEnvironment from another thread is not implemented (Phase 9)"
     );
     // SAFETY: as in `attach_thread`; the context is the allocation's own

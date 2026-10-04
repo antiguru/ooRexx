@@ -576,6 +576,70 @@ impl Interp {
         match &instruction.kind {
             InstructionKind::Guard(guard) => self.exec_guard(code, index, guard),
             InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
+            InstructionKind::Command { .. } | InstructionKind::Address(_)
+                if self.blocked_command_ended() =>
+            {
+                self.end_blocked_command(instruction, source)
+                    .map(ExecOutcome::Done)
+            }
+            // A command clause: the string is evaluated, handed to the
+            // `ADDRESS` environment in force, and its return code settles
+            // `RC`, `.RS` and any condition. See `command.rs`.
+            //
+            // The expression is `Option` because `opt_expr` builds it, but a
+            // clause reaching the command fallback has a term in it -- an
+            // empty one is a null clause and is dropped before this. Measured
+            // on the oracle: `;`, a blank line and `;;` each run nothing at
+            // all, and the C++'s own `execute` would fault on the null it
+            // would need. The assertion is the tripwire rather than a
+            // sentence claiming it cannot happen.
+            InstructionKind::Command { expression } => {
+                debug_assert!(
+                    expression.is_some(),
+                    "a command clause reached execution with no expression"
+                );
+                match expression {
+                    Some(expression) => {
+                        self.exec_command(code, instruction, source, expression, None, None)
+                    }
+                    None => Ok(ExecOutcome::Done(Flow::Next)),
+                }
+            }
+            // `ADDRESS`: the forms that only name an environment -- the
+            // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and
+            // the bare toggle -- go to `exec_address`. `ADDRESS env command`
+            // runs one command against that name and writes neither half of
+            // the activation's pair, measured. `WITH`'s redirection is what
+            // is still owed.
+            InstructionKind::Address(address) => {
+                if let Some(command) = &address.command {
+                    let environment = match (&address.environment, &address.dynamic) {
+                        (Some(name), _) => name.to_vec(),
+                        (None, Some(expression)) => {
+                            let value = self.eval(code, expression)?;
+                            self.roots.activity_mut().push_temp(value);
+                            let value = self.required_string_value(value)?;
+                            self.to_text(value).into_owned()
+                        }
+                        (None, None) => Vec::new(),
+                    };
+                    // **The configuration is this command's alone.** The
+                    // arm that carries a command never calls `setAddress`,
+                    // so it stores nothing under the name -- measured, a
+                    // later command in the same program is not redirected
+                    // and the stem it filled keeps its one line.
+                    return self.exec_command(
+                        code,
+                        instruction,
+                        source,
+                        command,
+                        Some(&environment),
+                        address.io.as_deref(),
+                    );
+                }
+                self.exec_address(code, address)?;
+                Ok(ExecOutcome::Done(Flow::Next))
+            }
             _ => self
                 .exec_flow(code, index, instruction, source, first_instruction)
                 .map(ExecOutcome::Done),
@@ -1120,42 +1184,6 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
-            // `ADDRESS`: the forms that only name an environment -- the
-            // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and
-            // the bare toggle -- go to `exec_address`. `ADDRESS env command`
-            // runs one command against that name and writes neither half of
-            // the activation's pair, measured. `WITH`'s redirection is what
-            // is still owed.
-            InstructionKind::Address(address) => {
-                if let Some(command) = &address.command {
-                    let environment = match (&address.environment, &address.dynamic) {
-                        (Some(name), _) => name.to_vec(),
-                        (None, Some(expression)) => {
-                            let value = self.eval(code, expression)?;
-                            self.roots.activity_mut().push_temp(value);
-                            let value = self.required_string_value(value)?;
-                            self.to_text(value).into_owned()
-                        }
-                        (None, None) => Vec::new(),
-                    };
-                    // **The configuration is this command's alone.** The
-                    // arm that carries a command never calls `setAddress`,
-                    // so it stores nothing under the name -- measured, a
-                    // later command in the same program is not redirected
-                    // and the stem it filled keeps its one line.
-                    return self.exec_command(
-                        code,
-                        instruction,
-                        source,
-                        command,
-                        Some(&environment),
-                        address.io.as_deref(),
-                    );
-                }
-                self.exec_address(code, address)?;
-                Ok(Flow::Next)
-            }
-
             // A message send as a whole clause: `q~append(1)`, `q~~append(1)`
             // and the message-assignment form `q[1] = 2`. See
             // `exec_message`.
@@ -1165,30 +1193,6 @@ impl Interp {
 
             // `FORWARD` and its options. See `exec_forward`.
             InstructionKind::Forward(forward) => self.exec_forward(code, forward),
-
-            // A command clause: the string is evaluated, handed to the
-            // `ADDRESS` environment in force, and its return code settles
-            // `RC`, `.RS` and any condition. See `command.rs`.
-            //
-            // The expression is `Option` because `opt_expr` builds it, but a
-            // clause reaching the command fallback has a term in it -- an
-            // empty one is a null clause and is dropped before this. Measured
-            // on the oracle: `;`, a blank line and `;;` each run nothing at
-            // all, and the C++'s own `execute` would fault on the null it
-            // would need. The assertion is the tripwire rather than a
-            // sentence claiming it cannot happen.
-            InstructionKind::Command { expression } => {
-                debug_assert!(
-                    expression.is_some(),
-                    "a command clause reached execution with no expression"
-                );
-                match expression {
-                    Some(expression) => {
-                        self.exec_command(code, instruction, source, expression, None, None)
-                    }
-                    None => Ok(Flow::Next),
-                }
-            }
 
             other => Err(Loud::instruction(other).into()),
         }

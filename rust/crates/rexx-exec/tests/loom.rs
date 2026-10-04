@@ -32,7 +32,7 @@ use baton::Baton;
 use timer::{INBOX, Inbox, Registration, SLICE};
 
 /// Runs `body` as the baton's holder, failing if another thread is inside.
-fn hold(baton: &Baton, inside: &AtomicUsize) {
+fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
     assert!(baton.held_here());
     assert_eq!(
         inside.fetch_add(1, Ordering::SeqCst),
@@ -47,7 +47,7 @@ fn hold(baton: &Baton, inside: &AtomicUsize) {
 #[test]
 fn the_baton_passes_to_a_waiting_thread() {
     loom::model(|| {
-        let baton = Arc::new(Baton::new());
+        let baton = Arc::new(Baton::<u32>::new());
         let inside = Arc::new(AtomicUsize::new(0));
         baton.acquire();
         let pool = {
@@ -69,7 +69,7 @@ fn the_baton_passes_to_a_waiting_thread() {
 #[test]
 fn the_baton_passes_to_one_waiting_thread_at_a_time() {
     loom::model(|| {
-        let baton = Arc::new(Baton::new());
+        let baton = Arc::new(Baton::<u32>::new());
         let inside = Arc::new(AtomicUsize::new(0));
         baton.acquire();
         let pool: Vec<_> = (0..2)
@@ -190,7 +190,7 @@ fn touch(inside: &AtomicUsize) {
 #[test]
 fn a_callback_during_an_off_baton_call_takes_the_baton_first() {
     loom::model(|| {
-        let baton = Arc::new(Baton::new());
+        let baton = Arc::new(Baton::<u32>::new());
         let inside = Arc::new(AtomicUsize::new(0));
         let registration = Registration::new();
         let inbox = registration.inbox();
@@ -237,5 +237,79 @@ fn a_loop_with_a_call_in_flight_waits_for_its_completion() {
         caller.join().expect("the call's thread");
         assert_eq!(taken, [7]);
         assert!(!registration.requests().pending(INBOX));
+    });
+}
+
+/// The holder lends the baton to a pool thread and waits; the pool thread
+/// touches interpreter state with what was lent and gives it back, and a
+/// third thread taking the baton gets it only once the holder releases it.
+/// No two threads touch that state at once.
+#[test]
+fn a_lent_baton_comes_back_before_its_lender_runs() {
+    loom::model(|| {
+        let baton = Arc::new(Baton::<u32>::new());
+        let inside = Arc::new(AtomicUsize::new(0));
+        baton.acquire();
+        let pool = {
+            let (baton, inside) = (Arc::clone(&baton), Arc::clone(&inside));
+            thread::spawn(move || {
+                assert_eq!(baton.await_lend(), 5);
+                assert!(baton.held_here());
+                assert_eq!(baton.lent(), Some(5));
+                touch(&inside);
+                baton.give_back();
+                assert!(!baton.held_here());
+            })
+        };
+        let other = {
+            let (baton, inside) = (Arc::clone(&baton), Arc::clone(&inside));
+            thread::spawn(move || {
+                assert!(baton.take_unless_held());
+                touch(&inside);
+                baton.release();
+            })
+        };
+        baton.lend(pool.thread().id(), 5);
+        assert!(baton.held_here());
+        assert_eq!(baton.lent(), None);
+        touch(&inside);
+        baton.release();
+        pool.join().expect("the pool thread");
+        other.join().expect("the other thread");
+    });
+}
+
+/// A pool thread recalls the baton through the inbox while the holder idles
+/// there; the holder lends it, and the pool thread's lend ends before the
+/// holder touches interpreter state again.
+#[test]
+fn a_recall_posted_to_an_idle_holder_is_lent_the_baton() {
+    loom::model(|| {
+        let baton = Arc::new(Baton::<u32>::new());
+        let inside = Arc::new(AtomicUsize::new(0));
+        let registration = Registration::new();
+        baton.acquire();
+        let pool = {
+            let (baton, inside, inbox) = (
+                Arc::clone(&baton),
+                Arc::clone(&inside),
+                registration.inbox(),
+            );
+            thread::spawn(move || {
+                inbox.post(1);
+                baton.await_lend();
+                touch(&inside);
+                baton.give_back();
+            })
+        };
+        let mut posted = Vec::from(registration.drain());
+        while posted.is_empty() {
+            posted.extend(registration.idle());
+        }
+        assert_eq!(posted, [1]);
+        baton.lend(pool.thread().id(), 0);
+        touch(&inside);
+        baton.release();
+        pool.join().expect("the pool thread");
     });
 }

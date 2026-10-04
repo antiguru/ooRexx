@@ -121,6 +121,8 @@ pub(crate) enum ParkReason {
     Semaphore(crate::semaphores::SemaphoreWait),
     /// A native call prepared on the baton, until its completion is drained.
     Native,
+    /// A blocking operation run off the baton, until it has ended.
+    Block,
 }
 
 impl ParkReason {
@@ -134,15 +136,40 @@ impl ParkReason {
             ParkReason::Timer { .. } => "a timer's end",
             ParkReason::Semaphore(_) => "a semaphore",
             ParkReason::Native => "a native call's return",
+            ParkReason::Block => "a command's end",
         }
     }
+}
+
+/// What other threads post to an interpreter's inbox.
+pub(crate) enum Posted {
+    Completed(Completed),
+    Recall(Recall),
+    /// `activity`'s blocking operation has ended.
+    Unblocked {
+        activity: ActivityId,
+        ended: crate::command::Waited,
+    },
 }
 
 /// A native call's completion, posted to the inbox by the thread that ran
 /// the call, for the activity that made it.
 pub(crate) struct Completed {
     pub(crate) activity: ActivityId,
+    /// The call's native frame, as [`Interp::native_token`] names it.
+    pub(crate) frame: u64,
     pub(crate) completion: rexx_api::invoke::Completion,
+}
+
+/// A pool thread's request for the baton, for a callback of the native call
+/// it runs for `activity` or for that call's end.
+pub(crate) struct Recall {
+    pub(crate) activity: ActivityId,
+    /// The call's native frame, as [`Interp::native_token`] names it.
+    pub(crate) frame: u64,
+    pub(crate) thread: std::thread::ThreadId,
+    /// The address of a local near the base of that thread's stack.
+    pub(crate) base: usize,
 }
 
 /// A started activity's first step: the send `~start` asked for.
@@ -231,10 +258,10 @@ pub(crate) struct Activities {
     next_native: u32,
     /// Failures kept by [`Interp::keep_late_failure`].
     late_failures: Vec<Failure>,
-    /// Native calls that have left their driver and whose completions have
-    /// not been drained.
+    /// Native calls and blocking operations that have left their driver and
+    /// whose completions have not been drained.
     in_flight: usize,
-    /// Those of them whose run is on this thread's stack, under a callback,
+    /// Those of them whose run is below the running loop, under a callback,
     /// so that no loop above them can wait for their completions.
     runs_below: usize,
     /// The guard locks, and what each parked activity waits on.
@@ -324,6 +351,11 @@ impl Activities {
         })
     }
 
+    /// Whether a native call or a blocking operation is in flight.
+    pub(crate) fn in_flight(&self) -> bool {
+        self.in_flight > 0
+    }
+
     #[cfg(test)]
     pub(crate) fn retired(&self) -> &[rexx_api::ffi::ThreadContext] {
         &self.retired
@@ -371,14 +403,23 @@ pub(crate) trait Scheduler {
     /// that is holding the baton.
     fn stop_the_world(&self);
     /// Runs the native call the running activity, parked for it, prepared,
-    /// with the baton released (spec 2026-09-29 P6-3), and posts its
-    /// completion.
+    /// off the baton (spec 2026-09-29 P6-3): on a pool thread, which this
+    /// thread lends the baton to while it enters the call, or, where no pool
+    /// thread is free, here with the baton released. Its completion is
+    /// posted.
     fn exit_for_native(&mut self);
-    /// Posts `completion`, of `activity`'s native call, to `inbox` for the
-    /// baton's holder to drain; it touches nothing else.
+    /// Runs `block`, a blocking operation of the running activity's that
+    /// touches no island value, on a pool thread, which posts what it ended
+    /// with; `Err(block)` where no pool thread is free.
+    fn exit_for_block(&mut self, block: crate::command::Block)
+    -> Result<(), crate::command::Block>;
+    /// Posts `completion`, of `activity`'s native call in the native frame
+    /// `frame`, to `inbox` for the baton's holder to drain; it touches
+    /// nothing else.
     fn post_completion(
         inbox: &crate::timer::Inbox<crate::timer::Posted>,
         activity: ActivityId,
+        frame: u64,
         completion: rexx_api::invoke::Completion,
     ) where
         Self: Sized;
@@ -450,7 +491,7 @@ impl Scheduler for Interp {
                     });
                 }
             }
-            ParkReason::Native => {}
+            ParkReason::Native | ParkReason::Block => {}
             ParkReason::Semaphore(wait) => {
                 let order = wait.deadline.map(|deadline| {
                     table.next_sleeper += 1;
@@ -502,13 +543,22 @@ impl Scheduler for Interp {
         NATIVE_EXITS.with(|exits| exits.set(exits.get() + 1));
         self.activities.in_flight += 1;
         let thread = self.thread_context();
-        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let baton = crate::sync::Arc::clone(&self.baton);
         let inbox = self.timer.inbox();
         let activity = self.activities.running;
+        if let Some(worker) = self.pool.reserve() {
+            let to = worker.thread();
+            let pooled = crate::dispatch::library::PooledCall::new(
+                call, thread, frame, pending, activity, &baton, inbox,
+            );
+            worker.run(Box::new(move || pooled.run()));
+            baton.lend(to, crate::island::Island::of(self));
+            return;
+        }
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         self.activities.runs_below += 1;
         let pending = call.run(frame, pending, self, &baton, &thread, |completion| {
-            Self::post_completion(&inbox, activity, completion);
+            Self::post_completion(&inbox, activity, frame, completion);
         });
         self.activities.runs_below -= 1;
         pin_leave!(self);
@@ -517,15 +567,34 @@ impl Scheduler for Interp {
         }
     }
 
+    fn exit_for_block(
+        &mut self,
+        block: crate::command::Block,
+    ) -> Result<(), crate::command::Block> {
+        let Some(worker) = self.pool.reserve() else {
+            return Err(block);
+        };
+        self.activities.in_flight += 1;
+        let inbox = self.timer.inbox();
+        let activity = self.activities.running;
+        worker.run(Box::new(move || {
+            let ended = block.wait();
+            inbox.post(Posted::Unblocked { activity, ended });
+        }));
+        Ok(())
+    }
+
     fn post_completion(
         inbox: &crate::timer::Inbox<crate::timer::Posted>,
         activity: ActivityId,
+        frame: u64,
         completion: rexx_api::invoke::Completion,
     ) {
-        inbox.post(Completed {
+        inbox.post(Posted::Completed(Completed {
             activity,
+            frame,
             completion,
-        });
+        }));
     }
 }
 
@@ -1041,29 +1110,107 @@ impl Interp {
         self.file_completions(posted);
     }
 
-    /// Hands each of `posted` to the parked activity that made its call, and
-    /// readies that activity.
-    pub(crate) fn file_completions(&mut self, posted: VecDeque<Completed>) {
-        for Completed {
-            activity,
-            completion,
-        } in posted
-        {
-            self.activities.in_flight -= 1;
-            let call = if activity == self.activities.running {
-                self.activity.native_call.as_mut()
-            } else {
-                self.activities
-                    .idle
-                    .get_mut(activity.0 as usize)
-                    .and_then(Option::as_mut)
-                    .and_then(|idle| idle.activity.native_call.as_mut())
-            };
-            if let Some(call) = call {
-                call.complete(completion);
-                self.unpark(activity);
+    /// Hands each completion of `posted` to the parked activity that made its
+    /// call and readies that activity, and lends the baton to each pool
+    /// thread that recalls it.
+    pub(crate) fn file_completions(&mut self, posted: VecDeque<Posted>) {
+        for posted in posted {
+            match posted {
+                Posted::Completed(Completed {
+                    activity,
+                    frame,
+                    completion,
+                }) => {
+                    self.activities.in_flight -= 1;
+                    if let Some(call) = self
+                        .record_of(activity)
+                        .and_then(|record| record.native_call.as_mut())
+                        .filter(|call| call.frame() == frame)
+                    {
+                        call.complete(completion);
+                        self.unpark(activity);
+                    }
+                }
+                Posted::Recall(recall) => self.serve_recall(recall),
+                Posted::Unblocked { activity, ended } => {
+                    self.activities.in_flight -= 1;
+                    if let Some(blocked) = self
+                        .record_of(activity)
+                        .and_then(|record| record.blocked.as_mut())
+                    {
+                        blocked.end(ended);
+                        self.unpark(activity);
+                    }
+                }
             }
         }
+    }
+
+    /// `activity`'s record, running or idle, or `None` for a handle no
+    /// activity has.
+    fn record_of(&mut self, activity: ActivityId) -> Option<&mut Activity> {
+        if activity == self.activities.running {
+            return Some(&mut self.activity);
+        }
+        self.activities
+            .idle
+            .get_mut(activity.0 as usize)
+            .and_then(Option::as_mut)
+            .map(|idle| &mut idle.activity)
+    }
+
+    /// Lends the baton to the pool thread `recall` names, with the activity
+    /// whose native call it runs as the running one, its frames pinned, and
+    /// the stack measured from that thread's: the callback or the call's end
+    /// runs above the activity that ran last, whose frames stay below.
+    fn serve_recall(&mut self, recall: Recall) {
+        let Recall {
+            activity,
+            frame,
+            thread,
+            base,
+        } = recall;
+        let outgoing = self.activities.running;
+        let switched = activity != outgoing
+            && self
+                .activities
+                .idle
+                .get(activity.0 as usize)
+                .and_then(Option::as_ref)
+                .and_then(|idle| idle.activity.native_call.as_ref())
+                .is_some_and(|call| call.frame() == frame);
+        if switched {
+            self.swap_running(activity, outgoing);
+            self.activities.owners.push((outgoing, true));
+        }
+        pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
+        self.activities.runs_below += 1;
+        let stack = (self.stack_base, self.stack_room);
+        self.stack_base = base;
+        self.stack_room = pool::POOL_STACK_BYTES - pool::POOL_STACK_MARGIN;
+        let baton = crate::sync::Arc::clone(&self.baton);
+        baton.lend(thread, crate::island::Island::of(self));
+        (self.stack_base, self.stack_room) = stack;
+        self.activities.runs_below -= 1;
+        pin_leave!(self);
+        if switched {
+            self.activities.owners.pop();
+            self.swap_running(outgoing, activity);
+        }
+    }
+
+    /// Makes the idle `next` the running activity in place of `running`,
+    /// whose record goes under its own handle, as [`Interp::switch_to`] does
+    /// without a switch's other work.
+    fn swap_running(&mut self, next: ActivityId, running: ActivityId) {
+        let table = &mut self.activities;
+        let Some(mut idle) = table.idle[next.0 as usize].take() else {
+            unreachable!("a recalled handle names an idle activity");
+        };
+        std::mem::swap(&mut self.activity, &mut idle.activity);
+        std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
+        table.idle[running.0 as usize] = Some(idle);
+        table.running = next;
     }
 
     /// Whether an activity other than the running one is alive.
@@ -1519,7 +1666,13 @@ impl Interp {
 
     /// The running activity's park, resumed now that it has woken.
     fn resume_parked(&mut self, failure: Option<Failure>) -> Result<Option<ObjRef>, Failure> {
-        match self.activity.native_park.take() {
+        let park = self.activity.native_park.take().or_else(|| {
+            self.activity
+                .native_call
+                .as_mut()
+                .and_then(|call| call.take_park())
+        });
+        match park {
             Some(park) => self.resume_native_park(*park, failure),
             None => {
                 Err(Loud::scheduler_inconsistency("a woken activity with no wait recorded").into())
@@ -1849,6 +2002,9 @@ pub(crate) fn take_scripted() -> Option<Scripted> {
     }
     SCRIPT.with(|script| script.borrow_mut().pop_front())
 }
+
+mod pool;
+pub(crate) use pool::{POOL_STACK_BYTES, Pool};
 
 #[cfg(test)]
 mod tests;

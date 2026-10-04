@@ -873,9 +873,11 @@ fn a_registered_handler_answers_until_a_library_closes() {
         ),
         LibraryLoad::Loaded(_)
     ));
-    let outcome = interp
-        .run_command(b"Tested", b"a command", None)
-        .unwrap_or_else(|_| panic!("the handler answers"));
+    let Ok(crate::command::Commanded::Done(outcome)) =
+        interp.run_command(b"Tested", b"a command", None)
+    else {
+        panic!("the handler answers");
+    };
     let answered = outcome.supplied.map(|supplied| supplied.text);
     assert_eq!(answered.as_deref(), Some(b"a command".as_slice()));
     assert!(interp.terminate().is_empty());

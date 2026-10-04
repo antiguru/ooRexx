@@ -1,0 +1,100 @@
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+/*                                                                            */
+/* This program and the accompanying materials are made available under       */
+/* the terms of the Common Public License v1.0 which accompanies this         */
+/* distribution. A copy is also available at the following address:           */
+/* https://www.oorexx.org/license.html                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+//! The interpreter's state on another OS thread (decision D-U2, spec
+//! 2026-09-29 2.5): a pool thread reaches it only through what the baton's
+//! holder lends it, and only while it holds the baton.
+
+#![allow(unsafe_code)]
+
+use std::ptr::NonNull;
+
+use crate::Interp;
+
+/// The baton every interpreter's state is reached under.
+pub(crate) type InterpBaton = crate::baton::Baton<Island>;
+
+/// A value of the interpreter's that moves to another OS thread.
+#[derive(Clone, Copy)]
+pub(crate) struct Islanded<T>(T);
+
+// SAFETY: D-U2. The island is reachable only through one root pointer and the
+// baton, and a thread does no refcount operation and no interior access on an
+// island value (derives a borrow, clones or drops an `Rc`, reads or writes a
+// `Cell`) off the baton. A value made here is made on the baton, moves without
+// being touched, and is taken out only by `Islanded::take`, which requires the
+// baton; so no two threads ever touch it at once, which is the property its
+// `Rc` and `Cell` interior needs. A call run where it is made keeps a
+// `ThreadContext` clone across the release, made before the release and
+// dropped after the reacquire; a pool thread's clone moves here and is dropped
+// under a lend. `Sync` is not granted.
+unsafe impl<T> Send for Islanded<T> {}
+
+impl<T> Islanded<T> {
+    /// `value`, made by the baton's holder.
+    pub(crate) fn new(value: T, baton: &InterpBaton) -> Islanded<T> {
+        debug_assert!(baton.held_here(), "an island value moved off the baton");
+        Islanded(value)
+    }
+
+    /// The value, for the baton's holder.
+    pub(crate) fn take(self, baton: &InterpBaton) -> T {
+        debug_assert!(baton.held_here(), "an island value taken off the baton");
+        self.0
+    }
+}
+
+/// The interpreter's root pointer, which the baton's holder lends with it.
+pub(crate) type Island = Islanded<NonNull<Interp>>;
+
+impl Island {
+    /// The root pointer of `interp`, which its holder lends while it waits.
+    pub(crate) fn of(interp: &mut Interp) -> Island {
+        Islanded(NonNull::from(interp))
+    }
+
+    /// The interpreter as the API reaches it.
+    pub(crate) fn host(self) -> NonNull<dyn rexx_api::values::Host> {
+        self.0
+    }
+}
+
+/// The baton lent to this thread, given back when this drops.
+pub(crate) struct Lent<'b> {
+    baton: &'b InterpBaton,
+    island: Island,
+}
+
+impl<'b> Lent<'b> {
+    /// Waits until the baton is lent to this thread.
+    pub(crate) fn wait(baton: &'b InterpBaton) -> Lent<'b> {
+        Lent {
+            island: baton.await_lend(),
+            baton,
+        }
+    }
+
+    /// The interpreter, for as long as this lend.
+    pub(crate) fn interp(&mut self) -> &mut Interp {
+        // SAFETY: the lender derived the pointer from its own `&mut Interp`
+        // and waits in `Baton::lend`, touching nothing, until this thread
+        // gives the baton back, which only this value's drop does. The answer
+        // borrows `self` uniquely, so it ends before that drop and no second
+        // borrow is live beside it.
+        unsafe { self.island.0.as_mut() }
+    }
+}
+
+impl Drop for Lent<'_> {
+    fn drop(&mut self) {
+        self.baton.give_back();
+    }
+}

@@ -38,11 +38,11 @@ pub(crate) type NativeMethod = Stub<RexxMethodContext_>;
 
 /// The C signature of the stub the `RexxRoutineN` macros generate
 /// (`api/oorexxapi.h:4562`), answering as [`NativeMethod`] does.
-pub(crate) type NativeRoutine = Stub<RexxCallContext_>;
+pub type NativeRoutine = Stub<RexxCallContext_>;
 
 /// A generated stub over the context struct `C`. It may unwind: a `Throw`
 /// member leaves the extension that way, and [`call_stub`] catches it.
-type Stub<C> = unsafe extern "C-unwind" fn(*mut C, *mut ValueDescriptor) -> *mut u16;
+pub type Stub<C> = unsafe extern "C-unwind" fn(*mut C, *mut ValueDescriptor) -> *mut u16;
 
 /// `ROUTINE_TYPED_STYLE` (`api/oorexxapi.h:200`).
 pub const ROUTINE_TYPED_STYLE: c_int = 1;
@@ -296,6 +296,80 @@ pub fn hooks_only(
     unsafe { library_of(&entry, libloading::os::unix::Library::this().into(), "") }
         .expect("an entry asking for no version is accepted")
         .expect("an entry is a package")
+}
+
+/// A typed routine stub this image defines.
+#[doc(hidden)]
+pub type TypedRoutine = NativeRoutine;
+
+/// A library whose routine table is `routines`, typed routines this image
+/// defines, for a test that drives native calls without a shared object.
+#[doc(hidden)]
+#[cfg(unix)]
+#[must_use]
+pub fn routines_only(routines: &[(&str, TypedRoutine)]) -> Library {
+    let mapping = Mapping::new(Some(libloading::os::unix::Library::this().into()));
+    Library {
+        name: None,
+        version: None,
+        methods: Vec::new(),
+        routines: routines
+            .iter()
+            .map(|&(name, stub)| NativeRoutineEntry {
+                style: ROUTINE_TYPED_STYLE,
+                name: name.as_bytes().to_vec(),
+                entry_point: stub as *mut c_void,
+                mapping: Arc::clone(&mapping),
+            })
+            .collect(),
+        loader: None,
+        unloader: None,
+        mapping,
+        thread: None,
+    }
+}
+
+/// `SENDTHENAWAIT(object, message, path)`: sends `message` to `object`
+/// through the call's thread context, then waits up to half a second for a
+/// file at `path`, answering whether one appeared: a native that blocks
+/// after a callback, for a test.
+///
+/// # Safety
+/// As every typed routine stub's: `context` is a live call context, and a
+/// non-null `arguments` is the call's descriptor array.
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn send_then_await(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 5] = [
+        code::LOGICAL_T,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: a non-null `arguments` is the call's descriptor array, which
+    // `SIGNATURE` declares four elements of; `context` is the live call
+    // context, whose thread context links its table.
+    unsafe {
+        let object = (*arguments.add(1)).value.value_RexxObjectPtr;
+        let message = (*arguments.add(2)).value.value_CSTRING;
+        let path = CStr::from_ptr((*arguments.add(3)).value.value_CSTRING);
+        let path = std::path::PathBuf::from(path.to_string_lossy().into_owned());
+        let thread = (*context).threadContext;
+        ((*(*thread).functions).SendMessage0)(thread, object, message);
+        let appeared = (0..50).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            path.exists()
+        });
+        (*arguments).value.value_logical_t = usize::from(appeared);
+    }
+    std::ptr::null_mut()
 }
 
 /// A library read from an in-memory package entry whose loader registers a

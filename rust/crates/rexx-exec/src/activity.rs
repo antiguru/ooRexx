@@ -279,6 +279,9 @@ pub(crate) struct Activity {
     /// A native call that leaves its driver, from its `prepare` until its
     /// `finish`.
     pub(crate) native_call: Option<Box<crate::dispatch::library::NativeInFlight>>,
+    /// A command clause whose child waits off the baton, until the clause
+    /// settles it.
+    pub(crate) blocked: Option<Box<crate::command::Blocked>>,
     /// Whether a park's continuation is running, outside every driver, so a
     /// native call it makes does not leave one.
     pub(crate) resuming: bool,
@@ -404,6 +407,7 @@ impl Activity {
             driver_pins: 0,
             native_park: None,
             native_call: None,
+            blocked: None,
             resuming: false,
             first: None,
             root_then: None,
@@ -513,6 +517,8 @@ impl Activity {
             driver_pins: _,
             native_park,
             native_call,
+            // Bytes and a return code only.
+            blocked: _,
             resuming: _,
             first,
             root_then,

@@ -30,6 +30,7 @@ use rexx_api::redirect::Redirector;
 use crate::error::{Failure, Raised};
 use crate::redirect::IoContext;
 use crate::run::Flow;
+use crate::scheduler::{ExecOutcome, Scheduler};
 use crate::security::{key, message};
 use crate::{Code, Interp};
 
@@ -415,30 +416,75 @@ fn escalated(condition: &[u8], description: &[u8], rc: &[u8]) -> Raised {
     }
 }
 
+/// A command clause's run: its outcome, or `Left` with its child's wait off
+/// the baton.
+pub(crate) enum Commanded {
+    Done(CommandOutcome),
+    Left,
+}
+
 /// What one child left behind: its return code and each stream it wrote.
-struct Spawned {
+pub(crate) struct Waited {
     rc: i32,
     out: Vec<u8>,
     err: Vec<u8>,
 }
 
-/// Runs `command` in a child and collects what it wrote.
+/// A command's child, whose wait runs off the baton
+/// ([`crate::scheduler::Scheduler::exit_for_block`]).
+pub(crate) struct Block {
+    running: std::process::Child,
+}
+
+impl Block {
+    /// Waits for the child, collecting what it wrote.
+    pub(crate) fn wait(self) -> Waited {
+        collect(self.running, None, None)
+    }
+}
+
+/// A command clause whose child runs off the baton, on its activity's record
+/// until the clause runs again with what the child left.
+pub(crate) struct Blocked {
+    command: Vec<u8>,
+    indent: usize,
+    ended: Option<Waited>,
+}
+
+impl Blocked {
+    /// Records what the child left.
+    pub(crate) fn end(&mut self, ended: Waited) {
+        self.ended = Some(ended);
+    }
+}
+
+/// A started child, or what a command that started none answers.
+enum Child {
+    Ran(Waited),
+    Running {
+        running: std::process::Child,
+        input: Option<Vec<u8>>,
+        merged: Option<std::io::PipeReader>,
+    },
+}
+
+/// Starts `command` in a child.
 ///
-/// **Both pipes are drained concurrently**: a child filling one while this
-/// thread reads only the other deadlocks once a pipe buffer fills. Standard
-/// input is inherited unless `io` supplies one, which is the oracle's own
-/// rule -- it spawns with no file actions until an `ADDRESS ... WITH` asks
-/// for them.
-fn spawn(
+/// Standard input is inherited unless `io` supplies one, which is the
+/// oracle's own rule -- it spawns with no file actions until an `ADDRESS ...
+/// WITH` asks for them.
+fn start(
     interp: &Interp,
     handler: &Handler,
     command: &[u8],
     io: Option<&IoContext>,
-) -> Result<Spawned, Failure> {
-    let nothing = |rc| Spawned {
-        rc,
-        out: Vec::new(),
-        err: Vec::new(),
+) -> Result<Child, Failure> {
+    let nothing = |rc| {
+        Child::Ran(Waited {
+            rc,
+            out: Vec::new(),
+            err: Vec::new(),
+        })
     };
     let mut builder = match handler {
         Handler::Shell(shell) => {
@@ -489,7 +535,7 @@ fn spawn(
             builder.stderr(Stdio::piped());
         }
     }
-    let Ok(mut running) = builder.spawn() else {
+    let Ok(running) = builder.spawn() else {
         return Ok(nothing(UNKNOWN_COMMAND));
     };
     // **Every writing half of a merged pipe closes here**, and there are
@@ -497,7 +543,23 @@ fn spawn(
     // which the spawn duplicated rather than consumed. The read below waits
     // for end-of-file, and any one of them left open never gives it.
     drop(builder);
-    let merged = merged.map(|(reader, _writer)| reader);
+    Ok(Child::Running {
+        running,
+        input,
+        merged: merged.map(|(reader, _writer)| reader),
+    })
+}
+
+/// Collects what `running` writes and its return code, writing `input` to
+/// it first where there is one.
+///
+/// **Both pipes are drained concurrently**: a child filling one while this
+/// thread reads only the other deadlocks once a pipe buffer fills.
+fn collect(
+    mut running: std::process::Child,
+    input: Option<Vec<u8>>,
+    merged: Option<std::io::PipeReader>,
+) -> Waited {
     let stdin = running.stdin.take();
     let stdout = running.stdout.take();
     let stderr = running.stderr.take();
@@ -534,7 +596,7 @@ fn spawn(
         Ok(status) => exit_code(status),
         Err(_) => UNKNOWN_COMMAND,
     };
-    Ok(Spawned { rc, out, err })
+    Waited { rc, out, err }
 }
 
 /// 98.923, worded from the system's own description of the failure.
@@ -551,26 +613,33 @@ impl Interp {
     /// environment no handler is registered for runs nothing and answers
     /// [`NOT_REGISTERED`] with a `FAILURE` -- measured, the command is
     /// evaluated and never executed.
+    ///
+    /// A child's wait leaves the baton, answering `Left`, where nothing is
+    /// redirected and [`Interp::blocks_off_baton`] says so
+    /// (`NativeActivation::run`, `execution/NativeActivation.cpp:1691`,
+    /// releases the kernel lock around a command handler).
     pub(crate) fn run_command(
         &mut self,
         environment: &[u8],
         command: &[u8],
         io: Option<&IoContext>,
-    ) -> Result<CommandOutcome, Failure> {
+    ) -> Result<Commanded, Failure> {
         let registered = self
             .command_handlers
             .get(environment.to_ascii_uppercase().as_slice())
             .map(Rc::clone);
         if let Some(handler) = registered {
-            return self.run_registered_command(&handler, environment, command, io);
+            return self
+                .run_registered_command(&handler, environment, command, io)
+                .map(Commanded::Done);
         }
         let Some(handler) = handler_for(environment) else {
-            return Ok(CommandOutcome {
+            return Ok(Commanded::Done(CommandOutcome {
                 rc: NOT_REGISTERED,
                 status: ReturnStatus::Failure,
                 supplied: None,
                 condition: None,
-            });
+            }));
         };
         // `PATH` names no shell, so a `cd` under it is a program to find
         // rather than a directory to move to.
@@ -584,9 +653,22 @@ impl Interp {
             && matches!(handler, Handler::Shell(_))
             && let Some(outcome) = run_internally(self, command)
         {
-            return Ok(outcome);
+            return Ok(Commanded::Done(outcome));
         }
-        let spawned = spawn(self, &handler, command, io)?;
+        let spawned = match start(self, &handler, command, io)? {
+            Child::Ran(spawned) => spawned,
+            Child::Running { running, .. } if io.is_none() && self.blocks_off_baton() => {
+                match self.exit_for_block(Block { running }) {
+                    Ok(()) => return Ok(Commanded::Left),
+                    Err(block) => block.wait(),
+                }
+            }
+            Child::Running {
+                running,
+                input,
+                merged,
+            } => collect(running, input, merged),
+        };
         if let Some(context) = io {
             context.finish(self, &spawned.out, &spawned.err)?;
         }
@@ -598,7 +680,23 @@ impl Interp {
         if io.is_none_or(|context| !context.redirects_error()) {
             self.write_err(&spawned.err);
         }
-        Ok(CommandOutcome::of(spawned.rc))
+        Ok(Commanded::Done(CommandOutcome::of(spawned.rc)))
+    }
+
+    /// Whether a blocking operation started now waits off the baton: where
+    /// another activity is alive or a test mode asks for it, and outside a
+    /// park's continuation. A pinned clause waits for it in a nested loop.
+    fn blocks_off_baton(&self) -> bool {
+        !self.activity.resuming
+            && (self.switch.is_some() || self.stress_collect || self.others_live())
+    }
+
+    /// What a command whose child waited off the baton answers: its streams
+    /// written to this interpreter's sinks, and its return code.
+    fn command_ended(&mut self, ended: &Waited) -> CommandOutcome {
+        self.write_out(&ended.out);
+        self.write_err(&ended.err);
+        CommandOutcome::of(ended.rc)
     }
 
     /// `CommandHandler::call` (`concurrency/CommandHandler.cpp:98-151`) for a
@@ -677,7 +775,7 @@ impl Interp {
         environment: &[u8],
         command: &[u8],
         io: Option<&IoContext>,
-    ) -> Result<CommandOutcome, Failure> {
+    ) -> Result<Commanded, Failure> {
         if self.effective_security_manager().is_none() {
             return self.run_command(environment, command, io);
         }
@@ -689,7 +787,7 @@ impl Interp {
         let Some(info) = self.security_check(message::COMMAND, &entries)? else {
             return self.run_command(environment, command, io);
         };
-        self.command_from_manager(info)
+        self.command_from_manager(info).map(Commanded::Done)
     }
 
     /// What `SecurityManager::checkCommand` (`execution/SecurityManager.cpp:
@@ -735,6 +833,9 @@ impl Interp {
     ///
     /// `io` is the `WITH` configuration the issuing `ADDRESS` instruction
     /// carried, which merges with whatever the environment name has stored.
+    ///
+    /// Where the child's wait leaves the baton, the clause parks its activity
+    /// and [`Interp::end_blocked_command`] settles it once the child is done.
     pub(crate) fn exec_command(
         &mut self,
         code: &Code<'_>,
@@ -743,7 +844,7 @@ impl Interp {
         expression: &Expr,
         environment: Option<&[u8]>,
         io: Option<&AddressIo>,
-    ) -> Result<Flow, Failure> {
+    ) -> Result<ExecOutcome, Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         let value = self.eval(code, expression)?;
         self.roots.activity_mut().push_temp(value);
@@ -780,7 +881,17 @@ impl Interp {
         };
         self.roots.activity_mut().pop_frame(frame);
         let kept = self.activity.input_dispatch_syntax.take();
-        let outcome = outcome?;
+        let outcome = match outcome? {
+            Commanded::Done(outcome) => outcome,
+            Commanded::Left => {
+                self.activity.blocked = Some(Box::new(Blocked {
+                    command,
+                    indent,
+                    ended: None,
+                }));
+                return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
+            }
+        };
         // The SYNTAX condition the input reader's dispatcher took, raised now
         // that the command has completed: measured, oracle rc 0, a `LINEIN`
         // failing on its second line leaves `cat`'s one line of output in
@@ -789,6 +900,56 @@ impl Interp {
             self.reraise_failure_levels();
             return Err(kept);
         }
+        self.settle_command(instruction, source, &command, indent, &outcome)
+            .map(ExecOutcome::Done)
+    }
+
+    /// Whether the running activity's command clause has a child that ended
+    /// off the baton, which [`Interp::end_blocked_command`] settles.
+    pub(crate) fn blocked_command_ended(&self) -> bool {
+        self.activity
+            .blocked
+            .as_ref()
+            .is_some_and(|blocked| blocked.ended.is_some())
+    }
+
+    /// The command clause whose child ended off the baton, settled as
+    /// [`Interp::exec_command`] settles one whose child it waited for.
+    pub(crate) fn end_blocked_command(
+        &mut self,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
+        let Some(blocked) = self.activity.blocked.take() else {
+            return Err(
+                crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
+            );
+        };
+        let Blocked {
+            command,
+            indent,
+            ended: Some(ended),
+        } = *blocked
+        else {
+            return Err(crate::Loud::scheduler_inconsistency(
+                "a command resumed before its child ended",
+            )
+            .into());
+        };
+        let outcome = self.command_ended(&ended);
+        self.settle_command(instruction, source, &command, indent, &outcome)
+    }
+
+    /// `RC`, `.RS`, the trace lines and any condition of a command clause
+    /// that ran `command` to `outcome`.
+    fn settle_command(
+        &mut self,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        command: &[u8],
+        indent: usize,
+        outcome: &CommandOutcome,
+    ) -> Result<Flow, Failure> {
         if let Some(supplied) = &outcome.supplied {
             // The frame that held it is gone and `RC` is assigned below,
             // after allocations of this clause's own.
@@ -827,7 +988,7 @@ impl Interp {
                     && self.condition_raises_syntax(condition.as_bytes())
                 {
                     let rc = outcome.rc.to_string().into_bytes();
-                    return Err(escalated(condition.as_bytes(), &command, &rc).into());
+                    return Err(escalated(condition.as_bytes(), command, &rc).into());
                 }
             }
         }
@@ -856,7 +1017,7 @@ impl Interp {
             && !echoed
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
-            self.trace_command_retrace(line, indent, &text, &command);
+            self.trace_command_retrace(line, indent, &text, command);
         }
         if (echoed || retrace) && outcome.rc != 0 {
             match &outcome.supplied {
@@ -879,7 +1040,7 @@ impl Interp {
             }
             None => {
                 if let Some(condition) = outcome.status.condition() {
-                    self.raise_command_condition(condition, &command, outcome.rc)?;
+                    self.raise_command_condition(condition, command, outcome.rc)?;
                 }
             }
         }

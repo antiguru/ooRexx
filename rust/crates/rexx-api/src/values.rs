@@ -729,6 +729,12 @@ pub trait Baton {
 
     /// Whether this thread holds the baton.
     fn held_here(&self) -> bool;
+
+    /// The host lent with the baton this thread holds, where it was lent one;
+    /// valid while this thread holds the baton.
+    fn host(&self) -> Option<std::ptr::NonNull<dyn Host>> {
+        None
+    }
 }
 
 pub use crate::ffi::HostRef;
@@ -858,10 +864,14 @@ impl<'a> Activation<'a> {
     /// interpreter while the interpreter is inside a conversion.
     #[inline(always)]
     pub fn conversion(&self) -> Converting<'_, 'a> {
-        let conversion = self.conversion.borrow_mut();
+        let mut conversion = self.conversion.borrow_mut();
         let taken = match self.baton {
-            Some(baton) if baton.take_unless_held() => Some(Taken(baton)),
-            _ => None,
+            Some(baton) => {
+                let taken = baton.take_unless_held().then(|| Taken(baton));
+                conversion.host.refresh();
+                taken
+            }
+            None => None,
         };
         Converting {
             conversion,
@@ -885,6 +895,11 @@ impl<'a> Activation<'a> {
     /// it holds the baton, or the call never released it.
     pub fn baton_held(&self) -> bool {
         self.baton.is_none_or(|baton| baton.held_here())
+    }
+
+    /// Whether the call runs with the baton released.
+    pub(crate) fn released(&self) -> bool {
+        self.baton.is_some()
     }
 
     /// Whether the conversion state is held, which is a call nested inside

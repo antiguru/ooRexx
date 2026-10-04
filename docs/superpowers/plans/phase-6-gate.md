@@ -451,3 +451,175 @@ Unmodified, `testOORexx.rex -f METHOD.testGroup -V 1` from a scratch copy runs t
 tests and stops at rc 120 at `routine "RXFUNCQUERY" is not implemented (Phase 10)` only; the L2
 rows (`phase-4-exclusions.txt`, the roadmap's row 8, `phase-8-gate.md`) record it, and the Rung
 reads `L2 -> 10`.
+
+## S4
+
+### Blocking operations (Task 18)
+
+The command, run from the worktree root at the Task 18 commit, prints 123 lines (113 at
+`bddcd480e`; the ten more are Task 18's own: `scheduler.rs:581`, `scheduler/pool.rs:163`,
+`scheduler/tests/pool.rs` and `command.rs:436`, `:465`, `:559`, `:663`):
+
+```
+/bin/grep -a -rn 'std::process\|\.wait(\|std::fs\|fs::\|thread::sleep\|File::\|stdin()\|\.read(\|\.write(' rust/crates/rexx-exec/src
+```
+
+Classification, by site (paths under `rust/crates/rexx-exec/src/`):
+
+| Hits | Class | Reason |
+|---|---|---|
+| `command.rs:595` (`collect`'s child wait), reached as `Block::wait` from `scheduler.rs:581` and `command.rs:663` | off-baton | an `ADDRESS` command with nothing redirected, where another activity is alive or a test mode is set: the child starts on the baton, `Scheduler::exit_for_block` waits for it on a pool thread, and the clause settles `RC` once the activity wakes; no island value crosses (bytes and a return code). Where no pool thread is free, `command.rs:663` waits on the baton |
+| `command.rs:20`, `:395`, `:436`, `:465`, `:491`, `:502`, `:559` | not an operation | types, imports and the child's builder; the spawn itself (fork and exec) runs on the baton |
+| `command.rs:310` | stays on the baton | `cd`'s directory test, a local `stat` |
+| `install.rs:651`, `:913`, `:1772`, `lib.rs:2095` | spec 2.1 wrapper (package loaders, `::REQUIRES` and external routine files) | reached from nested Rust frames, so pinned |
+| `builtin/platform.rs:91`, `:99`, `:164`, `:169`; `builtin/rexxutil.rs:67`, `:78`, `:96`, `:99`, `:118`, `:121`, `:154`, `:597`, `:598`, `:619`, `:752`; `dispatch/files.rs` (every hit) | stays on the baton | single local filesystem calls (`stat`, `access`, `unlink`, `mkdir`, `rename`, `utimensat`, `readdir`) that wait on no other activity; a recorded divergence where a filesystem stalls (the oracle releases its kernel lock around a native routine) |
+| `dispatch/stream.rs` (every hit); `input.rs:75`, `:128` | spec 2.1 wrapper (the stream BIFs and methods; `PULL` and console input) | pinned, counted by the pinning report |
+| `builtin/numeric.rs:581` | not blocking | the process id, as `RANDOM`'s seed |
+| `run.rs:1437`, `:1574`, `run/interpret.rs:159`, `parse_template.rs:654` | not I/O | `Interp::read`, a variable read |
+| `builtin/convert.rs:996`, `:1005`, `dispatch/library/surface.rs:651`, `input.rs:129` | not I/O | writes and reads of memory |
+| `sync.rs:42`, `scheduler/pool.rs:163` | not reached from a resumable entry | the baton's and a pool thread's own condition-variable waits |
+| `input.rs:448`, `tests.rs`, `builtin/tests.rs`, `plan/tests.rs`, `run/tests/indent.rs`, `dispatch/library/tests.rs`, `dispatch/native/tests.rs`, `ir/corpus_shape_tests.rs`, `scheduler/tests/pool.rs`, `bin/rexx-run.rs`, `bin/rexx-ir.rs` | not reached from a resumable entry | tests and binaries |
+
+<details><summary>The command's output</summary>
+
+```
+scheduler.rs:581:            let ended = block.wait();
+install.rs:651:        let Ok(text) = std::fs::read(&resolved) else {
+install.rs:913:            match std::fs::metadata(require::normalize(candidate, cwd)) {
+install.rs:1772:        let Ok(text) = std::fs::read(&resolved) else {
+scheduler/pool.rs:163:                    .wait(mail)
+scheduler/tests/pool.rs:105:    std::thread::sleep(Duration::from_millis(200));
+scheduler/tests/pool.rs:293:    let path = std::env::temp_dir().join(format!("rexx-pool-{}", std::process::id()));
+scheduler/tests/pool.rs:294:    let _ = std::fs::remove_file(&path);
+scheduler/tests/pool.rs:304:    let _ = std::fs::remove_file(&path);
+command.rs:20:use std::process::Stdio;
+command.rs:310:    match std::fs::metadata(&path) {
+command.rs:395:fn exit_code(status: std::process::ExitStatus) -> i32 {
+command.rs:436:    running: std::process::Child,
+command.rs:465:        running: std::process::Child,
+command.rs:491:            let mut builder = std::process::Command::new(format!("{SHELL_DIRECTORY}/{shell}"));
+command.rs:502:            let mut builder = std::process::Command::new(OsStr::from_bytes(program));
+command.rs:559:    mut running: std::process::Child,
+command.rs:595:    let rc = match running.wait() {
+command.rs:663:                    Err(block) => block.wait(),
+lib.rs:2095:        let Ok(text) = std::fs::read(&resolved) else {
+run.rs:1437:                    let (value, _novalue) = self.read(code, *id);
+run.rs:1574:                    let (value, _novalue) = self.read(code, *id);
+builtin/numeric.rs:581:    u64::from(nanos) << 32 ^ u64::from(std::process::id())
+builtin/platform.rs:91:    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+builtin/platform.rs:99:    let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
+builtin/platform.rs:164:    if !std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_dir()) {
+builtin/platform.rs:169:    let resolved = std::fs::canonicalize(&candidate)
+builtin/rexxutil.rs:67:    let found = !path.is_empty() && std::fs::metadata(&path).is_ok();
+builtin/rexxutil.rs:78:    let found = !path.is_empty() && std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+builtin/rexxutil.rs:87:/// would give -- measured, and a port calling `std::fs::remove_file` and
+builtin/rexxutil.rs:96:    if path.is_empty() || !rustix::fs::access(path.as_str(), rustix::fs::Access::WRITE_OK).is_ok() {
+builtin/rexxutil.rs:99:    let code = match rustix::fs::unlink(path.as_str()) {
+builtin/rexxutil.rs:118:    let code = match rustix::fs::unlink(path.as_str()) {
+builtin/rexxutil.rs:121:            match rustix::fs::rmdir(path.as_str()) {
+builtin/rexxutil.rs:154:    let code = match rustix::fs::mkdir(path.as_str(), rustix::fs::Mode::from_bits_truncate(mode)) {
+builtin/rexxutil.rs:597:fn attributes(meta: &std::fs::Metadata) -> Vec<u8> {
+builtin/rexxutil.rs:598:    use std::os::unix::fs::PermissionsExt as _;
+builtin/rexxutil.rs:619:fn entry_line(options: TreeOptions, path: &str, meta: &std::fs::Metadata) -> Vec<u8> {
+builtin/rexxutil.rs:752:    let Ok(entries) = std::fs::read_dir(directory) else {
+builtin/tests.rs:204:    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+builtin/convert.rs:996:            Piece::Range(start, length).write(&mut out);
+builtin/convert.rs:1005:        piece.write(&mut out);
+run/interpret.rs:159:                let (value, _novalue) = self.read(code, *id);
+run/tests/indent.rs:218:        for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+run/tests/indent.rs:227:            let bytes = std::fs::read(&path).expect("a readable corpus program");
+sync.rs:42:    condvar.wait(guard).unwrap_or_else(PoisonError::into_inner)
+parse_template.rs:654:                let (value, novalue) = self.read(code, id);
+tests.rs:26:        for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+tests.rs:35:            let bytes = std::fs::read(&path).expect("a readable corpus program");
+dispatch/library/tests.rs:191:    let text = std::fs::read(&path).expect("the corpus witness is readable");
+dispatch/library/tests.rs:478:    let text = std::fs::read(&path).expect("the corpus witness is readable");
+dispatch/library/surface.rs:651:            data.write(0, &bytes);
+dispatch/files.rs:52:fn reachable(path: &str, mode: rustix::fs::Access) -> bool {
+dispatch/files.rs:53:    rustix::fs::access(path, mode).is_ok()
+dispatch/files.rs:67:    let there = std::fs::metadata(&path).is_ok();
+dispatch/files.rs:79:    let yes = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+dispatch/files.rs:91:    let yes = std::fs::metadata(&path).is_ok_and(|meta| meta.is_dir());
+dispatch/files.rs:108:    let yes = std::fs::metadata(&path).is_ok() && path.contains("/.");
+dispatch/files.rs:120:    let yes = reachable(&path, rustix::fs::Access::READ_OK);
+dispatch/files.rs:132:    let yes = reachable(&path, rustix::fs::Access::WRITE_OK);
+dispatch/files.rs:150:    let size = std::fs::metadata(&path).map_or(0, |meta| meta.len());
+dispatch/files.rs:168:    let Ok(entries) = std::fs::read_dir(&path) else {
+dispatch/files.rs:188:    let read = std::fs::metadata(path).and_then(|meta| {
+dispatch/files.rs:284:        Ok(since) => rustix::fs::Timespec {
+dispatch/files.rs:299:            rustix::fs::Timespec {
+dispatch/files.rs:305:    let omit = rustix::fs::Timespec {
+dispatch/files.rs:307:        tv_nsec: rustix::fs::UTIME_OMIT,
+dispatch/files.rs:310:        Stamp::Modified => rustix::fs::Timestamps {
+dispatch/files.rs:314:        Stamp::Accessed => rustix::fs::Timestamps {
+dispatch/files.rs:319:    rustix::fs::utimensat(rustix::fs::CWD, path, &times, rustix::fs::AtFlags::empty()).is_ok()
+dispatch/files.rs:362:    let made = std::fs::create_dir(&path).is_ok();
+dispatch/files.rs:378:    if !reachable(&path, rustix::fs::Access::WRITE_OK) {
+dispatch/files.rs:381:    let gone = std::fs::remove_file(&path).is_ok();
+dispatch/files.rs:394:    let gone = std::fs::remove_dir(&path).is_ok();
+dispatch/files.rs:412:    if from == to || std::fs::symlink_metadata(&to).is_ok() {
+dispatch/files.rs:415:    let moved = std::fs::rename(&from, &to).is_ok();
+dispatch/files.rs:428:    if let Ok(meta) = std::fs::metadata(&path) {
+dispatch/files.rs:429:        use std::os::unix::fs::PermissionsExt as _;
+dispatch/files.rs:438:        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(rewritten));
+dispatch/files.rs:559:        if std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_file()) {
+dispatch/stream.rs:232:    let exists = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+dispatch/stream.rs:251:    match std::fs::metadata(&path) {
+dispatch/stream.rs:271:    let modified = std::fs::metadata(&path)
+dispatch/stream.rs:332:/// opens on unix and `SysFile::open` closes it again and substitutes this
+dispatch/stream.rs:575:    if parsed.read_only && !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
+dispatch/stream.rs:585:    let mut opening = std::fs::OpenOptions::new();
+dispatch/stream.rs:587:        opening.read(true);
+dispatch/stream.rs:589:        opening.read(true).write(true).create(true);
+dispatch/stream.rs:611:    if metadata.as_ref().is_none_or(std::fs::Metadata::is_dir) {
+dispatch/stream.rs:684:fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
+dispatch/stream.rs:690:        match file.read(&mut out[filled..])? {
+dispatch/stream.rs:701:/// data (`SysFile::gets`) -- and a final unterminated line is still a line.
+dispatch/stream.rs:704:    file: &mut std::fs::File,
+dispatch/stream.rs:734:/// The lines from `position` to the end, counted the way `SysFile::countLines`
+dispatch/stream.rs:736:fn count_lines_from(file: &mut std::fs::File, position: u64) -> std::io::Result<u64> {
+dispatch/stream.rs:758:/// (`SysFile::getStreamTypeInfo`). A regular file is persistent.
+dispatch/stream.rs:759:fn is_transient(file: &std::fs::File) -> bool {
+dispatch/stream.rs:760:    use std::os::unix::fs::FileTypeExt;
+dispatch/stream.rs:766:fn size_of(file: &std::fs::File) -> u64 {
+dispatch/stream.rs:778:    let mut opening = std::fs::OpenOptions::new();
+dispatch/stream.rs:783:    opening.read(true).write(true).truncate(false);
+dispatch/stream.rs:799:        Err(_) if for_write => match std::fs::OpenOptions::new().write(true).open(&path) {
+dispatch/stream.rs:809:        Err(_) => match std::fs::OpenOptions::new().read(true).open(&path) {
+dispatch/stream.rs:1314:fn write_at(file: &mut std::fs::File, position: u64, bytes: &[u8]) -> std::io::Result<()> {
+dispatch/stream.rs:1769:fn count_lines_upto(file: &mut std::fs::File, position: i64) -> std::io::Result<u64> {
+dispatch/native/tests.rs:36:            let text = std::fs::read(&path).unwrap_or_else(|e| {
+ir/corpus_shape_tests.rs:16:use std::fs;
+ir/corpus_shape_tests.rs:493:        fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+ir/corpus_shape_tests.rs:509:        let text = fs::read_to_string(&path)
+ir/corpus_shape_tests.rs:560:            fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+plan/tests.rs:173:        for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+plan/tests.rs:182:            let bytes = std::fs::read(&path).expect("a readable corpus program");
+input.rs:75:                ProgramInput::Stdin => Source::Stdin(std::io::stdin()),
+input.rs:128:            Source::Stdin(stdin) => stdin.lock().read(&mut buffer),
+input.rs:129:            Source::Bytes(cursor) => cursor.read(&mut buffer),
+input.rs:448:        let count = Dribble(b'z').read(&mut buffer).expect("the source answers");
+bin/rexx-ir.rs:15:use std::process::ExitCode;
+bin/rexx-ir.rs:31:    let text = match std::fs::read(&path) {
+bin/rexx-run.rs:16:use std::process::ExitCode;
+bin/rexx-run.rs:39:            use std::os::unix::fs::FileTypeExt;
+bin/rexx-run.rs:40:            std::fs::metadata(format!("/proc/self/fd/{fd}"))
+bin/rexx-run.rs:75:    let text = match std::fs::read(&path) {
+bin/rexx-run.rs:90:    let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
+```
+
+</details>
+
+### Migration divergences (Task 18, spec section 11)
+
+* Successive native calls of one activity may run on different pool threads, so a thread-affine
+  extension behaves differently from the oracle, where an activity's calls share its thread.
+* Error 11 on a pool thread follows that thread's 512 KiB stack (margin 64 KiB, the oracle's
+  `errorRecoveryStack`), so its depth depends on whether the call left its driver: `.k~send0`
+  recursing through `TestSendMessage0` (the program of `scheduler/tests/pool.rs`
+  `deep_pinned_recursion_on_a_pool_thread_raises_11`, run by a release `rexx-run`, counting the
+  traceback's `SEND0` lines) reaches 55 levels here at rc 245, three runs alike, and 7744 on the
+  oracle at rc 245, whose main activity runs on the process's main thread.
+* A lone activity's native call keeps the baton (ruling P43), so an activity its callback starts
+  runs only once the call returns; a call that then waits for that activity waits in vain
+  (`scheduler/tests/pool.rs`, `a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity`).

@@ -34,7 +34,11 @@ use rexx_num::{DIGITS64, Number};
 use super::Resolution;
 use crate::builtin::datatype::{SymbolKind, classify};
 use crate::error::Raised;
+use crate::island::{InterpBaton, Islanded, Lent};
 use crate::run::Started;
+use crate::scheduler::{ActivityId, Posted, Recall, Scheduler};
+use crate::sync::Arc;
+use crate::timer::Inbox;
 use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame, PendingTrap};
 
 /// The bytes a small integer or an inline string renders as, for a reader
@@ -67,7 +71,7 @@ impl Interp {
     /// Runs `binding`'s procedure against `args` with `receiver` as its self,
     /// and answers what the extension returned, or `Entered` with the
     /// activity parked for the call's driver exit
-    /// ([`Interp::exits_for_native`]).
+    /// ([`Interp::leaves_driver`]).
     ///
     /// # Errors
     /// The condition the extension raised, whatever converting an argument or
@@ -92,7 +96,7 @@ impl Interp {
             return Err(Loud::library_procedure_gone().into());
         };
         let held = HeldCall::Method(entry.held(), resolution.method);
-        let exits = self.exits_for_native();
+        let exits = self.leaves_driver();
         self.push_native_frame(owner, resolution.scope, Some(receiver), name, args, None);
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let packaged = self.external_package_path(resolution.method).is_some();
@@ -182,7 +186,7 @@ impl Interp {
             return Err(Loud::library_procedure_gone().into());
         };
         let held = HeldCall::Routine(entry.held());
-        let exits = self.exits_for_native();
+        let exits = self.leaves_driver();
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args, Some(code));
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let program = self.library_code_program(code);
@@ -311,7 +315,7 @@ impl Interp {
     /// is alive or a test mode asks for every exit. A lone activity's call
     /// runs on the baton, which costs a single-activity program nothing
     /// (ruling P43).
-    fn exits_for_native(&self) -> bool {
+    pub(crate) fn leaves_driver(&self) -> bool {
         self.activity.pin_depth == 0
             && !self.activity.resuming
             && (self.switch.is_some() || self.stress_collect || self.others_live())
@@ -895,6 +899,11 @@ impl NativeInFlight {
         matches!(self.stage, Stage::Prepared)
     }
 
+    /// The call's native frame, as [`Interp::native_token`] names it.
+    pub(crate) fn frame(&self) -> u64 {
+        self.frame
+    }
+
     /// Readies the call to leave its driver, keeping `park`, the
     /// activity's, for the call's length, and answers what the call reads
     /// and writes, its frame, and the condition recorded so far.
@@ -921,6 +930,12 @@ impl NativeInFlight {
     ) -> Option<Box<super::NativePark>> {
         self.call = Some(call);
         self.pending = pending;
+        self.park.take()
+    }
+
+    /// The activity's park, kept here while the call runs on a pool thread,
+    /// for a failure that ends it first.
+    pub(crate) fn take_park(&mut self) -> Option<Box<super::NativePark>> {
         self.park.take()
     }
 
@@ -986,7 +1001,7 @@ impl OffBaton {
         frame: u64,
         pending: Option<usize>,
         host: &mut Interp,
-        baton: &crate::baton::Baton,
+        baton: &InterpBaton,
         thread: &rexx_api::ffi::ThreadContext,
         post: impl FnOnce(Completion),
     ) -> Option<usize> {
@@ -1005,24 +1020,163 @@ impl OffBaton {
         }
         thread.enter(&activation, |contexts| {
             baton.release();
-            let completion = match held {
-                HeldCall::Method(held, _) => {
-                    invoke::call_held_method(native, held, &contexts.method())
-                }
-                HeldCall::Routine(held) => {
-                    invoke::call_held_routine(native, held, &contexts.call())
-                }
-            };
-            post(completion);
+            post(held.call(native, contexts));
             baton.acquire();
         });
         activation.pending()
     }
 }
 
+impl HeldCall {
+    /// Calls the row's stub with `native`'s descriptors.
+    fn call(
+        &self,
+        native: &mut NativeCall,
+        contexts: &mut rexx_api::ffi::Contexts<'_, '_>,
+    ) -> Completion {
+        match self {
+            HeldCall::Method(held, _) => invoke::call_held_method(native, held, &contexts.method()),
+            HeldCall::Routine(held) => invoke::call_held_routine(native, held, &contexts.call()),
+        }
+    }
+}
+
+/// A native call a pool thread runs (spec 2026-09-29 2.2): the baton's holder
+/// lends it the baton to enter the call, and it recalls the baton for each
+/// callback and for the call's end, so that each runs as the call's activity.
+pub(crate) struct PooledCall {
+    work: Islanded<(Box<OffBaton>, rexx_api::ffi::ThreadContext)>,
+    frame: u64,
+    pending: Option<usize>,
+    activity: ActivityId,
+    baton: Arc<InterpBaton>,
+    inbox: Arc<Inbox<Posted>>,
+}
+
+impl PooledCall {
+    /// The call `call` in the native frame `frame` holding the condition
+    /// `pending`, with `thread` as `activity`'s thread context.
+    pub(crate) fn new(
+        call: Box<OffBaton>,
+        thread: rexx_api::ffi::ThreadContext,
+        frame: u64,
+        pending: Option<usize>,
+        activity: ActivityId,
+        baton: &Arc<InterpBaton>,
+        inbox: Arc<Inbox<Posted>>,
+    ) -> PooledCall {
+        PooledCall {
+            work: Islanded::new((call, thread), baton),
+            frame,
+            pending,
+            activity,
+            baton: Arc::clone(baton),
+            inbox,
+        }
+    }
+
+    /// On the pool thread: enters the call under the lend the holder makes,
+    /// gives the baton back, calls the stub, and once it returns recalls the
+    /// baton to leave the call, put its parts back on the activity's record
+    /// and post its completion.
+    pub(crate) fn run(self) {
+        let probe = 0u8;
+        let recalling = Recalling {
+            baton: &self.baton,
+            inbox: &self.inbox,
+            activity: self.activity,
+            frame: self.frame,
+            base: &raw const probe as usize,
+        };
+        let entered = Lent::wait(&self.baton);
+        let (mut call, thread) = self.work.take(&self.baton);
+        let (completion, mut ended, pending) = {
+            let OffBaton {
+                held,
+                native,
+                strings,
+            } = &mut *call;
+            let activation = Activation::new(Conversion {
+                host: HostRef::through(&recalling),
+                strings,
+            });
+            activation.set_frame(self.frame);
+            if let Some(number) = self.pending {
+                activation.raise(number);
+            }
+            let (completion, ended) = thread.enter(&activation, |contexts| {
+                drop(entered);
+                let completion = held.call(native, contexts);
+                (completion, recalling.recall())
+            });
+            (completion, ended, activation.pending())
+        };
+        let interp = ended.interp();
+        if let Some(record) = interp
+            .activity
+            .native_call
+            .as_mut()
+            .filter(|record| record.frame == self.frame)
+        {
+            interp.activity.native_park = record.back(call, pending);
+        }
+        drop(thread);
+        Interp::post_completion(&self.inbox, self.activity, self.frame, completion);
+    }
+}
+
+/// The baton as a pool thread running a native call reaches it: a thread
+/// that does not hold it recalls it from the holder, which lends it with the
+/// call's activity running.
+struct Recalling<'p> {
+    baton: &'p InterpBaton,
+    inbox: &'p Inbox<Posted>,
+    activity: ActivityId,
+    frame: u64,
+    base: usize,
+}
+
+impl<'p> Recalling<'p> {
+    /// Recalls the baton and waits until it is lent.
+    fn recall(&self) -> Lent<'p> {
+        self.inbox.post(Posted::Recall(Recall {
+            activity: self.activity,
+            frame: self.frame,
+            thread: std::thread::current().id(),
+            base: self.base,
+        }));
+        Lent::wait(self.baton)
+    }
+}
+
+impl rexx_api::values::Baton for Recalling<'_> {
+    fn take_unless_held(&self) -> bool {
+        if self.baton.held_here() {
+            return false;
+        }
+        #[cfg(test)]
+        self.baton.count_take();
+        std::mem::forget(self.recall());
+        true
+    }
+
+    fn release(&self) {
+        self.baton.give_back();
+    }
+
+    fn held_here(&self) -> bool {
+        self.baton.held_here()
+    }
+
+    fn host(&self) -> Option<std::ptr::NonNull<dyn rexx_api::values::Host>> {
+        self.baton.lent().map(crate::island::Island::host)
+    }
+}
+
 #[cfg(test)]
 thread_local! {
-    /// How many times a callback on this thread took the baton.
+    /// How many times a callback took the baton of an interpreter this
+    /// thread ran.
     static CALLBACK_TAKES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
@@ -1032,12 +1186,18 @@ pub(crate) fn callback_takes() -> u64 {
     CALLBACK_TAKES.with(std::cell::Cell::get)
 }
 
-impl rexx_api::values::Baton for crate::baton::Baton {
+/// Adds `takes` to [`CALLBACK_TAKES`].
+#[cfg(test)]
+pub(crate) fn note_callback_takes(takes: u64) {
+    CALLBACK_TAKES.with(|counted| counted.set(counted.get() + takes));
+}
+
+impl rexx_api::values::Baton for InterpBaton {
     fn take_unless_held(&self) -> bool {
         let took = crate::baton::Baton::take_unless_held(self);
         #[cfg(test)]
         if took {
-            CALLBACK_TAKES.with(|takes| takes.set(takes.get() + 1));
+            self.count_take();
         }
         took
     }

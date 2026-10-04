@@ -32,10 +32,9 @@ pub(crate) const INBOX: u32 = 2;
 /// `ActivityManager::timeSliceLength` (`concurrency/ActivityManager.hpp:359`).
 const SLICE_LENGTH: Duration = Duration::from_millis(24);
 
-/// What other threads post to an interpreter's inbox: a native call's
-/// completion.
+/// What other threads post to an interpreter's inbox.
 #[cfg(not(all(loom, test)))]
-pub(crate) type Posted = crate::scheduler::Completed;
+pub(crate) type Posted = crate::scheduler::Posted;
 
 /// A model's stand-in for a completion.
 #[cfg(all(loom, test))]

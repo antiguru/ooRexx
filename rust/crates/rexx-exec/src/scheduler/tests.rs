@@ -1250,3 +1250,4 @@ fn a_post_from_another_thread_ends_an_idle() {
 }
 
 mod native;
+mod pool;

@@ -109,6 +109,9 @@ mod timer;
 mod baton;
 mod sync;
 
+// The interpreter's state on another OS thread (D-U2).
+mod island;
+
 // The `PARSE` template engine: the movement cursor (source-independent, one
 // struct, unit-tested against measured oracle bytes) and the driver that
 // evaluates trigger operands, traces, and assigns the targets.
@@ -208,6 +211,31 @@ pub(crate) const LIBRARY_PACKAGE_NAME: &[u8] = b"REXX";
 /// interpreter stack: 536870912 bytes, eval depth reached: 100000, span: 47999520 bytes, per frame: 480.0 bytes
 /// ```
 pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
+
+/// The stack a new interpreter's pool threads get.
+#[cfg(not(test))]
+fn pool_stack() -> usize {
+    crate::scheduler::POOL_STACK_BYTES
+}
+
+#[cfg(test)]
+thread_local! {
+    /// A pool stack size a test sets for the interpreters this thread makes.
+    static POOL_STACK: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn pool_stack() -> usize {
+    POOL_STACK
+        .with(std::cell::Cell::get)
+        .unwrap_or(crate::scheduler::POOL_STACK_BYTES)
+}
+
+/// Gives the pool threads of interpreters this thread makes `bytes` of stack.
+#[cfg(test)]
+pub(crate) fn set_pool_stack(bytes: usize) {
+    POOL_STACK.with(|stack| stack.set(Some(bytes)));
+}
 
 /// The arena size below which no ordinary run ever collects, and the floor
 /// every later growth allowance is raised to (see `Interp::collect_at`).
@@ -1149,7 +1177,7 @@ struct Interp {
     /// inbox and the request word the timer sets.
     timer: crate::timer::Registration,
     /// The right to touch this interpreter's state.
-    baton: crate::sync::Arc<crate::baton::Baton>,
+    baton: crate::sync::Arc<crate::island::InterpBaton>,
     /// The deterministic switch mode, where a test set one.
     switch: Option<crate::scheduler::Switch>,
     /// Whether the pending `SLICE` has been counted as deferred.
@@ -1509,6 +1537,9 @@ struct Interp {
     /// the package of a translation that raised no routine, method or resource
     /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
     untranslated: rustc_hash::FxHashSet<ProgramId>,
+    /// The threads native calls and blocking operations run on; last, so
+    /// that every island value is dropped before its threads end.
+    pool: crate::scheduler::Pool,
 }
 
 /// Where one installed `::ROUTINE` lives: which loaded program, and which of
@@ -1854,7 +1885,7 @@ impl Interp {
                 .collect()
         };
         // The creating thread holds the baton until a driver exit releases it.
-        let baton = crate::sync::Arc::new(crate::baton::Baton::new());
+        let baton = crate::sync::Arc::new(crate::island::InterpBaton::new());
         baton.acquire();
         Interp {
             heap: Heap::new(),
@@ -1982,6 +2013,7 @@ impl Interp {
             required_paths: FxHashMap::default(),
             required_packages: FxHashMap::default(),
             untranslated: rustc_hash::FxHashSet::default(),
+            pool: crate::scheduler::Pool::new(pool_stack()),
         }
     }
 
@@ -2537,6 +2569,7 @@ impl Interp {
             stack_room: _,
             timer: _,
             baton: _,
+            pool: _,
             switch: _,
             slice_deferred: _,
             // A chunk's interned literals are allocated immortal.
@@ -3246,17 +3279,25 @@ fn execute_on(
     let stack = interp.stack_span();
     let collections = interp.heap.collections_performed() - interp.collections_before_program;
     let chunks_refused = interp.chunks_refused;
+    #[cfg(test)]
+    crate::dispatch::library::note_callback_takes(interp.baton.takes());
 
-    Outcome {
+    let outcome = Outcome {
         exit_code,
-        stdout: interp.out,
-        stderr: interp.trace,
+        stdout: std::mem::take(&mut interp.out),
+        stderr: std::mem::take(&mut interp.trace),
         stack,
         collections,
         chunks_refused,
         #[cfg(feature = "pinning")]
         pinning: interp.pinning.take(&interp.activity.pins),
+    };
+    // A pool thread still running a call ends it under the baton, through
+    // this interpreter's state, which therefore outlives the run.
+    if interp.activities.in_flight() {
+        std::mem::forget(interp);
     }
+    outcome
 }
 
 #[cfg(test)]
