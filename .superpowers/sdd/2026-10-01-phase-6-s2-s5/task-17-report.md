@@ -407,9 +407,11 @@ A mutant that panics in `abandon_native_call` makes this test fail, so the test 
 `5`, `after`, then the started activity's Error 93.974, at rc 0. Head prints only the refusal.
 - This task caused it. Main's call is now a switch point, and the started activity, ready since
   `~start`, runs while main waits for its completion.
-- On the oracle that is also a possible schedule, because the native call releases the kernel lock.
-- What keeps main's lines from appearing is that this crate's refusal is loud and ends the run. A
-  condition in the started activity would not end it.
+- The oracle never omits those lines: over 30 runs, 29 print `5`, `after`, then Error 93.974, and
+  1 prints `5`, Error 93.974, then `after`. Head's empty stdout comes from this crate's loud
+  refusal of the unimplemented `setMethod` source: under P40 it ends the run, so main never
+  resumes.
+- A condition in the started activity would not end the run.
 - So it is an artifact of an unimplemented path, not of the exit. Changing the schedule to hide it
   would undo the switch point the spec asks for, so I left it.
 - The report's line "no test observes it" now reads: no failure that ends a native park lets the

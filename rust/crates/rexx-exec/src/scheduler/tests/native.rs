@@ -282,7 +282,9 @@ fn a_library_routine_called_again_reaches_the_row_its_name_finds() {
 /// A started activity's loud refusal, met while main's call has left its
 /// driver and waits to finish, ends main's park in place of the completion:
 /// the call is abandoned, its frame popped, and the run ends with the
-/// refusal.
+/// refusal. The empty stdout is that refusal's (P40), not a schedule the
+/// oracle takes: measured over 30 runs, the oracle prints `5` and `after`
+/// in every one, around the started activity's Error 93.974.
 #[test]
 fn a_failure_ending_a_native_park_abandons_the_call() {
     let run = counted(
