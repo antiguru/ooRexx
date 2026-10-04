@@ -58,6 +58,8 @@ fn library() -> rexx_api::load::Library {
     rexx_api::load::routines_only(&[
         ("SENDTWICE", rexx_api::load::send_twice),
         ("SENDAWAITSEND", rexx_api::load::send_await_send),
+        ("SENDKEEPING", rexx_api::load::send_keeping),
+        ("SENDTHROUGH", rexx_api::load::send_through),
         (
             "SENDFROMANOTHERTHREAD",
             rexx_api::load::send_from_another_thread,
@@ -117,21 +119,40 @@ fn a_callback_from_the_calls_own_thread_runs() {
 
 /// A callback from a thread running no native call takes the baton, does
 /// nothing, and leaves the oracle's 98.983 on the call whose context it
-/// used (`Activity::validateThread`, `concurrency/Activity.cpp:3620`).
+/// used (`Activity::validateThread`, `concurrency/Activity.cpp:3620`). The
+/// holder serves it while it runs another activity, which it switches out
+/// for the call's own; the baton is held once, for the whole member.
 #[test]
 fn a_callback_from_another_thread_takes_the_baton_and_raises_98_983() {
-    let ran = run("m = .t~new~start('idle')\nsignal on syntax\n\
+    let ran = run("m = .t~new~start('spin')\nsignal on syntax\n\
          say SENDFROMANOTHERTHREAD(.loud~new, 'SPEAK')\nsay 'unreached'\n\
          syntax:\nsay 'trapped' condition('o')~code\nsay m~result\n\
-         ::requires 'callbacktest' LIBRARY\n::class t\n::method idle\n  call SysSleep 0.2\n  \
-         return 'idle'\n::class loud\n::method speak\n  say 'spoke'\n  return 1\n");
+         ::requires 'callbacktest' LIBRARY\n::class t\n::method spin\n  \
+         do i = 1 to 2000000\n  end\n  return 'spun'\n\
+         ::class loud\n::method speak\n  say 'spoke'\n  return 1\n");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
-    assert_eq!(ran.stdout(), "trapped 98.983\nidle\n");
+    assert_eq!(ran.stdout(), "trapped 98.983\nspun\n");
     assert_eq!(ran.exits, 1);
-    assert_eq!(
-        ran.takes, 1,
-        "the other thread's callback took the baton once"
-    );
+    assert_eq!(ran.takes, 1, "the other thread took the baton once");
+}
+
+/// A thread context kept from a call on one pool thread, used from another
+/// activity's call on another pool thread while the first call runs outside
+/// any callback, does nothing and gives the user's own call 98.983.
+#[test]
+fn a_kept_context_used_from_another_threads_call_raises_98_983_there() {
+    let ran = run("k = .keeper~new\nu = .t~new~start('use', k)\n\
+         call SENDKEEPING k, 'KEEP'\nsay u~result\n\
+         ::requires 'callbacktest' LIBRARY\n\
+         ::class keeper\n::method init\n  expose kept\n  kept = .nil\n\
+         ::method keep unguarded\n  expose kept\n  use arg kept\n\
+         ::method kept unguarded\n  expose kept\n  return kept\n\
+         ::class t\n::method use\n  use arg k\n  do while k~kept == .nil\n    call SysSleep 0.01\n  end\n  \
+         signal on syntax\n  call SENDTHROUGH k~kept, .loud~new, 'SPEAK'\n  return 'answered'\n\
+         syntax:\n  return 'trapped' condition('o')~code\n\
+         ::class loud\n::method speak\n  say 'spoke'\n  return 1\n");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "trapped 98.983\n");
 }
 
 /// A callback whose call's activity a pinned waiter waits for is answered by

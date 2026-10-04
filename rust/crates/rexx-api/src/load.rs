@@ -460,6 +460,85 @@ pub unsafe extern "C-unwind" fn send_await_send(
     std::ptr::null_mut()
 }
 
+/// `SENDKEEPING(object, message)`: sends `message` to `object` through the
+/// call's thread context with that context as a `.Pointer`, then sleeps half
+/// a second outside any callback: a native whose context another call may
+/// keep, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn send_keeping(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 4] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    unsafe {
+        let thread = (*context).threadContext;
+        let kept = ((*(*thread).functions).NewPointer)(thread, thread.cast());
+        ((*(*thread).functions).SendMessage1)(
+            thread,
+            (*arguments.add(1)).value.value_RexxObjectPtr,
+            (*arguments.add(2)).value.value_CSTRING,
+            kept.cast(),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        (*arguments).value.value_RexxObjectPtr = std::ptr::null_mut();
+    }
+    std::ptr::null_mut()
+}
+
+/// `SENDTHROUGH(pointer, object, message)`: sends `message` to `object`
+/// through the thread context `pointer`, which [`send_keeping`] handed out,
+/// answering whether the send answered nothing: a callback through a context
+/// another call kept, for a test.
+///
+/// # Safety
+/// As [`send_then_await`], and `pointer` is a thread context whose call is
+/// in flight.
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn send_through(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 5] = [
+        code::LOGICAL_T,
+        code::POINTER,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments,
+    // and the caller guarantees the kept context.
+    unsafe {
+        let thread = (*arguments.add(1))
+            .value
+            .value_POINTER
+            .cast::<crate::layout::RexxThreadContext_>();
+        let answered = ((*(*thread).functions).SendMessage0)(
+            thread,
+            (*arguments.add(2)).value.value_RexxObjectPtr,
+            (*arguments.add(3)).value.value_CSTRING,
+        );
+        (*arguments).value.value_logical_t = usize::from(answered.is_null());
+    }
+    std::ptr::null_mut()
+}
+
 /// `SENDFROMANOTHERTHREAD(object, message)`: sends `message` to `object`
 /// through the call's thread context from a thread of its own, which it
 /// waits for, answering whether the send answered nothing: a callback from
