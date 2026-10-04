@@ -643,6 +643,146 @@ pub fn run_tests(
         .collect()
 }
 
+/// How many rows [`rows_in_parallel`] runs at once, where set; the default
+/// is [`ROWS_DEFAULT`].
+pub const ROWS_ENV: &str = "REXX_GROUP_ROWS";
+
+pub const ROWS_DEFAULT: usize = 6;
+
+/// The pool every [`rows_in_parallel`] of the process shares, so the bound
+/// holds across tests.
+fn row_pool() -> &'static rayon::ThreadPool {
+    static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| {
+        let rows = env::var(ROWS_ENV).map_or(ROWS_DEFAULT, |value| {
+            value
+                .parse()
+                .unwrap_or_else(|_| panic!("{ROWS_ENV} is not a count: {value:?}"))
+        });
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(rows)
+            .thread_name(|at| format!("group-row-{at}"))
+            .build()
+            .expect("cannot build the row pool")
+    })
+}
+
+/// How many pooled and quiet rows are running, and how many pooled rows wait.
+struct Rows {
+    pooled: usize,
+    quiet: usize,
+    pooled_waiting: usize,
+}
+
+static ROWS: std::sync::Mutex<Rows> = std::sync::Mutex::new(Rows {
+    pooled: 0,
+    quiet: 0,
+    pooled_waiting: 0,
+});
+
+static TURN: std::sync::Condvar = std::sync::Condvar::new();
+
+/// A running row's place in [`ROWS`], given back on drop.
+struct RowTurn {
+    quiet: bool,
+}
+
+impl RowTurn {
+    /// Waits until no row of the other kind runs; a quiet row also waits
+    /// while a pooled row is waiting.
+    fn take(quiet: bool) -> RowTurn {
+        let wait = |rows| {
+            TURN.wait(rows)
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        };
+        let mut rows = ROWS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if quiet {
+            while rows.pooled > 0 || rows.pooled_waiting > 0 {
+                rows = wait(rows);
+            }
+            rows.quiet += 1;
+        } else {
+            rows.pooled_waiting += 1;
+            while rows.quiet > 0 {
+                rows = wait(rows);
+            }
+            rows.pooled_waiting -= 1;
+            rows.pooled += 1;
+        }
+        RowTurn { quiet }
+    }
+}
+
+impl Drop for RowTurn {
+    fn drop(&mut self) {
+        let mut rows = ROWS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.quiet {
+            rows.quiet -= 1;
+        } else {
+            rows.pooled -= 1;
+        }
+        TURN.notify_all();
+    }
+}
+
+/// Runs `body` while no pooled row of any [`rows_in_parallel`] runs.
+pub fn on_a_quiet_machine<T>(body: impl FnOnce() -> T) -> T {
+    let _turn = RowTurn::take(true);
+    body()
+}
+
+/// Runs `row` over each of `rows` in its own scratch copy,
+/// `<name>-<pid>-<index>/run` below the target's temporary directory, removed
+/// after the row. The rows `quiet` selects run one at a time after the others,
+/// each [`on_a_quiet_machine`]; the rest run in the shared pool. Answers the
+/// results in `rows`' order.
+pub fn rows_in_parallel<R: Sync, T: Send>(
+    name: &str,
+    rows: &[R],
+    quiet: impl Fn(&R) -> bool,
+    row: impl Fn(&Path, &R) -> T + Sync,
+) -> Vec<T> {
+    use rayon::prelude::*;
+
+    let one = |at: usize| {
+        let run = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("{name}-{}-{at}", std::process::id()))
+            .join("run");
+        let result = row(&run, &rows[at]);
+        let dir = run.parent().expect("a parent");
+        if dir.exists() {
+            fs::remove_dir_all(dir).expect("cannot remove the run");
+        }
+        result
+    };
+    let (alone, pooled): (Vec<usize>, Vec<usize>) =
+        (0..rows.len()).partition(|&at| quiet(&rows[at]));
+    let pooled: Vec<(usize, T)> = row_pool().install(|| {
+        pooled
+            .into_par_iter()
+            .map(|at| {
+                let _turn = RowTurn::take(false);
+                (at, one(at))
+            })
+            .collect()
+    });
+    let mut results: Vec<Option<T>> = (0..rows.len()).map(|_| None).collect();
+    for (at, result) in pooled {
+        results[at] = Some(result);
+    }
+    for at in alone {
+        results[at] = Some(on_a_quiet_machine(|| one(at)));
+    }
+    results
+        .into_iter()
+        .map(|result| result.expect("every row ran"))
+        .collect()
+}
+
 fn compare(theirs: Run, ours: Run) -> Outcome {
     let stderr = String::from_utf8_lossy(&ours.stderr).into_owned();
     if let Some(line) = stderr.lines().find(|line| line.starts_with("rexx-exec: ")) {

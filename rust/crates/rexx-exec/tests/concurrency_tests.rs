@@ -1386,8 +1386,8 @@ mod group_runs {
 
     use super::group_runner::{
         GATE_ENV, Outcome, Run, SwitchMode, TestResult, VERBOSITY, excerpt, first_difference,
-        fresh_copy, gate_mode, group_file, masked, reaching_rxapi, run_crate, run_tests,
-        source_test_names, test_names,
+        fresh_copy, gate_mode, group_file, masked, on_a_quiet_machine, reaching_rxapi,
+        rows_in_parallel, run_crate, run_tests, source_test_names, test_names,
     };
     use super::support::oracle;
 
@@ -1491,18 +1491,21 @@ mod group_runs {
         mode: SwitchMode,
         chosen: impl Fn(&str) -> bool,
     ) -> Vec<TestResult> {
-        // One group at a time: two at once outgrow the gate's memory cap.
-        static ONE_GROUP: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _one = ONE_GROUP
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let oracle = oracle::locate();
-        let run = scratch(name);
         let tests: Vec<String> = source_test_names(dir, group)
             .into_iter()
             .filter(|test| chosen(test))
             .collect();
-        let results = run_tests(&oracle, &run, dir, group, &tests, mode, None);
+        let results = rows_in_parallel(
+            name,
+            &tests,
+            |test| WALL_CLOCK.contains(&format!("{dir}/{group}.testGroup {test}").as_str()),
+            |run, test| {
+                let one = std::slice::from_ref(test);
+                let mut results = run_tests(&oracle, run, dir, group, one, mode, None);
+                results.pop().expect("one result")
+            },
+        );
         let mut table = String::new();
         for row in &results {
             let detail = match &row.outcome {
@@ -1525,7 +1528,6 @@ mod group_runs {
             fs::write(path, &table).expect("cannot write the table");
         }
         assert_eq!(results.len(), tests.len());
-        fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
         results
     }
 
@@ -1670,7 +1672,9 @@ mod group_runs {
                         eprintln!("P48 rerun: {key} {name}: {label}");
                         let run = scratch(&format!("{name}-rerun"));
                         let one = std::slice::from_ref(&row.test);
-                        let again = run_tests(&oracle, &run, "base/class", group, one, mode, None);
+                        let again = on_a_quiet_machine(|| {
+                            run_tests(&oracle, &run, "base/class", group, one, mode, None)
+                        });
                         fs::remove_dir_all(run.parent().expect("a parent"))
                             .expect("cannot remove the run");
                         label = format!("{label}, then {} (P48 rerun)", again[0].outcome.label());
@@ -1983,100 +1987,34 @@ mod group_runs {
                 .or_default()
                 .push(row.test.clone());
         }
+        let rows: Vec<(&String, &String)> = groups
+            .iter()
+            .flat_map(|(file, tests)| tests.iter().map(move |test| (file, test)))
+            .collect();
         let oracle = oracle::locate();
+        let results = rows_in_parallel(
+            name,
+            &rows,
+            |(file, test)| WALL_CLOCK.contains(&format!("{file} {test}").as_str()),
+            |run, (file, test)| row_in_both_modes(&oracle, run, file, test),
+        );
         let mut table =
             String::from("group\ttest\tnormal against the oracle\tevery against normal\n");
         let mut differing = Vec::new();
         let mut stuck = Vec::new();
-        for (file, tests) in &groups {
-            let (dir, group) = file
-                .trim_end_matches(".testGroup")
-                .rsplit_once('/')
-                .expect("a group below a directory");
-            let run = scratch(name);
-            let not_run = reaching_rxapi(dir, &[group]);
-            for test in tests {
-                let one = std::slice::from_ref(test);
-                // The runner asserts that the oracle finishes within the
-                // deadline; a test it outlasts is recorded as such.
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_tests(&oracle, &run, dir, group, one, SwitchMode::None, None)
-                }));
-                let normal = match result {
-                    Ok(results) => cell(&results[0].outcome),
-                    Err(payload) => {
-                        let deadline = payload
-                            .downcast_ref::<String>()
-                            .is_some_and(|m| m.starts_with("the oracle did not finish"));
-                        if !deadline {
-                            std::panic::resume_unwind(payload);
-                        }
-                        ("oracle did not finish".to_string(), String::new())
-                    }
-                };
-                let mut modes = ("not run".to_string(), true);
-                if !not_run.contains(&format!("{group}.{test}")) {
-                    let row = format!("{file} {test}");
-                    let judge = || {
-                        let group_path = group_file(&run, dir, group);
-                        let args = [
-                            "-f",
-                            group_path.as_str(),
-                            "-U",
-                            "-V",
-                            VERBOSITY,
-                            "-t",
-                            test.as_str(),
-                        ];
-                        fresh_copy(&run, dir);
-                        let shipped = run_crate(&run, &args, SwitchMode::None);
-                        fresh_copy(&run, dir);
-                        let every = run_crate(&run, &args, SwitchMode::EveryOpportunity);
-                        let raced = row == EVERY_FORCES_THE_RACE
-                            && normal.0 == "pass"
-                            && shipped.status == Some(0)
-                            && !inverted(&shipped)
-                            && every.status.is_none()
-                            && !inverted(&every);
-                        let mut hung = Vec::new();
-                        if raced {
-                            let modes = (
-                                "every mode forces the test's own race; the oracle hangs in the \
-                                 same interleaving (P46)"
-                                    .to_string(),
-                                true,
-                            );
-                            return (modes, hung);
-                        }
-                        for (name, ours) in [("normal", &shipped), ("every", &every)] {
-                            if inverted(ours) || ours.status.is_none() {
-                                hung.push(format!("{row}: {name}"));
-                            }
-                        }
-                        (compare_modes(&row, &shipped, &every), hung)
-                    };
-                    let (mut judged, mut hung) = judge();
-                    if (!judged.1 || !hung.is_empty()) && WALL_CLOCK.contains(&row.as_str()) {
-                        eprintln!("P48 rerun: {row}: {} {hung:?}", judged.0);
-                        (judged, hung) = judge();
-                        judged.0.push_str(" (P48 rerun)");
-                    }
-                    modes = judged;
-                    stuck.extend(hung);
-                }
-                if !modes.1 {
-                    differing.push(format!("{file} {test}"));
-                }
-                let show = |(key, detail): &(String, String)| {
-                    if detail.is_empty() {
-                        key.clone()
-                    } else {
-                        format!("{key}: {detail}")
-                    }
-                };
-                table.push_str(&format!("{file}\t{test}\t{}\t{}\n", show(&normal), modes.0));
+        for ((file, test), (normal, modes, hung)) in rows.iter().zip(results) {
+            stuck.extend(hung);
+            if !modes.1 {
+                differing.push(format!("{file} {test}"));
             }
-            fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+            let show = |(key, detail): &(String, String)| {
+                if detail.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{key}: {detail}")
+                }
+            };
+            table.push_str(&format!("{file}\t{test}\t{}\t{}\n", show(&normal), modes.0));
         }
         eprintln!("{table}");
         if let Some(path) = std::env::var_os(table_env) {
@@ -2087,6 +2025,80 @@ mod group_runs {
             differing.is_empty(),
             "tests differing between the modes: {differing:?}"
         );
+    }
+
+    /// One row of [`rows_in_both_modes`] in the copy `run`: its cell against
+    /// the oracle, how the two modes compare and whether that is allowed, and
+    /// the modes that hung or ended in an inverted wait.
+    fn row_in_both_modes(
+        oracle: &oracle::Oracle,
+        run: &Path,
+        file: &str,
+        test: &str,
+    ) -> ((String, String), (String, bool), Vec<String>) {
+        let (dir, group) = file
+            .trim_end_matches(".testGroup")
+            .rsplit_once('/')
+            .expect("a group below a directory");
+        let one = &[test.to_string()];
+        // The runner asserts that the oracle finishes within the deadline; a
+        // test it outlasts is recorded as such.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_tests(oracle, run, dir, group, one, SwitchMode::None, None)
+        }));
+        let normal = match result {
+            Ok(results) => cell(&results[0].outcome),
+            Err(payload) => {
+                let deadline = payload
+                    .downcast_ref::<String>()
+                    .is_some_and(|m| m.starts_with("the oracle did not finish"));
+                if !deadline {
+                    std::panic::resume_unwind(payload);
+                }
+                ("oracle did not finish".to_string(), String::new())
+            }
+        };
+        if reaching_rxapi(dir, &[group]).contains(&format!("{group}.{test}")) {
+            return (normal, ("not run".to_string(), true), Vec::new());
+        }
+        let row = format!("{file} {test}");
+        let judge = || {
+            let group_path = group_file(run, dir, group);
+            let args = ["-f", group_path.as_str(), "-U", "-V", VERBOSITY, "-t", test];
+            fresh_copy(run, dir);
+            let shipped = run_crate(run, &args, SwitchMode::None);
+            fresh_copy(run, dir);
+            let every = run_crate(run, &args, SwitchMode::EveryOpportunity);
+            let raced = row == EVERY_FORCES_THE_RACE
+                && normal.0 == "pass"
+                && shipped.status == Some(0)
+                && !inverted(&shipped)
+                && every.status.is_none()
+                && !inverted(&every);
+            let mut hung = Vec::new();
+            if raced {
+                let modes = (
+                    "every mode forces the test's own race; the oracle hangs in the \
+                     same interleaving (P46)"
+                        .to_string(),
+                    true,
+                );
+                return (modes, hung);
+            }
+            for (name, ours) in [("normal", &shipped), ("every", &every)] {
+                if inverted(ours) || ours.status.is_none() {
+                    hung.push(format!("{row}: {name}"));
+                }
+            }
+            (compare_modes(&row, &shipped, &every), hung)
+        };
+        let (mut judged, mut hung) = judge();
+        if (!judged.1 || !hung.is_empty()) && WALL_CLOCK.contains(&row.as_str()) {
+            eprintln!("P48 rerun: {row}: {} {hung:?}", judged.0);
+            (judged, hung) = judge();
+            judged.0.push_str(" (P48 rerun)");
+        }
+        (normal, judged, hung)
     }
 
     /// The `TRACE_TraceObject` tests that pass; the table printed beside
