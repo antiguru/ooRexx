@@ -460,6 +460,89 @@ pub unsafe extern "C-unwind" fn send_await_send(
     std::ptr::null_mut()
 }
 
+/// `NAPTHENSEND(object, message)`: sleeps a fifth of a second, then sends
+/// `message` to `object` through the call's thread context, answering what
+/// it answered: a callback made well after its call left its driver, for a
+/// test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn nap_then_send(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 4] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    unsafe {
+        let thread = (*context).threadContext;
+        (*arguments).value.value_RexxObjectPtr = ((*(*thread).functions).SendMessage0)(
+            thread,
+            (*arguments.add(1)).value.value_RexxObjectPtr,
+            (*arguments.add(2)).value.value_CSTRING,
+        );
+    }
+    std::ptr::null_mut()
+}
+
+/// `AWAITSENDTWICE(path, object, first, second)`: waits up to five seconds
+/// for a file at `path`, then sends `first`, then `second`, to `object`
+/// through the call's thread context, answering what `second` answered: a
+/// native whose callbacks start when a test says, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn await_send_twice(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 6] = [
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares four arguments.
+    unsafe {
+        let path = CStr::from_ptr((*arguments.add(1)).value.value_CSTRING);
+        let path = std::path::PathBuf::from(path.to_string_lossy().into_owned());
+        let _ = (0..500).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            path.exists()
+        });
+        let object = (*arguments.add(2)).value.value_RexxObjectPtr;
+        let thread = (*context).threadContext;
+        ((*(*thread).functions).SendMessage0)(
+            thread,
+            object,
+            (*arguments.add(3)).value.value_CSTRING,
+        );
+        (*arguments).value.value_RexxObjectPtr = ((*(*thread).functions).SendMessage0)(
+            thread,
+            object,
+            (*arguments.add(4)).value.value_CSTRING,
+        );
+    }
+    std::ptr::null_mut()
+}
+
 /// `SENDKEEPING(object, message)`: sends `message` to `object` through the
 /// call's thread context with that context as a `.Pointer`, then sleeps half
 /// a second outside any callback: a native whose context another call may

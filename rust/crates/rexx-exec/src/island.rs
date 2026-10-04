@@ -102,8 +102,8 @@ impl<'b> Lent<'b> {
 
 impl Drop for Lent<'_> {
     /// Gives the baton back, except as a panic unwinds: the pool thread's
-    /// job posts the panic first, so the lender finds it before it runs
-    /// again.
+    /// job posts the panic first, so the lender drains it before it runs a
+    /// clause.
     fn drop(&mut self) {
         if !std::thread::panicking() {
             self.baton.give_back();

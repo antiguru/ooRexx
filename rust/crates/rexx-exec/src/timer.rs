@@ -29,9 +29,6 @@ pub(crate) const SLICE: u32 = 1;
 /// Something was posted to the inbox and not yet taken.
 pub(crate) const INBOX: u32 = 2;
 
-/// A pool thread's panic was posted.
-pub(crate) const PANICKED: u32 = 4;
-
 /// `ActivityManager::timeSliceLength` (`concurrency/ActivityManager.hpp:359`).
 const SLICE_LENGTH: Duration = Duration::from_millis(24);
 

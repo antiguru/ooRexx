@@ -59,6 +59,8 @@ fn library() -> rexx_api::load::Library {
         ("SENDTWICE", rexx_api::load::send_twice),
         ("SENDAWAITSEND", rexx_api::load::send_await_send),
         ("SENDKEEPING", rexx_api::load::send_keeping),
+        ("NAPTHENSEND", rexx_api::load::nap_then_send),
+        ("AWAITSENDTWICE", rexx_api::load::await_send_twice),
         ("SENDTHROUGH", rexx_api::load::send_through),
         (
             "SENDFROMANOTHERTHREAD",
@@ -69,6 +71,7 @@ fn library() -> rexx_api::load::Library {
         ("HERE3", here::<3>),
         ("NAPLONG", nap::<1500>),
         ("NAPLONGER", nap::<3000>),
+        ("NAP", nap::<300>),
     ])
 }
 
@@ -237,15 +240,16 @@ fn a_callback_waits_for_a_contended_guard_on_its_own_thread() {
 }
 
 /// A callback is served at the holder's next cold visit even while the
-/// holder is pinned and nothing else is ready, so no slice ends its run:
-/// a pinned busy-wait sees what the callback did.
+/// holder is pinned and nothing else is ready, so neither a slice nor a
+/// round of other activities ends its run: a pinned busy-wait sees what the
+/// callback did.
 #[test]
 fn a_callback_is_served_at_a_pinned_holders_next_cold_visit() {
     let ran = run(
         "f = .flag~new\nm = .t~new~start('work', f)\na = .array~of(2, 1)\n\
          a~sortWith(.c~new(f))\nsay 'sorted' a~toString('L', ',') m~result\n\
          ::requires 'callbacktest' LIBRARY\n\
-         ::class t\n::method work\n  use arg f\n  return SENDTWICE(f, 'MARK', 'MARK')\n\
+         ::class t\n::method work\n  use arg f\n  return NAPTHENSEND(f, 'MARK')\n\
          ::class flag\n::method init\n  expose set\n  set = 0\n\
          ::method set unguarded\n  expose set\n  return set\n\
          ::method mark unguarded\n  expose set\n  set = 1\n  return 'marked'\n\
@@ -255,6 +259,43 @@ fn a_callback_is_served_at_a_pinned_holders_next_cold_visit() {
     );
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
     assert_eq!(ran.stdout(), "sorted 1,2 marked\n");
+}
+
+/// Recalls that reach the holder together, while it keeps the baton for a
+/// call at the pool's bound, are each served: the first callback waits for
+/// the second, which its own thread's nested loop finds in the inbox rather
+/// than behind the holder's lend.
+#[test]
+fn recalls_drained_together_are_each_served() {
+    let path = std::env::temp_dir().join(format!("rexx-batched-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let ran = run_shaped(
+        &format!(
+            "m = .meet~new\na = .t~new~start('go', .side~new(m, 'A'))\n\
+             b = .t~new~start('go', .side~new(m, 'B'))\ncall SysSleep 0.1\n\
+             call lineout '{path}', 'go'\ncall lineout '{path}'\ncall NAP\n\
+             say a~result b~result\n\
+             ::requires 'callbacktest' LIBRARY\n\
+             ::class t\n::method go\n  use arg side\n  \
+             return AWAITSENDTWICE('{path}', side, 'FIRST', 'SECOND')\n\
+             ::class side\n::method init\n  expose m who\n  use arg m, who\n\
+             ::method first\n  expose m who\n  m~arrive\n  return who'1'\n\
+             ::method second\n  expose who\n  return who'2'\n\
+             ::class meet\n::method init\n  expose n\n  n = 0\n\
+             ::method arrive\n  expose n\n  n += 1\n  guard on when n >= 2\n",
+            path = path.display()
+        ),
+        Shape {
+            library: (b"callbacktest", library),
+            bound: Some(2),
+            deadline: Duration::from_secs(20),
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "A2 B2\n");
 }
 
 /// A call abandoned while it runs on a pool thread (its park ended by an

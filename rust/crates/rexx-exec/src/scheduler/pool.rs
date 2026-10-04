@@ -29,15 +29,19 @@ pub(crate) type Job = Box<dyn FnOnce() + Send>;
 
 /// Runs `job`, posting a panic it ends in to `inbox` for the baton's holder
 /// to panic with, before the baton lent to this thread goes back: a lend
-/// is not given back as a panic unwinds ([`crate::island::Lent`]).
+/// is not given back as a panic unwinds ([`crate::island::Lent`]), and the
+/// lender drains the inbox before it runs a clause.
 pub(crate) fn posting_panics(
     inbox: &crate::timer::Inbox<super::Posted>,
     baton: &crate::island::InterpBaton,
     job: impl FnOnce(),
 ) {
     if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
+        // Widens the window a lend given back while the panic unwinds would
+        // open, for a test to see.
+        #[cfg(test)]
+        std::thread::sleep(std::time::Duration::from_millis(100));
         inbox.post(super::Posted::Panicked(payload));
-        inbox.requests().set(crate::timer::PANICKED);
         if baton.lent().is_some() {
             baton.give_back();
         }

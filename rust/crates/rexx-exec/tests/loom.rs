@@ -29,7 +29,7 @@ use loom::sync::atomic::{AtomicUsize, Ordering};
 use loom::thread;
 
 use baton::Baton;
-use timer::{INBOX, Inbox, PANICKED, Registration, SLICE};
+use timer::{INBOX, Inbox, Registration, SLICE};
 
 /// Runs `body` as the baton's holder, failing if another thread is inside.
 fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
@@ -337,9 +337,9 @@ fn a_requeued_post_is_drained_again_ahead_of_later_posts() {
 }
 
 /// A pool thread that panics under a lend posts the panic before it gives
-/// the baton back, so the lender sees it as soon as its lend returns.
+/// the baton back, so the lender's first drain after the lend finds it.
 #[test]
-fn a_panic_posted_under_a_lend_is_seen_when_the_lend_returns() {
+fn a_panic_posted_under_a_lend_is_drained_when_the_lend_returns() {
     loom::model(|| {
         let baton = Arc::new(Baton::<u32>::new());
         let inbox = Arc::new(Inbox::<u32>::new());
@@ -349,12 +349,11 @@ fn a_panic_posted_under_a_lend_is_seen_when_the_lend_returns() {
             thread::spawn(move || {
                 baton.await_lend();
                 inbox.post(9);
-                inbox.requests().set(PANICKED);
                 baton.give_back();
             })
         };
         baton.lend(pool.thread().id(), 0);
-        assert!(inbox.requests().pending(PANICKED));
+        assert!(inbox.requests().pending(INBOX));
         assert_eq!(Vec::from(inbox.drain()), [9]);
         baton.release();
         pool.join().expect("the pool thread");

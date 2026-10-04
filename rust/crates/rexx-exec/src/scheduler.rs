@@ -580,7 +580,6 @@ impl Scheduler for Interp {
                 pool::posting_panics(&inbox, &lent, || pooled.run());
             }));
             baton.lend(to, crate::island::Island::of(self));
-            self.reraise_lent_panic();
             return;
         }
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
@@ -1263,7 +1262,6 @@ impl Interp {
             self.activities.owners.pop();
             self.swap_running(outgoing, activity);
         }
-        self.reraise_lent_panic();
     }
 
     /// The idle activity whose thread context is at `address`.
@@ -1274,21 +1272,6 @@ impl Interp {
                 .is_some_and(|thread| thread.address() == address)
         })?;
         Some(ActivityId(u32::try_from(index).expect("handles fit u32")))
-    }
-
-    /// Panics with a panic a pool thread posted while it held the baton by a
-    /// lend, before this thread runs anything after the lend: such a thread
-    /// gives the baton back only once its panic is posted
-    /// ([`pool::posting_panics`]).
-    fn reraise_lent_panic(&self) {
-        if !self.timer.requests().pending(crate::timer::PANICKED) {
-            return;
-        }
-        for posted in self.timer.drain() {
-            if let Posted::Panicked(payload) = posted {
-                std::panic::resume_unwind(payload);
-            }
-        }
     }
 
     /// Makes the idle `next` the running activity in place of `running`,
