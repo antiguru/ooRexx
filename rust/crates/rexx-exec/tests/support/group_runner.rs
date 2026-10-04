@@ -737,9 +737,9 @@ pub fn on_a_quiet_machine<T>(body: impl FnOnce() -> T) -> T {
 
 /// Runs `row` over each of `rows` in its own scratch copy,
 /// `<name>-<pid>-<index>/run` below the target's temporary directory, removed
-/// after the row. The rows `quiet` selects run one at a time after the others,
-/// each [`on_a_quiet_machine`]; the rest run in the shared pool. Answers the
-/// results in `rows`' order.
+/// after the row. The rows `quiet` selects run after the others, each on its
+/// own thread and [`on_a_quiet_machine`]; the rest run in the shared pool.
+/// Answers the results in `rows`' order.
 pub fn rows_in_parallel<R: Sync, T: Send>(
     name: &str,
     rows: &[R],
@@ -774,8 +774,21 @@ pub fn rows_in_parallel<R: Sync, T: Send>(
     for (at, result) in pooled {
         results[at] = Some(result);
     }
-    for at in alone {
-        results[at] = Some(on_a_quiet_machine(|| one(at)));
+    let one = &one;
+    let alone: Vec<(usize, T)> = std::thread::scope(|scope| {
+        let rows: Vec<_> = alone
+            .into_iter()
+            .map(|at| scope.spawn(move || (at, on_a_quiet_machine(|| one(at)))))
+            .collect();
+        rows.into_iter()
+            .map(|row| {
+                row.join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect()
+    });
+    for (at, result) in alone {
+        results[at] = Some(result);
     }
     results
         .into_iter()
