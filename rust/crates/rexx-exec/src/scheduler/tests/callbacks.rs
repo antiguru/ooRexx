@@ -64,6 +64,7 @@ fn library() -> rexx_api::load::Library {
         ("SENDTHROUGH", rexx_api::load::send_through),
         ("KEEPCALLCONTEXT", rexx_api::load::keep_call_context),
         ("SETTHROUGH", rexx_api::load::set_through),
+        ("NAPTHENSET", rexx_api::load::nap_then_set),
         ("FOREIGNINCALLBACK", rexx_api::load::foreign_in_callback),
         (
             "SENDFROMANOTHERTHREAD",
@@ -380,4 +381,26 @@ fn a_callback_from_an_abandoned_call_answers_nothing() {
     .expect("the run did not panic");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
     assert_eq!(ran.stdout(), "abandoned 11.1\nafter\nidle\n");
+}
+
+/// A variable set through the call context of a call its activity
+/// abandoned while it ran sets nothing.
+#[test]
+fn a_variable_set_from_an_abandoned_call_sets_nothing() {
+    let ran = run_shaped(
+        "s = .t~new~start('idle')\nx = 'before'\nsignal on syntax name abandoned\n\
+         call NAPTHENSET 'X', 'set'\nsay 'unreached'\n\
+         abandoned:\nsay 'abandoned' condition('o')~code\n\
+         call SysSleep 0.5\nsay x\nsay s~result\n\
+         ::requires 'callbacktest' LIBRARY\n\
+         ::class t\n::method idle\n  call SysSleep 1\n  return 'idle'\n",
+        Shape {
+            library: (b"callbacktest", library),
+            fail_native_wait: true,
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "abandoned 11.1\nbefore\nidle\n");
 }

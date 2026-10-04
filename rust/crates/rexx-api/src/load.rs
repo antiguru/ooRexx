@@ -700,6 +700,40 @@ pub unsafe extern "C-unwind" fn set_through(
     std::ptr::null_mut()
 }
 
+/// `NAPTHENSET(name, value)`: sleeps a fifth of a second, then sets the
+/// variable `name` to `value` through the call's own context: a native
+/// whose callback comes after its activity may have moved on, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn nap_then_set(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 4] = [
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::REXX_OBJECT_PTR,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    unsafe {
+        ((*(*context).functions).SetContextVariable)(
+            context,
+            (*arguments.add(1)).value.value_CSTRING,
+            (*arguments.add(2)).value.value_RexxObjectPtr,
+        );
+        (*arguments).value.value_RexxObjectPtr = std::ptr::null_mut();
+    }
+    std::ptr::null_mut()
+}
+
 /// `FOREIGNINCALLBACK(object, message, other, message2)`: sends `message`
 /// to `object` through the call's thread context while a thread of its own
 /// sends `message2` to `other` through it a fifth of a second later, and
