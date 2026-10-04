@@ -765,6 +765,12 @@ impl<'a> std::ops::DerefMut for Converting<'_, 'a> {
 /// A baton a callback took, released when this drops.
 struct Taken<'a>(&'a dyn Baton);
 
+/// [`Activation::hold_baton`]'s answer: the baton it took, if any, given up
+/// when this drops.
+pub struct BatonHold<'a> {
+    _taken: Option<Taken<'a>>,
+}
+
 impl Drop for Taken<'_> {
     fn drop(&mut self) {
         self.0.release();
@@ -801,6 +807,9 @@ impl Conversion<'_> {
 /// flight is a panic and not a silent aliasing.
 pub struct Activation<'a> {
     conversion: RefCell<Conversion<'a>>,
+    /// The baton a guarded host is reached under, apart from the conversion
+    /// state so that it is readable while that state is held.
+    baton: Option<&'a dyn Baton>,
     pending: Cell<Option<usize>>,
     frame: Cell<Option<u64>>,
     between_halves: Cell<bool>,
@@ -809,6 +818,7 @@ pub struct Activation<'a> {
 impl<'a> Activation<'a> {
     pub fn new(conversion: Conversion<'a>) -> Activation<'a> {
         Activation {
+            baton: conversion.host.baton(),
             conversion: RefCell::new(conversion),
             pending: Cell::new(None),
             frame: Cell::new(None),
@@ -849,7 +859,7 @@ impl<'a> Activation<'a> {
     #[inline(always)]
     pub fn conversion(&self) -> Converting<'_, 'a> {
         let conversion = self.conversion.borrow_mut();
-        let taken = match conversion.host.baton() {
+        let taken = match self.baton {
             Some(baton) if baton.take_unless_held() => Some(Taken(baton)),
             _ => None,
         };
@@ -857,6 +867,24 @@ impl<'a> Activation<'a> {
             conversion,
             _taken: taken,
         }
+    }
+
+    /// For a call that runs with the baton released, takes the baton unless
+    /// this thread holds it, until the answer drops: what a callback does
+    /// before it reads any state of the interpreter's.
+    pub fn hold_baton(&self) -> BatonHold<'a> {
+        BatonHold {
+            _taken: match self.baton {
+                Some(baton) if baton.take_unless_held() => Some(Taken(baton)),
+                _ => None,
+            },
+        }
+    }
+
+    /// Whether this thread may read the interpreter's state for this call:
+    /// it holds the baton, or the call never released it.
+    pub fn baton_held(&self) -> bool {
+        self.baton.is_none_or(|baton| baton.held_here())
     }
 
     /// Whether the conversion state is held, which is a call nested inside

@@ -253,3 +253,29 @@ fn string_hash(name: &[u8]) -> u64 {
             .wrapping_add_signed(i64::from(i8::from_ne_bytes([*byte])))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use super::Libraries;
+
+    /// A name's library is held once: a second hold answers the first, which
+    /// is what keeps a routine row resolved in it valid for the
+    /// interpreter's life.
+    #[test]
+    fn a_held_name_keeps_its_first_library() {
+        let mut libraries = Libraries::new();
+        let first = Rc::new(rexx_api::load::hooks_only(None, None));
+        let second = Rc::new(rexx_api::load::hooks_only(None, None));
+        let held = libraries.hold(b"lib", Rc::clone(&first));
+        assert!(Rc::ptr_eq(&held, &first));
+        let again = libraries.hold(b"lib", second);
+        assert!(Rc::ptr_eq(&again, &first));
+        assert!(
+            libraries
+                .get(b"lib")
+                .is_some_and(|got| Rc::ptr_eq(got, &first))
+        );
+    }
+}

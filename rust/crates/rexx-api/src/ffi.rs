@@ -1007,6 +1007,7 @@ unsafe fn addressed<'a, C: CallLinked>(context: *mut C) -> Addressed<'a> {
     // another one here aliases nothing: every write past it goes through the
     // activation's own cells.
     let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
+    let _held = own.hold_baton();
     if !own.is_busy() {
         return Addressed::Here(own, None);
     }
@@ -1167,6 +1168,14 @@ unsafe fn innermost_or_running<'a>(
     // running a call for, which is borrowed for as long as the pointer is
     // there. The reference is shared, as in `addressed`.
     let innermost = unsafe { &*activation.cast::<Activation<'a>>() };
+    // The innermost cell is this context's own, written on the baton before
+    // a release; the table's `Running` and the activations' states are the
+    // interpreter's, read only under the baton.
+    let _held = innermost.hold_baton();
+    debug_assert!(
+        innermost.baton_held(),
+        "a callback read the interpreter's state without the baton"
+    );
     let running = cell.1.0.get();
     if !innermost.is_busy() || running.is_null() || running == activation {
         return (innermost, None);
@@ -6019,6 +6028,36 @@ mod tests {
         let _ = activation.whole_number(6);
         assert_eq!((baton.takes.get(), baton.releases.get()), (1, 1));
         assert!(baton.held.get());
+    }
+
+    /// A thread-context member called during a call that runs with the
+    /// baton released takes the baton before it reads the thread table's
+    /// running call, and again for its conversion, giving it back each time.
+    #[test]
+    fn a_thread_member_off_the_baton_takes_it_before_reading_the_table() {
+        let mut host = FakeHost::new();
+        let baton = CountedBaton::default();
+        baton.held.set(true);
+        let mut strings = CStringPool::new();
+        let activation = values::Activation::new(Conversion {
+            host: values::HostRef::guarded(&mut host, &baton),
+            strings: &mut strings,
+        });
+        let answered = ThreadContext::new().enter(&activation, |contexts| {
+            let context = contexts.method().as_ptr();
+            values::Baton::release(&baton);
+            // SAFETY: `context` is the one this `Contexts` built, which links
+            // the thread context and its table, and a native call is in
+            // flight on it.
+            let answered = unsafe {
+                let thread = (*context).threadContext;
+                ((*(*thread).functions).WholeNumberToObject)(thread, 5)
+            };
+            baton.held.set(true);
+            answered
+        });
+        assert!(!answered.is_null());
+        assert_eq!((baton.takes.get(), baton.releases.get()), (2, 3));
     }
 
     /// The host a guarded host reaches, asked for on a thread not holding

@@ -1384,6 +1384,10 @@ struct Interp {
     library_code_rows: FxHashMap<LibraryCodeKey, usize>,
     /// The procedure each [`Interp::library_codes`] row is, by row.
     library_code_keys: Vec<LibraryCodeKey>,
+    /// The routine row each [`Interp::library_codes`] row resolved to, once
+    /// called: a held library is never replaced and its tables never change,
+    /// so the row stays the one its name finds.
+    library_code_routines: Vec<Option<u32>>,
     /// The [`Interp::library_codes`] row each library-backed `::ROUTINE`
     /// directive bound, which is the package its routine reports.
     library_routine_codes: FxHashMap<InstalledRoutine, usize>,
@@ -1701,7 +1705,9 @@ pub(crate) enum LibraryLoad {
 #[derive(Clone)]
 pub(crate) struct LibraryBinding {
     pub(crate) library: Rc<rexx_api::load::Library>,
-    pub(crate) procedure: Vec<u8>,
+    /// The procedure's row in `library`'s method table, `None` where it
+    /// exports none of that name.
+    pub(crate) method: Option<usize>,
 }
 
 /// One running `INTERPRET` fragment, which the oracle runs as an activation
@@ -1929,6 +1935,7 @@ impl Interp {
             library_codes: Vec::new(),
             library_code_rows: FxHashMap::default(),
             library_code_keys: Vec::new(),
+            library_code_routines: Vec::new(),
             library_routine_codes: FxHashMap::default(),
             defined_library_codes: FxHashMap::default(),
             rexx_routine_rows: FxHashMap::default(),
@@ -2619,6 +2626,7 @@ impl Interp {
             library_codes: _,
             library_code_rows: _,
             library_code_keys: _,
+            library_code_routines: _,
             library_routine_codes: _,
             defined_library_codes: _,
             rexx_routine_rows: _,

@@ -307,8 +307,8 @@ impl Interp {
         self.library_externals.insert(
             method,
             crate::LibraryBinding {
+                method: library.method_index(&key.procedure),
                 library,
-                procedure: key.procedure,
             },
         );
         self.defined_library_codes.insert(method, code);

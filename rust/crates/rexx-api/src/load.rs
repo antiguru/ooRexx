@@ -144,11 +144,15 @@ impl Mapping {
 
     /// Closes the mapping, or answers `false` where a call into it is in
     /// flight.
+    /// `open` is cleared before `calls` is read, and a call counts itself
+    /// before it reads `open` ([`Held::new`], [`Mapping::hold`]), so of a
+    /// close and a call racing, one sees the other.
     fn close(&self) -> bool {
+        self.open.store(false, Ordering::SeqCst);
         if self.calls.load(Ordering::SeqCst) > 0 {
+            self.open.store(true, Ordering::SeqCst);
             return false;
         }
-        self.open.store(false, Ordering::SeqCst);
         drop(
             self.handle
                 .lock()
@@ -212,7 +216,7 @@ impl NativeMethodEntry {
     #[must_use]
     pub fn held(&self) -> HeldMethod {
         HeldMethod {
-            held: Held::new(self.stub(), &self.mapping),
+            held: Held::new(&self.mapping, || self.stub()),
         }
     }
 
@@ -414,7 +418,7 @@ impl NativeRoutineEntry {
     pub fn held(&self) -> HeldRoutine {
         HeldRoutine {
             style: self.style,
-            held: Held::new(self.stub(), &self.mapping),
+            held: Held::new(&self.mapping, || self.stub()),
         }
     }
 }
@@ -428,10 +432,13 @@ struct Held<S> {
 }
 
 impl<S> Held<S> {
-    fn new(stub: Option<S>, mapping: &Arc<Mapping>) -> Held<S> {
+    /// Counts the call, then resolves its stub with `stub`, which answers
+    /// `None` for a closed mapping: counted first, a close that has not yet
+    /// cleared `open` sees the call and refuses.
+    fn new(mapping: &Arc<Mapping>, stub: impl FnOnce() -> Option<S>) -> Held<S> {
         mapping.calls.fetch_add(1, Ordering::SeqCst);
         Held {
-            stub,
+            stub: stub(),
             mapping: Arc::clone(mapping),
         }
     }
@@ -829,15 +836,15 @@ impl Library {
         let Some(function) = self.hook(hook) else {
             return;
         };
-        if !self.mapping.is_open() {
-            return;
-        }
         // SAFETY: the address is the package entry's own `loader` or
         // `unloader`, a `RexxPackageLoader`/`RexxPackageUnloader`
-        // (`api/oorexxapi.h:257-258`), in a mapping that is open and that a
-        // close leaves open while this call is held; the thread context is
-        // the one `contexts` links, live for the call.
+        // (`api/oorexxapi.h:257-258`), in a mapping found open after this
+        // call was counted, which a close then leaves open; the thread
+        // context is the one `contexts` links, live for the call.
         let ran = self.mapping.hold(|| {
+            if !self.mapping.is_open() {
+                return Ok(());
+            }
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
                 function(contexts.thread())
             }))
@@ -910,9 +917,24 @@ impl Library {
     /// ```
     #[must_use]
     pub fn method(&self, name: &[u8]) -> Option<&NativeMethodEntry> {
+        self.method_at(self.method_index(name)?)
+    }
+
+    /// The index of the row [`Library::method`] answers. A library's tables
+    /// do not change once it is read, so the index names that row for the
+    /// library's life.
+    #[must_use]
+    pub fn method_index(&self, name: &[u8]) -> Option<usize> {
         self.methods
             .iter()
-            .find(|row| row.name.eq_ignore_ascii_case(name))
+            .position(|row| row.name.eq_ignore_ascii_case(name))
+    }
+
+    /// The method row at `index`.
+    #[must_use]
+    #[inline]
+    pub fn method_at(&self, index: usize) -> Option<&NativeMethodEntry> {
+        self.methods.get(index)
     }
 
     /// The routine row `name` names, found as `LibraryPackage::resolveRoutine`
@@ -925,6 +947,13 @@ impl Library {
     /// one `loadRoutines` leaves in its table (`:291`).
     #[must_use]
     pub fn routine(&self, name: &[u8]) -> Option<&NativeRoutineEntry> {
+        self.routine_at(self.routine_index(name)?)
+    }
+
+    /// The index of the row [`Library::routine`] answers, valid for the
+    /// library's life as [`Library::method_index`]'s is.
+    #[must_use]
+    pub fn routine_index(&self, name: &[u8]) -> Option<usize> {
         let spelling = match self.routines.iter().find(|row| row.name == name) {
             Some(row) => &row.name,
             None => {
@@ -935,7 +964,14 @@ impl Library {
                     .name
             }
         };
-        self.routines.iter().rev().find(|row| row.name == *spelling)
+        self.routines.iter().rposition(|row| row.name == *spelling)
+    }
+
+    /// The routine row at `index`.
+    #[must_use]
+    #[inline]
+    pub fn routine_at(&self, index: usize) -> Option<&NativeRoutineEntry> {
+        self.routines.get(index)
     }
 
     /// Each upper-cased routine name with the spelling whose row answers it
@@ -1238,8 +1274,26 @@ unsafe fn routine_table(
 
 #[cfg(test)]
 mod tests {
-    use super::{CURRENT_INTERPRETER_VERSION, Hook, Library, NativeRoutineEntry, library_of};
+    use super::{
+        CURRENT_INTERPRETER_VERSION, Held, Hook, Library, Mapping, NativeRoutineEntry, library_of,
+    };
     use crate::layout::{RexxPackageEntry, RexxThreadContext_};
+
+    /// A close while a row is held for a call is refused and leaves the
+    /// mapping open; once the row drops it closes, and a row held after that
+    /// finds it closed.
+    #[test]
+    fn a_held_row_keeps_its_mapping_open() {
+        let mapping = Mapping::new(None);
+        let held = Held::new(&mapping, || mapping.is_open().then_some(()));
+        assert!(held.stub.is_some());
+        assert!(!mapping.close());
+        assert!(mapping.is_open());
+        drop(held);
+        assert!(mapping.close());
+        let after = Held::new(&mapping, || mapping.is_open().then_some(()));
+        assert!(after.stub.is_none());
+    }
 
     extern "C-unwind" fn ignoring_hook(_thread: *mut RexxThreadContext_) {}
 

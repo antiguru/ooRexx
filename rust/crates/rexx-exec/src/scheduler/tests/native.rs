@@ -263,3 +263,41 @@ fn a_guarded_library_method_runs_after_its_guard_wait() {
         assert_eq!(run.exits, 0);
     }
 }
+
+/// A library routine called again, by another spelling and by `CALL`,
+/// reaches the row its name finds; the cached row is checked against the
+/// name at every call in a debug build.
+#[test]
+fn a_library_routine_called_again_reaches_the_row_its_name_finds() {
+    let run = counted(
+        "say TestIntArg(1)\nsay testintarg(2)\ncall TestIntArg 3\nsay result\n\
+         say TestNameArg()\nsay TestIntArg(4)\n::requires 'orxfunction' LIBRARY\n",
+        false,
+        bounded(),
+    );
+    assert_eq!(run.outcome.exit_code, 0, "{}", run.stderr());
+    assert_eq!(run.stdout(), "1\n2\n3\nTESTNAMEARG\n4\n");
+}
+
+/// A started activity's loud refusal, met while main's call has left its
+/// driver and waits to finish, ends main's park in place of the completion:
+/// the call is abandoned, its frame popped, and the run ends with the
+/// refusal.
+#[test]
+fn a_failure_ending_a_native_park_abandons_the_call() {
+    let run = counted(
+        "o = .t~new\nm = o~start('boom')\nsay TestIntArg(5)\nsay 'after'\n\
+         ::requires 'orxfunction' LIBRARY\n::class t\n::method boom\n  \
+         self~setMethod('Z', .nil, 'BOGUS')\n",
+        false,
+        bounded(),
+    );
+    assert_eq!(run.outcome.exit_code, 120);
+    assert_eq!(run.stdout(), "");
+    assert_eq!(
+        run.stderr(),
+        "rexx-exec: a method source that is neither a string nor an array is not implemented \
+         (Phase 5)\n"
+    );
+    assert_eq!(run.exits, 1);
+}

@@ -1938,6 +1938,7 @@ impl Interp {
         let row = self.library_codes.len();
         self.library_codes.push(None);
         self.library_code_keys.push(key.clone());
+        self.library_code_routines.push(None);
         self.library_code_rows.insert(key, row);
         row
     }
@@ -2226,6 +2227,32 @@ impl Interp {
         self.rexx_routine_objects.insert(object, row);
     }
 
+    /// The library and the routine row [`Interp::library_codes`] row `code`
+    /// is, resolved by name on the first call, or `None` where its library
+    /// is not held or exports no such routine.
+    #[inline]
+    pub(crate) fn library_code_routine(
+        &mut self,
+        code: usize,
+    ) -> Option<(&rexx_api::load::Library, usize)> {
+        let key = &self.library_code_keys[code];
+        let library = self.libraries.get(&key.library)?;
+        let index = match self.library_code_routines[code] {
+            Some(index) => index as usize,
+            None => {
+                let index = library.routine_index(&key.procedure)?;
+                self.library_code_routines[code] = u32::try_from(index).ok();
+                index
+            }
+        };
+        debug_assert_eq!(
+            Some(index),
+            library.routine_index(&key.procedure),
+            "a library code's cached routine row is not the one its name finds"
+        );
+        Some((library, index))
+    }
+
     /// The procedure [`Interp::library_codes`] row `code` is.
     pub(crate) fn library_code_key(&self, code: usize) -> &LibraryCodeKey {
         &self.library_code_keys[code]
@@ -2259,10 +2286,10 @@ impl Interp {
         let LibraryLoad::Loaded(library) = self.resolve_library(library) else {
             return None;
         };
-        library.method(&bind.procedure)?;
+        let method = library.method_index(&bind.procedure)?;
         Some(LibraryBinding {
             library,
-            procedure: bind.procedure.clone(),
+            method: Some(method),
         })
     }
 

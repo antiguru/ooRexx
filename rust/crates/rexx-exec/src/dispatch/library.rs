@@ -85,7 +85,10 @@ impl Interp {
         reserved: bool,
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let owner = self.pool_owner(receiver)?;
-        let Some(entry) = binding.library.method(&binding.procedure) else {
+        let Some(entry) = binding
+            .method
+            .and_then(|method| binding.library.method_at(method))
+        else {
             return Err(Loud::library_procedure_gone().into());
         };
         let held = HeldCall::Method(entry.held(), resolution.method);
@@ -172,11 +175,9 @@ impl Interp {
         name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
-        let key = self.library_code_key(code);
         let Some(entry) = self
-            .libraries
-            .get(&key.library)
-            .and_then(|library| library.routine(&key.procedure))
+            .library_code_routine(code)
+            .and_then(|(library, index)| library.routine_at(index))
         else {
             return Err(Loud::library_procedure_gone().into());
         };
