@@ -1070,6 +1070,44 @@ fn notifier_failures_in_several_started_activities_each_end_their_own() {
     assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 6);
 }
 
+/// Notifier failures in more started activities than an interpreter stack
+/// of 33 MiB has room to nest the yields of: the yields stop nesting, so no
+/// Error 11 reaches main or another activity, and every notifier failure is
+/// reported, as the oracle reports each.
+#[test]
+fn notifier_failures_too_many_to_nest_are_each_reported() {
+    for (starts, waits) in [
+        (
+            "do i = 1 to 3000\n  m = .message~new('abc', 'length')\n  m~notify(.bad~new)\n  \
+             m~start\nend\n",
+            "do j = 1 to 200000\nend\nsay 'done'\n",
+        ),
+        (
+            "s = .starter~new~start('go')\n",
+            "call SysSleep 1\nsay 'done'\n",
+        ),
+    ] {
+        let ran = pool::run_shaped(
+            &format!(
+                "signal on syntax\n{starts}{waits}exit\nsyntax:\nsay 'trapped' condition('o')~code\n\
+                 ::class starter\n::method go\n  do i = 1 to 3000\n    \
+                 m = .message~new('abc', 'length')\n    m~notify(.bad~new)\n    m~start\n  end\n\
+                 ::class bad inherit MessageNotification\n::method messageComplete\n  return 1/0\n"
+            ),
+            pool::Shape {
+                interpreter_stack: 33 * 1024 * 1024,
+                ..pool::SHAPE
+            },
+        )
+        .expect("the run did not panic");
+        let stderr = ran.stderr();
+        assert_eq!(ran.outcome.exit_code, 0, "{starts}");
+        assert_eq!(ran.stdout(), "done\n", "{starts}");
+        assert!(!stderr.contains("Error 11"), "{starts}");
+        assert_eq!(stderr.matches("Error 42.3:").count(), 6000, "{starts}");
+    }
+}
+
 /// The program does not wait for an activity a termination `UNINIT` starts:
 /// it ends at once with the `UNINIT`'s own lines, as the oracle's does.
 #[test]

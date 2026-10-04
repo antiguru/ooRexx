@@ -696,6 +696,12 @@ pub trait Host {
     /// its stub returns, while the call's frame alone holds what it was
     /// handed and what it answered.
     fn between_halves(&mut self) {}
+
+    /// Whether the running activity has the native frame `frame`, which a
+    /// call its activity abandoned while it ran no longer has.
+    fn runs_frame(&self, _frame: u64) -> bool {
+        true
+    }
 }
 
 /// The `NUMERIC` settings a call context reports.
@@ -915,6 +921,16 @@ impl<'a> Activation<'a> {
     /// it holds the baton, or the call never released it.
     pub fn baton_held(&self) -> bool {
         self.baton.is_none_or(|baton| baton.held_here())
+    }
+
+    /// Whether this call still runs as its activity's: one that never
+    /// released the baton does, and one that did while the host's running
+    /// activity has its frame.
+    pub fn live(&self) -> bool {
+        self.baton.is_none()
+            || self
+                .frame()
+                .is_none_or(|frame| self.conversion().host.runs_frame(frame))
     }
 
     /// Whether the conversion state is held, which is a call nested inside

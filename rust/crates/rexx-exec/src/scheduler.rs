@@ -741,6 +741,16 @@ impl Interp {
         ))
     }
 
+    /// Whether the running activity has the native frame the frame token
+    /// `frame` names.
+    pub(crate) fn runs_native_frame(&self, frame: u64) -> bool {
+        let id = frame & u64::from(u32::MAX);
+        usize::try_from(frame >> 32)
+            .ok()
+            .and_then(|row| self.activity.native_handles.get(row))
+            .is_some_and(|native| u64::from(native.id) == id)
+    }
+
     /// `read` of the activity whose native call the frame token `frame`
     /// names: the running one as it is, or an idle one as
     /// [`Interp::with_idle_activity`] puts it in place.
@@ -749,10 +759,7 @@ impl Interp {
         frame: u64,
         read: impl FnOnce(&mut Interp) -> Option<R>,
     ) -> Option<R> {
-        let row = usize::try_from(frame >> 32).ok()?;
-        let id = frame & u64::from(u32::MAX);
-        if (self.activity.native_handles.get(row)).is_some_and(|native| u64::from(native.id) == id)
-        {
+        if self.runs_native_frame(frame) {
             return read(self);
         }
         let (owner, _) = self.idle_native_owner(frame)?;
@@ -913,6 +920,11 @@ impl Interp {
     /// failed with something that is not a condition, is the one its wait
     /// answers.
     pub(crate) fn wait_until_woken(&mut self) -> Option<Failure> {
+        #[cfg(test)]
+        if self.activity.native_call.is_some() && std::mem::take(&mut self.fail_native_wait) {
+            self.cancel_wait();
+            return Some(Raised::insufficient_stack().into());
+        }
         let failure = match self.run_others(false) {
             Ok(Waited::Woken) => return None,
             Ok(Waited::Blocked { .. }) => Loud::unsatisfiable_wait().into(),
@@ -1935,9 +1947,14 @@ impl Interp {
     /// ending holds no frame of its driver's: on the oracle the activity a
     /// notifier failed in gives up the kernel lock while the failure
     /// unwinds, and an activity the completion woke runs then. Its end runs
-    /// on below the round, so a loop above sets it aside.
+    /// on below the round, so a loop above sets it aside. Each such yield
+    /// nests, so one made with less than half the stack's room left is not
+    /// made, keeping room for the code of the activities ending below it.
     fn yield_after_notifier_failure(&mut self) -> Result<(), Failure> {
-        if !self.any_ready() {
+        let probe = 0u8;
+        if !self.any_ready()
+            || self.stack_base.abs_diff(&raw const probe as usize) > self.stack_room / 2
+        {
             return Ok(());
         }
         self.yield_at_slice();

@@ -264,6 +264,19 @@ pub(crate) fn set_panic_at_call_end(path: std::path::PathBuf) {
     PANIC_AT_CALL_END.with(|panics| *panics.borrow_mut() = Some(path));
 }
 
+#[cfg(test)]
+thread_local! {
+    /// [`Interp::fail_native_wait`] for the interpreters this thread makes.
+    static FAIL_NATIVE_WAIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Has each interpreter this thread makes answer main's first wait for a
+/// native call with Error 11.1, which abandons the call.
+#[cfg(test)]
+pub(crate) fn set_fail_native_wait() {
+    FAIL_NATIVE_WAIT.with(|fail| fail.set(true));
+}
+
 /// The arena size below which no ordinary run ever collects, and the floor
 /// every later growth allowance is raised to (see `Interp::collect_at`).
 const COLLECT_FLOOR: usize = 65_536;
@@ -1420,6 +1433,10 @@ struct Interp {
     /// native call, while it holds the baton by a lend.
     #[cfg(test)]
     panic_at_call_end: Option<std::path::PathBuf>,
+    /// Whether main's next wait for a native call is answered with Error
+    /// 11.1 in place of the call's completion.
+    #[cfg(test)]
+    fail_native_wait: bool,
     /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
@@ -1997,6 +2014,8 @@ impl Interp {
             library_open_attempts: 0,
             #[cfg(test)]
             panic_at_call_end: PANIC_AT_CALL_END.with(|path| path.borrow().clone()),
+            #[cfg(test)]
+            fail_native_wait: FAIL_NATIVE_WAIT.with(std::cell::Cell::get),
             library_externals: FxHashMap::default(),
             external_packages: FxHashMap::default(),
             library_codes: Vec::new(),
@@ -2691,6 +2710,8 @@ impl Interp {
                 library_open_attempts: _,
             #[cfg(test)]
                 panic_at_call_end: _,
+            #[cfg(test)]
+                fail_native_wait: _,
             library_externals: _,
             // Program identities, not objects.
             external_packages: _,

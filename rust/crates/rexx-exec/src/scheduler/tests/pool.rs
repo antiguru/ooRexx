@@ -128,7 +128,26 @@ fn library() -> rexx_api::load::Library {
         ("HERE", here),
         ("SENDTHENAWAIT", rexx_api::load::send_then_await),
         ("BOOM", boom),
+        ("BOOMMARKED", boom_marked),
     ])
+}
+
+/// The file [`boom_marked`] reads, and how many lines it had then.
+static BOOM_MARK: Mutex<(Option<std::path::PathBuf>, usize)> = Mutex::new((None, 0));
+
+/// Counts the lines of [`BOOM_MARK`]'s file, then panics.
+extern "C-unwind" fn boom_marked(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    let mut mark = BOOM_MARK.lock().expect("unpoisoned");
+    let path = mark.0.clone().expect("a file");
+    mark.1 = std::fs::read_to_string(path).map_or(0, |read| read.lines().count());
+    drop(mark);
+    panic!("a native panicked");
 }
 
 extern "C-unwind" fn boom(
@@ -142,8 +161,9 @@ extern "C-unwind" fn boom(
 }
 
 /// The pool a run gets, where a test sets it, the run's deadline, the
-/// library offered, by name, the interpreter thread's stack, and the file
-/// [`crate::set_panic_at_call_end`] names.
+/// library offered, by name, the interpreter thread's stack, the file
+/// [`crate::set_panic_at_call_end`] names, and whether
+/// [`crate::set_fail_native_wait`] is set.
 pub(super) struct Shape {
     pub(super) stack: Option<usize>,
     pub(super) bound: Option<usize>,
@@ -151,6 +171,7 @@ pub(super) struct Shape {
     pub(super) library: (&'static [u8], fn() -> rexx_api::load::Library),
     pub(super) interpreter_stack: usize,
     pub(super) panic_at_call_end: Option<std::path::PathBuf>,
+    pub(super) fail_native_wait: bool,
 }
 
 pub(super) const SHAPE: Shape = Shape {
@@ -160,6 +181,7 @@ pub(super) const SHAPE: Shape = Shape {
     library: (b"pooltest", library),
     interpreter_stack: crate::INTERPRETER_STACK_BYTES,
     panic_at_call_end: None,
+    fail_native_wait: false,
 };
 
 /// A run: its outcome, its driver exits, the interpreter's thread, and how
@@ -225,6 +247,9 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
             }
             if let Some(path) = shape.panic_at_call_end {
                 crate::set_panic_at_call_end(path);
+            }
+            if shape.fail_native_wait {
+                crate::set_fail_native_wait();
             }
             let outcome = crate::execute_on(
                 "/tmp/pool.rex",
@@ -411,6 +436,38 @@ fn a_panic_under_a_lend_reaches_the_lender_before_it_runs_on() {
     );
     assert!(written.starts_with("tick\n"), "{written:?}");
     assert!(written.ends_with("tick\nend\n"), "{written:?}");
+}
+
+/// A native that panics on a pool thread recalls the baton before it
+/// unwinds: the other activity stops within a cold visit of the panic, not
+/// for the length of the unwinding.
+#[test]
+fn a_native_panic_on_a_pool_thread_unwinds_under_a_lend() {
+    let path = std::env::temp_dir().join(format!("rexx-native-panic-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    *BOOM_MARK.lock().expect("unpoisoned") = (Some(path.clone()), 0);
+    let ran = run_shaped(
+        &format!(
+            "m = .t~new~start('ticks')\ncall SysSleep 0.05\ncall BOOMMARKED\nsay 'after'\n\
+             ::requires 'pooltest' LIBRARY\n::class t\n::method ticks\n  \
+             do forever\n    call lineout '{}', 'tick'\n    call lineout '{}'\n  end\n",
+            path.display(),
+            path.display()
+        ),
+        Shape {
+            deadline: Duration::from_secs(10),
+            ..SHAPE
+        },
+    );
+    let written = std::fs::read_to_string(&path).expect("the file");
+    let _ = std::fs::remove_file(&path);
+    let Err(payload) = ran else {
+        panic!("the run ended without the native's panic");
+    };
+    assert_eq!(payload.downcast_ref::<&str>(), Some(&"a native panicked"));
+    let before = BOOM_MARK.lock().expect("unpoisoned").1;
+    let after = written.lines().count() - before;
+    assert!(before > 0 && after < 1024, "{before} then {after}");
 }
 
 /// A pinned waiter whose wait an activity's native call satisfies: the call

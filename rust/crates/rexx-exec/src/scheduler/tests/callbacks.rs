@@ -62,6 +62,9 @@ fn library() -> rexx_api::load::Library {
         ("NAPTHENSEND", rexx_api::load::nap_then_send),
         ("AWAITSENDTWICE", rexx_api::load::await_send_twice),
         ("SENDTHROUGH", rexx_api::load::send_through),
+        ("KEEPCALLCONTEXT", rexx_api::load::keep_call_context),
+        ("SETTHROUGH", rexx_api::load::set_through),
+        ("FOREIGNINCALLBACK", rexx_api::load::foreign_in_callback),
         (
             "SENDFROMANOTHERTHREAD",
             rexx_api::load::send_from_another_thread,
@@ -70,7 +73,6 @@ fn library() -> rexx_api::load::Library {
         ("HERE2", here::<2>),
         ("HERE3", here::<3>),
         ("NAPLONG", nap::<1500>),
-        ("NAPLONGER", nap::<3000>),
         ("NAP", nap::<300>),
     ])
 }
@@ -156,6 +158,42 @@ fn a_kept_context_used_from_another_threads_call_raises_98_983_there() {
          ::class loud\n::method speak\n  say 'spoke'\n  return 1\n");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
     assert_eq!(ran.stdout(), "trapped 98.983\n");
+}
+
+/// A call context kept from main's call on one pool thread, used from
+/// another activity's call on another pool thread, sets nothing and gives
+/// the user's own call 98.983.
+#[test]
+fn a_kept_call_context_used_from_another_threads_call_raises_98_983_there() {
+    let ran = run(
+        "k = .keeper~new\nu = .t~new~start('use', k)\nx = 'before'\n\
+         call KEEPCALLCONTEXT k, 'KEEP'\nsay u~result x\n\
+         ::requires 'callbacktest' LIBRARY\n\
+         ::class keeper\n::method init\n  expose kept\n  kept = .nil\n\
+         ::method keep unguarded\n  expose kept\n  use arg kept\n\
+         ::method kept unguarded\n  expose kept\n  return kept\n\
+         ::class t\n::method use\n  use arg k\n  do while k~kept == .nil\n    call SysSleep 0.01\n  end\n  \
+         signal on syntax\n  call SETTHROUGH k~kept, 'X', 'set'\n  return 'answered'\n\
+         syntax:\n  return 'trapped' condition('o')~code\n",
+    );
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "trapped 98.983 before\n");
+}
+
+/// A callback from a thread running no native call, served while the
+/// call's own thread is inside a callback that waits, does nothing, and
+/// leaves 98.983 on the call for when it returns.
+#[test]
+fn a_foreign_callback_while_the_calls_thread_is_in_a_callback_raises_98_983() {
+    let ran = run("m = .t~new~start('spin')\nsignal on syntax\n\
+         call FOREIGNINCALLBACK .w~new, 'WAIT', .loud~new, 'SPEAK'\nsay 'unreached'\n\
+         syntax:\nsay 'trapped' condition('o')~code\nsay m~result\n\
+         ::requires 'callbacktest' LIBRARY\n::class t\n::method spin\n  \
+         do i = 1 to 2000000\n  end\n  return 'spun'\n\
+         ::class w\n::method wait\n  call SysSleep 0.5\n  return 1\n\
+         ::class loud\n::method speak\n  say 'spoke'\n  return 1\n");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "trapped 98.983\nspun\n");
 }
 
 /// A callback whose call's activity a pinned waiter waits for is answered by
@@ -298,32 +336,48 @@ fn recalls_drained_together_are_each_served() {
     assert_eq!(ran.stdout(), "A2 B2\n");
 }
 
-/// A call abandoned while it runs on a pool thread (its park ended by an
-/// Error 11 that nested notifier failures raise; another activity starts
-/// them, so that main is parked for its call and not sliced when the error
-/// arrives) completes no later call of its activity: the second call
-/// returns only once its own native has.
+/// A call abandoned while it runs on a pool thread (its park answered with
+/// Error 11.1 by the test's injection) completes no later call of its
+/// activity: the second call returns only once its own native has.
 #[test]
 fn an_abandoned_calls_completion_does_not_complete_the_next_call() {
     let ran = run_shaped(
-        "signal on syntax name abandoned\ns = .starter~new~start('go')\n\
-         call NAPLONG\nsay 'unreached'\n\
+        "s = .t~new~start('idle')\nsignal on syntax name abandoned\n\
+         call NAP\nsay 'unreached'\n\
          abandoned:\nsay 'abandoned' condition('o')~code\n\
-         signal on syntax name drained\n\
-         drained:\ncall SysSleep 0.3\n\
-         call time 'R'\ncall NAPLONGER\nsay 'waited' (time('E') >= 2.5)\n\
+         call time 'R'\ncall NAPLONG\nsay 'waited' (time('E') >= 1.2)\nsay s~result\n\
          ::requires 'callbacktest' LIBRARY\n\
-         ::class starter\n::method go\n  b = .bad~new\n  do i = 1 to 3000\n    \
-         m = .message~new('abc', 'length')\n    m~notify(b)\n    m~start\n  end\n\
-         ::class bad inherit MessageNotification\n::method messageComplete\n  return 1/0\n",
+         ::class t\n::method idle\n  call SysSleep 2\n  return 'idle'\n",
         Shape {
             library: (b"callbacktest", library),
-            interpreter_stack: 33 * 1024 * 1024,
+            fail_native_wait: true,
             ..SHAPE
         },
     )
     .expect("the run did not panic");
-    let stdout = ran.stdout();
-    assert!(stdout.starts_with("abandoned 11.1\n"), "{stdout}");
-    assert!(stdout.ends_with("waited 1\n"), "{stdout}");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "abandoned 11.1\nwaited 1\nidle\n");
+}
+
+/// A callback from a call its activity abandoned while it ran reaches no
+/// activity: it answers nothing, and the activity runs on.
+#[test]
+fn a_callback_from_an_abandoned_call_answers_nothing() {
+    let ran = run_shaped(
+        "s = .t~new~start('idle')\nsignal on syntax name abandoned\n\
+         say NAPTHENSEND(.f~new, 'MARK')\nsay 'unreached'\n\
+         abandoned:\nsay 'abandoned' condition('o')~code\n\
+         call SysSleep 0.5\nsay 'after'\nsay s~result\n\
+         ::requires 'callbacktest' LIBRARY\n\
+         ::class t\n::method idle\n  call SysSleep 1\n  return 'idle'\n\
+         ::class f\n::method mark\n  say 'marked'\n  return 1\n",
+        Shape {
+            library: (b"callbacktest", library),
+            fail_native_wait: true,
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "abandoned 11.1\nafter\nidle\n");
 }

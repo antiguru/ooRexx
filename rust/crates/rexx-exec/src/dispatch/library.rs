@@ -1075,7 +1075,7 @@ impl PooledCall {
     /// On the pool thread: enters the call under the lend the holder makes,
     /// gives the baton back, calls the stub, and once it returns recalls the
     /// baton to leave the call, put its parts back on the activity's record
-    /// and post its completion.
+    /// and post its completion. A stub that panics recalls it to unwind.
     pub(crate) fn run(self) {
         let probe = 0u8;
         let recalling = Recalling {
@@ -1103,8 +1103,16 @@ impl PooledCall {
             }
             let (completion, ended) = thread.enter(&activation, |contexts| {
                 drop(entered);
-                let completion = held.call(native, contexts);
-                (completion, recalling.recall())
+                let completion = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    held.call(native, contexts)
+                }));
+                let ended = recalling.recall();
+                match completion {
+                    Ok(completion) => (completion, ended),
+                    // Unwound under the lend: the call's state drops on the
+                    // baton.
+                    Err(payload) => std::panic::resume_unwind(payload),
+                }
             });
             (completion, ended, activation.pending())
         };
@@ -1636,6 +1644,10 @@ impl Host for Interp {
         if self.stress_collect {
             self.collect_now();
         }
+    }
+
+    fn runs_frame(&self, frame: u64) -> bool {
+        self.runs_native_frame(frame)
     }
 }
 

@@ -622,6 +622,137 @@ pub unsafe extern "C-unwind" fn send_through(
     std::ptr::null_mut()
 }
 
+/// `KEEPCALLCONTEXT(object, message)`: sends `message` to `object` through
+/// the call's thread context with the call context as a `.Pointer`, then
+/// sleeps half a second outside any callback: a native whose call context
+/// another call may keep, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn keep_call_context(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 4] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    unsafe {
+        let thread = (*context).threadContext;
+        let kept = ((*(*thread).functions).NewPointer)(thread, context.cast());
+        ((*(*thread).functions).SendMessage1)(
+            thread,
+            (*arguments.add(1)).value.value_RexxObjectPtr,
+            (*arguments.add(2)).value.value_CSTRING,
+            kept.cast(),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        (*arguments).value.value_RexxObjectPtr = std::ptr::null_mut();
+    }
+    std::ptr::null_mut()
+}
+
+/// `SETTHROUGH(pointer, name, value)`: sets the variable `name` to `value`
+/// through the call context `pointer`, which [`keep_call_context`] handed
+/// out: a callback through a call context another call kept, for a test.
+///
+/// # Safety
+/// As [`send_then_await`], and `pointer` is a call context whose call is in
+/// flight.
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn set_through(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 5] = [
+        code::REXX_OBJECT_PTR,
+        code::POINTER,
+        code::CSTRING,
+        code::REXX_OBJECT_PTR,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments,
+    // and the caller guarantees the kept context.
+    unsafe {
+        let kept = (*arguments.add(1))
+            .value
+            .value_POINTER
+            .cast::<RexxCallContext_>();
+        ((*(*kept).functions).SetContextVariable)(
+            kept,
+            (*arguments.add(2)).value.value_CSTRING,
+            (*arguments.add(3)).value.value_RexxObjectPtr,
+        );
+        (*arguments).value.value_RexxObjectPtr = std::ptr::null_mut();
+    }
+    std::ptr::null_mut()
+}
+
+/// `FOREIGNINCALLBACK(object, message, other, message2)`: sends `message`
+/// to `object` through the call's thread context while a thread of its own
+/// sends `message2` to `other` through it a fifth of a second later, and
+/// waits for that thread: a callback from a thread running no native call
+/// while the call's own thread is inside a callback, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn foreign_in_callback(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 6] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares four arguments.
+    // The other thread uses the context, the object and the message only
+    // while this one waits for it, inside the call.
+    unsafe {
+        let thread = (*context).threadContext;
+        let shared = thread as usize;
+        let other = (*arguments.add(3)).value.value_RexxObjectPtr as usize;
+        let message = (*arguments.add(4)).value.value_CSTRING as usize;
+        let foreign = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let thread = shared as *mut crate::layout::RexxThreadContext_;
+            ((*(*thread).functions).SendMessage0)(
+                thread,
+                other as crate::layout::RexxObjectPtr,
+                message as crate::layout::CSTRING,
+            );
+        });
+        ((*(*thread).functions).SendMessage0)(
+            thread,
+            (*arguments.add(1)).value.value_RexxObjectPtr,
+            (*arguments.add(2)).value.value_CSTRING,
+        );
+        foreign.join().expect("the sending thread");
+        (*arguments).value.value_RexxObjectPtr = std::ptr::null_mut();
+    }
+    std::ptr::null_mut()
+}
+
 /// `SENDFROMANOTHERTHREAD(object, message)`: sends `message` to `object`
 /// through the call's thread context from a thread of its own, which it
 /// waits for, answering whether the send answered nothing: a callback from

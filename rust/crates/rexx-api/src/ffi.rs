@@ -1061,10 +1061,37 @@ impl ContextVariables for RexxExitContext_ {
 /// member reached through a context another activity's call was handed.
 const INVALID_THREAD: usize = 98983;
 
+/// Why the call [`CALLING`] names never holds its conversion state when a
+/// member arrives: extension code calls members, it runs only inside a
+/// [`ThreadContext::enter`], and an entry made while a member of the calling
+/// call runs is a newer calling call.
+const CALLING_IDLE: &str = "a member arrived while the calling call's conversion state was held";
+
 /// A callback's activation, reached with the baton held until this drops.
 pub(crate) struct Reached<'a> {
     activation: &'a Activation<'a>,
+    /// Its activity abandoned its call while it ran ([`Activation::live`]),
+    /// so nothing of the host's may be read for it.
+    abandoned: bool,
     _held: crate::values::BatonHold<'a>,
+}
+
+impl<'a> Reached<'a> {
+    fn new(activation: &'a Activation<'a>, held: crate::values::BatonHold<'a>) -> Reached<'a> {
+        Reached {
+            activation,
+            abandoned: false,
+            _held: held,
+        }
+    }
+
+    /// `activation`, abandoned where it is not busy and not live.
+    fn checked(activation: &'a Activation<'a>, held: crate::values::BatonHold<'a>) -> Reached<'a> {
+        Reached {
+            abandoned: !activation.is_busy() && !activation.live(),
+            ..Reached::new(activation, held)
+        }
+    }
 }
 
 impl<'a> std::ops::Deref for Reached<'a> {
@@ -1108,15 +1135,13 @@ unsafe fn addressed<'a, C: CallLinked>(context: *mut C) -> Addressed<'a> {
     let own_erased = std::ptr::from_ref(own).cast::<Activation<'static>>();
     if unsafe { calling.as_ref() }.is_some_and(|calling| calling.activation == own_erased) {
         let held = own.hold_baton();
-        if !own.is_busy() {
-            return Addressed::Here(
-                Reached {
-                    activation: own,
-                    _held: held,
-                },
-                None,
-            );
-        }
+        debug_assert!(!own.is_busy(), "{CALLING_IDLE}");
+        let own = Reached::checked(own, held);
+        return if own.abandoned {
+            Addressed::Elsewhere(own, None)
+        } else {
+            Addressed::Here(own, None)
+        };
     }
     // SAFETY: the caller guarantees the link to a live thread context.
     match unsafe { reached(C::thread_of(context), "nested call") } {
@@ -1194,9 +1219,10 @@ unsafe fn innermost_activation<'a>(
 /// whose call runs elsewhere, unless it already holds a condition: the
 /// oracle raises it against that other activity, so a condition the running
 /// call raised itself is the one it ends with. A call whose conversion state
-/// is held, by its own thread waiting in a callback, records it.
-fn raise_invalid_thread(running: &Activation<'_>) {
-    if running.is_busy() {
+/// is held, by its own thread waiting in a callback, or whose activity
+/// abandoned it, records it.
+fn raise_invalid_thread(running: &Reached<'_>) {
+    if running.abandoned || running.is_busy() {
         if running.pending().is_none() {
             running.raise(INVALID_THREAD);
         }
@@ -1253,10 +1279,9 @@ macro_rules! or_nothing {
 }
 
 /// The innermost native call of `context`'s activity, under the baton: `Here`
-/// where it is the call this thread runs, or a call of another activity
-/// entered above it on this thread holds its conversion state; else
-/// `Elsewhere`, with the call to be given 98.983, which is this thread's own
-/// call, or, on a thread running none, that innermost call.
+/// where it is the call this thread runs; else `Elsewhere`, with the call to
+/// be given 98.983, which is this thread's own call, or, on a thread running
+/// none, that innermost call.
 ///
 /// # Panics
 /// Where no native call is in flight on `context`.
@@ -1297,32 +1322,25 @@ unsafe fn reached<'a>(context: *mut RexxThreadContext_, slot: &str) -> Addressed
     );
     let here = calls_here().any(|entry| std::ptr::eq(entry.innermost, cell));
     let Some(calling) = calling else {
-        return Addressed::Elsewhere(
-            Reached {
-                activation: innermost,
-                _held: held,
-            },
-            None,
-        );
+        return Addressed::Elsewhere(Reached::checked(innermost, held), None);
     };
     // SAFETY: as above.
     let running = unsafe { &*calling.activation.cast::<Activation<'a>>() };
-    if here && (std::ptr::eq(innermost, running) || running.is_busy()) {
+    debug_assert!(!running.is_busy(), "{CALLING_IDLE}");
+    let running_reached = Reached::checked(running, held);
+    if running_reached.abandoned {
+        return Addressed::Elsewhere(running_reached, None);
+    }
+    if here && std::ptr::eq(innermost, running) {
         Addressed::Here(
             Reached {
                 activation: innermost,
-                _held: held,
+                ..running_reached
             },
             None,
         )
     } else {
-        Addressed::Elsewhere(
-            Reached {
-                activation: running,
-                _held: held,
-            },
-            None,
-        )
+        Addressed::Elsewhere(running_reached, None)
     }
 }
 
@@ -1475,7 +1493,7 @@ unsafe fn numeric_of(context: *mut RexxCallContext_) -> crate::values::Numeric {
     // SAFETY: as `addressed`.
     match unsafe { addressed(context) } {
         Addressed::Here(activation, _) => activation.numeric(),
-        Addressed::Elsewhere(running, frame) => (!running.is_busy())
+        Addressed::Elsewhere(running, frame) => (!running.is_busy() && !running.abandoned)
             .then(|| running.kept_numeric(frame))
             .flatten()
             .unwrap_or_else(|| {
@@ -3775,7 +3793,8 @@ mod messages {
         // activity's call answers that activity's top frame's executable.
         match unsafe { super::addressed(context) } {
             super::Addressed::Here(activation, _) => activation.executable(SLOT).cast(),
-            super::Addressed::Elsewhere(running, frame) => (!running.is_busy())
+            super::Addressed::Elsewhere(running, frame) => (!running.is_busy()
+                && !running.abandoned)
                 .then(|| running.kept_executable(frame))
                 .flatten()
                 .map_or_else(
