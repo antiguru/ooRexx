@@ -214,3 +214,175 @@ At `9ef5a4c37`, from `rust/`, `CARGO_TARGET_DIR` in the task's scratch:
 - The pool harness's `NATIVE_EXITS` counts the interpreter thread's exits only: an exit made by a
   pool thread holding a lend (its nested loop running another activity) is not counted, so the
   interleaved test does not assert `exits`.
+
+## Fix round 1
+
+Base `66e6474f0`. Commits: `1616351de` (findings 1-6), `ae86b3f78` (`refusal-sites.tsv`
+re-derived; with the definition column cut, the old and new tables are byte-identical),
+`fc87c642d` (a second witness for finding 1). Scratch: `p6-scratch/t19f1/`.
+
+Mutants were applied by `p6-scratch/t19f1/mut/run.py` from `mut/mutants.json`. Each one is an
+exact single-occurrence replacement. The run is `memcap 8G cargo test --profile mutation -p
+rexx-exec --lib --no-fail-fast -- <test> --exact`, and the file is then restored from a saved copy
+and compared byte for byte. Logs: `mut/<id>.log`. Afterwards `git status` showed only the
+controller's `progress.md`.
+
+### Finding 2 (Error 11 from nested notifier yields): fixed
+
+- **Fix.** `yield_after_notifier_failure` no longer yields when less than half the stack's room is
+  left (`scheduler.rs`).
+- **Why not "11.1 ends X".** My first attempt followed the reviewer's wording: skip only when
+  `run_round` has no room at all. That attempt still produced Error 11, as many started activities'
+  own reports, because at that depth the notifier's own clauses (`return 1/0`) hit the clause-level
+  stack check. A yield is not a clause of X's, and the oracle raises nothing there, so the verdict
+  on the oracle decides it: no Error 11 anywhere. Half the room keeps the ending activities' code
+  clear of that check.
+- **Test.** `scheduler::tests::notifier_failures_too_many_to_nest_are_each_reported` runs two
+  variants at a 33 MiB interpreter stack with 3000 failing-notifier messages and `SIGNAL ON SYNTAX`
+  in main:
+  - main starts the messages, then busy-loops;
+  - another activity starts them while main is in `SysSleep 1`.
+
+  Each variant must give rc 0, stdout `done`, no `Error 11`, and exactly 6000 `Error 42.3:`
+  reports.
+- **Mutant F2** (the room check replaced by `false`): red. The first variant reports `Error 11`.
+  The assertion stops at the first variant, so the second variant's red under the mutant was not
+  measured on its own. Before the fix, the probe gave 2880 reports plus Error 11 for the first
+  variant, and the reviewer saw `trapped 11.1` for the second.
+- **Oracle.** I ran the same two programs with 10 messages from fresh directories, 30 runs each.
+  With 20 messages, the second variant hit `Error 48.1` (thread creation) under the mandated
+  `ulimit -v` in 25 of 30 runs, so I used 10.
+  - Oracle: 30/30 `done`, rc 0, 20 reports, no Error 11, for both programs.
+  - Ours (`rexx-run`, 30 runs each): the same, and the sorted stderr is byte-identical to the
+    oracle's in every run.
+  - The interleaving differs: the oracle has 26 orders in 30 runs, while ours has one, each report
+    contiguous. This is the same stderr-interleaving class already recorded for carry 2.
+
+### Finding 1 (an abandoned call's callback aborts): fixed
+
+- **Route.** Finding 2's fix removes the route that both carry 2's test and this finding stood
+  on. I re-ran the remaining route I know of: the Task 17 loud-refusal abandonment, followed by a
+  callback 200 ms later. It gives rc 120 with no abort, because the run has ended (P40/P53) and
+  nothing serves the recall. So abandonment with the run continuing is now reached only through a
+  test injection. `Shape::fail_native_wait` (`Interp::fail_native_wait`, `cfg(test)`) answers
+  main's first wait for a native call with 11.1.
+- **Fix.** `Host::runs_frame(frame)` is a defaulted trait member; `Interp` answers it through
+  `runs_native_frame`, which `with_native_owner` now shares. `Activation::live()` asks it, for a
+  call that released the baton. A `Reached` built by `Reached::checked` is `abandoned` when it is
+  not busy and not live. It is checked in two places:
+  - on the fast path in `addressed`;
+  - for this thread's own call in `reached` (and for the innermost call on a thread running none).
+
+  An abandoned `Reached` is `Elsewhere`. `raise_invalid_thread` only records 98.983 on it, through
+  `raise`, without touching the host. That condition is never delivered: the call's completion is
+  filtered out (carry 2), so the member answers nothing.
+- **Tests.** All three run under the injection:
+  - `a_callback_from_an_abandoned_call_answers_nothing`: `NAPTHENSEND` through the thread context
+    gives `abandoned 11.1`, `after`, `idle`, rc 0, and no `marked`. Before the fix, this aborted
+    at `library.rs:1593`, as the reviewer saw.
+  - `a_variable_set_from_an_abandoned_call_sets_nothing`: new native `NAPTHENSET`, through the
+    call's own context, which is the fast path. `x` stays `before`.
+  - `an_abandoned_calls_completion_does_not_complete_the_next_call`: carry 2's test, moved onto the
+    injection with `NAP` then `NAPLONG`. `NAPLONGER` was dropped.
+- **Mutants:**
+  - F1 (`abandoned: false`): both abandoned tests red, as a pool-thread panic at
+    `library.rs:1601` ("a native activation is running") followed by an abort.
+  - F1fast (the fast path ignores `abandoned`): the variable test red (abort).
+  - F1reached (`reached` ignores it): the callback test red (abort).
+  - C2 (the `Completed` frame filter removed): red, `waited 0`.
+- **Not witnessed:** the `checked(innermost)` arm for a thread running no call whose context's
+  innermost call was abandoned. No test reaches it.
+
+### Finding 3 (fast-path thread check unwitnessed): fixed
+
+- **Test.** `a_kept_call_context_used_from_another_threads_call_raises_98_983_there`, over new
+  natives:
+  - `KEEPCALLCONTEXT` hands out its `RexxCallContext*` as a `.Pointer`;
+  - `SETTHROUGH` calls `SetContextVariable` through it from another activity's call.
+
+  Expected: `trapped 98.983 before`.
+- **Mutant ML** (the fast path accepts any call on the thread): red, `answered before`.
+- **No method-context variant.** The fast path is generic over the context type (`addressed::<C>`),
+  so the call-context test exercises the same code. A method variant would need a method library
+  in the test harness, which `routines_only` does not build.
+
+### Finding 4 (busy branch of `raise_invalid_thread` unwitnessed): fixed
+
+- **Test.** `a_foreign_callback_while_the_calls_thread_is_in_a_callback_raises_98_983`, over the
+  new native `FOREIGNINCALLBACK`. Its own thread sends `WAIT` (`SysSleep 0.5`) while a spawned
+  thread sends `SPEAK` 200 ms in.
+
+  Expected: `trapped 98.983`, `spun`, rc 0, and no `spoke`.
+- **Mutant ME** (the busy branch removed): red, with a borrow panic at `values.rs:898` and then an
+  abort.
+
+### Finding 5 (two busy guards unwitnessed): argued unreachable, guards replaced by assertions
+
+- **Change.** Both guards on the calling call are now `debug_assert!`s, with the argument in
+  `CALLING_IDLE` (`ffi.rs`):
+  - `if !own.is_busy()` on the fast path;
+  - `|| running.is_busy()` in `reached`'s `Here` rule.
+- **The argument.** Members are called by extension code, and extension code runs only inside
+  `ThreadContext::enter`. That holds for every entry the reviewer listed, and for hooks, command
+  handlers and exits. An `enter` made while a member of the calling call runs, such as Rexx code
+  that member ran calling a native, becomes the newer calling call. So the calling call never holds
+  its conversion state when a member arrives.
+- **Release behaviour if the argument were wrong:**
+  - fast path: the member's `conversion()` borrow panics, which is loud;
+  - `reached`: the call is answered `Elsewhere` instead of `Here`.
+
+  `reached`'s doc no longer states the busy rule.
+- **Evidence.** The assertions held over the debug-assertion suites `memcap 8G cargo test -p
+  rexx-exec --lib -- scheduler::tests` (90 passed) and `memcap 8G cargo test -p rexx-api --lib`
+  (70 passed). That shows they do not fire in those suites; it does not prove unreachability. No
+  mutant applies, since the code they guarded is gone.
+
+### Finding 6 (a native panic unwinds off the baton): fixed
+
+- **Fix.** `PooledCall::run` catches the stub's panic, recalls the baton, then `resume_unwind`s.
+  The `Entered`, the activation and the `ThreadContext` clone then drop under the lend, and
+  `posting_panics` posts the panic and gives the lend back, as in carry 3.
+- **Test.** `pool::a_native_panic_on_a_pool_thread_unwinds_under_a_lend`. New native `BOOMMARKED`
+  counts the lines of a file that another activity is appending `tick` to, then panics. After the
+  run, fewer than 1024 lines may follow that count: one cold-visit interval.
+  - Measured with the fix: 65 to 73 lines, over 5 runs.
+- **Mutant F6** (recall only on a normal return): red, `11173 then 15213`. The other activity
+  ticks through the whole unwinding, including `posting_panics`' 100 ms window.
+
+### Finding 7 (a lendee draining `Panicked` aborts): not fixed, argued
+
+- **Reach.** It needs a panic posted to the inbox while a pool thread's nested loop drains it
+  inside a callback member. Posted panics come only from a native that panics (a Rust `C-unwind`
+  test native; a C native cannot) or from an interpreter defect on a pool thread.
+- **Why abort is acceptable.** The run ends in both cases: an abort (rc 134) here, or a panic of
+  the interpreter thread otherwise. Each is loud, and each is a defect path.
+- **Why the fix is worse.** Deferring the panic to the outer holder would let the lendee keep
+  running clauses after a panic was posted, which carry 3 exists to prevent.
+- **Effect of finding 6's fix.** It does not change this: a native panic now posts under a lend
+  served by whichever loop drains the recall.
+
+### Checks
+
+From `rust/`, with `CARGO_TARGET_DIR=p6-scratch/t19f1/target`, at `fc87c642d`:
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- The same with `--features pinning`: exit 0.
+- I did not touch loom-modelled code (`timer.rs`, `baton.rs`), so I did not run the loom suite.
+- `cargo test --workspace --release --no-run`: exit 0. Then `memcap 8G cargo test --workspace
+  --release --no-fail-fast`: exit 0, 141 `test result` lines, 2973 passed, 0 failed, 4 ignored.
+- Debug-assertion runs: as in finding 5.
+
+### Concerns
+
+- **Unwitnessed paths.** Findings 1 and 2 are each witnessed by one route:
+  - finding 2's second variant was not separately run red;
+  - the abandoned check for a foreign thread's innermost call has no test.
+- **The injection is now the only way to an abandoned call that lets the run continue.** If that
+  path is in fact unreachable, `abandon_native_call`'s continuation and the carry-2 filter are
+  defensive code kept alive by a test hook. I did not run an unreachability claim beyond the
+  routes named above.
+- **The half-room threshold is a judgement, not a measurement.** Below it, notifier yields stop.
+  The order of stderr reports for very many failing notifiers can then differ from what deeper
+  nesting gave. No test pins that order at that depth.
+- **New per-callback cost.** `Activation::live` adds one host query per member callback for a call
+  run with the baton released (pooled or guarded). I did not measure it (P51).
