@@ -16,7 +16,7 @@ use rexx_num::DivOp;
 /// A buffer holding `bytes` at the constructor's default capacity.
 fn buffer_state(bytes: &[u8]) -> BufferState {
     BufferState {
-        bytes: bytes.to_vec(),
+        bytes: bytes.to_vec().into(),
         capacity: bytes.len().max(256),
         default_size: 256,
     }

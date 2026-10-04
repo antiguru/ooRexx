@@ -831,6 +831,143 @@ pub unsafe extern "C-unwind" fn send_from_another_thread(
     std::ptr::null_mut()
 }
 
+/// Waits up to five seconds for a file at `path`, answering whether one
+/// appeared.
+fn await_file(path: &Path) -> bool {
+    (0..500).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        path.exists()
+    })
+}
+
+/// `HOLDCSTRING(string, path)`: keeps the address of its `CSTRING`
+/// argument, waits up to five seconds for a file at `path`, and answers
+/// whether one appeared and the bytes there are still the argument's: a
+/// native holding a kept string across other activities' work, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn hold_c_string(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 4] = [
+        code::LOGICAL_T,
+        code::CSTRING,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    // The interpreter keeps the string's bytes, and their terminator, for as
+    // long as the call is in flight.
+    unsafe {
+        let held = (*arguments.add(1)).value.value_CSTRING;
+        let path = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING);
+        let path = PathBuf::from(path.to_string_lossy().into_owned());
+        let copy = CStr::from_ptr(held).to_bytes_with_nul().to_vec();
+        let appeared = await_file(&path);
+        let same = copy
+            .iter()
+            .enumerate()
+            .all(|(at, byte)| held.add(at).cast::<u8>().read_volatile() == *byte);
+        (*arguments).value.value_logical_t = usize::from(appeared && same);
+    }
+    std::ptr::null_mut()
+}
+
+/// `HOLDBUFFER(buffer, path, mark)`: keeps the address `MutableBufferData`
+/// answers, waits up to five seconds for a file at `path`, then reads the
+/// buffer's length in bytes from that address and writes `mark` over its
+/// start, answering what it read, or `unawaited` where no file appeared: a
+/// native holding a buffer's storage across other activities' work, for a
+/// test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn hold_buffer(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 5] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_MUTABLE_BUFFER_OBJECT,
+        code::CSTRING,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments.
+    // The interpreter keeps the storage at the address it answered for as
+    // long as the call is in flight, at least the length answered with it.
+    unsafe {
+        let buffer = (*arguments.add(1)).value.value_RexxMutableBufferObject;
+        let path = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING);
+        let path = PathBuf::from(path.to_string_lossy().into_owned());
+        let mark = CStr::from_ptr((*arguments.add(3)).value.value_CSTRING).to_bytes();
+        let thread = (*context).threadContext;
+        let functions = &*(*thread).functions;
+        let data = (functions.MutableBufferData)(thread, buffer).cast::<u8>();
+        let length = (functions.MutableBufferLength)(thread, buffer);
+        let read: Vec<u8> = if await_file(&path) {
+            let read = (0..length).map(|at| data.add(at).read_volatile()).collect();
+            for (at, byte) in mark.iter().take(length).enumerate() {
+                data.add(at).write_volatile(*byte);
+            }
+            read
+        } else {
+            b"unawaited".to_vec()
+        };
+        (*arguments).value.value_RexxObjectPtr =
+            (functions.NewString)(thread, read.as_ptr().cast(), read.len()).cast();
+    }
+    std::ptr::null_mut()
+}
+
+/// `FINISHEDINPLACE(text)`: makes a buffer string of `text`'s length, asks
+/// for its `StringData` before writing `text` through `BufferStringData` and
+/// finishing it, and answers what the first address then holds.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn finished_in_place(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 3] = [code::REXX_OBJECT_PTR, code::CSTRING, ARGUMENT_TERMINATOR];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares one argument. The
+    // buffer string is written up to the length it was made at.
+    unsafe {
+        let text = CStr::from_ptr((*arguments.add(1)).value.value_CSTRING).to_bytes();
+        let thread = (*context).threadContext;
+        let functions = &*(*thread).functions;
+        let string = (functions.NewBufferString)(thread, text.len());
+        let early = (functions.StringData)(thread, string.cast()).cast::<u8>();
+        let data = (functions.BufferStringData)(thread, string).cast::<u8>();
+        data.copy_from_nonoverlapping(text.as_ptr(), text.len());
+        (functions.FinishBufferString)(thread, string, text.len());
+        let read: Vec<u8> = (0..text.len())
+            .map(|at| early.add(at).read_volatile())
+            .collect();
+        (*arguments).value.value_RexxObjectPtr =
+            (functions.NewString)(thread, read.as_ptr().cast(), read.len()).cast();
+    }
+    std::ptr::null_mut()
+}
+
 /// A library read from an in-memory package entry whose loader registers a
 /// direct command handler for the environment `TESTED` that answers its
 /// command, for a test that drives the interpreter's handler table without a

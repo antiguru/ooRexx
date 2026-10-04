@@ -5342,7 +5342,7 @@ mod tests {
         let state = host.state(grown).expect("a mutable buffer");
         let contents = state.buffer().expect("a mutable buffer");
         assert_eq!(
-            (contents.bytes.as_slice(), contents.capacity),
+            (&contents.bytes[..], contents.capacity),
             (&b"mutabl"[..], 6)
         );
     }
@@ -5371,7 +5371,7 @@ mod tests {
         let state = host.state(copy).expect("a mutable buffer");
         let contents = state.buffer().expect("a mutable buffer");
         assert!(contents.bytes.capacity() >= contents.capacity);
-        assert_eq!(contents.bytes, b"zzz");
+        assert_eq!(&contents.bytes[..], b"zzz");
     }
 
     /// **Object memory is aligned as `malloc` aligns**, 16 bytes, at every

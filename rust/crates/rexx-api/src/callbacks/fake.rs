@@ -372,7 +372,7 @@ impl Surface for FakeHost {
 
     fn new_mutable_buffer(&mut self, capacity: usize) -> ObjRef {
         self.native(NativeState::Buffer(BufferState {
-            bytes: Vec::with_capacity(capacity),
+            bytes: Vec::with_capacity(capacity).into(),
             capacity,
             default_size: capacity,
         }))

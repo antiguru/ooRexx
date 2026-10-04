@@ -658,6 +658,7 @@ impl Interp {
                 condition: None,
                 code: None,
                 kept: rustc_hash::FxHashSet::default(),
+                lent: Vec::new(),
                 caller: None,
                 id: 0,
                 packaged: false,
@@ -703,6 +704,11 @@ impl Interp {
         frame.locals.clear();
         for object in frame.kept.drain() {
             self.release_kept(object);
+        }
+        for buffer in frame.lent.drain(..) {
+            if let Some(state) = self.buffer_mut(buffer) {
+                state.bytes.release();
+            }
         }
         self.activity.native_spares.push(frame);
         answer

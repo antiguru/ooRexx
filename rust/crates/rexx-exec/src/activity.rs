@@ -592,6 +592,7 @@ impl Activity {
             out.extend([frame.owner, frame.scope, frame.receiver]);
             out.extend(frame.arguments.iter().copied().flatten());
             out.extend(frame.argument_list);
+            out.extend(frame.lent.iter().copied());
             out.extend(
                 [frame.additional, frame.result, frame.condition]
                     .into_iter()

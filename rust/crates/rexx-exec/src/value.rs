@@ -596,7 +596,7 @@ impl Interp {
                 name,
                 ..
             } => match (state.buffer(), state.pointer()) {
-                (Some(buffer), _) => Cow::Borrowed(buffer.bytes.as_slice()),
+                (Some(buffer), _) => Cow::Borrowed(&buffer.bytes[..]),
                 // `PointerClass::stringValue`
                 // (`classes/PointerClass.cpp:152`), held nowhere, which is
                 // why `try_text` answers `None` for one.
@@ -665,7 +665,7 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } => state.buffer().map(|buffer| buffer.bytes.as_slice()),
+            } => state.buffer().map(|buffer| &buffer.bytes[..]),
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
             Body::Instance { name, .. } => name.as_deref(),

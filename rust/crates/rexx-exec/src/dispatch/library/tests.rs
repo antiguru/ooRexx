@@ -837,6 +837,36 @@ fn a_handle_carried_values_copy_lasts_until_a_collection() {
     assert!(interp.kept_strings.contains_key(&held));
 }
 
+/// **A buffer's storage moved out from under a call lives until that call
+/// ends**, and a second call holding it keeps it past the first's end.
+#[test]
+fn a_lent_buffers_old_storage_lives_until_its_last_call_ends() {
+    use rexx_api::callbacks::Surface;
+    use rexx_core::ObjRef;
+    let mut interp = Interp::new();
+    let buffer = interp.new_mutable_buffer(16);
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    interp.mutable_buffer(buffer).expect("a buffer");
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    interp.mutable_buffer(buffer).expect("a buffer");
+    interp.mutable_buffer(buffer).expect("a buffer");
+    let retired = |interp: &mut Interp| interp.buffer(buffer).expect("a buffer").bytes.retired();
+    interp
+        .buffer_mut(buffer)
+        .expect("a buffer")
+        .bytes
+        .extend_from_slice(&[0; 4096]);
+    assert_eq!(retired(&mut interp), 1);
+    interp.pop_native_frame();
+    assert_eq!(
+        retired(&mut interp),
+        1,
+        "the inner call's end freed the outer's"
+    );
+    interp.pop_native_frame();
+    assert_eq!(retired(&mut interp), 0);
+}
+
 /// **Copies of handle-carried values stay bounded without a collection**:
 /// calls that each ask for a new one, and allocate nothing, leave at most
 /// the prune's bound behind.

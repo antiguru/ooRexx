@@ -1841,6 +1841,9 @@ struct NativeFrame {
     /// The handle-carried values this call asked a kept `CSTRING` of, each
     /// counted once in [`Interp::kept_holders`].
     kept: rustc_hash::FxHashSet<ObjRef>,
+    /// The `MutableBuffer`s this call was handed the address of, each lent
+    /// once ([`rexx_core::BufferBytes::lend`]).
+    lent: Vec<ObjRef>,
     /// The activation the call was made from.
     caller: Option<crate::activation::ActivationId>,
     /// This native activation's number among its activity's, which is what

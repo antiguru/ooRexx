@@ -472,9 +472,142 @@ impl StreamState {
 /// (`classes/MutableBufferClass.hpp`).
 #[derive(Clone, Debug)]
 pub struct BufferState {
-    pub bytes: Vec<u8>,
+    pub bytes: BufferBytes,
     pub capacity: usize,
     pub default_size: usize,
+}
+
+/// A `MutableBuffer`'s bytes, whose address native calls in flight may hold
+/// (spec 2026-09-29 2.5). While any does ([`BufferBytes::lend`]), growth
+/// moves the bytes to new storage and keeps the old until the last of those
+/// calls ends ([`BufferBytes::release`]); a shrink keeps the storage.
+///
+/// Only the growth methods here may reallocate: the slice it dereferences to
+/// cannot, and [`BufferBytes::edit`] refuses to.
+#[derive(Debug)]
+pub struct BufferBytes {
+    bytes: Vec<u8>,
+    lent: usize,
+    retired: Vec<Vec<u8>>,
+}
+
+impl BufferBytes {
+    pub fn capacity(&self) -> usize {
+        self.bytes.capacity()
+    }
+
+    /// Room for `additional` bytes past the length.
+    pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        if self.bytes.capacity() - self.bytes.len() >= additional {
+            return Ok(());
+        }
+        if self.lent == 0 {
+            return self.bytes.try_reserve_exact(additional);
+        }
+        let mut moved = Vec::new();
+        moved.try_reserve_exact(self.bytes.len().saturating_add(additional))?;
+        moved.extend_from_slice(&self.bytes);
+        self.retired.push(std::mem::replace(&mut self.bytes, moved));
+        Ok(())
+    }
+
+    /// [`BufferBytes::try_reserve_exact`], aborting where `Vec`'s own growth
+    /// would.
+    fn reserve_exact(&mut self, additional: usize) {
+        if self.try_reserve_exact(additional).is_err() {
+            std::alloc::handle_alloc_error(std::alloc::Layout::new::<u8>());
+        }
+    }
+
+    pub fn extend_from_slice(&mut self, bytes: &[u8]) {
+        self.reserve_exact(bytes.len());
+        self.bytes.extend_from_slice(bytes);
+    }
+
+    pub fn resize(&mut self, length: usize, value: u8) {
+        self.reserve_exact(length.saturating_sub(self.bytes.len()));
+        self.bytes.resize(length, value);
+    }
+
+    pub fn truncate(&mut self, length: usize) {
+        self.bytes.truncate(length);
+    }
+
+    pub fn clear(&mut self) {
+        self.bytes.clear();
+    }
+
+    /// `Vec::shrink_to`, which keeps lent storage where it is.
+    pub fn shrink_to(&mut self, capacity: usize) {
+        if self.lent == 0 {
+            self.bytes.shrink_to(capacity);
+        }
+    }
+
+    /// Runs `edit` over the bytes as a `Vec` that it may shorten or rewrite
+    /// but not grow past its capacity.
+    ///
+    /// # Panics
+    /// Where `edit` reallocated lent storage.
+    pub fn edit<R>(&mut self, edit: impl FnOnce(&mut Vec<u8>) -> R) -> R {
+        let address = self.bytes.as_ptr();
+        let answer = edit(&mut self.bytes);
+        assert!(
+            self.lent == 0 || std::ptr::eq(address, self.bytes.as_ptr()),
+            "a buffer edit reallocated lent storage"
+        );
+        answer
+    }
+
+    /// One more native call holds the bytes' address.
+    pub fn lend(&mut self) {
+        self.lent += 1;
+    }
+
+    /// One call that held the bytes' address has ended; the last frees the
+    /// storage growth moved them out of.
+    pub fn release(&mut self) {
+        self.lent = self.lent.saturating_sub(1);
+        if self.lent == 0 {
+            self.retired.clear();
+        }
+    }
+
+    /// How many storages growth has moved the bytes out of while lent.
+    pub fn retired(&self) -> usize {
+        self.retired.len()
+    }
+}
+
+impl Clone for BufferBytes {
+    /// A copy's bytes, which no call holds.
+    fn clone(&self) -> BufferBytes {
+        BufferBytes::from(self.bytes.clone())
+    }
+}
+
+impl From<Vec<u8>> for BufferBytes {
+    fn from(bytes: Vec<u8>) -> BufferBytes {
+        BufferBytes {
+            bytes,
+            lent: 0,
+            retired: Vec::new(),
+        }
+    }
+}
+
+impl std::ops::Deref for BufferBytes {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl std::ops::DerefMut for BufferBytes {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes
+    }
 }
 
 impl BufferState {

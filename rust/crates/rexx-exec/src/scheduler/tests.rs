@@ -1307,5 +1307,6 @@ fn a_post_from_another_thread_ends_an_idle() {
 }
 
 mod callbacks;
+mod lent;
 mod native;
 mod pool;

@@ -371,7 +371,7 @@ pub(super) fn native_mutable_buffer_new(
         unreachable!("new_instance allocates a Body::Instance")
     };
     *native = Some(Box::new(rexx_core::NativeState::Buffer(BufferState {
-        bytes,
+        bytes: bytes.into(),
         capacity,
         default_size,
     })));
@@ -528,7 +528,9 @@ fn buffer_delete(
 ) -> Result<Option<ObjRef>, Failure> {
     let (begin, range) = delete_arguments(interp, args)?;
     let state = buffer_state_mut(interp, receiver, name)?;
-    crate::builtin::string::delete_range(&mut state.bytes, begin, range);
+    state
+        .bytes
+        .edit(|bytes| crate::builtin::string::delete_range(bytes, begin, range));
     Ok(Some(receiver))
 }
 
@@ -1870,6 +1872,8 @@ fn native_mutable_buffer_delword(
 ) -> Result<Option<ObjRef>, Failure> {
     let (position, count) = delword_arguments(interp, args)?;
     let state = buffer_state_mut(interp, receiver, b"DELWORD")?;
-    crate::builtin::word::delword_bytes(&mut state.bytes, position, count);
+    state
+        .bytes
+        .edit(|bytes| crate::builtin::word::delword_bytes(bytes, position, count));
     Ok(Some(receiver))
 }

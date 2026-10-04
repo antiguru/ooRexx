@@ -918,6 +918,7 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         condition: None,
         code: None,
         kept: rustc_hash::FxHashSet::default(),
+        lent: Vec::new(),
         caller: None,
         id: 0,
         packaged: false,
@@ -945,8 +946,9 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
     );
 }
 
-/// The receiver, the arguments and the argument array a native activation
-/// holds for its conversions are roots while it lives, each one alone.
+/// The receiver, the arguments, the argument array and the lent buffers a
+/// native activation holds for its conversions are roots while it lives,
+/// each one alone.
 #[test]
 fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     let mut interp = Interp::new();
@@ -959,6 +961,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     let (receiver, argument, list) = (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
     let (additional, result, condition) =
         (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+    let lent = fresh(&mut interp);
     interp.activity.native_handles.push(crate::NativeFrame {
         owner: rexx_core::ObjRef::NIL,
         scope: rexx_core::ObjRef::NIL,
@@ -974,6 +977,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         condition: Some(condition),
         code: None,
         kept: rustc_hash::FxHashSet::default(),
+        lent: vec![lent],
         caller: None,
         id: 0,
         packaged: false,
@@ -986,6 +990,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         (additional, "held ADDITIONAL"),
         (result, "held RESULT"),
         (condition, "held condition object"),
+        (lent, "lent buffer"),
     ];
     interp.collect_now();
     for (held, what) in held {

@@ -203,7 +203,18 @@ impl Surface for Interp {
             *bytes = Bytes::from_slice(written);
             *num = None;
         }
-        self.kept_strings.remove(&string);
+        // Rewritten where it lies, as the oracle's string data is: a call
+        // may hold the address `StringData` answered for the unfinished
+        // string.
+        match self.kept_strings.get_mut(&string) {
+            Some(kept) if written.len() < kept.len() => {
+                kept[..written.len()].copy_from_slice(written);
+                kept[written.len()] = 0;
+            }
+            _ => {
+                self.kept_strings.remove(&string);
+            }
+        }
     }
 
     fn new_buffer(&mut self, length: usize) -> ObjRef {
@@ -227,7 +238,7 @@ impl Surface for Interp {
         self.native_state_instance(
             "MutableBuffer",
             NativeState::Buffer(BufferState {
-                bytes,
+                bytes: bytes.into(),
                 capacity,
                 default_size: capacity,
             }),
@@ -235,7 +246,7 @@ impl Surface for Interp {
     }
 
     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
-        let state = self.buffer_mut(buffer)?;
+        let state = self.lent_buffer(buffer)?;
         let (address, capacity) = state.writable();
         Some((address.cast(), state.bytes.len(), capacity))
     }
@@ -251,7 +262,7 @@ impl Surface for Interp {
     }
 
     fn set_mutable_buffer_capacity(&mut self, buffer: ObjRef, capacity: usize) -> Option<POINTER> {
-        let state = self.buffer_mut(buffer)?;
+        let state = self.lent_buffer(buffer)?;
         // `MutableBuffer::setCapacity` (`:292`), which asks `ensureCapacity`
         // for the difference over the capacity and not over the length.
         if capacity > state.capacity {
@@ -684,6 +695,24 @@ impl Surface for Interp {
 }
 
 impl Interp {
+    /// `buffer`'s state, lent to the innermost native call: its storage is
+    /// not reallocated in place until that call ends.
+    fn lent_buffer(&mut self, buffer: ObjRef) -> Option<&mut BufferState> {
+        self.buffer(buffer)?;
+        let mut lend = false;
+        if let Some(frame) = self.activity.native_handles.last_mut()
+            && !frame.lent.contains(&buffer)
+        {
+            frame.lent.push(buffer);
+            lend = true;
+        }
+        let state = self.buffer_mut(buffer)?;
+        if lend {
+            state.bytes.lend();
+        }
+        Some(state)
+    }
+
     /// A direct collection member's answer as the surface reports it, rooted,
     /// or its condition held.
     fn served(&mut self, answered: Result<Option<ObjRef>, Failure>) -> Result<Option<ObjRef>, ()> {
