@@ -372,6 +372,138 @@ pub unsafe extern "C-unwind" fn send_then_await(
     std::ptr::null_mut()
 }
 
+/// `SENDTWICE(object, first, second)`: sends `first`, then `second`, to
+/// `object` through the call's thread context, answering what `second`
+/// answered: a native that calls back twice, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn send_twice(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 5] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments.
+    unsafe {
+        let object = (*arguments.add(1)).value.value_RexxObjectPtr;
+        let thread = (*context).threadContext;
+        ((*(*thread).functions).SendMessage0)(
+            thread,
+            object,
+            (*arguments.add(2)).value.value_CSTRING,
+        );
+        (*arguments).value.value_RexxObjectPtr = ((*(*thread).functions).SendMessage0)(
+            thread,
+            object,
+            (*arguments.add(3)).value.value_CSTRING,
+        );
+    }
+    std::ptr::null_mut()
+}
+
+/// `SENDAWAITSEND(object, first, path, second)`: sends `first` to `object`
+/// through the call's thread context, waits up to five seconds for a file at
+/// `path`, then sends `second`, answering what `second` answered: a native
+/// that calls back on both sides of a wait, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn send_await_send(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 6] = [
+        code::REXX_OBJECT_PTR,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::CSTRING,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares four arguments.
+    unsafe {
+        let object = (*arguments.add(1)).value.value_RexxObjectPtr;
+        let path = CStr::from_ptr((*arguments.add(3)).value.value_CSTRING);
+        let path = std::path::PathBuf::from(path.to_string_lossy().into_owned());
+        let thread = (*context).threadContext;
+        ((*(*thread).functions).SendMessage0)(
+            thread,
+            object,
+            (*arguments.add(2)).value.value_CSTRING,
+        );
+        let _ = (0..500).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            path.exists()
+        });
+        (*arguments).value.value_RexxObjectPtr = ((*(*thread).functions).SendMessage0)(
+            thread,
+            object,
+            (*arguments.add(4)).value.value_CSTRING,
+        );
+    }
+    std::ptr::null_mut()
+}
+
+/// `SENDFROMANOTHERTHREAD(object, message)`: sends `message` to `object`
+/// through the call's thread context from a thread of its own, which it
+/// waits for, answering whether the send answered nothing: a callback from
+/// a thread running no native call, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn send_from_another_thread(
+    context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 4] = [
+        code::LOGICAL_T,
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        ARGUMENT_TERMINATOR,
+    ];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    // The other thread uses the context, the object and the message only
+    // while this one waits for it, inside the call.
+    unsafe {
+        let thread = (*context).threadContext as usize;
+        let object = (*arguments.add(1)).value.value_RexxObjectPtr as usize;
+        let message = (*arguments.add(2)).value.value_CSTRING as usize;
+        let answered = std::thread::spawn(move || {
+            let thread = thread as *mut crate::layout::RexxThreadContext_;
+            ((*(*thread).functions).SendMessage0)(
+                thread,
+                object as crate::layout::RexxObjectPtr,
+                message as crate::layout::CSTRING,
+            ) as usize
+        })
+        .join()
+        .expect("the sending thread");
+        (*arguments).value.value_logical_t = usize::from(answered == 0);
+    }
+    std::ptr::null_mut()
+}
+
 /// A library read from an in-memory package entry whose loader registers a
 /// direct command handler for the environment `TESTED` that answers its
 /// command, for a test that drives the interpreter's handler table without a

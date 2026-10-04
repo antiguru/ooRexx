@@ -29,7 +29,7 @@ use loom::sync::atomic::{AtomicUsize, Ordering};
 use loom::thread;
 
 use baton::Baton;
-use timer::{INBOX, Inbox, Registration, SLICE};
+use timer::{INBOX, Inbox, PANICKED, Registration, SLICE};
 
 /// Runs `body` as the baton's holder, failing if another thread is inside.
 fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
@@ -309,6 +309,53 @@ fn a_recall_posted_to_an_idle_holder_is_lent_the_baton() {
         assert_eq!(posted, [1]);
         baton.lend(pool.thread().id(), 0);
         touch(&inside);
+        baton.release();
+        pool.join().expect("the pool thread");
+    });
+}
+
+/// The holder requeues what follows a recall before it lends the baton,
+/// while another thread posts: what it requeued is drained again, ahead of
+/// the later post.
+#[test]
+fn a_requeued_post_is_drained_again_ahead_of_later_posts() {
+    loom::model(|| {
+        let registration = Registration::new();
+        registration.inbox().post(1);
+        registration.inbox().post(2);
+        let mut taken = registration.drain();
+        assert_eq!(taken.pop_front(), Some(1));
+        let poster = {
+            let inbox = registration.inbox();
+            thread::spawn(move || inbox.post(3))
+        };
+        registration.requeue(taken);
+        poster.join().expect("the poster");
+        assert!(registration.requests().pending(INBOX));
+        assert_eq!(Vec::from(registration.drain()), [2, 3]);
+    });
+}
+
+/// A pool thread that panics under a lend posts the panic before it gives
+/// the baton back, so the lender sees it as soon as its lend returns.
+#[test]
+fn a_panic_posted_under_a_lend_is_seen_when_the_lend_returns() {
+    loom::model(|| {
+        let baton = Arc::new(Baton::<u32>::new());
+        let inbox = Arc::new(Inbox::<u32>::new());
+        baton.acquire();
+        let pool = {
+            let (baton, inbox) = (Arc::clone(&baton), Arc::clone(&inbox));
+            thread::spawn(move || {
+                baton.await_lend();
+                inbox.post(9);
+                inbox.requests().set(PANICKED);
+                baton.give_back();
+            })
+        };
+        baton.lend(pool.thread().id(), 0);
+        assert!(inbox.requests().pending(PANICKED));
+        assert_eq!(Vec::from(inbox.drain()), [9]);
         baton.release();
         pool.join().expect("the pool thread");
     });

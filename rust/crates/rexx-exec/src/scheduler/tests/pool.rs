@@ -141,33 +141,42 @@ extern "C-unwind" fn boom(
     panic!("a native panicked");
 }
 
-/// The pool a run gets, where a test sets it, and the run's deadline.
-#[derive(Clone, Copy)]
-struct Shape {
-    stack: Option<usize>,
-    bound: Option<usize>,
-    deadline: Duration,
+/// The pool a run gets, where a test sets it, the run's deadline, the
+/// library offered, by name, the interpreter thread's stack, and the file
+/// [`crate::set_panic_at_call_end`] names.
+pub(super) struct Shape {
+    pub(super) stack: Option<usize>,
+    pub(super) bound: Option<usize>,
+    pub(super) deadline: Duration,
+    pub(super) library: (&'static [u8], fn() -> rexx_api::load::Library),
+    pub(super) interpreter_stack: usize,
+    pub(super) panic_at_call_end: Option<std::path::PathBuf>,
 }
 
-const SHAPE: Shape = Shape {
+pub(super) const SHAPE: Shape = Shape {
     stack: None,
     bound: None,
     deadline: Duration::from_secs(60),
+    library: (b"pooltest", library),
+    interpreter_stack: crate::INTERPRETER_STACK_BYTES,
+    panic_at_call_end: None,
 };
 
-/// A run: its outcome, its driver exits, and the interpreter's thread.
-struct Ran {
-    outcome: Outcome,
-    exits: u64,
-    thread: ThreadId,
+/// A run: its outcome, its driver exits, the interpreter's thread, and how
+/// many times a callback took the baton.
+pub(super) struct Ran {
+    pub(super) outcome: Outcome,
+    pub(super) exits: u64,
+    pub(super) thread: ThreadId,
+    pub(super) takes: u64,
 }
 
 impl Ran {
-    fn stdout(&self) -> String {
+    pub(super) fn stdout(&self) -> String {
         String::from_utf8_lossy(&self.outcome.stdout).into_owned()
     }
 
-    fn stderr(&self) -> String {
+    pub(super) fn stderr(&self) -> String {
         String::from_utf8_lossy(&self.outcome.stderr).into_owned()
     }
 }
@@ -186,9 +195,9 @@ fn run(source: &str, pool_stack: Option<usize>) -> Ran {
     .expect("the run did not panic")
 }
 
-/// [`run`] with the pool and deadline `shape` gives, answering whether the
-/// interpreter thread panicked.
-fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran> {
+/// [`run`] with what `shape` gives, answering whether the interpreter
+/// thread panicked.
+pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran> {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
@@ -204,26 +213,31 @@ fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran> {
         ]);
     let text = source.as_bytes().to_vec();
     std::thread::Builder::new()
-        .stack_size(crate::INTERPRETER_STACK_BYTES)
+        .stack_size(shape.interpreter_stack)
         .spawn(move || {
-            crate::install::offer_library(b"pooltest", library);
+            let (name, library) = shape.library;
+            crate::install::offer_library(name, library);
             if let Some(bytes) = shape.stack {
                 crate::set_pool_stack(bytes);
             }
             if let Some(threads) = shape.bound {
                 crate::set_pool_bound(threads);
             }
+            if let Some(path) = shape.panic_at_call_end {
+                crate::set_panic_at_call_end(path);
+            }
             let outcome = crate::execute_on(
                 "/tmp/pool.rex",
                 text,
                 false,
                 invocation,
-                Some(crate::INTERPRETER_STACK_BYTES),
+                Some(shape.interpreter_stack),
             );
             Ran {
                 outcome,
                 exits: crate::scheduler::native_exits(),
                 thread: std::thread::current().id(),
+                takes: crate::dispatch::library::callback_takes(),
             }
         })
         .expect("the interpreter thread")
@@ -362,6 +376,41 @@ fn a_panic_on_a_pool_thread_reaches_the_interpreter_thread() {
         panic!("the run ended without the native's panic");
     };
     assert_eq!(payload.downcast_ref::<&str>(), Some(&"a native panicked"));
+}
+
+/// A pool thread that panics while it holds the baton by a lend posts the
+/// panic before the baton goes back, and the lender panics with it before
+/// it runs another clause: nothing the other activity writes follows the
+/// pool thread's last line.
+#[test]
+fn a_panic_under_a_lend_reaches_the_lender_before_it_runs_on() {
+    let path = std::env::temp_dir().join(format!("rexx-lent-panic-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let ran = run_shaped(
+        &format!(
+            "m = .t~new~start('ticks')\ncall NAP\nsay 'after'\n\
+             ::requires 'pooltest' LIBRARY\n::class t\n::method ticks\n  \
+             do forever\n    call lineout '{}', 'tick'\n    call lineout '{}'\n  end\n",
+            path.display(),
+            path.display()
+        ),
+        Shape {
+            deadline: Duration::from_secs(10),
+            panic_at_call_end: Some(path.clone()),
+            ..SHAPE
+        },
+    );
+    let written = std::fs::read_to_string(&path).expect("the file");
+    let _ = std::fs::remove_file(&path);
+    let Err(payload) = ran else {
+        panic!("the run ended without the pool thread's panic");
+    };
+    assert_eq!(
+        payload.downcast_ref::<&str>(),
+        Some(&"a call's end panicked under a lend")
+    );
+    assert!(written.starts_with("tick\n"), "{written:?}");
+    assert!(written.ends_with("tick\nend\n"), "{written:?}");
 }
 
 /// A pinned waiter whose wait an activity's native call satisfies: the call

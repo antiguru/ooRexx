@@ -29,6 +29,9 @@ pub(crate) const SLICE: u32 = 1;
 /// Something was posted to the inbox and not yet taken.
 pub(crate) const INBOX: u32 = 2;
 
+/// A pool thread's panic was posted.
+pub(crate) const PANICKED: u32 = 4;
+
 /// `ActivityManager::timeSliceLength` (`concurrency/ActivityManager.hpp:359`).
 const SLICE_LENGTH: Duration = Duration::from_millis(24);
 
@@ -94,6 +97,21 @@ impl<T> Inbox<T> {
     pub(crate) fn post(&self, item: T) {
         let mut queue = lock(&self.queue);
         queue.posted.push_back(item);
+        self.requests.set(INBOX);
+        drop(queue);
+        self.arrived.notify_one();
+    }
+
+    /// Puts `items`, taken by the holder and not yet served, back ahead of
+    /// anything posted since.
+    pub(crate) fn requeue(&self, items: VecDeque<T>) {
+        if items.is_empty() {
+            return;
+        }
+        let mut queue = lock(&self.queue);
+        for item in items.into_iter().rev() {
+            queue.posted.push_front(item);
+        }
         self.requests.set(INBOX);
         drop(queue);
         self.arrived.notify_one();
@@ -285,6 +303,11 @@ impl Registration {
     /// What was posted since the holder last took, in order.
     pub(crate) fn drain(&self) -> VecDeque<Posted> {
         self.inbox.drain()
+    }
+
+    /// [`Inbox::requeue`].
+    pub(crate) fn requeue(&self, items: VecDeque<Posted>) {
+        self.inbox.requeue(items);
     }
 
     /// Blocks this thread until something is posted, with no deadline for

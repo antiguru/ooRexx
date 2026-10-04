@@ -610,13 +610,13 @@ pub struct ThreadContext {
 #[derive(Clone)]
 pub struct ThreadTable {
     home: Rc<TableHome>,
-    running: Rc<Running>,
+    /// The baton a callback from a thread running no native call of the
+    /// interpreter's takes.
+    requester: Option<Requester>,
 }
 
-/// The activation of the native call entered last and not yet returned on
-/// any context linking one table: the call running on the running
-/// activity. Null where none is. Erased as [`Innermost`]'s is.
-struct Running(Cell<*const Activation<'static>>);
+/// A baton any thread may take.
+pub type Requester = std::sync::Arc<dyn crate::values::Baton + Send + Sync>;
 
 /// Owns a [`ThreadTable`]'s allocation, which extensions read through the
 /// contexts linking it.
@@ -641,7 +641,17 @@ impl ThreadTable {
             home: Rc::new(TableHome(
                 NonNull::new(raw).expect("Box::into_raw answers a non-null pointer"),
             )),
-            running: Rc::new(Running(Cell::new(std::ptr::null()))),
+            requester: None,
+        }
+    }
+
+    /// A table whose contexts' callbacks from a thread running no native
+    /// call take `requester`.
+    #[must_use]
+    pub fn requesting(requester: Requester) -> ThreadTable {
+        ThreadTable {
+            requester: Some(requester),
+            ..ThreadTable::new()
         }
     }
 
@@ -677,22 +687,37 @@ struct Thread {
     instance: Owned<RexxInstance_, Innermost>,
     table: ThreadTable,
     innermost: Innermost,
-    /// The thread the interpreter runs on, which is the only one an
-    /// extension may attach to it.
-    home: std::thread::ThreadId,
-    /// The thread running the innermost call in flight with the baton
-    /// released, which may attach as the home thread does. Written by
-    /// [`ThreadContext::enter`] on the baton and read by that thread.
-    runner: Cell<Option<std::thread::ThreadId>>,
 }
 
-/// The activation of the innermost native call in flight on this context,
-/// null where none is, and the table's [`Running`] call.
+/// The innermost native call in flight on this context, null where none is,
+/// and the table's requester.
 ///
-/// The lifetime is erased: the pointers are written only by
-/// [`ThreadContext::enter`], for the length of a borrow of the activation,
-/// and put back before that borrow ends.
-struct Innermost(Cell<*const Activation<'static>>, Rc<Running>);
+/// The lifetime is erased: the pointer is written only by
+/// [`ThreadContext::enter`] and [`Entered`]'s drop, on the baton, for the
+/// length of a borrow of the activation.
+struct Innermost(Cell<*const Entered<'static>>, Option<Requester>);
+
+thread_local! {
+    /// The native call entered last on this OS thread and not yet returned,
+    /// on any context: what a callback from this thread is made by. Per OS
+    /// thread, as `layout.rs`'s `REFUSED` is, since a thread's calls nest on
+    /// its own stack (spec 2026-09-29 2.4, 2.5).
+    static CALLING: Cell<*const Entered<'static>> = const { Cell::new(std::ptr::null()) };
+}
+
+/// The calls entered on this OS thread and not yet returned, innermost
+/// first.
+fn calls_here() -> impl Iterator<Item = &'static Entered<'static>> {
+    let mut at = CALLING.get();
+    std::iter::from_fn(move || {
+        // SAFETY: an entry stays linked from `CALLING`, directly or through
+        // a later entry's `outer`, only while the `enter` that made it runs
+        // on this thread, which is below the caller on its stack.
+        let entry = unsafe { at.as_ref() }?;
+        at = entry.outer;
+        Some(entry)
+    })
+}
 
 impl ThreadContext {
     /// A thread context with no native call in flight, linking a table of its
@@ -721,9 +746,7 @@ impl ThreadContext {
                 owner: std::ptr::null_mut(),
             },
             table: table.clone(),
-            innermost: Innermost(Cell::new(std::ptr::null()), Rc::clone(&table.running)),
-            home: std::thread::current().id(),
-            runner: Cell::new(None),
+            innermost: Innermost(Cell::new(std::ptr::null()), table.requester.clone()),
         }));
         // SAFETY: `raw` is the allocation just made and nothing else addresses
         // it yet. Every link is taken from `raw` itself, so its provenance is
@@ -742,6 +765,12 @@ impl ThreadContext {
                 NonNull::new(raw).expect("Box::into_raw answers a non-null pointer"),
             )),
         }
+    }
+
+    /// The address an extension is handed, as a number.
+    #[must_use]
+    pub fn address(&self) -> usize {
+        self.pointer() as usize
     }
 
     /// The address an extension is handed.
@@ -799,18 +828,15 @@ impl ThreadContext {
         debug_assert_eq!(self.constants(), constants, "a constant's handle moved");
         // SAFETY: as above; the reference covers only the cell.
         let innermost = unsafe { &(*raw).innermost };
-        let entered = std::ptr::from_ref(activation).cast::<Activation<'static>>();
-        // SAFETY: as above; the reference covers only the cell.
-        let runner = unsafe { &(*raw).runner };
-        let ran = activation
-            .released()
-            .then(|| runner.replace(Some(std::thread::current().id())));
-        let _entered = Entered {
+        let entered = Entered {
             innermost,
-            runner: ran.map(|ran| (runner, ran)),
-            previous: innermost.0.replace(entered),
-            running: innermost.1.0.replace(entered),
+            activation: std::ptr::from_ref(activation).cast::<Activation<'static>>(),
+            outer: CALLING.get(),
+            below: Cell::new(innermost.0.get()),
         };
+        let at = std::ptr::from_ref(&entered).cast::<Entered<'static>>();
+        innermost.0.set(at);
+        CALLING.set(at);
         let mut contexts = Contexts {
             thread: self.pointer(),
             method: Owned {
@@ -868,26 +894,39 @@ impl Default for ThreadContext {
     }
 }
 
-/// Puts back the native call that was innermost before an
-/// [`ThreadContext::enter`].
+/// A native call in flight, from its [`ThreadContext::enter`] until it
+/// returns, when its drop unlinks it.
 struct Entered<'a> {
+    /// Its context's innermost cell.
     innermost: &'a Innermost,
-    /// The thread's runner cell and what it held, for a call with the baton
-    /// released.
-    runner: Option<(
-        &'a Cell<Option<std::thread::ThreadId>>,
-        Option<std::thread::ThreadId>,
-    )>,
-    previous: *const Activation<'static>,
-    running: *const Activation<'static>,
+    activation: *const Activation<'static>,
+    /// The call entered before it on this OS thread.
+    outer: *const Entered<'static>,
+    /// The call innermost on its context before it. A call of an activity
+    /// abandoned while it runs ends after the next call of that activity was
+    /// entered, so this is rewritten when a call below ends first.
+    below: Cell<*const Entered<'static>>,
 }
 
 impl Drop for Entered<'_> {
     fn drop(&mut self) {
-        self.innermost.0.set(self.previous);
-        self.innermost.1.0.set(self.running);
-        if let Some((runner, ran)) = self.runner {
-            runner.set(ran);
+        let me = std::ptr::from_ref(self).cast::<Entered<'static>>();
+        debug_assert_eq!(CALLING.get(), me, "a thread's calls end in reverse order");
+        CALLING.set(self.outer);
+        let mut at = self.innermost.0.get();
+        if at == me {
+            self.innermost.0.set(self.below.get());
+            return;
+        }
+        // SAFETY: the entries linked from the cell are calls in flight, each
+        // linked until its own drop, which runs on the baton as this one
+        // does.
+        while let Some(entry) = unsafe { at.as_ref() } {
+            if entry.below.get() == me {
+                entry.below.set(self.below.get());
+                return;
+            }
+            at = entry.below.get();
         }
     }
 }
@@ -1022,6 +1061,20 @@ impl ContextVariables for RexxExitContext_ {
 /// member reached through a context another activity's call was handed.
 const INVALID_THREAD: usize = 98983;
 
+/// A callback's activation, reached with the baton held until this drops.
+pub(crate) struct Reached<'a> {
+    activation: &'a Activation<'a>,
+    _held: crate::values::BatonHold<'a>,
+}
+
+impl<'a> std::ops::Deref for Reached<'a> {
+    type Target = Activation<'a>;
+
+    fn deref(&self) -> &Activation<'a> {
+        self.activation
+    }
+}
+
 /// What a method or call context addresses.
 enum Addressed<'a> {
     /// Its own activation, or, while a call nested inside that one holds its
@@ -1030,10 +1083,11 @@ enum Addressed<'a> {
     /// (`ApiContext(RexxCallContext *, bool)`,
     /// `interpreter/api/ContextApi.hpp:135`); with the host frame of the
     /// context's own call in the second case.
-    Here(&'a Activation<'a>, Option<u64>),
-    /// A context kept by a call of another activity, whose innermost call is
-    /// busy there: the call running now, and the host frame of the kept call.
-    Elsewhere(&'a Activation<'a>, Option<u64>),
+    Here(Reached<'a>, Option<u64>),
+    /// A context whose activity's call does not run on this thread
+    /// (`Activity::validateThread`, `concurrency/Activity.cpp:3620`): the
+    /// call to be given 98.983, and the host frame of the context's call.
+    Elsewhere(Reached<'a>, Option<u64>),
 }
 
 /// What `context` addresses.
@@ -1049,32 +1103,40 @@ unsafe fn addressed<'a, C: CallLinked>(context: *mut C) -> Addressed<'a> {
     // another one here aliases nothing: every write past it goes through the
     // activation's own cells.
     let own = unsafe { &*owner_of::<C, Activation<'a>>(context) };
-    let _held = own.hold_baton();
-    if !own.is_busy() {
-        return Addressed::Here(own, None);
+    let calling = CALLING.get();
+    // SAFETY: a non-null `CALLING` is a call in flight on this thread.
+    let own_erased = std::ptr::from_ref(own).cast::<Activation<'static>>();
+    if unsafe { calling.as_ref() }.is_some_and(|calling| calling.activation == own_erased) {
+        let held = own.hold_baton();
+        if !own.is_busy() {
+            return Addressed::Here(
+                Reached {
+                    activation: own,
+                    _held: held,
+                },
+                None,
+            );
+        }
     }
-    // SAFETY: the caller guarantees the link to a live thread context, and a
-    // held conversion means a call is in flight on it.
-    let (innermost, elsewhere) =
-        unsafe { innermost_or_running(C::thread_of(context), "nested call") };
-    match elsewhere {
-        Some(running) => Addressed::Elsewhere(running, own.frame()),
-        None => Addressed::Here(innermost, own.frame()),
+    // SAFETY: the caller guarantees the link to a live thread context.
+    match unsafe { reached(C::thread_of(context), "nested call") } {
+        Addressed::Here(reached, _) => Addressed::Here(reached, own.frame()),
+        Addressed::Elsewhere(reached, _) => Addressed::Elsewhere(reached, own.frame()),
     }
 }
 
-/// The activation `context` addresses ([`addressed`]). Where that is a call of
-/// another activity, the running call is given the oracle's 98.983 and the
+/// The activation `context` addresses ([`addressed`]). Where its call runs
+/// elsewhere, the call to be given the oracle's 98.983 is given it and the
 /// member answers nothing: `None`.
 ///
 /// # Safety
 /// As [`addressed`].
-unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> Option<&'a Activation<'a>> {
+unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> Option<Reached<'a>> {
     // SAFETY: as `addressed`.
     match unsafe { addressed(context) } {
         Addressed::Here(activation, _) => Some(activation),
         Addressed::Elsewhere(running, _) => {
-            raise_invalid_thread(running);
+            raise_invalid_thread(&running);
             None
         }
     }
@@ -1086,23 +1148,20 @@ unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> Option<&'a Activa
 ///
 /// # Safety
 /// As [`addressed`].
-unsafe fn variables_of<'a, C: CallLinked>(
-    context: *mut C,
-) -> Option<(&'a Activation<'a>, Option<u64>)> {
+unsafe fn variables_of<'a, C: CallLinked>(context: *mut C) -> Option<(Reached<'a>, Option<u64>)> {
     // SAFETY: as `addressed`.
     match unsafe { addressed(context) } {
         Addressed::Here(activation, frame) => Some((activation, frame)),
         Addressed::Elsewhere(running, _) => {
-            raise_invalid_thread(running);
+            raise_invalid_thread(&running);
             None
         }
     }
 }
 
 /// The activation of the innermost native call in flight, reached through a
-/// thread context. Where that call is busy and another, entered later, runs
-/// on another activity, the member came from there: that call is given the
-/// oracle's 98.983, and the member does nothing (`None`), as
+/// thread context. Where that call runs elsewhere, the call to be given the
+/// oracle's 98.983 is given it, and the member does nothing (`None`), as
 /// `Activity::validateThread` throws before it runs.
 ///
 /// # Panics
@@ -1120,21 +1179,29 @@ unsafe fn variables_of<'a, C: CallLinked>(
 unsafe fn innermost_activation<'a>(
     context: *mut RexxThreadContext_,
     slot: &str,
-) -> Option<&'a Activation<'a>> {
+) -> Option<Reached<'a>> {
     // SAFETY: as the caller guarantees.
-    let (innermost, elsewhere) = unsafe { innermost_or_running(context, slot) };
-    let Some(running) = elsewhere else {
-        return Some(innermost);
-    };
-    raise_invalid_thread(running);
-    None
+    match unsafe { reached(context, slot) } {
+        Addressed::Here(innermost, _) => Some(innermost),
+        Addressed::Elsewhere(running, _) => {
+            raise_invalid_thread(&running);
+            None
+        }
+    }
 }
 
 /// Gives `running` the oracle's 98.983 for a member reached through a context
-/// of another activity's call, unless it already holds a condition: the
+/// whose call runs elsewhere, unless it already holds a condition: the
 /// oracle raises it against that other activity, so a condition the running
-/// call raised itself is the one it ends with.
+/// call raised itself is the one it ends with. A call whose conversion state
+/// is held, by its own thread waiting in a callback, records it.
 fn raise_invalid_thread(running: &Activation<'_>) {
+    if running.is_busy() {
+        if running.pending().is_none() {
+            running.raise(INVALID_THREAD);
+        }
+        return;
+    }
     if !running.check_condition() {
         running.raise_syntax(INVALID_THREAD);
     }
@@ -1185,50 +1252,80 @@ macro_rules! or_nothing {
     };
 }
 
-/// The innermost native call of `context`'s activity, and, where it is busy,
-/// the running call of another activity that is not.
+/// The innermost native call of `context`'s activity, under the baton: `Here`
+/// where it is the call this thread runs, or a call of another activity
+/// entered above it on this thread holds its conversion state; else
+/// `Elsewhere`, with the call to be given 98.983, which is this thread's own
+/// call, or, on a thread running none, that innermost call.
 ///
 /// # Panics
 /// Where no native call is in flight on `context`.
 ///
 /// # Safety
 /// As [`innermost_activation`].
-unsafe fn innermost_or_running<'a>(
-    context: *mut RexxThreadContext_,
-    slot: &str,
-) -> (&'a Activation<'a>, Option<&'a Activation<'a>>) {
+unsafe fn reached<'a>(context: *mut RexxThreadContext_, slot: &str) -> Addressed<'a> {
     // SAFETY: the caller guarantees `context` came from a live
     // `ThreadContext`, whose wrapper's `owner` is its `Innermost`, a field of
     // the same allocation.
     let cell = unsafe { &*owner_of::<RexxThreadContext_, Innermost>(context) };
-    let activation = cell.0.get();
+    // SAFETY: a call in flight on this thread outlives the callback it makes.
+    let calling = unsafe { CALLING.get().cast::<Entered<'a>>().as_ref() };
+    let held = match calling {
+        Some(calling) => {
+            // SAFETY: as for `calling`; the activation is borrowed for as
+            // long as its call is in flight.
+            unsafe { &*calling.activation.cast::<Activation<'a>>() }.hold_baton()
+        }
+        None => match &cell.1 {
+            Some(requester) => crate::values::BatonHold::take_for(&**requester, context as usize),
+            None => crate::values::BatonHold::none(),
+        },
+    };
+    // Read with the baton held: a thread writes the cell only on the baton.
+    let innermost = cell.0.get();
     assert!(
-        !activation.is_null(),
+        !innermost.is_null(),
         "RexxThreadInterface.{slot} was called with no native call in flight"
     );
-    // SAFETY: a non-null pointer is the activation `ThreadContext::enter` is
-    // running a call for, which is borrowed for as long as the pointer is
-    // there. The reference is shared, as in `addressed`.
-    let innermost = unsafe { &*activation.cast::<Activation<'a>>() };
-    // The innermost cell is this context's own, written on the baton before
-    // a release; the table's `Running` and the activations' states are the
-    // interpreter's, read only under the baton.
-    let _held = innermost.hold_baton();
+    // SAFETY: a non-null pointer is a call `ThreadContext::enter` is running,
+    // whose activation is borrowed for as long as the pointer is there. The
+    // reference is shared, as in `addressed`.
+    let innermost = unsafe { &*(*innermost).activation.cast::<Activation<'a>>() };
     debug_assert!(
         innermost.baton_held(),
         "a callback read the interpreter's state without the baton"
     );
-    let running = cell.1.0.get();
-    if !innermost.is_busy() || running.is_null() || running == activation {
-        return (innermost, None);
+    let here = calls_here().any(|entry| std::ptr::eq(entry.innermost, cell));
+    let Some(calling) = calling else {
+        return Addressed::Elsewhere(
+            Reached {
+                activation: innermost,
+                _held: held,
+            },
+            None,
+        );
+    };
+    // SAFETY: as above.
+    let running = unsafe { &*calling.activation.cast::<Activation<'a>>() };
+    if here && (std::ptr::eq(innermost, running) || running.is_busy()) {
+        Addressed::Here(
+            Reached {
+                activation: innermost,
+                _held: held,
+            },
+            None,
+        )
+    } else {
+        Addressed::Elsewhere(
+            Reached {
+                activation: running,
+                _held: held,
+            },
+            None,
+        )
     }
-    // SAFETY: as for `activation`: `Running` holds the call entered last, on
-    // whichever context, for as long as it runs.
-    let running = unsafe { &*running.cast::<Activation<'a>>() };
-    (innermost, (!running.is_busy()).then_some(running))
 }
 
-/// The bytes of a name an extension passed, or `None` for a null pointer.
 ///
 /// # Safety
 /// A non-null `name` is a NUL-terminated string that outlives the call.
@@ -1378,14 +1475,17 @@ unsafe fn numeric_of(context: *mut RexxCallContext_) -> crate::values::Numeric {
     // SAFETY: as `addressed`.
     match unsafe { addressed(context) } {
         Addressed::Here(activation, _) => activation.numeric(),
-        Addressed::Elsewhere(running, frame) => running.kept_numeric(frame).unwrap_or_else(|| {
-            raise_invalid_thread(running);
-            crate::values::Numeric {
-                digits: 0,
-                fuzz: 0,
-                engineering: false,
-            }
-        }),
+        Addressed::Elsewhere(running, frame) => (!running.is_busy())
+            .then(|| running.kept_numeric(frame))
+            .flatten()
+            .unwrap_or_else(|| {
+                raise_invalid_thread(&running);
+                crate::values::Numeric {
+                    digits: 0,
+                    fuzz: 0,
+                    engineering: false,
+                }
+            }),
     }
 }
 
@@ -3675,15 +3775,16 @@ mod messages {
         // activity's call answers that activity's top frame's executable.
         match unsafe { super::addressed(context) } {
             super::Addressed::Here(activation, _) => activation.executable(SLOT).cast(),
-            super::Addressed::Elsewhere(running, frame) => {
-                running.kept_executable(frame).map_or_else(
+            super::Addressed::Elsewhere(running, frame) => (!running.is_busy())
+                .then(|| running.kept_executable(frame))
+                .flatten()
+                .map_or_else(
                     || {
-                        super::raise_invalid_thread(running);
+                        super::raise_invalid_thread(&running);
                         std::ptr::null_mut()
                     },
                     <*mut _>::cast,
-                )
-            }
+                ),
         }
     }
 
@@ -4015,24 +4116,23 @@ unsafe extern "C" fn get_interpreter_instance(
     unsafe { (*context).instance }
 }
 
-/// Whether this thread is `thread`'s home or runs its innermost call.
+/// Whether this thread runs a native call of `thread`'s activity.
 ///
 /// # Safety
 /// `thread` is a live `Thread`.
 unsafe fn runs_here(thread: *const Thread) -> bool {
-    let me = std::thread::current().id();
-    // SAFETY: the caller guarantees `thread`; `home` is written only when it
-    // is made, and `runner` names this thread only while it runs a call.
-    unsafe { (*thread).home == me || (*thread).runner.get() == Some(me) }
+    // SAFETY: the caller guarantees `thread`; naming a field reads nothing.
+    let cell = unsafe { &raw const (*thread).innermost };
+    calls_here().any(|entry| std::ptr::eq(entry.innermost, cell))
 }
 
-/// `AttachThread` from the thread the interpreter runs on, or the one running
-/// the call, while a native call is in flight: that thread is attached
-/// already, so the context it answers is the one the running call has.
+/// `AttachThread` from a thread running a native call of the instance's
+/// activity: that thread is attached already, so the context it answers is
+/// the one the running call has.
 ///
 /// # Panics
-/// Called from another thread, or with no native call in flight, which is
-/// embedding.
+/// Called from a thread running no native call of the instance's activity,
+/// which is embedding.
 ///
 /// # Safety
 /// `instance` is an instance a live [`ThreadContext`] links, and a non-null
@@ -4051,15 +4151,9 @@ unsafe extern "C" fn attach_thread(
             .cast::<Thread>()
     };
     let refused = "RexxInstanceInterface.AttachThread is not implemented (Phase 9)";
-    // SAFETY: as above; `home` is written only when the thread is made, so
-    // any thread may read it, and `runner` is this thread's own while it
-    // runs a call.
+    // SAFETY: as above.
     let home = unsafe { runs_here(thread) };
     assert!(home, "{refused}");
-    // SAFETY: as above, and this thread is the one whose call wrote the
-    // innermost cell.
-    let idle = unsafe { (*thread).innermost.0.get().is_null() };
-    assert!(!idle, "{refused}");
     if !attached.is_null() {
         // SAFETY: the caller guarantees the write; the context is the
         // allocation's own `thread` field.
@@ -4074,8 +4168,8 @@ unsafe extern "C" fn attach_thread(
 /// a null name or a null handler registers nothing.
 ///
 /// # Panics
-/// Called from another thread, which is embedding, or with no native call in
-/// flight.
+/// Called from a thread running no native call of the instance's activity,
+/// which is embedding.
 ///
 /// # Safety
 /// `instance` is an instance a live [`ThreadContext`] links, a non-null
@@ -6128,8 +6222,8 @@ mod tests {
     }
 
     /// A thread-context member called during a call that runs with the
-    /// baton released takes the baton before it reads the thread table's
-    /// running call, and again for its conversion, giving it back each time.
+    /// baton released takes the baton once, before it reads the context's
+    /// innermost call, and holds it through its conversion.
     #[test]
     fn a_thread_member_off_the_baton_takes_it_before_reading_the_table() {
         let mut host = FakeHost::new();
@@ -6154,7 +6248,60 @@ mod tests {
             answered
         });
         assert!(!answered.is_null());
-        assert_eq!((baton.takes.get(), baton.releases.get()), (2, 3));
+        assert_eq!((baton.takes.get(), baton.releases.get()), (1, 2));
+    }
+
+    /// A call that ends while a later call on its context is still in
+    /// flight, as an abandoned call does, leaves the later one innermost,
+    /// and the context has no call in flight once both have ended.
+    #[test]
+    fn a_call_ending_below_a_later_one_leaves_the_later_one_innermost() {
+        /// The context, reached from the first call's thread.
+        struct Shared(*const ThreadContext);
+        // SAFETY: the other thread only enters the context, which reads its
+        // allocation's address and writes its cell, never its `Rc`'s count,
+        // and the channels order those writes against this thread's.
+        unsafe impl Send for Shared {}
+        let innermost = |thread: &ThreadContext| {
+            // SAFETY: the allocation is live while `thread` is.
+            let entered = unsafe { (*thread.home.0.as_ptr()).innermost.0.get() };
+            // SAFETY: a non-null entry is a call in flight.
+            unsafe { entered.as_ref() }.map(|entered| entered.activation)
+        };
+        let thread = ThreadContext::new();
+        let shared = Shared(&raw const thread);
+        let (entered, first_in) = std::sync::mpsc::channel();
+        let (end, first_ends) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            let first = scope.spawn(move || {
+                let shared = shared;
+                let mut host = FakeHost::new();
+                let mut strings = CStringPool::new();
+                let activation = values::Activation::new(Conversion {
+                    host: (&mut host).into(),
+                    strings: &mut strings,
+                });
+                // SAFETY: the context outlives the scope.
+                unsafe { &*shared.0 }.enter(&activation, |_| {
+                    entered.send(()).expect("the test waits");
+                    first_ends.recv().expect("the test ends the call");
+                });
+            });
+            first_in.recv().expect("the first call entered");
+            let mut host = FakeHost::new();
+            let mut strings = CStringPool::new();
+            let activation = values::Activation::new(Conversion {
+                host: (&mut host).into(),
+                strings: &mut strings,
+            });
+            let second = std::ptr::from_ref(&activation).cast::<values::Activation<'static>>();
+            thread.enter(&activation, |_| {
+                end.send(()).expect("the first call waits");
+                first.join().expect("the first call");
+                assert_eq!(innermost(&thread), Some(second));
+            });
+        });
+        assert_eq!(innermost(&thread), None);
     }
 
     /// The host a guarded host reaches, asked for on a thread not holding

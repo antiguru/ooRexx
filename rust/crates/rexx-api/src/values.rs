@@ -735,6 +735,14 @@ pub trait Baton {
     fn host(&self) -> Option<std::ptr::NonNull<dyn Host>> {
         None
     }
+
+    /// [`Baton::take_unless_held`] for a thread running no native call of
+    /// the host's, with the activity whose thread context is at `context`
+    /// running while this thread holds it.
+    fn take_for(&self, context: usize) -> bool {
+        let _ = context;
+        self.take_unless_held()
+    }
 }
 
 pub use crate::ffi::HostRef;
@@ -775,6 +783,20 @@ struct Taken<'a>(&'a dyn Baton);
 /// when this drops.
 pub struct BatonHold<'a> {
     _taken: Option<Taken<'a>>,
+}
+
+impl<'a> BatonHold<'a> {
+    /// No baton taken.
+    pub(crate) fn none() -> BatonHold<'a> {
+        BatonHold { _taken: None }
+    }
+
+    /// [`Baton::take_for`] `context`, given up when the answer drops.
+    pub(crate) fn take_for(baton: &'a dyn Baton, context: usize) -> BatonHold<'a> {
+        BatonHold {
+            _taken: baton.take_for(context).then(|| Taken(baton)),
+        }
+    }
 }
 
 impl Drop for Taken<'_> {
@@ -893,11 +915,6 @@ impl<'a> Activation<'a> {
     /// it holds the baton, or the call never released it.
     pub fn baton_held(&self) -> bool {
         self.baton.is_none_or(|baton| baton.held_here())
-    }
-
-    /// Whether the call runs with the baton released.
-    pub(crate) fn released(&self) -> bool {
-        self.baton.is_some()
     }
 
     /// Whether the conversion state is held, which is a call nested inside

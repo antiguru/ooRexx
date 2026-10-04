@@ -28,10 +28,19 @@ pub(crate) const POOL_BOUND: usize = 64;
 pub(crate) type Job = Box<dyn FnOnce() + Send>;
 
 /// Runs `job`, posting a panic it ends in to `inbox` for the baton's holder
-/// to panic with.
-pub(crate) fn posting_panics(inbox: &crate::timer::Inbox<super::Posted>, job: impl FnOnce()) {
+/// to panic with, before the baton lent to this thread goes back: a lend
+/// is not given back as a panic unwinds ([`crate::island::Lent`]).
+pub(crate) fn posting_panics(
+    inbox: &crate::timer::Inbox<super::Posted>,
+    baton: &crate::island::InterpBaton,
+    job: impl FnOnce(),
+) {
     if let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
         inbox.post(super::Posted::Panicked(payload));
+        inbox.requests().set(crate::timer::PANICKED);
+        if baton.lent().is_some() {
+            baton.give_back();
+        }
     }
 }
 

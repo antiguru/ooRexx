@@ -1051,6 +1051,25 @@ fn a_notifier_failing_on_a_started_success_is_the_sends_failure() {
     assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 2);
 }
 
+/// Started sends whose notifiers all fail yield in turn, each one's end
+/// running on below the next one's round, which sets it aside: every
+/// notifier runs, twice, and the program ends as the oracle's does.
+#[test]
+fn notifier_failures_in_several_started_activities_each_end_their_own() {
+    let outcome = run(
+        "b = .bad~new\ndo i = 1 to 3\n  m = .message~new('abc', 'length')\n  m~notify(b)\n  \
+         m~start\nend\ncall SysSleep 0.2\nsay 'main end'\n\
+         ::class bad inherit MessageNotification\n::method messageComplete\n  say 'notified'\n  \
+         return 1/0\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(
+        stdout(&outcome),
+        format!("{}main end\n", "notified\n".repeat(9))
+    );
+    assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 6);
+}
+
 /// The program does not wait for an activity a termination `UNINIT` starts:
 /// it ends at once with the `UNINIT`'s own lines, as the oracle's does.
 #[test]
@@ -1249,5 +1268,6 @@ fn a_post_from_another_thread_ends_an_idle() {
     assert_eq!(taken, [7]);
 }
 
+mod callbacks;
 mod native;
 mod pool;

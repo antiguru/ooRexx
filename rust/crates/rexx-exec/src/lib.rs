@@ -250,6 +250,20 @@ pub(crate) fn set_pool_bound(threads: usize) {
     POOL_SHAPE.with(|shape| shape.set((shape.get().0, Some(threads))));
 }
 
+#[cfg(test)]
+thread_local! {
+    /// [`Interp::panic_at_call_end`] for the interpreters this thread makes.
+    static PANIC_AT_CALL_END: std::cell::RefCell<Option<std::path::PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Has a pool thread of each interpreter this thread makes append `end` to
+/// `path` and panic at a native call's end, under the lend.
+#[cfg(test)]
+pub(crate) fn set_panic_at_call_end(path: std::path::PathBuf) {
+    PANIC_AT_CALL_END.with(|panics| *panics.borrow_mut() = Some(path));
+}
+
 /// The arena size below which no ordinary run ever collects, and the floor
 /// every later growth allowance is raised to (see `Interp::collect_at`).
 const COLLECT_FLOOR: usize = 65_536;
@@ -1402,6 +1416,10 @@ struct Interp {
     /// test reads to see that a held one is not asked for again.
     #[cfg(test)]
     library_open_attempts: usize,
+    /// A file a pool thread appends `end` to, then panics, at the end of a
+    /// native call, while it holds the baton by a lend.
+    #[cfg(test)]
+    panic_at_call_end: Option<std::path::PathBuf>,
     /// Which library procedure each `::METHOD`/`::ATTRIBUTE ... EXTERNAL
     /// "LIBRARY <name>"` bound to, keyed by the identity
     /// [`Interp::install_one_method`] minted for its dictionary key.
@@ -1900,6 +1918,9 @@ impl Interp {
         // The creating thread holds the baton until a driver exit releases it.
         let baton = crate::sync::Arc::new(crate::island::InterpBaton::new());
         baton.acquire();
+        let timer = crate::timer::Registration::new();
+        let requester = crate::dispatch::library::Requester::new(&baton, timer.inbox());
+        let thread_table = rexx_api::ffi::ThreadTable::requesting(crate::sync::Arc::new(requester));
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
@@ -1921,7 +1942,7 @@ impl Interp {
             clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
             stack_base: 0,
             stack_room: usize::MAX,
-            timer: crate::timer::Registration::new(),
+            timer,
             baton,
             switch: None,
             slice_deferred: false,
@@ -1956,7 +1977,7 @@ impl Interp {
             collections_before_program: 0,
             #[cfg(feature = "pinning")]
             pinning: pinning::Pinning::default(),
-            activities: scheduler::Activities::new(),
+            activities: scheduler::Activities::new(thread_table),
             library_programs: Vec::new(),
             method_bodies: NameMap::default(),
             compiled_method_names: FxHashMap::default(),
@@ -1974,6 +1995,8 @@ impl Interp {
             libraries: Libraries::new(),
             #[cfg(test)]
             library_open_attempts: 0,
+            #[cfg(test)]
+            panic_at_call_end: PANIC_AT_CALL_END.with(|path| path.borrow().clone()),
             library_externals: FxHashMap::default(),
             external_packages: FxHashMap::default(),
             library_codes: Vec::new(),
@@ -2666,6 +2689,8 @@ impl Interp {
             libraries: _,
             #[cfg(test)]
                 library_open_attempts: _,
+            #[cfg(test)]
+                panic_at_call_end: _,
             library_externals: _,
             // Program identities, not objects.
             external_packages: _,

@@ -529,16 +529,14 @@ impl Surface for Interp {
     }
 
     fn kept_numeric(&mut self, frame: u64) -> Option<Numeric> {
-        let (owner, _) = self.idle_native_owner(frame)?;
-        self.with_idle_activity(owner, |interp| {
+        self.with_native_owner(frame, |interp| {
             let activation = interp.running_activation()?;
             Some(super::numeric_of(&activation.settings))
         })
     }
 
     fn kept_executable(&mut self, frame: u64) -> Option<ObjRef> {
-        let (owner, _) = self.idle_native_owner(frame)?;
-        let object = self.with_idle_activity(owner, |interp| {
+        let object = self.with_native_owner(frame, |interp| {
             let running = interp.running_activation()?.id;
             let top = interp.activity.native_handles.len().checked_sub(1);
             match top.filter(|&row| interp.activity.native_handles[row].caller == Some(running)) {

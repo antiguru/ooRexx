@@ -36,7 +36,7 @@ use crate::builtin::datatype::{SymbolKind, classify};
 use crate::error::Raised;
 use crate::island::{InterpBaton, Islanded, Lent};
 use crate::run::Started;
-use crate::scheduler::{ActivityId, Posted, Recall, Scheduler};
+use crate::scheduler::{ActivityId, Posted, Recall, Recaller, Scheduler};
 use crate::sync::Arc;
 use crate::timer::Inbox;
 use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame, PendingTrap};
@@ -1109,6 +1109,17 @@ impl PooledCall {
             (completion, ended, activation.pending())
         };
         let interp = ended.interp();
+        #[cfg(test)]
+        if let Some(path) = &interp.panic_at_call_end {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(path)
+                .expect("the test's file");
+            writeln!(file, "end").expect("a line written");
+            panic!("a call's end panicked under a lend");
+        }
         if let Some(record) = interp
             .activity
             .native_call
@@ -1118,7 +1129,7 @@ impl PooledCall {
             interp.activity.native_park = record.back(call, pending);
         }
         drop(thread);
-        Interp::post_completion(&self.inbox, self.activity, completion);
+        Interp::post_completion(&self.inbox, self.activity, self.frame, completion);
     }
 }
 
@@ -1137,12 +1148,64 @@ impl<'p> Recalling<'p> {
     /// Recalls the baton and waits until it is lent.
     fn recall(&self) -> Lent<'p> {
         self.inbox.post(Posted::Recall(Recall {
-            activity: self.activity,
-            frame: self.frame,
+            by: Recaller::Call {
+                activity: self.activity,
+                frame: self.frame,
+            },
             thread: std::thread::current().id(),
-            base: self.base,
+            base: Some(self.base),
         }));
         Lent::wait(self.baton)
+    }
+}
+
+/// The baton as a thread running no native call of the interpreter's
+/// reaches it (spec 2026-09-29 2.4): it recalls the baton as a pool thread
+/// does, and the holder serves it at its next drain.
+pub(crate) struct Requester {
+    baton: Arc<InterpBaton>,
+    inbox: Arc<Inbox<Posted>>,
+}
+
+impl Requester {
+    pub(crate) fn new(baton: &Arc<InterpBaton>, inbox: Arc<Inbox<Posted>>) -> Requester {
+        Requester {
+            baton: Arc::clone(baton),
+            inbox,
+        }
+    }
+}
+
+impl rexx_api::values::Baton for Requester {
+    fn take_unless_held(&self) -> bool {
+        self.take_for(0)
+    }
+
+    fn take_for(&self, context: usize) -> bool {
+        if self.baton.held_here() {
+            return false;
+        }
+        #[cfg(test)]
+        self.baton.count_take();
+        self.inbox.post(Posted::Recall(Recall {
+            by: Recaller::Context(context),
+            thread: std::thread::current().id(),
+            base: None,
+        }));
+        std::mem::forget(Lent::wait(&self.baton));
+        true
+    }
+
+    fn release(&self) {
+        self.baton.give_back();
+    }
+
+    fn held_here(&self) -> bool {
+        self.baton.held_here()
+    }
+
+    fn host(&self) -> Option<std::ptr::NonNull<dyn rexx_api::values::Host>> {
+        self.baton.lent().map(crate::island::Island::host)
     }
 }
 

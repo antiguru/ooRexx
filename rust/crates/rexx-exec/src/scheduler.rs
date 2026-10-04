@@ -164,18 +164,29 @@ pub(crate) enum Posted {
 /// the call, for the activity that made it.
 pub(crate) struct Completed {
     pub(crate) activity: ActivityId,
+    /// The call's native frame, as [`Interp::native_token`] names it: a call
+    /// abandoned while it ran completes no later call of its activity.
+    pub(crate) frame: u64,
     pub(crate) completion: rexx_api::invoke::Completion,
 }
 
-/// A pool thread's request for the baton, for a callback of the native call
-/// it runs for `activity` or for that call's end.
+/// A thread's request for the baton, for a callback or a native call's end.
 pub(crate) struct Recall {
-    pub(crate) activity: ActivityId,
-    /// The call's native frame, as [`Interp::native_token`] names it.
-    pub(crate) frame: u64,
+    pub(crate) by: Recaller,
     pub(crate) thread: std::thread::ThreadId,
-    /// The address of a local near the base of that thread's stack.
-    pub(crate) base: usize,
+    /// The address of a local near the base of that thread's stack, where
+    /// Rexx code may run under the lend.
+    pub(crate) base: Option<usize>,
+}
+
+/// Which activity runs while a recalled baton is lent.
+pub(crate) enum Recaller {
+    /// A pool thread running `activity`'s native call in the native frame
+    /// `frame`, as [`Interp::native_token`] names it.
+    Call { activity: ActivityId, frame: u64 },
+    /// A thread running no native call of this interpreter's, calling back
+    /// through the activity's thread context at this address.
+    Context(usize),
 }
 
 /// A started activity's first step: the send `~start` asked for.
@@ -293,7 +304,9 @@ const STACK_MARGIN: usize = 32 * 1024 * 1024;
 const MAX_POOLED: usize = 5;
 
 impl Activities {
-    pub(crate) fn new() -> Activities {
+    /// The table of an interpreter whose activities' thread contexts link
+    /// `thread_table`.
+    pub(crate) fn new(thread_table: rexx_api::ffi::ThreadTable) -> Activities {
         Activities {
             running: MAIN,
             idle: vec![None],
@@ -309,7 +322,7 @@ impl Activities {
             next_message: 0,
             waiters: FxHashMap::default(),
             retired: Vec::new(),
-            thread_table: rexx_api::ffi::ThreadTable::new(),
+            thread_table,
             pooled: VecDeque::new(),
             last_number: 0,
             next_native: 0,
@@ -418,11 +431,13 @@ pub(crate) trait Scheduler {
     /// with; `Err(block)` where no pool thread is free.
     fn exit_for_block(&mut self, block: crate::command::Block)
     -> Result<(), crate::command::Block>;
-    /// Posts `completion`, of `activity`'s native call, to `inbox` for the
-    /// baton's holder to drain; it touches nothing else.
+    /// Posts `completion`, of `activity`'s native call in the native frame
+    /// `frame`, to `inbox` for the baton's holder to drain; it touches
+    /// nothing else.
     fn post_completion(
         inbox: &crate::timer::Inbox<crate::timer::Posted>,
         activity: ActivityId,
+        frame: u64,
         completion: rexx_api::invoke::Completion,
     ) where
         Self: Sized;
@@ -560,16 +575,18 @@ impl Scheduler for Interp {
                 &baton,
                 crate::sync::Arc::clone(&inbox),
             );
+            let lent = crate::sync::Arc::clone(&baton);
             worker.run(Box::new(move || {
-                pool::posting_panics(&inbox, || pooled.run());
+                pool::posting_panics(&inbox, &lent, || pooled.run());
             }));
             baton.lend(to, crate::island::Island::of(self));
+            self.reraise_lent_panic();
             return;
         }
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         self.activities.runs_below += 1;
         let pending = call.run(frame, pending, self, &baton, &thread, |completion| {
-            Self::post_completion(&inbox, activity, completion);
+            Self::post_completion(&inbox, activity, frame, completion);
         });
         self.activities.runs_below -= 1;
         pin_leave!(self);
@@ -587,9 +604,10 @@ impl Scheduler for Interp {
         };
         self.activities.in_flight += 1;
         let inbox = self.timer.inbox();
+        let baton = crate::sync::Arc::clone(&self.baton);
         let activity = self.activities.running;
         worker.run(Box::new(move || {
-            pool::posting_panics(&inbox, || {
+            pool::posting_panics(&inbox, &baton, || {
                 let ended = block.stream(&|error, bytes| {
                     inbox.post(Posted::Output { error, bytes });
                 });
@@ -602,10 +620,12 @@ impl Scheduler for Interp {
     fn post_completion(
         inbox: &crate::timer::Inbox<crate::timer::Posted>,
         activity: ActivityId,
+        frame: u64,
         completion: rexx_api::invoke::Completion,
     ) {
         inbox.post(Posted::Completed(Completed {
             activity,
+            frame,
             completion,
         }));
     }
@@ -720,6 +740,24 @@ impl Interp {
             ActivityId(u32::try_from(index).expect("handles fit u32")),
             row,
         ))
+    }
+
+    /// `read` of the activity whose native call the frame token `frame`
+    /// names: the running one as it is, or an idle one as
+    /// [`Interp::with_idle_activity`] puts it in place.
+    pub(crate) fn with_native_owner<R>(
+        &mut self,
+        frame: u64,
+        read: impl FnOnce(&mut Interp) -> Option<R>,
+    ) -> Option<R> {
+        let row = usize::try_from(frame >> 32).ok()?;
+        let id = frame & u64::from(u32::MAX);
+        if (self.activity.native_handles.get(row)).is_some_and(|native| u64::from(native.id) == id)
+        {
+            return read(self);
+        }
+        let (owner, _) = self.idle_native_owner(frame)?;
+        self.with_idle_activity(owner, read)
     }
 
     /// Whether an activity waits in the ready queue.
@@ -1124,25 +1162,32 @@ impl Interp {
     }
 
     /// Hands each completion of `posted` to the parked activity that made its
-    /// call and readies that activity, and lends the baton to each pool
-    /// thread that recalls it.
-    pub(crate) fn file_completions(&mut self, posted: VecDeque<Posted>) {
-        for posted in posted {
-            match posted {
+    /// call and readies that activity, and lends the baton to each thread
+    /// that recalls it. What follows a recall goes back to the inbox before
+    /// the lend, where a loop the lendee nests can drain it.
+    pub(crate) fn file_completions(&mut self, mut posted: VecDeque<Posted>) {
+        while let Some(next) = posted.pop_front() {
+            match next {
                 Posted::Completed(Completed {
                     activity,
+                    frame,
                     completion,
                 }) => {
                     self.activities.in_flight -= 1;
                     if let Some(call) = self
                         .record_of(activity)
                         .and_then(|record| record.native_call.as_mut())
+                        .filter(|call| call.frame() == frame)
                     {
                         call.complete(completion);
                         self.unpark(activity);
                     }
                 }
-                Posted::Recall(recall) => self.serve_recall(recall),
+                Posted::Recall(recall) => {
+                    self.timer.requeue(std::mem::take(&mut posted));
+                    self.serve_recall(recall);
+                    posted = self.timer.drain();
+                }
                 Posted::Output {
                     error: false,
                     bytes,
@@ -1176,43 +1221,73 @@ impl Interp {
             .map(|idle| &mut idle.activity)
     }
 
-    /// Lends the baton to the pool thread `recall` names, with the activity
-    /// whose native call it runs as the running one, its frames pinned, and
-    /// the stack measured from that thread's: the callback or the call's end
-    /// runs above the activity that ran last, whose frames stay below.
+    /// Lends the baton to the thread `recall` names, with the activity it
+    /// calls back for as the running one, its frames pinned, and the stack
+    /// measured from that thread's: the callback or the call's end runs above
+    /// the activity that ran last, whose frames stay below. A thread running
+    /// no native call of this interpreter's gets no stack to run Rexx code
+    /// on.
     fn serve_recall(&mut self, recall: Recall) {
-        let Recall {
-            activity,
-            frame,
-            thread,
-            base,
-        } = recall;
+        let Recall { by, thread, base } = recall;
         let outgoing = self.activities.running;
-        let switched = activity != outgoing
-            && self
+        let activity = match by {
+            Recaller::Call { activity, frame } => self
                 .activities
                 .idle
                 .get(activity.0 as usize)
                 .and_then(Option::as_ref)
                 .and_then(|idle| idle.activity.native_call.as_ref())
-                .is_some_and(|call| call.frame() == frame);
-        if switched {
+                .is_some_and(|call| call.frame() == frame)
+                .then_some(activity),
+            Recaller::Context(address) => self.context_owner(address),
+        }
+        .filter(|activity| *activity != outgoing);
+        if let Some(activity) = activity {
             self.swap_running(activity, outgoing);
             self.activities.owners.push((outgoing, true));
         }
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         self.activities.runs_below += 1;
         let stack = (self.stack_base, self.stack_room);
-        self.stack_base = base;
-        self.stack_room = self.pool.stack().saturating_sub(STACK_MARGIN);
+        self.stack_base = base.unwrap_or(self.stack_base);
+        self.stack_room = match base {
+            Some(_) => self.pool.stack().saturating_sub(STACK_MARGIN),
+            None => 0,
+        };
         let baton = crate::sync::Arc::clone(&self.baton);
         baton.lend(thread, crate::island::Island::of(self));
         (self.stack_base, self.stack_room) = stack;
         self.activities.runs_below -= 1;
         pin_leave!(self);
-        if switched {
+        if let Some(activity) = activity {
             self.activities.owners.pop();
             self.swap_running(outgoing, activity);
+        }
+        self.reraise_lent_panic();
+    }
+
+    /// The idle activity whose thread context is at `address`.
+    fn context_owner(&self, address: usize) -> Option<ActivityId> {
+        let index = self.activities.idle.iter().position(|idle| {
+            idle.as_ref()
+                .and_then(|idle| idle.activity.thread.as_ref())
+                .is_some_and(|thread| thread.address() == address)
+        })?;
+        Some(ActivityId(u32::try_from(index).expect("handles fit u32")))
+    }
+
+    /// Panics with a panic a pool thread posted while it held the baton by a
+    /// lend, before this thread runs anything after the lend: such a thread
+    /// gives the baton back only once its panic is posted
+    /// ([`pool::posting_panics`]).
+    fn reraise_lent_panic(&self) {
+        if !self.timer.requests().pending(crate::timer::PANICKED) {
+            return;
+        }
+        for posted in self.timer.drain() {
+            if let Posted::Panicked(payload) = posted {
+                std::panic::resume_unwind(payload);
+            }
         }
     }
 
@@ -1874,15 +1949,16 @@ impl Interp {
     }
 
     /// One round of the other ready activities, where a started activity
-    /// ending holds no Rust frame of its own: on the oracle the activity a
+    /// ending holds no frame of its driver's: on the oracle the activity a
     /// notifier failed in gives up the kernel lock while the failure
-    /// unwinds, and an activity the completion woke runs then.
+    /// unwinds, and an activity the completion woke runs then. Its end runs
+    /// on below the round, so a loop above sets it aside.
     fn yield_after_notifier_failure(&mut self) -> Result<(), Failure> {
         if !self.any_ready() {
             return Ok(());
         }
         self.yield_at_slice();
-        self.run_round(false).map(|_| ())
+        self.run_round(true).map(|_| ())
     }
 
     /// A pinned activity's yield (ruling P29): one round of the other ready
