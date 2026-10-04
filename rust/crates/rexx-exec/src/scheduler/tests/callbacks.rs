@@ -299,19 +299,22 @@ fn recalls_drained_together_are_each_served() {
 }
 
 /// A call abandoned while it runs on a pool thread (its park ended by an
-/// Error 11 that nested notifier failures raise) completes no later call of
-/// its activity: the second call returns only once its own native has.
+/// Error 11 that nested notifier failures raise; another activity starts
+/// them, so that main is parked for its call and not sliced when the error
+/// arrives) completes no later call of its activity: the second call
+/// returns only once its own native has.
 #[test]
 fn an_abandoned_calls_completion_does_not_complete_the_next_call() {
     let ran = run_shaped(
-        "signal on syntax name abandoned\nb = .bad~new\ndo i = 1 to 3000\n  \
-         m = .message~new('abc', 'length')\n  m~notify(b)\n  m~start\nend\n\
+        "signal on syntax name abandoned\ns = .starter~new~start('go')\n\
          call NAPLONG\nsay 'unreached'\n\
          abandoned:\nsay 'abandoned' condition('o')~code\n\
          signal on syntax name drained\n\
          drained:\ncall SysSleep 0.3\n\
          call time 'R'\ncall NAPLONGER\nsay 'waited' (time('E') >= 2.5)\n\
          ::requires 'callbacktest' LIBRARY\n\
+         ::class starter\n::method go\n  b = .bad~new\n  do i = 1 to 3000\n    \
+         m = .message~new('abc', 'length')\n    m~notify(b)\n    m~start\n  end\n\
          ::class bad inherit MessageNotification\n::method messageComplete\n  return 1/0\n",
         Shape {
             library: (b"callbacktest", library),
