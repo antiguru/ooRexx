@@ -529,3 +529,181 @@ Target dirs `p6-scratch/t21f2/target` and `.../target-loom`; each status capture
 4. **N7 leaves the pre-existing `LINES()` divergence**: once `LINES()` has been asked, a later ask
    answers 0 here (`lines_asked`) where the oracle answers 1 after a read. The witness asks only
    after the reads.
+
+## Fix round 3
+
+Base `bf76afa1d`. Commits: `e7366a2fb` (R-N4, concern 2, R1/R3, R2 witness), `f72960a81` (a wait
+restores the mask it found), `869398f89` (the pinning report's `Input` kind; a clippy fix in
+the mask witness), and this section with `task-21-rereview-2.md`. Oracle runs: the CLAUDE.md
+wrapper from fresh empty directories, with SIGINT, SIGTERM and SIGHUP reset by `env
+--default-signal`; this crate the same without the `ulimit`. Driver
+`p6-scratch/t21f3/drv.py`. "Identical" means rc, stdout and stderr, path masked.
+
+### R-N4 (P67): who takes a halting signal
+
+`signal::block` blocks SIGINT, SIGTERM and SIGHUP in the calling thread. It runs in
+`install_signal_handlers` (so in `rexx-run`'s main thread once the handlers are installed), at
+the start of the timer thread and of every pool thread. `signal::unblocked` unblocks them
+around a pool thread's command wait (`block.stream`, which includes the pipe reads and the
+`waitpid`; the scoped thread that reads the child's stderr inherits that mask) and its stdin
+chunk read, and restores the mask it found after. Each is a no-op where the handlers are not
+installed, so test binaries and embedders keep their own masks. The pipe read
+(`command::read_all`) and the stdin read (`read_stdin_chunk`) now retry `EINTR`: before, the
+first ended the child's output and the second read end of input.
+
+**Departure from P67: the interpreter's thread is not blocked** (`signal::receive`, at the
+start of the thread `on_thread_of` spawns). With every thread blocked, a signal while no wait is
+in flight is never delivered: mutant K4 (P67 as written) turns 21 of 37 `signals.rs` tests red,
+`sigint_halts_a_busy_loop`, every sleep and both builtin/method witnesses among them. The thread
+that drains the inbox taking the signal does not reopen the race: the kernel queues the signal
+before the child's exit is visible (inferred from `kill` of a group running under
+`tasklist_lock`, which the child's exit notification needs; not instrumented), and the handler runs on whichever thread it chose, the
+interpreter's or the waiting pool thread, before that thread next returns to user space, so
+before `Unblocked` is posted or filed. Only the main thread was a third candidate, and it is
+blocked. Masks measured from `/proc/<pid>/task/*/status` while a command runs: main and timer
+`SigBlk 0x4003`, interpreter `0`, the waiting pool thread and its stderr reader `0`.
+
+A child's mask: `SigBlk` of `address system 'grep ... /proc/self/status'` is `0` on both, for
+an unredirected command, a redirected one, and one run by a started activity (std empties the
+mask before `exec`). `SigIgn` differs as DEVIATIONS entry 11 records (`0x1000` on the oracle).
+
+Witnesses:
+- The re-review's group program (`say 'a'` / `address system 'sleep 2'` ... SIGINT to the group
+  at 0.5 s), under `p6-scratch/t21f3/load.sh 48`: this crate at `e7366a2fb` 60/60 4.1 at
+  line 2 at load average 27-50, and 60/60 again at 88-96 (a second load running); at
+  `f72960a81` 60/60 at 4.5-24; the oracle 30/30 the same at 24-30. Mutant K1 (main thread not
+  blocked, the old layout's race), between those two `e7366a2fb` runs: 7 of 60 `a` / `b -2`
+  then 4.1 at line 4, at 77-88.
+- `signals.rs` `only_the_interpreter_and_its_waits_take_the_halting_signals`: the masks above,
+  sampled while a command runs, after it (the pool thread blocked again) and during a stdin
+  read.
+- `ctrl_c_halts_a_script_running_commands` and `ctrl_c_halts_a_redirected_command` now run
+  once (`halts_at_once`), no P48 rerun. The signals binary 20 times with `--nocapture` beside
+  the memcapped workspace suite (load average 8-25): 37 passed each run. One run printed one
+  rerun line, for the new `readhalt` witness, not a Ctrl-C one (concern 2).
+
+### Concern 2 (P66): a stdin read runs the other activities
+
+`fill_stdin` parks the reading activity on a new `ParkReason::Input` in a `pinned_wait`, so the
+holder runs ready activities until the chunk or a halt arrives. A parked reader is counted in
+flight (`Activities::input_readers`), so a loop with nothing ready idles on the inbox rather
+than refusing. `Posted::Input` files the chunk and readies every reader; `wake_for_halt` wakes a
+reader (marks `woken_by_halt`), and the read then answers nothing as before; `cancel_wait`
+withdraws one. The chunk a halted read waited for is still filed when it arrives.
+`input_line`/`input_bytes` now answer `Result`, for the wait's failure. The pinning report
+names the park `ParkKind::Input`.
+
+Witnesses, each 30/30 on both sides and identical:
+- The re-review's stamped probe (8 stamped lines 0.25 s apart, `parse pull` on stdin written at
+  2 s): `w 1` ... `w 8` then `main hi`, for both the `SysSleep` and the busy-wait form. The
+  stamps equal the oracle's in all 30 busy runs and 16 of 30 sleep runs; the other sleep runs
+  differ in stamps only.
+- `signals.rs` `an_activity_runs_while_main_reads` (8 lines 0.1 s apart, input at 1.5 s).
+- `a_halt_during_a_read_reaches_an_activity_that_ran_meanwhile`: the re-review's `keptend`
+  program, SIGINT at 1 s, input at 2 s: `w 3` / `wh 3` / `mh` / `main []` / `end`, rc 0, where
+  base dropped `wh`. The started activity has run by the time of the halt now; one that has not
+  run yet has no Rexx frame and is dropped, as `Activity::halt` drops it on the oracle.
+- The existing read witnesses (`sigint_ends_a_parse_pull`, `..._linein`, `..._charin`,
+  `..._stdin_linein`, `call_on_halt_sees_an_interrupted_read`, `a_halted_read_loses_no_input`,
+  `a_stdin_read_waits_without_spinning`) pass unchanged.
+
+### R1 and R3: the trap's own entry is delayed
+
+`deliver_one_pending_trap` delays and undelays the entry the trap was found under: the
+condition's own where the trap frame has one, else `ANY` (`CallInstruction.cpp:603`, `:632`).
+`CONDITION('C')` still answers the raised condition.
+
+Witnesses:
+- R3's program: oracle 2/2 and this crate `h in ERROR` / `h out 2` / `main after`, rc 0. As a
+  unit test (`a_call_on_any_handler_holds_its_any_trap`) with a counter that bounds the
+  recursion the old key allows; oracle identical.
+- `n3any`-shaped: `a_second_signal_in_a_call_on_any_handler_is_dropped` (the N3 witness with
+  `call on any`); its program at its timing by the driver: oracle 30/30, this crate 30/30,
+  identical. A busy-main form (two SIGINTs at 0.5
+  and 1.2 s): `ready` / `h in` / `h out` / `main after` on both, 3/3; this crate ends 0.5 s later
+  (3.53 s against 3.02 s), a `TIME('E')` matter, not a trap one (concern 4).
+- SIGNAL ON ANY, the same shapes: R3's with `signal on any` gives `h in ERROR 2` / `h out 2` on
+  both; two SIGINTs into a busy `SIGNAL ON ANY` handler give the untrapped 4.1 at the handler's
+  line 9 on both, 3/3 (a `SIGNAL ON` trap is off once taken, so there is nothing to delay).
+
+### R2: the `set_aside` arm, reached
+
+`signal::tests::a_halt_readies_a_set_aside_activity_once`, in a process of its own (`alone`,
+which the N4 witness now shares): main waits in `interpret 'r = s~wait(0.3)'`; a started
+activity waits in `interpret 'u~wait'`, and a third busy-loops 2 s. Main's deadline readies it
+inside the second activity's loop, which sets it aside; at 1 s a signal's halt (`PENDING` set
+and `timer::serve_signal` called from a thread) withdraws main's semaphore wait. Expected
+`slept 1` for main's later `SysSleep 1`; M-b (the `set_aside` check deleted) answers `slept 0`.
+Not oracle-compared: the oracle's main is not buried (P30), so its sleep starts at 0.3 s and the
+halt cuts it (`slept 0`, then `mh`, 2/2). The halt queued in the `INTERPRET` runs no handler on
+either: `call on halt` around `interpret 'call SysSleep 3'` prints only `after` on both.
+
+### Mutants
+
+`p6-scratch/t21f3/mut.py`: per mutant, copy the file, assert the site occurs once, write the
+mutant, run `cargo test --profile mutation -p rexx-exec --test signals --no-fail-fast` and
+`... --lib --no-fail-fast -- signal::tests a_call_on_any_handler`, copy back and `cmp`. Every
+run counted 37 signals tests and 4 lib tests.
+
+| mutant | red |
+| --- | --- |
+| K1 main thread not blocked | the mask witness; group driver 7/60 under load |
+| K2 timer thread not blocked | the mask witness |
+| K3 pool thread not blocked | the mask witness (after `f72960a81`; it survived while `unblocked` re-blocked rather than restored) |
+| K4 interpreter thread blocked (P67 as written) | 21 signals tests, the busy loop among them |
+| K5 command wait not unblocked | the mask witness |
+| K6 stdin read not unblocked | the mask witness |
+| K7 pipe read ends at `EINTR` | **survives**; recorded run below |
+| K8 stdin read ends at `EINTR` | **survives**; recorded run below |
+| P1 a reader not in flight | 10 signals tests (the "nothing left to run" refusal) |
+| P2 a halt does not wake a reader | 7 read witnesses |
+| P3 a read idles on the inbox (the old shape) | `an_activity_runs_while_main_reads`, `..._ran_meanwhile`, `a_stdin_read_waits_without_spinning` |
+| R1 the raised condition's entry delayed | `a_second_signal_in_a_call_on_any_handler_is_dropped`, `a_call_on_any_handler_holds_its_any_trap` |
+| R2 no `set_aside` check | `a_halt_readies_a_set_aside_activity_once` |
+
+K7 and K8 need the signal on the pool thread, and the kernel picks among the unblocked threads;
+`signals.rs` cannot choose. Recorded with `tgkill` to each `rexx-pool` thread
+(`p6-scratch/t21f3/tg.py`, `tg7.py`), 3 runs each:
+- K8, a `CALL ON HALT` program with two `parse pull`s, input written 0.5 s after the signal:
+  shipped `halted` / `v=[]` / `v=[one]`; K8 `v=[]` / `halted` / `v=[]`, stdin closed before
+  the write (the `EINTR` read as end of input).
+- K7, a command echoing `1`..`4` 0.3 s apart under `CALL ON HALT`, signal at 0.45 s: shipped
+  `1` `2` `rc -4` `halted` `3` `4`; K7 loses `3` and `4`.
+
+`git status` after each: only the lead's `progress.md`.
+
+### Checks (P51)
+
+Target dirs `p6-scratch/t21f3/target` and `.../target-loom`; each status captured unpiped.
+
+- `cargo fmt --all --check`: exit 0 (at `869398f89`).
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0; `--features pinning`: exit 0;
+  `RUSTFLAGS="--cfg loom"`: exit 0. Each log has one `Checking rexx-exec` line. (At
+  `f72960a81` the pinning clippy failed on the unmatched `ParkReason::Input` and the loom one on
+  `1 << (1 - 1)`; both fixed in `869398f89`.)
+- `cargo test --workspace --release --no-run`, then `memcap 8G cargo test --workspace --release
+  --no-fail-fast`: at `f72960a81` exit 0, 143 result lines, 3029 passed, 0 failed, 4 ignored.
+  At `869398f89` the same: no-run exit 0, test exit 0, 143 result lines, 3029 passed, 0 failed,
+  4 ignored (run alongside the loom gate).
+- Loom, `RUSTFLAGS="--cfg loom" memcap 8G cargo test -p rexx-exec --test loom` at `869398f89`:
+  exit 0, 15 passed, 430.51 s test time, 465 s wall including the build.
+
+### Concerns
+
+1. **P67 departure: the interpreter thread takes signals** (above). An embedder's own unblocked
+   threads still compete for them (P67's stated cost); and with two interpreters in one process
+   the other one's thread can take the signal, so the race is closed for one interpreter per
+   process only.
+2. **`a_halt_during_a_read_reaches_an_activity_that_ran_meanwhile` needed P48's rerun once in
+   20 binary runs** under load: `mh` / `main []` before `wh 3`. The started activity's
+   handler ran after main resumed, so the slice ended between the halt being served and the
+   activity's clause end. Not investigated further; the oracle gave its order 30/30 at low load.
+3. **The interpreter thread now takes `EINTR`** where main used to: any blocking call on it that
+   does not retry could fail on a signal. std's `read_to_end`, `write_all`, `Child::wait` and
+   `thread::sleep` retry; a `Read::read` on a FIFO or terminal stream through the stream classes
+   was not audited.
+4. **A trap handler's `TIME('R')` and the 0.5 s** in the busy-main `n3any` form: main's `TIME('E')`
+   loop ends 0.5 s late here. Not traced; probably the queued `time-elapsed-loop-hang`.
+5. **The stage-close pinning gate** (`concurrency_tests` under `--features pinning`) compares a
+   report against `phase-6-pinning.md`; a stdin read is now a pinned park of kind `Input`.
+   Not run under P51.
