@@ -204,6 +204,23 @@ out> r [o]
 out> main lines 1
 out> main end
 
+# charin() then .INPUT~LINES, a send that waits pinned
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+say 'main lines' .input~lines
+say 'main end'
+exit
+::class r
+::method go
+  c = charin()
+  say 'r [' || c || ']'
+----
+rc> 0
+out> r [o]
+out> main lines 1
+out> main end
+
 # a line queued while main waits on standard input is the next PULL's
 run write1000=(one,two)
 o = .w~new; m = o~start('go')

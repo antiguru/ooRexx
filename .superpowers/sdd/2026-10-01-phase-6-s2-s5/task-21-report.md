@@ -707,3 +707,135 @@ Target dirs `p6-scratch/t21f3/target` and `.../target-loom`; each status capture
 5. **The stage-close pinning gate** (`concurrency_tests` under `--features pinning`) compares a
    report against `phase-6-pinning.md`; a stdin read is now a pinned park of kind `Input`.
    Not run under P51.
+
+## Fix round 4
+
+Base `4a20439fa`. F-1 only. Commits: `2bb88a4df` (the fix and `tests/stdin_contention.rs`), and
+this section with one more case and `task-21-rereview-3.md`. Driver: the re-review's `drv.py`,
+copied to `p6-scratch/t21f4/` (fresh run directory per run, `env --default-signal`, oracle under
+the `ulimit`). "Identical" means rc, stdout and stderr.
+
+### Reproduction and the oracle
+
+HEAD refused (rc 120, the inverted-wait message) on the re-review's `mainreads`, `pullstdin`,
+`tworeaders`, `tworeaders2` and `tworeaders3`, and on every other shape below except `queuemid`.
+A reader reached through any route except a direct `.stdin~` send from Rexx, against a second
+activity reaching the default input stream through `lines()`, `linein()`, `charin()`, `chars()`,
+`lines('STDIN')`, `.input~` or PULL/PARSE LINEIN, refused.
+
+The oracle, 30 runs per shape, input `one`/`two`/`three` in one write at 1.0 s unless noted;
+every shape gave one output 30/30:
+
+| Shape | Oracle, 30/30 |
+| --- | --- |
+| `mainreads` (main PULLs, started `lines()`) | `main [one]` / `w lines 1` |
+| `pullstdin` (started PULLs, main `lines()`) | `r [one]` / `main lines 1` / `main end` |
+| `tworeaders`, `tworeaders2`, `tworeaders3` | `main [two]` / `end one`; `r [one]` / `main [two]` (/ `main end`) |
+| `threereaders` (three PULLs), also one line per write at 1.0/1.5/2.0 s | `a [one]` / `b [two]` / `main [three]` / `main end` |
+| `bifreaders` (two `linein()`), also split | `r [one]` / `main [two]` / `main end` |
+| `mixreaders` (`linein()` then PULL) | the same |
+| `charlines` (`charin()`, then `lines()`); `charinput` (then `.input~lines`) | `r [o]` / `main lines 1` / `main end` |
+| `queuemid` (a QUEUE while main's PULL waits) | `main [one]` / `w queued` / `next [queued]` |
+| `pinnedlines` (main `.stdin~linein`, started `lines()`) | `main [one]` / `w got [1]` |
+| `stamp1` (the second activity's `lines()` stamped) | `w before 0.0` / `main [one] 1.0` / `w after 1 0.8` / `w lines 1` |
+| `interphalt2` (`interpret 'parse pull v'` under CALL ON HALT, SIGINT 0.5 s) | `halted 2` / `v=[]` |
+
+So the oracle's rule: the second accessor blocks on `.STDIN`'s guard until the reader's read
+returns (`stamp1`: 0.8 s blocked), and readers are served in arrival order; the reader's own
+next clauses run before the waiter. A matrix (reader by `.stdin~linein`, `.input~linein`,
+`linein()`, `charin()`, PULL, PARSE LINEIN, INTERPRET PULL; second accessor by `lines()`, PULL,
+`linein()`, `.input~lines`, `.stdin~lines`), one oracle run per cell, ran every cell with rc 0.
+
+### The fix
+
+The reader held `.STDIN`'s guard inside a pinned wait, so every activity run meanwhile ran above
+it, and one that then waited for that guard could never be woken. Now an access of standard
+input takes `.STDIN`'s guard and waits for its chunk **before** it sends, where the park can be
+off every pinned frame (`Interp::stdin_turn`, `input.rs`), and holds the guard until the read
+returns (`end_stdin_turn`), as the oracle's reader holds it across its read:
+
+- `ParkReason::Stdin`: queued on the guard where another activity owns it (FIFO, the guard
+  table's own queue, so readers are served in order), else a reader in flight for its chunk.
+  Its re-test (`retest_stdin`) parks again for a partial line and turns a halt's wake into a read
+  that answers nothing.
+- PULL, PARSE PULL and PARSE LINEIN compile to `Op::Exec` rather than `Op::Parse`, so the
+  instruction parks at the op and runs again when woken. A PULL holding the turn reads standard
+  input, not a line queued meanwhile (`queuemid`).
+- The stream builtins `LINEIN(name)`, `CHARIN(name)`, `LINES(name[, opt])` and `CHARS(name)`
+  take the turn too; a builtin parks through `Interp::park_builtin` and the new
+  `Failure::Parked`, which the builtin call sites turn into the call's park, checked only on the
+  error path.
+- A halt that wakes such a wait is taken in the activation the read then runs in (the `.INPUT`
+  monitor's `UNKNOWN`), which is where HEAD's pinned read took it: without this the CALL ON HALT
+  handler ran one clause late, and inside INTERPRET not at all (measured on an intermediate build;
+  the signals read witnesses went red).
+- The pinned path of `exec_suspends` re-tests a woken wait as `park_native`'s does.
+
+Ours, 30 runs per shape with the fixed binary, beside the oracle runs above (load average 2-6,
+the gate running): every shape in the table identical to the oracle 30/30, `stamp1`'s stamps
+included. The matrix, rerun with the fixed binary: every cell identical but the three in concern 1.
+
+### Tests
+
+`tests/stdin_contention.rs`, one datadriven test over `tests/stdin_contention/cases`: every
+shape of the table but `stamp1`, each with the oracle's bytes, P48 rerun once on a mismatch. At HEAD every case refuses except `queuemid` and `interphalt2`, which guard the fix's
+own queue and halt rules.
+
+Mutants, in an archive of `2bb88a4df` (`rust/` and `interpreter/`, touched, separate target dir,
+a `Compiling rexx-exec` line checked per run), each written over a copy, run with
+`cargo test --profile mutation -p rexx-exec --lib --test signals --test stdin_contention
+--no-fail-fast`, then restored from the copy and `cmp`'d (`p6-scratch/t21f4/mut.py`). The
+unmutated baseline there: signals 37/37, stdin_contention 1/1, lib 941 passed and 59 failed (the
+library and pool tests, which need artifacts outside the archive; 1000/1000 in the real tree).
+Red is relative to that baseline; the case named is the first `stdin_contention` mismatch.
+
+| Mutant | Red |
+| --- | --- |
+| M1 PULL/LINEIN lowered back to `Op::Parse` | stdin_contention (`tworeaders`) |
+| M2 no guard turn | stdin_contention (`pullstdin`) |
+| M3 PULL holding the turn reads the queue first | stdin_contention (`queuemid`) |
+| M4 `Failure::Parked` not turned into a park | stdin_contention (`mainreads`); signals `call_on_halt_sees_an_interrupted_read`, `sigint_ends_a_charin`, `sigint_ends_a_linein` |
+| M5 `LINEIN` builtin takes no turn | stdin_contention (`bifreaders`) |
+| M6 `LINES` builtin takes no turn | stdin_contention (`pinnedlines`) |
+| M7 a halt's wake not turned into a halted read | stdin_contention (`interphalt2`); 6 signals read witnesses |
+| M8 the turn's guard never released | stdin_contention (`mainreads`) |
+| M9 no re-test on the pinned `exec_suspends` path | stdin_contention (`interphalt2`) |
+| M10 the halt request not moved to the reading activation | stdin_contention (`interphalt2`); 6 signals read witnesses |
+| M11 a chunk-phase `Stdin` park not registered as a reader | stdin_contention (`mainreads`); 9 signals tests |
+| M12 `CHARIN` builtin takes no turn | survived first; red (`charinput`) once that case was added |
+
+### Checks (P51)
+
+Target dir `p6-scratch/t21f4/target` (loom: `target-loom`); every status captured unpiped.
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0; `--features pinning`: exit 0;
+  `RUSTFLAGS="--cfg loom"`: exit 0. One `Checking rexx-exec` line in each log.
+- At `2bb88a4df`: `cargo test --workspace --release --no-run` exit 0, then `memcap 8G cargo test
+  --workspace --release --no-fail-fast` exit 0: 144 result lines, 3030 passed, 0 failed, 4
+  ignored. The `charinput` case, added after, passes (`--test stdin_contention`, 1 passed).
+- The signals binary 20 times with `--nocapture`, beside the mutant runs (load average 3-6):
+  37 passed each run, no rerun line.
+- Callgrind (`bench-programs/callgrind.sh -r 1`, libc subtracted), HEAD against the fix: +1
+  instruction per builtin call: strings +0.068%, parse +0.039%, textnum +0.035%, alloc4c
+  +0.032%, decrender +0.019%; rexxcps -0.002%; emptyloop, assign, compound, dispatch, varlookup,
+  nop, sendloop 0.0000%. A first form that read `native_park` after every builtin cost +0.48% on
+  strings; the error-path form replaced it.
+
+### Concerns
+
+1. **Two pinned accessors still refuse.** A reader whose read waits pinned (a direct
+   `.stdin~linein` or `.input~linein` send, or a read inside INTERPRET, a trap handler or another
+   pinned frame) against a second accessor that also waits pinned (a direct `.input~` send):
+   matrix cells `.stdin~linein`/`.input~lines`, `.input~linein`/`.input~lines` and
+   `interpret 'parse pull v'`/`.input~lines` are still rc 120 where the oracle runs them. Closing
+   them needs the send path, not an instruction or builtin, to park off its frames.
+2. **P43**: no per-clause cost, but one instruction per builtin call (above). The lead's call
+   whether that is inside P43.
+3. **PULL and PARSE LINEIN now run as `Op::Exec`**, under the `OpExec` pin; the stage-close
+   pinning gate's report may count them differently. Not run (outside P51).
+4. **A pending HALT request is moved to the activation running the read** when a woken read
+   consumes the halt; a `Message~halt` request pending at that moment moves with it.
+5. **Pre-existing, outside F-1:** after a read leaves nothing buffered, `.stdin~chars` and
+   `lines()` on a pipe answer `1` here and `0` on the oracle (`stamp3`, and `stamp1` with only
+   `one` written). Base answers the same as HEAD.
