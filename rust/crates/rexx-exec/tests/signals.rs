@@ -59,6 +59,16 @@ enum Launch {
     Reading,
 }
 
+/// What the harness does once the program is ready, in order.
+#[derive(Clone, Copy)]
+enum Step {
+    /// Sends the signal, by PID or to the group as the launch says.
+    Signal(&'static str),
+    Pause(Duration),
+    /// Writes to the program's standard input.
+    Write(&'static str),
+}
+
 #[derive(Debug, PartialEq)]
 struct Ended {
     code: Option<i32>,
@@ -66,16 +76,17 @@ struct Ended {
     stderr: String,
 }
 
-/// Runs `source` under `rexx-run` started as `launch`, sends `signal` once
+/// Runs `source` under `rexx-run` started as `launch`, takes `steps` once
 /// `ready` is on its stdout, or after [`UNREADY_WAIT`] where `ready` is
-/// empty, and answers how it ended and how long after the signal.
-fn run_signalled(
+/// empty, and answers how it ended and how long after the first signal.
+fn run_steps(
     name: &str,
     source: &str,
     ready: &str,
-    signal: &str,
+    steps: &[Step],
     launch: Launch,
 ) -> (Ended, Duration) {
+    let signal = first_signal(steps);
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("signals-{name}-{signal}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("the probe directory");
@@ -131,15 +142,31 @@ fn run_signalled(
             seen.extend(bytes);
         }
     }
-    let signalled = Instant::now();
     let target = match launch {
         Launch::Group => format!("-{}", child.id()),
         _ => child.id().to_string(),
     };
-    let sent = Command::new("kill")
-        .args([&format!("-{signal}"), "--", &target])
-        .status()
-        .is_ok_and(|status| status.success());
+    let mut signalled = None;
+    let mut sent = true;
+    for step in steps {
+        match *step {
+            Step::Signal(signal) => {
+                signalled.get_or_insert_with(Instant::now);
+                sent &= Command::new("kill")
+                    .args([&format!("-{signal}"), "--", &target])
+                    .status()
+                    .is_ok_and(|status| status.success());
+            }
+            Step::Pause(pause) => std::thread::sleep(pause),
+            Step::Write(text) => {
+                use std::io::Write;
+                let input = child.stdin.as_mut().expect("piped stdin");
+                input.write_all(text.as_bytes()).expect("the write");
+                input.flush().expect("the flush");
+            }
+        }
+    }
+    let signalled = signalled.unwrap_or_else(Instant::now);
     let mut status = None;
     while sent && signalled.elapsed() < END_WAIT {
         if let Ok(Some(ended)) = child.try_wait() {
@@ -154,7 +181,7 @@ fn run_signalled(
     }
     let _ = child.wait();
     drop(child.stdin.take());
-    assert!(sent, "kill -s {signal} failed");
+    assert!(sent, "a kill in {name} failed");
     reader.join().expect("the stdout reader");
     seen.extend(receiver.try_iter().flatten());
     let stderr = errors.join().expect("the stderr reader");
@@ -168,12 +195,50 @@ fn run_signalled(
     (ended, took)
 }
 
-/// [`run_signalled`], asserting it ended as `expected` within [`PROMPT`],
+/// The first signal `steps` send.
+fn first_signal(steps: &[Step]) -> &'static str {
+    steps
+        .iter()
+        .find_map(|step| match step {
+            Step::Signal(signal) => Some(*signal),
+            _ => None,
+        })
+        .expect("a signal among the steps")
+}
+
+/// [`run_steps`] with one signal, asserting it ended as `expected` within [`PROMPT`],
 /// with one rerun on a mismatch (ruling P48).
-fn halts(name: &str, source: &str, ready: &str, signal: &str, launch: Launch, expected: &Ended) {
+fn halts(
+    name: &str,
+    source: &str,
+    ready: &str,
+    signal: &'static str,
+    launch: Launch,
+    expected: &Ended,
+) {
+    halts_after(
+        name,
+        source,
+        ready,
+        &[Step::Signal(signal)],
+        launch,
+        expected,
+    );
+}
+
+/// [`halts`] with `steps` in place of one signal.
+fn halts_after(
+    name: &str,
+    source: &str,
+    ready: &str,
+    steps: &[Step],
+    launch: Launch,
+    expected: &Ended,
+) {
+    let signal = first_signal(steps);
     let mut last = None;
     for _ in 0..2 {
-        let (ended, took) = run_signalled(name, source, ready, signal, launch);
+        let (ended, took) = run_steps(name, source, ready, steps, launch);
         if ended == *expected && took < PROMPT {
             return;
         }
@@ -681,5 +746,225 @@ fn an_abandoned_command_ends_no_later_one() {
             stdout: "a\nb -4\nhalted 4\nx\nc 0\n".to_string(),
             stderr: String::new(),
         },
+    );
+}
+
+/// Another activity's busy loop holds the baton past main's timed waits'
+/// deadlines; the halt that ends main's loop leaves it ready once, so the
+/// later sleep runs its whole second.
+#[test]
+fn a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_sleep() {
+    halts(
+        "readyonce_sleep",
+        "call on halt name h\ns = .eventsemaphore~new\no = .w~new\no~start('w')\nsay 'ready'\n\
+         halted = 0\ndo until halted\n  r = s~wait(0.001)\nend\ncall time 'R'\ncall SysSleep 1\n\
+         say 'slept' (time('E') >= 0.9)\nexit\nh: halted = 1; return\n\
+         ::class w\n::method w\n  call on halt name wh\n  call time 'R'\n  do forever\n\
+         \x20   if time('E') >= 2 then leave\n  end\n  return\nwh: return\n",
+        "",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nslept 1\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// As [`a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_sleep`], with
+/// an untimed wait that only the busy activity's post ends.
+#[test]
+fn a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_wait() {
+    halts(
+        "readyonce_wait",
+        "call on halt name h\ns = .eventsemaphore~new\nt = .eventsemaphore~new\no = .w~new\n\
+         o~start('w', t)\nsay 'ready'\nhalted = 0\ndo until halted\n  r = s~wait(0.001)\nend\n\
+         call time 'R'\nr2 = t~wait\nsay 'waited' r2 (time('E') >= 0.5)\nexit\n\
+         h: halted = 1; return\n\
+         ::class w\n::method w\n  use arg t\n  call on halt name wh\n  call time 'R'\n\
+         \x20 do forever\n    if time('E') >= 2 then leave\n  end\n  t~post\n  return\n\
+         wh: return\n",
+        "",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nwaited 1 1\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// A long native method in a short loop: the halt is served when the method
+/// returns.
+#[test]
+fn sigint_halts_after_a_long_method() {
+    halts(
+        "method",
+        "do i = 1 to 30\n  v = 'ab'~copies(30000000)\nend\nsay 'done'\n",
+        "",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(252),
+            stdout: String::new(),
+            stderr: "     2 *-*   v = 'ab'~copies(30000000)\n\
+                     Error 4 running PROGRAM line 2:  Program interrupted.\n\
+                     Error 4.1:  Program interrupted with HALT condition.\n"
+                .to_string(),
+        },
+    );
+}
+
+/// A second signal while the `CALL ON HALT` handler runs is dropped, as the
+/// oracle's delayed trap drops it.
+#[test]
+fn a_second_signal_in_a_call_on_halt_handler_is_dropped() {
+    halts_after(
+        "secondbusy",
+        "call on halt name h\nsay 'ready'\ncall SysSleep 1\nsay 'main after'\nexit\n\
+         h:\n  say 'h in' sigl\n  call time 'R'\n  do forever\n    if time('E') >= 1.5 then leave\n\
+         \x20 end\n  say 'h out'\n  return\n",
+        "ready\n",
+        &[
+            Step::Pause(Duration::from_millis(300)),
+            Step::Signal("INT"),
+            Step::Pause(Duration::from_millis(700)),
+            Step::Signal("INT"),
+        ],
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nmain after\nh in 4\nh out\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// The second signal ends the handler's own sleep, which answers EINTR, and
+/// raises nothing.
+#[test]
+fn a_second_signal_ends_a_handlers_sleep() {
+    halts_after(
+        "secondsleep",
+        "call on halt name h\nsay 'ready'\ncall SysSleep 1\nsay 'main after'\nexit\n\
+         h:\n  say 'h in' sigl\n  r = SysSleep(1.5)\n  say 'h out' r\n  return\n",
+        "ready\n",
+        &[
+            Step::Pause(Duration::from_millis(300)),
+            Step::Signal("INT"),
+            Step::Pause(Duration::from_millis(700)),
+            Step::Signal("INT"),
+        ],
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nmain after\nh in 4\nh out 4\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// The abandoned child outlives the next command; its later end ends
+/// nothing, and the next command answers its own RC at its own end. The
+/// oracle's `first` RC is unset; this program does not print it.
+#[test]
+fn an_abandoned_command_ends_no_shorter_later_one() {
+    halts(
+        "commandtoken",
+        "call on halt name h\nsay 'a'\naddress system 'sleep 3; exit 7'\nsay 'first'\n\
+         call time 'R'\naddress system 'sleep 0.3'\nsay 'second' rc (time('E') < 1)\nexit\n\
+         h: say 'halted' sigl; return\n",
+        "a\n",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "a\nfirst\nhalted 4\nsecond 0 1\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// The chunk a halted read was waiting for is kept for the next read, and
+/// the counts answer again once a read has. The oracle's second read answers
+/// the null string: it loses `one` (DEVIATIONS entry 10); the rest is its.
+#[test]
+fn a_halted_read_loses_no_input() {
+    halts_after(
+        "readafter",
+        "call on halt name h\nsay 'ready'\nparse pull v\nsay 'v=['v']'\nparse pull v\n\
+         say 'v=['v']'\nv = linein()\nsay 'v=['v']'\nv = charin(,,3)\nsay 'v=['v']'\n\
+         say lines() chars()\nv = linein()\nsay 'v=['v']'\nv = linein()\nsay 'v=['v']'\nexit\n\
+         h: say 'halted' sigl; return\n",
+        "ready\n",
+        &[
+            Step::Pause(Duration::from_millis(300)),
+            Step::Signal("INT"),
+            Step::Pause(Duration::from_millis(500)),
+            Step::Write("one\ntwo\nthree\nfour\n"),
+        ],
+        Launch::Reading,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nhalted 3\nv=[]\nv=[one]\nv=[two]\nv=[thr]\n1 1\nv=[ee]\nv=[four]\n"
+                .to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// `/proc/<pid>/stat`'s user and system time, in clock ticks.
+fn cpu_ticks(pid: u32) -> u64 {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).expect("the process's stat");
+    let (_, fields) = stat
+        .rsplit_once(')')
+        .expect("stat names the command in parentheses");
+    let fields: Vec<&str> = fields.split_whitespace().collect();
+    let field = |at: usize| fields[at].parse::<u64>().expect("a tick count");
+    field(11) + field(12)
+}
+
+/// A read of standard input idles while another activity's command end
+/// waits to be filed, rather than spinning: measured by the process's CPU
+/// time over the wait.
+#[test]
+fn a_stdin_read_waits_without_spinning() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("signals-spin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("the probe directory");
+    let file = dir.join("spin.rex");
+    std::fs::write(
+        &file,
+        "o = .w~new\no~start('w')\ncall SysSleep 0.2\nparse pull v\nsay 'v=['v']'\nexit\n\
+         ::class w\n::method w\n  address system 'sleep 1'\n",
+    )
+    .expect("the probe");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(&file)
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("rexx-run starts");
+    std::thread::sleep(Duration::from_millis(1500));
+    let before = cpu_ticks(child.id());
+    std::thread::sleep(Duration::from_millis(1000));
+    let after = cpu_ticks(child.id());
+    {
+        use std::io::Write;
+        let mut input = child.stdin.take().expect("piped stdin");
+        input.write_all(b"hi\n").expect("the write");
+    }
+    let output = child.wait_with_output().expect("rexx-run ends");
+    std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "v=[hi]\n");
+    // USER_HZ is 100: under a tenth of the second the read waited.
+    assert!(
+        after - before < 10,
+        "{} ticks over a 1 s wait",
+        after - before
     );
 }

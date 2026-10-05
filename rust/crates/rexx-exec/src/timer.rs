@@ -413,6 +413,26 @@ impl Drop for Registration {
     }
 }
 
+/// Posts a halt to every live interpreter if a signal arrived since the
+/// last take.
+fn post_signal_halts(wake: &Wake, live: &State) {
+    if wake.take_signal() {
+        for entry in &live.live {
+            entry.inbox.post(halt());
+            entry.inbox.requests().set(HALT);
+        }
+    }
+}
+
+/// What the timer thread does for a signal, done now on this thread: a
+/// signal that arrived with a blocking wait's end is served before the
+/// wait's activity runs on.
+#[cfg(not(all(loom, test)))]
+pub(crate) fn serve_signal() {
+    let registry = registry();
+    post_signal_halts(&registry.wake, &lock(&registry.state));
+}
+
 /// The timer thread: posts a halt to every interpreter if a signal arrived,
 /// ticks, then sleeps until the next deadline, or with no deadline where
 /// there is none, until a wake; it ends when none is registered.
@@ -425,12 +445,7 @@ fn run_timer() {
                 live.timer_running = false;
                 return;
             }
-            if registry.wake.take_signal() {
-                for entry in &live.live {
-                    entry.inbox.post(halt());
-                    entry.inbox.requests().set(HALT);
-                }
-            }
+            post_signal_halts(&registry.wake, &live);
             let now = now();
             live.tick(now).map(|at| at.saturating_duration_since(now))
         };

@@ -922,7 +922,7 @@ impl Interp {
         let kept = self.activity.input_dispatch_syntax.take();
         let outcome = match outcome? {
             Commanded::Done(outcome) => {
-                self.serve_posted_halt();
+                self.serve_signal_now();
                 outcome
             }
             Commanded::Left(token) => {

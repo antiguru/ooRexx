@@ -2390,12 +2390,15 @@ impl Interp {
                     (Arity::Fixed(arity), _) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
                     }
-                    (_, NativeBody::Run(run)) => pinned!(
-                        self,
-                        crate::pinning::PinKind::native(name),
-                        run(self, cleared, receiver, args)
-                    )
-                    .map(NativeStarted::Ran),
+                    (_, NativeBody::Run(run)) => {
+                        let ran = pinned!(
+                            self,
+                            crate::pinning::PinKind::native(name),
+                            run(self, cleared, receiver, args)
+                        );
+                        self.serve_posted_halt();
+                        ran.map(NativeStarted::Ran)
+                    }
                     (_, NativeBody::Begin(begin)) => begin(self, cleared, receiver, args),
                 };
                 match outcome {

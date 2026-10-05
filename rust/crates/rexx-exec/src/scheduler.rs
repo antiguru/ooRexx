@@ -350,6 +350,16 @@ impl Activities {
         }
     }
 
+    /// Puts `activity` at the back of the ready queue unless it is ready
+    /// already: a second entry would end the next park it makes.
+    fn make_ready(&mut self, activity: ActivityId) {
+        if !self.ready.contains(&activity)
+            && !self.set_aside.iter().any(|(set, _)| *set == activity)
+        {
+            self.ready.push_back(activity);
+        }
+    }
+
     /// Appends every `ObjRef` an activity that is not running holds.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         for failure in &self.late_failures {
@@ -570,7 +580,7 @@ impl Scheduler for Interp {
 
     fn unpark(&mut self, activity: ActivityId) {
         self.activities.guards.woken(activity);
-        self.activities.ready.push_back(activity);
+        self.activities.make_ready(activity);
     }
 
     fn yield_at_slice(&mut self) {
@@ -1261,6 +1271,7 @@ impl Interp {
                     token,
                     ended,
                 } => {
+                    self.serve_signal_now();
                     let abandoned = &mut self.activities.abandoned_blocks;
                     if let Some(at) = abandoned.iter().position(|held| *held == token) {
                         abandoned.swap_remove(at);
@@ -1375,7 +1386,7 @@ impl Interp {
                 break;
             }
             table.sleepers.pop();
-            table.ready.push_back(sleeper);
+            table.make_ready(sleeper);
         }
     }
 
@@ -2041,11 +2052,23 @@ impl Interp {
     /// (`execution/RexxActivation.cpp:4085`-`:4093`), at the end of the
     /// clause the request found running, in that clause's activation: a
     /// `CALL ON` trap queues it, a `SIGNAL ON` trap takes it, and untrapped it
-    /// is 4.1.
+    /// is 4.1. A trap held while its handler runs drops it: the oracle queues
+    /// it on the handler's activation, which keeps it delayed until that
+    /// activation ends.
     pub(crate) fn raise_requested_halt(
         &mut self,
         description: Option<Vec<u8>>,
     ) -> Result<(), Failure> {
+        let held = self.trap_frame().is_some_and(|frame| {
+            let traps = &frame.traps;
+            traps
+                .get(b"HALT".as_slice())
+                .or_else(|| traps.get(b"ANY".as_slice()))
+                .is_some_and(|trap| trap.delayed)
+        });
+        if held {
+            return Ok(());
+        }
         let raised = Raised {
             description: description.clone(),
             ..Raised::condition(std::borrow::Cow::Borrowed("HALT"))
@@ -2145,7 +2168,7 @@ impl Interp {
                 .retain(|Reverse((_, sleeper, _))| *sleeper != order);
             if table.sleepers.len() < before {
                 record.woken_by_halt = true;
-                table.ready.push_back(activity);
+                table.make_ready(activity);
             }
         } else if std::mem::take(&mut record.when_parked) {
             record.woken_by_halt = true;
@@ -2181,6 +2204,15 @@ impl Interp {
         if self.timer.requests().pending(crate::timer::HALT) {
             self.serve_halt_now();
         }
+    }
+
+    /// Serves a signal whose handler has run and whose halt the timer thread
+    /// has not posted yet: a terminal's Ctrl-C ends a command's child and
+    /// signals this process at once, and the halt belongs to the command's
+    /// clause.
+    pub(crate) fn serve_signal_now(&mut self) {
+        crate::timer::serve_signal();
+        self.serve_posted_halt();
     }
 
     #[cold]

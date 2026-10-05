@@ -140,4 +140,46 @@ mod tests {
         assert_eq!(outcome.stdout, b"ran\n");
         assert!(!super::INSTALL.is_completed());
     }
+
+    /// Set in the process [`a_signal_pending_at_a_commands_end_halts_it`]
+    /// runs its case in.
+    const ALONE: &str = "REXX_SIGNAL_CASE_ALONE";
+
+    /// A signal whose handler ran as a command's child ended halts that
+    /// command's clause, before the timer thread posts it. The flag is set
+    /// with no wake written, so the timer thread does not take it.
+    #[test]
+    fn a_signal_pending_at_a_commands_end_halts_it() {
+        if std::env::var_os(ALONE).is_none() {
+            // The halt reaches every live interpreter in the process, so
+            // the case runs in a process of its own.
+            let name = "signal::tests::a_signal_pending_at_a_commands_end_halts_it";
+            let output = std::process::Command::new(std::env::current_exe().expect("this binary"))
+                .args(["--exact", name, "--test-threads=1"])
+                .env(ALONE, "1")
+                .output()
+                .expect("the case's process");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(output.status.success(), "{stdout}");
+            assert!(stdout.contains("1 passed"), "{stdout}");
+            return;
+        }
+        let raiser = std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            super::PENDING.store(true, super::Ordering::Release);
+        });
+        let outcome = crate::run_program(
+            "/no/such/dir/t.rex",
+            b"say 'a'\naddress system 'sleep 0.5'\nsay 'b' rc\n".to_vec(),
+            crate::Invocation::none(),
+        );
+        raiser.join().expect("the raiser");
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "a\n");
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            "     2 *-* address system 'sleep 0.5'\n\
+             Error 4 running /no/such/dir/t.rex line 2:  Program interrupted.\n\
+             Error 4.1:  Program interrupted with HALT condition.\n"
+        );
+    }
 }

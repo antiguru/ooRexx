@@ -113,8 +113,8 @@ impl Input {
         }
     }
 
-    /// A halt abandoned a read: the counts answer `0` from now on, as the
-    /// oracle's do after its interrupted read, and a later read still waits.
+    /// A halt abandoned a read: the counts answer `0` until a later read
+    /// answers something, as the oracle's do after its interrupted read.
     fn interrupted(&mut self) {
         self.exhausted = true;
     }
@@ -167,7 +167,7 @@ impl Input {
                 self.exhausted = true;
                 return None;
             }
-            Ok(_) => {}
+            Ok(_) => self.exhausted = false,
         }
         // The terminator is not part of the line, and a `\r` immediately
         // before it is not either -- but a `\r` anywhere else is data, and a
@@ -207,7 +207,10 @@ impl Input {
                 self.exhausted = true;
                 0
             }
-            Ok(count) => count,
+            Ok(count) => {
+                self.exhausted = false;
+                count
+            }
         };
         buffer.truncate(filled);
         buffer
@@ -337,8 +340,20 @@ impl Interp {
     /// it is posted or a signal's halt arrives (ruling P60). A halt abandons
     /// the wait, whose chunk is filed when it comes, and answers `false`:
     /// the read answers nothing, as the oracle's interrupted read does.
-    /// Other posts wait for the next drain.
+    /// Other posts wait for the next drain, held here so that an idle waits
+    /// for a new post.
     fn fill_stdin(&mut self, line: bool) -> bool {
+        let mut kept = std::collections::VecDeque::new();
+        let filled = self.fill_stdin_keeping(line, &mut kept);
+        self.timer.requeue(kept);
+        filled
+    }
+
+    fn fill_stdin_keeping(
+        &mut self,
+        line: bool,
+        kept: &mut std::collections::VecDeque<crate::scheduler::Posted>,
+    ) -> bool {
         while self.input.stdin_wants(line) {
             if self.input.start_stdin_read() {
                 let Some(worker) = self.pool.reserve() else {
@@ -353,7 +368,6 @@ impl Interp {
                     });
                 }));
             }
-            let mut kept = std::collections::VecDeque::new();
             let mut halted = false;
             for post in self.timer.idle() {
                 match post {
@@ -362,7 +376,6 @@ impl Interp {
                     other => kept.push_back(other),
                 }
             }
-            self.timer.requeue(kept);
             if halted {
                 self.input.interrupted();
                 self.halt_all();
