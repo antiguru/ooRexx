@@ -188,8 +188,22 @@ pub(crate) fn sleep(
     park_point!(interp, crate::pinning::ParkKind::SysSleep);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
     let done = answer(interp, 0);
-    interp.park_routine(crate::scheduler::ParkReason::Sleep { deadline }, done)
+    interp.park_routine_with(
+        crate::scheduler::ParkReason::Sleep { deadline },
+        |interp, done| {
+            interp.activity.asleep = None;
+            if std::mem::take(&mut interp.activity.woken_by_halt) {
+                return Ok(Some(answer(interp, EINTR)));
+            }
+            Ok(Some(done))
+        },
+        done,
+    )
 }
+
+/// What a sleep a halt ended answers: `nanosleep`'s errno
+/// (`SysThread::longSleep`, `common/platform/unix/SysThread.cpp:191`).
+const EINTR: i64 = 4;
 
 /// `ERROR_SEM_TIMEOUT`: a timed wait ended with nothing taken.
 const SEM_TIMEOUT: i64 = 121;

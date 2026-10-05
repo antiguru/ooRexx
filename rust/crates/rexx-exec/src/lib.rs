@@ -105,6 +105,9 @@ mod semaphores;
 // The live-interpreter registry, the timer thread and the inbox.
 mod timer;
 
+// The signal handlers (D-U3).
+mod signal;
+
 // The baton, and the synchronisation shim it, the inbox and the timer use.
 mod baton;
 mod sync;

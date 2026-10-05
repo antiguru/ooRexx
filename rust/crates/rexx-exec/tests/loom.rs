@@ -10,7 +10,8 @@
 /*----------------------------------------------------------------------------*/
 
 //! `loom` models of the baton, the inbox and the timer (spec 2026-09-29 R4),
-//! compiled from the interpreter's own sources against `loom`'s primitives.
+//! compiled from the interpreter's own sources against `loom`'s primitives;
+//! the timer's wake source is `sync.rs`'s model of the self-pipe.
 //! Empty unless built with `RUSTFLAGS="--cfg loom"`.
 
 #![cfg(loom)]
@@ -29,7 +30,7 @@ use loom::sync::atomic::{AtomicUsize, Ordering};
 use loom::thread;
 
 use baton::Baton;
-use timer::{INBOX, Inbox, Registration, SLICE};
+use timer::{HALT_POSTED, INBOX, Inbox, Registration, SLICE};
 
 /// Runs `body` as the baton's holder, failing if another thread is inside.
 fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
@@ -172,6 +173,38 @@ fn a_sleeper_registers_as_the_timer_exits() {
     });
 }
 
+/// A signal landing while the holder idles with no deadline, before or
+/// after it blocks, posts one halt that ends the idle.
+#[test]
+fn a_signal_halts_an_idle_holder() {
+    loom::model(|| {
+        let registration = Registration::new();
+        let handler = thread::spawn(timer::signal);
+        let mut posted = Vec::new();
+        while posted.is_empty() {
+            posted.extend(registration.idle());
+        }
+        handler.join().expect("the handler");
+        assert_eq!(posted, [HALT_POSTED]);
+        drop(registration);
+        timer::join_timer();
+    });
+}
+
+/// A signal that arrives while no interpreter is registered halts none
+/// registered after it.
+#[test]
+fn a_signal_between_interpreters_halts_nothing() {
+    loom::model(|| {
+        timer::signal();
+        let registration = Registration::new();
+        let inbox = registration.inbox();
+        drop(registration);
+        timer::join_timer();
+        assert!(inbox.drain().is_empty());
+    });
+}
+
 /// Touches interpreter state, failing if another thread is touching it.
 fn touch(inside: &AtomicUsize) {
     assert_eq!(
@@ -215,6 +248,8 @@ fn a_callback_during_an_off_baton_call_takes_the_baton_first() {
         baton.release();
         other.join().expect("the other thread");
         assert_eq!(Vec::from(registration.drain()), [1]);
+        drop(registration);
+        timer::join_timer();
     });
 }
 
@@ -237,6 +272,8 @@ fn a_loop_with_a_call_in_flight_waits_for_its_completion() {
         caller.join().expect("the call's thread");
         assert_eq!(taken, [7]);
         assert!(!registration.requests().pending(INBOX));
+        drop(registration);
+        timer::join_timer();
     });
 }
 
@@ -311,6 +348,8 @@ fn a_recall_posted_to_an_idle_holder_is_lent_the_baton() {
         touch(&inside);
         baton.release();
         pool.join().expect("the pool thread");
+        drop(registration);
+        timer::join_timer();
     });
 }
 
@@ -333,6 +372,8 @@ fn a_requeued_post_is_drained_again_ahead_of_later_posts() {
         poster.join().expect("the poster");
         assert!(registration.requests().pending(INBOX));
         assert_eq!(Vec::from(registration.drain()), [2, 3]);
+        drop(registration);
+        timer::join_timer();
     });
 }
 

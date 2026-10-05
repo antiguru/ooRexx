@@ -1465,6 +1465,23 @@ DEVIATIONS -- permanent, chosen
      this crate reads 61626364. No answer here should match the oracle's
      after a collection, which reads reclaimed memory.
 
+ 10. A SIGNAL HALTS WHERE THE ORACLE DIES OR HANGS (spec 2026-09-29
+     section 4). OWNER: none.
+
+     Under nohup SIGHUP is ignored, and the oracle, which reads only
+     SIGHUP's previous action (platform/unix/SystemInterpreter.cpp:136-139),
+     installs no handler, so SIGINT and SIGTERM kill it. This crate checks
+     each signal and halts: Error 4.1, rc 252. An activity parked in GUARD
+     WHEN is woken by the signal and takes the halt here; the oracle leaves
+     it parked and the process never ends.
+
+     Witnesses: rexx-exec's tests/signals.rs,
+     under_nohup_sigint_still_halts and sigint_reaches_a_parked_guard_when.
+     Measured 2026-10-05, oracle, 30 runs each, under timeout -s SIGNAL 1:
+     the sleep program under nohup ends by SIGINT (status 130) and by
+     SIGTERM (143); the GUARD WHEN program prints main's 4.1 and is killed
+     3 s later.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

@@ -1988,6 +1988,7 @@ impl Interp {
                         break;
                     };
                     self.activity.guard_posted = false;
+                    let halted = std::mem::take(&mut self.activity.woken_by_halt);
                     let frame = self.roots.activity_mut().push_frame();
                     let holds = self.eval_condition(
                         code,
@@ -2005,6 +2006,12 @@ impl Interp {
                             let reacquire = self.activation().flags.reserved();
                             self.guard_off(key);
                             if !self.activity.guard_posted {
+                                // A `CALL ON HALT` trap queues, and the wait
+                                // parks again.
+                                if halted && let Err(failure) = self.take_requested_halt() {
+                                    self.end_guard_exec(exec);
+                                    return Err(failure);
+                                }
                                 exec.wait = GuardExecWait::When { reacquire };
                                 self.activity.guard_exec = Some(Box::new(exec));
                                 return Ok(ExecOutcome::Park(

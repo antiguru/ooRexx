@@ -12,15 +12,16 @@
 //! The live-interpreter registry and the timer thread, the process's only
 //! global state (spec 2026-09-29 section 4, R3), and each interpreter's
 //! inbox. Each interpreter registers its inbox; the timer sets `SLICE` in
-//! every armed one each slice, and wakes an idle one through its inbox when
-//! the deadline it idles until is due. The timer thread ends when no
-//! interpreter is registered.
+//! every armed one each slice, wakes an idle one through its inbox when the
+//! deadline it idles until is due, and posts a halt to every one when a
+//! signal arrives. The timer thread runs while any interpreter is
+//! registered.
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crate::sync::{
-    Arc, AtomicU32, Condvar, Mutex, MutexGuard, Ordering, lock, now, thread, wait, wait_timeout,
+    Arc, AtomicU32, Condvar, Mutex, MutexGuard, Ordering, Wake, lock, now, thread, wait,
 };
 
 /// The running activity's slice is over.
@@ -39,6 +40,21 @@ pub(crate) type Posted = crate::scheduler::Posted;
 /// A model's stand-in for a completion.
 #[cfg(all(loom, test))]
 pub(crate) type Posted = u32;
+
+/// What the timer posts for a signal.
+#[cfg(not(all(loom, test)))]
+fn halt() -> Posted {
+    crate::scheduler::Posted::Halt
+}
+
+/// A model's stand-in for a signal's halt.
+#[cfg(all(loom, test))]
+pub(crate) const HALT_POSTED: Posted = u32::MAX;
+
+#[cfg(all(loom, test))]
+fn halt() -> Posted {
+    HALT_POSTED
+}
 
 /// An interpreter's request bits, which other threads set. No data is
 /// published through a bit: what a post carries is under the inbox's lock.
@@ -224,8 +240,8 @@ impl State {
 
 struct Registry {
     state: Mutex<State>,
-    /// Notified when an entry is armed, idles or leaves.
-    changed: Condvar,
+    /// Woken when an entry is armed, idles or leaves, and by a signal.
+    wake: Wake,
 }
 
 impl Registry {
@@ -238,7 +254,7 @@ impl Registry {
                 #[cfg(all(loom, test))]
                 timers: Vec::new(),
             }),
-            changed: Condvar::new(),
+            wake: Wake::new(),
         }
     }
 }
@@ -270,9 +286,17 @@ pub(crate) struct Registration {
 }
 
 impl Registration {
+    /// Registers a new interpreter, installs the signal handlers where this
+    /// is the process's first, and starts the timer thread unless it runs.
+    /// A signal that arrived while none was registered halts nothing.
     pub(crate) fn new() -> Registration {
         let inbox = Arc::new(Inbox::new());
+        registry().wake.install_signals();
         let mut live = live();
+        if live.live.is_empty() {
+            registry().wake.take_signal();
+        }
+        live.start_timer();
         live.next_id += 1;
         let id = live.next_id;
         live.live.push(Live {
@@ -320,12 +344,10 @@ impl Registration {
             return;
         }
         self.armed = true;
-        let mut live = live();
-        live.start_timer();
-        if let Some(entry) = live.entry(self.id) {
+        if let Some(entry) = live().entry(self.id) {
             entry.slice_began = Some(now());
         }
-        registry().changed.notify_one();
+        registry().wake.notify();
     }
 
     /// Whether the registry has this interpreter armed.
@@ -350,20 +372,22 @@ impl Registration {
     /// posted to the inbox, and answers what was posted.
     pub(crate) fn idle_until(&self, at: Instant) -> VecDeque<Posted> {
         self.inbox.expect_wake();
-        {
-            let mut live = live();
-            live.start_timer();
-            if let Some(entry) = live.entry(self.id) {
-                entry.idle_until = Some(at);
-            }
-            registry().changed.notify_one();
+        if let Some(entry) = live().entry(self.id) {
+            entry.idle_until = Some(at);
         }
+        registry().wake.notify();
         let posted = self.inbox.idle();
         if let Some(entry) = live().entry(self.id) {
             entry.idle_until = None;
         }
         posted
     }
+}
+
+/// What a signal handler does to the wake source.
+#[cfg(all(loom, test))]
+pub(crate) fn signal() {
+    registry().wake.signal();
 }
 
 /// Waits for every timer thread started to end.
@@ -378,25 +402,30 @@ pub(crate) fn join_timer() {
 impl Drop for Registration {
     fn drop(&mut self) {
         live().live.retain(|entry| entry.id != self.id);
-        registry().changed.notify_one();
+        registry().wake.notify();
     }
 }
 
-/// The timer thread: ticks, then sleeps until the next deadline, or with no
-/// deadline where there is none, until a registration changes; it ends when
-/// none is left.
+/// The timer thread: posts a halt to every interpreter if a signal arrived,
+/// ticks, then sleeps until the next deadline, or with no deadline where
+/// there is none, until a wake; it ends when none is registered.
 fn run_timer() {
     let registry = registry();
-    let mut live = lock(&registry.state);
     loop {
-        if live.live.is_empty() {
-            live.timer_running = false;
-            return;
-        }
-        let now = now();
-        live = match live.tick(now) {
-            None => wait(&registry.changed, live),
-            Some(at) => wait_timeout(&registry.changed, live, at.saturating_duration_since(now)),
+        let timeout = {
+            let mut live = lock(&registry.state);
+            if live.live.is_empty() {
+                live.timer_running = false;
+                return;
+            }
+            if registry.wake.take_signal() {
+                for entry in &live.live {
+                    entry.inbox.post(halt());
+                }
+            }
+            let now = now();
+            live.tick(now).map(|at| at.saturating_duration_since(now))
         };
+        registry.wake.wait(timeout);
     }
 }

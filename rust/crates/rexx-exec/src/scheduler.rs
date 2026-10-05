@@ -158,6 +158,8 @@ pub(crate) enum Posted {
     },
     /// A pool thread's job panicked; the baton's holder panics with it.
     Panicked(Box<dyn std::any::Any + Send>),
+    /// A signal arrived: every activity is halted ([`Interp::halt_all`]).
+    Halt,
 }
 
 /// A native call's completion, posted to the inbox by the thread that ran
@@ -511,6 +513,8 @@ impl Scheduler for Interp {
                 table
                     .sleepers
                     .push(Reverse((deadline, table.next_sleeper, running)));
+                self.activity.asleep = Some(table.next_sleeper);
+                self.activity.woken_by_halt = false;
             }
             ParkReason::Timer { deadline, cancel } => {
                 table.next_sleeper += 1;
@@ -1226,6 +1230,7 @@ impl Interp {
                 } => self.write_out(&bytes),
                 Posted::Output { error: true, bytes } => self.write_err(&bytes),
                 Posted::Panicked(payload) => std::panic::resume_unwind(payload),
+                Posted::Halt => self.halt_all(),
                 Posted::Unblocked { activity, ended } => {
                     self.activities.in_flight -= 1;
                     if let Some(blocked) = self
@@ -1387,7 +1392,8 @@ impl Interp {
     /// Runs every started activity to its end, for the end of the program.
     /// One that nothing left can wake keeps the program waiting, as the
     /// oracle's termination does (`InterpreterInstance::terminate`,
-    /// `runtime/InterpreterInstance.cpp:562`), until the run's deadline.
+    /// `runtime/InterpreterInstance.cpp:562`), until the run's deadline or
+    /// a signal's halt wakes it.
     pub(crate) fn run_started_activities(&mut self) -> Result<(), Failure> {
         self.cancel_wait();
         loop {
@@ -1403,19 +1409,18 @@ impl Interp {
                 && table.sleepers.is_empty()
                 && table.in_flight == table.runs_below
             {
-                return Err(self.idle_for_good());
+                self.idle_for_good()?;
             }
         }
     }
 
-    /// Idles this thread with nothing left that can wake an activity: only
-    /// the run's deadline ends it.
-    fn idle_for_good(&mut self) -> Failure {
-        loop {
-            if let Err(failure) = self.idle_until(Instant::now() + TIMER_DAY) {
-                return failure;
-            }
+    /// Idles this thread with nothing left that can wake an activity but a
+    /// signal's halt; the run's deadline ends it.
+    fn idle_for_good(&mut self) -> Result<(), Failure> {
+        while self.activities.ready.is_empty() {
+            self.idle_until(Instant::now() + TIMER_DAY)?;
         }
+        Ok(())
     }
 
     /// Runs ready activities with the running one set aside, until it is
@@ -2052,27 +2057,98 @@ impl Interp {
                 .map(|idle| &mut idle.activity)
                 .find(|activity| runs(activity))
         };
-        let Some(target) = target else {
-            return true;
-        };
-        let Some(activation) = target.running.as_ref().map(|running| running.id) else {
-            return true;
-        };
-        if target.pending_traps.iter().any(|pending| pending.request) {
-            return false;
+        match target {
+            Some(target) => request_halt(target, description) != Some(false),
+            None => true,
         }
-        target.pending_traps.push_back(PendingTrap {
-            condition: b"HALT".as_slice().into(),
-            rc: None,
-            description,
-            object: None,
-            activation,
-            queued_during_delivery: true,
-            request: true,
-            fragment_depth: target.fragment_depth,
-        });
-        true
     }
+
+    /// A signal's halt (`InterpreterInstance::haltAllActivities`,
+    /// `runtime/InterpreterInstance.cpp:686`): every activity with a Rexx
+    /// frame is asked to raise `HALT` with no description, and one asleep in
+    /// `SysSleep` or parked in a `GUARD WHEN` is woken to take it.
+    pub(crate) fn halt_all(&mut self) {
+        let running = self.activities.running;
+        if request_halt(&mut self.activity, None) == Some(true) {
+            self.wake_for_halt(running);
+        }
+        for index in 0..self.activities.idle.len() {
+            let Some(Some(idle)) = self.activities.idle.get_mut(index) else {
+                continue;
+            };
+            if request_halt(&mut idle.activity, None) == Some(true) {
+                self.wake_for_halt(ActivityId(u32::try_from(index).expect("handles fit u32")));
+            }
+        }
+    }
+
+    /// Ends `activity`'s `SysSleep` or `GUARD WHEN` park, if it is in one.
+    fn wake_for_halt(&mut self, activity: ActivityId) {
+        let table = &mut self.activities;
+        let record = if activity == table.running {
+            &mut self.activity
+        } else {
+            match table.idle.get_mut(activity.0 as usize) {
+                Some(Some(idle)) => &mut idle.activity,
+                _ => return,
+            }
+        };
+        if let Some(order) = record.asleep.take() {
+            let before = table.sleepers.len();
+            table
+                .sleepers
+                .retain(|Reverse((_, sleeper, _))| *sleeper != order);
+            if table.sleepers.len() < before {
+                record.woken_by_halt = true;
+                table.ready.push_back(activity);
+            }
+        } else if std::mem::take(&mut record.when_parked) {
+            record.woken_by_halt = true;
+            self.unpark(activity);
+        }
+    }
+
+    /// Takes the running activation's halt request and raises it, for a
+    /// `GUARD WHEN` a halt woke: `true` where one was taken.
+    pub(crate) fn take_requested_halt(&mut self) -> Result<bool, Failure> {
+        let here = self.activation().id;
+        let Some(at) = self
+            .activity
+            .pending_traps
+            .iter()
+            .position(|pending| pending.request && pending.activation == here)
+        else {
+            return Ok(false);
+        };
+        let pending = self
+            .activity
+            .pending_traps
+            .remove(at)
+            .expect("position answered an index inside the queue");
+        self.raise_requested_halt(pending.description)?;
+        Ok(true)
+    }
+}
+
+/// Queues a halt request for `target`'s running activation
+/// (`RexxActivation::halt`): `None` where it has none, `Some(false)` where
+/// one is already queued, else `Some(true)`.
+fn request_halt(target: &mut Activity, description: Option<Vec<u8>>) -> Option<bool> {
+    let activation = target.running.as_ref()?.id;
+    if target.pending_traps.iter().any(|pending| pending.request) {
+        return Some(false);
+    }
+    target.pending_traps.push_back(PendingTrap {
+        condition: b"HALT".as_slice().into(),
+        rc: None,
+        description,
+        object: None,
+        activation,
+        queued_during_delivery: true,
+        request: true,
+        fragment_depth: target.fragment_depth,
+    });
+    Some(true)
 }
 
 #[cfg(test)]

@@ -42,17 +42,106 @@ pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexG
     condvar.wait(guard).unwrap_or_else(PoisonError::into_inner)
 }
 
-/// [`wait`], for at most `timeout`. `loom` models no timeouts, so a model
-/// waits for a notification.
-pub(crate) fn wait_timeout<'a, T>(
-    condvar: &Condvar,
-    guard: MutexGuard<'a, T>,
-    timeout: Duration,
-) -> MutexGuard<'a, T> {
-    condvar
-        .wait_timeout(guard, timeout)
-        .unwrap_or_else(PoisonError::into_inner)
-        .0
+/// The timer thread's wake source: a socket pair whose read end the timer
+/// waits on, with a read timeout for its next deadline, and whose
+/// nonblocking write end registration changes and the signal handlers each
+/// write one byte to. It is never closed, so a byte written while no timer
+/// thread reads stays until one does.
+#[cfg(not(all(loom, test)))]
+pub(crate) struct Wake {
+    reader: std::os::unix::net::UnixStream,
+    writer: std::os::unix::net::UnixStream,
+}
+
+#[cfg(not(all(loom, test)))]
+impl Wake {
+    pub(crate) fn new() -> Wake {
+        let (reader, writer) =
+            std::os::unix::net::UnixStream::pair().expect("the timer's wake socket");
+        writer
+            .set_nonblocking(true)
+            .expect("a nonblocking wake socket");
+        Wake { reader, writer }
+    }
+
+    /// Wakes the timer. A full socket already holds a wake.
+    pub(crate) fn notify(&self) {
+        use std::io::Write;
+        let _ = (&self.writer).write(&[0]);
+    }
+
+    /// Blocks until a wake or `timeout`, taking every wake written.
+    pub(crate) fn wait(&self, timeout: Option<Duration>) {
+        use std::io::Read;
+        if timeout == Some(Duration::ZERO) {
+            return;
+        }
+        let _ = self.reader.set_read_timeout(timeout);
+        let mut bytes = [0u8; 64];
+        let _ = (&self.reader).read(&mut bytes);
+    }
+
+    /// Installs the signal handlers, writing to this socket.
+    pub(crate) fn install_signals(&self) {
+        use std::os::fd::AsRawFd;
+        crate::signal::install(self.writer.as_raw_fd());
+    }
+
+    /// Whether a signal arrived since the last call.
+    pub(crate) fn take_signal(&self) -> bool {
+        crate::signal::take_pending()
+    }
+}
+
+/// The model's wake source: a wake flag and a signal flag under a lock, set
+/// by a notify and a signal and taken by a wait and `take_signal`. Timeouts
+/// are not modelled, so a wait waits for a notify.
+#[cfg(all(loom, test))]
+pub(crate) struct Wake {
+    state: Mutex<WakeState>,
+    arrived: Condvar,
+}
+
+#[cfg(all(loom, test))]
+#[derive(Default)]
+struct WakeState {
+    woken: bool,
+    signalled: bool,
+}
+
+#[cfg(all(loom, test))]
+impl Wake {
+    pub(crate) fn new() -> Wake {
+        Wake {
+            state: Mutex::new(WakeState::default()),
+            arrived: Condvar::new(),
+        }
+    }
+
+    pub(crate) fn notify(&self) {
+        lock(&self.state).woken = true;
+        self.arrived.notify_one();
+    }
+
+    pub(crate) fn wait(&self, _timeout: Option<Duration>) {
+        let mut state = lock(&self.state);
+        while !state.woken {
+            state = wait(&self.arrived, state);
+        }
+        state.woken = false;
+    }
+
+    pub(crate) fn install_signals(&self) {}
+
+    /// What a signal handler does: the pending flag, then the wake.
+    pub(crate) fn signal(&self) {
+        lock(&self.state).signalled = true;
+        self.notify();
+    }
+
+    pub(crate) fn take_signal(&self) -> bool {
+        std::mem::take(&mut lock(&self.state).signalled)
+    }
 }
 
 #[cfg(not(all(loom, test)))]
