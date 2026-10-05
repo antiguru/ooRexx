@@ -255,8 +255,8 @@ reached, a release with ready activities leaves them for the next thread that ta
   at +0.27% on emptyloop and +0.06% on rexxcps, and N = 1024 is measured in S0.
 * **Timer thread.** One per process. An interpreter arms it when it has a second ready activity, a
   due sleeper, or a pending completion or baton request; with nothing armed it sleeps with no
-  deadline, and it ends when no interpreter is registered, started again by the next arm or idle
-  (ruling P49). It sets the SLICE bit after the oracle's 24 ms and wakes idle interpreters for due
+  deadline, and it ends when no interpreter is registered, started again by the next registration
+  (ruling P49), so that a signal always has a reader while an interpreter is live. It sets the SLICE bit after the oracle's 24 ms and wakes idle interpreters for due
   sleepers. SLICE switches at that clause boundary, never mid-clause, and while pinned is deferred to
   the next unpinned boundary (P6-4). Precedent: CPython's `eval_breaker`, Ruby's timer thread.
 * **Baton requests** come only from C callbacks (2.4). Against an unpinned holder a callback sets
