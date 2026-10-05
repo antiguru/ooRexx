@@ -353,10 +353,10 @@ impl Surface for FakeHost {
         self.text(&vec![0; length])
     }
 
-    fn finish_string(&mut self, string: ObjRef, written: &[u8]) {
+    fn finish_string(&mut self, string: ObjRef, made: &[u8], length: usize) {
         if let Some(Body::Text { bytes, .. }) = self.heap.get_mut(string).map(|held| &mut held.body)
         {
-            *bytes = Bytes::from_slice(written);
+            *bytes = Bytes::from_slice(&made[..length]);
         }
     }
 

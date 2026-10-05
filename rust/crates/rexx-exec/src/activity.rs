@@ -588,16 +588,7 @@ impl Activity {
         // reference to it: nothing on the Rexx side names an object a native
         // method allocated and has not returned yet.
         for frame in native_handles {
-            out.extend(frame.locals.roots());
-            out.extend([frame.owner, frame.scope, frame.receiver]);
-            out.extend(frame.arguments.iter().copied().flatten());
-            out.extend(frame.argument_list);
-            out.extend(frame.lent.iter().copied());
-            out.extend(
-                [frame.additional, frame.result, frame.condition]
-                    .into_iter()
-                    .flatten(),
-            );
+            frame.object_roots(out);
         }
         // Each queued trap's condition object. Destructured rather than
         // reached by field: the match above guards `Activity`'s own fields, and

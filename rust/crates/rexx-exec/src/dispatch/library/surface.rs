@@ -196,20 +196,21 @@ impl Surface for Interp {
         string
     }
 
-    fn finish_string(&mut self, string: ObjRef, written: &[u8]) {
+    fn finish_string(&mut self, string: ObjRef, made: &[u8], length: usize) {
         if let Some(Body::Text { bytes, num }) =
             self.heap.get_mut(string).map(|held| &mut held.body)
         {
-            *bytes = Bytes::from_slice(written);
+            *bytes = Bytes::from_slice(&made[..length]);
             *num = None;
         }
         // Rewritten where it lies, as the oracle's string data is: a call
         // may hold the address `StringData` answered for the unfinished
-        // string.
+        // string. Every byte made is copied and the terminator at the made
+        // length stays, as `RexxString::finish` sets only the length
+        // (`StringClass.hpp:541`).
         match self.kept_strings.get_mut(&string) {
-            Some(kept) if written.len() < kept.len() => {
-                kept[..written.len()].copy_from_slice(written);
-                kept[written.len()] = 0;
+            Some(kept) if made.len() < kept.len() => {
+                kept[..made.len()].copy_from_slice(made);
             }
             _ => {
                 self.kept_strings.remove(&string);

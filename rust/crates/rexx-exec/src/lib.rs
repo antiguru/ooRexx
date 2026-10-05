@@ -1856,6 +1856,21 @@ struct NativeFrame {
     reserved: bool,
 }
 
+impl NativeFrame {
+    fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        out.extend(self.locals.roots());
+        out.extend([self.owner, self.scope, self.receiver]);
+        out.extend(self.arguments.iter().copied().flatten());
+        out.extend(self.argument_list);
+        out.extend(self.lent.iter().copied());
+        out.extend(
+            [self.additional, self.result, self.condition]
+                .into_iter()
+                .flatten(),
+        );
+    }
+}
+
 /// What one just-installed dictionary key resolves to, handed to
 /// [`Interp::install_one_method`] by whichever installer minted it.
 #[derive(Clone)]
@@ -3343,6 +3358,8 @@ fn execute_on(
     let chunks_refused = interp.chunks_refused;
     #[cfg(test)]
     crate::dispatch::library::note_callback_takes(interp.baton.takes());
+    #[cfg(test)]
+    crate::scheduler::note_abandoned_held(&interp.activities);
 
     let outcome = Outcome {
         exit_code,

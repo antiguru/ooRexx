@@ -481,13 +481,14 @@ impl CStringPool {
             .map(|(_, bytes)| bytes.as_mut_ptr().cast())
     }
 
-    /// The first `length` bytes written for `string`, at most as many as
-    /// were made, which becomes the area's length. The area stays where it
-    /// is until the pool is cleared.
-    pub fn written(&mut self, string: ObjRef, length: usize) -> Option<Vec<u8>> {
+    /// Every byte written for `string`, and `length` capped at how many were
+    /// made, which becomes the area's length. The area stays where it is
+    /// until the pool is cleared.
+    pub fn written(&mut self, string: ObjRef, length: usize) -> Option<(Vec<u8>, usize)> {
         let (_, bytes) = self.writable.iter_mut().find(|(key, _)| *key == string)?;
+        let made = bytes.clone();
         bytes.truncate(length);
-        Some(bytes.clone())
+        Some((made, bytes.len()))
     }
 
     pub fn len(&self) -> usize {

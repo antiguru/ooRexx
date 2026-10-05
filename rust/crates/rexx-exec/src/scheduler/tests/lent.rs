@@ -44,27 +44,43 @@ fn library() -> rexx_api::load::Library {
 
 /// Runs `source` with this module's routines as the library `lenttest`,
 /// after replacing `PATH` in it with a file of the test's own, which the
-/// program writes to say its other activity is done.
-fn run(test: &str, source: &str) -> Ran {
+/// program writes to say its other activity is done, with
+/// [`crate::set_fail_native_wait`] set where `fail_native_wait`.
+fn run_lent(test: &str, source: &str, fail_native_wait: bool) -> Ran {
     let path = std::env::temp_dir().join(format!("rexx-lent-{}-{test}", std::process::id()));
-    let _ = std::fs::remove_file(&path);
+    let mut held = path.clone().into_os_string();
+    held.push(".held");
+    let files = [path.clone(), held.into()];
+    for file in &files {
+        let _ = std::fs::remove_file(file);
+    }
     let source = source.replace("PATH", &path.to_string_lossy());
     let ran = run_shaped(
         &source,
         Shape {
             library: (b"lenttest", library),
+            fail_native_wait,
             ..SHAPE
         },
     )
     .expect("the run did not panic");
-    let _ = std::fs::remove_file(&path);
+    for file in &files {
+        let _ = std::fs::remove_file(file);
+    }
     ran
+}
+
+fn run(test: &str, source: &str) -> Ran {
+    run_lent(test, source, false)
 }
 
 const ROUTINES: &str = "::requires 'lenttest' LIBRARY\n::class t\n";
 
 /// The method that says the other activity is done.
 const DONE: &str = "  call lineout 'PATH', 'done'\n  call lineout 'PATH'\n";
+
+/// The method that waits for `HOLDBUFFER` to hold its buffer's address.
+const HELD: &str = "  do 500 until SysFileExists('PATH.held')\n    call SysSleep 0.01\n  end\n";
 
 /// **A handle-carried value's kept string outlives a prune made while its
 /// call is in flight**: another activity asks for more kept strings than the
@@ -103,8 +119,7 @@ fn a_held_heap_string_survives_another_activitys_collection() {
 
 /// **A buffer grown while a call holds its address keeps the old storage
 /// until the call ends**: the call reads what it held, and its writes there
-/// afterwards are not seen (a licensed divergence; in the oracle they land
-/// in freed memory).
+/// are not seen, as in the oracle, whose growth also moves the bytes.
 #[test]
 fn a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds() {
     let ran = run(
@@ -112,7 +127,7 @@ fn a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds() {
         &format!(
             "b = .mutablebuffer~new('abcdefghijklmnopqrstuvwxyz')\nm = .t~new~start('grow', b)\n\
              say HOLDBUFFER(b, 'PATH', 'ZZ')\nsay b~substr(1, 4) b~length\nsay m~result\n\
-             {ROUTINES}::method grow\n  use arg b\n  b~append(copies('y', 5000))\n\
+             {ROUTINES}::method grow\n  use arg b\n{HELD}  b~append(copies('y', 5000))\n\
              {DONE}  return 'grown'\n"
         ),
     );
@@ -133,7 +148,7 @@ fn a_buffer_changed_in_place_under_a_call_stays_shared() {
         &format!(
             "b = .mutablebuffer~new('abcdefghijklmnopqrstuvwxyz')\nm = .t~new~start('overlay', b)\n\
              say HOLDBUFFER(b, 'PATH', 'ZZ')\nsay b~substr(1, 4) b~length\nsay m~result\n\
-             {ROUTINES}::method overlay\n  use arg b\n  b~overlay('XY', 3)\n\
+             {ROUTINES}::method overlay\n  use arg b\n{HELD}  b~overlay('XY', 3)\n\
              {DONE}  return 'overlaid'\n"
         ),
     );
@@ -145,14 +160,36 @@ fn a_buffer_changed_in_place_under_a_call_stays_shared() {
 }
 
 /// **Finishing a buffer string keeps the address `StringData` answered for
-/// it**, which then reads the finished bytes, as the oracle's one storage
-/// does (`RexxString::finish` sets only the length).
+/// it**, which then reads every byte written up to the length the string
+/// was made at, as the oracle's one storage does (`RexxString::finish` sets
+/// only the length): measured, oracle, `helloxxxxx` for the shorter finish.
 #[test]
 fn finishing_a_buffer_string_keeps_its_kept_string_in_place() {
     let ran = run(
         "finished",
-        "say FINISHEDINPLACE('hello')\n::requires 'lenttest' LIBRARY\n",
+        "say FINISHEDINPLACE('hello', 5)\nsay FINISHEDINPLACE('hello', 10)\n\
+         ::requires 'lenttest' LIBRARY\n",
     );
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
-    assert_eq!(ran.stdout(), "hello\n");
+    assert_eq!(ran.stdout(), "hello\nhelloxxxxx\n");
+}
+
+/// **A call abandoned while it runs keeps its frame until its completion is
+/// drained**, and no longer.
+#[test]
+fn an_abandoned_calls_frame_ends_with_its_completion() {
+    let ran = run_lent(
+        "abandoned",
+        &format!(
+            "s = .t~new~start('idle')\nsignal on syntax name abandoned\n\
+             say HOLDCSTRING('abc', 'PATH')\nsay 'unreached'\n\
+             abandoned:\nsay 'abandoned' condition('o')~code\n\
+             call lineout 'PATH', 'done'\ncall lineout 'PATH'\ncall SysSleep 0.3\n\
+             say s~result\n{ROUTINES}::method idle\n  call SysSleep 1\n  return 'idle'\n"
+        ),
+        true,
+    );
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "abandoned 11.1\nidle\n");
+    assert_eq!(ran.abandoned, 0, "the completion left the frame held");
 }

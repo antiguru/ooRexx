@@ -867,6 +867,54 @@ fn a_lent_buffers_old_storage_lives_until_its_last_call_ends() {
     assert_eq!(retired(&mut interp), 0);
 }
 
+/// **An abandoned call keeps what its frame holds until its completion is
+/// drained**: the buffer it lent stays rooted and its moved-out storage
+/// stays, as does its kept string's holder.
+#[test]
+fn an_abandoned_calls_frame_holds_until_its_completion() {
+    use rexx_api::callbacks::Surface;
+    use rexx_api::values::Host;
+    use rexx_core::ObjRef;
+    let mut interp = Interp::new();
+    let buffer = interp.new_mutable_buffer(16);
+    let carried = ObjRef::small_int(7).expect("a small integer");
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    interp.mutable_buffer(buffer).expect("a buffer");
+    interp.kept_c_string(carried, b"7").expect("a copy");
+    let token = interp.native_token();
+    interp.activity.native_call = Some(Box::new(super::NativeInFlight {
+        call: None,
+        frame: token,
+        pending: None,
+        stage: super::Stage::Left,
+        park: None,
+    }));
+    interp
+        .buffer_mut(buffer)
+        .expect("a buffer")
+        .bytes
+        .extend_from_slice(&[0; 4096]);
+    let retired = |interp: &mut Interp| interp.buffer(buffer).expect("a buffer").bytes.retired();
+    let rooted = |interp: &Interp| {
+        let mut roots = Vec::new();
+        interp.object_roots(&mut roots);
+        roots.contains(&buffer)
+    };
+    interp.abandon_native_call(ObjRef::NIL);
+    assert!(interp.activity.native_handles.is_empty());
+    assert_eq!(
+        retired(&mut interp),
+        1,
+        "the abandon freed the lent storage"
+    );
+    assert!(rooted(&interp), "the abandon unrooted the lent buffer");
+    assert_eq!(interp.kept_holders.get(&carried), Some(&1));
+    interp.end_abandoned_call(token);
+    assert_eq!(retired(&mut interp), 0);
+    assert!(!rooted(&interp));
+    assert_eq!(interp.kept_holders.get(&carried), None);
+}
+
 /// **Copies of handle-carried values stay bounded without a collection**:
 /// calls that each ask for a new one, and allocate nothing, leave at most
 /// the prune's bound behind.

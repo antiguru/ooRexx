@@ -880,12 +880,13 @@ pub unsafe extern "C-unwind" fn hold_c_string(
     std::ptr::null_mut()
 }
 
-/// `HOLDBUFFER(buffer, path, mark)`: keeps the address `MutableBufferData`
-/// answers, waits up to five seconds for a file at `path`, then reads the
-/// buffer's length in bytes from that address and writes `mark` over its
-/// start, answering what it read, or `unawaited` where no file appeared: a
-/// native holding a buffer's storage across other activities' work, for a
-/// test.
+/// `HOLDBUFFER(buffer, path, mark)`: keeps the address and length
+/// `MutableBufferData` and `MutableBufferLength` answer, writes a file at
+/// `path` with `.held` appended, waits up to five seconds for a file at
+/// `path`, then reads that many bytes from that address and writes `mark`
+/// over its start, answering what it read, or `unawaited` where no file
+/// appeared: a native holding a buffer's storage across other activities'
+/// work, for a test.
 ///
 /// # Safety
 /// As [`send_then_await`].
@@ -907,7 +908,8 @@ pub unsafe extern "C-unwind" fn hold_buffer(
     }
     // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments.
     // The interpreter keeps the storage at the address it answered for as
-    // long as the call is in flight, at least the length answered with it.
+    // long as the call is in flight. The test changes the buffer only after
+    // the `.held` file appears, so the length answered is that storage's.
     unsafe {
         let buffer = (*arguments.add(1)).value.value_RexxMutableBufferObject;
         let path = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING);
@@ -917,6 +919,9 @@ pub unsafe extern "C-unwind" fn hold_buffer(
         let functions = &*(*thread).functions;
         let data = (functions.MutableBufferData)(thread, buffer).cast::<u8>();
         let length = (functions.MutableBufferLength)(thread, buffer);
+        let mut held = path.clone().into_os_string();
+        held.push(".held");
+        let _ = std::fs::write(held, b"held");
         let read: Vec<u8> = if await_file(&path) {
             let read = (0..length).map(|at| data.add(at).read_volatile()).collect();
             for (at, byte) in mark.iter().take(length).enumerate() {
@@ -932,9 +937,11 @@ pub unsafe extern "C-unwind" fn hold_buffer(
     std::ptr::null_mut()
 }
 
-/// `FINISHEDINPLACE(text)`: makes a buffer string of `text`'s length, asks
-/// for its `StringData` before writing `text` through `BufferStringData` and
-/// finishing it, and answers what the first address then holds.
+/// `FINISHEDINPLACE(text, made)`: makes a buffer string of `made` bytes,
+/// asks for its `StringData` before filling it with `x` through
+/// `BufferStringData`, writing `text` over its start and finishing it at
+/// `text`'s length, and answers what the first address then holds up to its
+/// first NUL.
 ///
 /// # Safety
 /// As [`send_then_await`].
@@ -944,24 +951,31 @@ pub unsafe extern "C-unwind" fn finished_in_place(
     arguments: *mut ValueDescriptor,
 ) -> *mut u16 {
     use crate::values::code;
-    static SIGNATURE: [u16; 3] = [code::REXX_OBJECT_PTR, code::CSTRING, ARGUMENT_TERMINATOR];
+    static SIGNATURE: [u16; 4] = [
+        code::REXX_OBJECT_PTR,
+        code::CSTRING,
+        code::SIZE_T,
+        ARGUMENT_TERMINATOR,
+    ];
     if arguments.is_null() {
         return SIGNATURE.as_ptr().cast_mut();
     }
-    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares one argument. The
-    // buffer string is written up to the length it was made at.
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares two arguments.
+    // The buffer string is written up to the length it was made at, and the
+    // early address is read no further than the NUL the interpreter keeps
+    // after it.
     unsafe {
         let text = CStr::from_ptr((*arguments.add(1)).value.value_CSTRING).to_bytes();
+        let made = (*arguments.add(2)).value.value_size_t.max(text.len());
         let thread = (*context).threadContext;
         let functions = &*(*thread).functions;
-        let string = (functions.NewBufferString)(thread, text.len());
-        let early = (functions.StringData)(thread, string.cast()).cast::<u8>();
+        let string = (functions.NewBufferString)(thread, made);
+        let early = (functions.StringData)(thread, string.cast());
         let data = (functions.BufferStringData)(thread, string).cast::<u8>();
+        data.write_bytes(b'x', made);
         data.copy_from_nonoverlapping(text.as_ptr(), text.len());
         (functions.FinishBufferString)(thread, string, text.len());
-        let read: Vec<u8> = (0..text.len())
-            .map(|at| early.add(at).read_volatile())
-            .collect();
+        let read = CStr::from_ptr(early).to_bytes();
         (*arguments).value.value_RexxObjectPtr =
             (functions.NewString)(thread, read.as_ptr().cast(), read.len()).cast();
     }

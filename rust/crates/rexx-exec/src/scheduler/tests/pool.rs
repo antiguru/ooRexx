@@ -184,13 +184,15 @@ pub(super) const SHAPE: Shape = Shape {
     fail_native_wait: false,
 };
 
-/// A run: its outcome, its driver exits, the interpreter's thread, and how
-/// many times a callback took the baton.
+/// A run: its outcome, its driver exits, the interpreter's thread, how many
+/// times a callback took the baton, and how many abandoned calls' frames it
+/// still held at its end.
 pub(super) struct Ran {
     pub(super) outcome: Outcome,
     pub(super) exits: u64,
     pub(super) thread: ThreadId,
     pub(super) takes: u64,
+    pub(super) abandoned: usize,
 }
 
 impl Ran {
@@ -263,6 +265,7 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
                 exits: crate::scheduler::native_exits(),
                 thread: std::thread::current().id(),
                 takes: crate::dispatch::library::callback_takes(),
+                abandoned: crate::scheduler::abandoned_held(),
             }
         })
         .expect("the interpreter thread")

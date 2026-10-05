@@ -278,6 +278,9 @@ pub(crate) struct Activities {
     /// Native calls and blocking operations that have left their driver and
     /// whose completions have not been drained.
     in_flight: usize,
+    /// The native frames of calls abandoned while they ran, by frame token
+    /// ([`Interp::native_token`]), until their completions are drained.
+    abandoned: Vec<(u64, crate::NativeFrame)>,
     /// Those of them whose run is below the running loop, under a callback,
     /// so that no loop above them can wait for their completions.
     runs_below: usize,
@@ -328,6 +331,7 @@ impl Activities {
             next_native: 0,
             late_failures: Vec::new(),
             in_flight: 0,
+            abandoned: Vec::new(),
             runs_below: 0,
             guards: crate::guards::GuardTable::default(),
             semaphores: crate::semaphores::Semaphores::default(),
@@ -343,6 +347,9 @@ impl Activities {
         }
         for idle in self.idle.iter().flatten() {
             idle.object_roots(out);
+        }
+        for (_, frame) in &self.abandoned {
+            frame.object_roots(out);
         }
         for timer in self.timers.values() {
             out.extend(
@@ -371,6 +378,18 @@ impl Activities {
     }
 
     /// Whether a native call or a blocking operation is in flight.
+    /// Holds the native frame of a call abandoned while it ran, named by the
+    /// frame token `token`, until its completion is drained.
+    pub(crate) fn keep_abandoned(&mut self, token: u64, frame: crate::NativeFrame) {
+        self.abandoned.push((token, frame));
+    }
+
+    /// The native frame [`Activities::keep_abandoned`] holds for `token`.
+    pub(crate) fn take_abandoned(&mut self, token: u64) -> Option<crate::NativeFrame> {
+        let row = self.abandoned.iter().position(|(held, _)| *held == token)?;
+        Some(self.abandoned.swap_remove(row).1)
+    }
+
     pub(crate) fn in_flight(&self) -> bool {
         self.in_flight > 0
     }
@@ -1192,6 +1211,8 @@ impl Interp {
                     {
                         call.complete(completion);
                         self.unpark(activity);
+                    } else {
+                        self.end_abandoned_call(frame);
                     }
                 }
                 Posted::Recall(recall) => {
@@ -2058,6 +2079,21 @@ impl Interp {
 thread_local! {
     /// How many driver exits for a native call this thread has made.
     static NATIVE_EXITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// How many abandoned calls' frames the last run on this thread still
+    /// held at its end.
+    static ABANDONED_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// [`ABANDONED_HELD`]'s count.
+#[cfg(test)]
+pub(crate) fn abandoned_held() -> usize {
+    ABANDONED_HELD.with(std::cell::Cell::get)
+}
+
+/// Sets [`ABANDONED_HELD`] from `activities`.
+#[cfg(test)]
+pub(crate) fn note_abandoned_held(activities: &Activities) {
+    ABANDONED_HELD.with(|held| held.set(activities.abandoned.len()));
 }
 
 /// [`NATIVE_EXITS`]'s count.

@@ -81,8 +81,9 @@ pub trait Surface {
     /// [`Surface::finish_string`] fills.
     fn new_raw_string(&mut self, length: usize) -> ObjRef;
 
-    /// Replaces the bytes of a string [`Surface::new_raw_string`] made.
-    fn finish_string(&mut self, string: ObjRef, bytes: &[u8]);
+    /// Makes the first `length` of `made`, the bytes written to a string
+    /// [`Surface::new_raw_string`] made, that string's value.
+    fn finish_string(&mut self, string: ObjRef, made: &[u8], length: usize);
 
     /// A `Buffer` of `length` zero bytes.
     fn new_buffer(&mut self, length: usize) -> ObjRef;
@@ -743,13 +744,13 @@ impl Activation<'_> {
             "RexxThreadInterface.FinishBufferString",
             std::ptr::null_mut(),
             |cx| {
-                let Some(written) = cx.strings.written(object, length) else {
+                let Some((made, length)) = cx.strings.written(object, length) else {
                     return handle;
                 };
                 cx.host
                     .surface()
                     .expect("checked by with_surface")
-                    .finish_string(object, &written);
+                    .finish_string(object, &made, length);
                 handle
             },
         )

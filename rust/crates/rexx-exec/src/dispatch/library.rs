@@ -364,13 +364,18 @@ impl Interp {
 
     /// Drops the running activity's native call whose wait was ended by
     /// `failure` in place of its completion: its frame popped and its guard
-    /// lock released, as the call's own end does.
+    /// lock released. The native may still be running, so the frame keeps
+    /// what it holds for the native -- its handles' objects, kept strings and
+    /// lent buffers -- until the completion is drained
+    /// ([`Interp::end_abandoned_call`]).
     pub(crate) fn abandon_native_call(&mut self, receiver: ObjRef) {
         if self.activity.native_call.take().is_none() {
             return;
         }
         let scope = self.native_frame().scope;
-        let popped = self.pop_native_frame();
+        let token = self.native_token();
+        let (popped, frame) = self.take_native_frame();
+        self.activities.keep_abandoned(token, frame);
         if popped.reserved {
             self.release_guard(crate::guards::GuardKey {
                 object: receiver,
@@ -682,6 +687,23 @@ impl Interp {
     /// whether it was a method's, and keeps its cleared buffers for the next
     /// call to refill. The held condition's objects stay rooted as temps.
     fn pop_native_frame(&mut self) -> Popped {
+        let (answer, mut frame) = self.take_native_frame();
+        self.end_native_frame(&mut frame);
+        self.activity.native_spares.push(frame);
+        answer
+    }
+
+    /// Releases what the native frame of an abandoned call, named by the
+    /// frame token `token`, holds, once that call's completion is drained.
+    pub(crate) fn end_abandoned_call(&mut self, token: u64) {
+        if let Some(mut frame) = self.activities.take_abandoned(token) {
+            self.end_native_frame(&mut frame);
+        }
+    }
+
+    /// Pops the innermost native frame and takes its held condition out of
+    /// it, leaving the rest held.
+    fn take_native_frame(&mut self) -> (Popped, crate::NativeFrame) {
         let mut frame = self
             .activity
             .native_handles
@@ -698,6 +720,12 @@ impl Interp {
         for object in [answer.additional, answer.result].into_iter().flatten() {
             self.roots.activity_mut().push_temp(object);
         }
+        (answer, frame)
+    }
+
+    /// Clears `frame` for reuse, ending its hold on its kept strings and lent
+    /// buffers.
+    fn end_native_frame(&mut self, frame: &mut crate::NativeFrame) {
         frame.name.clear();
         frame.arguments.clear();
         frame.argument_list = None;
@@ -710,8 +738,6 @@ impl Interp {
                 state.bytes.release();
             }
         }
-        self.activity.native_spares.push(frame);
-        answer
     }
 
     /// Drops the kept copy of every handle-carried value no call in flight
