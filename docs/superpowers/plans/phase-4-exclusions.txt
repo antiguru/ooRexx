@@ -1437,6 +1437,34 @@ DEVIATIONS -- permanent, chosen
      carries itself, rather than enumerating the table, so its output is in
      the program's own order on both sides and needs no licence.
 
+  9. A NATIVE CALL'S OLD MUTABLEBUFFER STORAGE OUTLIVES A COLLECTION
+     (spec 2026-09-29 2.5). OWNER: none.
+
+     A native call on a pool thread holds the address MutableBufferData
+     answered while the holder runs other activities. Growth past the
+     storage moves the bytes on both interpreters: the oracle's
+     MutableBuffer::ensureCapacity
+     (interpreter/classes/MutableBufferClass.cpp:246) gives the buffer a new
+     data object and leaves the old one as garbage. So both agree while no
+     collection runs during the call: the call reads the bytes it held, and
+     Rexx does not see its writes. They differ only after a collection. The
+     oracle's reclaims the old object under the call, whose reads then answer
+     garbage; here the old storage stays valid until every call holding it
+     has ended. Writes made while the buffer is changed in place stay shared
+     on both.
+
+     Witnesses: the forge in
+     docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-20-forge/
+     (lent.cpp; build.sh). Measured 2026-10-05, oracle, 30 runs each:
+     grow.rex answers abcdefghijklmnopqrstuvwxyz / abcd 5026 / grown and
+     overlay.rex abXYefghijklmnopqrstuvwxyz / ZZXY 26 / overlaid, what
+     rexx-exec's
+     scheduler::tests::lent::a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds
+     and a_buffer_changed_in_place_under_a_call_stays_shared assert;
+     growgc.rex, which collects before the call reads, reads 00000000 where
+     this crate reads 61626364. No answer here should match the oracle's
+     after a collection, which reads reclaimed memory.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -5624,19 +5652,3 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   (NativeActivation::removeLocalReference,
   interpreter/execution/NativeActivation.cpp:1219). Output and rc agree.
   OWNER: Phase 9 (benchmark and resource parity).
-
-  C WRITES TO A MUTABLEBUFFER'S STORAGE AFTER ANOTHER ACTIVITY GREW IT ARE
-  NOT SEEN (spec 2026-09-29 2.5). A native call on a pool thread holds the
-  address MutableBufferData answered while the holder runs other
-  activities; one that grows the buffer past its storage moves the bytes to
-  new storage and keeps the old alive until every call holding it has
-  ended. The call reads and writes the old storage, and Rexx no longer sees
-  those writes. In the oracle the grown buffer takes a new data object
-  (MutableBuffer::ensureCapacity, interpreter/classes/MutableBufferClass.cpp:246),
-  so the writes are not seen there either, and the old object is garbage the
-  next collection may reclaim under the call. Writes made while the buffer
-  is changed in place stay shared on both. Witnesses: rexx-exec's
-  scheduler::tests::lent::a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds
-  and a_buffer_changed_in_place_under_a_call_stays_shared. OWNER: none; the
-  oracle's writes may land in reclaimed memory, which no answer here should
-  match.

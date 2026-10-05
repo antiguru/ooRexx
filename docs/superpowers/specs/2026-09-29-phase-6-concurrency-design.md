@@ -197,9 +197,12 @@ the baton: kept C strings (`kept_strings`, `dispatch/library.rs:984-1010`, prune
 (`dispatch/library/surface.rs:212-237`). The rule, per kind: storage lent to a native call is not
 freed or reallocated in place while that call is in flight. A kept string is not pruned while any
 call that received it is in flight; a MutableBuffer mutation that would reallocate lent storage
-allocates new storage and keeps the old alive until the lending call completes. C writes that land in
-the old storage after such a reallocation are not seen by Rexx, a licensed divergence (in the oracle
-they are writes into freed memory).
+allocates new storage and keeps the old alive until the lending call completes. C reads and writes
+through the old address after such a reallocation do not reach the buffer, as in the oracle, where
+growth gives the buffer a new data object (`MutableBuffer::ensureCapacity`,
+`interpreter/classes/MutableBufferClass.cpp:246`) and leaves the old one as garbage. The licensed
+divergence is that storage's lifetime: the oracle's next collection reclaims it under the call, after
+which the call's accesses touch freed memory; here it stays valid until the lending call completes.
 
 ### 2.6 Pinned waits
 
