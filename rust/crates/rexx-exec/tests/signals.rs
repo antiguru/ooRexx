@@ -1092,8 +1092,8 @@ fn halting_blocked(pid: u32) -> Vec<(String, bool)> {
             .find_map(|line| line.strip_prefix("SigBlk:"))
             .map(|mask| u64::from_str_radix(mask.trim(), 16).expect("a hex mask"))
             .expect("a SigBlk line");
-        // SIGHUP, SIGINT and SIGTERM.
-        let halting = 1 << (1 - 1) | 1 << (2 - 1) | 1 << (15 - 1);
+        // SIGHUP, SIGINT and SIGTERM: signal n is bit n - 1.
+        let halting = 0x4003;
         assert!(blocked & halting == 0 || blocked & halting == halting);
         threads.push((name.trim().to_string(), blocked & halting != 0));
     }
