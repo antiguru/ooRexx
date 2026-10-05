@@ -20,7 +20,9 @@
 //!
 //! Every test here depends on a wall-clock boundary (ruling P48): the signal
 //! must land inside a sleep, and the halt within [`PROMPT`]. A mismatch is
-//! run again once, and only a second mismatch fails.
+//! run again once, and only a second mismatch fails; the Ctrl-C witnesses
+//! run once, since the thread that takes a terminal's signal is the one
+//! that waits on the command (ruling P67).
 
 use std::io::Read;
 use std::os::unix::process::CommandExt;
@@ -248,6 +250,23 @@ fn halts_after(
     let (ended, took) = last.expect("a run");
     assert_eq!(ended, *expected, "{name} under SIG{signal}, twice");
     panic!("{name} under SIG{signal} took {took:?} to end, twice");
+}
+
+/// [`halts`] without the rerun.
+fn halts_at_once(
+    name: &str,
+    source: &str,
+    ready: &str,
+    signal: &'static str,
+    launch: Launch,
+    expected: &Ended,
+) {
+    let (ended, took) = run_steps(name, source, ready, &[Step::Signal(signal)], launch);
+    assert_eq!(ended, *expected, "{name} under SIG{signal}");
+    assert!(
+        took < PROMPT,
+        "{name} under SIG{signal} took {took:?} to end"
+    );
 }
 
 const SLEEP: &str = "say 'before'\nrc = SysSleep(5)\nsay 'after' rc\n";
@@ -484,7 +503,7 @@ fn sigint_ends_a_command_wait() {
 /// the script halts rather than running its next command.
 #[test]
 fn ctrl_c_halts_a_script_running_commands() {
-    halts(
+    halts_at_once(
         "group",
         "say 'a'\naddress system 'sleep 2'\nsay 'b' rc\naddress system 'sleep 2'\nsay 'c' rc\n",
         "a\n",
@@ -687,7 +706,7 @@ fn sigint_ends_a_semaphore_wait() {
 /// DEVIATIONS entry 12.
 #[test]
 fn ctrl_c_halts_a_redirected_command() {
-    halts(
+    halts_at_once(
         "redirected",
         "say 'a'\naddress system 'sleep 2' with output stem o.\nsay 'b' rc\n\
          address system 'sleep 2'\nsay 'c' rc\n",
@@ -842,6 +861,57 @@ fn a_second_signal_in_a_call_on_halt_handler_is_dropped() {
     );
 }
 
+/// A `CALL ON ANY` handler holds its `ANY` trap while it runs, so a second
+/// signal is dropped there too.
+#[test]
+fn a_second_signal_in_a_call_on_any_handler_is_dropped() {
+    halts_after(
+        "secondany",
+        "call on any name h\nsay 'ready'\ncall SysSleep 1\nsay 'main after'\nexit\n\
+         h:\n  say 'h in' sigl\n  call time 'R'\n  do forever\n    if time('E') >= 1.5 then leave\n\
+         \x20 end\n  say 'h out'\n  return\n",
+        "ready\n",
+        &[
+            Step::Pause(Duration::from_millis(300)),
+            Step::Signal("INT"),
+            Step::Pause(Duration::from_millis(700)),
+            Step::Signal("INT"),
+        ],
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nmain after\nh in 4\nh out\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
+/// A halt during a read of standard input reaches the started activity that
+/// ran while main waited, whose handler runs before main's.
+#[test]
+fn a_halt_during_a_read_reaches_an_activity_that_ran_meanwhile() {
+    halts_after(
+        "readhalt",
+        "call on halt name mh\no = .w~new; m = o~start('go')\nparse pull v\n\
+         say 'main [' || v || ']'\nm~result\nsay 'end'\nexit\nmh: say 'mh'; return\n\
+         ::class w\n::method go\n  call on halt name wh\n  address system 'exit 3'\n  say 'w' rc\n\
+         \x20 call time 'R'\n  do forever; if time('E') >= 2 then leave; end\n  return\n\
+         wh: say 'wh' rc; return\n",
+        "",
+        &[
+            Step::Signal("INT"),
+            Step::Pause(Duration::from_millis(1000)),
+            Step::Write("hi\n"),
+        ],
+        Launch::Reading,
+        &Ended {
+            code: Some(0),
+            stdout: "w 3\nwh 3\nmh\nmain []\nend\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
 /// The second signal ends the handler's own sleep, which answers EINTR, and
 /// raises nothing.
 #[test]
@@ -966,5 +1036,128 @@ fn a_stdin_read_waits_without_spinning() {
         after - before < 10,
         "{} ticks over a 1 s wait",
         after - before
+    );
+}
+
+/// Another activity runs while main waits on a read of standard input, as
+/// the oracle's threads do (ruling P66): oracle 30 of 30.
+#[test]
+fn an_activity_runs_while_main_reads() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("signals-readruns-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("the probe directory");
+    let file = dir.join("readruns.rex");
+    std::fs::write(
+        &file,
+        "o = .w~new\no~start('go')\nparse pull v\nsay 'main' v\nexit\n\
+         ::class w\n::method go\n  do i = 1 to 8\n    say 'w' i\n    call SysSleep 0.1\n  end\n",
+    )
+    .expect("the probe");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(&file)
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("rexx-run starts");
+    std::thread::sleep(Duration::from_millis(1500));
+    {
+        use std::io::Write;
+        let mut input = child.stdin.take().expect("piped stdin");
+        input.write_all(b"hi\n").expect("the write");
+    }
+    let output = child.wait_with_output().expect("rexx-run ends");
+    std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "w 1\nw 2\nw 3\nw 4\nw 5\nw 6\nw 7\nw 8\nmain hi\n"
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+}
+
+/// Each thread's blocked halting signals, by thread name.
+fn halting_blocked(pid: u32) -> Vec<(String, bool)> {
+    let mut threads = Vec::new();
+    for task in std::fs::read_dir(format!("/proc/{pid}/task")).expect("the threads") {
+        let task = task.expect("a thread").path();
+        let (Ok(name), Ok(status)) = (
+            std::fs::read_to_string(task.join("comm")),
+            std::fs::read_to_string(task.join("status")),
+        ) else {
+            continue;
+        };
+        let blocked = status
+            .lines()
+            .find_map(|line| line.strip_prefix("SigBlk:"))
+            .map(|mask| u64::from_str_radix(mask.trim(), 16).expect("a hex mask"))
+            .expect("a SigBlk line");
+        // SIGHUP, SIGINT and SIGTERM.
+        let halting = 1 << (1 - 1) | 1 << (2 - 1) | 1 << (15 - 1);
+        assert!(blocked & halting == 0 || blocked & halting == halting);
+        threads.push((name.trim().to_string(), blocked & halting != 0));
+    }
+    threads.sort();
+    threads
+}
+
+/// The halting signals reach only the interpreter's thread and a thread in a
+/// command's wait or a read of standard input (ruling P67): measured on each
+/// thread while a command runs, after it, and while a read waits.
+#[test]
+fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("signals-masks-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("the probe directory");
+    let file = dir.join("masks.rex");
+    std::fs::write(
+        &file,
+        "address system 'sleep 2'\ncall SysSleep 2\nparse pull v\nsay v\n",
+    )
+    .expect("the probe");
+    let mut child = Command::new("env")
+        .arg("--default-signal=INT,TERM,HUP")
+        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(&file)
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("rexx-run starts");
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        std::thread::sleep(Duration::from_secs(1));
+        seen.push(halting_blocked(child.id()));
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    {
+        use std::io::Write;
+        let mut input = child.stdin.take().expect("piped stdin");
+        input.write_all(b"x\n").expect("the write");
+    }
+    let output = child.wait_with_output().expect("rexx-run ends");
+    std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "x\n");
+    let thread = |name: &str, blocked: bool| (name.to_string(), blocked);
+    let run = thread("rexx-run", true);
+    let timer = thread("rexx-timer", true);
+    let interp = thread("rexx-interp", false);
+    // A command's wait reads the child's error stream on a thread of its own.
+    let waiting = thread("rexx-pool", false);
+    let idle = thread("rexx-pool", true);
+    assert_eq!(
+        seen,
+        [
+            vec![
+                interp.clone(),
+                waiting.clone(),
+                waiting.clone(),
+                run.clone(),
+                timer.clone()
+            ],
+            vec![interp.clone(), idle, run.clone(), timer.clone()],
+            vec![interp, waiting, run, timer],
+        ]
     );
 }

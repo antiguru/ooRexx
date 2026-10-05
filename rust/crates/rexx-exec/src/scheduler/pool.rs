@@ -175,6 +175,7 @@ impl Worker {
 
 /// A pool thread: runs each job it is sent, then waits idle for the next.
 fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
+    crate::signal::block();
     loop {
         let mail = {
             let mut mail = lock(&mailbox.mail);

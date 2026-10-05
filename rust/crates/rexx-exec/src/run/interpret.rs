@@ -227,7 +227,7 @@ impl Interp {
             self.route_trace_line(start);
         }
         loop {
-            let Some(line) = self.input_line() else {
+            let Some(line) = self.input_line()? else {
                 return Ok(false);
             };
             if line.is_empty() {

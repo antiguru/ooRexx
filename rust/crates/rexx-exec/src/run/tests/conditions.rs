@@ -512,6 +512,25 @@ fn a_call_trap_declines_a_condition_with_nowhere_to_resume_but_a_signal_trap_tak
     );
 }
 
+/// A `CALL ON ANY` handler is held by its `ANY` entry while it runs, so the
+/// `ERROR` its own command raises is not trapped again. Oracle bytes; the
+/// counter bounds the recursion a held `ERROR` entry would allow.
+#[test]
+fn a_call_on_any_handler_holds_its_any_trap() {
+    let outcome = crate::run_program(
+        "/no/such/dir/t.rex",
+        b"call on any name h\nn = 0\naddress system 'exit 1'\nsay 'main after'\nexit\n\
+          h:\n  n = n + 1\n  if n > 3 then return\n  say 'h in' condition('C')\n\
+            address system 'exit 2'\n  say 'h out' rc\n  return\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "h in ERROR\nh out 2\nmain after\n"
+    );
+}
+
 // ---- fix round 1: the pending-trap delivery boundary, and its identity ----
 
 /// **Fix round 1's Critical, half (a).** The clause that finishes may

@@ -76,7 +76,12 @@ const STDIN_CHUNK: usize = 8 * 1024;
 /// Reads one chunk of standard input: empty at its end or on an error.
 pub(crate) fn read_stdin_chunk() -> Vec<u8> {
     let mut chunk = vec![0u8; STDIN_CHUNK];
-    let read = std::io::stdin().lock().read(&mut chunk).unwrap_or(0);
+    let read = loop {
+        match std::io::stdin().lock().read(&mut chunk) {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            read => break read.unwrap_or(0),
+        }
+    };
     chunk.truncate(read);
     chunk
 }
@@ -305,7 +310,7 @@ impl Interp {
     pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
         let route = self.local_route(b"INPUT")?;
         let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
-            return Ok(self.input_line().unwrap_or_default());
+            return Ok(self.input_line()?.unwrap_or_default());
         };
         let caller = self.caller();
         let answer = pinned!(
@@ -322,45 +327,29 @@ impl Interp {
     /// The reader behind `.STDIN~LINEIN`, keeping end of input apart from an
     /// empty line: its caller raises `NOTREADY` on the first and not on the
     /// second.
-    pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn input_line(&mut self) -> Result<Option<Vec<u8>>, Failure> {
         self.hand_over_before_read();
-        if !self.fill_stdin(true) {
-            return None;
+        if !self.fill_stdin(true)? {
+            return Ok(None);
         }
-        self.input.read_line()
+        Ok(self.input.read_line())
     }
 
     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
-    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
+    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Result<Vec<u8>, Failure> {
         self.hand_over_before_read();
-        if !self.fill_stdin(false) {
-            return Vec::new();
+        if !self.fill_stdin(false)? {
+            return Ok(Vec::new());
         }
-        self.input.read_bytes(wanted)
+        Ok(self.input.read_bytes(wanted))
     }
 
     /// Reads standard input until it holds a line where `line`, else a byte,
-    /// or has ended: each chunk off the baton, with this thread idle until
-    /// it is posted or a signal's halt arrives (ruling P60). A halt abandons
-    /// the wait, whose chunk is filed when it comes, and answers `false`:
-    /// the read answers nothing, as the oracle's interrupted read does.
-    /// Other posts wait for the next drain, held here so that an idle waits
-    /// for a new post.
-    fn fill_stdin(&mut self, line: bool) -> bool {
-        let mut kept = std::collections::VecDeque::new();
-        let filled = self.fill_stdin_keeping(line, &mut kept);
-        self.timer.requeue(kept);
-        if filled {
-            self.input.reading_stdin();
-        }
-        filled
-    }
-
-    fn fill_stdin_keeping(
-        &mut self,
-        line: bool,
-        kept: &mut std::collections::VecDeque<crate::scheduler::Posted>,
-    ) -> bool {
+    /// or has ended: each chunk off the baton, while the other activities run
+    /// (rulings P60, P66). A halt that wakes the read answers `false`: the
+    /// read answers nothing, as the oracle's interrupted read does, and the
+    /// chunk it waited for is filed when it comes.
+    fn fill_stdin(&mut self, line: bool) -> Result<bool, Failure> {
         while self.input.stdin_wants(line) {
             if self.input.start_stdin_read() {
                 let Some(worker) = self.pool.reserve() else {
@@ -371,25 +360,21 @@ impl Interp {
                 let baton = crate::sync::Arc::clone(&self.baton);
                 worker.run(Box::new(move || {
                     crate::scheduler::posting_panics(&inbox, &baton, || {
-                        inbox.post(crate::scheduler::Posted::Input(read_stdin_chunk()));
+                        let chunk = crate::signal::unblocked(read_stdin_chunk);
+                        inbox.post(crate::scheduler::Posted::Input(chunk));
                     });
                 }));
             }
-            let mut halted = false;
-            for post in self.timer.idle() {
-                match post {
-                    crate::scheduler::Posted::Input(chunk) => self.input.receive(chunk),
-                    crate::scheduler::Posted::Halt => halted = true,
-                    other => kept.push_back(other),
-                }
+            if let Some(failure) = self.pinned_wait(crate::scheduler::ParkReason::Input) {
+                return Err(failure);
             }
-            if halted {
+            if self.activity.woken_by_halt {
                 self.input.interrupted();
-                self.halt_all();
-                return false;
+                return Ok(false);
             }
         }
-        true
+        self.input.reading_stdin();
+        Ok(true)
     }
 
     /// Hands the two output buffers to the embedding's [`crate::Sinks`],

@@ -119,6 +119,54 @@ fn errno_location() -> *mut libc::c_int {
     unsafe { libc::__errno() }
 }
 
+/// Changes how this thread's mask treats the halting signals.
+fn mask(how: libc::c_int) {
+    // SAFETY: the set is initialised by `sigemptyset` before it is read, and
+    // both pointers are to a live local or null.
+    unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&raw mut set);
+        for (signal, _) in HALTING {
+            libc::sigaddset(&raw mut set, signal);
+        }
+        libc::pthread_sigmask(how, &raw const set, std::ptr::null_mut());
+    }
+}
+
+/// Blocks the halting signals in this thread, so the kernel delivers them
+/// only to a thread that takes them (ruling P67).
+pub(crate) fn block() {
+    mask(libc::SIG_BLOCK);
+}
+
+/// Unblocks the halting signals in this thread where the handlers are
+/// installed: for the interpreter's own thread, which runs Rexx and drains
+/// what a blocking wait posts, so a handler it takes has run before it
+/// files that post.
+pub(crate) fn receive() {
+    if INSTALL.is_completed() {
+        mask(libc::SIG_UNBLOCK);
+    }
+}
+
+/// Runs `wait` with the halting signals unblocked in this thread where the
+/// handlers are installed: a signal then interrupts the wait, and its
+/// handler has run before the wait returns.
+pub(crate) fn unblocked<R>(wait: impl FnOnce() -> R) -> R {
+    struct Reblock;
+    impl Drop for Reblock {
+        fn drop(&mut self) {
+            block();
+        }
+    }
+    if !INSTALL.is_completed() {
+        return wait();
+    }
+    mask(libc::SIG_UNBLOCK);
+    let _reblock = Reblock;
+    wait()
+}
+
 /// Whether a signal arrived since the last call.
 pub(crate) fn take_pending() -> bool {
     PENDING
@@ -141,27 +189,33 @@ mod tests {
         assert!(!super::INSTALL.is_completed());
     }
 
-    /// Set in the process [`a_signal_pending_at_a_commands_end_halts_it`]
-    /// runs its case in.
+    /// Set in the process a test runs its case in alone.
     const ALONE: &str = "REXX_SIGNAL_CASE_ALONE";
+
+    /// Whether this is the process the test `name` runs its case in: a halt
+    /// reaches every live interpreter in the process. Elsewhere it runs that
+    /// process and asserts it passed.
+    fn alone(name: &str) -> bool {
+        if std::env::var_os(ALONE).is_some() {
+            return true;
+        }
+        let output = std::process::Command::new(std::env::current_exe().expect("this binary"))
+            .args(["--exact", name, "--test-threads=1"])
+            .env(ALONE, "1")
+            .output()
+            .expect("the case's process");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{stdout}");
+        assert!(stdout.contains("1 passed"), "{stdout}");
+        false
+    }
 
     /// A signal whose handler ran as a command's child ended halts that
     /// command's clause, before the timer thread posts it. The flag is set
     /// with no wake written, so the timer thread does not take it.
     #[test]
     fn a_signal_pending_at_a_commands_end_halts_it() {
-        if std::env::var_os(ALONE).is_none() {
-            // The halt reaches every live interpreter in the process, so
-            // the case runs in a process of its own.
-            let name = "signal::tests::a_signal_pending_at_a_commands_end_halts_it";
-            let output = std::process::Command::new(std::env::current_exe().expect("this binary"))
-                .args(["--exact", name, "--test-threads=1"])
-                .env(ALONE, "1")
-                .output()
-                .expect("the case's process");
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            assert!(output.status.success(), "{stdout}");
-            assert!(stdout.contains("1 passed"), "{stdout}");
+        if !alone("signal::tests::a_signal_pending_at_a_commands_end_halts_it") {
             return;
         }
         // Off the baton, and redirected, which waits on it.
@@ -189,5 +243,38 @@ mod tests {
                 )
             );
         }
+    }
+
+    /// A halt readies a deadline-woken activity that a nested loop has set
+    /// aside only once: main's timed wait in an `INTERPRET` is due while
+    /// another activity's pinned wait runs a busy one, and a second entry
+    /// would end main's later `SysSleep` at once. The halt queued in the
+    /// `INTERPRET` runs no handler, as on the oracle.
+    #[test]
+    fn a_halt_readies_a_set_aside_activity_once() {
+        if !alone("signal::tests::a_halt_readies_a_set_aside_activity_once") {
+            return;
+        }
+        let raiser = std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            super::PENDING.store(true, super::Ordering::Release);
+            crate::timer::serve_signal();
+        });
+        let outcome = crate::run_program(
+            "/no/such/dir/t.rex",
+            b"s = .EventSemaphore~new\nu = .EventSemaphore~new\ncall on halt name mh\n\
+              b = .b~new; b~start('go', u)\nc = .c~new; c~start('go', u)\n\
+              interpret 'r = s~wait(0.3)'\ncall time 'R'\ncall SysSleep 1\n\
+              say 'slept' (time('E') >= 1)\nexit\nmh: say 'mh'; return\n\
+              ::class b\n::method go\n  use arg u\n  call on halt name bh\n\
+              interpret 'u~wait'\n  return\nbh: return\n\
+              ::class c\n::method go\n  use arg u\n  call on halt name ch\n  call time 'R'\n\
+              do forever; if time('E') >= 2 then leave; end\n  u~post\n  return\nch: return\n"
+                .to_vec(),
+            crate::Invocation::none(),
+        );
+        raiser.join().expect("the raiser");
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "slept 1\n");
+        assert_eq!(String::from_utf8_lossy(&outcome.stderr), "");
     }
 }

@@ -463,11 +463,13 @@ fn read_all(
         return;
     };
     let mut piece = [0u8; 4096];
-    while let Ok(count) = reader.read(&mut piece) {
-        if count == 0 {
-            return;
+    loop {
+        match reader.read(&mut piece) {
+            Ok(0) => return,
+            Ok(count) => written(error, piece[..count].to_vec()),
+            Err(failed) if failed.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return,
         }
-        written(error, piece[..count].to_vec());
     }
 }
 

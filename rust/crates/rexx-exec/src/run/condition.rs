@@ -510,6 +510,16 @@ impl Interp {
             sites: Vec::new(),
         });
         let key: Box<[u8]> = pending.condition.clone();
+        // The entry the trap was found under, `ANY` where the condition has
+        // none: the trap instruction's own condition is what the oracle
+        // delays (`CallInstruction.cpp:603`, `:632`).
+        let delayed: Box<[u8]> = match self
+            .trap_frame()
+            .is_some_and(|frame| frame.traps.get(&key).is_some())
+        {
+            true => key.clone(),
+            false => b"ANY".as_slice().into(),
+        };
         // **Delayed, not removed** (`Trap::delayed`). The two are the same
         // to every lookup that decides whether to trap, and different to
         // `CONDITION('S')` alone, which reports `DELAY` here and `OFF` for a
@@ -517,7 +527,7 @@ impl Interp {
         // this comment claimed the flag also protects a handler's own `CALL
         // OFF`, and that is false -- the handler's table is a copy, so its
         // `CALL OFF` never reached this one to be undone.
-        if let Some(trap) = self.activation_mut().traps.get_mut(&key) {
+        if let Some(trap) = self.activation_mut().traps.get_mut(&delayed) {
             trap.delayed = true;
         }
         // What `CONDITION()` answers inside the handler. Set on *this*
@@ -580,7 +590,7 @@ impl Interp {
         // for null before enabling it; nothing a Rexx program can do
         // removes the entry between here and the delay above, so the arm is
         // structural rather than a case anything reaches.
-        if let Some(trap) = self.activation_mut().traps.get_mut(&key) {
+        if let Some(trap) = self.activation_mut().traps.get_mut(&delayed) {
             trap.delayed = false;
         }
         match ended {

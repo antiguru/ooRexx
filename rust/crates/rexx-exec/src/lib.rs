@@ -2932,9 +2932,11 @@ impl Interp {
 /// Installs the SIGINT, SIGTERM and SIGHUP handlers that halt every live
 /// interpreter, once per process (spec 2026-09-29 section 4, ruling P62): for
 /// a process entry point that starts Rexx for a user. An embedding that does
-/// not call it keeps its own dispositions.
+/// not call it keeps its own dispositions. Blocks them in the calling thread:
+/// the interpreter's thread and its blocking waits take them (ruling P67).
 pub fn install_signal_handlers() {
     timer::install_signals();
+    signal::block();
 }
 
 /// Runs a Rexx program and returns what it produced.
@@ -3122,7 +3124,10 @@ fn on_thread_of(stack: usize, body: impl FnOnce() -> Outcome + Send + 'static) -
     let interpreter = std::thread::Builder::new()
         .name("rexx-interp".to_string())
         .stack_size(stack)
-        .spawn(body)
+        .spawn(|| {
+            signal::receive();
+            body()
+        })
         .expect("spawning the interpreter thread");
     match interpreter.join() {
         Ok(outcome) => outcome,

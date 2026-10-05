@@ -437,6 +437,8 @@ pub(crate) fn serve_signal() {
 /// ticks, then sleeps until the next deadline, or with no deadline where
 /// there is none, until a wake; it ends when none is registered.
 fn run_timer() {
+    #[cfg(not(all(loom, test)))]
+    crate::signal::block();
     let registry = registry();
     loop {
         let timeout = {

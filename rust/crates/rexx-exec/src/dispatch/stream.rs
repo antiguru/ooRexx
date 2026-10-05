@@ -953,7 +953,7 @@ pub(super) fn charin(
         if wanted == 0 {
             return Ok(Some(interp.text(b"")));
         }
-        let read = interp.input_bytes(wanted);
+        let read = interp.input_bytes(wanted)?;
         // Three outcomes, not two, and the standard stream's rule is its own
         // rather than the file path's. Measured over a six-byte standard
         // input: asking for 50 answers all six and leaves `NOTREADY:EOF`,
@@ -1059,7 +1059,7 @@ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, F
         let StandardStream::In = which else {
             return Ok(None);
         };
-        return match interp.input_line() {
+        return match interp.input_line()? {
             Some(text) => {
                 // A read that succeeds clears whatever a refused write left:
                 // measured, `.stdin~lineout` leaves `ERROR:13` and the next
