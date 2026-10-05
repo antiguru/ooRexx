@@ -1251,7 +1251,10 @@ impl Interp {
                 } => self.write_out(&bytes),
                 Posted::Output { error: true, bytes } => self.write_err(&bytes),
                 Posted::Panicked(payload) => std::panic::resume_unwind(payload),
-                Posted::Halt => self.halt_all(),
+                Posted::Halt => {
+                    self.timer.requests().clear(crate::timer::HALT);
+                    self.halt_all();
+                }
                 Posted::Input(chunk) => self.input.receive(chunk),
                 Posted::Unblocked {
                     activity,
@@ -2174,10 +2177,17 @@ impl Interp {
     /// loop, in a blocking operation that has returned: the halt is queued
     /// for the end of the running clause. Everything else posted waits for
     /// the next drain.
+    #[inline(always)]
     pub(crate) fn serve_posted_halt(&mut self) {
-        if !self.timer.requests().pending(crate::timer::INBOX) {
-            return;
+        if self.timer.requests().pending(crate::timer::HALT) {
+            self.serve_halt_now();
         }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn serve_halt_now(&mut self) {
+        self.timer.requests().clear(crate::timer::HALT);
         let mut posted = self.timer.drain();
         let before = posted.len();
         posted.retain(|post| !matches!(post, Posted::Halt));

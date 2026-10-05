@@ -30,6 +30,9 @@ pub(crate) const SLICE: u32 = 1;
 /// Something was posted to the inbox and not yet taken.
 pub(crate) const INBOX: u32 = 2;
 
+/// A signal's halt was posted to the inbox, beside `INBOX`.
+pub(crate) const HALT: u32 = 4;
+
 /// `ActivityManager::timeSliceLength` (`concurrency/ActivityManager.hpp:359`).
 const SLICE_LENGTH: Duration = Duration::from_millis(24);
 
@@ -425,6 +428,7 @@ fn run_timer() {
             if registry.wake.take_signal() {
                 for entry in &live.live {
                     entry.inbox.post(halt());
+                    entry.inbox.requests().set(HALT);
                 }
             }
             let now = now();
