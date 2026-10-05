@@ -119,24 +119,35 @@ fn errno_location() -> *mut libc::c_int {
     unsafe { libc::__errno() }
 }
 
-/// Changes how this thread's mask treats the halting signals.
-fn mask(how: libc::c_int) {
-    // SAFETY: the set is initialised by `sigemptyset` before it is read, and
-    // both pointers are to a live local or null.
+/// The halting signals as a set.
+fn halting() -> libc::sigset_t {
+    // SAFETY: the set is initialised by `sigemptyset` before it is added to,
+    // through a pointer to a live local.
     unsafe {
         let mut set: libc::sigset_t = std::mem::zeroed();
         libc::sigemptyset(&raw mut set);
         for (signal, _) in HALTING {
             libc::sigaddset(&raw mut set, signal);
         }
-        libc::pthread_sigmask(how, &raw const set, std::ptr::null_mut());
+        set
+    }
+}
+
+/// Changes this thread's mask by `how` with `set`, answering the mask before.
+fn mask(how: libc::c_int, set: &libc::sigset_t) -> libc::sigset_t {
+    // SAFETY: both pointers are to live values, and a zeroed `sigset_t` is a
+    // valid place for the old mask.
+    unsafe {
+        let mut before: libc::sigset_t = std::mem::zeroed();
+        libc::pthread_sigmask(how, set, &raw mut before);
+        before
     }
 }
 
 /// Blocks the halting signals in this thread, so the kernel delivers them
 /// only to a thread that takes them (ruling P67).
 pub(crate) fn block() {
-    mask(libc::SIG_BLOCK);
+    mask(libc::SIG_BLOCK, &halting());
 }
 
 /// Unblocks the halting signals in this thread where the handlers are
@@ -145,25 +156,25 @@ pub(crate) fn block() {
 /// files that post.
 pub(crate) fn receive() {
     if INSTALL.is_completed() {
-        mask(libc::SIG_UNBLOCK);
+        mask(libc::SIG_UNBLOCK, &halting());
     }
 }
 
 /// Runs `wait` with the halting signals unblocked in this thread where the
-/// handlers are installed: a signal then interrupts the wait, and its
-/// handler has run before the wait returns.
+/// handlers are installed, and the thread's mask restored after: a signal
+/// then interrupts the wait, and its handler has run before the wait
+/// returns.
 pub(crate) fn unblocked<R>(wait: impl FnOnce() -> R) -> R {
-    struct Reblock;
-    impl Drop for Reblock {
+    struct Restore(libc::sigset_t);
+    impl Drop for Restore {
         fn drop(&mut self) {
-            block();
+            mask(libc::SIG_SETMASK, &self.0);
         }
     }
     if !INSTALL.is_completed() {
         return wait();
     }
-    mask(libc::SIG_UNBLOCK);
-    let _reblock = Reblock;
+    let _restore = Restore(mask(libc::SIG_UNBLOCK, &halting()));
     wait()
 }
 
