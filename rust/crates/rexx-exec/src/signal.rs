@@ -164,22 +164,30 @@ mod tests {
             assert!(stdout.contains("1 passed"), "{stdout}");
             return;
         }
-        let raiser = std::thread::spawn(|| {
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            super::PENDING.store(true, super::Ordering::Release);
-        });
-        let outcome = crate::run_program(
-            "/no/such/dir/t.rex",
-            b"say 'a'\naddress system 'sleep 0.5'\nsay 'b' rc\n".to_vec(),
-            crate::Invocation::none(),
-        );
-        raiser.join().expect("the raiser");
-        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "a\n");
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            "     2 *-* address system 'sleep 0.5'\n\
-             Error 4 running /no/such/dir/t.rex line 2:  Program interrupted.\n\
-             Error 4.1:  Program interrupted with HALT condition.\n"
-        );
+        // Off the baton, and redirected, which waits on it.
+        for command in [
+            "address system 'sleep 0.5'",
+            "address system 'sleep 0.5' with output stem o.",
+        ] {
+            let raiser = std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                super::PENDING.store(true, super::Ordering::Release);
+            });
+            let outcome = crate::run_program(
+                "/no/such/dir/t.rex",
+                format!("say 'a'\n{command}\nsay 'b' rc\n").into_bytes(),
+                crate::Invocation::none(),
+            );
+            raiser.join().expect("the raiser");
+            assert_eq!(String::from_utf8_lossy(&outcome.stdout), "a\n", "{command}");
+            assert_eq!(
+                String::from_utf8_lossy(&outcome.stderr),
+                format!(
+                    "     2 *-* {command}\n\
+                     Error 4 running /no/such/dir/t.rex line 2:  Program interrupted.\n\
+                     Error 4.1:  Program interrupted with HALT condition.\n"
+                )
+            );
+        }
     }
 }

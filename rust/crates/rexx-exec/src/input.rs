@@ -113,10 +113,17 @@ impl Input {
         }
     }
 
-    /// A halt abandoned a read: the counts answer `0` until a later read
-    /// answers something, as the oracle's do after its interrupted read.
+    /// A halt abandoned a read: the counts answer `0` until the next read,
+    /// as the oracle's do after its interrupted read.
     fn interrupted(&mut self) {
         self.exhausted = true;
+    }
+
+    /// A read of standard input follows, which decides the counts afresh.
+    fn reading_stdin(&mut self) {
+        if matches!(self.source, Source::Stdin(_)) {
+            self.exhausted = false;
+        }
     }
 
     /// Files a chunk standard input delivered: its end where empty.
@@ -167,7 +174,7 @@ impl Input {
                 self.exhausted = true;
                 return None;
             }
-            Ok(_) => self.exhausted = false,
+            Ok(_) => {}
         }
         // The terminator is not part of the line, and a `\r` immediately
         // before it is not either -- but a `\r` anywhere else is data, and a
@@ -207,10 +214,7 @@ impl Input {
                 self.exhausted = true;
                 0
             }
-            Ok(count) => {
-                self.exhausted = false;
-                count
-            }
+            Ok(count) => count,
         };
         buffer.truncate(filled);
         buffer
@@ -346,6 +350,9 @@ impl Interp {
         let mut kept = std::collections::VecDeque::new();
         let filled = self.fill_stdin_keeping(line, &mut kept);
         self.timer.requeue(kept);
+        if filled {
+            self.input.reading_stdin();
+        }
         filled
     }
 
