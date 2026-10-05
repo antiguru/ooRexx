@@ -886,10 +886,11 @@ fn a_second_signal_in_a_call_on_any_handler_is_dropped() {
     );
 }
 
-/// A halt during a read of standard input reaches the started activity that
-/// ran while main waited, whose handler runs before main's.
+/// A halt during a read of standard input misses a started activity that
+/// has not yet run: DEVIATIONS entry 13. The oracle's is `w 3` / `wh 3` /
+/// `mh` / `main []` / `end`.
 #[test]
-fn a_halt_during_a_read_reaches_an_activity_that_ran_meanwhile() {
+fn a_halt_during_a_read_misses_an_activity_that_has_not_run() {
     halts_after(
         "readhalt",
         "call on halt name mh\no = .w~new; m = o~start('go')\nparse pull v\n\
@@ -906,7 +907,7 @@ fn a_halt_during_a_read_reaches_an_activity_that_ran_meanwhile() {
         Launch::Reading,
         &Ended {
             code: Some(0),
-            stdout: "w 3\nwh 3\nmh\nmain []\nend\n".to_string(),
+            stdout: "mh\nmain []\nw 3\nend\n".to_string(),
             stderr: String::new(),
         },
     );
@@ -1039,10 +1040,10 @@ fn a_stdin_read_waits_without_spinning() {
     );
 }
 
-/// Another activity runs while main waits on a read of standard input, as
-/// the oracle's threads do (ruling P66): oracle 30 of 30.
+/// No other activity runs while main waits on a read of standard input:
+/// DEVIATIONS entry 13. The oracle prints `w 1` to `w 8` before `main hi`.
 #[test]
-fn an_activity_runs_while_main_reads() {
+fn no_activity_runs_while_main_reads() {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("signals-readruns-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("the probe directory");
@@ -1071,7 +1072,7 @@ fn an_activity_runs_while_main_reads() {
     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "w 1\nw 2\nw 3\nw 4\nw 5\nw 6\nw 7\nw 8\nmain hi\n"
+        "main hi\nw 1\nw 2\nw 3\nw 4\nw 5\nw 6\nw 7\nw 8\n"
     );
     assert_eq!(String::from_utf8_lossy(&output.stderr), "");
 }

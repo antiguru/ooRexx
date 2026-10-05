@@ -790,16 +790,10 @@ pub(crate) fn compile(
                     }
                     _ => None,
                 };
-                // A read of a line can park, which only `Op::Exec` can.
-                match parse.source {
-                    ParseSource::Pull | ParseSource::LineIn => ops.push(Op::Exec {
-                        index: instruction_index(index)?,
-                    }),
-                    _ => ops.push(Op::Parse {
-                        index: instruction_index(index)?,
-                        src,
-                    }),
-                }
+                ops.push(Op::Parse {
+                    index: instruction_index(index)?,
+                    src,
+                });
                 close_region(&mut ops, at)?;
                 registers.release(mark);
             }

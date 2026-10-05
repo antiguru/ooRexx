@@ -123,12 +123,6 @@ pub(crate) enum ParkReason {
     Native,
     /// A blocking operation run off the baton, until it has ended.
     Block,
-    /// A read of standard input, until a chunk arrives.
-    Input,
-    /// An access of standard input off every pinned frame, until its turn
-    /// at `.STDIN`'s guard and then the chunk it wants
-    /// ([`Interp::stdin_turn`]).
-    Stdin(crate::input::StdinWait),
 }
 
 impl ParkReason {
@@ -143,7 +137,6 @@ impl ParkReason {
             ParkReason::Semaphore(_) => "a semaphore",
             ParkReason::Native => "a native call's return",
             ParkReason::Block => "a command's end",
-            ParkReason::Input | ParkReason::Stdin(_) => "standard input",
         }
     }
 }
@@ -301,8 +294,6 @@ pub(crate) struct Activities {
     /// The tokens of blocking operations a halt abandoned, no longer in
     /// flight, until their ends are drained.
     abandoned_blocks: Vec<u64>,
-    /// The activities parked on a read of standard input, each in flight.
-    input_readers: Vec<ActivityId>,
     /// The guard locks, and what each parked activity waits on.
     pub(crate) guards: crate::guards::GuardTable,
     pub(crate) semaphores: crate::semaphores::Semaphores,
@@ -354,7 +345,6 @@ impl Activities {
             runs_below: 0,
             next_block: 0,
             abandoned_blocks: Vec::new(),
-            input_readers: Vec::new(),
             guards: crate::guards::GuardTable::default(),
             semaphores: crate::semaphores::Semaphores::default(),
         }
@@ -567,22 +557,6 @@ impl Scheduler for Interp {
                 }
             }
             ParkReason::Native | ParkReason::Block => {}
-            ParkReason::Input => {
-                table.input_readers.push(running);
-                table.in_flight += 1;
-            }
-            ParkReason::Stdin(wait) => {
-                let queued = wait.key().is_some_and(|key| {
-                    table
-                        .guards
-                        .owner(key)
-                        .is_some_and(|owner| owner != running)
-                });
-                if !queued {
-                    table.input_readers.push(running);
-                    table.in_flight += 1;
-                }
-            }
             ParkReason::Semaphore(wait) => {
                 let order = wait.deadline.map(|deadline| {
                     table.next_sleeper += 1;
@@ -1061,11 +1035,6 @@ impl Interp {
         self.activities
             .sleepers
             .retain(|Reverse((_, _, sleeper))| *sleeper != running);
-        let readers = &mut self.activities.input_readers;
-        if let Some(at) = readers.iter().position(|reader| *reader == running) {
-            readers.swap_remove(at);
-            self.activities.in_flight -= 1;
-        }
     }
 
     /// Measures this interpreter's Rust stack from `base`, an address near
@@ -1298,13 +1267,7 @@ impl Interp {
                     self.timer.requests().clear(crate::timer::HALT);
                     self.halt_all();
                 }
-                Posted::Input(chunk) => {
-                    self.input.receive(chunk);
-                    for reader in std::mem::take(&mut self.activities.input_readers) {
-                        self.activities.in_flight -= 1;
-                        self.unpark(reader);
-                    }
-                }
+                Posted::Input(chunk) => self.input.receive(chunk),
                 Posted::Unblocked {
                     activity,
                     token,
@@ -1841,7 +1804,6 @@ impl Interp {
     pub(crate) fn retest_wait(&mut self, reason: ParkReason) -> Option<ParkReason> {
         match reason {
             ParkReason::Semaphore(wait) => self.retest_semaphore(wait).map(ParkReason::Semaphore),
-            ParkReason::Stdin(wait) => self.retest_stdin(wait),
             _ => None,
         }
     }
@@ -2170,9 +2132,8 @@ impl Interp {
     /// A signal's halt (`InterpreterInstance::haltAllActivities`,
     /// `runtime/InterpreterInstance.cpp:686`): every activity with a Rexx
     /// frame is asked to raise `HALT` with no description, and one parked in
-    /// `SysSleep`, a `GUARD WHEN`, a semaphore wait, a command's wait or a
-    /// read of standard input is woken to take it (rulings P59, P60, P66), in
-    /// handle order.
+    /// `SysSleep`, a `GUARD WHEN`, a semaphore wait or a command's wait is
+    /// woken to take it (rulings P59, P60), in handle order.
     pub(crate) fn halt_all(&mut self) {
         let running = self.activities.running;
         for index in 0..self.activities.idle.len() {
@@ -2221,15 +2182,6 @@ impl Interp {
         {
             table.in_flight -= 1;
             table.abandoned_blocks.push(token);
-            self.unpark(activity);
-        } else if let Some(at) = table
-            .input_readers
-            .iter()
-            .position(|reader| *reader == activity)
-        {
-            table.input_readers.swap_remove(at);
-            table.in_flight -= 1;
-            record.woken_by_halt = true;
             self.unpark(activity);
         } else if let Some(order) = record.semaphore_wait.take() {
             let before = table.sleepers.len();

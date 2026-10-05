@@ -246,7 +246,6 @@ mod counter {
         Timer,
         NativeCall,
         Command,
-        Input,
     }
 
     impl ParkKind {
@@ -265,9 +264,6 @@ mod counter {
                 },
                 crate::scheduler::ParkReason::Native => ParkKind::NativeCall,
                 crate::scheduler::ParkReason::Block => ParkKind::Command,
-                crate::scheduler::ParkReason::Input | crate::scheduler::ParkReason::Stdin(_) => {
-                    ParkKind::Input
-                }
             }
         }
     }

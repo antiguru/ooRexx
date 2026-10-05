@@ -1545,6 +1545,32 @@ DEVIATIONS -- permanent, chosen
      Measured 2026-10-05, 30 runs each: the oracle's 98.923 is the same in
      every run, and so is this crate's 4.1.
 
+ 13. NO OTHER ACTIVITY RUNS DURING A READ OF THE DEFAULT INPUT STREAM
+     (spec 2026-09-29 2.1, ruling P69). OWNER: none.
+
+     The reader keeps the baton until its chunk or a halt arrives, so every
+     other activity waits for the read; the oracle's other threads run
+     during it. So a halt during the read misses a started activity that has
+     not yet run: it has no Rexx frame to take the request, and runs on
+     untrapped once the read ends.
+
+     Measured by the Task 21 re-review 2, 2026-10-05, a started activity
+     printing 8 lines 0.25 s apart while main's PARSE PULL waits for `hi` at
+     2 s: the oracle prints `w 1 0.0` to `w 8 1.8`, then `main hi 2.0`; here
+     `main hi 2.0` comes first, then `w 1 2.0` to `w 8 3.8`. Its `keptend`
+     program (CALL ON HALT in main and in a started activity that runs a
+     command and then a 2 s loop; SIGINT at 1 s, `hi` at 2 s): the oracle
+     prints `w 3` / `wh 3` / `mh` / `main []` / `end` at 2.02 s, this crate
+     `mh` / `main []` / `w 3` / `end` at 3.01 s. Remeasured 2026-10-05, 5
+     runs each, identical in every run. A Message~halt main sends while a
+     started activity reads is sent only after that read ends: the re-review
+     4 `mhalt1` program prints `halt sent 1` / `r halted from main` /
+     `r read [one]` on the oracle and `r read [one]` / `r next` /
+     `halt sent 1` here, 30 runs each.
+
+     Witnesses: rexx-exec's tests/signals.rs, no_activity_runs_while_main_reads
+     and a_halt_during_a_read_misses_an_activity_that_has_not_run.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

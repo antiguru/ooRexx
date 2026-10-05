@@ -586,7 +586,9 @@ impl Interp {
         // so built in memory here and read back out one line later, on the
         // path every `length(...)`/`substr(...)` in a program takes.
         if let CallResolution::Settled(Resolved::Builtin(target)) = resolution {
-            return crate::run::builtin_started(self.invoke_builtin_call(code, target, name, args));
+            return self
+                .invoke_builtin_call(code, target, name, args)
+                .map(Started::Ran);
         }
         // `CallType::Function`: this is the function-invocation route, and a
         // `::ROUTINE` reached this way answers `FUNCTION` as `PARSE SOURCE`'s

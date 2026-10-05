@@ -17,9 +17,7 @@
 use rexx_core::ObjRef;
 
 use super::{Args, arg, optional_string, required_string};
-use crate::dispatch::NativeResume;
 use crate::error::Raised;
-use crate::input::StdinWants;
 use crate::{Failure, Interp};
 
 /// Resolves `args`' first argument and sends `message` the rest of them.
@@ -46,15 +44,6 @@ fn send_to_stream(
     } else {
         args.values_from(2).to_vec()
     };
-    let read: Option<(NativeResume, StdinWants)> = match message {
-        b"LINEIN" if rest.is_empty() => Some((resume_linein, StdinWants::Line)),
-        b"CHARIN" if rest.is_empty() => Some((resume_charin, StdinWants::Byte)),
-        b"CHARS" => Some((resume_chars, StdinWants::Nothing)),
-        _ => None,
-    };
-    if let Some((resume, wants)) = read {
-        return after_stdin_turn(interp, stream, wants, resume);
-    }
     let caller = interp.caller();
     pinned!(
         interp,
@@ -62,79 +51,6 @@ fn send_to_stream(
         interp.send_message(stream, message, None, &rest, caller)
     )?
     .ok_or_else(|| Failure::from(Raised::no_result(message)))
-}
-
-/// `resume`'s answer for `stream`, run once [`Interp::stdin_turn`] lets an
-/// access wanting `wants` go on: at once, or parked until then.
-fn after_stdin_turn(
-    interp: &mut Interp,
-    stream: ObjRef,
-    wants: StdinWants,
-    resume: NativeResume,
-) -> Result<ObjRef, Failure> {
-    if let Some(reason) = interp.stdin_turn(Some(stream), wants)? {
-        return interp.park_builtin(reason, resume, stream);
-    }
-    Ok(resume(interp, stream)?.unwrap_or(stream))
-}
-
-/// A `LINEIN` with no arguments sent to `stream`.
-fn resume_linein(interp: &mut Interp, stream: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    send_in_turn(interp, stream, b"LINEIN", None).map(Some)
-}
-
-/// A `CHARIN` with no arguments sent to `stream`.
-fn resume_charin(interp: &mut Interp, stream: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    send_in_turn(interp, stream, b"CHARIN", None).map(Some)
-}
-
-/// `CHARS` sent to `stream`.
-fn resume_chars(interp: &mut Interp, stream: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    send_in_turn(interp, stream, b"CHARS", None).map(Some)
-}
-
-/// `LINES(name)`'s answer: the builtin's own squash of `NORMAL`'s count.
-fn resume_lines(interp: &mut Interp, stream: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    let argument = interp.text(b"NORMAL");
-    let answer = send_in_turn(interp, stream, b"LINES", Some(argument))?;
-    // The quick answer is the builtin's own, not the destination's: measured,
-    // a destination answering `7` gives `lines()` 1 and `lines(,'C')` 7.
-    let present = interp.to_text(answer).as_ref() != b"0";
-    Ok(Some(interp.text(if present { b"1" } else { b"0" })))
-}
-
-/// `LINES(name, 'C')`'s answer.
-fn resume_lines_counted(interp: &mut Interp, stream: ObjRef) -> Result<Option<ObjRef>, Failure> {
-    let argument = interp.text(b"C");
-    send_in_turn(interp, stream, b"LINES", Some(argument)).map(Some)
-}
-
-/// `message` sent to `stream` with `argument`, ending the access's
-/// [`Interp::stdin_turn`].
-fn send_in_turn(
-    interp: &mut Interp,
-    stream: ObjRef,
-    message: &[u8],
-    argument: Option<ObjRef>,
-) -> Result<ObjRef, Failure> {
-    let frame = interp.roots.activity_mut().push_frame();
-    interp.roots.activity_mut().push_temp(stream);
-    if let Some(argument) = argument {
-        interp.roots.activity_mut().push_temp(argument);
-    }
-    let args: &[Option<ObjRef>] = match &argument {
-        Some(_) => std::slice::from_ref(&argument),
-        None => &[],
-    };
-    let caller = interp.caller();
-    let sent = pinned!(
-        interp,
-        crate::pinning::PinKind::StreamWrapper,
-        interp.send_message(stream, message, None, args, caller)
-    );
-    interp.end_stdin_turn();
-    interp.roots.activity_mut().pop_frame(frame);
-    sent?.ok_or_else(|| Raised::no_result(message).into())
 }
 
 /// `LINEIN(name, [line], [count])`.
@@ -221,11 +137,23 @@ pub(crate) fn lines(
     // **The two spellings are not symmetric**, measured against a route whose
     // destination answers `LINES` itself: the quick option goes out as
     // `NORMAL` and the counting one as `C`.
-    let resume: NativeResume = match option {
-        b'C' => resume_lines_counted,
-        _ => resume_lines,
-    };
-    after_stdin_turn(interp, stream, StdinWants::Nothing, resume)
+    let argument = interp.text(if option == b'C' { b"C" } else { b"NORMAL" });
+    interp.roots.activity_mut().push_temp(argument);
+    let caller = interp.caller();
+    let answer = pinned!(
+        interp,
+        crate::pinning::PinKind::StreamWrapper,
+        interp.send_message(stream, b"LINES", None, &[Some(argument)], caller)
+    )?
+    .ok_or_else(|| Failure::from(Raised::no_result(b"LINES")))?;
+    if option == b'C' {
+        return Ok(answer);
+    }
+    // The quick answer is the builtin's own, not the destination's: measured,
+    // a destination answering `7` gives `lines()` 1 and `lines(,'C')` 7.
+    let text = interp.to_text(answer).into_owned();
+    let present = text != b"0";
+    Ok(interp.text(if present { b"1" } else { b"0" }))
 }
 
 /// `STREAM(name, [operation], [command])`. The operation is read by its first

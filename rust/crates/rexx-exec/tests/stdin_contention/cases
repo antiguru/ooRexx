@@ -1,4 +1,4 @@
-# main reads; a started activity asks lines() meanwhile and waits for the read
+# main reads; a started activity asks lines() meanwhile
 run write1000=(one,two,three)
 o = .w~new; m = o~start('go')
 parse pull v
@@ -204,7 +204,7 @@ out> r [o]
 out> main lines 1
 out> main end
 
-# charin() then .INPUT~LINES, a send that waits pinned
+# charin() then .INPUT~LINES
 run write1000=(one,two,three)
 o = .r~new; m = o~start('go')
 call SysSleep 0.2
@@ -241,7 +241,7 @@ out> main [one]
 out> w queued
 out> next [queued]
 
-# main reads by .stdin~linein, a pinned read; lines() waits for it
+# main reads by .stdin~linein; a started activity asks lines() meanwhile
 run write1000=(one,two)
 -- H: v = .stdin~linein / W: n = lines()
 o = .w~new; m = o~start('go')
@@ -271,3 +271,92 @@ return
 rc> 0
 out> halted 2
 out> v=[]
+
+# two readers by linein(,,1)
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+v = linein(,,1)
+say 'main [' || v || ']'
+say 'r' m~result
+exit
+::class r
+::method go
+  v = linein(,,1)
+  return '[' || v || ']'
+----
+rc> 0
+out> main [two]
+out> r [one]
+
+# two readers by charin(,,1)
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+v = charin(,,1)
+say 'main [' || v || ']'
+say 'r' m~result
+exit
+::class r
+::method go
+  v = charin(,,1)
+  return '[' || v || ']'
+----
+rc> 0
+out> main [n]
+out> r [o]
+
+# .stdin~linein then .INPUT~LINES
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+v = .input~lines
+say 'main [' || v || ']'
+say 'r' m~result
+exit
+::class r
+::method go
+  v = .stdin~linein
+  return '[' || v || ']'
+----
+rc> 0
+out> main [1]
+out> r [one]
+
+# .INPUT~LINEIN then STREAM('STDIN')
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+v = stream('STDIN')
+say 'main [' || v || ']'
+say 'r' m~result
+exit
+::class r
+::method go
+  v = .input~linein
+  return '[' || v || ']'
+----
+rc> 0
+out> main [READY]
+out> r [one]
+
+# two readers by PULL through a Stream subclass as .INPUT's destination
+run write1000=(one,two,three)
+.input~destination(.mys~new('unused'))
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+parse pull w
+say 'main [' || w || ']'
+say 'r' m~result
+exit
+::class r
+::method go
+  parse pull v
+  return '[' || v || ']'
+::class mys subclass stream
+::method linein
+  return 'sub:' || .stdin~linein
+----
+rc> 0
+out> main [sub:two]
+out> r [sub:one]

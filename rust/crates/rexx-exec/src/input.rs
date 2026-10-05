@@ -31,10 +31,8 @@ use std::io::{BufRead, Cursor, Read};
 
 use rexx_core::ObjRef;
 
-use crate::guards::{GuardKey, Reserve};
 use crate::invocation::ProgramInput;
-use crate::scheduler::ParkReason;
-use crate::{Failure, Interp, Raised};
+use crate::{Failure, Interp};
 
 /// `.input`'s position: the one line cursor every input construct advances.
 pub(crate) struct Input {
@@ -49,32 +47,6 @@ pub(crate) struct Input {
     /// every time after, with no read in between, where `.stdin~chars` keeps
     /// answering `1`. `LINES('N')` is that first ask too.
     lines_asked: bool,
-    /// A halt woke an access waiting in [`Interp::stdin_turn`]: its read
-    /// answers nothing.
-    halted: bool,
-}
-
-/// An access of standard input parked by [`Interp::stdin_turn`]: for `key`,
-/// `.STDIN`'s guard, where another activity holds it, then for a chunk.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct StdinWait {
-    key: Option<GuardKey>,
-    wants: StdinWants,
-}
-
-/// What an access of standard input needs buffered before it can go on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StdinWants {
-    Line,
-    Byte,
-    /// Nothing: a count, which reads no input.
-    Nothing,
-}
-
-impl StdinWait {
-    pub(crate) fn key(self) -> Option<GuardKey> {
-        self.key
-    }
 }
 
 enum Source {
@@ -179,7 +151,6 @@ impl Input {
             },
             exhausted: false,
             lines_asked: false,
-            halted: false,
         }
     }
 
@@ -317,9 +288,6 @@ impl Interp {
     /// answers** -- measured, a program with one line pushed reads it and the
     /// destination sees a single `LINEIN`, for the second read.
     pub(crate) fn pull_line(&mut self) -> Result<Vec<u8>, Failure> {
-        if self.holds_stdin_turn() {
-            return self.linein_line();
-        }
         match self.queue.pop() {
             Some(line) => Ok(line),
             None => self.linein_line(),
@@ -342,7 +310,7 @@ impl Interp {
     pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
         let route = self.local_route(b"INPUT")?;
         let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
-            return Ok(self.input_line()?.unwrap_or_default());
+            return Ok(self.input_line().unwrap_or_default());
         };
         let caller = self.caller();
         let answer = pinned!(
@@ -359,189 +327,75 @@ impl Interp {
     /// The reader behind `.STDIN~LINEIN`, keeping end of input apart from an
     /// empty line: its caller raises `NOTREADY` on the first and not on the
     /// second.
-    pub(crate) fn input_line(&mut self) -> Result<Option<Vec<u8>>, Failure> {
+    pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
         self.hand_over_before_read();
-        if !self.fill_stdin(true)? {
-            return Ok(None);
+        if !self.fill_stdin(true) {
+            return None;
         }
-        Ok(self.input.read_line())
+        self.input.read_line()
     }
 
     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
-    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Result<Vec<u8>, Failure> {
+    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
         self.hand_over_before_read();
-        if !self.fill_stdin(false)? {
-            return Ok(Vec::new());
+        if !self.fill_stdin(false) {
+            return Vec::new();
         }
-        Ok(self.input.read_bytes(wanted))
+        self.input.read_bytes(wanted)
     }
 
     /// Reads standard input until it holds a line where `line`, else a byte,
-    /// or has ended: each chunk off the baton, while the other activities run
-    /// (rulings P60, P66). A halt that wakes the read answers `false`: the
-    /// read answers nothing, as the oracle's interrupted read does, and the
-    /// chunk it waited for is filed when it comes.
-    fn fill_stdin(&mut self, line: bool) -> Result<bool, Failure> {
-        if std::mem::take(&mut self.input.halted) {
-            // The halt is taken where the oracle's read was when it came: in
-            // the running activation, such as the `.INPUT` monitor's
-            // `UNKNOWN`, whose clause end hands a `CALL ON HALT` to the
-            // reading clause's own.
-            if let Some(running) = self.running_activation().map(|running| running.id) {
-                let depth = self.activity.fragment_depth;
-                for pending in self.activity.pending_traps.iter_mut() {
-                    if pending.request {
-                        pending.activation = running;
-                        pending.fragment_depth = depth;
-                    }
+    /// or has ended: each chunk off the baton, with this thread idle until
+    /// it is posted or a signal's halt arrives (ruling P60). A halt abandons
+    /// the wait, whose chunk is filed when it comes, and answers `false`:
+    /// the read answers nothing, as the oracle's interrupted read does.
+    /// Other posts wait for the next drain, held here so that an idle waits
+    /// for a new post.
+    fn fill_stdin(&mut self, line: bool) -> bool {
+        let mut kept = std::collections::VecDeque::new();
+        let filled = self.fill_stdin_keeping(line, &mut kept);
+        self.timer.requeue(kept);
+        if filled {
+            self.input.reading_stdin();
+        }
+        filled
+    }
+
+    fn fill_stdin_keeping(
+        &mut self,
+        line: bool,
+        kept: &mut std::collections::VecDeque<crate::scheduler::Posted>,
+    ) -> bool {
+        while self.input.stdin_wants(line) {
+            if self.input.start_stdin_read() {
+                let Some(worker) = self.pool.reserve() else {
+                    self.input.receive(read_stdin_chunk());
+                    continue;
+                };
+                let inbox = self.timer.inbox();
+                let baton = crate::sync::Arc::clone(&self.baton);
+                worker.run(Box::new(move || {
+                    crate::scheduler::posting_panics(&inbox, &baton, || {
+                        let chunk = crate::signal::unblocked(read_stdin_chunk);
+                        inbox.post(crate::scheduler::Posted::Input(chunk));
+                    });
+                }));
+            }
+            let mut halted = false;
+            for post in self.timer.idle() {
+                match post {
+                    crate::scheduler::Posted::Input(chunk) => self.input.receive(chunk),
+                    crate::scheduler::Posted::Halt => halted = true,
+                    other => kept.push_back(other),
                 }
             }
-            self.input.interrupted();
-            return Ok(false);
-        }
-        let wants = match line {
-            true => StdinWants::Line,
-            false => StdinWants::Byte,
-        };
-        while self.request_stdin(wants) {
-            if let Some(failure) = self.pinned_wait(ParkReason::Input) {
-                return Err(failure);
-            }
-            if self.activity.woken_by_halt {
+            if halted {
                 self.input.interrupted();
-                return Ok(false);
+                self.halt_all();
+                return false;
             }
         }
-        self.input.reading_stdin();
-        Ok(true)
-    }
-
-    /// Whether a read wanting `wants` must wait for a chunk of standard
-    /// input: one is in flight, or this starts it.
-    /// Where no pool thread can be reserved the chunk is read here instead.
-    fn request_stdin(&mut self, wants: StdinWants) -> bool {
-        let line = match wants {
-            StdinWants::Line => true,
-            StdinWants::Byte => false,
-            StdinWants::Nothing => return false,
-        };
-        while self.input.stdin_wants(line) {
-            if !self.input.start_stdin_read() {
-                return true;
-            }
-            let Some(worker) = self.pool.reserve() else {
-                self.input.receive(read_stdin_chunk());
-                continue;
-            };
-            let inbox = self.timer.inbox();
-            let baton = crate::sync::Arc::clone(&self.baton);
-            worker.run(Box::new(move || {
-                crate::scheduler::posting_panics(&inbox, &baton, || {
-                    let chunk = crate::signal::unblocked(read_stdin_chunk);
-                    inbox.post(crate::scheduler::Posted::Input(chunk));
-                });
-            }));
-            return true;
-        }
-        false
-    }
-
-    /// The park an access through `route` (`None` for no route) makes
-    /// before it sends, from a frame that can park off every pinned one: for
-    /// `.STDIN`'s guard where another activity holds it, else for the chunk
-    /// it wants, holding that guard as the oracle's reader does across its
-    /// read. `None` once it can go on, holding the guard until
-    /// [`Interp::end_stdin_turn`], or where `route` ends elsewhere.
-    ///
-    /// # Errors
-    ///
-    /// 98.905 where the guard's owner waits on this activity.
-    pub(crate) fn stdin_turn(
-        &mut self,
-        route: Option<ObjRef>,
-        wants: StdinWants,
-    ) -> Result<Option<ParkReason>, Failure> {
-        if !self.input.is_live() || self.input.halted {
-            return Ok(None);
-        }
-        let key = match route.filter(|route| *route != ObjRef::NIL) {
-            Some(route) if !self.route_ends_at(route, self.bootstrap_stdin) => return Ok(None),
-            Some(_) => self.stdin_key(),
-            None => None,
-        };
-        if let Some(key) = key
-            && self.activities.guards.is_live()
-            && !self.granted(key)
-            && let Reserve::Contended(owner) = self.take_guard(key)
-        {
-            if self.deadlocks(owner) {
-                return Err(Raised::deadlock().into());
-            }
-            let me = self.running_activity();
-            self.activities.guards.enqueue(key, me);
-            return Ok(Some(ParkReason::Stdin(StdinWait {
-                key: Some(key),
-                wants,
-            })));
-        }
-        Ok(self
-            .request_stdin(wants)
-            .then_some(ParkReason::Stdin(StdinWait { key, wants })))
-    }
-
-    /// [`Interp::stdin_turn`] for a `PARSE` from `source`, a line. `PULL`
-    /// reads the queue instead where it has a line and no turn is held.
-    pub(crate) fn parse_stdin_turn(
-        &mut self,
-        source: &rexx_parse::ParseSource,
-    ) -> Result<Option<ParkReason>, Failure> {
-        if matches!(source, rexx_parse::ParseSource::Pull)
-            && self.queue.len() > 0
-            && !self.holds_stdin_turn()
-        {
-            return Ok(None);
-        }
-        let route = self.local_route(b"INPUT")?;
-        self.stdin_turn(route, StdinWants::Line)
-    }
-
-    /// The re-test of a woken [`Interp::stdin_turn`] park: `Some` to park
-    /// again for a chunk. A halt that woke it makes the read answer nothing.
-    pub(crate) fn retest_stdin(&mut self, wait: StdinWait) -> Option<ParkReason> {
-        if std::mem::take(&mut self.activity.woken_by_halt) {
-            self.input.halted = true;
-            return None;
-        }
-        self.request_stdin(wait.wants)
-            .then_some(ParkReason::Stdin(wait))
-    }
-
-    /// Ends an access [`Interp::stdin_turn`] let go on: `.STDIN`'s guard
-    /// released where the running activity holds it.
-    pub(crate) fn end_stdin_turn(&mut self) {
-        self.input.halted = false;
-        if self.activities.guards.is_live()
-            && let Some(key) = self.stdin_key()
-            && self.granted(key)
-        {
-            self.release_guard(key);
-        }
-    }
-
-    /// Whether the running activity holds `.STDIN`'s guard from
-    /// [`Interp::stdin_turn`].
-    fn holds_stdin_turn(&mut self) -> bool {
-        self.activities.guards.is_live() && self.stdin_key().is_some_and(|key| self.granted(key))
-    }
-
-    /// The guard `.STDIN`'s reads reserve.
-    fn stdin_key(&mut self) -> Option<GuardKey> {
-        let stdin = self.bootstrap_stdin?;
-        let scope = self.lookup(stdin, crate::dispatch::LINEIN, None)?.scope;
-        Some(GuardKey {
-            object: stdin,
-            scope,
-        })
+        true
     }
 
     /// Hands the two output buffers to the embedding's [`crate::Sinks`],

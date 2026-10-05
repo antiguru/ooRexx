@@ -2492,10 +2492,6 @@ impl Interp {
                 self.abandon_guard_exec();
                 return Some(Err(failure));
             }
-            if let Some(again) = self.retest_wait(reason) {
-                outcome = ExecOutcome::Park(again);
-                continue;
-            }
             outcome = match pinned!(
                 self,
                 crate::pinning::PinKind::OpExec,

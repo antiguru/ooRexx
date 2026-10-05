@@ -367,8 +367,9 @@ impl Interp {
         // reported against the `CALL` clause, at rc 214, and a version that
         // skipped evaluation would run the callee instead.
         if let CallResolution::Settled(Resolved::Builtin(target)) = resolution {
-            let value = builtin_started(self.invoke_builtin_call(code, target, name, args))?;
-            return Ok(internal_begun(value));
+            return Ok(Begun::Done(Ended::Returned(Some(
+                self.invoke_builtin_call(code, target, name, args)?,
+            ))));
         }
         // A fresh `Vec` and not a lent one: this path always hands the
         // arguments to the callee, which keeps them, so there is nothing to
@@ -466,9 +467,11 @@ impl Interp {
         // The builtin path, which runs no activation -- the same shortcut
         // `begin_eval_call` takes and for the same measured reason.
         if let Resolved::Builtin(target) = resolved {
-            return builtin_started(self.run_over_pushed_args(mark, |interp, values| {
-                builtin::run(interp, name, target, values)
-            }));
+            return self
+                .run_over_pushed_args(mark, |interp, values| {
+                    builtin::run(interp, name, target, values)
+                })
+                .map(Started::Ran);
         }
         let mut values = std::mem::take(&mut self.activity.value_buffer);
         let started = self.begin_call_over_values(resolved, name, &values[mark..]);
@@ -1391,10 +1394,8 @@ impl Interp {
             // No activation, no `Argument`s built -- the shortcut
             // `begin_call_over_values` takes, and the reason a `CALL` to a builtin
             // reaches `Ended::Returned(Some(_))` with a value to settle.
-            Resolved::Builtin(target) => {
-                builtin_started(builtin::run(self, name, target, &values[mark..]))
-                    .map(|started| subroutine_started(internal_begun(started)))
-            }
+            Resolved::Builtin(target) => builtin::run(self, name, target, &values[mark..])
+                .map(|value| Started::Ran(Ended::Returned(Some(value)))),
             // **Named rather than left to the arm below**, which has a
             // catch-all: an internal routine sent into `invoke_call_over`
             // would reach a `match` that has no arm for it.
@@ -1433,22 +1434,6 @@ pub(crate) fn function_started(begun: Begun, name: &[u8]) -> Result<Started<ObjR
     match begun {
         Begun::Done(ended) => function_value(ended, name).map(Started::Ran),
         Begun::Entered => Ok(Started::Entered),
-    }
-}
-
-/// A builtin's answer as a started call: `Entered` where it parked.
-#[inline(always)]
-pub(crate) fn builtin_started(ran: Result<ObjRef, Failure>) -> Result<Started<ObjRef>, Failure> {
-    ran.map(Started::Ran).or_else(builtin_failed)
-}
-
-/// [`builtin_started`] for a builtin that did not answer.
-#[cold]
-#[inline(never)]
-fn builtin_failed(failure: Failure) -> Result<Started<ObjRef>, Failure> {
-    match failure {
-        Failure::Parked => Ok(Started::Entered),
-        failure => Err(failure),
     }
 }
 
