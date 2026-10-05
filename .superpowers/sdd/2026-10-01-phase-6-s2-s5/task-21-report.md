@@ -1,7 +1,7 @@
 # Task 21 report: signals
 
 Base `12f5d843a`. Commits: `532bf29fa` (signals), `ebba80f32` (refusal-sites.tsv re-derived, the
-nohup SIGHUP witness); this report and the spec 4 P49 sentence are committed after them.
+nohup SIGHUP witness); this report and the spec 4 P49 sentence (`8bb1304f1`), and the loom addendum after them.
 
 ## Step 1: the self-pipe, settled
 
@@ -128,7 +128,24 @@ Target dirs under `p6-scratch/t21/`. At `ebba80f32`:
   moved the Loud constructors' lines; re-derived with `REXX_REFUSAL_SITES_REFRESH=1` in
   `ebba80f32`.)
 - loom, `RUSTFLAGS="--cfg loom" CARGO_TARGET_DIR=.../t21/target-loom memcap 8G cargo test -p
-  rexx-exec --test loom`: still running when this report was committed; see the addendum.
+  rexx-exec --test loom`: **did not finish.** 12 of 14 models passed (the two signal models and
+  every baton, inbox and timer model but two); `a_sleeper_registers_as_the_timer_exits` and
+  `an_idle_deadline_is_never_lost` were still exploring when I stopped the run by PID after 1 h 39 min
+  (a `--release` run alongside: same two, stopped after 37 min). Both register more than once, so
+  each now explores a timer thread from its first registration and a respawn. With
+  `LOOM_MAX_PREEMPTIONS` on the release binary, both pass at every bound tried:
+
+  | bound | `an_idle_deadline_is_never_lost` | `a_sleeper_registers_as_the_timer_exits` |
+  | --- | --- | --- |
+  | 3 | 0.09 s | 0.43 s |
+  | 4 | 0.65 s | 4.08 s |
+  | 5 | 3.14 s | 27.90 s |
+  | 6 | 12.51 s | 159.06 s |
+  | 7 | 43.96 s | 734.76 s |
+
+  Growth is about 5x per bound level, so the unbounded gate command will not finish in a gate's
+  time. Needs a ruling: a preemption bound for the loom gate (or those two models), or the timer
+  not started at registration.
 
 ## Departures and concerns
 
@@ -155,8 +172,8 @@ Target dirs under `p6-scratch/t21/`. At `ebba80f32`:
    interpreter has ended: a signal then neither halts nor kills. As the oracle's library does.
 6. **Witnesses live in `tests/signals.rs`, not `concurrency_tests.rs`**; P48's rerun-once rule is
    applied in that file, since `WALL_CLOCK` names ootest rows.
-7. **`loom` run time.** Every model that registers now has a timer thread from the start; see Checks
-   for the cost. Four existing models gained `drop(registration); timer::join_timer()` (loom
+7. **`loom` does not finish unbounded** (Checks). Every model that registers now has a timer thread
+   from its first registration; two Task 15 models no longer finish. Four existing models gained `drop(registration); timer::join_timer()` (loom
    otherwise ended an execution under a live timer thread and panicked inside loom's object store).
 8. **loom 0.7.2 lost a `Release` store** on the model's atomic flag (Step 1, Orderings); the model
    keeps the flag under its wake lock. Not investigated further.
