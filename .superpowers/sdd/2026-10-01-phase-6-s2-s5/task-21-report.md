@@ -180,3 +180,222 @@ Target dirs under `p6-scratch/t21/`. At `ebba80f32`:
 9. **M9 (`SA_RESTART`) survives**, and the SIGPIPE `SIG_IGN` cannot be witnessed from a Rust host.
 10. **`rexx-run` hands a busy loop's output over only when it ends** (the busy witness signals after
     a second rather than on its `ready` line). Pre-existing; the bytes agree with the oracle.
+
+## Fix round 1
+
+Base `e86c8fa29`. Commits: `9b47a4df5` (F1-F10), `8063a6939` (a `HALT` request bit for F1's
+check), `492f0bab8` (a stale command end witnessed; an unreachable token filter dropped), and
+this section. Oracle runs: the CLAUDE.md wrapper from fresh empty directories, each program
+signalled by PID (or by its process group where a row says so), with SIGINT, SIGTERM and SIGHUP
+reset by `env --default-signal`. This crate's runs are the same without the `ulimit` (concern 2).
+"Identical" means rc, stdout and stderr, with the directory masked.
+
+### F1: a halt posted during a blocking operation is served when it returns
+
+`Interp::serve_posted_halt` (`scheduler.rs`) runs after every builtin (`builtin::run`) and after
+every command clause that waited on the baton (`exec_command`). It takes a pending `Posted::Halt`
+out of the inbox, puts every other post back for the next drain, and calls `halt_all`. The
+request is then queued for the clause still running, which raises it at its end: where the
+oracle's `processClauseBoundary` raises it, after every instruction including the last. Only the
+halt is filed there: a `Recall` filed mid-expression would lend the baton out with a builtin's
+answer still unrooted.
+
+The first version tested `INBOX`: 23 Ir per builtin call, and in a multi-activity program it
+drained and requeued unrelated posts on every call. The timer now sets a `HALT` request bit with
+each halt it posts (`timer.rs`), and the check is an inline test of that bit with a cold body.
+Callgrind (`bench-programs/callgrind.sh -r 1`), `e86c8fa29` against `8063a6939`'s tree: rexxcps
++0.10%, strings +0.41%, textnum +0.28%, parse +0.29%, emptyloop +0.0000%: about 6 Ir per builtin
+call, nothing per clause (P43). Concern 1.
+
+Program end: a halt queued before the last clause ends is raised by that clause; after main's
+last clause, a halt reaches started activities through `next_runnable`'s drain; with no activity
+left there is nothing to halt, as on the oracle.
+
+Witnesses (`tests/signals.rs`), each run 30 times on the oracle and on this crate, identical in
+every run: `sigint_halts_after_a_long_builtin` (the review's `copies` loop, 4.1 at line 2),
+`ctrl_c_halts_a_script_running_commands` (the review's group SIGINT: line 2 at 1.0 s, where it was
+`b -2`/`c 0` at 3 s), `sigint_halts_a_last_clause_command`. `ctrl_c_halts_a_redirected_command`
+(a redirected command still waits on the baton) is a divergence: the oracle gives 98.923, 30 of
+30 (F2). Mutants: M1 no serve after a builtin, red on the builtin witness; M2 no serve after a
+command clause, red on the redirected witness; M15 the timer sets no `HALT` bit, red on both.
+
+### F2 (P60): a halt ends the command wait and reads of standard input
+
+**Design: off-baton abandonment, not poll.** For the command wait the machinery existed: a command
+off the baton parks its activity on `ParkReason::Block` while a pool thread waits for the child
+and posts `Unblocked`. Two changes. An unredirected command now takes that path everywhere outside
+a park's continuation, where it needed a second live activity or a test mode (`blocks_off_baton`
+is gone). And `wake_for_halt` abandons a `Block` park: the clause gets `Blocked::abandon`'s ending
+(RC -4), its token joins `abandoned_blocks` and leaves `in_flight`, so the program's end does not
+wait for the child, which runs on as the oracle's does; the late `Unblocked` for that token is
+dropped. Poll would have needed a descriptor per interpreter that the timer writes on a halt (the
+inbox is a condvar), and the child's pipes polled on the holder's thread, where `collect` drains
+them concurrently on purpose.
+
+Standard input the same way (`input.rs`): `Source::Stdin` keeps its own buffer; `fill_stdin` has
+a pool thread read one 8 KiB chunk and post it as `Posted::Input`, while the holder idles on the
+inbox, keeping other posts aside and requeueing them after. On `Posted::Halt` it marks the input
+interrupted, calls `halt_all` and answers nothing: as the oracle's interrupted read, the null
+string, then NOTREADY, and CHARS and LINES 0. The read still in flight is filed when it arrives,
+so the next read loses nothing. Where no pool thread can be reserved the chunk is read inline.
+LINES never blocks, here or on the oracle (it answered 0 at once on an open FIFO), so it has
+nothing to interrupt.
+
+The halt from an interrupted read lands in the `.INPUT` monitor's forwarding `UNKNOWN` activation.
+Untrapped, that gives the oracle's traceback, `Monitor` line included, unchanged. A `CALL ON HALT`
+trap found through that forwarding activation is now queued on its owner, the caller, and
+delivered at the end of the caller's clause, as on the oracle (`halted 3` before `v=[]`); it was
+queued on the monitor's activation and never delivered.
+
+The child under a PID-only signal keeps running on both; a terminal Ctrl-C signals the group, the
+child dies of it, and both halt at the command's line (the group witness above).
+
+Witnesses, each identical to the oracle in 30 of 30 runs except where noted:
+`sigint_ends_a_command_wait`; `call_on_halt_sees_an_abandoned_command` (RC differs: -4 here 30 of
+30, the oracle's unset `waitpid` status -100, -64, -44, -38 and -36 across 30 runs);
+`an_abandoned_command_ends_no_later_one` (oracle 3 runs, the same but RC);
+`sigint_ends_a_parse_pull`, `sigint_ends_a_linein`, `sigint_ends_a_charin` (Monitor frame);
+`sigint_ends_a_stdin_linein` (none); `call_on_halt_sees_an_interrupted_read`. Mutants: M3 the
+command waits inline, red on five command witnesses; M4 no abandonment, red on four; M5 the read
+ignores the halt, red on all five read witnesses; M6 no interrupted mark and M7 the CALL ON trap
+queued on the running activation, each red on the CALL ON read witness; M16 the late end not
+dropped, red on `an_abandoned_command_ends_no_later_one`.
+
+DEVIATIONS entry 10 takes the RC, the abandoned child's later output and the read that loses
+nothing; new entry 12 (OWNER: none) the waits a halt does not end: other streams, a redirected
+command (the oracle's 98.923), and either wait under `ulimit -v`.
+
+### F3: a halt withdraws a semaphore wait; a message wait is not withdrawn (departure)
+
+`park` records a semaphore wait on the activity, with a timed wait's sleeper order;
+`wake_for_halt` removes the sleeper, withdraws it from the semaphore's queue
+(`Semaphores::withdraw` now says whether it was queued), marks it and readies it.
+`retest_semaphore` answers a marked wait without re-testing: an untimed `Sys*Sem` wait `0`, as the
+oracle's `sem_wait` interrupted by EINTR answers (`SysRexxUtil.cpp:836-850`), every other wait
+that it took nothing. `halt_all` now goes in handle order, so main's report comes first, as on the
+oracle. Witnesses, each identical to the oracle in 30 of 30 runs: `sigint_ends_a_semaphore_wait`
+(the review's program: main's 4.1 at line 5, then the activity's at line 10; this crate ends at
+1 s, the oracle at 10 s because it does not wake the sleeper) and
+`call_on_halt_sees_a_withdrawn_semaphore_wait` (`after 0`, `halted 7`). Mutants: M8 no
+withdrawal, red on both; M9 a withdrawn untimed wait answers 121, red on the second.
+
+**Message waits are not withdrawn.** I implemented it and measured it moving this crate away from
+the oracle. On the oracle a halt leaves `m~result` waiting until the runner halts, and main then
+re-raises the runner's condition (`11 *-* call SysSleep 3` / `Error 4 running ... line 5` under
+`CALL ON HALT`); withdrawn, main answered `.nil`, printed `after The NIL object` and ran its
+handler. Without withdrawal the runner, always woken now (P59), completes the message with its
+halt and main re-raises it as the oracle does: that program's output is identical to the oracle's,
+and the untrapped one differs only by the oracle's interleaving of its two threads' lines. Every
+runner a halt reaches ends, so a message wait no longer meets the refusal except behind a runner a
+halt does not wake (concern 3).
+
+### F4 (P61): install rules
+
+`signal.rs`'s `HALTING` pairs each signal with whether it installs over `SIG_IGN`: SIGINT and
+SIGTERM yes, SIGHUP no; anything else, a handler, is left alone. Witnesses:
+`sigint_ignored_at_start_still_halts` (`sh -c "trap '' INT; exec ..."`, identical to the oracle,
+30 of 30) and `under_nohup_sighup_stays_ignored`. Mutants: M10 SIGINT not over `SIG_IGN`, red on
+the first; M11 SIGHUP over `SIG_IGN`, red on the second. DEVIATIONS entry 10 now states both
+installs, the oracle's (SIGHUP's action decides all three) and this crate's.
+
+### F5 and F11 (P62): handlers at the entry point
+
+`Registration::new` no longer installs; `rexx_exec::install_signal_handlers()` (`lib.rs`) does,
+and `rexx-run`'s `main` calls it first. The C API's interpreter creation does not exist yet
+(`RexxCreateInterpreter` is Phase 9's), so there is no second call site. The witnesses spawn
+`env --default-signal=INT,TERM,HUP rexx-run`, with `nohup` or `sh -c` after `env` where a test
+needs them. `signal::tests::running_a_program_installs_no_handler` runs a program and asserts the
+install never ran; M13 (install at registration again) turns it red; M12 (`rexx-run` without the
+call) turns every signal witness but the nohup SIGHUP one red. The signals binary run as
+`sh -c "trap '' INT TERM HUP; exec <bin>"`: 25 of 25 pass; with the `env` reset removed from the
+harness the same run fails `sighup_halts_a_sleep` alone (under P61 an ignored SIGINT or SIGTERM is
+installed over anyway). The witnesses now print a line when P48 reruns them.
+
+### F6 (P58): preemption bound
+
+`registration_model` (`tests/loom.rs`), a `loom::model::Builder` with `preemption_bound =
+Some(5)`, runs `an_idle_deadline_is_never_lost` and `a_sleeper_registers_as_the_timer_exits`, and
+F7's new model (concern 4); the others stay unbounded. The loom gate now finishes (Checks).
+
+### F7: every live interpreter
+
+`a_signal_halts_every_live_interpreter`: two registrations, one modelled signal, each inbox must
+get exactly one halt. M14 (the halt posted to the first registration only) turns it red: loom
+deadlock, the second idles for ever.
+
+### F8: the modelled flag is the shipped one
+
+The model's `Wake` holds the signal flag as a loom `AtomicBool`: `signal` does
+`store(true, Release)` then a notify, `take_signal` `compare_exchange(true, false, AcqRel,
+Acquire)`. The shipped code now does the same: `signal::handler` stores with `Release` and
+`take_pending` uses that `compare_exchange` in place of `swap(SeqCst)`, so model and code run the
+same operations, and the operation is one the reviewer measured loom reading correctly. Either is
+correct on hardware: an RMW reads the latest value whatever its ordering. All three signal models
+pass.
+
+**Correction to Step 1's "Orderings" bullet and concern 8 above:** loom 0.7.2 did not lose a
+`Release` store. Its RMW `swap` and `fetch_and` read a stale value despite the mutex's
+happens-before (the review's standalone repro); `compare_exchange` and `load(Acquire)` read the
+store.
+
+### F9: errno per platform
+
+`errno_location()` (`signal.rs`): `__errno_location` on Linux and Android, `__error` on Apple
+targets and FreeBSD, `__errno` on OpenBSD and NetBSD. `cargo check --target aarch64-apple-darwin
+-p rexx-exec` now reports only the existing E0308 at `rexxutil.rs:154`; the mutant using
+`__errno_location` on Apple brings E0425 back.
+
+### F10 (P63): DEVIATIONS entry 11
+
+New, OWNER: none: an ADDRESS child's SigIgn is `0x4` here and `0x1004` on the oracle, so
+`yes | head -1` prints "Broken pipe" only on the oracle. No code change; measured by the review;
+no suite witness.
+
+### Mutants
+
+Applied by a script that saves the file, writes the mutant, runs the command, and copies the saved
+file back, asserting the bytes match; `git status` clean afterwards apart from the lead's
+`progress.md`. M1-M12, M15 and M16 with `cargo test --release -p rexx-exec --test signals
+--no-fail-fast`; M13 with `cargo test --release -p rexx-exec --lib --no-fail-fast signal::`; M14
+with `RUSTFLAGS="--cfg loom" cargo test --release -p rexx-exec --test loom --no-fail-fast
+every_live`. Every one went red as listed above; none survived.
+
+### Checks (P51), at `492f0bab8`
+
+Target dirs `p6-scratch/t21f1/target` and `.../target-loom`; each status captured unpiped to a
+file.
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0; `--features pinning`: exit 0;
+  `RUSTFLAGS="--cfg loom"`: exit 0.
+- `cargo test --workspace --release --no-run`: exit 0; then `memcap 8G cargo test --workspace
+  --release --no-fail-fast`: exit 0, 143 result lines, 3013 passed, 0 failed, 4 ignored.
+- Loom: `RUSTFLAGS="--cfg loom" CARGO_TARGET_DIR=.../target-loom memcap 8G cargo test -p
+  rexx-exec --test loom`: exit 0, 15 passed, 363 s. It finishes.
+- The same gates at `9b47a4df5` were also all exit 0 (3012 passed; loom 362 s).
+
+### Concerns
+
+1. **F1 costs about 6 Ir per builtin call** (rexxcps +0.10%, strings +0.41%). Nothing per clause,
+   but every builtin call pays. The alternative is to check only after builtins that can run
+   long, which needs a list; a builtin missing from it would not be served until the next
+   countdown check.
+2. **Commands now leave the baton in single-activity programs too**: one pool-thread hand-off per
+   unredirected command, against a `fork`/`exec`, unmeasured; output streams in as it arrives
+   rather than after the child's exit. The release suite is green. Under `ulimit -v 1G` a pool
+   thread's 512 MiB stack cannot be reserved, so the command wait and the stdin read fall back
+   inline and are not interrupted (DEVIATIONS 12). That is why this crate's probes ran without the
+   `ulimit`, as Task 21's did. A command wait needs no big stack; a pool sized for it would remove
+   this, not done.
+3. **F3 departure: message waits are not withdrawn** (argued above). A message wait whose runner
+   no halt wakes (a guard-lock, `Timer` or pinned-native park) still meets the "nothing left to
+   run" refusal after a signal. The narrow fix would wake a halted parked activity at that refusal
+   instead of refusing; not done, needs the lead's ruling.
+4. **F7's model runs under the preemption bound too**, beyond P58's two: it registers twice, and
+   unbounded took 378 s in release; bounded at 5, 3.14 s.
+5. **Divergences added to entry 10**: the abandoned command's RC (-4 against an unset status), its
+   child's later output reaching this interpreter only while it runs, and the next read after a
+   halted read keeping every byte where the oracle lost a line (one run). Entry 12 has the
+   redirected command's 98.923.
+6. **The F5 witness is a command run, not a suite test**: the suite cannot change its own
+   dispositions without `unsafe`.
