@@ -114,3 +114,129 @@ From `rust/`, `CARGO_TARGET_DIR` in the task's scratch, at `6ceab29b0`'s tree:
   `None`); with lent buffers rooted, this cannot happen while the frame lives.
 - No perf measurement (P51): a `MutableBufferData` call now does a `Vec::contains` over the frame's
   lent buffers and a second heap lookup.
+
+## Fix round 1
+
+Base `55dd10af8`. Commits: `a48312f8e` (code and tests), `805b21795` (deviation row, spec
+sentence, forge); this section and the review are committed after them.
+
+### F1: the grown-buffer test raced its native
+
+- **Where the out-of-bounds read was: the test's native, not the interpreter.** `hold_buffer`
+  took the address and the length in two callbacks, `MutableBufferData` then
+  `MutableBufferLength`, and read `length` bytes from the address. A growth between the two
+  leaves the native with the old storage and the new length, and it reads past the old storage.
+  The interpreter kept the old storage valid for its own length (retired, not freed). The oracle
+  has the same window: each of the two stubs takes its own `ApiContext`
+  (`interpreter/api/ThreadContextStubs.cpp:1989-2013`), and growth moves the data there too.
+  Scenario 1 (growth before the first callback) is a legal schedule, not a defect either.
+- **Fix:** `HOLDBUFFER` writes `PATH.held` once it holds the address and the length, and the
+  `grow` and `overlay` methods poll `SysFileExists('PATH.held')` before changing the buffer. The
+  SAFETY comment now states that ordering.
+- **Proof, by running** the `scheduler::tests::lent::` filter of the `rexx-exec` lib test binary
+  on default parallel test threads: 60 runs, 0 failed (release, at `a48312f8e`'s tree). With
+  `--test-threads=1`: 40 runs, 0 failed (`--profile mutation`).
+- **Mutant** (the `grow` method's wait removed, rebuilt with `--profile mutation`): 11 of 60
+  runs red, all in `a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds`.
+
+### F2: the report's oracle claim
+
+The Checks line "the oracle's natives run holding the kernel lock, so it cannot schedule another
+activity while a call holds the address" is false. `NativeActivation::run` and
+`callNativeRoutine` release the kernel around the native (`NativeActivation.cpp:1304`, `:1420`),
+so the oracle runs this interleaving. The forge now carries it: `lent.cpp` defines `HOLDBUFFER`
+and `FINISHEDINPLACE` as rexx-api's test natives do, with the `.held` rendezvous, built by
+`build.sh`. From a fresh directory per run, 30 runs each, oracle under `ulimit -v 1048576` and
+`timeout -k 5 20`, and `rexx-run` built from `a48312f8e`:
+
+| Program | Oracle | rexx-run |
+|---|---|---|
+| `grow.rex` | `abcdefghijklmnopqrstuvwxyz` / `abcd 5026` / `grown`, rc 0, 30 of 30 | same, 30 of 30 |
+| `overlay.rex` | `abXYefghijklmnopqrstuvwxyz` / `ZZXY 26` / `overlaid`, rc 0, 30 of 30 | same, 30 of 30 |
+| `growgc.rex` | `00000000` / `abcd 5026` / `grown`, 30 of 30 | `61626364` / `abcd 5026` / `grown`, 30 of 30 |
+| `finishshort.rex` | `hello` / `helloxxxxx`, 30 of 30 | same, 30 of 30 |
+
+`growgc.rex` collects between the growth and the call's read; its first line is the hex of the
+first four bytes the call read. That row is the licensed divergence.
+
+### F3: the divergence row
+
+The row is gone from the Phase 8 close section and is DEVIATIONS entry 9, "A NATIVE CALL'S OLD
+MUTABLEBUFFER STORAGE OUTLIVES A COLLECTION", owner none. It says what verdict 1 says: the two
+agree while no collection runs during the call, and differ only after one, where the oracle's
+call reads reclaimed memory and this crate's reads the original bytes. It cites the forge and
+the runs above. Spec 2.5's sentence is replaced with the review's text; the false clause is
+deleted, not reworded. The Divergence row section above, which says the row was in DEVIATIONS
+and that the oracle cannot schedule the interleaving, was false on both counts.
+
+### F4: the FinishBufferString terminator
+
+Matched to the oracle. `CStringPool::written` now answers every byte made along with the
+capped finished length, `Surface::finish_string` takes both, and a kept copy taken before the
+finish gets every made byte with its terminator left at the made length, as `RexxString::finish`
+sets only the length (`StringClass.hpp:541`). The string's value is still the finished bytes.
+
+- **Test:** `finishing_a_buffer_string_keeps_its_kept_string_in_place` now calls
+  `FINISHEDINPLACE('hello', 5)` and `FINISHEDINPLACE('hello', 10)` and expects `hello` and
+  `helloxxxxx`. `finished_in_place` takes the made length, fills with `x`, and reads the early
+  address up to its NUL.
+- **Mutants** (whole `rexx-exec` lib, `--no-fail-fast`): F4a writes a NUL at the finished length
+  after the copy, F4b copies only the finished bytes. Both red, in that test only (994 passed,
+  1 failed each).
+- A later `CSTRING` or `StringData` of the same string, while that kept copy lives, also reads the
+  made bytes, as the oracle's one storage does. Without an early `StringData`, a later copy is
+  made from the finished value and stops at the finished length where the oracle's does not;
+  that is not introduced here.
+
+### F5: abandon released what the native still held
+
+Fixed by keeping the frame until the completion. `pop_native_frame` is split into
+`take_native_frame` (pop, take the held condition) and `end_native_frame` (clear, release kept
+holders and lent buffers). `abandon_native_call` takes the frame and parks it, with its frame
+token, in `Activities::abandoned`, whose frames are roots (`NativeFrame::object_roots`, now
+shared with `Activity::object_roots`). `file_completions` hands a completion that matches no
+current call to `Interp::end_abandoned_call`, which ends the frame. A run that ends with the
+call still in flight leaves it held, as P53 leaves the `Interp`.
+
+- **Tests:**
+  - `dispatch::library::tests::an_abandoned_calls_frame_holds_until_its_completion`: a frame
+    lends a buffer and keeps a handle-carried string; the buffer grows; after the abandon the
+    old storage is still retired, the buffer is still a root, and the holder count is 1; after
+    `end_abandoned_call` all three are gone.
+  - `scheduler::tests::lent::an_abandoned_calls_frame_ends_with_its_completion`: under
+    `fail_native_wait`, `HOLDCSTRING` is abandoned with 11.1 and then completes; the run ends
+    holding no abandoned frame (`Ran::abandoned`, read from a test-only thread-local set at the
+    run's end). It waits 0.3 s after the native's file for the completion to drain.
+- **Mutants** (whole `rexx-exec` lib, `--no-fail-fast`):
+
+| Mutant | Result |
+|---|---|
+| F5a abandon ends the frame at once (the old behaviour) | red: the unit test |
+| F5b `file_completions` never calls `end_abandoned_call` | red: the scheduler test |
+| F5c abandoned frames not rooted | red: the unit test |
+| F5d `end_abandoned_call` does nothing | red: both tests |
+
+- Not tested: a native reading lent storage after an abandon. `fail_native_wait` fails the
+  first wait, before any callback is served, so a callback-taking native like `HOLDBUFFER` gets
+  null from its abandoned call and lends nothing. The unit test covers the lend.
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=.../p6-scratch/t20f1/target`:
+- `cargo fmt --all --check`: exit 0 (at `a48312f8e`'s tree, before commit).
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0 (same tree).
+- `cargo clippy --workspace --all-targets --features pinning -- -D warnings`: exit 0 (same tree).
+- `cargo test --release -p rexx-api -p rexx-core --no-fail-fast`: all green (same tree).
+- `cargo test --workspace --release --no-run`: exit 0. Then `memcap 8G cargo test --workspace
+  --release --no-fail-fast` at `805b21795`: exit 0, 142 `test result` lines, 2987 passed, 0 failed (summed over those lines).
+- Mutation baseline M0 (`--profile mutation -p rexx-exec --lib --no-fail-fast`): 995 passed, 0
+  failed. Each mutant was applied by exact-string replacement (one occurrence asserted) and
+  restored from a saved copy (equality asserted); `git status` showed only the lead's
+  `progress.md` after the round.
+
+### Concerns
+
+- F5's scheduler test waits 0.3 s for the abandoned call's completion to drain; the completion is
+  posted within one 10 ms poll of the file appearing, but nothing orders it.
+- `Activities::abandoned` is searched linearly per unmatched completion; it holds only calls
+  abandoned while running.
