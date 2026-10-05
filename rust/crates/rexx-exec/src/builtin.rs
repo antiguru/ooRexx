@@ -722,7 +722,7 @@ pub(crate) fn run(
     // `Interp::required_string_arguments` put it. The row's own name goes
     // with it, because which positions are exempt is a fact about the
     // builtin.
-    match interp.required_string_arguments(builtin.name, args)? {
+    let answer = match interp.required_string_arguments(builtin.name, args)? {
         Some(converted) => (builtin.run)(
             interp,
             builtin.name,
@@ -739,7 +739,9 @@ pub(crate) fn run(
                 objects: args,
             },
         ),
-    }
+    };
+    interp.serve_posted_halt();
+    answer
 }
 
 /// The 1-based argument positions `name` fetches **raw**, which the

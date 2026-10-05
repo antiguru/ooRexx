@@ -325,8 +325,11 @@ pub(crate) struct Activity {
     pub(crate) when_parked: bool,
     /// Its `SysSleep`'s order among the sleepers, while that sleep parks it.
     pub(crate) asleep: Option<u64>,
-    /// Whether a halt ended its `SysSleep` or `GUARD WHEN` park early.
+    /// Whether a halt ended its park early.
     pub(crate) woken_by_halt: bool,
+    /// While it is parked in a semaphore wait, that wait's sleeper order
+    /// where it is timed.
+    pub(crate) semaphore_wait: Option<Option<u64>>,
     /// For a `>K>` line of a `GUARD`'s `WHEN` being routed, whether its value
     /// starts with `0`: the `TraceObject`'s `ISWAITING`.
     pub(crate) waiting_traced: Option<bool>,
@@ -429,6 +432,7 @@ impl Activity {
             when_parked: false,
             asleep: None,
             woken_by_halt: false,
+            semaphore_wait: None,
             waiting_traced: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
@@ -543,6 +547,7 @@ impl Activity {
             when_parked: _,
             asleep: _,
             woken_by_halt: _,
+            semaphore_wait: _,
             waiting_traced: _,
             #[cfg(feature = "pinning")]
                 pins: _,

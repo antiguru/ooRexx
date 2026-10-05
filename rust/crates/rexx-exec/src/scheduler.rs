@@ -145,9 +145,10 @@ impl ParkReason {
 pub(crate) enum Posted {
     Completed(Completed),
     Recall(Recall),
-    /// `activity`'s blocking operation has ended.
+    /// `activity`'s blocking operation, posted under `token`, has ended.
     Unblocked {
         activity: ActivityId,
+        token: u64,
         ended: crate::command::Waited,
     },
     /// What a command's child off the baton wrote, to standard error where
@@ -160,6 +161,8 @@ pub(crate) enum Posted {
     Panicked(Box<dyn std::any::Any + Send>),
     /// A signal arrived: every activity is halted ([`Interp::halt_all`]).
     Halt,
+    /// A chunk of standard input, empty at its end.
+    Input(Vec<u8>),
 }
 
 /// A native call's completion, posted to the inbox by the thread that ran
@@ -286,6 +289,11 @@ pub(crate) struct Activities {
     /// Those of them whose run is below the running loop, under a callback,
     /// so that no loop above them can wait for their completions.
     runs_below: usize,
+    /// The last token a blocking operation was posted under.
+    next_block: u64,
+    /// The tokens of blocking operations a halt abandoned, no longer in
+    /// flight, until their ends are drained.
+    abandoned_blocks: Vec<u64>,
     /// The guard locks, and what each parked activity waits on.
     pub(crate) guards: crate::guards::GuardTable,
     pub(crate) semaphores: crate::semaphores::Semaphores,
@@ -335,6 +343,8 @@ impl Activities {
             in_flight: 0,
             abandoned: Vec::new(),
             runs_below: 0,
+            next_block: 0,
+            abandoned_blocks: Vec::new(),
             guards: crate::guards::GuardTable::default(),
             semaphores: crate::semaphores::Semaphores::default(),
         }
@@ -449,9 +459,12 @@ pub(crate) trait Scheduler {
     fn exit_for_native(&mut self);
     /// Runs `block`, a blocking operation of the running activity's that
     /// touches no island value, on a pool thread, which posts what it ended
-    /// with; `Err(block)` where no pool thread is free.
-    fn exit_for_block(&mut self, block: crate::command::Block)
-    -> Result<(), crate::command::Block>;
+    /// with under the token answered; `Err(block)` where no pool thread is
+    /// free.
+    fn exit_for_block(
+        &mut self,
+        block: crate::command::Block,
+    ) -> Result<u64, crate::command::Block>;
     /// Posts `completion`, of `activity`'s native call in the native frame
     /// `frame`, to `inbox` for the baton's holder to drain; it touches
     /// nothing else.
@@ -499,6 +512,8 @@ impl Scheduler for Interp {
     fn park(&mut self, reason: ParkReason) {
         let running = self.activities.running;
         let table = &mut self.activities;
+        self.activity.woken_by_halt = false;
+        self.activity.semaphore_wait = None;
         match reason {
             ParkReason::Guard(_) => {}
             ParkReason::GuardWhen => self.activity.when_parked = true,
@@ -514,7 +529,6 @@ impl Scheduler for Interp {
                     .sleepers
                     .push(Reverse((deadline, table.next_sleeper, running)));
                 self.activity.asleep = Some(table.next_sleeper);
-                self.activity.woken_by_halt = false;
             }
             ParkReason::Timer { deadline, cancel } => {
                 table.next_sleeper += 1;
@@ -540,6 +554,7 @@ impl Scheduler for Interp {
                     table.sleepers.push(Reverse((deadline, order, running)));
                     order
                 });
+                self.activity.semaphore_wait = Some(order);
                 if !matches!(wait.kind, crate::semaphores::WaitKind::Poll(_)) {
                     table.semaphores.enqueue(
                         wait.key,
@@ -620,11 +635,13 @@ impl Scheduler for Interp {
     fn exit_for_block(
         &mut self,
         block: crate::command::Block,
-    ) -> Result<(), crate::command::Block> {
+    ) -> Result<u64, crate::command::Block> {
         let Some(worker) = self.pool.reserve() else {
             return Err(block);
         };
         self.activities.in_flight += 1;
+        self.activities.next_block += 1;
+        let token = self.activities.next_block;
         let inbox = self.timer.inbox();
         let baton = crate::sync::Arc::clone(&self.baton);
         let activity = self.activities.running;
@@ -633,10 +650,14 @@ impl Scheduler for Interp {
                 let ended = block.stream(&|error, bytes| {
                     inbox.post(Posted::Output { error, bytes });
                 });
-                inbox.post(Posted::Unblocked { activity, ended });
+                inbox.post(Posted::Unblocked {
+                    activity,
+                    token,
+                    ended,
+                });
             });
         }));
-        Ok(())
+        Ok(token)
     }
 
     fn post_completion(
@@ -1231,11 +1252,22 @@ impl Interp {
                 Posted::Output { error: true, bytes } => self.write_err(&bytes),
                 Posted::Panicked(payload) => std::panic::resume_unwind(payload),
                 Posted::Halt => self.halt_all(),
-                Posted::Unblocked { activity, ended } => {
+                Posted::Input(chunk) => self.input.receive(chunk),
+                Posted::Unblocked {
+                    activity,
+                    token,
+                    ended,
+                } => {
+                    let abandoned = &mut self.activities.abandoned_blocks;
+                    if let Some(at) = abandoned.iter().position(|held| *held == token) {
+                        abandoned.swap_remove(at);
+                        continue;
+                    }
                     self.activities.in_flight -= 1;
                     if let Some(blocked) = self
                         .record_of(activity)
                         .and_then(|record| record.blocked.as_mut())
+                        .filter(|blocked| blocked.token() == token)
                     {
                         blocked.end(ended);
                         self.unpark(activity);
@@ -2019,13 +2051,20 @@ impl Interp {
         match self.trap_for(b"HALT") {
             Some(trap) if trap.call => {
                 let object = self.build_condition_object(&raised, Some(true))?;
+                // In a forwarding activation, such as the `.INPUT` monitor's
+                // `UNKNOWN` a halted read ran in, the trap is the caller's,
+                // whose clause is still running and takes it at its end:
+                // measured, `parse pull` halted runs the handler before the
+                // next clause.
+                let running = self.activation().id;
+                let owner = self.trap_frame().map_or(running, |frame| frame.id);
                 self.activity.pending_traps.push_back(PendingTrap {
                     condition: b"HALT".as_slice().into(),
                     rc: None,
                     description,
                     object: Some(object),
-                    activation: self.activation().id,
-                    queued_during_delivery: true,
+                    activation: owner,
+                    queued_during_delivery: owner == running,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
                 });
@@ -2065,24 +2104,28 @@ impl Interp {
 
     /// A signal's halt (`InterpreterInstance::haltAllActivities`,
     /// `runtime/InterpreterInstance.cpp:686`): every activity with a Rexx
-    /// frame is asked to raise `HALT` with no description, and one asleep in
-    /// `SysSleep` or parked in a `GUARD WHEN` is woken to take it.
+    /// frame is asked to raise `HALT` with no description, and one parked in
+    /// `SysSleep`, a `GUARD WHEN`, a semaphore wait or a command's wait is
+    /// woken to take it (rulings P59, P60), in handle order.
     pub(crate) fn halt_all(&mut self) {
         let running = self.activities.running;
-        if request_halt(&mut self.activity, None) == Some(true) {
-            self.wake_for_halt(running);
-        }
         for index in 0..self.activities.idle.len() {
-            let Some(Some(idle)) = self.activities.idle.get_mut(index) else {
-                continue;
+            let activity = ActivityId(u32::try_from(index).expect("handles fit u32"));
+            let record = if activity == running {
+                &mut self.activity
+            } else {
+                match self.activities.idle.get_mut(index) {
+                    Some(Some(idle)) => &mut idle.activity,
+                    _ => continue,
+                }
             };
-            if request_halt(&mut idle.activity, None) == Some(true) {
-                self.wake_for_halt(ActivityId(u32::try_from(index).expect("handles fit u32")));
+            if request_halt(record, None) == Some(true) {
+                self.wake_for_halt(activity);
             }
         }
     }
 
-    /// Ends `activity`'s `SysSleep` or `GUARD WHEN` park, if it is in one.
+    /// Ends `activity`'s park, if it is in one a halt ends.
     fn wake_for_halt(&mut self, activity: ActivityId) {
         let table = &mut self.activities;
         let record = if activity == table.running {
@@ -2105,6 +2148,43 @@ impl Interp {
         } else if std::mem::take(&mut record.when_parked) {
             record.woken_by_halt = true;
             self.unpark(activity);
+        } else if let Some(token) = record
+            .blocked
+            .as_mut()
+            .and_then(|blocked| blocked.abandon())
+        {
+            table.in_flight -= 1;
+            table.abandoned_blocks.push(token);
+            self.unpark(activity);
+        } else if let Some(order) = record.semaphore_wait.take() {
+            let before = table.sleepers.len();
+            if let Some(order) = order {
+                table
+                    .sleepers
+                    .retain(|Reverse((_, sleeper, _))| *sleeper != order);
+            }
+            if table.sleepers.len() < before || table.semaphores.withdraw(activity) {
+                record.woken_by_halt = true;
+                self.unpark(activity);
+            }
+        }
+    }
+
+    /// Serves a signal's halt posted while this thread ran outside the clause
+    /// loop, in a blocking operation that has returned: the halt is queued
+    /// for the end of the running clause. Everything else posted waits for
+    /// the next drain.
+    pub(crate) fn serve_posted_halt(&mut self) {
+        if !self.timer.requests().pending(crate::timer::INBOX) {
+            return;
+        }
+        let mut posted = self.timer.drain();
+        let before = posted.len();
+        posted.retain(|post| !matches!(post, Posted::Halt));
+        let halted = posted.len() < before;
+        self.timer.requeue(posted);
+        if halted {
+            self.halt_all();
         }
     }
 
@@ -2209,7 +2289,7 @@ pub(crate) fn take_scripted() -> Option<Scripted> {
 }
 
 mod pool;
-pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool};
+pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
 
 #[cfg(test)]
 mod tests;

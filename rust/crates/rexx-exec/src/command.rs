@@ -417,10 +417,10 @@ fn escalated(condition: &[u8], description: &[u8], rc: &[u8]) -> Raised {
 }
 
 /// A command clause's run: its outcome, or `Left` with its child's wait off
-/// the baton.
+/// the baton under the token its end is posted with.
 pub(crate) enum Commanded {
     Done(CommandOutcome),
-    Left,
+    Left(u64),
 }
 
 /// What one child left behind: its return code and each stream it wrote.
@@ -476,15 +476,40 @@ fn read_all(
 pub(crate) struct Blocked {
     command: Vec<u8>,
     indent: usize,
+    token: u64,
     ended: Option<Waited>,
 }
 
 impl Blocked {
+    /// The token the child's end is posted with.
+    pub(crate) fn token(&self) -> u64 {
+        self.token
+    }
+
     /// Records what the child left.
     pub(crate) fn end(&mut self, ended: Waited) {
         self.ended = Some(ended);
     }
+
+    /// Ends the wait for a child still running, which a halt abandons there,
+    /// answering its token: `waitpid` interrupted leaves the oracle's status
+    /// unset, and this answers [`INTERRUPTED`].
+    pub(crate) fn abandon(&mut self) -> Option<u64> {
+        if self.ended.is_some() {
+            return None;
+        }
+        self.ended = Some(Waited {
+            rc: INTERRUPTED,
+            out: Vec::new(),
+            err: Vec::new(),
+        });
+        Some(self.token)
+    }
 }
+
+/// The return code of a command whose wait a halt abandoned: `EINTR`, negated
+/// as a signal's code is. DEVIATIONS entry 10.
+const INTERRUPTED: i32 = -4;
 
 /// A started child, or what a command that started none answers.
 enum Child {
@@ -642,9 +667,9 @@ impl Interp {
     /// evaluated and never executed.
     ///
     /// A child's wait leaves the baton, answering `Left`, where nothing is
-    /// redirected and [`Interp::blocks_off_baton`] says so
-    /// (`NativeActivation::run`, `execution/NativeActivation.cpp:1691`,
-    /// releases the kernel lock around a command handler).
+    /// redirected, outside a park's continuation (`NativeActivation::run`,
+    /// `execution/NativeActivation.cpp:1691`, releases the kernel lock around
+    /// a command handler), where a halt can abandon it (ruling P60).
     pub(crate) fn run_command(
         &mut self,
         environment: &[u8],
@@ -684,9 +709,9 @@ impl Interp {
         }
         let spawned = match start(self, &handler, command, io)? {
             Child::Ran(spawned) => spawned,
-            Child::Running { running, .. } if io.is_none() && self.blocks_off_baton() => {
+            Child::Running { running, .. } if io.is_none() && !self.activity.resuming => {
                 match self.exit_for_block(Block { running }) {
-                    Ok(()) => return Ok(Commanded::Left),
+                    Ok(token) => return Ok(Commanded::Left(token)),
                     Err(block) => block.wait(),
                 }
             }
@@ -708,14 +733,6 @@ impl Interp {
             self.write_err(&spawned.err);
         }
         Ok(Commanded::Done(CommandOutcome::of(spawned.rc)))
-    }
-
-    /// Whether a blocking operation started now waits off the baton: where
-    /// another activity is alive or a test mode asks for it, and outside a
-    /// park's continuation. A pinned clause waits for it in a nested loop.
-    fn blocks_off_baton(&self) -> bool {
-        !self.activity.resuming
-            && (self.switch.is_some() || self.stress_collect || self.others_live())
     }
 
     /// What a command whose child waited off the baton answers: its streams
@@ -909,11 +926,15 @@ impl Interp {
         self.roots.activity_mut().pop_frame(frame);
         let kept = self.activity.input_dispatch_syntax.take();
         let outcome = match outcome? {
-            Commanded::Done(outcome) => outcome,
-            Commanded::Left => {
+            Commanded::Done(outcome) => {
+                self.serve_posted_halt();
+                outcome
+            }
+            Commanded::Left(token) => {
                 self.activity.blocked = Some(Box::new(Blocked {
                     command,
                     indent,
+                    token,
                     ended: None,
                 }));
                 return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
@@ -955,6 +976,7 @@ impl Interp {
         let Blocked {
             command,
             indent,
+            token: _,
             ended: Some(ended),
         } = *blocked
         else {

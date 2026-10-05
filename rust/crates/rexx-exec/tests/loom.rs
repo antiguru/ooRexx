@@ -135,12 +135,21 @@ fn the_timer_sets_slice_while_the_holder_idles() {
     });
 }
 
+/// A model with more than one registration, explored with at most five
+/// preemptions (ruling P58): unbounded, each also explores the timer thread
+/// its first registration starts, and does not finish in a gate's time.
+fn registration_model(body: impl Fn() + Sync + Send + 'static) {
+    let mut builder = loom::model::Builder::new();
+    builder.preemption_bound = Some(5);
+    builder.check(body);
+}
+
 /// An idle whose deadline the timer finds due ends, whether the timer's
 /// wake lands before or after the holder blocks; twice in a row, and with
 /// the timer started anew after the registry emptied.
 #[test]
 fn an_idle_deadline_is_never_lost() {
-    loom::model(|| {
+    registration_model(|| {
         let registration = Registration::new();
         let posted = registration.idle_until(sync::now());
         assert!(posted.is_empty());
@@ -160,7 +169,7 @@ fn an_idle_deadline_is_never_lost() {
 /// end, while another registers and idles: the idle still ends.
 #[test]
 fn a_sleeper_registers_as_the_timer_exits() {
-    loom::model(|| {
+    registration_model(|| {
         let first = Registration::new();
         assert!(first.idle_until(sync::now()).is_empty());
         let other = thread::spawn(|| {
@@ -187,6 +196,27 @@ fn a_signal_halts_an_idle_holder() {
         handler.join().expect("the handler");
         assert_eq!(posted, [HALT_POSTED]);
         drop(registration);
+        timer::join_timer();
+    });
+}
+
+/// One signal posts one halt to each live interpreter.
+#[test]
+fn a_signal_halts_every_live_interpreter() {
+    registration_model(|| {
+        let first = Registration::new();
+        let second = Registration::new();
+        let handler = thread::spawn(timer::signal);
+        for registration in [&first, &second] {
+            let mut posted = Vec::new();
+            while posted.is_empty() {
+                posted.extend(registration.idle());
+            }
+            assert_eq!(posted, [HALT_POSTED]);
+        }
+        handler.join().expect("the handler");
+        drop(first);
+        drop(second);
         timer::join_timer();
     });
 }

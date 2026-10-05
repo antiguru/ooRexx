@@ -120,16 +120,18 @@ impl Semaphores {
     }
 
     /// Withdraws `activity` from the queue it is on, and drops an answer no
-    /// resume read.
-    pub(crate) fn withdraw(&mut self, activity: ActivityId) {
+    /// resume read; answers whether it was on one.
+    pub(crate) fn withdraw(&mut self, activity: ActivityId) -> bool {
         self.answers.remove(&activity);
-        if let Some(key) = self.parked.remove(&activity)
-            && let Some(semaphore) = self.table.get_mut(&key)
-        {
+        let Some(key) = self.parked.remove(&activity) else {
+            return false;
+        };
+        if let Some(semaphore) = self.table.get_mut(&key) {
             semaphore
                 .waiters
                 .retain(|waiter| waiter.activity != activity);
         }
+        true
     }
 
     /// Appends each mutex semaphore an activity holds, as the oracle's
@@ -208,6 +210,14 @@ impl Interp {
     pub(crate) fn retest_semaphore(&mut self, wait: SemaphoreWait) -> Option<SemaphoreWait> {
         let me = self.running_activity();
         self.activities.semaphores.withdraw(me);
+        // A halt withdrew the wait: an untimed `Sys*Sem` wait answers `0`, as
+        // `sem_wait` interrupted does (`platform/unix/SysRexxUtil.cpp:836-850`),
+        // and every other wait answers that it took nothing.
+        if std::mem::take(&mut self.activity.woken_by_halt) {
+            let answer = wait.kind == WaitKind::Counting;
+            self.activities.semaphores.answers.insert(me, answer);
+            return None;
+        }
         let expired = wait
             .deadline
             .is_some_and(|deadline| Instant::now() >= deadline);

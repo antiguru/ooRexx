@@ -286,12 +286,10 @@ pub(crate) struct Registration {
 }
 
 impl Registration {
-    /// Registers a new interpreter, installs the signal handlers where this
-    /// is the process's first, and starts the timer thread unless it runs.
-    /// A signal that arrived while none was registered halts nothing.
+    /// Registers a new interpreter and starts the timer thread unless it
+    /// runs. A signal that arrived while none was registered halts nothing.
     pub(crate) fn new() -> Registration {
         let inbox = Arc::new(Inbox::new());
-        registry().wake.install_signals();
         let mut live = live();
         if live.live.is_empty() {
             registry().wake.take_signal();
@@ -382,6 +380,12 @@ impl Registration {
         }
         posted
     }
+}
+
+/// Installs the signal handlers, writing to the timer's wake source.
+#[cfg(not(all(loom, test)))]
+pub(crate) fn install_signals() {
+    registry().wake.install_signals();
 }
 
 /// What a signal handler does to the wake source.

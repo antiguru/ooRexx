@@ -2929,6 +2929,14 @@ impl Interp {
 
 // ---- the public entry point ----
 
+/// Installs the SIGINT, SIGTERM and SIGHUP handlers that halt every live
+/// interpreter, once per process (spec 2026-09-29 section 4, ruling P62): for
+/// a process entry point that starts Rexx for a user. An embedding that does
+/// not call it keeps its own dispositions.
+pub fn install_signal_handlers() {
+    timer::install_signals();
+}
+
 /// Runs a Rexx program and returns what it produced.
 pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
     let path = path.to_string();

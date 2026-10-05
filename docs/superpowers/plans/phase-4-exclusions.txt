@@ -1465,22 +1465,85 @@ DEVIATIONS -- permanent, chosen
      this crate reads 61626364. No answer here should match the oracle's
      after a collection, which reads reclaimed memory.
 
- 10. A SIGNAL HALTS WHERE THE ORACLE DIES OR HANGS (spec 2026-09-29
-     section 4). OWNER: none.
+ 10. A SIGNAL HALTS WHERE THE ORACLE DIES OR HANGS, AND WAKES WHAT THE
+     ORACLE LEAVES WAITING (spec 2026-09-29 section 4, rulings P59-P61).
+     OWNER: none.
 
-     Under nohup SIGHUP is ignored, and the oracle, which reads only
-     SIGHUP's previous action (platform/unix/SystemInterpreter.cpp:136-139),
-     installs no handler, so SIGINT and SIGTERM kill it. This crate checks
-     each signal and halts: Error 4.1, rc 252. An activity parked in GUARD
-     WHEN is woken by the signal and takes the halt here; the oracle leaves
-     it parked and the process never ends.
+     The oracle installs its SIGINT, SIGTERM and SIGHUP handlers only where
+     SIGHUP's previous action is the default
+     (platform/unix/SystemInterpreter.cpp:136-145), and then over whatever
+     SIGINT and SIGTERM had. This crate installs SIGINT and SIGTERM over the
+     default or an ignored action and SIGHUP over the default only, and never
+     over a handler (P61). So under nohup, where SIGHUP is ignored, the
+     oracle installs nothing and SIGINT and SIGTERM kill it; here they halt:
+     Error 4.1, rc 252. With SIGINT ignored at start, as a non-interactive
+     shell starts a background job, both halt.
 
-     Witnesses: rexx-exec's tests/signals.rs,
-     under_nohup_sigint_still_halts and sigint_reaches_a_parked_guard_when.
-     Measured 2026-10-05, oracle, 30 runs each, under timeout -s SIGNAL 1:
-     the sleep program under nohup ends by SIGINT (status 130) and by
-     SIGTERM (143); the GUARD WHEN program prints main's 4.1 and is killed
-     3 s later.
+     A signal reaches only the thread it lands on in the oracle; here every
+     parked activity is woken to take its halt (P59): one in SysSleep or
+     GUARD WHEN, which the oracle leaves parked so that the process never
+     ends, and one in a semaphore wait. A withdrawn untimed Sys*Sem wait
+     answers 0, as the oracle's interrupted sem_wait does; a timed one, which
+     the oracle keeps polling, and an EventSemaphore or MutexSemaphore wait,
+     which it does not interrupt, answer that they took nothing.
+
+     A halt abandons an unredirected command's wait (P60) as the oracle's
+     interrupted waitpid does, and the child, signalled by PID alone, runs on
+     in both. RC is then -4 here; the oracle reads waitpid's unset status,
+     which varies from run to run (-100, -64, -44, -38 and -36 measured). What the abandoned child writes afterwards
+     reaches this interpreter's output only while it still runs; the
+     oracle's child writes straight to the inherited descriptor.
+
+     A halted read of standard input answers the null string and leaves the
+     counts at 0 on both. The next read waits again on both; here it reads
+     every byte that arrives, where the oracle answered the null string for
+     a line written after the halt (one run).
+
+     Witnesses: rexx-exec's tests/signals.rs, under_nohup_sigint_still_halts,
+     sigint_ignored_at_start_still_halts, sigint_reaches_a_parked_guard_when,
+     sigint_ends_a_program_waiting_on_a_guard_when, sigint_ends_a_semaphore_wait,
+     call_on_halt_sees_a_withdrawn_semaphore_wait and
+     call_on_halt_sees_an_abandoned_command. Measured 2026-10-05, oracle, 30
+     runs each, under timeout -s SIGNAL 1: the sleep program under nohup ends
+     by SIGINT (status 130) and by SIGTERM (143); the GUARD WHEN program
+     prints main's 4.1 and is killed 3 s later. Measured 2026-10-05, oracle
+     and this crate, 30 runs each, signalled by PID or by process group,
+     identical on all three descriptors: the sleep program with SIGINT
+     ignored at start; a command's wait, also as the last clause; a script's
+     commands under a group SIGINT; a long builtin; the PULL, LINEIN, CHARIN
+     and .STDIN~LINEIN reads untrapped, and LINEIN under CALL ON HALT; the
+     semaphore wait, untrapped and under CALL ON HALT. The CALL ON HALT
+     command program agrees on everything but RC.
+
+ 11. AN ADDRESS COMMAND'S CHILD STARTS WITH SIGPIPE AT ITS DEFAULT (ruling
+     P63). OWNER: none.
+
+     The oracle ignores SIGPIPE (SystemInterpreter.cpp:146-148) and its
+     children inherit that through posix_spawn: a child's SigIgn mask in
+     /proc/self/status is 0x1004 (SIGQUIT, SIGPIPE). std::process::Command
+     resets SIGPIPE in the child, so here it is 0x4 (SIGQUIT). So
+     address system 'yes | head -1' writes "yes: standard output: Broken
+     pipe" to stderr on the oracle and nothing here.
+
+     Witness: none in the suite; measured by the Task 21 review, 2026-10-05.
+
+ 12. A BLOCKING WAIT A SIGNAL DOES NOT END (ruling P60). OWNER: none.
+
+     A halt ends the wait for an unredirected command's child and for a read
+     of the default input stream. It does not end a read of any other
+     stream, or a redirected command's wait, which runs on the baton holder's
+     thread with its pipes read by threads of its own: the halt is served
+     when the wait returns. The oracle's own read gets EINTR in some of
+     these: measured, a redirected command under a process-group SIGINT is
+     98.923 "Address command redirection failed (Interrupted system call)",
+     rc 158, where this crate waits for the child the signal killed and
+     raises 4.1 at the same clause. Under ulimit -v, where a pool thread's
+     stack cannot be reserved, an unredirected command and a read of the
+     default input stream are waited for there too.
+
+     Witness: rexx-exec's tests/signals.rs, ctrl_c_halts_a_redirected_command.
+     Measured 2026-10-05, 30 runs each: the oracle's 98.923 is the same in
+     every run, and so is this crate's 4.1.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

@@ -16,6 +16,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    rexx_exec::install_signal_handlers();
     let mut args = std::env::args_os().skip(1);
     let Some(path) = args.next() else {
         eprintln!("usage: rexx-run FILE [arguments]");

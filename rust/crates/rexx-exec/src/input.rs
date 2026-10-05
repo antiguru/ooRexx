@@ -53,12 +53,32 @@ enum Source {
     /// Nothing to read, ever. Distinct from `Bytes` over an empty buffer only
     /// in costing no allocation; both answer `None` on the first read.
     Nothing,
-    /// `std::io::Stdin` rather than a `StdinLock`, and locked per read: the
-    /// handle is what `Interp` can hold without borrowing from anything, and
-    /// this crate reads lines rarely enough that re-locking is not worth a
-    /// lifetime for.
-    Stdin(std::io::Stdin),
+    /// The process's standard input, read a chunk at a time off the baton,
+    /// where a halt can abandon the wait ([`Interp::fill_stdin`]).
+    Stdin(Stdin),
     Bytes(Cursor<Vec<u8>>),
+}
+
+/// What standard input has delivered and not been read yet.
+#[derive(Default)]
+struct Stdin {
+    buffered: Vec<u8>,
+    /// A chunk read found the end of the input, or failed.
+    ended: bool,
+    /// A chunk read is in flight, perhaps one a halt abandoned.
+    reading: bool,
+}
+
+/// How much one read of standard input asks for: `std`'s own buffer size,
+/// which a read of at least that size bypasses.
+const STDIN_CHUNK: usize = 8 * 1024;
+
+/// Reads one chunk of standard input: empty at its end or on an error.
+pub(crate) fn read_stdin_chunk() -> Vec<u8> {
+    let mut chunk = vec![0u8; STDIN_CHUNK];
+    let read = std::io::stdin().lock().read(&mut chunk).unwrap_or(0);
+    chunk.truncate(read);
+    chunk
 }
 
 impl Input {
@@ -68,11 +88,53 @@ impl Input {
         matches!(self.source, Source::Stdin(_))
     }
 
+    /// Whether standard input needs a chunk more before the next read can
+    /// answer: a whole line where `line`, else any byte.
+    fn stdin_wants(&self, line: bool) -> bool {
+        let Source::Stdin(stdin) = &self.source else {
+            return false;
+        };
+        let ready = match line {
+            true => stdin.buffered.contains(&b'\n'),
+            false => !stdin.buffered.is_empty(),
+        };
+        !ready && !stdin.ended
+    }
+
+    /// Starts a chunk read where none is in flight, answering whether one
+    /// was started.
+    fn start_stdin_read(&mut self) -> bool {
+        match &mut self.source {
+            Source::Stdin(stdin) if !stdin.reading => {
+                stdin.reading = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// A halt abandoned a read: the counts answer `0` from now on, as the
+    /// oracle's do after its interrupted read, and a later read still waits.
+    fn interrupted(&mut self) {
+        self.exhausted = true;
+    }
+
+    /// Files a chunk standard input delivered: its end where empty.
+    pub(crate) fn receive(&mut self, chunk: Vec<u8>) {
+        if let Source::Stdin(stdin) = &mut self.source {
+            stdin.reading = false;
+            if chunk.is_empty() {
+                stdin.ended = true;
+            }
+            stdin.buffered.extend(chunk);
+        }
+    }
+
     pub(crate) fn new(input: ProgramInput) -> Input {
         Input {
             source: match input {
                 ProgramInput::Nothing => Source::Nothing,
-                ProgramInput::Stdin => Source::Stdin(std::io::stdin()),
+                ProgramInput::Stdin => Source::Stdin(Stdin::default()),
                 ProgramInput::Bytes(bytes) => Source::Bytes(Cursor::new(bytes)),
             },
             exhausted: false,
@@ -88,7 +150,14 @@ impl Input {
                 self.exhausted = true;
                 return None;
             }
-            Source::Stdin(stdin) => stdin.lock().read_until(b'\n', &mut line),
+            Source::Stdin(stdin) => {
+                let end = match stdin.buffered.iter().position(|byte| *byte == b'\n') {
+                    Some(at) => at + 1,
+                    None => stdin.buffered.len(),
+                };
+                line.extend(stdin.buffered.drain(..end));
+                Ok(end)
+            }
             Source::Bytes(cursor) => cursor.read_until(b'\n', &mut line),
         };
         match read {
@@ -125,7 +194,12 @@ impl Input {
                 self.exhausted = true;
                 return Vec::new();
             }
-            Source::Stdin(stdin) => stdin.lock().read(&mut buffer),
+            Source::Stdin(stdin) => {
+                let count = wanted.min(stdin.buffered.len());
+                buffer[..count].copy_from_slice(&stdin.buffered[..count]);
+                stdin.buffered.drain(..count);
+                Ok(count)
+            }
             Source::Bytes(cursor) => cursor.read(&mut buffer),
         };
         let filled = match read {
@@ -224,8 +298,7 @@ impl Interp {
     pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
         let route = self.local_route(b"INPUT")?;
         let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
-            self.hand_over_before_read();
-            return Ok(self.input.read_line().unwrap_or_default());
+            return Ok(self.input_line().unwrap_or_default());
         };
         let caller = self.caller();
         let answer = pinned!(
@@ -244,13 +317,59 @@ impl Interp {
     /// second.
     pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
         self.hand_over_before_read();
+        if !self.fill_stdin(true) {
+            return None;
+        }
         self.input.read_line()
     }
 
     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
     pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
         self.hand_over_before_read();
+        if !self.fill_stdin(false) {
+            return Vec::new();
+        }
         self.input.read_bytes(wanted)
+    }
+
+    /// Reads standard input until it holds a line where `line`, else a byte,
+    /// or has ended: each chunk off the baton, with this thread idle until
+    /// it is posted or a signal's halt arrives (ruling P60). A halt abandons
+    /// the wait, whose chunk is filed when it comes, and answers `false`:
+    /// the read answers nothing, as the oracle's interrupted read does.
+    /// Other posts wait for the next drain.
+    fn fill_stdin(&mut self, line: bool) -> bool {
+        while self.input.stdin_wants(line) {
+            if self.input.start_stdin_read() {
+                let Some(worker) = self.pool.reserve() else {
+                    self.input.receive(read_stdin_chunk());
+                    continue;
+                };
+                let inbox = self.timer.inbox();
+                let baton = crate::sync::Arc::clone(&self.baton);
+                worker.run(Box::new(move || {
+                    crate::scheduler::posting_panics(&inbox, &baton, || {
+                        inbox.post(crate::scheduler::Posted::Input(read_stdin_chunk()));
+                    });
+                }));
+            }
+            let mut kept = std::collections::VecDeque::new();
+            let mut halted = false;
+            for post in self.timer.idle() {
+                match post {
+                    crate::scheduler::Posted::Input(chunk) => self.input.receive(chunk),
+                    crate::scheduler::Posted::Halt => halted = true,
+                    other => kept.push_back(other),
+                }
+            }
+            self.timer.requeue(kept);
+            if halted {
+                self.input.interrupted();
+                self.halt_all();
+                return false;
+            }
+        }
+        true
     }
 
     /// Hands the two output buffers to the embedding's [`crate::Sinks`],

@@ -93,54 +93,51 @@ impl Wake {
     }
 }
 
-/// The model's wake source: a wake flag and a signal flag under a lock, set
-/// by a notify and a signal and taken by a wait and `take_signal`. Timeouts
-/// are not modelled, so a wait waits for a notify.
+/// The model's wake source: a wake flag under a lock, set by a notify and
+/// taken by a wait, and the signal flag as the handler and the timer use it,
+/// a lock-free atomic. Timeouts are not modelled, so a wait waits for a
+/// notify.
 #[cfg(all(loom, test))]
 pub(crate) struct Wake {
-    state: Mutex<WakeState>,
+    woken: Mutex<bool>,
     arrived: Condvar,
-}
-
-#[cfg(all(loom, test))]
-#[derive(Default)]
-struct WakeState {
-    woken: bool,
-    signalled: bool,
+    signalled: loom::sync::atomic::AtomicBool,
 }
 
 #[cfg(all(loom, test))]
 impl Wake {
     pub(crate) fn new() -> Wake {
         Wake {
-            state: Mutex::new(WakeState::default()),
+            woken: Mutex::new(false),
             arrived: Condvar::new(),
+            signalled: loom::sync::atomic::AtomicBool::new(false),
         }
     }
 
     pub(crate) fn notify(&self) {
-        lock(&self.state).woken = true;
+        *lock(&self.woken) = true;
         self.arrived.notify_one();
     }
 
     pub(crate) fn wait(&self, _timeout: Option<Duration>) {
-        let mut state = lock(&self.state);
-        while !state.woken {
-            state = wait(&self.arrived, state);
+        let mut woken = lock(&self.woken);
+        while !*woken {
+            woken = wait(&self.arrived, woken);
         }
-        state.woken = false;
+        *woken = false;
     }
-
-    pub(crate) fn install_signals(&self) {}
 
     /// What a signal handler does: the pending flag, then the wake.
     pub(crate) fn signal(&self) {
-        lock(&self.state).signalled = true;
+        self.signalled.store(true, Ordering::Release);
         self.notify();
     }
 
+    /// The shipped take, `signal::take_pending`'s.
     pub(crate) fn take_signal(&self) -> bool {
-        std::mem::take(&mut lock(&self.state).signalled)
+        self.signalled
+            .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
     }
 }
 
