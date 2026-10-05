@@ -296,3 +296,22 @@ fn sigint_ends_a_program_waiting_on_a_guard_when() {
         },
     );
 }
+
+/// A signal ignored before the interpreter starts stays ignored: under
+/// `nohup` SIGHUP does not end the sleep, on the oracle either (rc 0, 30 of
+/// 30 runs).
+#[test]
+fn under_nohup_sighup_stays_ignored() {
+    halts(
+        "nohup_hup",
+        "say 'before'\nrc = SysSleep(2)\nsay 'after' rc\n",
+        "before\n",
+        "HUP",
+        true,
+        &Ended {
+            code: Some(0),
+            stdout: "before\nafter 0\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
