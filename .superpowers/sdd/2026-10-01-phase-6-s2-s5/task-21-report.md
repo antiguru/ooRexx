@@ -839,3 +839,121 @@ Target dir `p6-scratch/t21f4/target` (loom: `target-loom`); every status capture
 5. **Pre-existing, outside F-1:** after a read leaves nothing buffered, `.stdin~chars` and
    `lines()` on a pipe answer `1` here and `0` on the oracle (`stamp3`, and `stamp1` with only
    `one` written). Base answers the same as HEAD.
+
+## Fix round 5
+
+Base `26acf6f83`. Commit `4cf934a48` (the removal, the witnesses, DEVIATIONS entry 13), and
+this section with `task-21-rereview-4.md`. Ruling P69 withdraws P66 and P68. Driver: re-review
+4's `drv.py` and `cmp.sh`, copied to `p6-scratch/t21f5/` (fresh run directory per run, `env
+--default-signal`, oracle under the `ulimit`). "Pre-P66" is re-review 4's `rexx-run` built at
+`bf76afa1d`, reused. "Identical" means rc, stdout and stderr.
+
+### Removed and kept
+
+The files fix round 4 alone touched (`builtin/stream.rs`, `dispatch.rs`, `environment.rs`,
+`error.rs`, `eval.rs`, `ir/compile.rs`, `ir/drive.rs`, `run.rs`, `run/call.rs`) and those whose
+fix round 3 change was only P66's (`pinning.rs`, `dispatch/stream.rs`, `run/interpret.rs`) were
+written back to their `bf76afa1d` text; `input.rs`, `lib.rs` and `scheduler.rs` were written back
+to it and the kept hunks applied again. No git revert, checkout or restore.
+
+- Removed: `ParkReason::Input`, `input_readers` and the reader wake in `halt_all` (P66); the
+  `.STDIN` guard turn (`stdin_turn`, `ParkReason::Stdin`, `bootstrap_stdin`), PULL and PARSE
+  LINEIN as `Op::Exec`, `Failure::Parked` and the re-test on the pinned `exec_suspends` path
+  (fix round 4). A read of standard input again idles on the inbox until its chunk or a halt,
+  keeping other posts aside, as at `bf76afa1d`.
+- Kept: P60's interruptible read and command wait; P67 as amended (`signal::block` in
+  `install_signal_handlers`, the timer and pool threads, `signal::receive` on the interpreter
+  thread, `signal::unblocked` around the command wait and the stdin chunk read); the `EINTR`
+  retries in `read_all` and `read_stdin_chunk`; the R1/R3 trap key; the R2 witness; fix rounds 1
+  and 2. `git diff bf76afa1d 4cf934a48 -- rust/crates/rexx-exec/src` is exactly those.
+- Witnesses: `an_activity_runs_while_main_reads` and
+  `a_halt_during_a_read_reaches_an_activity_that_ran_meanwhile` now assert the starvation, as
+  `no_activity_runs_while_main_reads` and `a_halt_during_a_read_misses_an_activity_that_has_not_run`
+  (`main hi` before `w 1`; `mh` / `main []` / `w 3` / `end`). `stdin_contention` keeps every case:
+  each still matches the oracle's bytes, so none described only the guard queue. Added the cells
+  that refused under it: `linein(,,1)` twice, `charin(,,1)` twice, `.stdin~linein` against
+  `.input~lines`, `.input~linein` against `stream('STDIN')`, and re-review 4's `sub2` route.
+- DEVIATIONS entry 13, OWNER: none: no other activity runs during a read of the default input
+  stream, and a halt then misses a started activity that has not yet run; with re-review 2's
+  stamped and `keptend` probes and `mhalt1`.
+
+### Matrix
+
+Re-review 4's 63 programs, one run per cell on the oracle, pre-P66 and `4cf934a48`'s binary,
+input `one`/`two`/`three` at 1.0 s: every cell identical to pre-P66. 56 identical to the oracle;
+the other 7 are column 1 (`stream('STDIN','C','QUERY EXISTS')` answers `''`, the oracle `STDIN`),
+pre-existing N-5, the same on pre-P66. No cell refuses. 30 runs each side, identical 30/30:
+`mx_2_3`, `mx_1_2`, `mx_3_5`, `mainreads`, `pullstdin`. `sub2` 3/3 identical. On `8faaf27b8`'s
+binary the five added cases each end rc 120.
+
+### N-2 programs, 30 runs each side
+
+| Program | Oracle | This round | Pre-P66 (3 runs) |
+| --- | --- | --- | --- |
+| `late_vlinein` | `a halted` / `a [one]` / `main halted` / `main read [two]` / `main next` 26, `main halted` before `a [one]` 4 | 30/30 `a halted` / `a []` / `main halted` / `main read [one]` / `main next` | the same as this round |
+| `late_parsepullv` | the same two orders, 22 and 8 | the same as `late_vlinein`, 30/30 | the same |
+| `mhalt1`, `mhalt3` | `halt sent 1` / `r halted from main` / `r read [one]` / `r next` / `r done` | 30/30 `r read [one]` / `r next` / `halt sent 1` / `r done` | the same as this round |
+
+`late_*`: `main halted` comes before main's read again, as on the oracle; `a []` and `[one]`
+for `[two]` are DEVIATIONS 10's halted read. `mhalt1` and `mhalt3` do **not** match the oracle,
+and did not at `bf76afa1d` either: main's `m~halt` cannot run while the started activity reads,
+so it is sent after the read (concern 1). They matched at `4a20439fa`, after P66.
+
+Single activity: PULL under a PID SIGINT, `linein()` and a CALL ON HALT PULL under a group
+SIGINT, 10 runs each side: identical, 4.1 with the monitor frame, and `halted 2` / `v=[]`.
+
+### Mutants
+
+`p6-scratch/t21f5/mut.py`: per mutant, copy the file, assert the site occurs once, write it, run
+`memcap 8G cargo test --profile mutation -p rexx-exec --lib --test signals --test
+stdin_contention --no-fail-fast` (one `Compiling rexx-exec` line each), copy the binary aside,
+restore and `cmp`. Unmutated: lib 1000, signals 37, stdin_contention 1, all passing.
+
+| Mutant | Red |
+| --- | --- |
+| A1 a halt during a read kept for later | 7 signals read witnesses; stdin_contention (`interphalt2`) |
+| A2 no `halt_all` after a halted read | the same |
+| A3 no interrupted mark | `call_on_halt_sees_an_interrupted_read` |
+| A4 posts requeued on every idle | `a_stdin_read_waits_without_spinning` |
+| A5 counts not reset at a read | `a_halted_read_loses_no_input` |
+| K1 main thread not blocked | the mask witness |
+| K2 timer thread not blocked | the mask witness |
+| K3 pool thread not blocked | the mask witness |
+| K4 interpreter thread blocked | 21 signals tests |
+| K5 command wait not unblocked | the mask witness |
+| K6 stdin read not unblocked | the mask witness |
+| K7 pipe read ends at `EINTR` | **survives**; probe below |
+| K8 stdin read ends at `EINTR` | **survives**; probe below |
+| R1 the raised condition's key delayed | `a_second_signal_in_a_call_on_any_handler_is_dropped`, `a_call_on_any_handler_holds_its_any_trap` |
+| R2 no `set_aside` check | `a_halt_readies_a_set_aside_activity_once` |
+
+K7 and K8 by `tgkill` to a `rexx-pool` thread, 3 runs each: `ptypull` (signal 0.5 s, `one` at
+1.0 s) shipped `halted` / `v=[]` / `v=[one]`, K8 `v=[]` twice with standard input closed;
+`k7live` (one pool thread signalled at 0.45 s) shipped `1` `2` `rc -4` `halted` `3` `4` `end`, K7
+loses `3` and `4`. The restored starvation: on `8faaf27b8`'s binary both re-pointed signals
+witnesses print the oracle's order (3 runs each), so they go red if P66 returns.
+
+### Checks (P51), at `4cf934a48`
+
+Target dirs `p6-scratch/t21f5/target` and `.../target-loom`; every status captured unpiped.
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0; `--features pinning`: exit 0;
+  `RUSTFLAGS="--cfg loom"`: exit 0. One `Checking rexx-exec` line in each log.
+- `cargo test --workspace --release --no-run`: exit 0; then `memcap 8G cargo test --workspace
+  --release`: exit 0, 144 result lines, 3030 passed, 0 failed, 4 ignored.
+- Loom, `RUSTFLAGS="--cfg loom" memcap 8G cargo test -p rexx-exec --test loom`: exit 0, 15
+  passed, 408.83 s.
+- The signals binary 20 times with `--nocapture` (load average 1.2-2.3): 37 passed each run, no
+  rerun line.
+
+### Concerns
+
+1. **`mhalt1` and `mhalt3` differ from the oracle 30/30**, as they did at `bf76afa1d`: a
+   `Message~halt` another activity would send during a read is sent after it, by which time the
+   reader has finished. The brief expected base to match; re-review 4's "base" was `4a20439fa`,
+   after P66. It is the starvation, and DEVIATIONS entry 13 names it.
+2. **K7 and K8 survive the suite**, as in fix round 3: no safe way to signal one thread from a
+   test without `unsafe` outside the granted files. The probes above are the record.
+3. **Pre-existing and unchanged:** N-5 (`QUERY EXISTS`), N-3 (CALL ON NOTREADY at stdin EOF), the
+   halted read keeping its chunk (DEVIATIONS 10).
