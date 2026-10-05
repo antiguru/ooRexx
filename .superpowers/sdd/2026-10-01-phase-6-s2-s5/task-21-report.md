@@ -399,3 +399,133 @@ file.
    redirected command's 98.923.
 6. **The F5 witness is a command run, not a suite test**: the suite cannot change its own
    dispositions without `unsafe`.
+
+## Fix round 2
+
+Base `159231bb8`. Commits: `f9fb61990` (N1-N5 fixes, F1's method case, witnesses),
+`2e50fc410` (N7's reset moved to one site; the redirected case of the N4 witness), and this
+section with `task-21-rereview-1.md`. Oracle runs: the CLAUDE.md wrapper from fresh empty
+directories, signalled by PID; this crate the same without the `ulimit` (fix round 1, concern 2).
+"Identical" means rc, stdout and stderr, with the path masked.
+
+### F1 residual: a long native method
+
+`begin_invoke` serves a posted halt after a `NativeBody::Run` method returns, as `builtin::run`
+does. Witness `sigint_halts_after_a_long_method` (the re-review's `'ab'~copies` loop): oracle
+10/10 and this crate identical. Mutant: the serve deleted, red on that test. Cost, callgrind
+`-r 1` base `159231bb8` against `2e50fc410`: rexxcps -0.0000%, strings +0.0000%, emptyloop
++0.0000%, sendloop -0.035%, dispatch -0.024%, dispatchclass -0.025%. The send programs got
+cheaper, which is layout, not this change; no measurable cost.
+
+### N1: readying is idempotent
+
+`Activities::make_ready` pushes an activity only where it is in neither the ready queue nor
+`set_aside`. `unpark`, `wake_due_sleepers` and `wake_for_halt`'s sleep branch use it. Every path
+the re-review asked about readies through it: notify plus halt, timer plus notify, deadline plus
+halt. Witnesses, each the re-review's shape with a 2 s busy activity, signalled at 1 s:
+`a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_sleep` (`SysSleep 1` after the halt;
+`slept 1`) and `..._for_a_wait` (an untimed `t~wait` that only the busy activity's post ends;
+`waited 1 1`). Oracle 10/10 each, this crate identical (5/5 by the driver, and in the suite).
+Mutant: the check removed, red on both.
+
+The busy loops are `do forever; if time('E') >= 2 then leave; end`, not `do while time('E') < 2;
+end`: on this crate the second never ends, because `TIME('E')` in a `DO WHILE` with an empty
+body does not advance (oracle: ends at 1 s). Pre-existing: the same at `159231bb8`. Concern 3.
+
+### N2: the stdin read blocks
+
+`fill_stdin` keeps the posts it sets aside in one deque for the whole read and requeues them when
+it returns, so each idle waits for a new post. Witness `a_stdin_read_waits_without_spinning`:
+a started activity's `address system 'sleep 1'` ends while main waits in `PARSE PULL`; the test
+reads `/proc/<pid>/stat` utime+stime over one second of that wait and asserts under 10 ticks.
+Mutant: requeue on every iteration (the old behaviour), red on that test.
+
+### N3: a halt inside its own CALL ON handler is dropped
+
+`raise_requested_halt` returns without raising where the `HALT` trap (or `ANY`) it finds is
+delayed. The oracle's `trap` queues it on the handler's activation, whose `processTraps` keeps
+re-queueing a delayed handler until that activation ends. Witnesses, each oracle 30/30 and this
+crate identical: `a_second_signal_in_a_call_on_halt_handler_is_dropped` (busy handler, SIGINT at
+0.3 s and 0.7 s later; `h in 4` / `h out`), `a_second_signal_ends_a_handlers_sleep` (`h out 4`,
+the handler's `SysSleep` answering EINTR), and the scheduler test
+`a_message_halt_inside_its_handler_is_dropped` (two `Message~halt`s, phases kept in a
+`.directory`, no timing). Mutant: the early return disabled, red on all three.
+
+### N4: a signal pending at a command's end is served first
+
+`timer::serve_signal` does what the timer thread does for a signal (one `take_signal`, a halt
+posted to every live interpreter), on the holder's thread. `Interp::serve_signal_now` calls it and
+then serves the posted halt. It runs at the `Unblocked` arm before the end is filed, and after an
+on-baton command in place of `serve_posted_halt`. Witness
+`signal::tests::a_signal_pending_at_a_commands_end_halts_it`: in a process of its own (the test
+re-executes its binary, since the halt reaches every live interpreter), a thread sets `PENDING`
+with no wake byte at 0.2 s while `address system 'sleep 0.5'` runs, and again for the same
+command redirected; each must halt at line 2. Mutants: the `Unblocked` call removed, red; the
+command-clause call back to `serve_posted_halt`, red. Both stay green on `signals.rs`, which
+cannot order the race.
+
+Flake check without P48's rerun: the signals binary at `2e50fc410`, 20 runs with
+`--nocapture`, 33 passed each, 0 "run again" lines in all 20 (load average 1.6-3.3). The gated
+workspace run had 0 too.
+
+### N5, N6, N7
+
+- **N5.** `an_abandoned_command_ends_no_shorter_later_one`, the re-review's program (`sleep 3;
+  exit 7` abandoned, then `sleep 0.3`): `second 0 1`. Oracle 3/3 identical. Mutant: `next_block
+  += 1` deleted, red.
+- **N6.** `a_halted_read_loses_no_input`: the re-review's stdin program, `one\ntwo\nthree\nfour\n`
+  written 0.5 s after the signal. This crate: `[]`, `one`, `two`, `thr`, `1 1`, `ee`, `four`.
+  The oracle, 5/5, differs only by losing `one` (DEVIATIONS entry 10). Mutant: `receive` drops a
+  chunk that arrives while the input is marked interrupted, red.
+- **N7.** `Input::reading_stdin`, called once `fill_stdin` returns ready, clears the zeroed counts
+  before the read: after the next read `LINES() CHARS()` answer `1 1`, the oracle's 5/5, where
+  they answered `0 0`. Same witness. Mutant: the call deleted, red.
+
+### Mutants
+
+`p6-scratch/t21f2/mut.py`: per mutant, copy the file, assert the site occurs once, write the
+mutant, run, copy back and `cmp`. Commands: `cargo test --release -p rexx-exec --test signals
+--no-fail-fast`, and for N3 and N4 also `cargo test --release -p rexx-exec --lib --no-fail-fast
+-- signal::tests a_message_halt_inside`. Every run counted 33 signals tests (3 or 4 lib tests).
+
+| mutant | red |
+| --- | --- |
+| N1 no dedupe in `make_ready` | both `a_halt_leaves_a_deadline_woken_wait_ready_once_*` |
+| F1 no serve after a native method | `sigint_halts_after_a_long_method` |
+| N2 requeue each iteration | `a_stdin_read_waits_without_spinning` |
+| N3 delayed trap not checked | both `a_second_signal_*`; `a_message_halt_inside_its_handler_is_dropped` |
+| N4a no serve at `Unblocked` | `a_signal_pending_at_a_commands_end_halts_it` (signals.rs green) |
+| N4b `serve_posted_halt` after an on-baton command | `a_signal_pending_at_a_commands_end_halts_it` (signals.rs green) |
+| N5 constant block token | `an_abandoned_command_ends_no_shorter_later_one` |
+| N6 chunk dropped after a halted read | `a_halted_read_loses_no_input` |
+| N7 counts not reset | `a_halted_read_loses_no_input` |
+
+`git status` afterwards showed only the lead's `progress.md`.
+
+### Checks (P51), at `2e50fc410`
+
+Target dirs `p6-scratch/t21f2/target` and `.../target-loom`; each status captured unpiped.
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0; `--features pinning`: exit 0;
+  `RUSTFLAGS="--cfg loom"`: exit 0. Each log has one `Checking rexx-exec` line. The loom clippy
+  at `f9fb61990`'s first draft failed on `serve_signal` unused under loom; it is gated like
+  `install_signals`.
+- `cargo test --workspace --release --no-run`: exit 0. Then `memcap 8G cargo test --workspace
+  --release --no-fail-fast`: exit 0, 143 result lines, 3023 passed, 0 failed, 4 ignored.
+- Loom: `RUSTFLAGS="--cfg loom" memcap 8G cargo test -p rexx-exec --test loom`: exit 0, 15
+  passed, 359.67 s test time, 392 s wall including the build.
+
+### Concerns
+
+1. **The N4 witness is in-process, not a signal.** It sets `PENDING` directly so the timer cannot
+   win; the real race is only covered statistically (20/20 above). It re-executes the lib test
+   binary with `--exact`; a renamed test breaks the inner run loudly (`1 passed` asserted).
+2. **Posts set aside during a stdin read wait until it ends** (N2 keeps that). A started
+   activity's `say` after its command runs after main's read on this crate; on the oracle it
+   prints first (`w 0` before `v=[hi]`, 3/3). Pre-existing: the reading holder keeps the baton.
+3. **`TIME('E')` does not advance in `do while time('E') < N; end`** on this crate, so the loop
+   never ends; the oracle's ends. Pre-existing at `159231bb8`; not filed, not in Task 21.
+4. **N7 leaves the pre-existing `LINES()` divergence**: once `LINES()` has been asked, a later ask
+   answers 0 here (`lines_asked`) where the oracle answers 1 after a read. The witness asks only
+   after the reads.
