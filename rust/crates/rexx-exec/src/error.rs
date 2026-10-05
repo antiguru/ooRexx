@@ -1891,6 +1891,10 @@ pub(crate) enum Failure {
     /// driver with nothing pinning it; the op that counted the clause turns
     /// it into the driver's exit before the clause begins.
     Slice,
+    /// **Not a failure**: a builtin parked its activity at a root driver
+    /// ([`Interp::park_builtin`]), which its call op turns into the call's
+    /// park.
+    Parked,
 }
 
 impl From<Loud> for Failure {

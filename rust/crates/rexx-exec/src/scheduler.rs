@@ -125,6 +125,10 @@ pub(crate) enum ParkReason {
     Block,
     /// A read of standard input, until a chunk arrives.
     Input,
+    /// An access of standard input off every pinned frame, until its turn
+    /// at `.STDIN`'s guard and then the chunk it wants
+    /// ([`Interp::stdin_turn`]).
+    Stdin(crate::input::StdinWait),
 }
 
 impl ParkReason {
@@ -139,7 +143,7 @@ impl ParkReason {
             ParkReason::Semaphore(_) => "a semaphore",
             ParkReason::Native => "a native call's return",
             ParkReason::Block => "a command's end",
-            ParkReason::Input => "standard input",
+            ParkReason::Input | ParkReason::Stdin(_) => "standard input",
         }
     }
 }
@@ -566,6 +570,18 @@ impl Scheduler for Interp {
             ParkReason::Input => {
                 table.input_readers.push(running);
                 table.in_flight += 1;
+            }
+            ParkReason::Stdin(wait) => {
+                let queued = wait.key().is_some_and(|key| {
+                    table
+                        .guards
+                        .owner(key)
+                        .is_some_and(|owner| owner != running)
+                });
+                if !queued {
+                    table.input_readers.push(running);
+                    table.in_flight += 1;
+                }
             }
             ParkReason::Semaphore(wait) => {
                 let order = wait.deadline.map(|deadline| {
@@ -1825,6 +1841,7 @@ impl Interp {
     pub(crate) fn retest_wait(&mut self, reason: ParkReason) -> Option<ParkReason> {
         match reason {
             ParkReason::Semaphore(wait) => self.retest_semaphore(wait).map(ParkReason::Semaphore),
+            ParkReason::Stdin(wait) => self.retest_stdin(wait),
             _ => None,
         }
     }

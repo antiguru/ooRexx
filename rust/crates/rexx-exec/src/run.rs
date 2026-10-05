@@ -78,8 +78,8 @@ mod condition;
 // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
 mod call;
 pub(crate) use call::{
-    Begun, CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, function_started,
-    subroutine_started,
+    Begun, CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, builtin_started,
+    function_started, subroutine_started,
 };
 #[cfg(test)]
 use call::{Entered, entered_receiver};
@@ -639,6 +639,19 @@ impl Interp {
                 }
                 self.exec_address(code, address)?;
                 Ok(ExecOutcome::Done(Flow::Next))
+            }
+            InstructionKind::Parse(parse) | InstructionKind::Pull(parse)
+                if matches!(
+                    parse.source,
+                    rexx_parse::ParseSource::Pull | rexx_parse::ParseSource::LineIn
+                ) =>
+            {
+                if let Some(reason) = self.parse_stdin_turn(&parse.source)? {
+                    return Ok(ExecOutcome::Park(reason));
+                }
+                let parsed = self.exec_parse(code, parse, None);
+                self.end_stdin_turn();
+                parsed.map(|()| ExecOutcome::Done(Flow::Next))
             }
             _ => self
                 .exec_flow(code, index, instruction, source, first_instruction)

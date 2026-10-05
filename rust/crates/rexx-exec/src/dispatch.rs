@@ -2754,6 +2754,20 @@ impl Interp {
         }));
     }
 
+    /// [`Interp::park_routine_with`] for a builtin: [`Failure::Parked`]
+    /// where the park is recorded on the activity.
+    pub(crate) fn park_builtin(
+        &mut self,
+        reason: crate::scheduler::ParkReason,
+        resume: NativeResume,
+        receiver: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        match self.park_native(reason, resume, receiver)? {
+            NativeStarted::Ran(answer) => Ok(answer.unwrap_or(receiver)),
+            NativeStarted::Entered(_) => Err(Failure::Parked),
+        }
+    }
+
     /// A park for `reason` by a routine whose answer, once woken, is what
     /// `resume` answers for `receiver`: that answer after a pinned wait, or
     /// `receiver` with the park recorded on the activity.
@@ -3376,9 +3390,13 @@ impl Interp {
             // once rather than running the remaining finalizers.
             // No slice ends under the pin this send holds.
             Ok(_)
-            | Err(Failure::Raised(_) | Failure::Exited(_) | Failure::Deadline | Failure::Slice) => {
-                None
-            }
+            | Err(
+                Failure::Raised(_)
+                | Failure::Exited(_)
+                | Failure::Deadline
+                | Failure::Slice
+                | Failure::Parked,
+            ) => None,
             Err(Failure::Loud(loud)) => Some(*loud),
         }
     }

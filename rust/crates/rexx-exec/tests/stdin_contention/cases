@@ -1,0 +1,256 @@
+# main reads; a started activity asks lines() meanwhile and waits for the read
+run write1000=(one,two,three)
+o = .w~new; m = o~start('go')
+parse pull v
+say 'main [' || v || ']'
+say m~result
+exit
+::class w
+::method go
+  call SysSleep 0.2
+  return 'w lines' lines()
+----
+rc> 0
+out> main [one]
+out> w lines 1
+
+# a started activity reads; main asks lines() meanwhile
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+say 'main lines' lines()
+say 'main end'
+exit
+::class r
+::method go
+  parse pull v
+  say 'r [' || v || ']'
+----
+rc> 0
+out> r [one]
+out> main lines 1
+out> main end
+
+# two readers by PULL, main the second, answered by message result
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+parse pull v
+say 'main [' || v || ']'
+r = m~result
+say 'end' r
+exit
+::class r
+::method go
+  parse pull v
+  return v
+----
+rc> 0
+out> main [two]
+out> end one
+
+# two readers by PULL, each served in order
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+parse pull v
+say 'main [' || v || ']'
+exit
+::class r
+::method go
+  parse pull v
+  say 'r [' || v || ']'
+----
+rc> 0
+out> r [one]
+out> main [two]
+
+# the same, main running on after its read
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+parse pull v
+say 'main [' || v || ']'
+call SysSleep 0.5
+say 'main end'
+exit
+::class r
+::method go
+  parse pull v
+  say 'r [' || v || ']'
+----
+rc> 0
+out> r [one]
+out> main [two]
+out> main end
+
+# three readers by PULL
+run write1000=(one,two,three)
+a = .r~new; ma = a~start('go', 'a')
+call SysSleep 0.1
+b = .r~new; mb = b~start('go', 'b')
+call SysSleep 0.1
+parse pull v
+say 'main [' || v || ']'
+call SysSleep 0.5
+say 'main end'
+exit
+::class r
+::method go
+  use arg tag
+  parse pull v
+  say tag '[' || v || ']'
+----
+rc> 0
+out> a [one]
+out> b [two]
+out> main [three]
+out> main end
+
+# three readers by PULL, one line at a time
+run write1000=(one) write1500=(two) write2000=(three)
+a = .r~new; ma = a~start('go', 'a')
+call SysSleep 0.1
+b = .r~new; mb = b~start('go', 'b')
+call SysSleep 0.1
+parse pull v
+say 'main [' || v || ']'
+call SysSleep 0.5
+say 'main end'
+exit
+::class r
+::method go
+  use arg tag
+  parse pull v
+  say tag '[' || v || ']'
+----
+rc> 0
+out> a [one]
+out> b [two]
+out> main [three]
+out> main end
+
+# two readers by linein()
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+v = linein()
+say 'main [' || v || ']'
+call SysSleep 0.5
+say 'main end'
+exit
+::class r
+::method go
+  v = linein()
+  say 'r [' || v || ']'
+----
+rc> 0
+out> r [one]
+out> main [two]
+out> main end
+
+# two readers by linein(), one line at a time
+run write1000=(one) write1500=(two) write2000=(three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+v = linein()
+say 'main [' || v || ']'
+call SysSleep 0.5
+say 'main end'
+exit
+::class r
+::method go
+  v = linein()
+  say 'r [' || v || ']'
+----
+rc> 0
+out> r [one]
+out> main [two]
+out> main end
+
+# linein() then PULL
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+parse pull v
+say 'main [' || v || ']'
+call SysSleep 0.5
+say 'main end'
+exit
+::class r
+::method go
+  v = linein()
+  say 'r [' || v || ']'
+----
+rc> 0
+out> r [one]
+out> main [two]
+out> main end
+
+# charin() then lines()
+run write1000=(one,two,three)
+o = .r~new; m = o~start('go')
+call SysSleep 0.2
+say 'main lines' lines()
+say 'main end'
+exit
+::class r
+::method go
+  c = charin()
+  say 'r [' || c || ']'
+----
+rc> 0
+out> r [o]
+out> main lines 1
+out> main end
+
+# a line queued while main waits on standard input is the next PULL's
+run write1000=(one,two)
+o = .w~new; m = o~start('go')
+parse pull v
+say 'main [' || v || ']'
+say m~result
+parse pull q
+say 'next [' || q || ']'
+exit
+::class w
+::method go
+  call SysSleep 0.2
+  queue 'queued'
+  return 'w queued'
+----
+rc> 0
+out> main [one]
+out> w queued
+out> next [queued]
+
+# main reads by .stdin~linein, a pinned read; lines() waits for it
+run write1000=(one,two)
+-- H: v = .stdin~linein / W: n = lines()
+o = .w~new; m = o~start('go')
+v = .stdin~linein
+say 'main [' || v || ']'
+say m~result
+exit
+::class w
+::method go
+  call SysSleep 0.2
+  n = lines()
+  return 'w got [' || n || ']'
+----
+rc> 0
+out> main [one]
+out> w got [1]
+
+# a halt during a read inside INTERPRET runs the CALL ON HALT handler at that clause
+run sigint=500 write1000=(one)
+call on halt name h
+interpret 'parse pull v'
+say 'v=[' || v || ']'
+exit
+h: say 'halted' sigl
+return
+----
+rc> 0
+out> halted 2
+out> v=[]

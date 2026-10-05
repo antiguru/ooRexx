@@ -829,6 +829,9 @@ impl Interp {
             if name == b"STDOUT".as_slice() {
                 self.bootstrap_stdout = Some(built);
             }
+            if name == b"STDIN".as_slice() {
+                self.bootstrap_stdin = Some(built);
+            }
             if self
                 .set_directory_entry(EnvScope::Local, name, built)
                 .is_err()

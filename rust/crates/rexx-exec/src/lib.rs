@@ -1529,6 +1529,9 @@ struct Interp {
     /// `SAY`'s own route. Measured, delivering every `SAY` through the monitor
     /// costs 16,360 instructions a line where writing costs none of it.
     bootstrap_stdout: Option<ObjRef>,
+    /// The `.STDIN` the bundle minted, whose guard an access of standard
+    /// input takes before it waits for a chunk ([`Interp::stdin_turn`]).
+    bootstrap_stdin: Option<ObjRef>,
     /// Bumped by every write that could move a route's far end: a `.local`
     /// entry, a directory put or removal, and an array write, which is how a
     /// monitor's destination queue changes.
@@ -2067,6 +2070,7 @@ impl Interp {
             processing_uninits: false,
             bootstrap_stderr: None,
             bootstrap_stdout: None,
+            bootstrap_stdin: None,
             route_generation: 0,
             store_generation: 0,
             output_route: None,
@@ -2770,6 +2774,7 @@ impl Interp {
             // handles here root nothing of their own; they are only compared.
             bootstrap_stderr: _,
             bootstrap_stdout: _,
+            bootstrap_stdin: _,
             route_generation: _,
             store_generation: _,
             // The route it names is `.local`'s own entry, which that global
@@ -3096,6 +3101,13 @@ fn report_late_failures(
                     .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
                 *exit_code = NOT_IMPLEMENTED_EXIT;
             }
+            Failure::Parked => {
+                let loud = Loud::scheduler_inconsistency("a builtin park outside a root driver");
+                interp
+                    .trace
+                    .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+                *exit_code = NOT_IMPLEMENTED_EXIT;
+            }
             Failure::Raised(raised) => {
                 if sites.is_empty() {
                     sites.push(FailureSite::Clause {
@@ -3273,7 +3285,10 @@ fn execute_on(
     // `interp` below -- a partial move of one field ends `interp`'s usability
     // as a whole value, and every other call above this one only reads or
     // takes a single field, never the whole struct.
-    let refused_main = matches!(result, Err(Failure::Loud(_) | Failure::Slice));
+    let refused_main = matches!(
+        result,
+        Err(Failure::Loud(_) | Failure::Slice | Failure::Parked)
+    );
     let mut exit_code = match result {
         // `Failure::Exited` is not a failure -- it is `EXIT` (or falling off
         // the routine's own end) reached through `ExprKind::Call`'s
@@ -3291,6 +3306,13 @@ fn execute_on(
         }
         Err(Failure::Slice) => {
             let loud = Loud::scheduler_inconsistency("a slice outside a root driver");
+            interp
+                .trace
+                .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+            NOT_IMPLEMENTED_EXIT
+        }
+        Err(Failure::Parked) => {
+            let loud = Loud::scheduler_inconsistency("a builtin park outside a root driver");
             interp
                 .trace
                 .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
