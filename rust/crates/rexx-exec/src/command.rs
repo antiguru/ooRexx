@@ -481,11 +481,6 @@ pub(crate) struct Blocked {
 }
 
 impl Blocked {
-    /// The token the child's end is posted with.
-    pub(crate) fn token(&self) -> u64 {
-        self.token
-    }
-
     /// Records what the child left.
     pub(crate) fn end(&mut self, ended: Waited) {
         self.ended = Some(ended);

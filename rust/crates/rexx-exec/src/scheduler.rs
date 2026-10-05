@@ -1270,7 +1270,6 @@ impl Interp {
                     if let Some(blocked) = self
                         .record_of(activity)
                         .and_then(|record| record.blocked.as_mut())
-                        .filter(|blocked| blocked.token() == token)
                     {
                         blocked.end(ended);
                         self.unpark(activity);

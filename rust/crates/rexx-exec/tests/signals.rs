@@ -663,3 +663,23 @@ fn call_on_halt_sees_a_withdrawn_semaphore_wait() {
         },
     );
 }
+
+/// The abandoned child's end, posted later, ends nothing: the next command
+/// runs to its own end.
+#[test]
+fn an_abandoned_command_ends_no_later_one() {
+    halts(
+        "commandnext",
+        "call on halt name h\nsay 'a'\naddress system 'sleep 1'\nsay 'b' rc\n\
+         address system 'sleep 2; echo x'\nsay 'c' rc\nexit\n\
+         h: say 'halted' sigl; return\n",
+        "a\n",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "a\nb -4\nhalted 4\nx\nc 0\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
