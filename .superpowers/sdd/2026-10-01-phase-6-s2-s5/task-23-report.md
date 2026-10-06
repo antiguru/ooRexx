@@ -80,3 +80,12 @@ compiling (memcap covered the build); built first, then run: 3033 passed, 3 fail
 `REXX_REFUSAL_SITES_REFRESH=1 cargo test --release -p rexx-exec --test refusal_sites -- --test-threads=1 the_table_holds_every_constructor`;
 only the definition column changed (`diff` of every other column empty). After the fix:
 `rexx-bench` and `refusal_sites` pass.
+
+At `300aa2695`: `cargo test --workspace --release --no-fail-fast` (built first, then run under
+`memcap 8G`) exits 0, 3036 passed and 0 failed (sum of `test result` lines).
+
+## Concerns
+
+- The sharing tags live in `rexx-core`'s heap behind a forwarded feature, not in `rexx-exec` alone.
+- "ooTest" for criterion 6 is criterion 1's derived list, not every ooTest test.
+- Clippy and fmt were last run at `e57dc8315`; `300aa2695` changes no Rust source.
