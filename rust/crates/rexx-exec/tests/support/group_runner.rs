@@ -474,7 +474,7 @@ pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTre
                     if quoted {
                         !matches!(c, '\'' | '"')
                     } else {
-                        c.is_ascii_alphanumeric() || *c == '_'
+                        c.is_ascii_alphanumeric() || matches!(c, '_' | '!' | '?' | '.')
                     }
                 })
                 .collect();
