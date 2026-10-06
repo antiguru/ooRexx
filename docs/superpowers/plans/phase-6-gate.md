@@ -1127,62 +1127,99 @@ Probes and counts (30 runs per side; one for row 20's single-activity program) f
 
 ### Criterion 1, the derived list's tests (Task 25)
 
-Per-test rows: the gate tests `group_runs::the_s2_rows_of_the_derived_list_in_both_modes` and
-`group_runs::the_s3_rows_of_the_derived_list_in_both_modes` (G4, G6).
-
 Whole-group rows: `group_runs::whole_groups::each_group_of_the_derived_list_in_one_run_in_both_modes`,
-gate-only. Each group file of the derived list runs in one run twice: whole, and with only its
-tests of the derived list (`part` `derived`); the tests reaching rxapi are renamed out of both. Each
-run is made on the oracle 5 times, and 30 times when the oracle's outcomes vary or one of ours is not
-among them (ruling P83), then here normally and under `EveryOpportunity`. An outcome is stdout
-masked as the per-test runner masks it (each copy's path replaced), stderr and exit status. "Agrees"
-means the outcome is one the oracle produced. At `7c9871515`, from `rust/`, release:
+gate-only. Each group file of the derived list runs in one run as `whole` (every test) and `derived`
+(its tests of the derived list); the tests reaching rxapi are renamed out of both. When the whole
+run here refuses, the group runs once more as `rest`: whole with the refusing tests skipped, each
+found as the last test the run started, until a run does not refuse (ruling P85). The rest part also
+leaves out the tests of `REST_LEFT_OUT`, which allocate here until memory runs out and take the
+shared test process with them: `Class` TEST_SUBCLASSES_GC (classes are never collected, D59) and
+`Object` TEST_UNINIT and TEST_UNINIT_CLASS (each loops until a weak reference is cleared). The copied
+framework writes `started NAME` to stderr as each test starts, on both sides.
+
+Each run is made on the oracle 5 times, and 30 times when the oracle's outcomes vary or one of ours
+is not among them (ruling P83), and here once normally and once under `EveryOpportunity`; a row of a
+group holding a wall-clock test that is not allowed runs again once (P48). Each side runs its own
+interpreter as `rexx` from `PATH`: the oracle its `build/bin`, this crate a link to its `rexx-run`
+(under every opportunity with `REXX_SWITCH_MODE=every`). An outcome is stdout masked as the per-test
+runner masks it (each copy's path replaced), stderr and exit status. "Agrees" means the outcome is
+one the oracle produced. A run's key is its refusal or summary, its status, the last test it started
+and its failing tests. At `bf558da52`, from `rust/`, release:
 
 ```
-REXX_CORPUS_GATE=1 RAYON_NUM_THREADS=4 REXX_WHOLE_GROUPS_TABLE=<file> memcap 8G cargo test --release \
-  -p rexx-exec --test concurrency_tests -- whole_groups --nocapture
+REXX_CORPUS_GATE=1 RAYON_NUM_THREADS=4 REXX_WHOLE_GROUPS_TABLE=<file> REXX_WHOLE_GROUPS_STARTED=<file> \
+  memcap 8G cargo test --release -p rexx-exec --test concurrency_tests -- whole_groups --nocapture
 ```
 
-`test result: ok. 1 passed; 0 failed` (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/run.log`);
-the table, with each group's oracle outcomes and their counts, is `whole-groups/table.txt` beside it.
-The test passes when every run agrees or is a row of its `DIFFERING` list with the same refusal or
-summary; no run ends in an inverted wait, and no run fails to finish but the P46 row.
+`test result: ok. 1 passed; 0 failed`, no P48 rerun
+(`docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/run.log`). Beside it, `table.txt`
+holds each row's oracle outcomes with their counts and keys and our two runs' keys, and
+`started.txt` the tests each of our runs started and the tests each rest run skipped. The test
+passes when every run agrees or is a row of its `DIFFERING` list with the same key; no unlisted run
+ends in an inverted wait or fails to finish. A listed row that agrees is printed: here `REPLY` whole
+under every opportunity, whose 19 assertions one of the oracle's 30 runs produced.
 
-Agreeing in both modes, whole and derived: `Alarm`, `EventSemaphore`, `Ticker`, `SysSleep`,
-`RESULT_RC_SIGL` and `bug2003_guard_when`. Agreeing in both modes in the derived part only:
-`STREAM`, `Class`, `DateTime`, `Object`, `RexxContext`, `CONSTANT`, `TRACE`, `Section1`.
+Agreeing in both modes (`table.txt`): `Alarm`, `EventSemaphore`, `Ticker`, `SysSleep`,
+`RESULT_RC_SIGL` and `bug2003_guard_when`, whole and derived; `STREAM`, `Class`, `DateTime`,
+`Object`, `RexxContext`, `CONSTANT`, `TRACE` and `Section1`, derived; `DateTime`, `Message`,
+`MethodArgs`, `GUARD` and `Section1`, rest. `bug2003_guard_when` runs `rexx guard_when.rex`, which
+passes on both sides, 12 assertions. `MutexSemaphore` both parts and `REPLY` derived agree normally.
+
+A run that refuses ends there, so it covers only the tests before the refusal (`started.txt`): the
+`Message` derived run starts 4 of its derived tests and the rest run 65 tests with
+TEST_REPLYWITH_NOT_ARRAY, TEST_SENDWITH_NOT_ARRAY and TEST_STARTWITH_NOT_ARRAY skipped; the
+`MethodArgs` derived run starts 1; `Method` refuses before any test starts, in both parts, so it has
+no rest run.
 
 The rows that differ, each with its reason (`DIFFERING`):
 
-| group | part | mode | ours | reason |
-|---|---|---|---|---|
-| `MutexSemaphore` | both | every | the run's deadline | TEST_EXCLUSION's own race, which the oracle hangs in too (P46); agrees normally |
-| `REPLY` | both | every | 19 assertions whole, 18 derived, rc 0 | every continuation runs before the program ends; the oracle races them with its end (P41, `phase-4-exclusions.txt` row 22); the oracle's assertion counts vary over its 30 runs (`table.txt`); agrees normally |
-| `TIME` | both | both | failure, rc 1 | elapsed-clock defect, queued `2026-10-02-elapsed-clock-per-routine-and-reset`: TEST_4, 5, 10, 11 as in their own runs, and whole, TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R, which pass alone and fail after earlier tests because a method does not start with a fresh elapsed clock |
-| `CALL` | derived | both | failure, rc 1 | TEST_4, the same elapsed-clock defect, as in its own run |
-| `Message` | both | both | refused, `MAKEARRAY` (Phase 9) | TEST_STARTWITH_NOT_ARRAY, as in its own run |
-| `Method`, `MethodArgs`, `TRACE_TraceObject` | both | both | refused, `DO is not implemented` | the derived tests refused in their own runs (S3 table above; queued `2026-10-02-do-with-over-refusal`) |
-| `ATTRIBUTE`, `METHOD` | derived | both | failure, rc 1 | TESTDELEGATE, as in its own run (Method delegate attributes, outside Phase 6) |
-| `GUARD` | derived | both | refused, `USE LOCAL` (Phase 5) | TEST_WHEN_USE_LOCAL_NO_WAIT, as in its own run |
-| `RAISE` | derived | both | failure, rc 1 | TEST_RAISE_INSERT_CRLF, as in its own run (message text conversion, outside Phase 6) |
-| `RAISE` | whole | both | failure, rc 1 | TEST_RAISE_INSERT_CRLF, and tests outside the derived list that fail alone too |
-| `STREAM` | whole | both | error, rc 2 | tests outside the derived list that fail alone too |
-| `Class`, `DateTime`, `Object`, `RexxContext`, `ATTRIBUTE`, `CONSTANT`, `METHOD`, `CALL`, `GUARD`, `TRACE`, `Section1` | whole | both | refused | a test outside the derived list refuses (its owner in the message), outside Phase 6 |
+| group | parts | modes | reason |
+|---|---|---|---|
+| `MutexSemaphore` | whole, derived | every | TEST_EXCLUSION's own race: the oracle passes it in each of its 30 runs as written and hangs when that schedule is forced (`SysSleep 0.01` after `step = 6`, P46) |
+| `REPLY` | whole, derived | every | every continuation runs before the program ends; the oracle races them with its end (P41, `phase-4-exclusions.txt` row 22) |
+| `TIME` | whole, derived | both | elapsed-clock defect, queued `2026-10-02-elapsed-clock-per-routine-and-reset`: TEST_4, 5, 10 and 11, as alone; whole, TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R, which pass alone, after earlier tests, because a method shares its caller's and earlier methods' elapsed clock (`whole-groups/clock/`) |
+| `CALL` | derived, rest | both | TEST_4, the same elapsed-clock defect, as alone |
+| `Message` | whole, derived | both | TEST_REPLYWITH_NOT_ARRAY refuses, as alone (`MAKEARRAY`, Phase 9) |
+| `Method` | whole, derived | both | refuses before any test starts with TESTDIRECTIVES' refusal alone: `DO WITH` or `DO COUNTER` over a collection, queued `2026-10-02-do-with-over-refusal` |
+| `MethodArgs` | whole, derived | both | TEST_REQUEST_STRING_CLASS refuses, as alone; the same queued refusal |
+| `TRACE_TraceObject` | whole, derived | both | TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; the same queued refusal |
+| `GUARD` | derived | both | TEST_WHEN_USE_LOCAL_NO_WAIT refuses, as alone (`USE LOCAL`, Phase 5) |
+| `ATTRIBUTE`, `METHOD` | derived, rest | both | TESTDELEGATE, as alone (Method delegate attributes, outside Phase 6) |
+| `RAISE` | derived | both | TEST_RAISE_INSERT_CRLF, as alone (message text conversion, outside Phase 6) |
+| `RAISE` | whole | both | TEST_RAISE_INSERT_CRLF, and TEST_RAISE_PROPAGATE, TEST_RAISE_SYNTAX_EXIT_02 and TEST_RAISE_SYNTAX_RETURN_02, which fail alone too |
+| `STREAM` | whole | both | TEST_QUERYFILE_EXISTS_OPENED_01 and _03, TEST_SEEK_CLOSEDFILE_2785896 and _2787994, TEST_OPEN_WRITE_ONLY_3274050_C and _D, which fail alone too; and TEST_RELATIVE_FILE_EXISTS and _EXISTS2, which fail on the oracle too |
+| `Class`, `Object`, `RexxContext`, `CONSTANT`, `TRACE`, `TRACE_TraceObject` | rest | both | tests outside the derived list that fail alone too, each named in its key |
+| `Class`, `Object`, `Section1` | whole | both | a test outside the derived list refuses alone the same way, each naming Phase 9: TEST_CLASS_DEFINE, TEST_RUN_ARRAY_ARGUMENT, TEST_OBJECT_OBJECTNAMEEQUALS |
+| `RexxContext` | whole | both | TESTCONDITION01 refuses alone the same way (`CONDITION` option `O`) |
+| `DateTime`, `TRACE` | whole | both | TEST_BRUTE_FORCE and TEST_TRACE_LABEL_WITH_FORWARD refuse alone the same way: `DO WITH` or `DO COUNTER` over a collection, queued `2026-10-02-do-with-over-refusal` |
+| `ATTRIBUTE`, `CONSTANT`, `METHOD`, `CALL`, `GUARD` | whole | both | a test outside the derived list expects a syntax error (25.925, 19.916, 25.902, 19.2, 25.913) and the parse here refuses instead, naming Phase 5, alone the same way: TESTABSTRACTTWICE, TEST_BAD_NEGATIVE, TESTABSTRACTEXTERNAL, TEST_INVALID, TEST_INVALID_OPTION_ONOFF |
 
-"Fail alone too" is `whole-groups/alone.sh`, from the repository root, its output `alone.txt`:
+"Alone" is `whole-groups/alone.sh`, from the repository root, each named test run alone with
+`-t`, standard input empty and each side's `rexx` on `PATH`; output `alone.txt`:
 
 ```
 bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/alone.sh REXX_RUN SCRATCH
 ```
 
-Each named STREAM and RAISE test fails alone here and passes alone on the oracle; the TIME
-`_R` tests pass alone on both; the method clock probe prints `1` on the oracle and `0` here.
+Each named test that "fails alone" or "refuses alone" does so here and passes alone on the oracle;
+the `TIME` `_R` tests pass alone on both. The elapsed-clock probes,
+`bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/clock/run.sh REXX_RUN SCRATCH 30`,
+output `clock/summary.txt`: a method's reset reaching a later method (`a.rex`), main's reset reaching
+a method (`b.rex`) and a method's reset reaching its caller (`d.rex`) each print `1` in 30 of 30 on
+the oracle and `0` in 30 of 30 here; a started method starts fresh on both (`e.rex`, 30 of 30).
+
+Our side runs once per mode per part in the gate test. A 30-run repetition per mode of the whole
+groups, taken by the record review before `rexx` was on `PATH`, is `whole-groups/ours-30-runs.txt`:
+`Alarm`, `EventSemaphore`, `Ticker`, `SysSleep` and `RESULT_RC_SIGL` in both modes, `MutexSemaphore`
+normally and `REPLY` in both modes each gave one outcome in 30 of 30.
 
 ### Criterion 9, pinned waits (Task 25)
 
-`phase-6-pinning.md` `## S5`: over the derived list and the corpus, in both modes, no inverted-wait
-refusal and no immovable `REPLY`. No run fails to finish but `MutexSemaphore` TEST_EXCLUSION under
-every opportunity (P46).
+`phase-6-pinning.md` `## S5`: the pinning report over the corpus and over the derived list's tests
+one test per run, in both modes: no inverted-wait refusal and no immovable `REPLY`; no run fails to
+finish but `MutexSemaphore` TEST_EXCLUSION under every opportunity (P46). The whole-group runs of
+criterion 1 carry no pinning report; they are checked only for an inverted-wait refusal on stderr
+and for a run that does not finish.
 
 ### Criterion 10, the *(verify)* items of spec section 6 (Task 25)
 

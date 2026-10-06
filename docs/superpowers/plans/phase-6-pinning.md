@@ -810,7 +810,7 @@ the `Input` park kind of Task 21's fix round 3 was removed with P66 at `4cf934a4
 
 ## S5
 
-At `dd578201c` (the interpreter's source as at `6e70817a9`), from `rust/`,
+At `bf558da52` (the interpreter's source as at `6e70817a9`), from `rust/`,
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/pinning-s5/pinning.sh TARGET_DIR OUT_DIR`, which
 runs the S4 close's command and the corpus report in both modes:
 
@@ -823,19 +823,25 @@ REXX_CORPUS_SWITCH=every <the same>
 ```
 
 Each exits 0 (`status.txt`); `pinning.log`: `test result: ok. 18 passed; 0 failed`. Over the
-derived list, arrivals per park and the waits-by-kind tables of both modes are the S4 close's:
+derived list, one test per run, the waits-by-kind tables of both modes equal the S3 close's (which
+the S4 close's equal), and the arrivals per park equal the S4 close's columns:
 
 ```
 R=docs/superpowers/records/2026-10-01-phase-6-s2-s5/pinning-s5
 python3 $R/pinning-diff.py $R/pinning.log docs/superpowers/plans/phase-6-pinning.md > $R/pinning-diff.log
 ```
 
-prints the S4 close's arrivals and no diff line for either mode. No immovable `REPLY` and no
+prints the arrivals of each mode and no diff line against the S3 close's waits-by-kind tables. No immovable `REPLY` and no
 inverted wait is counted in either mode. The only run that does not finish is `MutexSemaphore`
 TEST_EXCLUSION under every opportunity (P46); its normal run passes.
 
 The corpus: every program of the corpus differential through the same report,
-`corpus.rs` `pinning_report_over_the_corpus`, the mode from `REXX_CORPUS_SWITCH`. Tables, with
+`corpus.rs` `pinning_report_over_the_corpus`, the mode from `REXX_CORPUS_SWITCH`. It fails when a
+program does not finish, reaches an inverted wait or ends with a frame pushed: with the corpus
+subset extended by a `do forever; nop; end` program and by `measured::`'s `HIDDEN_INVERSION`
+program with `m2~wait`, in a scratch copy of the tree, it failed in both modes with `programs that
+did not finish: ["lang/zz_hang.rex"]`, and with the second program alone with `programs with an
+inverted wait: ["lang/zz_inverted.rex"]`. Tables, with
 each program that reached a wait: `pinning-corpus.md` and `pinning-corpus-every-opportunity.md`.
 Both read `programs 787, did not finish []`. Arrivals per park:
 
@@ -859,3 +865,6 @@ Waits by kind, summed over the frames of each:
 | deferred slice | 9 | 117 |
 | pinned yield | 7 | 44 |
 | inverted, immovable, late wake, inverted yield | 0 | 0 |
+
+The whole-group runs of criterion 1 (`phase-6-gate.md` `## S5`) carry no pinning report; they are
+checked only for an inverted-wait refusal on stderr and for a run that does not finish.

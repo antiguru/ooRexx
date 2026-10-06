@@ -55,3 +55,37 @@ Re-run at this head, 30 runs per probe per side, same results as `s5-find-verify
   94 s each, 5 at once, dominate).
 - Commits from `dd578201c` on carry the session line this session's system context gives
   (`session_01GGimEAe3NWM7Rh22JoLorg`) rather than the brief's.
+
+## Fix round 1
+
+Commits: `aefb2eec4` (keys, started markers, rest part, `rexx` on PATH, corpus asserts),
+`9efe2b267` (`REST_LEFT_OUT`), `573076d31` (a refusal before any test ends the rest part),
+`bf558da52` (`DIFFERING` regenerated, P48 rerun, `alone.sh`/`alone.txt`, clock probes, queue note),
+and the records commit after it (hash in `git log`; it also removes the corpus asserts that a
+replace had also put into `sharing_fraction_over_the_corpus`, which broke `--features sharing`).
+
+- C1: `pinning_report_over_the_corpus` asserts no unfinished run, no inverted wait, no pushed frame.
+  Red in a scratch copy with the reviewer's two programs added to `phase-6.txt`: both modes
+  `programs that did not finish: ["lang/zz_hang.rex"]`; with the inverted one alone `programs with an
+  inverted wait: ["lang/zz_inverted.rex"]`.
+- C2, F2: a run's key is refusal or summary, rc, last test started, failing tests; `DIFFERING` keyed
+  on it; `table.txt` carries every key.
+- C3: `rexx` on PATH per side (oracle `build/bin`, ours a link to `CARGO_BIN_EXE_rexx-run`,
+  `REXX_SWITCH_MODE=every` under every opportunity), in `run_oracle_within`/`run_crate_within`, so
+  the per-test rows get it too. `bug2003_guard_when` now passes on all sides, 12 assertions.
+- C4: a listed row that agrees is printed (`REPLY` whole every, this run).
+- F1/P85: `rest` part; `started.txt`; Message row names TEST_REPLYWITH_NOT_ARRAY.
+  `REST_LEFT_OUT`: Class TEST_SUBCLASSES_GC and Object TEST_UNINIT, TEST_UNINIT_CLASS, which alone
+  grow to the 4 GB `ulimit -v` here (3.4 GB maxrss) and in process took the test binary to the 8G
+  memcap (first whole run of this round: `memcap: OOM-killed at the 8G cap`).
+- F3: clock probes a/b/d/e, 30 runs each side, `whole-groups/clock/`; queue item updated.
+- F4-F9: record text as asked; F6: one run per mode stated, the review's 30-run tallies committed
+  as `whole-groups/ours-30-runs.txt` with the PATH caveat; F7: per-test paragraph removed.
+
+Checks at `bf558da52` (+ the sharing-only corpus.rs fix): whole-groups gate test `ok. 1 passed`,
+768.74 s, no P48 rerun; `measured::` 18 passed, corpus pinning both modes ok; fmt 0; clippy
+workspace, pinning, sharing 0 (sharing after the fix); `memcap 8G cargo test --workspace --release`
+exit 0, 3042 passed, 0 failed, 4 ignored (built first with `--no-run` outside memcap).
+
+Concerns: the whole-group test now takes about 13 minutes; a whole part that stops refusing before
+TEST_SUBCLASSES_GC or TEST_UNINIT would run them in process and hit the memcap.

@@ -1,5 +1,62 @@
-    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
-     Running tests/concurrency_tests.rs (/tmp/claude-1000/p6-t25/target-pin/release/deps/concurrency_tests-75cbe61e899e2aa1)
+   Compiling memchr v2.8.3
+   Compiling cfg-if v1.0.4
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.186
+   Compiling proc-macro2 v1.0.107
+   Compiling rustc-hash v2.1.2
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling rustversion v1.0.22
+   Compiling crossbeam-utils v0.8.21
+   Compiling rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes)
+   Compiling rustix v1.1.4
+   Compiling shlex v2.0.1
+   Compiling rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib)
+   Compiling crossbeam-epoch v0.9.20
+   Compiling find-msvc-tools v0.1.9
+   Compiling once_cell v1.21.4
+   Compiling bitflags v2.13.1
+   Compiling regex-syntax v0.8.11
+   Compiling log v0.4.34
+   Compiling linux-raw-sys v0.12.1
+   Compiling iana-time-zone v0.1.65
+   Compiling thiserror v1.0.69
+   Compiling rayon-core v1.13.0
+   Compiling pin-project-lite v0.2.17
+   Compiling lazy_static v1.5.1
+   Compiling smallvec v1.16.2
+   Compiling nu-ansi-term v0.50.3
+   Compiling scoped-tls v1.0.1
+   Compiling either v1.16.0
+   Compiling rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+   Compiling libloading v0.8.9
+   Compiling thread_local v1.1.10
+   Compiling sharded-slab v0.1.7
+   Compiling cc v1.3.0
+   Compiling tracing-core v0.1.36
+   Compiling num-traits v0.2.19
+   Compiling quick-xml v0.37.5
+   Compiling tracing-log v0.2.0
+   Compiling tracing v0.1.44
+   Compiling syn v2.0.119
+   Compiling crossbeam-deque v0.8.6
+   Compiling chrono v0.4.45
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+   Compiling generator v0.8.10
+   Compiling rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+   Compiling regex-automata v0.4.14
+   Compiling rayon v1.12.0
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+   Compiling thiserror-impl v1.0.69
+   Compiling datadriven v0.9.0
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling loom v0.7.2
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 41s
+     Running tests/concurrency_tests.rs (/tmp/claude-1000/p6-t25f/target-pin/release/deps/concurrency_tests-75cbe61e899e2aa1)
 
 running 18 tests
 test measured::a_buried_sleeper_due_first_is_a_late_wake ... ok
@@ -350,7 +407,7 @@ arrivals 508, with a frame other than TreeEval, TreeSend or OpExec 361
 | doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | SysSleep | Program | 1 |
 | regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | no park reached in-process | | |
 
-written to /tmp/claude-1000/p6-t25/target-pin/tmp/pinning-table.md
+written to /tmp/claude-1000/p6-t25f/target-pin/tmp/pinning-table.md
 ok
 test measured::pinned_parks_over_the_derived_list_under_every_opportunity ... | park | frames | tests | arrivals |
 |---|---|---|---|
@@ -736,8 +793,8 @@ arrivals 559, with a frame other than TreeEval, TreeSend or OpExec 360
 | doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | SysSleep | Program | 1 |
 | regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | no park reached in-process | | |
 
-written to /tmp/claude-1000/p6-t25/target-pin/tmp/pinning-table-every-opportunity.md
+written to /tmp/claude-1000/p6-t25f/target-pin/tmp/pinning-table-every-opportunity.md
 ok
 
-test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 127.34s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 127.33s
 

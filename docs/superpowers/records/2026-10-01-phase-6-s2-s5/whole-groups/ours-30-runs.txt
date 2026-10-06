@@ -1,0 +1,7 @@
+Taken by the Task 25 record review at 790de51c2 (task-25-review-record.md F6), before each side had
+its own rexx on PATH: bug2003_guard_when's figure is the rc 127 run, not today's. Whole groups,
+30 runs per mode of release rexx-run, xargs -P 4; outcome = the summary lines and rc:
+
+Alarm 30/30 68 assertions rc 0 (both modes); Ticker 30/30 87; SysSleep 30/30 23; EventSemaphore 30/30 30;
+RESULT_RC_SIGL 30/30 51, 1 failure, rc 1; bug2003_guard_when 30/30 1 error, rc 2;
+MutexSemaphore normal 30/30 42; REPLY normal 30/30 11; REPLY every 30/30 19
