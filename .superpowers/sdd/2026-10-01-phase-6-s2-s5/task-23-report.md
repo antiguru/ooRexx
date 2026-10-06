@@ -179,3 +179,10 @@ Code commit `2a9bbbe12`; records, gate and this section in the commit after it.
 5. Line citations re-derived: the inventory record at `2a9bbbe12` (only `lib.rs` lines moved),
    `lib.rs:1252` and `:3160` in the gate; `time_support.rs:202` (the reviewer's F2 nit).
 6. The feature-off `.text` hash at `2a9bbbe12` equals `0ac73b804`'s (`sharing-off-text-hash.txt`).
+
+Checks at `efda725c6` (own target dir): fmt 0; clippy `-D warnings` 0 with no feature, `sharing`,
+`pinning`, and `sharing,pinning`; `cargo test -p rexx-core --doc` 3 passed and 5 compile_fail
+passed; `cargo test --workspace --release --no-fail-fast` (built first, then run under `memcap 8G`)
+exits 0, 3036 passed and 0 failed. The four `sharing` witnesses passed at `2a9bbbe12` in the
+measurement run (`--release --features sharing --test concurrency_tests -- sharing:: --skip
+every_ootest --skip derived_list`: 4 passed).
