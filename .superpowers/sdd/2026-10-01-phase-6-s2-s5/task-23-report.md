@@ -61,10 +61,22 @@ commit after it.
 
 ## Criterion 7
 
-- `pingmsg.rex`, `pingsem.rex`, `pingguard.rex`, not added to `callgrind.sh`'s `PROGRAMS`, which
-  Task 26's gate runs against its base; `wallclock.sh` gained a `PROGRAMS` override instead.
+- `pingpong/pingmsg.rex`, `pingsem.rex`, `pingguard.rex` under `rust/bench-programs/`, in a
+  subdirectory: `rexx-bench`'s two list tests count every `.rex` directly in `bench-programs/` as
+  a criterion or suite axis, and failed when the programs sat there. `wallclock.sh` gained a
+  `PROGRAMS` override and names its output files with `/` spelled `_`.
 - 9 interleaved rounds, load in `pingpong/binaries.txt`; 30 runs per side for output stability.
+  The first run (programs at the top level, `0ac73b804`) was replaced by the run at the new paths;
+  the `rexx-run` binary's sha256 is the same in both.
 
 ## Checks
 
-See the final section.
+At `e57dc8315` (`/tmp` logs, not kept): fmt 0; clippy `-D warnings` 0 with no feature, with
+`rexx-exec/sharing`, and with `sharing,pinning`; `cargo test -p rexx-core --doc` 0. `cargo test
+--workspace --release --no-fail-fast` under `memcap 8G`: the first attempt was OOM-killed while
+compiling (memcap covered the build); built first, then run: 3033 passed, 3 failed: the two
+`rexx-bench` list tests (above) and `refusal_sites` `the_table_holds_every_constructor_the_source_defines`
+(lib.rs line numbers moved by `SharingReport`). `corpus/refusal-sites.tsv` re-derived by
+`REXX_REFUSAL_SITES_REFRESH=1 cargo test --release -p rexx-exec --test refusal_sites -- --test-threads=1 the_table_holds_every_constructor`;
+only the definition column changed (`diff` of every other column empty). After the fix:
+`rexx-bench` and `refusal_sites` pass.

@@ -996,25 +996,25 @@ outcome (derived list).
 
 ### Criterion 7, the ping-pong benchmark
 
-`rust/bench-programs/pingmsg.rex` (a message started and its result awaited), `pingsem.rex` (two
-activities alternating through two `EventSemaphore`s) and `pingguard.rex` (two activities passing a
-turn through `GUARD ON WHEN`). Recorded, not gated. From `rust/`, `rexx-run` a release build of
-`0ac73b804` without features, 32 CPUs:
+`rust/bench-programs/pingpong/pingmsg.rex` (a message started and its result awaited),
+`pingsem.rex` (two activities alternating through two `EventSemaphore`s) and `pingguard.rex` (two
+activities passing a turn through `GUARD ON WHEN`). Recorded, not gated. From `rust/`, `rexx-run` a
+release build of `e57dc8315` without features, 32 CPUs:
 
 ```
-PROGRAMS="pingmsg pingsem pingguard" bash bench-programs/wallclock.sh -r 9 -o OUT -x "pingmsg pingsem pingguard" rexx-run=TARGET/release/rexx-run
+PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard" bash bench-programs/wallclock.sh -r 9 -o OUT -x "pingpong/pingmsg pingpong/pingsem pingpong/pingguard" rexx-run=TARGET/release/rexx-run
 ```
 
-Load averages 2.27 4.29 9.14 before and 1.85 3.99 8.89 after
+Load averages 1.18 3.46 6.68 before and 1.42 3.31 6.52 after
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/binaries.txt`); every run exited 0 with
 the same stdout on both sides. Medians of 9 interleaved runs, seconds (`pingpong/table.txt`, runs in
 `pingpong/wall.tsv`):
 
 | program | rexx-run | oracle |
 |---|---|---|
-| `pingmsg` | 1.322 | 0.686 |
-| `pingsem` | 0.122 | 0.446 |
-| `pingguard` | 0.121 | 0.502 |
+| `pingmsg` | 1.325 | 0.656 |
+| `pingsem` | 0.121 | 0.581 |
+| `pingguard` | 0.119 | 0.470 |
 
 Each program gave one stdout and rc 0 in 30 runs on each side (`pingpong/thirty-runs.txt`, by
 `pingpong/thirty-runs.sh`).

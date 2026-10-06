@@ -56,7 +56,7 @@ if [ -z "$table_only" ]; then
 TIMED="heapshape rexxcps"
 TIMEFORMAT=%R
 run() { # arm program round
-    local d t f="$out/$2.$1.r$3"
+    local d t f="$out/${2//\//_}.$1.r$3"
     d=$(mktemp -d)
     if [ "$1" = oracle ]; then
         t=$( { cd "$d"; ( ulimit -v 1048576; export LD_LIBRARY_PATH=$lib; time "$oracle_root/bin/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
@@ -82,8 +82,8 @@ for f in "$out"/*.rc; do
 done
 for p in $PROGRAMS; do
     [[ " $TIMED " == *" $p "* ]] && continue
-    for f in "$out/$p".*.out; do
-        cmp -s "$f" "$out/$p.${names[0]}.r1.out" || { echo "$(basename "$f" .out) stdout differs from ${names[0]} r1" >&2; status=1; }
+    for f in "$out/${p//\//_}".*.out; do
+        cmp -s "$f" "$out/${p//\//_}.${names[0]}.r1.out" || { echo "$(basename "$f" .out) stdout differs from ${names[0]} r1" >&2; status=1; }
     done
 done
 fi

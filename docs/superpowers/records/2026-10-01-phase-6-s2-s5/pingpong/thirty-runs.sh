@@ -1,7 +1,7 @@
 #!/bin/bash
 # 30 oracle runs of each ping-pong program from a fresh empty dir: distinct
 # stdout, stderr and rc.
-B=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs
+B=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong
 for p in pingmsg pingsem pingguard; do
     d=$(mktemp -d /tmp/claude-1000/p6-t23/o30.XXXX)
     for i in $(seq 30); do
