@@ -2590,28 +2590,28 @@ mod group_runs {
                 "whole",
                 "normal",
                 "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
-                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
             ),
             (
                 "base/class/Method.testGroup",
                 "whole",
                 "every",
                 "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
-                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
             ),
             (
                 "base/class/Method.testGroup",
                 "derived",
                 "normal",
                 "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
-                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
             ),
             (
                 "base/class/Method.testGroup",
                 "derived",
                 "every",
                 "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
-                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
             ),
             (
                 "base/class/MethodArgs.testGroup",
@@ -3100,6 +3100,35 @@ mod group_runs {
             }
         }
 
+        /// `run` with its summary's assertion count masked.
+        fn count_masked(run: &Run) -> Run {
+            let text = String::from_utf8_lossy(&run.stdout).into_owned();
+            let stdout: Vec<&str> = text
+                .split('\n')
+                .map(|line| {
+                    if line.starts_with("Assertions:") {
+                        "Assertions:"
+                    } else {
+                        line
+                    }
+                })
+                .collect();
+            Run {
+                stdout: stdout.join("\n").into_bytes(),
+                stderr: run.stderr.clone(),
+                status: run.status,
+            }
+        }
+
+        /// Whether the oracle's distinct outcomes `seen` differ from each other
+        /// only in their assertion count (ruling P86).
+        fn counted_only(seen: &[&Run]) -> bool {
+            seen.len() > 1
+                && seen
+                    .iter()
+                    .all(|run| agree(&count_masked(run), &count_masked(seen[0])))
+        }
+
         /// `run` with the copy's path, and the copy's directory name in a
         /// path the framework abbreviates, replaced by `RUN`, so runs from
         /// different copies of one row compare.
@@ -3388,10 +3417,7 @@ mod group_runs {
                 format!("{file}\t{}\tskipped [{}]", part.label(), refusing.join(" "));
             // Ruling P86: where the oracle's runs differ from each other only
             // in their assertion count, the count is not compared.
-            let counted_only = seen.len() > 1
-                && seen
-                    .iter()
-                    .all(|(run, _)| uncounted(&key(run)) == uncounted(&key(seen[0].0)));
+            let counted_only = counted_only(&seen.iter().map(|(run, _)| *run).collect::<Vec<_>>());
             let mut keys = [String::new(), String::new()];
             let mut agrees = [false; 2];
             let mut stuck = [false; 2];
@@ -3445,6 +3471,46 @@ mod group_runs {
                 uncounted("rexx-exec: DO is not implemented, rc 120, last started T, failing []"),
                 "rexx-exec: DO is not implemented, rc 120, last started T, failing []"
             );
+        }
+
+        fn summary_run(assertions: u32, failures: u32, stderr: &str, status: i32) -> Run {
+            Run {
+                stdout: format!(
+                    "Tests ran:          1\nAssertions:         {assertions}\nFailures:           {failures}\nErrors:             0\n"
+                )
+                .into_bytes(),
+                stderr: stderr.as_bytes().to_vec(),
+                status: Some(status),
+            }
+        }
+
+        #[test]
+        fn one_oracle_outcome_is_not_counted_only() {
+            assert!(!counted_only(&[&summary_run(12, 0, "", 0)]));
+        }
+
+        #[test]
+        fn outcomes_differing_only_in_the_count_are_counted_only() {
+            assert!(counted_only(&[
+                &summary_run(12, 0, "", 0),
+                &summary_run(17, 0, "", 0)
+            ]));
+        }
+
+        #[test]
+        fn outcomes_differing_in_stderr_alone_are_not_counted_only() {
+            assert!(!counted_only(&[
+                &summary_run(12, 0, "", 0),
+                &summary_run(12, 0, "noise\n", 0)
+            ]));
+        }
+
+        #[test]
+        fn outcomes_differing_in_count_and_status_are_not_counted_only() {
+            assert!(!counted_only(&[
+                &summary_run(12, 0, "", 0),
+                &summary_run(17, 1, "", 1)
+            ]));
         }
 
         #[test]

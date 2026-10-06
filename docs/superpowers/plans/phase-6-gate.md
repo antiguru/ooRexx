@@ -1183,7 +1183,7 @@ The rows that differ, each with its reason (`DIFFERING`):
 | `TIME` | whole, derived | both | elapsed-clock defect, queued `2026-10-02-elapsed-clock-per-routine-and-reset`: TEST_4, 5, 10 and 11, as alone; whole, TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R, which pass alone, after earlier tests, because a method shares its caller's and earlier methods' elapsed clock (`whole-groups/clock/`) |
 | `CALL` | derived, rest | both | TEST_4, the same elapsed-clock defect, as alone |
 | `Message` | whole, derived | both | TEST_REPLYWITH_NOT_ARRAY refuses, as alone (`MAKEARRAY`, Phase 9) |
-| `Method` | whole, derived | both | refuses before any test starts with TESTDIRECTIVES' refusal alone: `DO WITH` or `DO COUNTER` over a collection, queued `2026-10-02-do-with-over-refusal` |
+| `Method` | whole, derived | both | refuses before any test starts: the group class's `activate` runs `do counter i fn over files` (`Method.testGroup:75`), so each of its tests refuses alone the same way (TESTDIRECTIVES, TEST_NEW_NO_ARGS); queued `2026-10-02-do-with-over-refusal` |
 | `MethodArgs` | whole, derived | both | TEST_REQUEST_STRING_CLASS refuses, as alone; the same queued refusal |
 | `TRACE_TraceObject` | whole, derived | both | TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; the same queued refusal |
 | `GUARD` | derived | both | TEST_WHEN_USE_LOCAL_NO_WAIT refuses, as alone (`USE LOCAL`, Phase 5) |

@@ -40,5 +40,6 @@ one base/class DateTime TEST_BRUTE_FORCE
 one base/class Message TEST_REPLYWITH_NOT_ARRAY
 one base/class MethodArgs TEST_REQUEST_STRING_CLASS
 one base/class Method TESTDIRECTIVES
+one base/class Method TEST_NEW_NO_ARGS
 one doc/rexxref/chapter5 Section1 TEST_OBJECT_OBJECTNAMEEQUALS
 # A method does not start with a fresh elapsed clock: whole-groups/clock/.
