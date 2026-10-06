@@ -1,13 +1,23 @@
-# criterion 6 over every ooTest group file run whole, at d9e17e5c8, from rust/:
-# RAYON_NUM_THREADS=4 REXX_SHARING_LOG=LOG memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_every_ootest_group --nocapture
-# (at the default 32 threads the run was OOM-killed at the 8G cap)
+# criterion 6 over every ooTest group file, each run until its end or its first refusal or deadline, at 2a9bbbe12, from rust/:
+# RAYON_NUM_THREADS=4 REXX_SHARING_LOG=LOG memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_every_ootest_group --ignored --nocapture
+# The same command without --release gives the same shared columns; the tables differ only in the
+# program objects of base/bif/TIME.testGroup (it ends at its deadline) and in the row of
+# base/rexxutil/SysSleep.testGroup (a failure here and a pass there, with fewer objects).
+# Outcomes, counted with grep -c '^| [^|]*testGroup | PATTERN' on this file below this header:
+#   'refused at': 76
+#   'refused at the run exceeded its deadline': 1
+#   'did not finish': 0
+#   'no test ran': 36
+#   'pass, ': 248
+#   'failure, ': 17
+#   'error, ': 11
 
 groups 388
 
 | | objects | shared |
 |---|---|---|
 | bootstrap | 105536 | 66 |
-| program | 1872392 | 157 |
+| program | 1872458 | 157 |
 
 not run, reaching rxapi:
 
@@ -353,7 +363,7 @@ not run, reaching rxapi:
 | base/rexxutil/SysFileXXX.testGroup | refused at routine "SYSFILECOPY" is not implemented (Phase 10) | 272 | 0 | 2182 | 0 |
 | base/rexxutil/SysFormatMessage.testGroup | refused at routine "SYSFORMATMESSAGE" is not implemented (Phase 10) | 272 | 0 | 1270 | 0 |
 | base/rexxutil/SysSearchPath.testGroup | refused at routine "SYSSEARCHPATH" is not implemented (Phase 10) | 272 | 0 | 1362 | 0 |
-| base/rexxutil/SysSleep.testGroup | failure, rc 1 | 272 | 0 | 2120 | 6 |
+| base/rexxutil/SysSleep.testGroup | failure, rc 1 | 272 | 0 | 2186 | 6 |
 | base/rexxutil/SysStemCopy.testGroup | refused at routine "SYSSTEMCOPY" is not implemented (Phase 10) | 272 | 0 | 1410 | 0 |
 | base/rexxutil/SysStemDelete.testGroup | refused at routine "SYSSTEMDELETE" is not implemented (Phase 10) | 272 | 0 | 1267 | 0 |
 | base/rexxutil/SysStemInsert.testGroup | refused at routine "SYSSTEMINSERT" is not implemented (Phase 10) | 272 | 0 | 1259 | 0 |

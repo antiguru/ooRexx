@@ -1,0 +1,122 @@
+crates/rexx-api/src/ffi.rs:192	-	held_here is_none_or
+crates/rexx-api/src/ffi.rs:208	-	held_here is_none_or
+crates/rexx-api/src/ffi.rs:828	-	constants
+crates/rexx-api/src/ffi.rs:914	-	get
+crates/rexx-api/src/ffi.rs:1138	-	is_busy
+crates/rexx-api/src/ffi.rs:1319	-	baton_held
+crates/rexx-api/src/ffi.rs:1329	-	is_busy
+crates/rexx-api/src/ffi.rs:6328	-	default guarded new numeric
+crates/rexx-exec/src/activation.rs:1073	-	as_ref map
+crates/rexx-exec/src/activation.rs:1187	-	map mode running_activation
+crates/rexx-exec/src/builtin/string.rs:137	-	len
+crates/rexx-exec/src/clause.rs:267	-	activation any iter
+crates/rexx-exec/src/clause.rs:411	-	is_empty
+crates/rexx-exec/src/dispatch.rs:1636	-	is_empty
+crates/rexx-exec/src/dispatch/array.rs:380	-	all is_some iter
+crates/rexx-exec/src/dispatch/hash.rs:1662	unshared	ok read_view
+crates/rexx-exec/src/dispatch/reqstr.rs:89	unshared	required_string_latch_holds
+crates/rexx-exec/src/environment.rs:713	unshared	rexx_package_class_uncached
+crates/rexx-exec/src/environment/route.rs:57	unshared	output_route_uncached
+crates/rexx-exec/src/eval.rs:277	-	is_none
+crates/rexx-exec/src/eval.rs:1059	unshared	is_err is_none operator_operand_gap
+crates/rexx-exec/src/eval.rs:1104	-	is_none is_ok parse_bytes
+crates/rexx-exec/src/eval.rs:1108	-	is_none is_ok parse_bytes
+crates/rexx-exec/src/guards.rs:490	-	owner running_activity
+crates/rexx-exec/src/guards.rs:495	-	map running_activation
+crates/rexx-exec/src/install.rs:1491	-	from_utf8_lossy is_none
+crates/rexx-exec/src/install.rs:2248	-	routine_index
+crates/rexx-exec/src/ir.rs:646	-	call_site_slot cfg copied for get holds_register index interned_konst interned_symbol konst map op_at ops_in ops_upto path position_at pub remember remember_call remember_konst remember_symbol resolved resolved_call saw_general send_name set setting_at time to trace tries_small_int
+crates/rexx-exec/src/ir.rs:691	-	copied get
+crates/rexx-exec/src/ir/compile.rs:204	-	assert_analysis_only_narrows
+crates/rexx-exec/src/ir/compile.rs:339	-	mark
+crates/rexx-exec/src/ir/compile.rs:503	-	any iter
+crates/rexx-exec/src/ir/compile.rs:1221	-	clause_positions new
+crates/rexx-exec/src/ir/compile.rs:1790	-	all iter rev skip
+crates/rexx-exec/src/ir/compile.rs:1890	-	all intermediates iter results trace_events
+crates/rexx-exec/src/ir/compile.rs:1904	-	all iter
+crates/rexx-exec/src/ir/compile.rs:1912	-	all echoes_keyword echoes_values iter
+crates/rexx-exec/src/ir/drive.rs:428	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:481	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:555	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:577	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:587	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:613	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:658	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:691	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:731	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:746	-	is_none slot_for
+crates/rexx-exec/src/ir/drive.rs:797	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:827	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:833	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:888	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:894	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:926	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:949	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:954	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:984	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1004	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1030	-	slot_for
+crates/rexx-exec/src/ir/drive.rs:1084	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1126	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1142	-	is_some
+crates/rexx-exec/src/ir/drive.rs:1152	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1178	-	is_some
+crates/rexx-exec/src/ir/drive.rs:1203	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1239	-	is_some
+crates/rexx-exec/src/ir/drive.rs:1262	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1438	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1505	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1517	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1524	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1560	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:1573	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:2563	-	activities_spawned
+crates/rexx-exec/src/ir/drive.rs:2972	-	activation any iter
+crates/rexx-exec/src/ir/drive.rs:3502	-	is_some_and last len
+crates/rexx-exec/src/ir/drive.rs:3504	-	is_some_and last len
+crates/rexx-exec/src/ir/drive.rs:3576	-	holds_register
+crates/rexx-exec/src/ir/drive.rs:3582	-	get is_some
+crates/rexx-exec/src/ir/drive.rs:3635	-	as_ref map
+crates/rexx-exec/src/ir/drive.rs:3684	-	activation_depth
+crates/rexx-exec/src/ir/drive.rs:3941	-	from_ref get map
+crates/rexx-exec/src/ir/drive.rs:3956	-	eq
+crates/rexx-exec/src/ir/trace_flow.rs:313	-	apply meet successors
+crates/rexx-exec/src/ir/trace_flow.rs:318	-	meet
+crates/rexx-exec/src/lib.rs:1075	-	as_bytes copied get is_none is_none_or name
+crates/rexx-exec/src/lib.rs:2140	-	is_none
+crates/rexx-exec/src/parse_template.rs:76	-	len
+crates/rexx-exec/src/parse_template.rs:245	-	len
+crates/rexx-exec/src/parse_template.rs:810	-	traced_mode
+crates/rexx-exec/src/plan.rs:227	-	line_of
+crates/rexx-exec/src/run.rs:434	-	get is_some_and ptr_eq
+crates/rexx-exec/src/run.rs:597	-	is_some
+crates/rexx-exec/src/run.rs:823	-	all iter
+crates/rexx-exec/src/run.rs:1939	-	granted
+crates/rexx-exec/src/run.rs:2488	-	as_bytes name shape_of
+crates/rexx-exec/src/run.rs:2539	-	is_none
+crates/rexx-exec/src/run.rs:2561	-	is_none
+crates/rexx-exec/src/run.rs:2764	-	printed_indent
+crates/rexx-exec/src/run.rs:2790	-	clause_line_at line unwrap_or_else
+crates/rexx-exec/src/run.rs:2846	-	activity is_err temps_len watermark
+crates/rexx-exec/src/run.rs:2882	-	activity temps_len watermark
+crates/rexx-exec/src/run.rs:3706	-	eq get is_some_and
+crates/rexx-exec/src/run/loops.rs:355	-	len
+crates/rexx-exec/src/run/loops.rs:657	unshared	array_slots as_deref as_slice copied flatten iter map
+crates/rexx-exec/src/run/loops.rs:708	-	as_ref from_i64 round_via_unary_plus
+crates/rexx-exec/src/run/loops.rs:1948	-	as_bytes name shape_of
+crates/rexx-exec/src/run/loops.rs:1953	-	and_then as_ref plain_integer
+crates/rexx-exec/src/run/loops.rs:1958	-	plain_integer
+crates/rexx-exec/src/run/loops.rs:2022	-	and_then as_ref plain_integer
+crates/rexx-exec/src/run/loops.rs:2027	-	plain_integer
+crates/rexx-exec/src/run/loops.rs:2038	-	as_bytes name shape_of
+crates/rexx-exec/src/run/loops.rs:2286	-	as_bytes name shape_of
+crates/rexx-exec/src/run/loops.rs:2298	-	control_slot is_none
+crates/rexx-exec/src/run/select.rs:113	-	len otherwise_range
+crates/rexx-exec/src/scheduler.rs:752	-	idle_read_state
+crates/rexx-exec/src/stem.rs:134	-	bound_slot_of is_none
+crates/rexx-exec/src/stem.rs:202	-	bound_slot_of
+crates/rexx-exec/src/stem.rs:243	-	bound_slot_of
+crates/rexx-exec/src/trace.rs:48	-	of traced_mode
+crates/rexx-exec/src/trace/format.rs:556	-	len
+crates/rexx-exec/src/value.rs:209	-	inline_text is_none
+crates/rexx-exec/src/value.rs:258	unshared	len to_text

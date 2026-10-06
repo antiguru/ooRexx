@@ -145,3 +145,37 @@ rexx-core --doc` 3 passed and 5 compile_fail passed; `cargo test --workspace --r
 `sharing` witnesses are feature-gated and are not in that count; at `e64886a0f`,
 `memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- sharing::uninit sharing::one_activity sharing::an_object`:
 3 passed.
+
+## Fix round 2
+
+Code commit `2a9bbbe12`; records, gate and this section in the commit after it.
+
+1. C2 again. `Interp::collect_now` now runs with touches paused for its whole body, and its three
+   liveness prunes (kept strings, guard pools and watches, semaphores) use a new untagged
+   `Heap::peek`. Walks outside a collection found by the enumeration: `record_exposer`'s prune of
+   the stem-exposer table and `weak_target`'s read of a weak cell, both `Heap::peek` now. Debug-only
+   checks that read objects (found by `debug-checks.py`) all read under a new `unshared!` macro
+   (`lib.rs`), which also replaces the two hand-written pauses of fix round 1: the `.NAME` cache's
+   search (`environment.rs`), the required-string latch (`reqstr.rs`), an operand's operator gap
+   (`eval.rs`), a DO OVER snapshot's slots (`run/loops.rs`) and `to_text` beside `text_len`
+   (`value.rs`) are new. Enumeration, commands and classification:
+   `docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/`. Classifying a row of
+   `debug-checks.txt` as reading no heap object rests on the names it calls, not on reading each
+   callee's body; the debug-release comparison below is the check on it.
+   Witness `sharing::a_collection_in_another_activity_shares_nothing_it_prunes` (the reviewer's
+   probe: 100 `.MutexSemaphore`s acquired and released by main, then `call GC 'Force'` in a started
+   activity, asserting program shared below 50): with `lib.rs` restored to `4db3412ee`'s
+   temporarily it fails, `program: SharingCount { objects: 111, shared: 102 }`; at `2a9bbbe12` it
+   passes. Restored by copy, `cmp` clean.
+2. Criterion 6 re-derived at `2a9bbbe12` over every population. The shared counts equal fix round
+   1's in every population; program objects moved in the every-group (deadline and timing rows)
+   and keyword rows. Corpus: release and debug tables byte-identical. Every group: release and debug
+   shared columns identical; `TIME` (deadline) and `SysSleep` (failure in one, pass in the other)
+   rows differ in objects.
+3. F1: the every-group population is stated as each group run until its end or its first refusal
+   or deadline, with the outcome counts quoted from the record's header beside the grep command.
+4. N1: the every-group test is `#[ignore]` with its reason; the gate quotes its command with
+   `RAYON_NUM_THREADS=4` and `--ignored`.
+5. Line citations re-derived: the inventory record at `2a9bbbe12` (only `lib.rs` lines moved),
+   `lib.rs:1252` and `:3160` in the gate; `time_support.rs:202` (the reviewer's F2 nit).
+6. The feature-off `.text` hash at `2a9bbbe12` equals `0ac73b804`'s (`sharing-off-text-hash.txt`).

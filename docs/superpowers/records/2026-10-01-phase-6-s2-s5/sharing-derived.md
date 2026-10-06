@@ -1,4 +1,4 @@
-# criterion 6 over criterion 1's derived list of ooTest tests, at d9e17e5c8, from rust/:
+# criterion 6 over criterion 1's derived list of ooTest tests, at 2a9bbbe12, from rust/:
 # REXX_SHARING_LOG=LOG memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_the_derived_list --nocapture
 
 tests 202

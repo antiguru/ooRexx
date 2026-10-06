@@ -25,6 +25,10 @@ head  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
 fix1  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
 # equal to head and aonly.
 
+# Task 23 fix round 2: 2a9bbbe12, built the same way, without features:
+fix2  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+# equal to head, aonly and fix1.
+
 # text-hash.sh:
 #!/bin/bash
 # Builds release rexx-run from each named archived tree, moved in turn to one

@@ -1,4 +1,4 @@
-# criterion 6 over the corpus, at d9e17e5c8, from rust/:
+# criterion 6 over the corpus, at 2a9bbbe12, from rust/:
 # REXX_SHARING_LOG=LOG memcap 8G cargo test --release -p rexx-exec --features sharing --test corpus -- --exact sharing_fraction_over_the_corpus --nocapture
 # The same command without --release (debug assertions on) writes a byte-identical table.
 

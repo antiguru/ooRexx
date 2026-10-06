@@ -911,14 +911,14 @@ note, not a defect, `2026-10-04-send-site-cache-self-customization`.
 
 ### Criterion 4, the single-owner audit (Task 23)
 
-The inventory is derived by ruling P71's command, from the repository root at `d9e17e5c8`; its
+The inventory is derived by ruling P71's command, from the repository root at `2a9bbbe12`; its
 output is `docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-4-inventory.txt`:
 
 ```
 /bin/grep -a -rn 'unsafe impl\|thread::spawn\|thread::Builder\|thread::scope\|Arc<\|Mutex<\|Condvar\|Atomic\|thread_local!' rust/crates
 ```
 
-Every hit falls in a row below (file and line at `d9e17e5c8`). A plain `static` needs no row: the
+Every hit falls in a row below (file and line at `2a9bbbe12`). A plain `static` needs no row: the
 compiler requires it to be `Sync`.
 
 | Site | Cross-thread type | Why sound | Fact or test |
@@ -926,10 +926,10 @@ compiler requires it to be `Sync`.
 | `rexx-exec/src/island.rs:56` | `Islanded<T>`, for the payloads `IslandPayload` lists (`:31`): `NonNull<Interp>` (`Island`) and `(Box<OffBaton>, ThreadContext)` (`PooledCall::work`, `dispatch/library.rs:1077`); the box holds `ObjRef`s and no `Rc` or `Cell`, the context is an `Rc` | made and taken only on the baton; moved untouched; the root pointer is dereferenced only by its lendee, through `Lent::interp` or a callback's `HostRef`, while the lender waits; the context drops under a lend, and an abandoned call's box drops off the baton |  `unsafe impl<T: IslandPayload> Send` (P72): a third payload does not compile (`task-23-report.md`); `island::tests::an_island_value_is_made_only_on_the_baton`, `..._taken_only_on_the_baton`; TSan (criterion 3) |
 | `rexx-exec/src/island.rs:132-142` | `Interp`, `RegFrame<'static>` | neither is `Send` | not-`Send` assertion (A3); its control, the same assertion on `u64`, fails E0283 (`task-23-report.md`) |
 | `rexx-exec/src/baton.rs:21,23,26` | `Baton<L>`: `Mutex<State>`, `Condvar`, test `AtomicU64` | the holder and lend state is the lock's data; `lent()` answers only to the lendee | `tests/loom.rs` baton models; TSan |
-| `rexx-exec/src/timer.rs:64,85,87,178,245,287,321`; `lib.rs:1239`; `dispatch/library.rs:1081-1211` | `Arc<Inbox<Posted>>`, `Arc<InterpBaton>`, `Requests(AtomicU32)` | `Posted` holds no `ObjRef`; request bits publish no data | `require_send::<Posted>()` (`scheduler.rs:171`, A4); `ObjRef` compile_fail (`rexx-core/src/handle.rs:52`, `:57`); `tests/loom.rs` inbox and timer models; `scheduler::tests::a_post_from_another_thread_ends_an_idle` |
+| `rexx-exec/src/timer.rs:64,85,87,178,245,287,321`; `lib.rs:1252`; `dispatch/library.rs:1081-1211` | `Arc<Inbox<Posted>>`, `Arc<InterpBaton>`, `Requests(AtomicU32)` | `Posted` holds no `ObjRef`; request bits publish no data | `require_send::<Posted>()` (`scheduler.rs:171`, A4); `ObjRef` compile_fail (`rexx-core/src/handle.rs:52`, `:57`); `tests/loom.rs` inbox and timer models; `scheduler::tests::a_post_from_another_thread_ends_an_idle` |
 | `rexx-exec/src/scheduler/pool.rs:52-83,123,177` | `Arc<Shared>`, `Arc<Mailbox>`, `Job = Box<dyn FnOnce() + Send>` | a job is `Send` by its type; the job kinds (`scheduler.rs:633` native call, `:664` blocking operation, `input.rs:377` stdin) capture `Send` values and `Islanded` | the type of `Job`; `scheduler/tests/pool.rs` |
 | `rexx-exec/src/timer.rs:205` | timer thread | touches only the registry (`Mutex<State>`) and inboxes | `static REGISTRY` (`Sync` by the compiler); loom timer models |
-| `rexx-exec/src/lib.rs:3142` | interpreter thread | its body is `FnOnce + Send + 'static`; `Interp` is built on it | the closure's bound; A3 |
+| `rexx-exec/src/lib.rs:3160` | interpreter thread | its body is `FnOnce + Send + 'static`; `Interp` is built on it | the closure's bound; A3 |
 | `rexx-exec/src/command.rs:618` | pipe drain, `thread::scope` | captures pipes and `&(dyn Fn + Sync)` only | the `Sync` bound |
 | `rexx-exec/src/signal.rs:36,40` | `static PENDING: AtomicBool`, `WAKE: AtomicI32` | async-signal-safe flags; carry no data | `signal.rs` unit tests (raiser threads `:237`, `:269`); loom `timer::signal` models |
 | `rexx-exec/src/sync.rs` | std or loom re-exports, `Wake` | the shim the loom models compile | `tests/loom.rs` |
@@ -961,7 +961,7 @@ handle" adds that object handles reach a pool thread of the same interpreter onl
 
 | Claim | Fact or test |
 |---|---|
-| no heap object holds a frame | `Body` has no lifetime (`rexx-core/src/body.rs:57`) and is `'static` (A2, `:139`); `RegFrame<'a>` borrows its arena (`frame.rs:117`), cannot outlive it (compile_fail `frame.rs:168`), cannot be held by a `'static` value or sent (A1, `frame.rs:90`, `:99`); `NativeState::Pointer(*mut c_void)` (`body.rs:177`) is a raw pointer outside the lifetime fact; it holds a C-supplied address (`dispatch/library.rs:1428`) or an Alarm or Ticker timer id (`dispatch/time_support.rs:201`), never a frame (P74) |
+| no heap object holds a frame | `Body` has no lifetime (`rexx-core/src/body.rs:57`) and is `'static` (A2, `:139`); `RegFrame<'a>` borrows its arena (`frame.rs:117`), cannot outlive it (compile_fail `frame.rs:168`), cannot be held by a `'static` value or sent (A1, `frame.rs:90`, `:99`); `NativeState::Pointer(*mut c_void)` (`body.rs:177`) is a raw pointer outside the lifetime fact; it holds a C-supplied address (`dispatch/library.rs:1428`) or an Alarm or Ticker timer id (`dispatch/time_support.rs:202`), never a frame (P74) |
 | contexts resolve across all activities | `dispatch/context.rs:159` `at_context`, `scheduler.rs:723` `idle_context_owner` |
 | live, finished, moved | `scheduler::tests::a_context_reads_an_activation_of_another_live_activity` (live, then 98.981 once finished), `scheduler::tests::a_context_follows_its_activation_to_a_reply_continuation` (moved by REPLY); corpus `context_of_another_activity`, `context_moved_by_reply` |
 
@@ -969,29 +969,44 @@ handle" adds that object handles reach a pool thread of the same interpreter onl
 
 The `sharing` feature of `rexx-exec` (forwarding `rexx-core`'s) tags each heap slot with the last
 activity that resolved its object through `Heap::get`, `Heap::get_mut` or `Heap::body_text`, or made
-it, and counts objects touched by more than one activity, separately for objects made before the program
-(the interpreter and its library bootstrap) and objects the program made; `Outcome::sharing` reports
-both. The collector's walks and the UNINIT registry's resolve untagged, and the debug-only
-re-derivations of the SAY route and of a directory's `StoreView` read with touches paused, so a
-debug build counts what a release build does. `concurrency_tests` witnesses:
-`sharing::one_activity_shares_nothing`; `sharing::an_object_read_by_a_started_activity_is_shared`,
-which fails with the tag switch in `Interp::switch_to` and `Interp::swap_running` removed; and
+it, and counts objects touched by more than one activity, separately for objects made before the
+program (the interpreter and its library bootstrap) and objects the program made;
+`Outcome::sharing` reports both. A collection runs with touches paused; the collector, the UNINIT
+registry and the interpreter's table prunes read through the untagged `resolve` or `Heap::peek`; and
+every debug-only check that reads an object reads under `unshared!`, so a debug build counts what a
+release build does. The enumeration of tagged reads and debug-only checks, its commands and the
+classification of each walk are in
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md`. `concurrency_tests`
+witnesses: `sharing::one_activity_shares_nothing`;
+`sharing::an_object_read_by_a_started_activity_is_shared`, which fails with the tag switch in
+`Interp::switch_to` and `Interp::swap_running` removed;
 `sharing::uninit_objects_another_activity_never_names_are_not_shared`, which failed (program shared
-102) before the registry walk resolved untagged (`task-23-report.md`).
+102) before the UNINIT registry walk resolved untagged; and
+`sharing::a_collection_in_another_activity_shares_nothing_it_prunes`, which failed (program shared
+102) before the collection's prunes did (`task-23-report.md`).
 
-Off, it costs nothing: release `rexx-run` built without features from `d9e17e5c8` has the same
+Off, it costs nothing: release `rexx-run` built without features from `2a9bbbe12` has the same
 `.text` hash as one built from the base with only the static assertions applied, and that build has
 the same functions with the same sizes as the base apart from one symbol's name
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt`).
 
-At `d9e17e5c8`, from `rust/`, release, each command and its table in the named file under
+At `2a9bbbe12`, from `rust/`, release, each command and its table in the named file under
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/`. The populations:
 
 * corpus: every program of the corpus differential (`sharing-corpus.md`; the same command in a
   debug build writes the same table);
-* ooTest, every group: every `.testGroup` under `ootest/ooRexx` run whole through `testOORexx.rex`
-  in process, except groups with a test that reaches rxapi, which the record lists
-  (`sharing-groups.md`, with each group's outcome);
+* ooTest, every group: every `.testGroup` under `ootest/ooRexx`, except groups with a test that
+  reaches rxapi, which the record lists, each run in process through `testOORexx.rex` until its
+  end or its first refusal or deadline (`sharing-groups.md`, with each group's outcome). The test is
+  `#[ignore]`d; its command:
+
+  ```
+  RAYON_NUM_THREADS=4 REXX_SHARING_LOG=LOG memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_every_ootest_group --ignored --nocapture
+  ```
+
+  Outcomes, by `grep -c '^| [^|]*testGroup | PATTERN' sharing-groups.md` (quoted in its header):
+  `refused at` 76, of which `refused at the run exceeded its deadline` 1; `no test ran` 36;
+  `pass, ` 248; `failure, ` 17; `error, ` 11; `did not finish` 0;
 * ooTest, criterion 1's derived list: each test run alone (`sharing-derived.md`);
 * ooTest, the in-process harnesses: every run of ours in the keyword, bif and expression assertion
   harnesses' differential tests and in `api_group_tests`, which runs each test of `API/oo`'s
@@ -1001,9 +1016,9 @@ At `d9e17e5c8`, from `rust/`, release, each command and its table in the named f
 | population | runs | bootstrap objects | bootstrap shared | program objects | program shared |
 |---|---|---|---|---|---|
 | corpus | 787 | 214064 | 500 (0.234%) | 306466 | 585 (0.191%) |
-| ooTest, every group | 388 | 105536 | 66 (0.063%) | 1872392 | 157 (0.008%) |
+| ooTest, every group | 388 | 105536 | 66 (0.063%) | 1872458 | 157 (0.008%) |
 | ooTest, criterion 1's derived list | 202 | 54944 | 306 (0.557%) | 319566 | 391 (0.122%) |
-| ooTest, keyword assertion bodies | 896 | 243712 | 0 | 15676 | 0 |
+| ooTest, keyword assertion bodies | 896 | 243712 | 0 | 15675 | 0 |
 | ooTest, bif assertion runs | 10184 | 2770048 | 0 | 12609 | 0 |
 | ooTest, expression assertion rows | 4259 | 1158448 | 0 | 10858 | 0 |
 | ooTest, `api_group_tests` | 577 | 156944 | 0 | 1222310 | 0 |
