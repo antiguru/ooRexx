@@ -1,0 +1,4 @@
+normal arrivals: GuardOn 36, GuardWhen 54, Reply 91, MessageResult 98, MessageWait 11, SemaphoreWait 8, SysSleep 173, Timer 37
+normal waits-by-kind diff end
+every opportunity arrivals: GuardOn 67, GuardWhen 54, Reply 91, MessageResult 98, MessageWait 11, SemaphoreWait 7, SysSleep 172, Timer 59
+every opportunity waits-by-kind diff end

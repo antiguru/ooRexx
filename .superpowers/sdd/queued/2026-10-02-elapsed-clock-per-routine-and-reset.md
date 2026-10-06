@@ -36,3 +36,8 @@ each: ours 5, 5 and 7 assertions with one failure, rc 1; the oracle 8, 8 and 18,
 
 Run counts: the driver rows one run each on the reviewer's tree; the probes one run each, the
 oracle's answers as quoted. Probes are under the Task 10 review scratchpad `t10rev/c/`.
+
+Task 25 (2026-10-06): a method does not start with a fresh elapsed clock either. Probe
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/alone.sh`'s last line: ours `0`,
+oracle `1`. So `TIME` TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R pass alone and fail
+in a whole-group run after earlier tests (`whole-groups/table.txt`).

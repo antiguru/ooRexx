@@ -1,0 +1,12 @@
+STREAM TEST_QUERYFILE_EXISTS_OPENED_01 | oracle: Assertions: 9 Failures: 0 Errors: 0 | ours: Assertions: 4 Failures: 1 Errors: 0 
+STREAM TEST_QUERYFILE_EXISTS_OPENED_03 | oracle: Assertions: 8 Failures: 0 Errors: 0 | ours: Assertions: 2 Failures: 1 Errors: 0 
+STREAM TEST_SEEK_CLOSEDFILE_2785896 | oracle: Assertions: 4 Failures: 0 Errors: 0 | ours: Assertions: 3 Failures: 1 Errors: 0 
+STREAM TEST_SEEK_CLOSEDFILE_2787994 | oracle: Assertions: 4 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+STREAM TEST_OPEN_WRITE_ONLY_3274050_C | oracle: Assertions: 7 Failures: 0 Errors: 0 | ours: Assertions: 3 Failures: 0 Errors: 1 
+STREAM TEST_OPEN_WRITE_ONLY_3274050_D | oracle: Assertions: 7 Failures: 0 Errors: 0 | ours: Assertions: 3 Failures: 0 Errors: 1 
+RAISE TEST_RAISE_PROPAGATE | oracle: Assertions: 17 Failures: 0 Errors: 0 | ours: Assertions: 14 Failures: 1 Errors: 0 
+RAISE TEST_RAISE_SYNTAX_EXIT_02 | oracle: Assertions: 17 Failures: 0 Errors: 0 | ours: Assertions: 14 Failures: 1 Errors: 0 
+RAISE TEST_RAISE_SYNTAX_RETURN_02 | oracle: Assertions: 17 Failures: 0 Errors: 0 | ours: Assertions: 14 Failures: 1 Errors: 0 
+TIME TEST_VALIDOPT_BIGCHAR_R | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 0 Errors: 0 
+TIME TEST_VALIDOPT_LITTLECHAR_R | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 0 Errors: 0 
+method clock probe | oracle: 1 | ours: 0

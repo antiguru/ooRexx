@@ -1,0 +1,743 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/concurrency_tests.rs (/tmp/claude-1000/p6-t25/target-pin/release/deps/concurrency_tests-75cbe61e899e2aa1)
+
+running 18 tests
+test measured::a_buried_sleeper_due_first_is_a_late_wake ... ok
+test measured::a_guard_when_is_a_pinned_wait_only_under_a_pinned_frame ... ok
+test measured::a_new_into_init_is_stackless_or_pinned ... ok
+test measured::a_park_inside_a_recursing_native_is_under_a_pinned_frame ... ok
+test measured::a_park_inside_a_stackless_entry_is_under_no_pinned_frame ... ok
+test measured::a_park_point_native_is_not_a_frame_above_itself ... ok
+test measured::a_park_records_the_pinned_frames_above_it ... ok
+test measured::a_park_under_each_frame_kind_records_it ... ok
+test measured::a_pinned_busy_wait_counts_its_pinned_yields ... ok
+test measured::a_sleep_in_a_tree_evaluated_expression_is_a_pinned_wait ... ok
+test measured::a_sleep_is_a_pinned_wait_only_under_a_pinned_frame ... ok
+test measured::a_slice_deferred_inside_a_sort_comparator_is_counted_once ... ok
+test measured::a_wait_is_a_park_point ... ok
+test measured::an_immovable_reply_is_counted_with_its_frames ... ok
+test measured::an_inverted_wait_is_counted_with_its_kind_and_frames ... ok
+test measured::pinned_busy_waiters_that_need_each_other_count_inverted_yields ... ok
+test measured::pinned_parks_over_the_derived_list ... | park | frames | tests | arrivals |
+|---|---|---|---|
+| GuardOn | OpExec | 9 | 28 |
+| GuardOn | Program > OpExec | 6 | 8 |
+| GuardWhen | OpExec | 3 | 5 |
+| GuardWhen | Program > OpExec | 23 | 49 |
+| Reply | OpExec | 2 | 3 |
+| Reply | Program > OpExec | 58 | 86 |
+| Reply | Program > TreeEval > TreeSend > OpExec | 2 | 2 |
+| MessageResult | Program | 32 | 80 |
+| MessageResult | Program > TreeSend | 4 | 18 |
+| MessageWait | Program | 5 | 11 |
+| SemaphoreWait | - | 2 | 4 |
+| SemaphoreWait | Program | 2 | 4 |
+| SysSleep | - | 9 | 70 |
+| SysSleep | Program | 35 | 103 |
+| Timer | - | 18 | 37 |
+
+arrivals 508, with a frame other than TreeEval, TreeSend or OpExec 361
+
+| wait | park | frames | count |
+|---|---|---|---|
+| deferred slice | - | Program | 9 |
+| deferred slice | - | Program > OpExec | 10 |
+| pinned | GuardOn | Program | 4 |
+| pinned | GuardWhen | Program | 44 |
+| pinned | GuardWhen | Program > OpExec | 10 |
+| pinned | MessageResult | Program | 77 |
+| pinned | MessageResult | Program > TreeSend | 18 |
+| pinned | MessageWait | Program | 8 |
+| pinned | SemaphoreWait | Program | 4 |
+| pinned | SysSleep | Program | 103 |
+| pinned yield | - | Program | 2 |
+
+| test | outcome | park | frames | arrivals |
+|---|---|---|---|---|
+| base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS | pass, rc 0 | no park reached in-process | | |
+| base/bif/TIME.testGroup TEST_2 | pass, rc 0 | SysSleep | Program | 3 |
+| base/bif/TIME.testGroup TEST_3 | pass, rc 0 | SysSleep | Program | 5 |
+| base/bif/TIME.testGroup TEST_4 | failure, rc 1 | SysSleep | Program | 3 |
+| base/bif/TIME.testGroup TEST_5 | failure, rc 1 | SysSleep | Program | 5 |
+| base/bif/TIME.testGroup TEST_8 | pass, rc 0 | SysSleep | Program | 4 |
+| base/bif/TIME.testGroup TEST_9 | pass, rc 0 | SysSleep | Program | 6 |
+| base/bif/TIME.testGroup TEST_10 | failure, rc 1 | SysSleep | Program | 3 |
+| base/bif/TIME.testGroup TEST_11 | failure, rc 1 | SysSleep | Program | 5 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | GuardOn | OpExec | 8 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | GuardWhen | OpExec | 1 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | GuardWhen | Program > OpExec | 9 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | Reply | Program > OpExec | 16 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | SysSleep | - | 8 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | Timer | - | 8 |
+| base/class/Alarm.testGroup TEST_ALARM_NO_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_NO_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_BAD_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_NEGATIVE_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_BAD_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Class.testGroup TEST_SUBCLASSES | pass, rc 0 | no park reached in-process | | |
+| base/class/DateTime.testGroup TEST_ELAPSED1 | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/EventSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_ISPOSTED_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_POST_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_RESET_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_POST_RESET | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_WAIT_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_WAIT_NUMBER | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | SemaphoreWait | Program | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | GuardWhen | Program > OpExec | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | MessageResult | Program | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | SemaphoreWait | - | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | SysSleep | Program | 2 |
+| base/class/Message.testGroup TEST_START | pass, rc 0 | MessageResult | Program | 10 |
+| base/class/Message.testGroup TEST_START | pass, rc 0 | MessageWait | Program | 1 |
+| base/class/Message.testGroup TEST_START | pass, rc 0 | SysSleep | - | 3 |
+| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | MessageResult | Program | 11 |
+| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | MessageWait | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | SysSleep | - | 3 |
+| base/class/Message.testGroup TEST_NOTIFY | pass, rc 0 | MessageWait | Program | 2 |
+| base/class/Message.testGroup TEST_SUPER_OVERRIDE | pass, rc 0 | MessageResult | Program | 4 |
+| base/class/Message.testGroup TEST_STARTWITH_NO_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_NOT_ARRAY | refused at method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_TOO_MANY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_NO_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_NOT_ARRAY | refused at method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_TOO_MANY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | MessageWait | Program | 3 |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | SysSleep | - | 3 |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | SysSleep | Program | 3 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program > TreeSend | 4 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program > TreeSend | 5 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program > TreeSend | 4 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program > TreeSend | 5 |
+| base/class/Method.testGroup TESTDIRECTIVES | refused at DO is not implemented | no park reached in-process | | |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | Timer | - | 1 |
+| base/class/MutexSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_NUMBER | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_RELEASE_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_ACQUIRE_SIMPLE | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_SIMPLE | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_NESTED | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | pass, rc 0 | GuardWhen | OpExec | 2 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | pass, rc 0 | GuardWhen | Program > OpExec | 3 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | pass, rc 0 | SemaphoreWait | - | 2 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | pass, rc 0 | SemaphoreWait | Program | 2 |
+| base/class/Object.testGroup TESTSTART01 | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TESTSTARTWITH01 | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_NO_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NO_NAME2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NOT_STRING | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE | pass, rc 0 | MessageResult | Program | 6 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_EXTRA_STUFF | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_STRING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_NAME2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NOT_STRING | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE | pass, rc 0 | MessageResult | Program | 6 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EXTRA_STUFF | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_STRING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program | 4 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program | 5 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program | 4 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program | 5 |
+| base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | GuardOn | OpExec | 4 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | Timer | - | 4 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_NO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_BAD_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_ALARM_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_DATETIME_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIMESPAN_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_BAD_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_MESSAGE_NOTIFICATION_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_FOUR_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | GuardOn | OpExec | 5 |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | Timer | - | 5 |
+| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | pass, rc 0 | Reply | Program > TreeEval > TreeSend > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/directives/ATTRIBUTE.testGroup TEST001 | pass, rc 0 | no park reached in-process | | |
+| base/directives/ATTRIBUTE.testGroup TESTDELEGATE | failure, rc 1 | no park reached in-process | | |
+| base/directives/CONSTANT.testGroup TEST_CONSTANT_METHOD_PROPERTIES | pass, rc 0 | no park reached in-process | | |
+| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | Reply | Program > OpExec | 2 |
+| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | SysSleep | - | 21 |
+| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | SysSleep | Program | 22 |
+| base/directives/METHOD.testGroup TESTDELEGATE | failure, rc 1 | no park reached in-process | | |
+| base/keyword/CALL.testGroup TEST_4 | failure, rc 1 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_WHEN_NOVALUE | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WHEN_NOT_BOOLEAN | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF_CONSECUTIVE | pass, rc 0 | GuardOn | Program > OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | GuardOn | Program > OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_UNGUARDED | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_UNGUARDED | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_NO_WAIT | pass, rc 0 | GuardWhen | Program > OpExec | 4 |
+| base/keyword/GUARD.testGroup TEST_WHEN_USE_LOCAL_NO_WAIT | refused at USE LOCAL in a ::METHOD body is not implemented (Phase 5) | no park reached in-process | | |
+| base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT | pass, rc 0 | GuardWhen | Program > OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_WHEN_MULTIPLE_NO_WAIT | pass, rc 0 | GuardWhen | Program > OpExec | 6 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | GuardWhen | Program > OpExec | 5 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | SysSleep | - | 26 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | GuardWhen | OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | GuardWhen | Program > OpExec | 3 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | SysSleep | Program | 2 |
+| base/keyword/RAISE.testGroup TEST_RAISE_INSERT_CRLF | failure, rc 1 | Reply | Program > OpExec | 1 |
+| base/keyword/RAISE.testGroup TEST_RAISE_INSERT_CRLF | failure, rc 1 | SysSleep | Program | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_ROUTINE | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_PROCEDURE | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_CALL | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | Reply | OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_EXIT_CODE_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_STACK_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_PLAIN | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_STRING | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_ARRAY | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_NIL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_NOP | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY__CODE_RETURN | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY__CODE_EXIT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT | pass, rc 0 | SysSleep | - | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_CONCURRENT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_CONCURRENT | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_GUARD | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_GUARD | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_REPLY | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_REPLY | pass, rc 0 | SysSleep | Program | 10 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | Reply | OpExec | 2 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | Reply | Program > TreeEval > TreeSend > OpExec | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | SysSleep | Program | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | Reply | Program > OpExec | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | SysSleep | - | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | SysSleep | Program | 1 |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_NO_ARG | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_NEGATIVE | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_TOO_LARGE | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_DURATION | pass, rc 0 | SysSleep | Program | 9 |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | pass, rc 0 | MessageWait | Program | 4 |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | pass, rc 0 | SysSleep | - | 4 |
+| base/special.variables/RESULT_RC_SIGL.testGroup TEST_RESULT_WITH_REPLY | pass, rc 0 | Reply | Program > OpExec | 3 |
+| doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | MessageResult | Program | 2 |
+| doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | SysSleep | Program | 1 |
+| regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | no park reached in-process | | |
+
+written to /tmp/claude-1000/p6-t25/target-pin/tmp/pinning-table.md
+ok
+test measured::pinned_parks_over_the_derived_list_under_every_opportunity ... | park | frames | tests | arrivals |
+|---|---|---|---|
+| GuardOn | OpExec | 30 | 59 |
+| GuardOn | Program > OpExec | 6 | 8 |
+| GuardWhen | OpExec | 3 | 5 |
+| GuardWhen | Program > OpExec | 23 | 49 |
+| Reply | OpExec | 2 | 3 |
+| Reply | Program > OpExec | 58 | 86 |
+| Reply | Program > TreeEval > TreeSend > OpExec | 2 | 2 |
+| MessageResult | Program | 32 | 80 |
+| MessageResult | Program > TreeSend | 4 | 18 |
+| MessageWait | Program | 5 | 11 |
+| SemaphoreWait | - | 2 | 3 |
+| SemaphoreWait | Program | 2 | 4 |
+| SysSleep | - | 9 | 70 |
+| SysSleep | Program | 34 | 102 |
+| Timer | - | 30 | 59 |
+
+arrivals 559, with a frame other than TreeEval, TreeSend or OpExec 360
+
+| wait | park | frames | count |
+|---|---|---|---|
+| deferred slice | - | - | 31 |
+| deferred slice | - | Notification | 8 |
+| deferred slice | - | Program | 360 |
+| deferred slice | - | Program > OpExec | 140 |
+| deferred slice | - | Program > TreeEval > TreeSend | 7 |
+| deferred slice | - | TraceWrapper | 697 |
+| deferred slice | - | TraceWrapper > Unknown | 80 |
+| deferred slice | - | TraceWrapper > Unknown > OpExec > Forward | 33 |
+| deferred slice | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+| inverted yield | - | Notification | 6 |
+| inverted yield | - | TraceWrapper | 697 |
+| inverted yield | - | TraceWrapper > Unknown | 43 |
+| inverted yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+| inverted yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+| late wake | MessageResult | Program | 456 |
+| late wake | MessageWait | Program | 234 |
+| pinned | GuardOn | Program | 15 |
+| pinned | GuardWhen | Program | 42 |
+| pinned | MessageResult | Program | 76 |
+| pinned | MessageResult | Program > TreeSend | 18 |
+| pinned | MessageWait | Program | 8 |
+| pinned | SemaphoreWait | Program | 4 |
+| pinned | SysSleep | Program | 102 |
+| pinned yield | - | Notification | 6 |
+| pinned yield | - | Program | 277 |
+| pinned yield | - | Program > OpExec | 140 |
+| pinned yield | - | Program > TreeEval > TreeSend | 7 |
+| pinned yield | - | TraceWrapper | 697 |
+| pinned yield | - | TraceWrapper > Unknown | 43 |
+| pinned yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+| pinned yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+
+| test | outcome | park | frames | arrivals |
+|---|---|---|---|---|
+| base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS | pass, rc 0 | no park reached in-process | | |
+| base/bif/TIME.testGroup TEST_2 | pass, rc 0 | SysSleep | Program | 3 |
+| base/bif/TIME.testGroup TEST_3 | pass, rc 0 | SysSleep | Program | 5 |
+| base/bif/TIME.testGroup TEST_4 | failure, rc 1 | SysSleep | Program | 3 |
+| base/bif/TIME.testGroup TEST_5 | failure, rc 1 | SysSleep | Program | 5 |
+| base/bif/TIME.testGroup TEST_8 | pass, rc 0 | SysSleep | Program | 4 |
+| base/bif/TIME.testGroup TEST_9 | pass, rc 0 | SysSleep | Program | 6 |
+| base/bif/TIME.testGroup TEST_10 | failure, rc 1 | SysSleep | Program | 3 |
+| base/bif/TIME.testGroup TEST_11 | failure, rc 1 | SysSleep | Program | 5 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | GuardOn | OpExec | 8 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | GuardWhen | OpExec | 1 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | GuardWhen | Program > OpExec | 9 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | Reply | Program > OpExec | 16 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | SysSleep | - | 8 |
+| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | Timer | - | 8 |
+| base/class/Alarm.testGroup TEST_ALARM_NO_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_NO_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_BAD_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_NEGATIVE_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Alarm.testGroup TEST_ALARM_BAD_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Class.testGroup TEST_SUBCLASSES | pass, rc 0 | no park reached in-process | | |
+| base/class/DateTime.testGroup TEST_ELAPSED1 | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/EventSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_ISPOSTED_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_POST_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_RESET_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_POST_RESET | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_WAIT_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_WAIT_NUMBER | pass, rc 0 | no park reached in-process | | |
+| base/class/EventSemaphore.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | SemaphoreWait | Program | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | GuardWhen | Program > OpExec | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | MessageResult | Program | 2 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | SemaphoreWait | - | 1 |
+| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | SysSleep | Program | 2 |
+| base/class/Message.testGroup TEST_START | pass, rc 0 | MessageResult | Program | 10 |
+| base/class/Message.testGroup TEST_START | pass, rc 0 | MessageWait | Program | 1 |
+| base/class/Message.testGroup TEST_START | pass, rc 0 | SysSleep | - | 3 |
+| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | MessageResult | Program | 11 |
+| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | MessageWait | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | SysSleep | - | 3 |
+| base/class/Message.testGroup TEST_NOTIFY | pass, rc 0 | MessageWait | Program | 2 |
+| base/class/Message.testGroup TEST_SUPER_OVERRIDE | pass, rc 0 | MessageResult | Program | 4 |
+| base/class/Message.testGroup TEST_STARTWITH_NO_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_NOT_ARRAY | refused at method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_TOO_MANY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_NO_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_NOT_ARRAY | refused at method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_TOO_MANY | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | MessageWait | Program | 3 |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | SysSleep | - | 3 |
+| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | SysSleep | Program | 3 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program > TreeSend | 4 |
+| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program > TreeSend | 5 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program > TreeSend | 4 |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program > TreeSend | 5 |
+| base/class/Method.testGroup TESTDIRECTIVES | refused at DO is not implemented | no park reached in-process | | |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | GuardOn | OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | Reply | Program > OpExec | 2 |
+| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | Timer | - | 2 |
+| base/class/MutexSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_NUMBER | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_RELEASE_ONE_ARG | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_ACQUIRE_SIMPLE | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_SIMPLE | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_NESTED | pass, rc 0 | no park reached in-process | | |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at the run exceeded its deadline | GuardWhen | OpExec | 2 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at the run exceeded its deadline | GuardWhen | Program > OpExec | 3 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at the run exceeded its deadline | Reply | Program > OpExec | 1 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at the run exceeded its deadline | SemaphoreWait | - | 2 |
+| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | refused at the run exceeded its deadline | SemaphoreWait | Program | 2 |
+| base/class/Object.testGroup TESTSTART01 | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TESTSTARTWITH01 | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_NO_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NO_NAME2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NOT_STRING | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE | pass, rc 0 | MessageResult | Program | 6 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_EXTRA_STUFF | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_STRING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_NAME2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NOT_STRING | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_NO_METHOD | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE | pass, rc 0 | MessageResult | Program | 6 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EXTRA_STUFF | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_STRING_NAME | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | MessageResult | Program | 1 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program | 4 |
+| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program | 5 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | MessageResult | Program | 4 |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | no park reached in-process | | |
+| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | MessageResult | Program | 5 |
+| base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | GuardOn | OpExec | 4 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | Timer | - | 4 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | GuardOn | OpExec | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | Timer | - | 2 |
+| base/class/Ticker.testGroup TEST_TICKER_NO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NO_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_BAD_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_ALARM_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_DATETIME_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIMESPAN_TIME | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_BAD_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_MESSAGE_NOTIFICATION_TARGET | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_TICKER_FOUR_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | GuardOn | OpExec | 5 |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | Timer | - | 5 |
+| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | pass, rc 0 | Reply | Program > TreeEval > TreeSend > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | SysSleep | Program | 1 |
+| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | pass, rc 0 | Timer | - | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | pass, rc 0 | GuardOn | OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | pass, rc 0 | Timer | - | 1 |
+| base/directives/ATTRIBUTE.testGroup TEST001 | pass, rc 0 | no park reached in-process | | |
+| base/directives/ATTRIBUTE.testGroup TESTDELEGATE | failure, rc 1 | no park reached in-process | | |
+| base/directives/CONSTANT.testGroup TEST_CONSTANT_METHOD_PROPERTIES | pass, rc 0 | no park reached in-process | | |
+| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | Reply | Program > OpExec | 2 |
+| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | SysSleep | - | 21 |
+| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | SysSleep | Program | 22 |
+| base/directives/METHOD.testGroup TESTDELEGATE | failure, rc 1 | no park reached in-process | | |
+| base/keyword/CALL.testGroup TEST_4 | failure, rc 1 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_WHEN_NOVALUE | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WHEN_NOT_BOOLEAN | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF_CONSECUTIVE | pass, rc 0 | GuardOn | Program > OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | GuardOn | Program > OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_UNGUARDED | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_UNGUARDED | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_NO_WAIT | pass, rc 0 | GuardWhen | Program > OpExec | 4 |
+| base/keyword/GUARD.testGroup TEST_WHEN_USE_LOCAL_NO_WAIT | refused at USE LOCAL in a ::METHOD body is not implemented (Phase 5) | no park reached in-process | | |
+| base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT | pass, rc 0 | GuardWhen | Program > OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_WHEN_MULTIPLE_NO_WAIT | pass, rc 0 | GuardWhen | Program > OpExec | 6 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | GuardWhen | Program > OpExec | 5 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | SysSleep | - | 26 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | GuardWhen | OpExec | 2 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | GuardWhen | Program > OpExec | 3 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | SysSleep | Program | 2 |
+| base/keyword/RAISE.testGroup TEST_RAISE_INSERT_CRLF | failure, rc 1 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_ROUTINE | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_PROCEDURE | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_CALL | pass, rc 0 | no park reached in-process | | |
+| base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | Reply | OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_EXIT_CODE_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_STACK_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_PLAIN | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_STRING | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_ARRAY | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_NIL | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_NOP | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY__CODE_RETURN | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY__CODE_EXIT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT | pass, rc 0 | SysSleep | - | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_CONCURRENT | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/REPLY.testGroup TEST_REPLY_CONCURRENT | pass, rc 0 | SysSleep | Program | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_GUARD | pass, rc 0 | GuardOn | Program > OpExec | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_GUARD | pass, rc 0 | GuardWhen | Program > OpExec | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_REPLY | pass, rc 0 | Reply | Program > OpExec | 1 |
+| base/keyword/TRACE.testGroup TEST_TRACE_REPLY | pass, rc 0 | SysSleep | Program | 10 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | Reply | OpExec | 2 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | Reply | Program > TreeEval > TreeSend > OpExec | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | SysSleep | Program | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | GuardWhen | Program > OpExec | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | Reply | Program > OpExec | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | SysSleep | - | 1 |
+| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | SysSleep | Program | 1 |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_NO_ARG | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_TWO_ARGS | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_NEGATIVE | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_TOO_LARGE | pass, rc 0 | no park reached in-process | | |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_DURATION | pass, rc 0 | SysSleep | Program | 9 |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | pass, rc 0 | MessageWait | Program | 4 |
+| base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | pass, rc 0 | SysSleep | - | 4 |
+| base/special.variables/RESULT_RC_SIGL.testGroup TEST_RESULT_WITH_REPLY | pass, rc 0 | Reply | Program > OpExec | 3 |
+| doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | MessageResult | Program | 2 |
+| doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | SysSleep | Program | 1 |
+| regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | no park reached in-process | | |
+
+written to /tmp/claude-1000/p6-t25/target-pin/tmp/pinning-table-every-opportunity.md
+ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 127.34s
+
