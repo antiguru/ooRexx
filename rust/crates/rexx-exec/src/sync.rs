@@ -42,15 +42,17 @@ pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexG
     condvar.wait(guard).unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The timer thread's wake source: a socket pair and a timer. The timer
-/// thread polls the socket's read end and the timer, armed for its next
-/// deadline. Registration changes and the signal handlers each write one
+/// The timer thread's wake source: a socket pair and, on Linux, a timerfd.
+/// The timer thread polls the socket's read end and the timerfd, armed for
+/// its next deadline; on other unix targets the deadline is the poll's
+/// timeout. Registration changes and the signal handlers each write one
 /// byte to the socket's nonblocking write end. The socket is never closed,
 /// so a byte written while no timer thread reads stays until one does.
 #[cfg(not(all(loom, test)))]
 pub(crate) struct Wake {
     reader: std::os::unix::net::UnixStream,
     writer: std::os::unix::net::UnixStream,
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     timer: std::os::fd::OwnedFd,
 }
 
@@ -63,15 +65,15 @@ impl Wake {
             end.set_nonblocking(true)
                 .expect("a nonblocking wake socket");
         }
-        let timer = rustix::time::timerfd_create(
-            rustix::time::TimerfdClockId::Monotonic,
-            rustix::time::TimerfdFlags::NONBLOCK | rustix::time::TimerfdFlags::CLOEXEC,
-        )
-        .expect("the timer's deadline timer");
         Wake {
             reader,
             writer,
-            timer,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            timer: rustix::time::timerfd_create(
+                rustix::time::TimerfdClockId::Monotonic,
+                rustix::time::TimerfdFlags::NONBLOCK | rustix::time::TimerfdFlags::CLOEXEC,
+            )
+            .expect("the timer's deadline timer"),
         }
     }
 
@@ -81,35 +83,48 @@ impl Wake {
         let _ = (&self.writer).write(&[0]);
     }
 
-    /// Blocks until a wake or `timeout`, taking every wake written. The
-    /// deadline is a timerfd's, which expires within the thread's timer
-    /// slack.
+    /// Blocks until a wake, `timeout`, or an interrupted poll, taking every
+    /// wake written. The caller recomputes its deadline on every return.
     pub(crate) fn wait(&self, timeout: Option<Duration>) {
         use rustix::event::{PollFd, PollFlags, poll};
-        use rustix::time::{Itimerspec, TimerfdTimerFlags, Timespec, timerfd_settime};
         use std::io::Read;
         if timeout == Some(Duration::ZERO) {
             return;
         }
-        let zero = Timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
-        let deadline = Itimerspec {
-            it_interval: zero,
-            it_value: timeout
-                .and_then(|timeout| Timespec::try_from(timeout).ok())
-                .unwrap_or(zero),
-        };
-        let _ = timerfd_settime(&self.timer, TimerfdTimerFlags::empty(), &deadline);
-        let mut polled = [
-            PollFd::new(&self.reader, PollFlags::IN),
-            PollFd::new(&self.timer, PollFlags::IN),
-        ];
-        let _ = poll(&mut polled, None);
-        let mut bytes = [0u8; 64];
-        let _ = (&self.reader).read(&mut bytes);
-        let _ = rustix::io::read(&self.timer, &mut bytes[..8]);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            use rustix::time::{Itimerspec, TimerfdTimerFlags, Timespec, timerfd_settime};
+            let zero = Timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            let deadline = Itimerspec {
+                it_interval: zero,
+                it_value: timeout
+                    .and_then(|timeout| Timespec::try_from(timeout).ok())
+                    .unwrap_or(zero),
+            };
+            let _ = timerfd_settime(&self.timer, TimerfdTimerFlags::empty(), &deadline);
+            let mut polled = [
+                PollFd::new(&self.reader, PollFlags::IN),
+                PollFd::new(&self.timer, PollFlags::IN),
+            ];
+            let _ = poll(&mut polled, None);
+            let _ = rustix::io::read(&self.timer, &mut [0u8; 8]);
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            // `poll(2)`'s timeout is a C int of milliseconds, so a wait is
+            // capped at a day and the caller recomputes after it.
+            let timeout = timeout
+                .map(|timeout| timeout.min(Duration::from_secs(86_400)))
+                .and_then(|timeout| rustix::time::Timespec::try_from(timeout).ok());
+            let _ = poll(
+                &mut [PollFd::new(&self.reader, PollFlags::IN)],
+                timeout.as_ref(),
+            );
+        }
+        let _ = (&self.reader).read(&mut [0u8; 64]);
     }
 
     /// Installs the signal handlers, writing to this socket.

@@ -37,6 +37,8 @@ fn library() -> rexx_api::load::Library {
     rexx_api::load::routines_only(&[
         ("HOLDCSTRING", rexx_api::load::hold_c_string),
         ("HOLDBUFFER", rexx_api::load::hold_buffer),
+        ("BUFFERHELD", rexx_api::load::buffer_held),
+        ("BUFFERCHANGED", rexx_api::load::buffer_changed),
         ("FINISHEDINPLACE", rexx_api::load::finished_in_place),
         ("TAKECSTRING", take_c_string),
     ])
@@ -44,16 +46,12 @@ fn library() -> rexx_api::load::Library {
 
 /// Runs `source` with this module's routines as the library `lenttest`,
 /// after replacing `PATH` in it with a file of the test's own, which the
-/// program writes to say its other activity is done, with
-/// [`crate::set_fail_native_wait`] set where `fail_native_wait`.
+/// program writes to say its other activity is done, or the test's key for
+/// `HOLDBUFFER`, with [`crate::set_fail_native_wait`] set where
+/// `fail_native_wait`.
 fn run_lent(test: &str, source: &str, fail_native_wait: bool) -> Ran {
     let path = std::env::temp_dir().join(format!("rexx-lent-{}-{test}", std::process::id()));
-    let mut held = path.clone().into_os_string();
-    held.push(".held");
-    let files = [path.clone(), held.into()];
-    for file in &files {
-        let _ = std::fs::remove_file(file);
-    }
+    let _ = std::fs::remove_file(&path);
     let source = source.replace("PATH", &path.to_string_lossy());
     let ran = run_shaped(
         &source,
@@ -64,9 +62,7 @@ fn run_lent(test: &str, source: &str, fail_native_wait: bool) -> Ran {
         },
     )
     .expect("the run did not panic");
-    for file in &files {
-        let _ = std::fs::remove_file(file);
-    }
+    let _ = std::fs::remove_file(&path);
     ran
 }
 
@@ -80,7 +76,10 @@ const ROUTINES: &str = "::requires 'lenttest' LIBRARY\n::class t\n";
 const DONE: &str = "  call lineout 'PATH', 'done'\n  call lineout 'PATH'\n";
 
 /// The method that waits for `HOLDBUFFER` to hold its buffer's address.
-const HELD: &str = "  do 500 until SysFileExists('PATH.held')\n    call SysSleep 0.01\n  end\n";
+const HELD: &str = "  do 500 until BUFFERHELD('PATH')\n    call SysSleep 0.01\n  end\n";
+
+/// The method that says to `HOLDBUFFER` that its buffer has changed.
+const CHANGED: &str = "  call BUFFERCHANGED 'PATH'\n";
 
 /// **A handle-carried value's kept string outlives a prune made while its
 /// call is in flight**: another activity asks for more kept strings than the
@@ -128,7 +127,7 @@ fn a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds() {
             "b = .mutablebuffer~new('abcdefghijklmnopqrstuvwxyz')\nm = .t~new~start('grow', b)\n\
              say HOLDBUFFER(b, 'PATH', 'ZZ')\nsay b~substr(1, 4) b~length\nsay m~result\n\
              {ROUTINES}::method grow\n  use arg b\n{HELD}  b~append(copies('y', 5000))\n\
-             {DONE}  return 'grown'\n"
+             {CHANGED}  return 'grown'\n"
         ),
     );
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
@@ -149,7 +148,7 @@ fn a_buffer_changed_in_place_under_a_call_stays_shared() {
             "b = .mutablebuffer~new('abcdefghijklmnopqrstuvwxyz')\nm = .t~new~start('overlay', b)\n\
              say HOLDBUFFER(b, 'PATH', 'ZZ')\nsay b~substr(1, 4) b~length\nsay m~result\n\
              {ROUTINES}::method overlay\n  use arg b\n{HELD}  b~overlay('XY', 3)\n\
-             {DONE}  return 'overlaid'\n"
+             {CHANGED}  return 'overlaid'\n"
         ),
     );
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());

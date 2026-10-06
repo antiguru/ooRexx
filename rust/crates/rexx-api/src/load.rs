@@ -880,13 +880,58 @@ pub unsafe extern "C-unwind" fn hold_c_string(
     std::ptr::null_mut()
 }
 
-/// `HOLDBUFFER(buffer, path, mark)`: keeps the address and length
-/// `MutableBufferData` and `MutableBufferLength` answer, writes a file at
-/// `path` with `.held` appended, waits up to five seconds for a file at
-/// `path`, then reads that many bytes from that address and writes `mark`
-/// over its start, answering what it read, or `unawaited` where no file
-/// appeared: a native holding a buffer's storage across other activities'
-/// work, for a test.
+/// The keys `HOLDBUFFER` holds a buffer's storage for, and the keys whose
+/// buffer `BUFFERCHANGED` says another activity has changed: a handshake
+/// through a lock, so that ThreadSanitizer sees the change ordered before
+/// the routine's access.
+struct BufferHandshake {
+    held: Vec<Vec<u8>>,
+    changed: Vec<Vec<u8>>,
+}
+
+static BUFFER_HANDSHAKE: Mutex<BufferHandshake> = Mutex::new(BufferHandshake {
+    held: Vec::new(),
+    changed: Vec::new(),
+});
+
+static BUFFER_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
+
+fn buffer_handshake() -> std::sync::MutexGuard<'static, BufferHandshake> {
+    BUFFER_HANDSHAKE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Waits up to five seconds for `BUFFERCHANGED(key)`, answering whether it
+/// came, and ends `key`'s hold either way.
+fn await_buffer_changed(key: &[u8]) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut handshake = buffer_handshake();
+    let changed = loop {
+        if let Some(at) = handshake.changed.iter().position(|k| k == key) {
+            handshake.changed.swap_remove(at);
+            break true;
+        }
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            break false;
+        }
+        handshake = BUFFER_CHANGED
+            .wait_timeout(handshake, left)
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .0;
+    };
+    handshake.held.retain(|k| k != key);
+    changed
+}
+
+/// `HOLDBUFFER(buffer, key, mark)`: keeps the address and length
+/// `MutableBufferData` and `MutableBufferLength` answer, says through
+/// `BUFFERHELD(key)` that it holds them, waits up to five seconds for
+/// `BUFFERCHANGED(key)`, then reads that many bytes from that address and
+/// writes `mark` over its start, answering what it read, or `unawaited`
+/// where `BUFFERCHANGED` did not come: a native holding a buffer's storage
+/// across other activities' work, for a test.
 ///
 /// # Safety
 /// As [`send_then_await`].
@@ -909,20 +954,17 @@ pub unsafe extern "C-unwind" fn hold_buffer(
     // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments.
     // The interpreter keeps the storage at the address it answered for as
     // long as the call is in flight. The test changes the buffer only after
-    // the `.held` file appears, so the length answered is that storage's.
+    // `BUFFERHELD` answers true, so the length answered is that storage's.
     unsafe {
         let buffer = (*arguments.add(1)).value.value_RexxMutableBufferObject;
-        let path = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING);
-        let path = PathBuf::from(path.to_string_lossy().into_owned());
+        let key = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING).to_bytes();
         let mark = CStr::from_ptr((*arguments.add(3)).value.value_CSTRING).to_bytes();
         let thread = (*context).threadContext;
         let functions = &*(*thread).functions;
         let data = (functions.MutableBufferData)(thread, buffer).cast::<u8>();
         let length = (functions.MutableBufferLength)(thread, buffer);
-        let mut held = path.clone().into_os_string();
-        held.push(".held");
-        let _ = std::fs::write(held, b"held");
-        let read: Vec<u8> = if await_file(&path) {
+        buffer_handshake().held.push(key.to_vec());
+        let read: Vec<u8> = if await_buffer_changed(key) {
             let read = (0..length).map(|at| data.add(at).read_volatile()).collect();
             for (at, byte) in mark.iter().take(length).enumerate() {
                 data.add(at).write_volatile(*byte);
@@ -934,6 +976,52 @@ pub unsafe extern "C-unwind" fn hold_buffer(
         (*arguments).value.value_RexxObjectPtr =
             (functions.NewString)(thread, read.as_ptr().cast(), read.len()).cast();
     }
+    std::ptr::null_mut()
+}
+
+/// `BUFFERHELD(key)`: whether `HOLDBUFFER(, key)` holds its buffer's
+/// storage, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn buffer_held(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 3] = [code::LOGICAL_T, code::CSTRING, ARGUMENT_TERMINATOR];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares one argument.
+    unsafe {
+        let key = CStr::from_ptr((*arguments.add(1)).value.value_CSTRING).to_bytes();
+        let held = buffer_handshake().held.iter().any(|k| k == key);
+        (*arguments).value.value_logical_t = usize::from(held);
+    }
+    std::ptr::null_mut()
+}
+
+/// `BUFFERCHANGED(key)`: says to `HOLDBUFFER(, key)` that its buffer has
+/// been changed, for a test.
+///
+/// # Safety
+/// As [`send_then_await`].
+#[doc(hidden)]
+pub unsafe extern "C-unwind" fn buffer_changed(
+    _context: *mut RexxCallContext_,
+    arguments: *mut ValueDescriptor,
+) -> *mut u16 {
+    use crate::values::code;
+    static SIGNATURE: [u16; 3] = [code::REXX_OBJECT_PTR, code::CSTRING, ARGUMENT_TERMINATOR];
+    if arguments.is_null() {
+        return SIGNATURE.as_ptr().cast_mut();
+    }
+    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares one argument.
+    let key = unsafe { CStr::from_ptr((*arguments.add(1)).value.value_CSTRING).to_bytes() };
+    buffer_handshake().changed.push(key.to_vec());
+    BUFFER_CHANGED.notify_all();
     std::ptr::null_mut()
 }
 

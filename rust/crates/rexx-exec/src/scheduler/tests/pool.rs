@@ -336,6 +336,26 @@ fn callback_recursion_on_a_pool_thread_reaches_the_depth_cap() {
     );
 }
 
+/// The same recursion bounded at 25 levels nests every native call on the
+/// pool thread its first callback was lent the baton on: one driver exit,
+/// one take. ThreadSanitizer runs this one, not the deep ones.
+#[test]
+fn bounded_callback_recursion_nests_under_one_lend() {
+    let ran = run(
+        "m = .t~new~start('idle')\nsay .k~new~send0(.r~new(25), 'deep')\nsay m~result\n\
+         ::class t\n::method idle\n  call SysSleep 0.5\n  return 'idled'\n\
+         ::class r\n::method init\n  expose left\n  use arg left\n\
+         ::method deep\n  expose left\n  left = left - 1\n  if left = 0 then return 'bottom'\n\
+         return .k~new~send0(self, 'deep')\n\
+         ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
+        None,
+    );
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "bottom\nidled\n");
+    assert_eq!(ran.exits, 1);
+    assert_eq!(ran.takes, 1);
+}
+
 /// The translator, run by a callback on a pool thread, has the interpreter
 /// thread's stack: deep nesting and long operator chains translate as they
 /// do there.
