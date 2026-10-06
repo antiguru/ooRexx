@@ -627,3 +627,191 @@ bin/rexx-run.rs:90:    let reported = std::fs::canonicalize(&path).unwrap_or_els
 * A lone activity's native call keeps the baton (ruling P43), so an activity its callback starts
   runs only once the call returns; a call that then waits for that activity waits in vain
   (`scheduler/tests/pool.rs`, `a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity`).
+
+### S4 close
+
+#### Background gates
+
+Run on `52b038a80` by `.superpowers/sdd/2026-10-01-phase-6-s2-s5/p6-gates/bggates.sh`; status file
+`.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/52b038a80/status.txt`, logs beside it in `logs/`.
+Its result lines, verbatim apart from the repository path:
+
+```
+52b038a80 started 2026-10-06T00:41:17+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 12.68 13.43 6.93 1/2788 888295 2026-10-06T00:45:24+02:00
+G4 release test exit 101
+G5 debug build exit 0
+load G6 11.01 6.71 5.85 2/2779 1057485 2026-10-06T00:59:18+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/52b038a80/logs/g4-test-release.txt:2
+.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/52b038a80/logs/g6-test-debug.txt:0
+P48 reruns: 2
+finished 2026-10-06T01:20:34+02:00
+```
+
+G4 release: 3029 passed, 1 failed. G6 debug: 3034 passed, 0 failed (sums of `test result` lines).
+G4's failure is `the_s2_rows_of_the_derived_list_in_both_modes`, at `base/rexxutil/SysSleep`
+TEST_SLEEP_CONCURRENT, after its P48 rerun (`g4-test-release.txt:2052`, `:2190`). G6 passed the
+same row only because both modes failed it alike: its cell is `differ: rc 1: oracle Failures 0,
+ours Failures 1` / `same (P48 rerun)` (`g6-criterion-one-table.txt`).
+
+The cause is a regression from `532bf29fa`. The timer thread waited in a socket read with
+`SO_RCVTIMEO`, which the kernel runs on its timer wheel, so a `SysSleep` ended late. The test
+allows 26 ms. Measured by `call time 'r'; call SysSleep 0.3; say time('e') - 0.3` repeated
+4 times in one program, with release `rexx-run` built from `git archive` of the Task 20 and earlier
+trees and of `532bf29fa`, and from the worktree for `52b038a80` and `2e6917afe`:
+
+| tree | overshoot, s |
+|---|---|
+| `7266ae03c` (S3 close) | 0.000147 0.000114 0.000095 0.000113 |
+| `a48312f8e` (Task 20) | 0.000197 0.000115 0.000120 0.000112 |
+| `532bf29fa` (Task 21) | 0.016163 0.019948 0.019998 0.019950 |
+| `52b038a80` | 0.014898 0.023956 0.019899 0.020352 |
+| `2e6917afe` | 0.000164 0.000086 0.000077 0.000087 |
+| oracle | 0.000226 0.000173 0.002361 0.000206 |
+
+`2e6917afe` (Task 22) arms a timerfd for the deadline and polls it beside the wake socket. A
+`ppoll` timeout alone was about 1.5 ms late under niceness 5. `sync.rs`
+`a_timed_wait_ends_close_to_its_timeout` fails on both variants: 19.7 ms late with the socket
+timeout and 1.5 ms with the `ppoll` timeout, against its 1 ms bound. At `b8ec39593`, from
+`rust/`:
+
+```
+REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=<file> cargo test --release -p rexx-exec \
+  --test concurrency_tests -- group_runs::the_s2_rows
+```
+
+exits 0 with no P48 rerun, and the row is `pass` / `same`. Every other row's cells are G6's, but
+`base/keyword/REPLY` TEST_REPLY_TWICE_REPLYASSERT, whose normal cell is `differ: rc 0: oracle 1,
+ours 0`: the oracle counts 1 in some runs, as the P41 table above records.
+
+LEAD: the G4 disposition (a rerun of G4 on the Task 22 head, or the row run above as its
+replacement) goes here.
+
+#### Criteria
+
+* **Criterion 1.** G4's and G6's tables (`g4-criterion-one-table.txt`,
+  `g4-criterion-one-s3-table.txt`, `g4-timer-table.txt` and the G6 ones) equal the S3 close's rows
+  above, apart from `SysSleep` TEST_SLEEP_CONCURRENT, which the regression above made fail and
+  `2e6917afe` passes, and `REPLY` TEST_REPLY_TWICE_REPLYASSERT's normal cell, which follows the
+  oracle's run (P41). Every Alarm and Ticker test passes in both modes in both gate runs.
+* **Criterion 2.** `the_framework_ticker_runs_without_dash_u` passes in G4 and in G6.
+* **Criterion 3.** Below: the ThreadSanitizer run is clean, and G9's `loom` passes.
+* **Criterion 9.** `phase-6-pinning.md` `## S4 close`: no inverted-wait refusal, no immovable
+  `REPLY`, and no hang in either mode over the derived list. The test that ends at the run's
+  deadline under every opportunity is `MutexSemaphore` TEST_EXCLUSION, the oracle's own hang
+  (P46).
+* The gate-only `outer_context.rs` tests (Task 19's kept-context 98.983 programs, against the
+  oracle) pass in G4 and in G6: `a_kept_outer_context_reaches_its_callers_variables`,
+  `a_kept_call_context_used_by_another_activity_answers_or_raises` and
+  `a_kept_thread_context_used_by_another_activity_does_nothing` (`g4-test-release.txt:3405-3407`).
+
+#### Criterion 3, race checking
+
+The ThreadSanitizer run, gate-only, from `rust/` with the installed nightly
+(`rustc 1.100.0-nightly (4aa1fbcf4 2026-09-08)`, its `rust-src` component):
+
+```
+export CARGO_TARGET_DIR=<own dir> RUSTFLAGS="-Zsanitizer=thread"
+export TSAN_OPTIONS="log_path=<dir>/tsan suppressions=$PWD/tsan.supp allocator_may_return_null=1 second_deadlock_stack=1"
+T="cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu"
+$T -p rexx-api --lib
+DEPTH="recursion deep eval_limit max_eval_depth the_stack_span a_stack_within_the_margin \
+  nested_pinned_waits_are_bounded notifier_failures_too_many_to_nest the_translator_on_a_pool_thread"
+$T -p rexx-exec --lib -- $(for t in $DEPTH; do echo --skip $t; done)
+$T -p rexx-exec --test signals --test stdin_contention --test program_end --test concurrency_tests \
+  --no-fail-fast -- --skip only_the_interpreter_and_its_waits_take_the_halting_signals
+```
+
+Clean means every command exits 0 and `<dir>` holds no `tsan.*` file. `rexx-run`, which the
+integration tests start, is built with the same flags, and its children write to `log_path`
+too: `sigint_ends_a_parse_pull` run with `verbosity=1` added left a `Running under
+ThreadSanitizer` log for the test process and for each `rexx-run` it started.
+
+The covered paths: the baton, the inbox and completions (`scheduler::`, the lib's program
+runs, each on an interpreter thread with the timer), the timer and its wake source (`sync::`,
+every `SysSleep`, `GUARD WHEN` and slice), the driver pool (`scheduler::tests::pool`, `::native`,
+`::callbacks`, `::lent`, rexx-api's `ffi::` callbacks), signals (`signals.rs`, `signal::`) and
+the stdin read (`stdin_contention.rs`, `input::`). `concurrency_tests` runs here without
+`REXX_CORPUS_GATE`: its rows against the oracle are timing-dependent and run in G4 and G6.
+
+Result at `b8ec39593` with `tsan.supp` as committed, the command run 10 times: in every run
+each command exits 0 and no report is written; rexx-api lib 70 passed, rexx-exec lib 986 passed
+with 16 filtered out, `concurrency_tests` 32, `program_end` 2, `signals` 36 with 1 filtered out,
+`stdin_contention` 1, 1127 in all.
+
+Reports and exclusions, each triaged:
+
+| what | where | verdict |
+|---|---|---|
+| data race, read and write of a mutable buffer's bytes | `rexx_api::load::hold_buffer` on a pool thread against `BufferBytes::extend_from_slice` / `try_reserve_exact` on the holder, `scheduler::tests::lent` `a_buffer_changed_in_place_under_a_call_stays_shared` and `a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds` | false positive: the test orders the two through a file the activity writes after changing the buffer and the routine waits for; TSan models no ordering through the filesystem. Suppressed, `race:rexx_api::load::hold_buffer` |
+| data race in `free` | glibc's `_dl_close_worker` under `Library::close` at program end on two interpreter threads (`dispatch::library::tests::a_library_call_answers_the_same_under_a_collection_at_every_allocation` and another test's run); found once | false positive: both run under the dynamic linker's `dl_load_lock`, taken inside ld.so where TSan does not see it. Suppressed, `race:_dl_close_worker` |
+| SEGV in `__tsan_func_entry` / `__tsan::CurrentStackId` | `eval::tests` depth tests (65,551 frames, 65,526 of them `Plan::note`), `scheduler::tests::pool::callback_recursion_on_a_pool_thread_reaches_the_depth_cap` (141,427 frames of `TestSendMessage0` callbacks); found under `gdb` | TSan's shadow call stack holds 65536 frames. Not a race. Excluded with every test that measures recursion against the native stack (`DEPTH`), which also fail on TSan's larger frames (`nested_pinned_waits_are_bounded_by_the_stack_remaining` reaches Error 11 at a smaller depth). The pool's other tests run |
+| `only_the_interpreter_and_its_waits_take_the_halting_signals` fails | lists one more `rexx-run` thread with the halting signals blocked | TSan's background thread, named for the process: in a TSan `rexx-run`, `/proc/<pid>/task/*/status` shows a second `rexx-run` thread with `SigBlk: fffffffe3ffbea07` (nearly every signal) beside this crate's `0000000000004003` (SIGHUP, SIGINT, SIGTERM). Excluded |
+
+`tsan.supp` holds the suppressions in this table, each with its reason.
+
+**loom.** G9: `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --test loom`, 15 passed in
+371.56 s (`g9-loom.txt`), the registration models under the P58 preemption bound. `2e6917afe`
+changes only the shipped `Wake`; the loom model of it is unchanged, and the loom tests build at
+`b8ec39593` (`cargo test -p rexx-exec --test loom --no-run` under `--cfg loom`, exit 0).
+
+#### Rulings and licensed divergences of S4
+
+Rulings, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/progress.md`:
+
+* P50: no API callback touches island state off the baton; the Conversion split and the
+  baton-guarded `Host` accessor landed in Task 17.
+* P51: per-task checks are fmt, clippy and `cargo test --workspace --release`; the full gates run
+  at stage closes.
+* P52: a pool thread runs the native call and the holder lends the baton through the inbox.
+* P53: a run ended with a call in flight leaks its `Interp` and leaves its pool threads blocked
+  (queued `2026-10-04-aborted-run-leaks-interp`).
+* P54: pool threads reserve `INTERPRETER_STACK_BYTES`, as interpreter threads do.
+* P55: with the pool at its bound, the fallback call keeps the baton; a call waiting on another
+  pool thread's callback then hangs (Migration divergences above).
+* P56: the thread-local `CALLING` in rexx-api `ffi.rs`.
+* P57: a callback from a thread running no native call, while the holder runs a baton-keeping
+  call, waits for it; where the native joins that thread the run hangs, where the oracle aborts
+  rc 134.
+* P58: the timer thread starts at every interpreter registration; the registration loom models
+  run under a preemption bound of 5.
+* P59: a signal wakes and halts every sleeper (DEVIATIONS entry 10).
+* P60: a halt ends the `ADDRESS` child wait and reads of the default input stream; other
+  blocking reads stay uninterruptible (DEVIATIONS entry 12).
+* P61: handlers install over `SIG_DFL` and `SIG_IGN` for SIGINT and SIGTERM, over `SIG_DFL` only
+  for SIGHUP.
+* P62: handlers install at `rexx-run` and the C API's interpreter creation only.
+* P63: `ADDRESS` children start with SIGPIPE at its default (DEVIATIONS entry 11).
+* P64: every unredirected `ADDRESS` command waits off the baton; without a pool reservation it
+  waits inline, uninterruptible (DEVIATIONS entry 12).
+* P65: a halt withdraws semaphore waits and not message waits; a message wait whose runner the
+  halt does not wake can end in the loud "nothing left to run" refusal.
+* P66 and P68: withdrawn by P69.
+* P67, as amended: SIGINT, SIGTERM and SIGHUP are blocked in pool, timer and other crate threads
+  and unblocked around the child wait and the stdin read; the interpreter thread keeps them.
+* P69: no other activity runs during a read of the default input stream (DEVIATIONS entry 13).
+
+DEVIATIONS rows added in S4 (`phase-4-exclusions.txt`), each with owner none:
+
+* 9, a native call's old MutableBuffer storage outlives a collection (Task 20, spec 2.5);
+* 10, a signal halts where the oracle dies or hangs, and wakes what the oracle leaves waiting
+  (Task 21, P59-P61);
+* 11, an `ADDRESS` command's child starts with SIGPIPE at its default (P63);
+* 12, a blocking wait a signal does not end (P60, P64);
+* 13, no other activity runs during a read of the default input stream (P69).
+
+The Migration divergences above (Task 18) are the others S4 records.
+
+#### Queued in S4
+
+`.superpowers/sdd/queued/`: `2026-10-03-interpret-translation-error-traceback`,
+`2026-10-04-aborted-run-leaks-interp`, `2026-10-04-send-site-cache-self-customization`,
+`2026-10-05-call-on-notready-stdin-eof`, `2026-10-05-stream-fifo-terminal-seek`,
+`2026-10-05-two-interpreters-signal-race`.

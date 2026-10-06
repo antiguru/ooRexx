@@ -1,0 +1,17 @@
+# ThreadSanitizer suppressions for the Phase 6 criterion 3 run
+# (docs/superpowers/plans/phase-6-gate.md, S4, "Criterion 3").
+#
+# `HOLDBUFFER` (rexx-api load.rs) is a test routine on a pool thread that
+# reads and writes a mutable buffer's storage through `MutableBufferData`
+# after another activity has changed that buffer. The test orders the two
+# through a file: the activity writes the buffer, then the file, and the
+# routine touches the storage only once it sees the file. TSan models no
+# ordering through the filesystem, so it reports the activity's write and
+# the routine's access as concurrent.
+race:rexx_api::load::hold_buffer
+
+# glibc's dlclose: two interpreters in one test process each close a
+# library they loaded, and `_dl_close_worker` frees on one thread what it
+# allocated on the other. Both run under the dynamic linker's
+# `dl_load_lock`, which ld.so takes internally where TSan does not see it.
+race:_dl_close_worker

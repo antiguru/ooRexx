@@ -767,3 +767,36 @@ Every opportunity:
 No immovable `REPLY` and no inverted wait is counted in either mode. Every test's outcome is the
 same in the two tables but `MutexSemaphore` TEST_EXCLUSION, which passes normally and ends at the
 run's deadline under every opportunity (P46).
+
+## S4 close
+
+At `b8ec39593`, from `rust/`:
+
+```
+RAYON_NUM_THREADS=4 CARGO_TARGET_DIR=<own dir> memcap 8G cargo test --release -p rexx-exec \
+  --features pinning --test concurrency_tests -- measured:: --nocapture --test-threads=1
+```
+
+Exit 0, 18 `measured::` tests passed. Arrivals per park, beside the S3 close:
+
+| park | S3 normal | S3 every opportunity | S4 normal | S4 every opportunity |
+|---|---:|---:|---:|---:|
+| GuardOn | 36 | 67 | 36 | 67 |
+| GuardWhen | 54 | 54 | 54 | 54 |
+| Reply | 91 | 91 | 91 | 91 |
+| MessageResult | 98 | 98 | 98 | 98 |
+| MessageWait | 11 | 11 | 11 | 11 |
+| SemaphoreWait | 8 | 7 | 8 | 7 |
+| SysSleep | 173 | 172 | 173 | 172 |
+| Timer | 37 | 59 | 37 | 59 |
+
+The waits-by-kind tables of both modes are row for row the S3 close's above (checked by `diff`
+against this file's S3 tables). The same run at `52b038a80` gave the same arrivals and tables. No `NativeCall` or
+`Command` park is counted: no test of the derived list waits for a native call or an `ADDRESS`
+command off the baton. No immovable `REPLY` and no inverted wait is counted in either mode. Every
+test's outcome is the same in both tables but `MutexSemaphore` TEST_EXCLUSION, which passes
+normally and ends at the run's deadline under every opportunity (P46).
+
+A read of the default input stream is not a park. It keeps the baton and idles on the inbox
+until its chunk or a halt arrives (P69, DEVIATIONS entry 13), so the report has no kind for it;
+the `Input` park kind of Task 21's fix round 3 was removed with P66 at `4cf934a48`.
