@@ -235,8 +235,9 @@ const RESOLVED: &[&str] = &["DELIVERED", "CLOSED", "RE-HOMED", "FIXED", "RESOLVE
 /// Every OWNER sentence of `text` naming a closed phase with no resolution
 /// after it, in the rest of its paragraph or in the next one, before the
 /// next OWNER: an exclusions record keeps its owner line as history and says
-/// beside or below it what became of the work. `NO OWNER` is not an owner,
-/// and a sentence ends at its first full stop.
+/// beside or below it what became of the work. `OWNER`, or `Owner:` in any
+/// case, is an owner and the phase matches in any case; `NO OWNER` is not an
+/// owner, and a sentence ends at its first full stop.
 fn open_owners(text: &str) -> Vec<String> {
     let mut paragraphs: Vec<String> = Vec::new();
     let mut current = Vec::new();
@@ -254,13 +255,17 @@ fn open_owners(text: &str) -> Vec<String> {
     for (position, paragraph) in paragraphs.iter().enumerate() {
         let next = paragraphs.get(position + 1).map_or("", String::as_str);
         let window = format!("{paragraph} {next}");
-        let owners: Vec<usize> = window
+        let upper = window.to_ascii_uppercase();
+        let owners: Vec<usize> = upper
             .match_indices("OWNER")
             .map(|(at, _)| at)
-            .filter(|&at| word_at(&window, at, "OWNER"))
+            .filter(|&at| {
+                word_at(&upper, at, "OWNER")
+                    && (window[at..].starts_with("OWNER") || upper[at + 5..].starts_with(':'))
+            })
             .collect();
         for (index, &at) in owners.iter().enumerate() {
-            if at >= paragraph.len() || window[..at].ends_with("NO ") {
+            if at >= paragraph.len() || upper[..at].ends_with("NO ") {
                 continue;
             }
             let end = window[at..]
@@ -275,10 +280,10 @@ fn open_owners(text: &str) -> Vec<String> {
             let rest = &window[end..stop];
             let resolved = RESOLVED.iter().any(|marker| {
                 rest.match_indices(marker)
-                    .any(|(offset, _)| word_at(&window, end + offset, marker))
+                    .any(|(offset, _)| resolves(&window, end + offset, marker))
             });
             for phase in CLOSED {
-                if names(sentence, phase) && !resolved {
+                if names(&upper[at..end], &phase.to_ascii_uppercase()) && !resolved {
                     found.push(sentence.to_string());
                 }
             }
@@ -293,6 +298,24 @@ fn word_at(text: &str, at: usize, word: &str) -> bool {
     text[at..].starts_with(word)
         && !text[..at].chars().next_back().is_some_and(joined)
         && !text[at + word.len()..].chars().next().is_some_and(joined)
+}
+
+/// Whether the resolution `word` at `at` resolves: standing alone, not
+/// quoted in backticks, and not after `not` or `not yet`.
+fn resolves(text: &str, at: usize, word: &str) -> bool {
+    let quoted = |c: Option<char>| c == Some('`');
+    let mut before = text[..at]
+        .split_whitespace()
+        .rev()
+        .map(str::to_ascii_lowercase);
+    let negated = matches!(
+        (before.next().as_deref(), before.next().as_deref()),
+        (Some("not"), _) | (Some("yet"), Some("not"))
+    );
+    word_at(text, at, word)
+        && !quoted(text[..at].chars().next_back())
+        && !quoted(text[at + word.len()..].chars().next())
+        && !negated
 }
 
 /// The same claim over the exclusions file, whose rows name their owners.
@@ -321,6 +344,27 @@ fn the_row_check_tells_an_open_owner_from_a_resolved_one() {
     assert_eq!(
         open_owners(rows),
         ["OWNER: Phase 8", "OWNER: Phase 8", "OWNER: Phase 8"]
+    );
+}
+
+/// An owner in any case is an owner, and a resolution word that is quoted
+/// or negated resolves nothing.
+#[test]
+fn the_row_check_reads_owners_in_any_case_and_no_negated_resolution() {
+    let rows = "I. OWNER: Phase 8.\n\nsee the `CLOSED` list.\n\n\
+                J. OWNER: Phase 8.\n\nNOT DELIVERED.\n\n\
+                K. OWNER: Phase 8.\n\nnot yet DELIVERED.\n\n\
+                L. Owner: Phase 8.\n\nM. OWNER: phase 8.\n\n\
+                N. Owner: phase 8.\n\nDELIVERED.\n";
+    assert_eq!(
+        open_owners(rows),
+        [
+            "OWNER: Phase 8",
+            "OWNER: Phase 8",
+            "OWNER: Phase 8",
+            "Owner: Phase 8",
+            "OWNER: phase 8"
+        ]
     );
 }
 

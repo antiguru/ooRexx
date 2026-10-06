@@ -6,7 +6,7 @@
 #
 # A program here may start activities, and witnesses only orderings the
 # oracle fixes. It may load one of the oracle's compiled extensions from the
-# directory its .env sidecar names, as phase-8.txt's header describes.
+# directory its .env sidecar names, as README.md's rules allow.
 
 # Phase 6 Task 8: Rexx-to-Rexx calls that run their callee in the caller's
 # driver loop.

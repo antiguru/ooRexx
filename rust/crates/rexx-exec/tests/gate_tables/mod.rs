@@ -191,7 +191,7 @@ pub const PHASE_GATE_ENV: &str = "REXX_PHASE_GATE";
 /// anyone having to set [`PHASE_GATE_ENV`].
 /// `7` closed on 2026-09-13, so its rows are gated for the same reason every
 /// other closed phase's are: a verdict of its own moving is a regression.
-/// `8` closed on 2026-09-28 for the same reason, and `6` at its own close.
+/// `8` closed on 2026-09-28 for the same reason.
 pub const CLOSED_PHASES: &[&str] = &[
     "5a", "5b", "5c", "5d", "5e", "5f", "5g", "5h", "5i", "5j", "6", "7", "8",
 ];

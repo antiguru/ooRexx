@@ -12,8 +12,10 @@ done_
 section "/bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/'"
 /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/'
 done_
-section "/bin/grep -a -rPzoc 'Phase\s+6' rust/crates --include=*.rs | /bin/grep -v ':0\$' | /bin/grep -av '/tests\.rs:\|/tests/'"
-/bin/grep -a -rPzoc 'Phase\s+6' rust/crates --include=*.rs | /bin/grep -v ':0$' | /bin/grep -av '/tests\.rs:\|/tests/'
+# Split text: a Rust string continued with a backslash drops the newline and
+# the next line's indentation, so those are joined before the search.
+section "find rust/crates -name '*.rs' | /bin/grep -av '/tests\.rs\$\|/tests/' | sort | while read -r f; do perl -0pe 's/\\\\\\n\\s*//g' \"\$f\" | /bin/grep -aPzq 'Phase\s+6' && echo \"\$f\"; done"
+find rust/crates -name '*.rs' | /bin/grep -av '/tests\.rs$\|/tests/' | sort | while read -r f; do perl -0pe 's/\\\n\s*//g' "$f" | /bin/grep -aPzq 'Phase\s+6' && echo "$f"; done
 done_
 section "/bin/grep -a -rln 'Phase 6' rust/crates --include=*.rs   # liveness: the test files still match"
 /bin/grep -a -rln 'Phase 6' rust/crates --include=*.rs

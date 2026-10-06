@@ -1065,13 +1065,16 @@ it. The S0/S1 commands (above), and the wrapped form restricted to non-test file
 ```
 /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/' | /bin/grep -av ':[0-9]*:\s*//'
 /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/'
-/bin/grep -a -rPzoc 'Phase\s+6' rust/crates --include=*.rs | /bin/grep -v ':0$' | /bin/grep -av '/tests\.rs:\|/tests/'
+find rust/crates -name '*.rs' | /bin/grep -av '/tests\.rs$\|/tests/' | sort | while read -r f; do perl -0pe 's/\\\n\s*//g' "$f" | /bin/grep -aPzq 'Phase\s+6' && echo "$f"; done
 /bin/grep -a -c 'Phase 6' rust/corpus/refusal-sites.tsv
 ```
 
-The first three print nothing and the fourth prints `0`. The same grep without the test filter
-still finds the test files (liveness section of `output.txt`). The two comments the S0/S1 table
-listed (`run.rs`, `handle.rs`) no longer name Phase 6 (P78).
+The first three print nothing and the fourth prints `0`. The third joins a string continued with a
+backslash before searching, so text split across lines is found. The same grep without the test
+filter still finds the test files (liveness section of `output.txt`). These commands are the
+listing; the enforcement is `closed_phases`' `no_refusal_names_a_closed_phase`, which reads every
+string literal whole. The two comments the S0/S1 table listed (`run.rs`, `handle.rs`) no longer
+name Phase 6 (P78).
 
 Every method of the oracle's Message, EventSemaphore and MutexSemaphore tables
 (`interpreter/memory/Setup.cpp:1050-1082`, `:1325-1341`, `:1348-1362`) against this crate's dispatch
@@ -1082,15 +1085,17 @@ python3 docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/m
 bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/probe.sh REXX_RUN method-probes
 ```
 
-Both print nothing: every method has a dispatch row (the full join is in `output.txt`) and no probe
-answers the generic native-method refusal (`lib.rs` `Loud::native_method`). The probe's control,
-`probe.sh REXX_RUN control`, prints that refusal for `.environment~unknown('ARRAY', 'y')`.
+Both print nothing: every method has a dispatch row (the full join is in `output.txt`), no probe
+answers the generic native-method refusal (`lib.rs` `Loud::native_method`), and every probe reached
+its method (`probe.sh` prints `not reached` for one with no `ok` line and no Error 91.999). The
+probe's control, `probe.sh REXX_RUN control`, prints that refusal for
+`.environment~unknown('ARRAY', 'y')` and `control.rex: not reached`.
 
 `closed_phases` lists Phase 6 among the closed phases, its negative control counts `"Phase 10"`
 alone, and gate table C's `CLOSED_PHASES` gains `6`. The Phase 6 corpus witnesses moved from
 `phase-8.txt` to `rust/corpus/phase-6.txt` (P17). Its tokenizer reads an identifier containing
 `CLOSED` as no resolution (P79); the Alarm and Ticker row it had passed over is resolved
-(`phase-4-exclusions.txt:5850`), citing gate table C
+(`phase-4-exclusions.txt:5885`), citing gate table C
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-gate-table-c.txt`).
 
 The divergences this design records are rows of `docs/superpowers/plans/phase-4-exclusions.txt`,
@@ -1109,12 +1114,13 @@ each with owner none, its reason and its witness or why it has none:
 | 17 | 1626 | HALT under nesting |
 | 18 | 1642 | a pinned busy-waiter (P29, P31) |
 | 19 | 1658 | a callback waiting for a baton-keeping call (P55, P57) |
-| 20 | 1670 | a wait nothing left to run can end (P27, P65, P77) |
-| 21 | 1689 | program end and termination UNINITs, u5 among them (P39, P40, P75) |
-| 22 | 1708 | one schedule where the oracle's threads race (P32, P36, P38, P41) |
-| 23 | 1734 | thread migration and Error 11 depth on a pool thread (spec section 11) |
+| 20 | 1673 | a wait nothing left to run can end (P27, P65, P77) |
+| 21 | 1692 | program end and termination UNINITs, u5 among them (P39, P40, P75) |
+| 22 | 1711 | one schedule where the oracle's threads race (P32, P36, P38, P41) |
+| 23 | 1742 | thread migration and Error 11 depth on a pool thread (spec section 11) |
+| 24 | 1760 | a context kept from another activity's call (P37, P84) |
 
-Probes and counts (30 runs per side; one for row 20's single-activity program) for rows 16, 17, 20,
-21 and 22 are in
+Probes and counts (30 runs per side; one for row 20's single-activity program) for rows 16, 17, 19,
+20, 21 and 22 are in
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-divergences/`; for rows 14, 15 and 18 in
 `.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/refusals/out5/counts.txt`.

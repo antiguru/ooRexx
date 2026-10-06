@@ -236,7 +236,7 @@ Consequence for this crate: **there is no oracle behaviour to match**, so
 `rexx-exec` refuses the shape rather than hanging: main parks in the wait,
 nothing is left to run, and the run ends at `Loud::unsatisfiable_wait` (ruling
 P27); `run/tests/message.rs`'s
-`the_guard_instructions_answers_and_the_phase_6_refusals` is the instrument. A
+`the_guard_instructions_answers_and_their_refusals` is the instrument. A
 started activity blocked the same way keeps the program's end waiting, as the
 oracle's does (`scheduler/tests.rs`'s
 `a_blocked_guard_when_keeps_the_programs_end_waiting`). No

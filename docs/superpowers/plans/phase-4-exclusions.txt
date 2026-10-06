@@ -1661,7 +1661,10 @@ DEVIATIONS -- permanent, chosen
      With the pool at its bound, or for a lone call, a native call keeps
      the baton. A callback into the interpreter from another thread then
      waits for that call to return; if the native joins that thread the
-     run hangs, where the oracle aborts, rc 134 (30 runs, ruling P57). Both
+     run hangs, where the oracle aborts, rc 134 (ruling P57; 30 runs each,
+     the counts file of row 16, program probes/lone_foreign.rex: the oracle
+     prints `terminate called after throwing an instance of
+     'NativeActivation*'`, and this crate prints nothing until killed). Both
      fail. Witness of the kept baton: rexx-exec's
      scheduler::tests::pool::a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity.
      The hang has none: the test thread would block in the native's join,
@@ -1679,8 +1682,8 @@ DEVIATIONS -- permanent, chosen
 
      Measured 2026-10-06 (the counts file of row 16, program
      probes/unsent.rex, one run each, a single activity): the oracle prints
-     `0 0 abc LENGTH` and is killed at 20 s, rc 137; this crate prints the
-     same line and refuses. Witnesses: rexx-exec's
+     `0 0 abc LENGTH`, ignores the wrapper's TERM at 20 s and is killed at
+     25 s, rc 137; this crate prints the same line and refuses. Witnesses: rexx-exec's
      scheduler::tests::the_result_of_a_message_never_sent_is_refused and
      a_pinned_wait_nothing_can_end_is_refused, and
      run::tests::message::the_guard_instructions_answers_and_their_refusals
@@ -1711,18 +1714,23 @@ DEVIATIONS -- permanent, chosen
      Activities switch at slices, waits and ends, chosen by one scheduler,
      so a program whose oracle output depends on thread timing gets one of
      its orders here, or an order the oracle was not seen to take. Where a
-     REPLY's sender and continuation interleave (P36, P41), the sender here
-     runs on until an ordinary switch. Where a started activity's notifier
+     REPLY's sender and continuation interleave (P36, P41), the oracle yields
+     inside the REPLY; here the sender yields at its next clause boundary
+     when another activity is ready and otherwise runs on until an ordinary
+     switch. Where a started activity's notifier
      fails inside main's pinned notifier wait (P38), main is buried below
      that round, so the failure replaces the message's outcome before main
-     reads it: a value and the exit status change. The clause a
+     reads it, the oracle's minority schedule taken every time: a value and
+     the exit status differ from its usual run. The clause a
      cross-activity HALT lands on inside a loop (P32) follows this crate's
      countdown, not the oracle's per-activation instruction count.
 
      Measured 2026-10-06, 30 runs each (the counts file of row 16): y1.rex
      prints `outer waited 1 97.1` here in every run and in 2 oracle runs,
-     `outer waited 1 42.3` in the other 28; y2.rex is rc 214 here and rc 0
-     with `outer waited 3` in every oracle run. replied.rex and reply2.rex
+     `outer waited 1 42.3` in the other 28; y2.rex is rc 214 here in every
+     run, and on the oracle prints `outer waited 3` at rc 0 in every run of
+     the first count and in 27 of the 30 of the second (fix round 1), whose
+     other 3 are rc 214 with this crate's output byte for byte. replied.rex and reply2.rex
      take three and six orders on the oracle; here one each, for reply2.rex
      not among the oracle's. Witnesses: rexx-exec's
      scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome,
@@ -1742,7 +1750,34 @@ DEVIATIONS -- permanent, chosen
      thread runs the code. Witnesses: rexx-exec's
      scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11
      and scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining.
-     Not measured against the oracle.
+     Measured at S4 (docs/superpowers/plans/phase-6-gate.md, `### Migration
+     divergences`, the programs of task-18-review.md finding 8): recursion
+     through a native callback with a second activity alive ends in Error 11
+     at the activation cap, 9999 or 10000 levels, and on the oracle at about
+     7750. Thread affinity is not measured: no extension in this tree is
+     thread-affine.
+
+ 24. A CONTEXT KEPT FROM ANOTHER ACTIVITY'S CALL ANSWERS OR RAISES 98.983
+     WHERE THE ORACLE CRASHES OR HANGS (rulings P37, P84). OWNER: none.
+
+     A native call keeps its call or thread context and another activity's
+     call uses it. Here GetContextDigits, GetContextFuzz, GetContextForm and
+     GetRoutine answer from the keeping activity's top frame, and every
+     other member raises 98.983 in the using activity's call. The oracle
+     answers those four too, GetContextFuzz with 256 where this crate
+     answers 0 (it reads a Rexx activation as a native one); GetArguments,
+     GetArgument and GetRoutineName end in SIGSEGV, rc 139, and the rest
+     raise 98.983 against the keeping activity, then 44.1, and hang
+     (.superpowers/sdd/2026-10-01-phase-6-s2-s5/task-7-review.md, finding on
+     kept call contexts; task-7-report.md R-T7-2, R-T7-5). A member of a
+     kept thread context does nothing here and raises 98.983 in the using
+     call unless that call already holds a condition of its own; the oracle
+     does nothing either, then ends in 44.1 and hangs, rc 137 under the
+     wrapper, except where the call holds its own condition
+     (task-7-review.md N1). The oracle has no defined answer to match. Witnesses: rexx-exec's gate-only
+     outer_context::a_kept_call_context_used_by_another_activity_answers_or_raises
+     and a_kept_thread_context_used_by_another_activity_does_nothing, and
+     scheduler::tests::callbacks::a_kept_call_context_used_from_another_threads_call_raises_98_983_there.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
@@ -5848,8 +5883,8 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   so their gate table C rows read `diverge-both` rather than `unanswered`.
 
   DELIVERED by Phase 6 S2 Task 8 and S3 Task 14: both constructions answer
-  "instance 1" on both sides, and at Phase 6's close gate table C gates both
-  classes and reports `Alarm instance loud=no 6 7 row(s): agree=7` and
+  "instance 1" on both sides, and with 6 in gate table C's `CLOSED_PHASES`
+  (Task 24) the table gates both classes and reports `Alarm instance loud=no 6 7 row(s): agree=7` and
   `Ticker instance loud=no 6 6 row(s): agree=6`
   (docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-gate-table-c.txt).
 

@@ -1,6 +1,10 @@
 # bash count.sh oracle|ours probes/NAME.rex 30 per section (unsent: one run of oracle.sh / ours.sh);
 # run-directory paths stripped from stderr.
-# ours.sh runs a release rexx-run built from the Task 24 working tree (base 4936f24c3); oracle.sh is the rules' wrapper.
+# Sections down to `halt_nested3 ours`: ours.sh ran a release rexx-run built from the Task 24
+# working tree (base 4936f24c3), oracle.sh the rules' wrapper with `-s KILL`.
+# Sections after `fix round 1`: oracle.sh is the rules' wrapper, ours.sh runs $REXX_RUN, a release
+# rexx-run built at 974267cc0; lone_foreign runs with EXTRA_LIB naming the directory of a
+# libforeign.so built from probes/foreign.cpp by the line in its header.
 == redirect_wrapper ours
      30 rc=0|main 0|w 1|w 2|w 3|
 == redirect_wrapper oracle
@@ -43,3 +47,13 @@ rc=137|0 0 abc LENGTH|
 rc=120|0 0 abc LENGTH|E: rexx-exec: a wait that nothing left to run can end is not implemented|
 == halt_nested3 ours
      30 rc=0|halt sent|B done|A halted|
+== fix round 1
+== y2 oracle
+     27 rc=0|in notifier|outer waited 3|in notifier|main end|in notifier|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|
+      3 rc=214|in notifier|in notifier|in notifier|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|E:     15 *-* return 1/0|E: Error 42 running p.rex line 11:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|
+== lone_foreign oracle (EXTRA_LIB: the directory holding libforeign.so)
+     30 rc=134|E: terminate called after throwing an instance of 'NativeActivation*'|
+== unsent oracle (1 run, single activity, wall time by /usr/bin/time)
+rc=137|0 0 abc LENGTH|wall 25.00 s
+== lone_foreign ours (EXTRA_LIB: the directory holding libforeign.so)
+     30 rc=137|

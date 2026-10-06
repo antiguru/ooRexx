@@ -1,9 +1,9 @@
-# usage: oracle.sh FILE  -- runs the oracle from a fresh empty dir
+# usage: oracle.sh FILE  -- runs the oracle from a fresh empty dir under the rules' wrapper
 f=$(realpath "$1")
-d=$(mktemp -d /tmp/claude-1000/p6-t24/run.XXXXXX)
+d=$(mktemp -d)
 cp "$f" "$d/p.rex"
 cd "$d"
-( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -s KILL -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx p.rex ) >out 2>err
+( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib${EXTRA_LIB:+:$EXTRA_LIB} timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx p.rex ) >out 2>err
 echo "rc=$?"
 cat out
-sed 's/^/E: /' err
+sed "s#$d/##; s/^/E: /" err

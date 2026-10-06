@@ -17,7 +17,7 @@ read and delete files inside that directory. It still prints no timestamp, no
 size of a file it did not write, no directory listing it did not create, and
 no host variable's value.
 
-**Narrowed again for the programs `phase-8.txt` lists.** A program there may
+**Narrowed again for the programs `phase-6.txt` and `phase-8.txt` list.** A program there may
 load one of the oracle's own compiled extensions, which is a file outside its
 run directory and outside this repository's own build. It is named through an
 `LD_LIBRARY_PATH={oraclelib}` sidecar rather than found on the ambient
