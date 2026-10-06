@@ -950,7 +950,7 @@ The static assertions Task 23 adds (the S5 audit's A1-A5, `s5-find-audit.md`):
 * A4, `rexx-exec/src/scheduler.rs:171`: `require_send::<Posted>()`.
 * A5, `rexx-exec/src/island.rs:31`, `:56`: `Islanded`'s payloads sealed (P72).
 
-`cargo test -p rexx-core --doc` at `0ac73b804`: 3 passed, and 5 compile_fail passed.
+`cargo test -p rexx-core --doc` at `d8f5d541e`: 3 passed, and 5 compile_fail passed.
 
 Spec sentences are amended to what holds (P73), in
 `docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md`: section 5's "refuses an object

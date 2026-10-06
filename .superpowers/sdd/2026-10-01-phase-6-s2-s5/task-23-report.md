@@ -137,3 +137,9 @@ Code commit `d9e17e5c8`; records and gate in the commit after it.
 
 Not done: a type-level check that `OffBaton` holds no `Rc` or `Cell`; the claim is in the SAFETY
 note only.
+
+Checks at `d8f5d541e` (own target dir): fmt 0; clippy `-D warnings` 0 with no feature, `sharing`,
+and `sharing,pinning` (and `pinning` alone at `d9e17e5c8`'s code before commit); `cargo test -p
+rexx-core --doc` 3 passed and 5 compile_fail passed; `cargo test --workspace --release
+--no-fail-fast` (built first, then run under `memcap 8G`) exits 0, 3036 passed and 0 failed. The
+`sharing` witnesses are feature-gated and ran in the measurement runs above, not in that count.
