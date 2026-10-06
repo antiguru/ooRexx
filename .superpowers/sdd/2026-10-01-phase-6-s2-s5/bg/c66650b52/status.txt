@@ -1,0 +1,16 @@
+c66650b52 started 2026-10-06T11:22:26+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 13.46 16.25 10.31 4/2680 2200888 2026-10-06T11:27:01+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 13.62 17.56 15.74 11/2831 2383822 2026-10-06T11:46:52+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/c66650b52/logs/g4-test-release.txt:0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/c66650b52/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-06T12:08:22+02:00

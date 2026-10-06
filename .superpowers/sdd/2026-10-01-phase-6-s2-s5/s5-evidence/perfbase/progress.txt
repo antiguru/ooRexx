@@ -1,0 +1,6 @@
+base compiling=1
+s1 compiling=1
+pad1 compiling=1
+pad2 compiling=1
+pad3 compiling=1
+done

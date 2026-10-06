@@ -1,0 +1,16 @@
+52b038a80 started 2026-10-06T00:41:17+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 12.68 13.43 6.93 1/2788 888295 2026-10-06T00:45:24+02:00
+G4 release test exit 101
+G5 debug build exit 0
+load G6 11.01 6.71 5.85 2/2779 1057485 2026-10-06T00:59:18+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/52b038a80/logs/g4-test-release.txt:2
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/52b038a80/logs/g6-test-debug.txt:0
+P48 reruns: 2
+finished 2026-10-06T01:20:34+02:00

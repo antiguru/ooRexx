@@ -1,0 +1,7 @@
+# 2026-10-06T09:30:54Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
+# valgrind-3.27.1
+# base /tmp/claude-1000/p6-s5-perfbase/bin/base/rexx-run dbce1a524b030eed574a74711d213bf37f37ef837428cedc657bfcac09779981
+# s1 /tmp/claude-1000/p6-s5-perfbase/bin/s1/rexx-run d851f268744533bf704ccce2479973945c30b99aa78365b4a036120a44bb9e64
+# pad1 /tmp/claude-1000/p6-s5-perfbase/bin/pad1/rexx-run d03c08a09fd9bd24253d2c89d067e67f533095748c226fbacb4120f7e65d4e41
+# pad2 /tmp/claude-1000/p6-s5-perfbase/bin/pad2/rexx-run a9b12e91f24be2f372ffdd28b67e22a38cbe7fec5135aec882df800f6ac8e96f
+# pad3 /tmp/claude-1000/p6-s5-perfbase/bin/pad3/rexx-run c772227271f91817f76ba2709c4e82244741a6aa0eb1ae510b304e331bb90d8d

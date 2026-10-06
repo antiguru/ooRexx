@@ -729,19 +729,49 @@ Every other row's cells are G6's; `base/keyword/REPLY` TEST_REPLY_TWICE_REPLYASS
 is `pass` here and in G6, and `differ: rc 0: oracle 1, ours 0` in G4: the oracle counts 1 in
 some runs, as the P41 table above records.
 
-LEAD: the G4 disposition (a rerun of G4 on the Task 22 head, or the row run above as its
-replacement) goes here.
+G4 at `52b038a80` is red on the regression above and is not waived. The gates were run again in
+full by the same script on `c66650b52`, the head that carries both fixes; status file
+`.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/c66650b52/status.txt`, logs beside it in `logs/`. Its result lines, verbatim apart from the repository
+path:
+
+```
+c66650b52 started 2026-10-06T11:22:26+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 13.46 16.25 10.31 4/2680 2200888 2026-10-06T11:27:01+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 13.62 17.56 15.74 11/2831 2383822 2026-10-06T11:46:52+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/c66650b52/logs/g4-test-release.txt:0
+.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/c66650b52/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-06T12:08:22+02:00
+```
+
+G4 release: 3033 passed, 0 failed. G6 debug: 3037 passed, 0 failed (sums of `test result` lines).
+`the_s2_rows_of_the_derived_list_in_both_modes` passes in G4 with no P48 rerun on the SysSleep row
+(`g4-test-release.txt:2049`, `g4-criterion-one-table.txt:138`). The criteria below cite this run's
+logs; the `52b038a80` run stays as the record of the regression.
 
 #### Criteria
 
-* **Criterion 1.** G4's and G6's tables (`g4-criterion-one-table.txt`,
+* **Criterion 1.** At `c66650b52`, G4's and G6's tables (`g4-criterion-one-table.txt`,
   `g4-criterion-one-s3-table.txt`, `g4-timer-table.txt` and the G6 ones) equal the S3 close's rows
-  above, apart from `SysSleep` TEST_SLEEP_CONCURRENT, which the regression above made fail and
-  `2e6917afe` passes, and `REPLY` TEST_REPLY_TWICE_REPLYASSERT's normal cell, which follows the
-  oracle's run (P41). Every Alarm and Ticker test passes in both modes in both gate runs.
+  above, apart from `SysSleep` TEST_SLEEP_CONCURRENT, which now passes, and the normal cells of
+  G4's `REPLY` TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT, TEST_REPLY_EXIT_CODE_REPLYASSERT and
+  TEST_REPLY_STACK_REPLYASSERT, which differ from the oracle's run by one assertion at rc 0
+  (`g4-criterion-one-table.txt:117-119`; P41). They pass in G6, and
+  `diff bg/52b038a80/logs/g4-criterion-one-table.txt bg/c66650b52/logs/g4-criterion-one-table.txt`
+  shows the same three rows passing at `52b038a80`. Every Alarm and Ticker test passes in both
+  modes in both gate runs.
 * **Criterion 2.** `the_framework_ticker_runs_without_dash_u` passes in G4 and in G6
-  (`g4-test-release.txt:1660`, `g6-test-debug.txt:1664`); `the_alarm_and_ticker_groups_pass_in_both_modes`
-  passes in both (`g4-test-release.txt:2047`, `g6-test-debug.txt:2052`).
+  (`g4-test-release.txt:1663`, `g6-test-debug.txt:1667`); `the_alarm_and_ticker_groups_pass_in_both_modes`
+  passes in both (`g4-test-release.txt:2050`, `g6-test-debug.txt:2055`).
 * **Criterion 3.** Below: the ThreadSanitizer run is clean, and G9's `loom` passes.
 * **Criterion 9.** `phase-6-pinning.md` `## S4 close`: no inverted-wait refusal, no immovable
   `REPLY`, and no hang in either mode over the derived list. The test that ends at the run's
@@ -750,8 +780,8 @@ replacement) goes here.
 * The gate-only `outer_context.rs` tests (Task 19's kept-context 98.983 programs, against the
   oracle) pass in G4 and in G6: `a_kept_outer_context_reaches_its_callers_variables`,
   `a_kept_call_context_used_by_another_activity_answers_or_raises` and
-  `a_kept_thread_context_used_by_another_activity_does_nothing` (`g4-test-release.txt:3405-3407`,
-  `g6-test-debug.txt:3254-3256`).
+  `a_kept_thread_context_used_by_another_activity_does_nothing` (`g4-test-release.txt:3252-3254`,
+  `g6-test-debug.txt:3257-3259`).
 
 #### Criterion 3, race checking
 
@@ -818,11 +848,9 @@ Reports, each triaged:
 
 `tsan.supp` holds the one suppression, with its reason.
 
-**loom.** G9 at `52b038a80`: `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --test loom`, 15
-passed in 371.56 s (`g9-loom.txt`), the registration models under the P58 preemption bound. At
-`c66650b52`, in a target dir of its own: `test result: ok. 15 passed; 0 failed ... finished in
-358.99s` (`s4-close-evidence/loom.log`). `2e6917afe` and `c66650b52` change only the shipped `Wake`; the loom model of it is
-unchanged.
+**loom.** G9 at `c66650b52`: `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --test loom`,
+`test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 401.33s`
+(`g9-loom.txt`), the registration models under the P58 preemption bound.
 
 #### Rulings and licensed divergences of S4
 
