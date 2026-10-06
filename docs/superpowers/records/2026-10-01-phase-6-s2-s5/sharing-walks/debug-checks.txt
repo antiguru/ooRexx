@@ -25,12 +25,10 @@ crates/rexx-exec/src/guards.rs:490	-	owner running_activity
 crates/rexx-exec/src/guards.rs:495	-	map running_activation
 crates/rexx-exec/src/install.rs:1491	-	from_utf8_lossy is_none
 crates/rexx-exec/src/install.rs:2248	-	routine_index
-crates/rexx-exec/src/ir.rs:646	-	call_site_slot cfg copied for get holds_register index interned_konst interned_symbol konst map op_at ops_in ops_upto path position_at pub remember remember_call remember_konst remember_symbol resolved resolved_call saw_general send_name set setting_at time to trace tries_small_int
 crates/rexx-exec/src/ir.rs:691	-	copied get
 crates/rexx-exec/src/ir/compile.rs:204	-	assert_analysis_only_narrows
 crates/rexx-exec/src/ir/compile.rs:339	-	mark
 crates/rexx-exec/src/ir/compile.rs:503	-	any iter
-crates/rexx-exec/src/ir/compile.rs:1221	-	clause_positions new
 crates/rexx-exec/src/ir/compile.rs:1790	-	all iter rev skip
 crates/rexx-exec/src/ir/compile.rs:1890	-	all intermediates iter results trace_events
 crates/rexx-exec/src/ir/compile.rs:1904	-	all iter

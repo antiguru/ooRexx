@@ -972,20 +972,24 @@ activity that resolved its object through `Heap::get`, `Heap::get_mut` or `Heap:
 it, and counts objects touched by more than one activity, separately for objects made before the
 program (the interpreter and its library bootstrap) and objects the program made;
 `Outcome::sharing` reports both. A collection runs with touches paused; the collector, the UNINIT
-registry and the interpreter's table prunes read through the untagged `resolve` or `Heap::peek`; and
+registry, the interpreter's table prunes and a stem clear's rewrite of the exposer stems its table
+names read through the untagged `resolve`, `Heap::peek` or `Heap::peek_mut`; and
 every debug-only check that reads an object reads under `unshared!`, so a debug build counts what a
-release build does. The enumeration of tagged reads and debug-only checks, its commands and the
+release build does. The enumeration of tagged reads, debug-only checks and iterating functions, its commands and the
 classification of each walk are in
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md`. `concurrency_tests`
 witnesses: `sharing::one_activity_shares_nothing`;
 `sharing::an_object_read_by_a_started_activity_is_shared`, which fails with the tag switch in
 `Interp::switch_to` and `Interp::swap_running` removed;
 `sharing::uninit_objects_another_activity_never_names_are_not_shared`, which failed (program shared
-102) before the UNINIT registry walk resolved untagged; and
+102) before the UNINIT registry walk resolved untagged;
 `sharing::a_collection_in_another_activity_shares_nothing_it_prunes`, which failed (program shared
-102) before the collection's prunes did (`task-23-report.md`).
+102) before the collection's prunes did; and
+`sharing::a_stem_cleared_in_another_activity_shares_no_dead_exposer`, which failed (program shared
+103) before the exposer rewrite did (`task-23-report.md`). At `f078489bc` the corpus, derived-list
+and every-group runs give the shared counts below unchanged.
 
-Off, it costs nothing: release `rexx-run` built without features from `2a9bbbe12` has the same
+Off, it costs nothing: release `rexx-run` built without features from `f078489bc` has the same
 `.text` hash as one built from the base with only the static assertions applied, and that build has
 the same functions with the same sizes as the base apart from one symbol's name
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt`).

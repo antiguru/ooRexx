@@ -1,0 +1,12 @@
+crates/rexx-exec/src/condition.rs:512	condition_copy
+crates/rexx-exec/src/dispatch/array.rs:372	array_reshape
+crates/rexx-exec/src/dispatch/array/sort.rs:263	write_back
+crates/rexx-exec/src/dispatch/array/surface.rs:437	native_array_fill
+crates/rexx-exec/src/dispatch/hash/stem.rs:24	stem_tails
+crates/rexx-exec/src/dispatch/package.rs:635	table_pairs
+crates/rexx-exec/src/environment.rs:1192	native_keys
+crates/rexx-exec/src/run.rs:2349	stem_assigned_tails
+crates/rexx-exec/src/run/loops.rs:674	hash_collection_indexes
+crates/rexx-exec/src/run/loops.rs:629	over_snapshot
+crates/rexx-exec/src/stem.rs:565	detach_exposed_tails
+crates/rexx-exec/src/stem.rs:714	is_uninitialised_stem

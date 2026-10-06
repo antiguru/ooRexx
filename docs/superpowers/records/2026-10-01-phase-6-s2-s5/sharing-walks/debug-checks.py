@@ -29,12 +29,20 @@ for f in sorted(files):
         spans.append((m.start(), balanced(text, m.end() - 1, '(', ')')))
     for m in re.finditer(r'#\[cfg\(debug_assertions\)\]\s*', text):
         rest = text[m.end():]
-        brace = rest.find('{')
-        semi = rest.find(';')
-        if brace != -1 and (semi == -1 or brace < semi):
-            spans.append((m.start(), balanced(text, m.end() + brace, '{', '}')))
-        else:
-            spans.append((m.start(), rest[:semi + 1]))
+        # A field or a statement ends at a `,` or `;` outside brackets; an item
+        # or block that opens a brace first runs to the matching brace.
+        depth = 0
+        for at, ch in enumerate(rest):
+            if ch in '([<':
+                depth += 1
+            elif ch in ')]' or (ch == '>' and rest[at - 1] != '-'):
+                depth -= 1
+            elif depth == 0 and ch == '{':
+                spans.append((m.start(), balanced(text, m.end() + at, '{', '}')))
+                break
+            elif depth == 0 and ch in ',;':
+                spans.append((m.start(), rest[:at + 1]))
+                break
     for start, span in sorted(spans):
         # Drop string literals, then look for calls.
         code = re.sub(r'"(\\.|[^"\\])*"', '""', span)

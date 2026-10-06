@@ -186,3 +186,29 @@ passed; `cargo test --workspace --release --no-fail-fast` (built first, then run
 exits 0, 3036 passed and 0 failed. The four `sharing` witnesses passed at `2a9bbbe12` in the
 measurement run (`--release --features sharing --test concurrency_tests -- sharing:: --skip
 every_ootest --skip derived_list`: 4 passed).
+
+## Fix round 3
+
+Code commit `f078489bc`; records, gate and this section in the commit after it.
+
+1. N3: `detach_exposed_tails` reads the exposer stems through `Heap::peek` and rewrites them
+   through a new `Heap::peek_mut` (untagged `get_mut`); its read of the stem being cleared stays
+   tagged. Witness `sharing::a_stem_cleared_in_another_activity_shares_no_dead_exposer` (the
+   reviewer's probe: `h. = 0`, 100 calls of `p: procedure expose h.1`, then `s.~empty` in a
+   started activity; asserts stdout `ok` and `0`, the oracle's in 3 runs, and program shared below
+   50): with `stem.rs` restored to `cce32934b`'s temporarily it fails,
+   `program: SharingCount { objects: 212, shared: 103 }`; at `f078489bc` it passes. Restored by
+   copy, `cmp` clean. A live exposer's rewrite is now uncounted too; the walks README says so.
+2. Coverage of `get_mut` and `body_text`: `tagged-sites.py` matched all four tagged accessors
+   already; its `get_mut`, `body_text` and `is_class` rows were listed and read by function, and a
+   new `iterating-functions.py` lists every function among the tagged sites that iterates
+   anything. Each listed function iterates the one object its operation targets; no further walk
+   of an interpreter table was found.
+3. N4: `debug-checks.py` ends a field or statement under `#[cfg(debug_assertions)]` at its `,` or
+   `;` outside brackets (`->` excepted). The `ir.rs:646` row and the `ir/compile.rs:1221`
+   struct-literal row, both artefacts, are gone; `ir.rs:691` now lists `copied get`.
+4. Criterion 6: at `f078489bc` the corpus, derived-list and every-group runs (release) give the
+   same bootstrap and program shared counts as the records at `2a9bbbe12`, so the records are not
+   re-derived. Program objects differ only in the `TIME` (deadline) and `SysSleep` (pass this
+   time) rows of the every-group run. The feature-off `.text` hash at `f078489bc` equals
+   `0ac73b804`'s.
