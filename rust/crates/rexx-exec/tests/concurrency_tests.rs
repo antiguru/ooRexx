@@ -2449,6 +2449,27 @@ mod group_runs {
             }
         }
 
+        /// The tests the rest part also leaves out, each with its reason: each
+        /// allocates here until memory runs out, which takes the shared test
+        /// process with it.
+        const REST_LEFT_OUT: &[(&str, &str, &str)] = &[
+            (
+                "base/class/Class.testGroup",
+                "TEST_SUBCLASSES_GC",
+                "loops until a dropped class is collected; classes are never collected (D59)",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "TEST_UNINIT",
+                "loops until a weak reference is cleared, which here it is not before memory runs out",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "TEST_UNINIT_CLASS",
+                "loops until a weak reference is cleared, which here it is not before memory runs out",
+            ),
+        ];
+
         /// The runs here, by group, part and mode, that need not be an outcome
         /// the oracle produced, each with its [`key`] and reason.
         const DIFFERING: &[(&str, &str, &str, &str, &str)] = &[];
@@ -2677,6 +2698,13 @@ mod group_runs {
                 };
                 let mut refusing = Vec::new();
                 let mut last = ours;
+                if refused(&last).is_some() {
+                    for (_, test, _) in REST_LEFT_OUT.iter().filter(|(listed, ..)| *listed == file)
+                    {
+                        left_out.insert(format!("{group}.{test}"));
+                        refusing.push(format!("{test} (unbounded)"));
+                    }
+                }
                 while refused(&last).is_some() {
                     let test = started(&last)
                         .pop()
@@ -2748,11 +2776,8 @@ mod group_runs {
                 }
                 cells.push_str(&format!("{}: {count} {}", at + 1, key(run)));
             }
-            let mut started_cells = format!(
-                "{file}\t{}\tskipped as refusing [{}]",
-                part.label(),
-                refusing.join(" ")
-            );
+            let mut started_cells =
+                format!("{file}\t{}\tskipped [{}]", part.label(), refusing.join(" "));
             let mut keys = [String::new(), String::new()];
             let mut agrees = [false; 2];
             let mut stuck = [false; 2];
