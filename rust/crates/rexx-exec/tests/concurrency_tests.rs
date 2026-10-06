@@ -2397,9 +2397,9 @@ mod group_runs {
         use std::time::{Duration, Instant};
 
         use super::super::group_runner::{
-            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
-            group_file, masked, outcome, reaching_rxapi, rows_in_parallel, run_crate_within,
-            run_oracle_within, skip, source_test_names,
+            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, directive_bodies, first_difference,
+            fresh_copy, gate_mode, group_file, masked, outcome, reaching_rxapi, read_lossy,
+            rows_in_parallel, run_crate_within, run_oracle_within, skip,
         };
         use super::super::support::oracle;
         use super::{WALL_CLOCK, inverted};
@@ -2444,8 +2444,437 @@ mod group_runs {
         }
 
         /// The runs here, by group, part and mode, that are not an outcome
-        /// the oracle produced, each with its reason.
-        const DIFFERING: &[(&str, &str, &str, &str)] = &[];
+        /// the oracle produced, each with its [`key`] and reason.
+        const DIFFERING: &[(&str, &str, &str, &str, &str)] = &[
+            (
+                "base/bif/STREAM.testGroup",
+                "whole",
+                "normal",
+                "error, assertions 195, rc 2",
+                "tests outside the derived list that fail alone too, outside Phase 6",
+            ),
+            (
+                "base/bif/STREAM.testGroup",
+                "whole",
+                "every",
+                "error, assertions 195, rc 2",
+                "tests outside the derived list that fail alone too, outside Phase 6",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "whole",
+                "normal",
+                "failure, assertions 506, rc 1",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "whole",
+                "every",
+                "failure, assertions 506, rc 1",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 65, rc 1",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 65, rc 1",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/class/Class.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"TEST1\" of class \"TESTDEFINE1\" is not implemented (Phase 9)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/Class.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"TEST1\" of class \"TESTDEFINE1\" is not implemented (Phase 9)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/DateTime.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/DateTime.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9)",
+                "TEST_STARTWITH_NOT_ARRAY's refusal, as in its own run",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9)",
+                "TEST_STARTWITH_NOT_ARRAY's refusal, as in its own run",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9)",
+                "TEST_STARTWITH_NOT_ARRAY's refusal, as in its own run",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9)",
+                "TEST_STARTWITH_NOT_ARRAY's refusal, as in its own run",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "TESTDIRECTIVES' refusal, as in its own run",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "TESTDIRECTIVES' refusal, as in its own run",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "TESTDIRECTIVES' refusal, as in its own run",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "TESTDIRECTIVES' refusal, as in its own run",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "the TEST_REQUEST_STRING refusal, as in their own runs",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "the TEST_REQUEST_STRING refusal, as in their own runs",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "the TEST_REQUEST_STRING refusal, as in their own runs",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "the TEST_REQUEST_STRING refusal, as in their own runs",
+            ),
+            (
+                "base/class/MutexSemaphore.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: the run exceeded its deadline",
+                "TEST_EXCLUSION's own race, which the oracle hangs in too (P46)",
+            ),
+            (
+                "base/class/MutexSemaphore.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: the run exceeded its deadline",
+                "TEST_EXCLUSION's own race, which the oracle hangs in too (P46)",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/RexxContext.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: CONDITION option \"O\" answers a Directory, which is not implemented",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/class/RexxContext.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: CONDITION option \"O\" answers a Directory, which is not implemented",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 25.925: Invalid subkeyword found. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 25.925: Invalid subkeyword found. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 187, rc 1",
+                "TESTDELEGATE, as in its own run: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 187, rc 1",
+                "TESTDELEGATE, as in its own run: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/CONSTANT.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: constant_TestGroup does not parse here: 19.916: String or symbol expected as ::CONSTANT value. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/CONSTANT.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: constant_TestGroup does not parse here: 19.916: String or symbol expected as ::CONSTANT value. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 25.902: Invalid subkeyword found. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 25.902: Invalid subkeyword found. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 67, rc 1",
+                "TESTDELEGATE, as in its own run: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 67, rc 1",
+                "TESTDELEGATE, as in its own run: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 19.2: String or symbol expected after CALL keyword. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 19.2: String or symbol expected after CALL keyword. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 7, rc 1",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 7, rc 1",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 25.913: Invalid subkeyword found. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 25.913: Invalid subkeyword found. is not implemented (Phase 5)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: USE LOCAL in a ::METHOD body is not implemented (Phase 5)",
+                "TEST_WHEN_USE_LOCAL_NO_WAIT's refusal, as in its own run",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: USE LOCAL in a ::METHOD body is not implemented (Phase 5)",
+                "TEST_WHEN_USE_LOCAL_NO_WAIT's refusal, as in its own run",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "whole",
+                "normal",
+                "failure, assertions 120, rc 1",
+                "TEST_RAISE_INSERT_CRLF as in its own run, and tests outside the derived list that fail alone too, outside Phase 6",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "whole",
+                "every",
+                "failure, assertions 120, rc 1",
+                "TEST_RAISE_INSERT_CRLF as in its own run, and tests outside the derived list that fail alone too, outside Phase 6",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 0, rc 1",
+                "TEST_RAISE_INSERT_CRLF, as in its own run: message text conversion, outside Phase 6",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 0, rc 1",
+                "TEST_RAISE_INSERT_CRLF, as in its own run: message text conversion, outside Phase 6",
+            ),
+            (
+                "base/keyword/REPLY.testGroup",
+                "whole",
+                "every",
+                "pass, assertions 19, rc 0",
+                "every continuation runs before the program ends; the oracle races them with its end (P41)",
+            ),
+            (
+                "base/keyword/REPLY.testGroup",
+                "derived",
+                "every",
+                "pass, assertions 18, rc 0",
+                "every continuation runs before the program ends; the oracle races them with its end (P41)",
+            ),
+            (
+                "base/keyword/TRACE.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/keyword/TRACE.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "the TEST_TRACEOBJECT_COLLECTOR and TEST_CALLER_STACK_FRAME_REPLY_START refusal, as in their own runs",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "the TEST_TRACEOBJECT_COLLECTOR and TEST_CALLER_STACK_FRAME_REPLY_START refusal, as in their own runs",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: DO is not implemented",
+                "the TEST_TRACEOBJECT_COLLECTOR and TEST_CALLER_STACK_FRAME_REPLY_START refusal, as in their own runs",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: DO is not implemented",
+                "the TEST_TRACEOBJECT_COLLECTOR and TEST_CALLER_STACK_FRAME_REPLY_START refusal, as in their own runs",
+            ),
+            (
+                "doc/rexxref/chapter5/Section1.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+            (
+                "doc/rexxref/chapter5/Section1.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9)",
+                "refused at a test outside the derived list, outside Phase 6",
+            ),
+        ];
+
+        /// A run's refusal, or its summary.
+        fn key(run: &Run) -> String {
+            String::from_utf8_lossy(&run.stderr)
+                .lines()
+                .find(|line| line.starts_with("rexx-exec: "))
+                .map_or_else(|| summary(run), str::to_string)
+        }
 
         /// `run` with the copy's path, and the copy's directory name in a
         /// path the framework abbreviates, replaced by `RUN`, so runs from
@@ -2551,6 +2980,7 @@ mod group_runs {
         /// finish.
         struct Row {
             cells: String,
+            keys: [String; 2],
             agrees: [bool; 2],
             stuck: [bool; 2],
         }
@@ -2579,10 +3009,15 @@ mod group_runs {
                 .expect("a group below a directory");
             let mut left_out = reaching_rxapi(dir, &[group]);
             if part == Part::Derived {
+                let path = super::super::worktree()
+                    .join("ootest/ooRexx")
+                    .join(dir)
+                    .join(format!("{group}.testGroup"));
                 left_out.extend(
-                    source_test_names(dir, group)
+                    directive_bodies(&read_lossy(&path))
                         .into_iter()
-                        .filter(|test| !derived.contains(test))
+                        .map(|(name, _)| name.to_ascii_uppercase())
+                        .filter(|name| name.starts_with("TEST") && !derived.contains(name))
                         .map(|test| format!("{group}.{test}")),
                 );
             }
@@ -2628,22 +3063,18 @@ mod group_runs {
                     cells.push_str(&format!("; {}: {count} {}, {detail}", at + 1, summary(run)));
                 }
             }
+            let mut keys = [String::new(), String::new()];
             let mut agrees = [false; 2];
             let mut stuck = [false; 2];
             for (at, run) in ours.iter().enumerate() {
                 stuck[at] = inverted(run) || run.status.is_none();
+                keys[at] = key(run);
                 let cell = match seen.iter().position(|(theirs, _)| agree(theirs, run)) {
                     Some(number) => {
                         agrees[at] = true;
                         format!("agrees with {}", number + 1)
                     }
-                    None => {
-                        let detail = String::from_utf8_lossy(&run.stderr)
-                            .lines()
-                            .find(|line| line.starts_with("rexx-exec: "))
-                            .map_or_else(|| difference(seen[0].0, run), str::to_string);
-                        format!("differs: {}, {detail}", summary(run))
-                    }
+                    None => format!("differs: {}, {}", keys[at], difference(seen[0].0, run)),
                 };
                 cells.push_str(&format!("\t{cell}"));
             }
@@ -2655,6 +3086,7 @@ mod group_runs {
             cells.push_str(&format!("\t{same}"));
             Row {
                 cells,
+                keys,
                 agrees,
                 stuck,
             }
@@ -2713,16 +3145,23 @@ mod group_runs {
                 for (at, mode) in ["normal", "every"].into_iter().enumerate() {
                     let listed = DIFFERING
                         .iter()
-                        .any(|(group, listed_part, listed_mode, _)| {
+                        .find(|(group, listed_part, listed_mode, ..)| {
                             group == file && *listed_part == part.label() && *listed_mode == mode
                         });
                     let name = format!("{file} {} {mode}", part.label());
-                    if row.stuck[at] && !listed {
-                        failing.push(format!("{name}: an inverted wait or a hang"));
-                    } else if !row.agrees[at] && !listed {
-                        failing.push(format!("{name}: not an oracle outcome"));
-                    } else if row.agrees[at] && listed {
-                        failing.push(format!("{name}: listed as differing, agrees"));
+                    match listed {
+                        Some((.., key, _)) if row.agrees[at] || row.keys[at] != *key => {
+                            failing
+                                .push(format!("{name}: listed as {key:?}, is {:?}", row.keys[at]));
+                        }
+                        Some(_) => {}
+                        None if row.stuck[at] => {
+                            failing.push(format!("{name}: an inverted wait or a hang"));
+                        }
+                        None if !row.agrees[at] => {
+                            failing.push(format!("{name}: not an oracle outcome"));
+                        }
+                        None => {}
                     }
                 }
             }
