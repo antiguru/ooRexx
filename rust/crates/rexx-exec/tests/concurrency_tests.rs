@@ -3089,17 +3089,6 @@ mod group_runs {
             )
         }
 
-        /// [`key`] without its assertion count.
-        fn uncounted(key: &str) -> String {
-            match key.split_once(", assertions ") {
-                Some((class, rest)) => {
-                    let rest = rest.split_once(',').map_or("", |(_, rest)| rest);
-                    format!("{class},{rest}")
-                }
-                None => key.to_string(),
-            }
-        }
-
         /// `run` with its summary's assertion count masked.
         fn count_masked(run: &Run) -> Run {
             let text = String::from_utf8_lossy(&run.stdout).into_owned();
@@ -3429,7 +3418,7 @@ mod group_runs {
                         agrees[at] = true;
                         format!("agrees with {}", number + 1)
                     }
-                    None if counted_only && uncounted(&keys[at]) == uncounted(&key(seen[0].0)) => {
+                    None if counted_only && agree(&count_masked(seen[0].0), &count_masked(run)) => {
                         agrees[at] = true;
                         format!("agrees but for the assertion count (P86): {}", keys[at])
                     }
@@ -3457,22 +3446,6 @@ mod group_runs {
             (row, normal)
         }
 
-        #[test]
-        fn a_key_without_its_count_keeps_status_and_tests() {
-            assert_eq!(
-                uncounted("pass, assertions 10, rc 0, last started T, failing []"),
-                "pass, rc 0, last started T, failing []"
-            );
-            assert_ne!(
-                uncounted("pass, assertions 10, rc 0, last started T, failing []"),
-                uncounted("failure, assertions 10, rc 1, last started T, failing [T]")
-            );
-            assert_eq!(
-                uncounted("rexx-exec: DO is not implemented, rc 120, last started T, failing []"),
-                "rexx-exec: DO is not implemented, rc 120, last started T, failing []"
-            );
-        }
-
         fn summary_run(assertions: u32, failures: u32, stderr: &str, status: i32) -> Run {
             Run {
                 stdout: format!(
@@ -3482,6 +3455,23 @@ mod group_runs {
                 stderr: stderr.as_bytes().to_vec(),
                 status: Some(status),
             }
+        }
+
+        #[test]
+        fn a_run_agrees_but_for_the_count_only_when_the_rest_agrees() {
+            let theirs = summary_run(12, 0, "", 0);
+            assert!(agree(
+                &count_masked(&theirs),
+                &count_masked(&summary_run(10, 0, "", 0))
+            ));
+            assert!(!agree(
+                &count_masked(&theirs),
+                &count_masked(&summary_run(10, 0, "noise\n", 0))
+            ));
+            assert!(!agree(
+                &count_masked(&theirs),
+                &count_masked(&summary_run(10, 1, "", 1))
+            ));
         }
 
         #[test]

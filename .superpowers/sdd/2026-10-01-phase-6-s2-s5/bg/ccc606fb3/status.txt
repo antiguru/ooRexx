@@ -1,0 +1,16 @@
+ccc606fb3 started 2026-10-07T00:15:02+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 9.23 9.55 5.58 1/1053 1154201 2026-10-07T00:18:42+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 9.79 8.84 6.34 1/1087 1354300 2026-10-07T00:45:38+02:00
+G6 debug test exit 101
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/ccc606fb3/logs/g4-test-release.txt:0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/ccc606fb3/logs/g6-test-debug.txt:2
+P48 reruns: 0
+finished 2026-10-07T01:06:36+02:00

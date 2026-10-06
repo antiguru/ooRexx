@@ -1,0 +1,141 @@
+group	test	normal against the oracle	every against normal
+base/bif/STREAM.testGroup	TEST_QUERYDIR_EXISTS	pass	same
+base/bif/TIME.testGroup	TEST_2	pass	same
+base/bif/TIME.testGroup	TEST_3	pass	same
+base/bif/TIME.testGroup	TEST_4	differ: rc 1: oracle Some("Assertions:         8"), ours Some("Assertions:         5")	same apart from elapsed values
+base/bif/TIME.testGroup	TEST_5	differ: rc 1: oracle Some("Assertions:         12"), ours Some("Assertions:         7")	same apart from elapsed values
+base/bif/TIME.testGroup	TEST_8	pass	same
+base/bif/TIME.testGroup	TEST_9	pass	same
+base/bif/TIME.testGroup	TEST_10	differ: rc 1: oracle Some("Assertions:         8"), ours Some("Assertions:         5")	same apart from elapsed values
+base/bif/TIME.testGroup	TEST_11	differ: rc 1: oracle Some("Assertions:         12"), ours Some("Assertions:         7")	same apart from elapsed values
+base/class/Alarm.testGroup	TEST_BASE_ALARM	pass	same
+base/class/DateTime.testGroup	TEST_ELAPSED1	pass	same
+base/class/EventSemaphore.testGroup	TEST_WAIT_CONCURRENT	pass	same
+base/class/Message.testGroup	TEST_START	pass	same
+base/class/Message.testGroup	TEST_REPLY	pass	same
+base/class/Message.testGroup	TEST_NOTIFY	pass	same
+base/class/Message.testGroup	TEST_SUPER_OVERRIDE	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_NO_ARRAY	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_NOT_ARRAY	refused: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)	same
+base/class/Message.testGroup	TEST_STARTWITH_TOO_MANY	pass	same
+base/class/Message.testGroup	TEST_REPLYWITH_NO_ARRAY	pass	same
+base/class/Message.testGroup	TEST_REPLYWITH_NOT_ARRAY	refused: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)	same
+base/class/Message.testGroup	TEST_REPLYWITH_TOO_MANY	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_CONTEXT	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_CONTEXT	pass	same
+base/class/Message.testGroup	TEST_REPLY_OVERRIDE_CONTEXT	pass	same
+base/class/Message.testGroup	TEST_REPLYWITH_OVERRIDE_CONTEXT	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_NOT_FOUND	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_NOT_FOUND	pass	same
+base/class/Message.testGroup	TEST_REPLY_OVERRIDE_NOT_FOUND	pass	same
+base/class/Message.testGroup	TEST_REPLYWITH_OVERRIDE_NOT_FOUND	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_NO_METHOD	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_NO_METHOD	pass	same
+base/class/Message.testGroup	TEST_REPLY_OVERRIDE_NO_METHOD	pass	same
+base/class/Message.testGroup	TEST_REPLYWITH_OVERRIDE_NO_METHOD	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_NOT_NON_SCOPE	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE	pass	same
+base/class/Message.testGroup	TEST_REPLY_OVERRIDE_NOT_NON_SCOPE	pass	same
+base/class/Message.testGroup	TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE	pass	same
+base/class/Message.testGroup	TEST_HALT_START	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_FROM_NONSELF	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass	same
+base/class/Message.testGroup	TEST_START_OVERRIDE_AMONG_MIXINCLASSES	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_FROM_NONSELF	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass	same
+base/class/Message.testGroup	TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES	pass	same
+base/class/Method.testGroup	TESTDIRECTIVES	refused: DO is not implemented	same
+base/class/MutexSemaphore.testGroup	TEST_EXCLUSION	pass	every mode forces the test's own race; the oracle hangs in the same interleaving (P46)
+base/class/Object.testGroup	TESTSTART01	pass	same
+base/class/Object.testGroup	TESTSTARTWITH01	pass	same
+base/class/Object.testGroup	TEST_START_NO_NAME	pass	same
+base/class/Object.testGroup	TEST_START_NO_NAME2	pass	same
+base/class/Object.testGroup	TEST_START_NOT_STRING	pass	same
+base/class/Object.testGroup	TEST_START_NO_METHOD	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_CONTEXT	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_EMPTY_ARRAY	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_MISSING_NAME	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_MISSING_SCOPE	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_EXTRA_STUFF	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_NON_STRING_NAME	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_NON_CLASS_SCOPE	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_NON_CLASS_SCOPE2	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_NOT_FOUND	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_NOT_NON_SCOPE	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_NO_METHOD	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_NO_NAME	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_NO_NAME2	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_NOT_STRING	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_NO_METHOD	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_CONTEXT	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_MISSING_NAME	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_MISSING_SCOPE	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_EXTRA_STUFF	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_NON_STRING_NAME	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_NOT_FOUND	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_NO_METHOD	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_FROM_NONSELF	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass	same
+base/class/Object.testGroup	TEST_START_OVERRIDE_AMONG_MIXINCLASSES	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_FROM_NONSELF	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	pass	same
+base/class/Object.testGroup	TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES	pass	same
+base/class/RexxContext.testGroup	TEST_INTERPRETER_THREAD_INVOCATION	pass	same
+base/class/Ticker.testGroup	TEST_TICKER_TWO_ARGS_STRING_TRIGGER	pass	same
+base/class/Ticker.testGroup	TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER	pass	same
+base/class/Ticker.testGroup	TEST_TICKER_THREE_ARGS_STRING_TRIGGER	pass	same
+base/class/Ticker.testGroup	TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER	pass	same
+base/class/Ticker.testGroup	TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE	pass	same
+base/class/Ticker.testGroup	TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE	pass	same
+base/class/Ticker.testGroup	TEST_CANCEL_TWICE	pass	same
+base/directives/ATTRIBUTE.testGroup	TEST001	pass	same
+base/directives/ATTRIBUTE.testGroup	TESTDELEGATE	differ: rc 1: oracle Some("Assertions:         122"), ours Some("Assertions:         95")	same
+base/directives/CONSTANT.testGroup	TEST_CONSTANT_METHOD_PROPERTIES	pass	same
+base/directives/METHOD.testGroup	TESTGUARDEDACCESS	pass	same
+base/directives/METHOD.testGroup	TESTDELEGATE	differ: rc 1: oracle Some("Assertions:         116"), ours Some("Assertions:         66")	same
+base/keyword/CALL.testGroup	TEST_4	differ: rc 1: oracle Some("Assertions:         18"), ours Some("Assertions:         7")	same
+base/keyword/GUARD.testGroup	TEST_ON_DEFAULT	pass	same
+base/keyword/GUARD.testGroup	TEST_ON	pass	same
+base/keyword/GUARD.testGroup	TEST_OFF	pass	same
+base/keyword/GUARD.testGroup	TEST_UNGUARDED	pass	same
+base/keyword/GUARD.testGroup	TEST_ON_OFF	pass	same
+base/keyword/GUARD.testGroup	TEST_WAIT_SIMPLE_TRIGGER	pass	same
+base/keyword/GUARD.testGroup	TEST_WAIT_SIMPLE	pass	same
+base/keyword/GUARD.testGroup	TEST_WAIT_MULTIPLE	pass	same
+base/keyword/RAISE.testGroup	TEST_RAISE_INSERT_CRLF	differ: rc 1: oracle Some("Assertions:         1"), ours Some("Assertions:         0")	same
+base/keyword/REPLY.testGroup	TEST_REPLY_ROUTINE	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_PROCEDURE	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_CALL	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_TWICE_REPLYASSERT	pass	assertions 0 then 1
+base/keyword/REPLY.testGroup	TEST_REPLY_RETURN_CODE_REPLYASSERT	pass	assertions 0 then 1
+base/keyword/REPLY.testGroup	TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT	pass	assertions 0 then 1
+base/keyword/REPLY.testGroup	TEST_REPLY_EXIT_CODE_REPLYASSERT	pass	assertions 0 then 1
+base/keyword/REPLY.testGroup	TEST_REPLY_STACK_REPLYASSERT	pass	assertions 1 then 2
+base/keyword/REPLY.testGroup	TEST_REPLY_PLAIN	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_STRING	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_ARRAY	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_NIL	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_NOP	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY__CODE_RETURN	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY__CODE_EXIT	pass	same
+base/keyword/REPLY.testGroup	TEST_REPLY_SAME_REPLYASSERT	pass	assertions 1 then 6
+base/keyword/REPLY.testGroup	TEST_REPLY_CONCURRENT	pass	same
+base/keyword/TRACE.testGroup	TEST_TRACE_REPLY	pass	same
+base/keyword/TRACE_TraceObject.testGroup	TEST_TRACEOBJECT_COLLECTOR	refused: DO is not implemented	trace lines on stderr differ
+base/keyword/TRACE_TraceObject.testGroup	TEST_CALLER_STACK_FRAME_REPLY_START	refused: DO is not implemented	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_NO_ARG	pass	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_TWO_ARGS	pass	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_INVALID	pass	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_INVALID_NEGATIVE	pass	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_INVALID_TOO_LARGE	pass	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_DURATION	pass	same
+base/rexxutil/SysSleep.testGroup	TEST_SLEEP_CONCURRENT	pass	same
+base/special.variables/RESULT_RC_SIGL.testGroup	TEST_RESULT_WITH_REPLY	pass	same
+doc/rexxref/chapter5/Section1.testGroup	TEST_OBJECT_START	pass	same
+regressions/bug2003_guard_when.testGroup	TEST_GUARD_WHEN_1	pass	same
