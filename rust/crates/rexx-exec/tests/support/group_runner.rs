@@ -470,7 +470,13 @@ pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTre
             let name_start = usize::from(quoted);
             let name: String = rest[name_start..]
                 .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .take_while(|c| {
+                    if quoted {
+                        !matches!(c, '\'' | '"')
+                    } else {
+                        c.is_ascii_alphanumeric() || *c == '_'
+                    }
+                })
                 .collect();
             let member = format!("{group}.{}", name.to_ascii_uppercase());
             if !left_out.iter().any(|name| name.as_ref() == member) {
