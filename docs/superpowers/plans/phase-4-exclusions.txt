@@ -1571,6 +1571,179 @@ DEVIATIONS -- permanent, chosen
      Witnesses: rexx-exec's tests/signals.rs, no_activity_runs_while_main_reads
      and a_halt_during_a_read_misses_an_activity_that_has_not_run.
 
+ 14. A PINNED WAIT ONLY AN ACTIVITY BELOW IT CAN END IS REFUSED (spec
+     2026-09-29 2.6, rulings P23, P30). OWNER: none.
+
+     A pinned activity that parks runs a nested scheduler round on its own
+     stack. Where what it waits for can come only from an activity whose
+     continuation lies below it, nothing the round can run ends the wait,
+     and with nothing in flight it refuses: "a pinned wait for WHAT that
+     only an activity pinned below it can end is not implemented", rc 120.
+     The oracle runs every activity on its own thread and completes.
+
+     Measured 2026-10-06, 30 runs each
+     (.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/refusals/out5/counts.txt,
+     program probes5/inverted.rex): scheduler/tests.rs HIDDEN_INVERSION
+     with main's wait inside INTERPRET: oracle rc 0 in every run, this crate
+     the refusal after "s3 sent m0" in every run. Witnesses: rexx-exec's
+     scheduler::tests::an_inverted_pinned_wait_is_refused and
+     an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted.
+
+ 15. A REPLY WITH RUST FRAMES INSIDE ITS METHOD BODY IS REFUSED (spec
+     2026-09-29 section 5). OWNER: none.
+
+     A REPLY moves the rest of its method to a new activity by moving its
+     frames. Inside a non-flattened loop, INTERPRET or a CALL ON handler
+     there are Rust frames between the body's driver and the REPLY, which
+     cannot move: "a REPLY its method body runs on a nested Rust frame is
+     not implemented", rc 120. The oracle continues on a new thread.
+
+     Measured 2026-10-06, 30 runs each (the counts file of row 14, program
+     probes5/immovable.rex): a method whose REPLY 1 is inside `do label l`
+     ... `leave l` ... `end` prints 1 at rc 0 on the oracle and refuses here. Witnesses: rexx-exec's
+     run::tests::message::the_guard_instructions_answers_and_their_refusals
+     (the refusal) and concurrency_tests
+     an_immovable_reply_is_counted_with_its_frames (the pinning count).
+
+ 16. A WRAPPER THAT KEEPS THE BATON BLOCKS EVERY OTHER ACTIVITY (spec
+     2026-09-29 2.1). OWNER: none.
+
+     The stream builtins, SAY to a routed .output, trace output delivery,
+     ADDRESS WITH redirection, condition handling, package loaders and
+     Routine~call of a library routine run on nested Rust frames and keep
+     the baton. While one blocks (a pipe, a console read, a redirected
+     command's child) the interpreter's other activities wait; the
+     oracle's run. Row 13 is the measured case of the default input stream.
+
+     Measured 2026-10-06, 30 runs each
+     (docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-divergences/counts.txt,
+     program probes/redirect_wrapper.rex): a started activity printing
+     `w 1` to `w 3` 0.1 s apart while main runs `address system 'sleep 1'
+     with output stem o.`: the oracle prints the three lines, then
+     `main 0`; here `main 0` comes first. Witness: rexx-exec's
+     scheduler::tests::pool::a_redirected_command_stops_every_other_activity.
+
+ 17. HALT UNDER NESTING WAITS FOR THE INNER REGION (spec 2026-09-29 2.6).
+     OWNER: none.
+
+     An activity that traps HALT and parks again while nested keeps the
+     enclosing pinned activities waiting, and a HALT targeted at an
+     enclosing activity is taken only when the inner region ends. The
+     oracle's activities each have a thread and take it at their next
+     clause.
+
+     Measured 2026-10-06, 30 runs each (the counts file of row 16, program
+     probes/halt_nested3.rex): `a` spins inside INTERPRET, `b` spins inside
+     INTERPRET in `a`'s pinned yields until main has sent `a~halt`: the
+     oracle prints `halt sent` / `A halted` / `B done`, this crate
+     `halt sent` / `B done` / `A halted`. Witness: rexx-exec's
+     scheduler::tests::a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region.
+
+ 18. A PINNED BUSY-WAITER IS NOT PREEMPTED (spec 2026-09-29 2.6, rulings
+     P29, P31). OWNER: none.
+
+     A pinned activity's slices are deferred, and its second slice takes a
+     pinned yield that runs others in a nested round on its stack. Two
+     pinned busy-waiters that need each other never end: the inner one's
+     yields cannot run the outer, buried below it. It is not refused, since
+     a busy wait cannot be told from long pinned work; each round is counted
+     as an inverted yield. The oracle preempts both and completes.
+
+     Measured 2026-10-06, 30 runs each (the counts file of row 14, program
+     probes5/busy2.rex): two INTERPRETed busy-waiters on each other's flags
+     print "A ended" / "B ended" at rc 0 on the oracle and run here until
+     killed. Witness: rexx-exec's concurrency_tests
+     pinned_busy_waiters_that_need_each_other_count_inverted_yields.
+
+ 19. A CALLBACK FROM A THREAD RUNNING NO NATIVE CALL WAITS FOR A
+     BATON-KEEPING CALL (rulings P55, P57). OWNER: none.
+
+     With the pool at its bound, or for a lone call, a native call keeps
+     the baton. A callback into the interpreter from another thread then
+     waits for that call to return; if the native joins that thread the
+     run hangs, where the oracle aborts, rc 134 (30 runs, ruling P57). Both
+     fail. Witness of the kept baton: rexx-exec's
+     scheduler::tests::pool::a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity.
+     The hang has none: the test thread would block in the native's join,
+     which no run deadline ends.
+
+ 20. A WAIT NOTHING LEFT TO RUN CAN END IS REFUSED (rulings P27, P65, P77).
+     OWNER: none.
+
+     Where an activity parks and no other activity, timer or call in
+     flight can end its wait (`~result` or `~wait` of a message nothing
+     sends, a GUARD WHEN nothing can make true in main alone (P27), a
+     message wait whose runner a halt left parked (P65)), this crate refuses:
+     "a wait that nothing left to run can end is not implemented", rc 120.
+     The oracle blocks for ever.
+
+     Measured 2026-10-06 (the counts file of row 16, program
+     probes/unsent.rex, one run each, a single activity): the oracle prints
+     `0 0 abc LENGTH` and is killed at 20 s, rc 137; this crate prints the
+     same line and refuses. Witnesses: rexx-exec's
+     scheduler::tests::the_result_of_a_message_never_sent_is_refused and
+     a_pinned_wait_nothing_can_end_is_refused, and
+     run::tests::message::the_guard_instructions_answers_and_their_refusals
+     (the GUARD WHEN).
+
+ 21. PROGRAM END WAITS FOR NEITHER A TERMINATION UNINIT'S ACTIVITIES NOR
+     ANY ACTIVITY AFTER A REFUSAL (rulings P39, P40, P75). OWNER: none.
+
+     Program end waits for every activity, then runs the termination
+     UNINITs; an activity those start is not waited for, as on the oracle.
+     A REPLY continuation one of them starts is such an activity: the
+     oracle's races its process exit and prints in most runs, this crate's
+     never. After main ends with a loud refusal nothing is waited for.
+
+     Measured 2026-10-06, 30 runs each (the counts file of row 16, program
+     probes/u5.rex): an UNINIT that says a line, REPLYs and says another
+     prints the line after the REPLY in 23 oracle runs and not in 7; here
+     in none.
+     The S2 record (docs/superpowers/plans/phase-6-gate.md, `### UNINIT
+     ordering`) holds the other termination probes. Witnesses: rexx-exec's
+     scheduler::tests::a_termination_uninits_reply_continuation_is_not_waited_for,
+     an_activity_a_termination_uninit_starts_is_not_waited_for and
+     a_refusal_in_main_does_not_wait_for_the_other_activities.
+
+ 22. THIS CRATE TAKES ONE SCHEDULE WHERE THE ORACLE'S THREADS RACE (rulings
+     P32, P36, P38, P41). OWNER: none.
+
+     Activities switch at slices, waits and ends, chosen by one scheduler,
+     so a program whose oracle output depends on thread timing gets one of
+     its orders here, or an order the oracle was not seen to take. Where a
+     REPLY's sender and continuation interleave (P36, P41), the sender here
+     runs on until an ordinary switch. Where a started activity's notifier
+     fails inside main's pinned notifier wait (P38), main is buried below
+     that round, so the failure replaces the message's outcome before main
+     reads it: a value and the exit status change. The clause a
+     cross-activity HALT lands on inside a loop (P32) follows this crate's
+     countdown, not the oracle's per-activation instruction count.
+
+     Measured 2026-10-06, 30 runs each (the counts file of row 16): y1.rex
+     prints `outer waited 1 97.1` here in every run and in 2 oracle runs,
+     `outer waited 1 42.3` in the other 28; y2.rex is rc 214 here and rc 0
+     with `outer waited 3` in every oracle run. replied.rex and reply2.rex
+     take three and six orders on the oracle; here one each, for reply2.rex
+     not among the oracle's. Witnesses: rexx-exec's
+     scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome,
+     a_reply_leaves_its_sender_running_until_an_ordinary_switch and
+     a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready.
+     The HALT landing site has none: the oracle's clause follows a count
+     this crate does not keep.
+
+ 23. AN ACTIVITY'S NATIVE CALLS AND CALLBACKS RUN ON WHICHEVER THREAD
+     HOLDS THEM (spec 2026-09-29 section 11). OWNER: none.
+
+     Successive native calls of one activity may land on different pool
+     threads, so a thread-affine extension behaves differently from the
+     oracle, where each activity keeps its thread. Rexx run by a callback
+     on a pool thread meets that thread's stack, and nested pinned waits
+     share one stack, so where Error 11.1 is raised depends on which
+     thread runs the code. Witnesses: rexx-exec's
+     scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11
+     and scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining.
+     Not measured against the oracle.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -4077,6 +4250,15 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   guard real rather than inheriting a silent no-op. That is Phase 6's, which
   owns the scheduling `REPLY` and `GUARD` are written against here.
 
+  DELIVERED by Phase 6 S3 Task 11: `~start` runs and a `GUARDED` method
+  reserves its scope against other activities. Measured 2026-10-06, 30 runs
+  each (.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/refusals/
+  guarded-30.txt, program probes4/guarded.rex): two started guarded sends
+  never overlap on either side and unguarded ones interleave; this crate's
+  order is the oracle's most frequent one in every run. Witnesses: the
+  corpus programs lang/guard_serializes_started_sends.rex and the others
+  under Task 11's header in rust/corpus/phase-6.txt.
+
   `PROTECTED` IS ROUTED THROUGH THE SECURITY-MANAGER SEAM, AND WHAT MADE IT
   UNOBSERVABLE STILL DOES. The sentence this replaces read that nothing in
   `rexx-exec` read the option, so `PROTECTED`, `UNPROTECTED` and the default
@@ -4736,7 +4918,7 @@ refuses on the routine path, each naming its owner:
   CLOSED by the surface plan's Tasks 5 and 6: RxCalcSin(30, 2, 'Q') is 88.916
   rc 168 on both, all three descriptors, 2026-09-28. The members a populated
   table still refuses are rexx-api's layout::REFUSING_MEMBERS, each naming
-  Phase 9 or Phase 6, and rexx-api/tests/layout.rs's
+  Phase 9, and rexx-api/tests/layout.rs's
   a_populated_table_refuses_exactly_the_members_it_names holds that list
   equal to the tables. A member no row names now refuses naming no phase,
   since only an unpopulated table reaches it.
@@ -5663,9 +5845,13 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   `ticker_createTimer` are native timer entry points its concurrency work
   has not built. class-set.txt now commits a construction program for both
   classes (`CONSTRUCTION_PROGRAMS` in `rexx-extract/src/docs/classes.rs`),
-  so their gate table C rows read `diverge-both` rather than `unanswered`;
-  neither is gated today because Phase 6 is not in `CLOSED_PHASES`, and this
-  row is what closing it would have to answer for first.
+  so their gate table C rows read `diverge-both` rather than `unanswered`.
+
+  DELIVERED by Phase 6 S2 Task 8 and S3 Task 14: both constructions answer
+  "instance 1" on both sides, and at Phase 6's close gate table C gates both
+  classes and reports `Alarm instance loud=no 6 7 row(s): agree=7` and
+  `Ticker instance loud=no 6 6 row(s): agree=6`
+  (docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-gate-table-c.txt).
 
   CONDITION AND STACK-FRAME RESIDUALS FOUND IN TASK 8's REVIEW (Phase 8
   surface, 2026-09-28, measured at f24f208ad against the oracle, each side in

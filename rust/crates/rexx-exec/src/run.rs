@@ -2372,7 +2372,7 @@ impl Interp {
                 self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
         }
-        // **LEGALITY, and Phase 6 keeps it.** A `REPLY` has already answered
+        // **LEGALITY.** A `REPLY` has already answered
         // the sender, so a value here has nobody to go to whatever activity
         // the rest of the body runs on: 98.936 for `RETURN`, 98.937 for
         // `EXIT`. Both are

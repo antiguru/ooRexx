@@ -1,0 +1,45 @@
+# bash count.sh oracle|ours probes/NAME.rex 30 per section (unsent: one run of oracle.sh / ours.sh);
+# run-directory paths stripped from stderr.
+# ours.sh runs a release rexx-run built from the Task 24 working tree (base 4936f24c3); oracle.sh is the rules' wrapper.
+== redirect_wrapper ours
+     30 rc=0|main 0|w 1|w 2|w 3|
+== redirect_wrapper oracle
+     30 rc=0|w 1|w 2|w 3|main 0|
+== y1 ours
+     30 rc=0|notifier sees 42.3|notifier sees 97.1|outer waited 1 97.1|main end|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|
+== y1 oracle
+      2 rc=0|notifier sees 42.3|notifier sees 97.1|outer waited 1 97.1|main end|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|
+      2 rc=0|notifier sees 42.3|outer waited 1 42.3|main end|notifier sees 97.1|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|
+     26 rc=0|notifier sees 42.3|outer waited 1 42.3|notifier sees 97.1|main end|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|E:     19 *-* return .nil~foo|E: Error 97 running p.rex line 19:  Object method not found.|E: Error 97.1:  Object "The NIL object" does not understand message "FOO".|
+== y2 ours
+     30 rc=214|in notifier|in notifier|in notifier|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|E:     15 *-* return 1/0|E: Error 42 running p.rex line 11:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|
+== y2 oracle
+     30 rc=0|in notifier|outer waited 3|in notifier|main end|in notifier|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|E:     15 *-* return 1/0|E: Error 42 running p.rex line 15:  Arithmetic overflow/underflow.|E: Error 42.3:  Arithmetic overflow; divisor must not be zero.|
+== replied ours
+     30 rc=0|answered|caller 1|caller 2|rest 1|rest 2|
+== replied oracle
+     13 rc=0|answered|caller 1|caller 2|rest 1|rest 2|
+      1 rc=0|answered|caller 1|rest 1|caller 2|rest 2|
+     16 rc=0|answered|rest 1|caller 1|rest 2|caller 2|
+== reply2 ours
+     30 rc=0|ra|rb|a rest|b rest|main 1|main 2|
+== reply2 oracle
+      9 rc=0|ra|a rest|b rest|rb|main 1|main 2|
+      8 rc=0|ra|b rest|a rest|rb|main 1|main 2|
+      1 rc=0|ra|b rest|rb|a rest|main 1|main 2|
+      1 rc=0|ra|rb|main 1|a rest|main 2|b rest|
+      6 rc=0|ra|rb|main 1|main 2|a rest|b rest|
+      5 rc=0|ra|rb|main 1|main 2|b rest|a rest|
+== u5 ours
+     30 rc=0|main end|uninit before reply|
+== u5 oracle
+      7 rc=0|main end|uninit before reply|
+     23 rc=0|main end|uninit before reply|uninit after reply|
+== halt_nested3 oracle
+     30 rc=0|halt sent|A halted|B done|
+== unsent oracle (1 run, single activity)
+rc=137|0 0 abc LENGTH|
+== unsent ours (1 run)
+rc=120|0 0 abc LENGTH|E: rexx-exec: a wait that nothing left to run can end is not implemented|
+== halt_nested3 ours
+     30 rc=0|halt sent|B done|A halted|

@@ -46,8 +46,8 @@ pub const SMALL_INT_MAX: i64 = (1 << 61) - 1;
 pub const SMALL_INT_MIN: i64 = -(1 << 61);
 
 /// Not [`Send`] or [`Sync`]: a handle is meaningless off the island that
-/// allocated its slot, and nothing may carry one to another OS thread before
-/// Phase 6 says so (design section 2.5).
+/// allocated its slot, and only `rexx-exec`'s `Islanded` carries one to
+/// another OS thread (design section 2.5).
 ///
 /// ```compile_fail
 /// fn require_send<T: Send>(_: T) {}

@@ -1,0 +1,201 @@
+# Phase 6 corpus subset -- concurrency. The union with the earlier
+# phase-*.txt files is what the harnesses read, not this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored.
+#
+# A program here may start activities, and witnesses only orderings the
+# oracle fixes. It may load one of the oracle's compiled extensions from the
+# directory its .env sidecar names, as phase-8.txt's header describes.
+
+# Phase 6 Task 8: Rexx-to-Rexx calls that run their callee in the caller's
+# driver loop.
+lang/call_condition_three_deep.rex
+lang/call_signal_out_of_callee.rex
+lang/call_trace_nested.rex
+lang/call_depth_cap_function.rex
+lang/call_depth_cap_call.rex
+lang/call_callee_allocates.rex
+
+# Phase 6 Task 9: sends, calls in argument positions, and the natives that run
+# a Rexx method or routine, entered from the caller's driver loop.
+lang/send_in_argument.rex
+lang/send_callee_allocates.rex
+lang/send_resumable_entries.rex
+lang/send_new_init_fails.rex
+lang/send_guarded.rex
+lang/builtin_argument_call.rex
+lang/new_init_subclasses.rex
+
+# Phase 6 Task 10: plain DO blocks run flat, their calls and sends on the
+# driver's frame.
+lang/do_block_calls.rex
+
+# Phase 6 S2 Task 2: started messages run on activities of their own, and
+# ~result and ~wait park the waiting activity until the send completes.
+lang/started_waits_for_a_later_send.rex
+lang/started_waits_inside_a_call.rex
+lang/started_unwaited_says.rex
+lang/started_result_message.rex
+lang/started_raises.rex
+lang/message_wait_then_completed.rex
+lang/message_two_waiters.rex
+lang/message_start.rex
+# Task 2 fix round 2: a wait in a replied body, and a pinned wait in an UNINIT,
+# which runs from Rust frames.
+lang/started_waited_in_a_replied_body.rex
+lang/started_waited_in_uninit.rex
+# Phase 6 S2 Task 3: activity numbers, the Message accessors, and an error in a
+# started activity kept for ~errorCondition and re-raised by ~result.
+lang/context_thread_numbers.rex
+lang/context_thread_sequential.rex
+lang/context_thread_pool_bound.rex
+lang/context_thread_lazy.rex
+lang/message_start_error_condition.rex
+lang/message_result_reraise.rex
+lang/message_result_relayed.rex
+lang/message_accessors.rex
+lang/message_reuse.rex
+lang/message_send_error_condition.rex
+lang/started_numeric_address.rex
+lang/message_error_condition_after_main.rex
+lang/message_send_user_condition.rex
+lang/started_primitive_error_condition.rex
+lang/message_send_reentered.rex
+lang/message_primitive_send_fails_main.rex
+lang/message_send_fails_main_frames.rex
+# Phase 6 S2 Task 4: Message~halt, raised at the halted activity's next clause
+# boundary.
+lang/message_halt_wait.rex
+lang/message_halt_self.rex
+lang/message_halt_untrapped.rex
+# Task 4 fix round 1: HALT at the end of the halted clause, in its own
+# activation; a pinned busy-wait yields on its second slice (ruling P29).
+lang/message_halt_returning.rex
+lang/message_halt_loop_step.rex
+lang/message_halt_interpret.rex
+lang/pinned_busy_wait_interpret.rex
+lang/pinned_busy_wait_handler.rex
+lang/pinned_busy_wait_external.rex
+# Task 4 fix round 2: main parked or sliced at its root is not buried
+# (ruling P30), so a pinned activity's rounds run it.
+lang/message_halt_pinned_target.rex
+lang/main_ends_in_pinned_yield.rex
+lang/main_fails_in_pinned_yield.rex
+# Phase 6 S2 Task 5: SysSleep parks its activity; sleepers wake in deadline
+# order, at the countdown's visits while another activity runs.
+lang/sleepers_wake_in_deadline_order.rex
+lang/sleep_parks_in_if_do_and_argument.rex
+lang/sleeper_wakes_busy_main.rex
+# Task 5 fix round 1: a wait in a tree-evaluated expression is a pinned wait.
+lang/sleep_in_parse_template_and_when.rex
+# Phase 6 S2 Task 6: REPLY moves the rest of its method to a new activity,
+# inside DO, SELECT and IF too; the sender waits for it before reading.
+lang/reply_then_wait.rex
+lang/reply_inside_constructs.rex
+lang/reply_continuation_error_trace.rex
+lang/reply_continuation_error_stderr.rex
+lang/reply_continuation_failed_send.rex
+lang/reply_as_the_last_clause.rex
+# Task 6 fix round 1: a trap handled at the REPLY clause's end leaves the split
+# owed to the replier's next clause; an empty rest still numbers the replier.
+lang/reply_split_after_a_trap_at_the_reply.rex
+lang/reply_split_after_a_trap_takes_the_failure.rex
+lang/reply_split_after_a_trap_does_not_wait.rex
+lang/reply_as_the_last_clause_numbers_the_replier.rex
+# Phase 6 S2 Task 7: a RexxContext answers for its activation on whichever
+# activity holds it, a REPLY's included; Message~reply, ~replyWith, ~notify,
+# ~messageComplete and ~triggered.
+lang/context_of_another_activity.rex
+lang/context_moved_by_reply.rex
+lang/message_reply.rex
+lang/message_notify.rex
+lang/message_notify_arguments.rex
+lang/message_notify_error.rex
+lang/message_notify_untrapped.rex
+# Task 7 fix round 1: a failing send tells only the message in the
+# activation's single slot; a failing notifier replaces the send's failure.
+lang/message_notify_single_slot.rex
+lang/message_notifier_fails.rex
+lang/message_notifier_fails_untrapped.rex
+# Task 7 fix round 2: a notified failed send keeps the native SEND level.
+lang/message_notify_error_traceback.rex
+# Phase 6 S2 Task 8: the timer natives park; an Alarm fires on its replied
+# activity, a Ticker until cancelled, a cancel ends whole days of waiting.
+lang/alarm_fires_after_reply.rex
+lang/ticker_cancelled_by_its_target.rex
+lang/timer_cancel_in_whole_days.rex
+lang/timer_native_arguments.rex
+# Task 8 fix round 1: a post wakes every waiter and reads each waiter's
+# CANCELED; the remainder is a uint32_t of milliseconds.
+lang/timer_post_wakes_every_waiter.rex
+lang/timer_post_reads_the_waiters_cancel.rex
+lang/timer_remainder_modulo_2_32.rex
+# Phase 6 S2-S5 Task 9: TraceObject THREAD, frame, guard and CALLERSTACKFRAME
+# entries across activities, and UNINIT at termination after every activity.
+lang/trace_object_activity_fields.rex
+lang/uninit_after_every_activity.rex
+# Task 9 fix round 1: the primitive method that entered a traced method.
+lang/trace_object_native_caller.rex
+# Phase 6 S3 Task 11: guard locks. Guarded sends from two activities run one
+# after the other, unguarded ones interleave; a REPLY moves the lock at
+# nesting 1 and reserves again at nesting 2; a guarded getter and GUARD ON
+# wait; a cycle of waits raises 98.905; TraceObject guard entries.
+lang/guard_serializes_started_sends.rex
+lang/reply_seen_by_a_guarded_send.rex
+lang/reply_continuation_parks_holding_the_guard.rex
+lang/reply_at_nesting_two_reserves_again.rex
+lang/guarded_getter_waits_for_reply.rex
+lang/guard_on_waits_in_an_unguarded_method.rex
+lang/guard_deadlock_two_activities.rex
+lang/message_wait_deadlock.rex
+lang/trace_object_guard_fields.rex
+# Task 11 fix round 1: setGuarded/setUnguarded decide a send's reserve; an
+# empty guarded method waits; a lock held before the first ~start counts.
+lang/method_set_unguarded_is_not_reserved.rex
+lang/method_set_guarded_is_reserved.rex
+lang/guarded_empty_method_waits.rex
+lang/guard_held_before_the_first_start.rex
+# Phase 6 S3 Task 12: a GUARD that waits parks its activity and runs again
+# once woken. A contended GUARD ON parks for the lock; GUARD WHEN watches the
+# exposed variables it names, gives the lock up while false, and wakes on a
+# store or DROP of one of them, a stem element store excepted; each
+# evaluation is traced, its >K> line's TraceObject carrying ISWAITING; a
+# store made while it evaluates makes it evaluate again at once. The native
+# SetGuardOnWhenUpdated/SetGuardOffWhenUpdated wait the same way.
+lang/guard_on_lock_passes_between_activities.rex
+lang/guard_when_waits_for_a_store.rex
+lang/guard_when_stem_element_store.rex
+lang/guard_when_attribute_setter.rex
+lang/guard_when_drop_wakes.rex
+lang/guard_when_traces_each_evaluation.rex
+lang/guard_when_trace_object_waiting.rex
+lang/guard_when_replies_take_turns.rex
+lang/guard_when_posted_while_evaluating.rex
+lang/native_guard_on_when_updated.rex
+lang/native_guard_off_keeps_the_count.rex
+# A woken GUARD ON WHEN holds the lock again; a finished one stops watching.
+lang/guard_when_holds_the_lock_again.rex
+lang/guard_when_unwatches_at_its_end.rex
+# EventSemaphore, MutexSemaphore and the unnamed Sys*Sem routines.
+lang/event_semaphore_post_reset_wait.rex
+lang/event_semaphore_post_wakes_every_waiter.rex
+lang/event_semaphore_timed_wait_ended_by_a_post.rex
+lang/event_semaphore_wait_not_a_number.rex
+lang/mutex_semaphore_nesting_and_close.rex
+lang/mutex_semaphore_released_when_its_activity_ends.rex
+lang/mutex_semaphore_end_hands_over_to_a_waiter.rex
+lang/mutex_semaphore_stays_with_the_replier.rex
+lang/mutex_semaphore_timed_acquire.rex
+lang/sys_semaphores_unnamed.rex
+lang/sys_semaphores_across_activities.rex
+lang/sys_semaphore_poll_takes_at_its_poll.rex
+lang/sys_semaphore_post_waits_for_the_next_poll.rex
+lang/sys_wait_event_sem_timeout_not_int.rex
+# Phase 6 S3 Task 14: an Alarm cancel waits for its timer to start, an Alarm
+# sends its Message target, a Ticker fires on its replied activity; a call's
+# pushed arguments survive a Rexx STRING method an argument runs.
+lang/alarm_cancel_waits_for_the_timer.rex
+lang/alarm_message_target.rex
+lang/ticker_fires_on_its_replied_activity.rex
+lang/call_argument_concatenates_a_rexx_string_method.rex

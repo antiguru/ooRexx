@@ -328,7 +328,7 @@ fn a_second_reply_reports_the_oracles_own_98_935() {
 /// **What `GUARD` answers, and the refusals beside it, in every `cargo
 /// test`.**
 #[test]
-fn the_guard_instructions_answers_and_the_phase_6_refusals() {
+fn the_guard_instructions_answers_and_their_refusals() {
     struct Row {
         name: &'static str,
         source: &'static str,

@@ -480,6 +480,31 @@ fn a_message_halt_inside_its_handler_is_dropped() {
     assert_eq!(stdout(&outcome), "1\nh in\n1\nh out\nw end\nmain end\n");
 }
 
+/// A `Message~halt` of an activity buried below another's pinned region is
+/// taken only once that region ends: `a` spins inside `INTERPRET`, `b` runs
+/// in its pinned yields and spins there until main has halted `a`. The
+/// oracle takes the halt at `a`'s next clause and prints `A halted` before
+/// `B done` (30 of 30 runs).
+#[test]
+fn a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region() {
+    let outcome = run_with(
+        "g = .gate~new\na = .t~new~start('a')\nb = .t~new~start('b', g)\n\
+         do while \\g~started; end\na~halt\ng~sent = 1\nsay 'halt sent'\n\
+         ::class gate\n::attribute started unguarded\n::attribute sent unguarded\n\
+         ::method init\n  expose started sent\n  started = 0\n  sent = 0\n\
+         ::class t\n::method a unguarded\n  signal on halt name h\n  \
+         interpret 'do forever; end'\nh:\n  say 'A halted'\n\
+         ::method b unguarded\n  use arg g\n  \
+         interpret 'g~started = 1; do until g~sent; end; do i = 1 to 1000000; end'\n  \
+         say 'B done'\n",
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(SwitchMode::EveryOpportunity),
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "halt sent\nB done\nA halted\n");
+}
+
 /// The stress mode collects at every countdown visit and every switch as
 /// well as at every allocation. Under either switch mode every clause visits
 /// the countdown, so `AtClause` past the program's end differs from
@@ -1089,6 +1114,40 @@ fn notifier_failures_in_several_started_activities_each_end_their_own() {
     assert_eq!(stderr(&outcome).matches("Error 42.3:").count(), 6);
 }
 
+/// A notifier that fails in a started activity run inside main's pinned
+/// notifier wait replaces the message's outcome before main reads it
+/// (ruling P38): main is buried below that round. The oracle mostly lets main
+/// read first: `outer waited 1 42.3`, and `outer waited 3` at rc 0.
+#[test]
+fn a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome() {
+    let outer = |body: &str, bad: &str| {
+        run(&format!(
+            "m0 = .message~new('a', 'length')\nm0~notify(.outer~new)\nm0~send\n\
+             say 'main end'\n::class outer inherit MessageNotification\n\
+             ::method messageComplete\n{body}\
+             ::class bad inherit MessageNotification\n::method messageComplete\n{bad}"
+        ))
+    };
+    let replaced = outer(
+        "  m = .message~new(.t~new, 'boom')\n  m~notify(.bad~new)\n  m~start\n  m~wait\n  \
+         say 'outer waited' m~hasError m~errorCondition~code\n\
+         ::class t\n::method boom\n  return 1/0\n",
+        "  use arg msg\n  say 'notifier sees' msg~errorCondition~code\n  return .nil~foo\n",
+    );
+    assert_eq!(replaced.exit_code, 0, "{}", stderr(&replaced));
+    assert_eq!(
+        stdout(&replaced),
+        "notifier sees 42.3\nnotifier sees 97.1\nouter waited 1 97.1\nmain end\n"
+    );
+    let raised = outer(
+        "  m = .message~new('abc', 'length')\n  m~notify(.bad~new)\n  m~start\n  m~wait\n  \
+         say 'outer waited' m~result\n",
+        "  say 'in notifier'\n  return 1/0\n",
+    );
+    assert_eq!(raised.exit_code, 214, "{}", stderr(&raised));
+    assert_eq!(stdout(&raised), "in notifier\nin notifier\nin notifier\n");
+}
+
 /// Notifier failures in more started activities than an interpreter stack
 /// of 33 MiB has room to nest the yields of: the yields stop nesting, so no
 /// Error 11 reaches main or another activity, and every notifier failure is
@@ -1144,6 +1203,17 @@ fn an_activity_a_termination_uninit_starts_is_not_waited_for() {
         "main end\nuninit starts\nuninit after start\n"
     );
     assert_eq!(stderr(&outcome), "");
+}
+
+/// The continuation a termination `UNINIT`'s `REPLY` starts is not waited
+/// for (ruling P39), so its line never shows; the oracle prints it in most
+/// runs, racing its own process exit.
+#[test]
+fn a_termination_uninits_reply_continuation_is_not_waited_for() {
+    let outcome = run("o = .k~new\nsay 'main end'\n::class k\n::method uninit\n  \
+                       say 'uninit before reply'\n  reply\n  say 'uninit after reply'\n");
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "main end\nuninit before reply\n");
 }
 
 /// An object a collection readied while a started activity ran is

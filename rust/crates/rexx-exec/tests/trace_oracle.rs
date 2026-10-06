@@ -462,6 +462,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-5c.txt",
     "phase-5d.txt",
     "phase-5j.txt",
+    "phase-6.txt",
     "phase-7.txt",
     "phase-8.txt",
 ];

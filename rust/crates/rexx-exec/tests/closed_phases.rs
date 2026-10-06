@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 /// Phase 7's task. Adding it here would redden the tree for work this phase
 /// did not take on; the honest statement is the narrow one, and the phase
 /// that pays that debt widens this list.
-const CLOSED: &[&str] = &["Phase 7", "Phase 8"];
+const CLOSED: &[&str] = &["Phase 6", "Phase 7", "Phase 8"];
 
 /// Every `.rs` file under one crate's `src/`, recursively.
 fn source_files(crate_dir: &str) -> Vec<PathBuf> {
@@ -289,7 +289,7 @@ fn open_owners(text: &str) -> Vec<String> {
 
 /// Whether `word` stands alone at `at` in `text`.
 fn word_at(text: &str, at: usize, word: &str) -> bool {
-    let joined = |c: char| c.is_ascii_alphanumeric() || c == '-';
+    let joined = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
     text[at..].starts_with(word)
         && !text[..at].chars().next_back().is_some_and(joined)
         && !text[at + word.len()..].chars().next().is_some_and(joined)
@@ -316,8 +316,12 @@ fn the_row_check_tells_an_open_owner_from_a_resolved_one() {
     let rows = "A. OWNER: Phase 8, the loader.\n\n  DELIVERED, later.\n\n\
                 B. OWNER:\n Phase 8. C. NO OWNER: Phase 8 is closed.\n\n\
                 D. OWNERSHIP of Phase 8. E. OWNER: Phase 80.\n\n\
-                F. OWNER: Phase 8.\n\nG.\n\nFIXED.\n";
-    assert_eq!(open_owners(rows), ["OWNER: Phase 8", "OWNER: Phase 8"]);
+                F. OWNER: Phase 8.\n\nG.\n\nFIXED.\n\n\
+                H. OWNER: Phase 8.\n\nnot in `CLOSED_PHASES`.\n";
+    assert_eq!(
+        open_owners(rows),
+        ["OWNER: Phase 8", "OWNER: Phase 8", "OWNER: Phase 8"]
+    );
 }
 
 /// The negative control for the scan: a phase that is still open is found by
@@ -332,7 +336,7 @@ fn the_scan_finds_an_open_phase_it_is_not_asked_about() {
             if line.trim_start().starts_with("//") {
                 continue;
             }
-            if line.contains("\"Phase 6\"") || line.contains("\"Phase 10\"") {
+            if line.contains("\"Phase 10\"") {
                 open += 1;
             }
         }
