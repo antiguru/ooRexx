@@ -142,4 +142,5 @@ Checks at `d8f5d541e` (own target dir): fmt 0; clippy `-D warnings` 0 with no fe
 and `sharing,pinning` (and `pinning` alone at `d9e17e5c8`'s code before commit); `cargo test -p
 rexx-core --doc` 3 passed and 5 compile_fail passed; `cargo test --workspace --release
 --no-fail-fast` (built first, then run under `memcap 8G`) exits 0, 3036 passed and 0 failed. The
-`sharing` witnesses are feature-gated and ran in the measurement runs above, not in that count.
+`sharing` witnesses are feature-gated and are not in that count; all three passed in the debug
+run of item 2, at the code `d9e17e5c8` commits.
