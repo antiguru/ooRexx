@@ -316,13 +316,14 @@ pub struct Outcome {
 #[cfg(feature = "sharing")]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct SharingReport {
-    /// Objects made, the library bootstrap's included.
-    pub objects: u64,
-    /// Of those, the ones the library bootstrap made.
-    pub before_program: u64,
-    /// Objects touched by more than one activity.
-    pub shared: u64,
+    /// The objects the interpreter and its library bootstrap made.
+    pub bootstrap: SharingCount,
+    /// The objects made after the bootstrap.
+    pub program: SharingCount,
 }
+
+#[cfg(feature = "sharing")]
+pub use rexx_core::SharingCount;
 
 /// How deep evaluation went and how much stack it took to get there.
 #[derive(Copy, Clone, Debug, Default)]
@@ -1364,10 +1365,6 @@ struct Interp {
     /// from -- see `Interp::bootstrap_library` for why the boundary is
     /// there and not at process start.
     collections_before_program: u64,
-    /// How many objects the heap had made when the library bootstrap
-    /// finished.
-    #[cfg(feature = "sharing")]
-    objects_before_program: u64,
     #[cfg(feature = "pinning")]
     pinning: pinning::Pinning,
     /// Every activity but the running one.
@@ -2032,8 +2029,6 @@ impl Interp {
             method_objects: FxHashMap::default(),
             library_bootstrap: false,
             collections_before_program: 0,
-            #[cfg(feature = "sharing")]
-            objects_before_program: 0,
             #[cfg(feature = "pinning")]
             pinning: pinning::Pinning::default(),
             activities: scheduler::Activities::new(thread_table),
@@ -2157,9 +2152,7 @@ impl Interp {
         // nothing.
         self.collections_before_program = self.heap.collections_performed();
         #[cfg(feature = "sharing")]
-        {
-            self.objects_before_program = self.heap.sharing_counts().0;
-        }
+        self.heap.sharing_program_starts();
         #[cfg(feature = "pinning")]
         self.pinning.reset();
         self.chunks_refused = 0;
@@ -2732,8 +2725,6 @@ impl Interp {
             method_bodies: _,
             library_bootstrap: _,
             collections_before_program: _,
-            #[cfg(feature = "sharing")]
-                objects_before_program: _,
             #[cfg(feature = "pinning")]
                 pinning: _,
             activities,
@@ -3417,12 +3408,8 @@ fn execute_on(
         pinning: interp.pinning.take(&interp.activity.pins),
         #[cfg(feature = "sharing")]
         sharing: {
-            let (objects, shared) = interp.heap.sharing_counts();
-            SharingReport {
-                objects,
-                before_program: interp.objects_before_program,
-                shared,
-            }
+            let [bootstrap, program] = interp.heap.sharing_counts();
+            SharingReport { bootstrap, program }
         },
     };
     // A pool thread still running a call ends it under the baton, through

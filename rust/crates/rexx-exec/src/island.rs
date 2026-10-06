@@ -44,11 +44,15 @@ impl IslandPayload for (Box<OffBaton>, rexx_api::ffi::ThreadContext) {}
 // `ThreadContext` clone across the release, made before the release and
 // dropped after the reacquire; a pool thread's clone moves here and is dropped
 // under a lend. `Sync` is not granted. Per payload: the root pointer
-// `NonNull<Interp>` is dereferenced only by `Lent::interp`, while its lender
-// waits; a native call's `(Box<OffBaton>, ThreadContext)`, which holds
-// `ObjRef`s and an `Rc`, is taken out by `PooledCall::run` under a lend and
-// put back on the activity's record, and its context dropped, under the
-// recall's lend.
+// `NonNull<Interp>` is dereferenced only by the thread it is lent to, while
+// its lender waits: by `Lent::interp`, and by `HostRef`'s `Deref` and
+// `DerefMut` (`rexx-api/src/ffi.rs`) for a callback, which receives it through
+// `Island::host`. A native call's `(Box<OffBaton>, ThreadContext)` is taken
+// out by `PooledCall::run` under a lend, and the context, an `Rc`, is dropped
+// under the recall's lend. The box holds no `Rc` or `Cell` (its parts are
+// `ObjRef` words, byte buffers, stub pointers and an `Arc`): it goes back on
+// the activity's record under that lend, or, for a call abandoned while it
+// ran, drops after the lend is given back.
 unsafe impl<T: IslandPayload> Send for Islanded<T> {}
 
 impl<T> Islanded<T> {

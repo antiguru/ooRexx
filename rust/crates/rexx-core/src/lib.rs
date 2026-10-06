@@ -38,6 +38,8 @@ pub use frame::{FrameArena, FrameBlock, ParkedFrame, RegFrame};
 pub use handle::{
     Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
 };
+#[cfg(feature = "sharing")]
+pub use heap::SharingCount;
 pub use heap::{CollectStats, Heap};
 pub use roots::{ActivityRoots, FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
 

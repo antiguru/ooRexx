@@ -76,12 +76,33 @@ pub struct Heap {
 #[cfg(feature = "sharing")]
 #[derive(Default)]
 struct Sharing {
-    /// Per slot: the tag, and whether a second activity has resolved it.
-    tags: Vec<std::cell::Cell<(u32, bool)>>,
+    tags: Vec<std::cell::Cell<Tag>>,
     current: std::cell::Cell<u32>,
+    /// While above zero, a resolution is not a touch.
+    paused: std::cell::Cell<u32>,
     serials: u32,
-    objects: u64,
-    shared: std::cell::Cell<u64>,
+    /// Whether objects made from here on are the program's.
+    program: bool,
+    /// Objects made, and of those touched by more than one activity, by
+    /// whether the program made them.
+    counts: std::cell::Cell<[SharingCount; 2]>,
+}
+
+/// One slot's tag.
+#[cfg(feature = "sharing")]
+#[derive(Copy, Clone)]
+struct Tag {
+    activity: u32,
+    shared: bool,
+    program: bool,
+}
+
+/// Objects made, and of those touched by more than one activity.
+#[cfg(feature = "sharing")]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct SharingCount {
+    pub objects: u64,
+    pub shared: u64,
 }
 
 impl Heap {
@@ -343,7 +364,11 @@ impl Heap {
         let registry = std::mem::take(&mut self.uninit);
         self.uninit = registry
             .into_iter()
-            .filter(|&r| self.get(r).is_some_and(crate::Object::has_uninit))
+            .filter(|&r| {
+                self.resolve(r).is_some_and(|slot| {
+                    matches!(&self.slots[slot], Slot::Live { object, .. } if object.has_uninit)
+                })
+            })
             .collect();
     }
 
@@ -488,35 +513,64 @@ impl Heap {
         self.sharing.current.set(tag);
     }
 
-    /// How many objects were made, and how many of them more than one
-    /// activity touched.
+    /// Counts objects made from here on as the program's.
     #[cfg(feature = "sharing")]
-    pub fn sharing_counts(&self) -> (u64, u64) {
-        (self.sharing.objects, self.sharing.shared.get())
+    pub fn sharing_program_starts(&mut self) {
+        self.sharing.program = true;
+    }
+
+    /// Stops counting resolutions as touches, for reads the program does not
+    /// make, until a matching `sharing_pause(false)`; pauses nest.
+    #[cfg(feature = "sharing")]
+    pub fn sharing_pause(&self, paused: bool) {
+        let depth = self.sharing.paused.get();
+        self.sharing
+            .paused
+            .set(if paused { depth + 1 } else { depth - 1 });
+    }
+
+    /// The counts for objects made before [`Heap::sharing_program_starts`],
+    /// and for those made after it.
+    #[cfg(feature = "sharing")]
+    pub fn sharing_counts(&self) -> [SharingCount; 2] {
+        self.sharing.counts.get()
     }
 
     #[cfg(feature = "sharing")]
     fn made(&mut self, slot: u32) {
-        let tag = (self.sharing.current.get(), false);
+        let program = self.sharing.program;
+        let tag = Tag {
+            activity: self.sharing.current.get(),
+            shared: false,
+            program,
+        };
         let slot = slot as usize;
         if slot == self.sharing.tags.len() {
             self.sharing.tags.push(std::cell::Cell::new(tag));
         } else {
             self.sharing.tags[slot].set(tag);
         }
-        self.sharing.objects += 1;
+        let mut counts = self.sharing.counts.get();
+        counts[usize::from(program)].objects += 1;
+        self.sharing.counts.set(counts);
     }
 
     #[cfg(feature = "sharing")]
     fn resolved(&self, slot: usize) {
         let current = self.sharing.current.get();
         let cell = &self.sharing.tags[slot];
-        let (tag, shared) = cell.get();
-        if tag != current {
-            if !shared {
-                self.sharing.shared.set(self.sharing.shared.get() + 1);
+        let tag = cell.get();
+        if tag.activity != current && self.sharing.paused.get() == 0 {
+            if !tag.shared {
+                let mut counts = self.sharing.counts.get();
+                counts[usize::from(tag.program)].shared += 1;
+                self.sharing.counts.set(counts);
             }
-            cell.set((current, true));
+            cell.set(Tag {
+                activity: current,
+                shared: true,
+                ..tag
+            });
         }
     }
 }

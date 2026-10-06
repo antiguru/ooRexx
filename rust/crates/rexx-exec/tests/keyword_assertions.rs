@@ -14,6 +14,9 @@
 //! `rexx_exec`'s public entry point, and checks each `self~assertSame` the
 //! way the ooTest framework's own `assertSame` does.
 
+#[cfg(feature = "sharing")]
+mod watchdog;
+
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
 use rexx_extract::find_test_groups;
 use rexx_extract::keyword::{ASSERTION_MARKER, DropReason, KeywordBody, extract_keyword};
@@ -164,11 +167,14 @@ fn parse_loud(stderr: &[u8]) -> (String, Option<String>) {
 
 /// Runs one body and classifies what happened.
 fn evaluate(body: &KeywordBody) -> RunOutcome {
-    classify(run_program(
+    let outcome = run_program(
         BODY_PATH,
         body.program.clone().into_bytes(),
         rexx_exec::Invocation::none(),
-    ))
+    );
+    #[cfg(feature = "sharing")]
+    watchdog::log_sharing(BODY_PATH, &outcome);
+    classify(outcome)
 }
 
 /// The classification step alone, so the constructed witnesses below can

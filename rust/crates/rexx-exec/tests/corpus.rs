@@ -956,8 +956,10 @@ fn sharing_fraction_over_the_corpus() {
         .map(|name| corpus_dir.join(name))
         .collect();
     let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
-    let mut rows =
-        String::from("| program | objects | before program | shared |\n|---|---|---|---|\n");
+    let mut rows = String::from(
+        "| program | bootstrap objects | bootstrap shared | program objects | program shared |\n\
+         |---|---|---|---|---|\n",
+    );
     let mut total = rexx_exec::SharingReport::default();
     for rel_path in &subset {
         let abs = fs::canonicalize(corpus_dir.join(rel_path))
@@ -967,24 +969,33 @@ fn sharing_fraction_over_the_corpus() {
         let overrides = resolved_environment(&sidecar, &dir);
         let cwd = prepare_run_directory(&dir, &sidecar);
         let sharing = run_rust(&abs, &cwd, &overrides, sidecar.stdin.as_deref()).sharing;
-        total.objects += sharing.objects;
-        total.before_program += sharing.before_program;
-        total.shared += sharing.shared;
-        if sharing.shared != 0 {
+        for (sum, count) in [
+            (&mut total.bootstrap, sharing.bootstrap),
+            (&mut total.program, sharing.program),
+        ] {
+            sum.objects += count.objects;
+            sum.shared += count.shared;
+        }
+        if sharing.bootstrap.shared + sharing.program.shared != 0 {
             writeln!(
                 rows,
-                "| {rel_path} | {} | {} | {} |",
-                sharing.objects, sharing.before_program, sharing.shared
+                "| {rel_path} | {} | {} | {} | {} |",
+                sharing.bootstrap.objects,
+                sharing.bootstrap.shared,
+                sharing.program.objects,
+                sharing.program.shared
             )
             .expect("a String takes a write");
         }
     }
     let text = format!(
-        "programs {}, objects {}, made before the program {}, shared {}\n\n{rows}",
+        "programs {}\n\n| | objects | shared |\n|---|---|---|\n\
+         | bootstrap | {} | {} |\n| program | {} | {} |\n\n{rows}",
         subset.len(),
-        total.objects,
-        total.before_program,
-        total.shared
+        total.bootstrap.objects,
+        total.bootstrap.shared,
+        total.program.objects,
+        total.program.shared
     );
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sharing-corpus.md");
     fs::write(&out, &text).expect("cannot write the table");

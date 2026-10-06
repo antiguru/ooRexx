@@ -1,10 +1,10 @@
 #!/bin/bash
 # Wall-clock seconds per program per binary, interleaved, median of ROUNDS.
 #
-# usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x PROGRAMS] [-T] NAME=BINARY...
+# usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x ORACLE_PROGRAMS] [-T] NAME=BINARY...
 #   ROUNDS    rounds (default 5); round r starts at arm r
 #   OUTDIR    output directory (default: mktemp -d)
-#   PROGRAMS  programs also run on the oracle (arm name "oracle")
+#   ORACLE_PROGRAMS  programs also run on the oracle (arm name "oracle")
 #   -T        print the table for OUTDIR's wall.tsv without running
 # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
 #      ORACLE_ROOT   the oracle's build directory (default /home/moritz/dev/repos/ooRexx/build)
@@ -28,7 +28,7 @@ while getopts r:o:x:T opt; do
 done
 shift $((OPTIND - 1))
 if [ $# -lt 1 ]; then
-    echo "usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x PROGRAMS] [-T] NAME=BINARY..." >&2
+    echo "usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x ORACLE_PROGRAMS] [-T] NAME=BINARY..." >&2
     exit 2
 fi
 oracle_root=${ORACLE_ROOT:-/home/moritz/dev/repos/ooRexx/build}

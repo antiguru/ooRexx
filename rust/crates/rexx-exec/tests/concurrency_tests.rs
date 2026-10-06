@@ -536,7 +536,7 @@ mod derived_runs {
     pub(super) fn run_test(
         run: &Path,
         group: &str,
-        test: &str,
+        test: Option<&str>,
         mode: Option<SwitchMode>,
     ) -> Outcome {
         let dir = Path::new(group).parent().and_then(Path::to_str);
@@ -544,7 +544,10 @@ mod derived_runs {
         let driver = run.join("testOORexx.rex");
         let text = fs::read(&driver).expect("the copied driver");
         let group_file = run.join("ooRexx").join(group);
-        let args = format!("-f {} -U -V 2 -t {test}", group_file.display());
+        let args = match test {
+            Some(test) => format!("-f {} -U -V 2 -t {test}", group_file.display()),
+            None => format!("-f {} -U -V 2", group_file.display()),
+        };
         let lib = super::support::oracle::oracle_root().join("lib");
         let mut environment: Vec<(Vec<u8>, Vec<u8>)> = std::env::vars()
             .filter(|(name, _)| name != "LD_LIBRARY_PATH")
@@ -600,11 +603,11 @@ mod sharing {
     use std::path::{Path, PathBuf};
 
     use rayon::prelude::*;
-    use rexx_exec::{Invocation, SharingReport, run_program};
+    use rexx_exec::{Invocation, SharingCount, SharingReport, run_program};
 
     use super::derive;
     use super::derived_runs::{outcome_of, run_test};
-    use super::group_runner::worktree;
+    use super::group_runner::{reaching_rxapi, worktree};
 
     fn sharing_of(source: &str) -> (String, SharingReport) {
         let outcome = run_program(
@@ -621,17 +624,15 @@ mod sharing {
     /// One activity shares nothing, however much it allocates and reads.
     #[test]
     fn one_activity_shares_nothing() {
-        let (stdout, sharing) = sharing_of(
-            "a = .array~new
-do i = 1 to 50
-  a[i] = i * 2
-end
-say a[50]
-",
-        );
+        let (stdout, sharing) =
+            sharing_of("a = .array~new\ndo i = 1 to 50\n  a[i] = i * 2\nend\nsay a[50]\n");
         assert_eq!(stdout, "100\n");
-        assert!(sharing.objects > sharing.before_program, "{sharing:?}");
-        assert_eq!(sharing.shared, 0, "{sharing:?}");
+        assert!(sharing.program.objects > 0, "{sharing:?}");
+        assert_eq!(
+            sharing.bootstrap.shared + sharing.program.shared,
+            0,
+            "{sharing:?}"
+        );
     }
 
     /// An array the main activity made and a started one reads is shared.
@@ -641,7 +642,52 @@ say a[50]
                       ::class t\n::method look\n  use arg a\n  return a[2]\n";
         let (stdout, sharing) = sharing_of(source);
         assert_eq!(stdout, "y\n");
-        assert!(sharing.shared > 0, "{sharing:?}");
+        assert!(sharing.program.shared > 0, "{sharing:?}");
+    }
+
+    /// Objects with an `UNINIT` that a started activity never names are not
+    /// shared: the heap's registry of them is not a touch.
+    #[test]
+    fn uninit_objects_another_activity_never_names_are_not_shared() {
+        let source = "a = .array~new\ndo i = 1 to 100\n  a[i] = .u~new\nend\n\
+                      say .t~new~start('other')~result\nsay a~items\n\
+                      ::class u\n::method uninit\n\
+                      ::class t\n::method other\n  return 'ok'\n";
+        let (stdout, sharing) = sharing_of(source);
+        assert_eq!(stdout, "ok\n100\n");
+        assert!(sharing.program.shared < 100, "{sharing:?}");
+    }
+
+    fn add(total: &mut SharingReport, one: SharingReport) {
+        for (sum, count) in [
+            (&mut total.bootstrap, one.bootstrap),
+            (&mut total.program, one.program),
+        ] {
+            sum.objects += count.objects;
+            sum.shared += count.shared;
+        }
+    }
+
+    fn cells(count: SharingCount) -> String {
+        format!("{} | {}", count.objects, count.shared)
+    }
+
+    const HEADER: &str =
+        "| bootstrap objects | bootstrap shared | program objects | program shared |";
+
+    fn summary(label: &str, runs: usize, total: SharingReport) -> String {
+        format!(
+            "{label} {runs}\n\n| | objects | shared |\n|---|---|---|\n\
+             | bootstrap | {} |\n| program | {} |\n",
+            cells(total.bootstrap),
+            cells(total.program)
+        )
+    }
+
+    fn write(file: &str, text: &str) {
+        let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join(file);
+        fs::write(&out, text).expect("cannot write the table");
+        println!("{text}\nwritten to {}", out.display());
     }
 
     #[test]
@@ -653,7 +699,12 @@ say a[50]
             .par_iter()
             .enumerate()
             .map(|(at, row)| {
-                let outcome = run_test(&base.join(at.to_string()), &row.group, &row.test, None);
+                let outcome = run_test(
+                    &base.join(at.to_string()),
+                    &row.group,
+                    Some(&row.test),
+                    None,
+                );
                 (
                     format!("{} {}", row.group, row.test),
                     outcome_of(&outcome),
@@ -661,29 +712,87 @@ say a[50]
                 )
             })
             .collect();
-        let mut table = String::from(
-            "| test | outcome | objects | before program | shared |\n|---|---|---|---|---|\n",
-        );
+        let mut table = format!("| test | outcome {HEADER}\n|---|---|---|---|---|---|\n");
         let mut total = SharingReport::default();
         for (test, outcome, sharing) in &rows {
-            total.objects += sharing.objects;
-            total.before_program += sharing.before_program;
-            total.shared += sharing.shared;
+            add(&mut total, *sharing);
             table.push_str(&format!(
-                "| {test} | {outcome} | {} | {} | {} |\n",
-                sharing.objects, sharing.before_program, sharing.shared
+                "| {test} | {outcome} | {} | {} |\n",
+                cells(sharing.bootstrap),
+                cells(sharing.program)
             ));
         }
-        let text = format!(
-            "tests {}, objects {}, made before the program {}, shared {}\n\n{table}",
-            rows.len(),
-            total.objects,
-            total.before_program,
-            total.shared
+        write(
+            "sharing-derived.md",
+            &format!("{}\n{table}", summary("tests", rows.len(), total)),
         );
-        let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sharing-derived.md");
-        fs::write(&out, &text).expect("cannot write the table");
-        println!("{text}\nwritten to {}", out.display());
+    }
+
+    /// Every ooTest group file run whole, in process, but a group with a test
+    /// that reaches rxapi (`group_runner::reaching_rxapi`).
+    #[test]
+    fn sharing_fraction_over_every_ootest_group() {
+        let root = worktree().join("ootest/ooRexx");
+        let mut groups = Vec::new();
+        let mut skipped = Vec::new();
+        let mut pending = vec![root.clone()];
+        while let Some(dir) = pending.pop() {
+            for entry in fs::read_dir(&dir).expect("an ooTest directory").flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                    continue;
+                }
+                let Some(stem) = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| name.strip_suffix(".testGroup"))
+                else {
+                    continue;
+                };
+                let relative = path.strip_prefix(&root).expect("below the root");
+                let group = relative.to_str().expect("a UTF-8 path").to_string();
+                let dir = relative
+                    .parent()
+                    .and_then(Path::to_str)
+                    .expect("a directory");
+                if reaching_rxapi(dir, &[stem]).is_empty() {
+                    groups.push(group);
+                } else {
+                    skipped.push(group);
+                }
+            }
+        }
+        groups.sort();
+        skipped.sort();
+        let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("sharing-groups-{}", std::process::id()));
+        let rows: Vec<(String, String, SharingReport)> = groups
+            .par_iter()
+            .enumerate()
+            .map(|(at, group)| {
+                let outcome = run_test(&base.join(at.to_string()), group, None, None);
+                (group.clone(), outcome_of(&outcome), outcome.sharing)
+            })
+            .collect();
+        let mut table = format!("| group | outcome {HEADER}\n|---|---|---|---|---|---|\n");
+        let mut total = SharingReport::default();
+        for (group, outcome, sharing) in &rows {
+            add(&mut total, *sharing);
+            table.push_str(&format!(
+                "| {group} | {outcome} | {} | {} |\n",
+                cells(sharing.bootstrap),
+                cells(sharing.program)
+            ));
+        }
+        let skipped: String = skipped.iter().map(|group| format!("- {group}\n")).collect();
+        write(
+            "sharing-groups.md",
+            &format!(
+                "{}\nnot run, reaching rxapi:\n\n{skipped}\n{table}",
+                summary("groups", rows.len(), total)
+            ),
+        );
     }
 }
 
@@ -1398,7 +1507,12 @@ mod measured {
             .par_iter()
             .enumerate()
             .map(|(at, row)| {
-                let outcome = run_test(&base.join(at.to_string()), &row.group, &row.test, mode);
+                let outcome = run_test(
+                    &base.join(at.to_string()),
+                    &row.group,
+                    Some(&row.test),
+                    mode,
+                );
                 (
                     format!("{} {}", row.group, row.test),
                     outcome_of(&outcome),

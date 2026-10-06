@@ -19,6 +19,32 @@ use std::time::Duration;
 
 use rexx_exec::{DEADLINE_EXIT, Invocation, Outcome, StackSpan, run_program};
 
+/// The file criterion 6's runs append each run's sharing counts to, one
+/// line each: the path, then the bootstrap's objects and shared objects, then
+/// the program's.
+#[cfg(feature = "sharing")]
+pub const SHARING_LOG_ENV: &str = "REXX_SHARING_LOG";
+
+/// Appends `outcome`'s sharing counts to the file [`SHARING_LOG_ENV`] names.
+#[cfg(feature = "sharing")]
+pub fn log_sharing(path: &str, outcome: &Outcome) {
+    use std::io::Write as _;
+    let Some(log) = std::env::var_os(SHARING_LOG_ENV) else {
+        return;
+    };
+    let rexx_exec::SharingReport { bootstrap, program } = outcome.sharing;
+    let line = format!(
+        "{path}\t{}\t{}\t{}\t{}\n",
+        bootstrap.objects, bootstrap.shared, program.objects, program.shared
+    );
+    std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(log)
+        .and_then(|mut file| file.write_all(line.as_bytes()))
+        .expect("the sharing log is writable");
+}
+
 /// Layer 1's bound on one sweep row.
 pub const ROW_DEADLINE: Duration = Duration::from_secs(60);
 
@@ -55,7 +81,11 @@ pub fn run_bounded_with(
         })
         .expect("spawning the watchdog thread");
     match receiver.recv_timeout(abandon) {
-        Ok(outcome) => outcome,
+        Ok(outcome) => {
+            #[cfg(feature = "sharing")]
+            log_sharing(path, &outcome);
+            outcome
+        }
         Err(mpsc::RecvTimeoutError::Timeout) => abandoned(path, abandon),
         Err(mpsc::RecvTimeoutError::Disconnected) => panic!(
             "the interpreter thread running {path} panicked; its own message is above this one"
