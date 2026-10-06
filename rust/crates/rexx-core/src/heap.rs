@@ -481,6 +481,16 @@ impl Heap {
         }
     }
 
+    /// [`Heap::get_mut`] for a walk of the interpreter's own tables, which
+    /// the sharing instrument does not count, as [`Heap::peek`].
+    pub fn peek_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
+        let slot = self.resolve(r)?;
+        match &mut self.slots[slot] {
+            Slot::Live { object, .. } => Some(object),
+            Slot::Free { .. } => unreachable!("resolve rejects free slots"),
+        }
+    }
+
     pub fn get_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
         let slot = self.resolve(r)?;
         #[cfg(feature = "sharing")]

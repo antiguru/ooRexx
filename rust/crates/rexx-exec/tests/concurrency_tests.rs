@@ -672,6 +672,20 @@ mod sharing {
         assert!(sharing.program.shared < 50, "{sharing:?}");
     }
 
+    /// A stem cleared in a started activity does not share the exposer
+    /// stems of returned `PROCEDURE EXPOSE` calls the exposer table still
+    /// reaches.
+    #[test]
+    fn a_stem_cleared_in_another_activity_shares_no_dead_exposer() {
+        let source = "h. = 0\ndo i = 1 to 100\n  call p\nend\n\
+                      say .t~new~start('clear', h.)~result\nsay h.1\nexit\n\
+                      p: procedure expose h.1\n  h.1 = h.1 + 1\n  return\n\
+                      ::class t\n::method clear\n  use arg s.\n  s.~empty\n  return 'ok'\n";
+        let (stdout, sharing) = sharing_of(source);
+        assert_eq!(stdout, "ok\n0\n");
+        assert!(sharing.program.shared < 50, "{sharing:?}");
+    }
+
     fn add(total: &mut SharingReport, one: SharingReport) {
         for (sum, count) in [
             (&mut total.bootstrap, one.bootstrap),

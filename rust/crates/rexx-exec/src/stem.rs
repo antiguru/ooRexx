@@ -558,7 +558,10 @@ impl Interp {
 
     /// `CompoundVariableTable::clear` over `home`: the elements another stem
     /// exposes stay with that stem, holding what they hold now, and `home`
-    /// no longer has them. Called before `home`'s tails are cleared.
+    /// no longer has them. Called before `home`'s tails are cleared. The
+    /// exposers are reached through the exposer table, which still reaches
+    /// one a returned `PROCEDURE` left as garbage until a collection, so they
+    /// are read untagged.
     pub(crate) fn detach_exposed_tails(&mut self, home: ObjRef) {
         let Some(cells) = self.stem_exposers.get(&home) else {
             return;
@@ -567,7 +570,7 @@ impl Interp {
             .iter()
             .filter_map(|cell| self.weak_target(*cell))
             .filter(|local| {
-                matches!(self.heap.get(*local).map(|object| &object.body),
+                matches!(self.heap.peek(*local).map(|object| &object.body),
                     Some(Body::Stem { exposed: Some(exposed), .. })
                         if exposed.values().any(|value| *value == home))
             })
@@ -601,7 +604,7 @@ impl Interp {
             if let Some(Body::Stem {
                 exposed: Some(exposed),
                 ..
-            }) = self.heap.get_mut(local).map(|object| &mut object.body)
+            }) = self.heap.peek_mut(local).map(|object| &mut object.body)
             {
                 for value in exposed.values_mut() {
                     if *value == home {
