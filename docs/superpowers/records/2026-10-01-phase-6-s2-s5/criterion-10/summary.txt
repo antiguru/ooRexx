@@ -1,0 +1,49 @@
+== oracle u1 (30 runs)
+     30 main end|activity end|uninit live|rc=0|stderr=
+== ours u1 (30 runs)
+     30 main end|activity end|uninit live|rc=0|stderr=
+== every u1 (30 runs)
+     30 main end|activity end|uninit live|rc=0|stderr=
+== oracle u2 (30 runs)
+     30 activity end|main end|uninit dropped|rc=0|stderr=
+== ours u2 (30 runs)
+     30 activity end|main end|uninit dropped|rc=0|stderr=
+== every u2 (30 runs)
+     30 activity end|main end|uninit dropped|rc=0|stderr=
+== oracle u3 (30 runs)
+     30 activity end|main end|uninit dropped 1|rc=0|stderr=
+== ours u3 (30 runs)
+     30 uninit dropped 2|activity end|main end|rc=0|stderr=
+== every u3 (30 runs)
+     30 uninit dropped 2|activity end|main end|rc=0|stderr=
+== oracle u4 (30 runs)
+     30 activity loop done|uninit dropped|activity end|main end|rc=0|stderr=
+== ours u4 (30 runs)
+     30 activity loop done|activity end|uninit dropped|main end|rc=0|stderr=
+== every u4 (30 runs)
+     30 activity loop done|activity end|uninit dropped|main end|rc=0|stderr=
+== oracle u5 (30 runs)
+      2 main end|uninit before reply|rc=0|stderr=
+     28 main end|uninit before reply|uninit after reply|rc=0|stderr=
+== ours u5 (30 runs)
+     30 main end|uninit before reply|rc=0|stderr=
+== every u5 (30 runs)
+     30 main end|uninit before reply|rc=0|stderr=
+== oracle t3 (30 runs)
+     30 main end|uninit starts|uninit after start|rc=7|stderr=
+== ours t3 (30 runs)
+     30 main end|uninit starts|uninit after start|rc=7|stderr=
+== every t3 (30 runs)
+     30 main end|uninit starts|uninit after start|rc=7|stderr=
+== oracle t7 (30 runs)
+     30 main end|uninit starts a poller|rc=0|stderr=
+== ours t7 (30 runs)
+     30 main end|uninit starts a poller|rc=0|stderr=
+== every t7 (30 runs)
+     30 main end|uninit starts a poller|rc=0|stderr=
+== oracle corpus_uaea (30 runs)
+     30 main end|started activity end|uninit of the object the started activity dropped|rc=0|stderr=
+== ours corpus_uaea (30 runs)
+     30 main end|started activity end|uninit of the object the started activity dropped|rc=0|stderr=
+== every corpus_uaea (30 runs)
+     30 main end|started activity end|uninit of the object the started activity dropped|rc=0|stderr=

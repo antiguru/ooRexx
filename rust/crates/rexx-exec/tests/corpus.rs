@@ -1002,3 +1002,100 @@ fn sharing_fraction_over_the_corpus() {
     fs::write(&out, &text).expect("cannot write the table");
     println!("{text}\nwritten to {}", out.display());
 }
+
+/// Criterion 9's pinning report over the corpus (spec 2026-09-29 section 9):
+/// the crate's side of every program [`corpus_differential`] runs, in the
+/// mode `REXX_CORPUS_SWITCH` names, the arrivals summed per park and the
+/// waits per kind, with each program that reached a wait listed.
+#[cfg(feature = "pinning")]
+#[test]
+fn pinning_report_over_the_corpus() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    let frames = |frames: &[rexx_exec::PinKind]| {
+        if frames.is_empty() {
+            return "-".to_string();
+        }
+        frames
+            .iter()
+            .map(|frame| format!("{frame:?}"))
+            .collect::<Vec<_>>()
+            .join(" > ")
+    };
+    let mut arrivals: BTreeMap<String, (usize, u64)> = BTreeMap::new();
+    let mut waits: BTreeMap<(&str, String, String), u64> = BTreeMap::new();
+    let mut programs =
+        String::from("| program | wait | park | frames | count |\n|---|---|---|---|---|\n");
+    let mut unfinished = Vec::new();
+    for rel_path in &subset {
+        let abs = fs::canonicalize(corpus_dir.join(rel_path))
+            .unwrap_or_else(|e| panic!("cannot resolve corpus entry {rel_path}: {e}"));
+        let dir = run_directory(rel_path);
+        let sidecar = sidecar_for(&corpus_dir, rel_path);
+        let overrides = resolved_environment(&sidecar, &dir);
+        let cwd = prepare_run_directory(&dir, &sidecar);
+        let outcome = run_rust(&abs, &cwd, &overrides, sidecar.stdin.as_deref());
+        if watchdog::did_not_finish(&outcome) {
+            unfinished.push(rel_path.clone());
+        }
+        let report = outcome.pinning;
+        for ((park, _), count) in &report.parks {
+            let total = arrivals.entry(format!("{park:?}")).or_default();
+            total.0 += 1;
+            total.1 += count;
+        }
+        let mut found: Vec<(&str, String, String, u64)> = Vec::new();
+        for (what, map) in [
+            ("pinned", &report.pinned_parks),
+            ("inverted", &report.inverted),
+            ("late wake", &report.late_wakes),
+        ] {
+            for ((park, at), count) in map {
+                found.push((what, format!("{park:?}"), frames(at), *count));
+            }
+        }
+        for (what, map) in [
+            ("immovable", &report.immovable_replies),
+            ("deferred slice", &report.deferred_slices),
+            ("pinned yield", &report.pinned_yields),
+            ("inverted yield", &report.inverted_yields),
+        ] {
+            for (at, count) in map {
+                let park = if what == "immovable" { "Reply" } else { "-" };
+                found.push((what, park.to_string(), frames(at), *count));
+            }
+        }
+        for (what, park, at, count) in found {
+            writeln!(
+                programs,
+                "| {rel_path} | {what} | {park} | {at} | {count} |"
+            )
+            .expect("a String takes a write");
+            *waits.entry((what, park, at)).or_default() += count;
+        }
+    }
+    let mut text = format!(
+        "programs {}, did not finish {unfinished:?}\n\n| park | programs | arrivals |\n|---|---|---|\n",
+        subset.len()
+    );
+    for (park, (count, total)) in &arrivals {
+        writeln!(text, "| {park} | {count} | {total} |").expect("a String takes a write");
+    }
+    text.push_str("\n| wait | park | frames | count |\n|---|---|---|---|\n");
+    for ((what, park, at), count) in &waits {
+        writeln!(text, "| {what} | {park} | {at} | {count} |").expect("a String takes a write");
+    }
+    text.push('\n');
+    text.push_str(&programs);
+    let file = match switch_mode() {
+        Some(_) => "pinning-corpus-every-opportunity.md",
+        None => "pinning-corpus.md",
+    };
+    let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join(file);
+    fs::write(&out, &text).expect("cannot write the table");
+    println!("{text}\nwritten to {}", out.display());
+}
