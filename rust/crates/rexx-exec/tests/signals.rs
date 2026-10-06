@@ -999,7 +999,8 @@ fn cpu_ticks(pid: u32) -> u64 {
 
 /// A read of standard input idles while another activity's command end
 /// waits to be filed, rather than spinning: measured by the process's CPU
-/// time over the wait.
+/// time over the wait. The command end is filed once the read ends, so the
+/// program ends.
 #[test]
 fn a_stdin_read_waits_without_spinning() {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -1029,8 +1030,21 @@ fn a_stdin_read_waits_without_spinning() {
         let mut input = child.stdin.take().expect("piped stdin");
         input.write_all(b"hi\n").expect("the write");
     }
+    let written = Instant::now();
+    while written.elapsed() < END_WAIT && matches!(child.try_wait(), Ok(None)) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let ended = !matches!(child.try_wait(), Ok(None));
+    if !ended {
+        let _ = child.kill();
+    }
     let output = child.wait_with_output().expect("rexx-run ends");
     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+    assert!(
+        ended,
+        "rexx-run still running {END_WAIT:?} after the read's input"
+    );
+    assert_eq!(output.status.code(), Some(0));
     assert_eq!(String::from_utf8_lossy(&output.stdout), "v=[hi]\n");
     // USER_HZ is 100: under a tenth of the second the read waited.
     assert!(
