@@ -975,7 +975,9 @@ program (the interpreter and its library bootstrap) and objects the program made
 registry, the interpreter's table prunes and a stem clear's rewrite of the exposer stems its table
 names read through the untagged `resolve`, `Heap::peek` or `Heap::peek_mut`; and
 every debug-only check that reads an object reads under `unshared!`, so a debug build counts what a
-release build does. The enumeration of tagged reads, debug-only checks and iterating functions, its commands and the
+release build does. An UNINIT is sent by the activity whose collection finds its object dead, and counts
+as that activity's touch, so the figure depends on which activity triggers a collection that runs
+UNINITs (P82). The enumeration of tagged reads, debug-only checks and iterating functions, its commands and the
 classification of each walk are in
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md`. `concurrency_tests`
 witnesses: `sharing::one_activity_shares_nothing`;

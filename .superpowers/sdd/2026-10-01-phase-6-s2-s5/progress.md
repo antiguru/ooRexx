@@ -352,3 +352,11 @@ Task 23: dispatched s5-t23 (opus), brief task-23-impl-brief.md. Task 24 brief re
 Task 23 implementer: DONE_WITH_CONCERNS, 0ac73b804 e57dc8315 300aa2695 3d0ab296b (base 811610f63). Ruling P80: the sharing tags live in rexx-core's Heap accessors (resolution happens there), turned on by rexx-exec's `sharing` feature — the brief's "in rexx-exec" named the wrong crate — cost if wrong: none observable. Ruling P81: criterion 6's ooTest population is criterion 1's derived list (the concurrent ooTest tests, run by the in-process runner); single-activity tests share nothing by construction — cost if wrong: a fraction with a smaller denominator, stated as such in the record. Reviews in parallel: t23-rev-code, t23-rev-record (opus).
 Task 23 record review: CHANGES NEEDED F1-F7 (task-23-review-record.md). P81 withdrawn: its premise (no whole-ooTest in-process runner) is false (group_runner::run_crate and the assertion harnesses run ooTest in process); criterion 6 measures over the whole ooTest those runners reach.
 Task 23 code review: PASS WITH ISSUES C1-C5 (task-23-review-code.md). Fix round 1 -> s5-t23 (resumed), brief task-23-fix1-brief.md.
+Task 23 fix round 1: d9e17e5c8 d8f5d541e a0b1631ab e64886a0f 4db3412ee; DONE_WITH_CONCERNS (OffBaton no-Rc is SAFETY prose only; every-group run needs RAYON_NUM_THREADS=4 under 8G). Re-review t23-rr (opus) -> task-23-rereview-1.md.
+Task 23 re-review 1: CHANGES NEEDED (C2 partial: collect_now table checks tagged; F1 partial: "run whole" overstated; N1 every-group test not ignored). Fix round 2 -> s5-t23.
+Task 23 fix round 2: 2a9bbbe12 efda725c6 cce32934b. Re-review 2 -> t23-rr2.
+Task 23 re-review 2: CHANGES NEEDED (C2 remainder detach_exposed_tails tagged get_mut; N4 nit). F1, N1 fixed. Fix round 3 -> s5-t23.
+Task 23 fix round 3: f078489bc ea52f92d1 9c2c6db44. Re-review 3 -> t23-rr3.
+Task 23 re-review 3: APPROVED (task-23-rereview-3.md); N5-N7 minor. Ruling P82: an UNINIT run by a collection in another activity is a real cross-activity use and stays counted; the record says the figure depends on which activity triggers collection — cost if wrong: a slightly larger shared count. N5-N7 wrap-up to s5-t23, lead checks the diff.
+Task 23 wrap-up (N5-N7) done by the lead (implementer silent 2h, stopped).
+Task 23: complete.

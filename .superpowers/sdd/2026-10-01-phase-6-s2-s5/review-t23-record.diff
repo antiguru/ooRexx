@@ -1,0 +1,884 @@
+diff --git a/docs/superpowers/plans/phase-6-gate.md b/docs/superpowers/plans/phase-6-gate.md
+index 7d66aea5e..0074ea724 100644
+--- a/docs/superpowers/plans/phase-6-gate.md
++++ b/docs/superpowers/plans/phase-6-gate.md
+@@ -899,10 +899,122 @@ DEVIATIONS rows added in S4 (`phase-4-exclusions.txt`), each with owner none:
+ * 13, no other activity runs during a read of the default input stream (P69).
+ 
+ The Migration divergences above (Task 18) are the others S4 records.
+ 
+ #### Queued in S4
+ 
+ `.superpowers/sdd/queued/`: `2026-10-04-aborted-run-leaks-interp`,
+ `2026-10-05-call-on-notready-stdin-eof`, `2026-10-05-stdin-chars-after-drain`,
+ `2026-10-05-stream-fifo-terminal-seek`, `2026-10-05-two-interpreters-signal-race`; and a design
+ note, not a defect, `2026-10-04-send-site-cache-self-customization`.
++
++## S5
++
++### Criterion 4, the single-owner audit (Task 23)
++
++The inventory is derived by ruling P71's command, from the repository root at `0ac73b804`; its
++output is `docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-4-inventory.txt`:
++
++```
++/bin/grep -a -rn 'unsafe impl\|thread::spawn\|thread::Builder\|thread::scope\|Arc<\|Mutex<\|Condvar\|Atomic\|thread_local!' rust/crates
++```
++
++Every hit falls in a row below (file and line at `0ac73b804`). A plain `static` needs no row: the
++compiler requires it to be `Sync`.
++
++| Site | Cross-thread type | Why sound | Fact or test |
++|---|---|---|---|
++| `rexx-exec/src/island.rs:52` | `Islanded<T>`, for the payloads `IslandPayload` lists (`:31`): `NonNull<Interp>` (`Island`) and `(Box<OffBaton>, ThreadContext)` (`PooledCall::work`, `dispatch/library.rs:1077`), which holds `ObjRef`s and an `Rc` | made and taken only on the baton; moved untouched; `Lent<'b>` bounds the `&mut Interp` | `unsafe impl<T: IslandPayload> Send` (P72): a third payload does not compile (`task-23-report.md`); `island::tests::an_island_value_is_made_only_on_the_baton`, `..._taken_only_on_the_baton`; TSan (criterion 3) |
++| `rexx-exec/src/island.rs:130-138` | `Interp`, `RegFrame<'static>` | neither is `Send` | not-`Send` assertion (A3); its control, the same assertion on `u64`, fails E0283 (`task-23-report.md`) |
++| `rexx-exec/src/baton.rs:21,23,26` | `Baton<L>`: `Mutex<State>`, `Condvar`, test `AtomicU64` | the holder and lend state is the lock's data; `lent()` answers only to the lendee | `tests/loom.rs` baton models; TSan |
++| `rexx-exec/src/timer.rs:64,85,87,178,245,287,321`; `lib.rs:1238`; `dispatch/library.rs:1081-1211` | `Arc<Inbox<Posted>>`, `Arc<InterpBaton>`, `Requests(AtomicU32)` | `Posted` holds no `ObjRef`; request bits publish no data | `require_send::<Posted>()` (`scheduler.rs:171`, A4); `ObjRef` compile_fail (`rexx-core/src/handle.rs:52`, `:57`); `tests/loom.rs` inbox and timer models; `scheduler::tests::a_post_from_another_thread_ends_an_idle` |
++| `rexx-exec/src/scheduler/pool.rs:52-83,123,177` | `Arc<Shared>`, `Arc<Mailbox>`, `Job = Box<dyn FnOnce() + Send>` | a job is `Send` by its type; the job kinds (`scheduler.rs:633` native call, `:664` blocking operation, `input.rs:377` stdin) capture `Send` values and `Islanded` | the type of `Job`; `scheduler/tests/pool.rs` |
++| `rexx-exec/src/timer.rs:205` | timer thread | touches only the registry (`Mutex<State>`) and inboxes | `static REGISTRY` (`Sync` by the compiler); loom timer models |
++| `rexx-exec/src/lib.rs:3151` | interpreter thread | its body is `FnOnce + Send + 'static`; `Interp` is built on it | the closure's bound; A3 |
++| `rexx-exec/src/command.rs:618` | pipe drain, `thread::scope` | captures pipes and `&(dyn Fn + Sync)` only | the `Sync` bound |
++| `rexx-exec/src/signal.rs:36,40` | `static PENDING: AtomicBool`, `WAKE: AtomicI32` | async-signal-safe flags; carry no data | `signal.rs` unit tests; loom `timer::signal` models |
++| `rexx-exec/src/sync.rs` | std or loom re-exports, `Wake` | the shim the loom models compile | `tests/loom.rs` |
++| `rexx-api/src/ffi.rs:109,112` | `unsafe impl Send for ValueDescriptor`, `Value` | a word and two ints; pointer members are addresses, dereferenced in `unsafe` at their sites | `require_send::<NativeCall>()`, `<Completion>()` (`invoke.rs:250-254`); `rexx-api/tests/invoke.rs:754-760` moves both across threads |
++| `rexx-api/src/ffi.rs:619` | `Requester = Arc<dyn Baton + Send + Sync>` | a foreign thread reaches the interpreter only by taking the baton | `HostRef` debug asserts (`ffi.rs:192`, `:208`, `:1320`) tested by `ffi.rs:6330`; `scheduler/tests/callbacks.rs` |
++| `rexx-api/src/ffi.rs:700`, `layout.rs:421`, `load.rs:1518` | non-test `thread_local!`s `CALLING`, `REFUSED`, `HOOK_THREW` | per native call on one OS thread's stack; no `ObjRef` | a `thread_local!` value is not sent; every other `thread_local!` hit is `#[cfg(test)]` or in a test file (`/bin/grep -a -rn -B3 'thread_local!' --include=*.rs rust/crates`) |
++| `rexx-api/src/load.rs:113-205,1157-2018` | `Arc<Mapping>` (`Mutex<Option<Library>>`, `AtomicBool`, `AtomicUsize`) | a close refuses while a call is counted in flight; the row outlives its mapping by the `Arc` | compile_fail `load.rs:191`, `:1681`; `load.rs` tests |
++| `rexx-api/src/load.rs:746-900` (doc-hidden) | foreign-thread and buffer-handshake test natives (P70) | play an extension's foreign thread | `scheduler/tests/callbacks.rs`, `scheduler/tests/lent.rs` |
++| `rexx-parse/src/selector.rs:19,44` | `Selector(Arc<[u8]>)` | immutable bytes | `Arc<[u8]>: Send + Sync` |
++| test, tool and probe files: `rexx-api/src/ffi.rs` tests, `rexx-api/src/invoke/tests.rs`, `rexx-api/tests/invoke.rs`, `rexx-exec/src/scheduler/tests*`, `rexx-exec/src/dispatch/library/tests.rs`, `rexx-exec/src/ir/corpus_shape_tests.rs`, `rexx-exec/src/bin/rexx-ir.rs`, `rexx-exec/tests/*`, `rexx-classes/tests/*`, `rexx-parse/tests/deep.rs`, `rexx-parse/examples/depth_probe.rs`; and `#[cfg(test)]` counters in `rexx-exec/src/{lib,scheduler,install,ir/compile,ir/counters,dispatch/library}.rs`, `rexx-num/src/addsub.rs` | test harness, tool and probe threads, test counters | outside the interpreter or compiled only for tests | not in the shipped interpreter |
++
++The static assertions Task 23 adds (the S5 audit's A1-A5, `s5-find-audit.md`):
++
++* A1, `rexx-core/src/frame.rs:90`, `:99`: compile_fail doctests, a `RegFrame` held by a `'static`
++  value (E0597) and sent (E0277), with a compiling control holding the register's `ObjRef`.
++* A2, `rexx-core/src/body.rs:138`: `require_static::<Body>()`.
++* A3, `rexx-exec/src/island.rs:130-138`: `Interp` and `RegFrame<'static>` are not `Send`.
++* A4, `rexx-exec/src/scheduler.rs:171`: `require_send::<Posted>()`.
++* A5, `rexx-exec/src/island.rs:31`, `:52`: `Islanded`'s payloads sealed (P72).
++
++`cargo test -p rexx-core --doc` at `0ac73b804`: 3 passed, and 5 compile_fail passed.
++
++Two spec sentences are amended to what holds (P73), in
++`docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md`: section 5's "refuses an object
++handle" adds that object handles reach a pool thread of the same interpreter only inside
++`Islanded` (P52); section 2.5's non-test `thread_local!`s add `CALLING` (P56).
++
++### Criterion 5, D3 frame ownership
++
++| Claim | Fact or test |
++|---|---|
++| no heap object holds a frame | `Body` has no lifetime (`rexx-core/src/body.rs:57`) and is `'static` (A2, `:138`); `RegFrame<'a>` borrows its arena (`frame.rs:117`), cannot outlive it (compile_fail `frame.rs:168`), cannot be held by a `'static` value or sent (A1, `frame.rs:90`, `:99`); `NativeState::Pointer(*mut c_void)` (`body.rs:177`) is a raw pointer outside the lifetime fact and holds C-supplied addresses only (P74) |
++| contexts resolve across all activities | `dispatch/context.rs:159` `at_context`, `scheduler.rs:723` `idle_context_owner` |
++| live, finished, moved | `scheduler::tests::a_context_reads_an_activation_of_another_live_activity` (live, then 98.981 once finished), `scheduler::tests::a_context_follows_its_activation_to_a_reply_continuation` (moved by REPLY); corpus `context_of_another_activity`, `context_moved_by_reply` |
++
++### Criterion 6, the sharing fraction
++
++The `sharing` feature of `rexx-exec` (forwarding `rexx-core`'s) tags each heap slot with the last
++activity that resolved its object through `Heap::get`, `Heap::get_mut` or `Heap::body_text`, or made
++it, and counts objects touched by more than one activity; `Outcome::sharing` reports the counts.
++`concurrency_tests` `sharing::one_activity_shares_nothing` and
++`sharing::an_object_read_by_a_started_activity_is_shared` witness it; the second fails with the
++tag switch in `Interp::switch_to` and `Interp::swap_running` removed (`task-23-report.md`).
++
++Off, it costs nothing: release `rexx-run` built without features from `0ac73b804` has the same
++`.text` hash as one built from the base with only the static assertions applied, and the same
++functions with the same sizes as the base apart from one symbol's name
++(`docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt`).
++
++At `0ac73b804`, from `rust/`, files in `docs/superpowers/records/2026-10-01-phase-6-s2-s5/`:
++
++```
++memcap 8G cargo test --release -p rexx-exec --features sharing --test corpus -- --exact sharing_fraction_over_the_corpus --nocapture
++memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_the_derived_list --nocapture
++```
++
++| run | record | objects | made before the program | shared | shared / objects |
++|---|---|---|---|---|---|
++| corpus, every program of the differential | `sharing-corpus.md` | 520530 | 214064 | 1088 | 0.21% |
++| ooTest, criterion 1's derived list | `sharing-derived.md` | 374510 | 54944 | 790 | 0.21% |
++
++Each record lists its programs or tests with a shared object (corpus) or every test with its
++outcome (derived list).
++
++### Criterion 7, the ping-pong benchmark
++
++`rust/bench-programs/pingpong/pingmsg.rex` (a message started and its result awaited),
++`pingsem.rex` (two activities alternating through two `EventSemaphore`s) and `pingguard.rex` (two
++activities passing a turn through `GUARD ON WHEN`). Recorded, not gated. From `rust/`, `rexx-run` a
++release build of `e57dc8315` without features, 32 CPUs:
++
++```
++PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard" bash bench-programs/wallclock.sh -r 9 -o OUT -x "pingpong/pingmsg pingpong/pingsem pingpong/pingguard" rexx-run=TARGET/release/rexx-run
++```
++
++Load averages 1.18 3.46 6.68 before and 1.42 3.31 6.52 after
++(`docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/binaries.txt`); every run exited 0 with
++the same stdout on both sides. Medians of 9 interleaved runs, seconds (`pingpong/table.txt`, runs in
++`pingpong/wall.tsv`):
++
++| program | rexx-run | oracle |
++|---|---|---|
++| `pingmsg` | 1.325 | 0.656 |
++| `pingsem` | 0.121 | 0.581 |
++| `pingguard` | 0.119 | 0.470 |
++
++Each program gave one stdout and rc 0 in 30 runs on each side (`pingpong/thirty-runs.txt`, by
++`pingpong/thirty-runs.sh`).
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-4-inventory.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-4-inventory.txt
+new file mode 100644
+index 000000000..9caf904a1
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-4-inventory.txt
+@@ -0,0 +1,185 @@
++# criterion 4 inventory (ruling P71), at 0ac73b804, from the repo root:
++# /bin/grep -a -rn 'unsafe impl\|thread::spawn\|thread::Builder\|thread::scope\|Arc<\|Mutex<\|Condvar\|Atomic\|thread_local!' rust/crates
++rust/crates/rexx-exec/src/baton.rs:18:use crate::sync::{Condvar, Mutex, lock, thread, wait};
++rust/crates/rexx-exec/src/baton.rs:21:    state: Mutex<State<L>>,
++rust/crates/rexx-exec/src/baton.rs:23:    changed: Condvar,
++rust/crates/rexx-exec/src/baton.rs:26:    takes: std::sync::atomic::AtomicU64,
++rust/crates/rexx-exec/src/baton.rs:50:            changed: Condvar::new(),
++rust/crates/rexx-exec/src/baton.rs:52:            takes: std::sync::atomic::AtomicU64::new(0),
++rust/crates/rexx-exec/src/signal.rs:25:use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
++rust/crates/rexx-exec/src/signal.rs:36:static PENDING: AtomicBool = AtomicBool::new(false);
++rust/crates/rexx-exec/src/signal.rs:40:static WAKE: AtomicI32 = AtomicI32::new(-1);
++rust/crates/rexx-exec/src/signal.rs:237:            let raiser = std::thread::spawn(|| {
++rust/crates/rexx-exec/src/signal.rs:269:        let raiser = std::thread::spawn(|| {
++rust/crates/rexx-exec/src/island.rs:52:unsafe impl<T: IslandPayload> Send for Islanded<T> {}
++rust/crates/rexx-exec/src/island.rs:163:        std::thread::scope(|scope| {
++rust/crates/rexx-exec/src/scheduler.rs:2292:thread_local! {
++rust/crates/rexx-exec/src/scheduler.rs:2328:thread_local! {
++rust/crates/rexx-exec/src/install.rs:2481:thread_local! {
++rust/crates/rexx-exec/src/scheduler/pool.rs:16:use std::sync::{Arc, Condvar, Mutex, PoisonError};
++rust/crates/rexx-exec/src/scheduler/pool.rs:52:    shared: Arc<Shared>,
++rust/crates/rexx-exec/src/scheduler/pool.rs:58:    state: Mutex<State>,
++rust/crates/rexx-exec/src/scheduler/pool.rs:70:    mailbox: Arc<Mailbox>,
++rust/crates/rexx-exec/src/scheduler/pool.rs:74:    mail: Mutex<Option<Mail>>,
++rust/crates/rexx-exec/src/scheduler/pool.rs:75:    arrived: Condvar,
++rust/crates/rexx-exec/src/scheduler/pool.rs:83:fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
++rust/crates/rexx-exec/src/scheduler/pool.rs:121:            arrived: Condvar::new(),
++rust/crates/rexx-exec/src/scheduler/pool.rs:123:        let spawned = std::thread::Builder::new()
++rust/crates/rexx-exec/src/scheduler/pool.rs:177:fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
++rust/crates/rexx-exec/src/scheduler/tests.rs:279:    let kept = std::thread::Builder::new()
++rust/crates/rexx-exec/src/scheduler/tests.rs:322:    let kept = std::thread::Builder::new()
++rust/crates/rexx-exec/src/scheduler/tests.rs:600:    let armed = std::thread::Builder::new()
++rust/crates/rexx-exec/src/scheduler/tests.rs:1320:        std::thread::spawn(move || inbox.post(7))
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:15:use std::sync::{Condvar, Mutex};
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:29:    counts: Mutex<(usize, usize, usize)>,
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:30:    arrived: Condvar,
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:37:            arrived: Condvar::new(),
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:91:static THREADS: Mutex<Vec<(&str, ThreadId)>> = Mutex::new(Vec::new());
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:136:static BOOM_MARK: Mutex<(Option<std::path::PathBuf>, usize)> = Mutex::new((None, 0));
++rust/crates/rexx-exec/src/scheduler/tests/pool.rs:239:    std::thread::Builder::new()
++rust/crates/rexx-exec/src/scheduler/tests/native.rs:49:    std::thread::Builder::new()
++rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs:29:static THREADS: Mutex<Vec<(usize, ThreadId)>> = Mutex::new(Vec::new());
++rust/crates/rexx-exec/src/command.rs:618:    let err = std::thread::scope(|scope| {
++rust/crates/rexx-exec/src/timer.rs:24:    Arc, AtomicU32, Condvar, Mutex, MutexGuard, Ordering, Wake, lock, now, thread, wait,
++rust/crates/rexx-exec/src/timer.rs:64:pub(crate) struct Requests(AtomicU32);
++rust/crates/rexx-exec/src/timer.rs:85:    queue: Mutex<Queue<T>>,
++rust/crates/rexx-exec/src/timer.rs:87:    arrived: Condvar,
++rust/crates/rexx-exec/src/timer.rs:99:            requests: Requests(AtomicU32::new(0)),
++rust/crates/rexx-exec/src/timer.rs:104:            arrived: Condvar::new(),
++rust/crates/rexx-exec/src/timer.rs:178:    inbox: Arc<Inbox<Posted>>,
++rust/crates/rexx-exec/src/timer.rs:205:        let timer = thread::Builder::new()
++rust/crates/rexx-exec/src/timer.rs:245:    state: Mutex<State>,
++rust/crates/rexx-exec/src/timer.rs:287:    inbox: Arc<Inbox<Posted>>,
++rust/crates/rexx-exec/src/timer.rs:321:    pub(crate) fn inbox(&self) -> Arc<Inbox<Posted>> {
++rust/crates/rexx-exec/src/lib.rs:228:thread_local! {
++rust/crates/rexx-exec/src/lib.rs:257:thread_local! {
++rust/crates/rexx-exec/src/lib.rs:271:thread_local! {
++rust/crates/rexx-exec/src/lib.rs:1238:    baton: crate::sync::Arc<crate::island::InterpBaton>,
++rust/crates/rexx-exec/src/lib.rs:3151:    let interpreter = std::thread::Builder::new()
++rust/crates/rexx-exec/src/sync.rs:19:pub(crate) use loom::sync::atomic::{AtomicU32, Ordering};
++rust/crates/rexx-exec/src/sync.rs:21:pub(crate) use loom::sync::{Arc, Condvar, Mutex, MutexGuard};
++rust/crates/rexx-exec/src/sync.rs:25:pub(crate) use std::sync::atomic::{AtomicU32, Ordering};
++rust/crates/rexx-exec/src/sync.rs:27:pub(crate) use std::sync::{Arc, Condvar, Mutex, MutexGuard};
++rust/crates/rexx-exec/src/sync.rs:36:pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
++rust/crates/rexx-exec/src/sync.rs:41:pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
++rust/crates/rexx-exec/src/sync.rs:148:    woken: Mutex<bool>,
++rust/crates/rexx-exec/src/sync.rs:149:    arrived: Condvar,
++rust/crates/rexx-exec/src/sync.rs:150:    signalled: loom::sync::atomic::AtomicBool,
++rust/crates/rexx-exec/src/sync.rs:158:            arrived: Condvar::new(),
++rust/crates/rexx-exec/src/sync.rs:159:            signalled: loom::sync::atomic::AtomicBool::new(false),
++rust/crates/rexx-exec/src/sync.rs:214:    static ref CLOCK: (Instant, std::sync::atomic::AtomicU64) =
++rust/crates/rexx-exec/src/sync.rs:215:        (Instant::now(), std::sync::atomic::AtomicU64::new(0));
++rust/crates/rexx-exec/src/dispatch/library/tests.rs:688:thread_local! {
++rust/crates/rexx-exec/src/dispatch/library/tests.rs:735:static PROGRAM_HOOKS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
++rust/crates/rexx-exec/src/dispatch/library.rs:1081:    baton: Arc<InterpBaton>,
++rust/crates/rexx-exec/src/dispatch/library.rs:1082:    inbox: Arc<Inbox<Posted>>,
++rust/crates/rexx-exec/src/dispatch/library.rs:1094:        baton: &Arc<InterpBaton>,
++rust/crates/rexx-exec/src/dispatch/library.rs:1095:        inbox: Arc<Inbox<Posted>>,
++rust/crates/rexx-exec/src/dispatch/library.rs:1206:    baton: Arc<InterpBaton>,
++rust/crates/rexx-exec/src/dispatch/library.rs:1207:    inbox: Arc<Inbox<Posted>>,
++rust/crates/rexx-exec/src/dispatch/library.rs:1211:    pub(crate) fn new(baton: &Arc<InterpBaton>, inbox: Arc<Inbox<Posted>>) -> Requester {
++rust/crates/rexx-exec/src/dispatch/library.rs:1277:thread_local! {
++rust/crates/rexx-exec/src/ir/compile.rs:1929:thread_local! {
++rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs:540:    let sweep = std::thread::Builder::new()
++rust/crates/rexx-exec/src/ir/counters.rs:17:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:36:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:62:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:82:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:102:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:122:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:142:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:162:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:182:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:202:thread_local! {
++rust/crates/rexx-exec/src/ir/counters.rs:222:thread_local! {
++rust/crates/rexx-exec/src/bin/rexx-ir.rs:43:    let rendered = std::thread::Builder::new()
++rust/crates/rexx-exec/tests/watchdog/mod.rs:48:    std::thread::Builder::new()
++rust/crates/rexx-exec/tests/loom.rs:29:use loom::sync::atomic::{AtomicUsize, Ordering};
++rust/crates/rexx-exec/tests/loom.rs:36:fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
++rust/crates/rexx-exec/tests/loom.rs:52:        let inside = Arc::new(AtomicUsize::new(0));
++rust/crates/rexx-exec/tests/loom.rs:56:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:74:        let inside = Arc::new(AtomicUsize::new(0));
++rust/crates/rexx-exec/tests/loom.rs:79:                thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:101:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:175:        let other = thread::spawn(|| {
++rust/crates/rexx-exec/tests/loom.rs:191:        let handler = thread::spawn(timer::signal);
++rust/crates/rexx-exec/tests/loom.rs:209:        let handler = thread::spawn(timer::signal);
++rust/crates/rexx-exec/tests/loom.rs:239:fn touch(inside: &AtomicUsize) {
++rust/crates/rexx-exec/tests/loom.rs:257:        let inside = Arc::new(AtomicUsize::new(0));
++rust/crates/rexx-exec/tests/loom.rs:263:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:295:            thread::spawn(move || inbox.post(7))
++rust/crates/rexx-exec/tests/loom.rs:318:        let inside = Arc::new(AtomicUsize::new(0));
++rust/crates/rexx-exec/tests/loom.rs:322:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:333:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:356:        let inside = Arc::new(AtomicUsize::new(0));
++rust/crates/rexx-exec/tests/loom.rs:365:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/loom.rs:399:            thread::spawn(move || inbox.post(3))
++rust/crates/rexx-exec/tests/loom.rs:420:            thread::spawn(move || {
++rust/crates/rexx-exec/tests/signals.rs:124:    let reader = std::thread::spawn(move || {
++rust/crates/rexx-exec/tests/signals.rs:132:    let errors = std::thread::spawn(move || {
++rust/crates/rexx-exec/tests/support/group_runner.rs:677:static ROWS: std::sync::Mutex<Rows> = std::sync::Mutex::new(Rows {
++rust/crates/rexx-exec/tests/support/group_runner.rs:683:static TURN: std::sync::Condvar = std::sync::Condvar::new();
++rust/crates/rexx-exec/tests/support/group_runner.rs:778:    let alone: Vec<(usize, T)> = std::thread::scope(|scope| {
++rust/crates/rexx-exec/tests/support/oracle.rs:26:use std::sync::atomic::{AtomicUsize, Ordering};
++rust/crates/rexx-exec/tests/support/oracle.rs:70:    invocations: AtomicUsize,
++rust/crates/rexx-exec/tests/support/oracle.rs:150:        invocations: AtomicUsize::new(0),
++rust/crates/rexx-exec/tests/support/oracle.rs:356:    thread::spawn(move || {
++rust/crates/rexx-exec/tests/support/oracle.rs:361:    thread::spawn(move || {
++rust/crates/rexx-exec/tests/prompt_before_read.rs:68:    std::thread::spawn(move || {
++rust/crates/rexx-exec/tests/stdin_contention.rs:77:    let out = std::thread::spawn(move || {
++rust/crates/rexx-exec/tests/stdin_contention.rs:82:    let err = std::thread::spawn(move || {
++rust/crates/rexx-exec/tests/program_end.rs:47:    std::thread::spawn(move || {
++rust/crates/rexx-parse/src/selector.rs:19:pub struct Selector(Arc<[u8]>);
++rust/crates/rexx-parse/src/selector.rs:44:pub(crate) struct SelectorTable(FxHashSet<Arc<[u8]>>);
++rust/crates/rexx-parse/src/selector.rs:57:        let fresh: Arc<[u8]> = Arc::from(name);
++rust/crates/rexx-parse/examples/depth_probe.rs:21:            let handle = std::thread::Builder::new()
++rust/crates/rexx-parse/examples/depth_probe.rs:39:            let handle = std::thread::Builder::new()
++rust/crates/rexx-parse/examples/depth_probe.rs:61:            let handle = std::thread::Builder::new()
++rust/crates/rexx-parse/examples/depth_probe.rs:102:            let mut builder = std::thread::Builder::new();
++rust/crates/rexx-parse/examples/depth_probe.rs:126:            let handle = std::thread::Builder::new()
++rust/crates/rexx-parse/examples/depth_probe.rs:150:            let mut builder = std::thread::Builder::new();
++rust/crates/rexx-parse/examples/depth_probe.rs:184:            let handle = std::thread::Builder::new()
++rust/crates/rexx-parse/examples/depth_probe.rs:205:            let handle = std::thread::Builder::new()
++rust/crates/rexx-parse/tests/deep.rs:42:    std::thread::Builder::new()
++rust/crates/rexx-parse/tests/deep.rs:60:    let handle = std::thread::Builder::new()
++rust/crates/rexx-api/src/layout.rs:421:thread_local! {
++rust/crates/rexx-api/src/load.rs:29:use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
++rust/crates/rexx-api/src/load.rs:113:    handle: Mutex<Option<libloading::Library>>,
++rust/crates/rexx-api/src/load.rs:114:    open: AtomicBool,
++rust/crates/rexx-api/src/load.rs:116:    calls: AtomicUsize,
++rust/crates/rexx-api/src/load.rs:120:    fn new(handle: Option<libloading::Library>) -> Arc<Mapping> {
++rust/crates/rexx-api/src/load.rs:123:            open: AtomicBool::new(true),
++rust/crates/rexx-api/src/load.rs:124:            calls: AtomicUsize::new(0),
++rust/crates/rexx-api/src/load.rs:134:        struct InFlight<'a>(&'a AtomicUsize);
++rust/crates/rexx-api/src/load.rs:205:    mapping: Arc<Mapping>,
++rust/crates/rexx-api/src/load.rs:770:        let foreign = std::thread::spawn(move || {
++rust/crates/rexx-api/src/load.rs:819:        let answered = std::thread::spawn(move || {
++rust/crates/rexx-api/src/load.rs:892:static BUFFER_HANDSHAKE: Mutex<BufferHandshake> = Mutex::new(BufferHandshake {
++rust/crates/rexx-api/src/load.rs:897:static BUFFER_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
++rust/crates/rexx-api/src/load.rs:1157:    mapping: Arc<Mapping>,
++rust/crates/rexx-api/src/load.rs:1203:    mapping: Arc<Mapping>,
++rust/crates/rexx-api/src/load.rs:1210:    fn new(mapping: &Arc<Mapping>, stub: impl FnOnce() -> Option<S>) -> Held<S> {
++rust/crates/rexx-api/src/load.rs:1518:thread_local! {
++rust/crates/rexx-api/src/load.rs:1558:    mapping: Arc<Mapping>,
++rust/crates/rexx-api/src/load.rs:1981:    mapping: &Arc<Mapping>,
++rust/crates/rexx-api/src/load.rs:2018:    mapping: &Arc<Mapping>,
++rust/crates/rexx-api/src/invoke/tests.rs:46:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:109:unsafe impl Send for ValueDescriptor {}
++rust/crates/rexx-api/src/ffi.rs:112:unsafe impl Send for Value {}
++rust/crates/rexx-api/src/ffi.rs:619:pub type Requester = std::sync::Arc<dyn crate::values::Baton + Send + Sync>;
++rust/crates/rexx-api/src/ffi.rs:700:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:4485:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:4796:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:4852:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:4926:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:5014:thread_local! {
++rust/crates/rexx-api/src/ffi.rs:6283:        unsafe impl Send for Shared {}
++rust/crates/rexx-api/src/ffi.rs:6294:        std::thread::scope(|scope| {
++rust/crates/rexx-api/tests/invoke.rs:67:thread_local! {
++rust/crates/rexx-api/tests/invoke.rs:754:            let mut native = std::thread::spawn(move || native)
++rust/crates/rexx-api/tests/invoke.rs:758:            let completion = std::thread::spawn(move || completion)
++rust/crates/rexx-classes/tests/uninit_sweep_order.rs:10:    use std::sync::atomic::{AtomicU32, Ordering};
++rust/crates/rexx-classes/tests/uninit_sweep_order.rs:11:    static NEXT: AtomicU32 = AtomicU32::new(1);
++rust/crates/rexx-classes/tests/native_classes_wiring.rs:14:    use std::sync::atomic::{AtomicU32, Ordering};
++rust/crates/rexx-classes/tests/native_classes_wiring.rs:15:    static NEXT: AtomicU32 = AtomicU32::new(1);
++rust/crates/rexx-num/src/addsub.rs:198:thread_local! {
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/README.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/README.txt
+new file mode 100644
+index 000000000..fb32bc7bc
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/README.txt
+@@ -0,0 +1,4 @@
++# Criterion 7, from rust/, rexx-run a release build of e57dc8315 without features:
++# PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard" bash bench-programs/wallclock.sh -r 9 -o OUT -x "pingpong/pingmsg pingpong/pingsem pingpong/pingguard" rexx-run=TARGET/release/rexx-run
++# wallclock.sh exited 0: every run exited 0 and every stdout matched rexx-run's first.
++# 32 CPUs; load averages before and after are in binaries.txt.
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/binaries.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/binaries.txt
+new file mode 100644
+index 000000000..4fe540773
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/binaries.txt
+@@ -0,0 +1,3 @@
++# 2026-10-06T10:32:10Z rounds=9 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib load=1.18 3.46 6.68
++# rexx-run /tmp/claude-1000/p6-t23/target/release/rexx-run fc3aeca627bc06c6cd4eae06daa78c97971ba5a936726ec8df2a1157dc915ac0
++# end load=1.42 3.31 6.52
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/table.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/table.txt
+new file mode 100644
+index 000000000..770bb2878
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/table.txt
+@@ -0,0 +1,4 @@
++program	rexx-run median	oracle median	oracle d%
++pingpong/pingmsg	1.325	0.656	-50.49
++pingpong/pingsem	0.121	0.581	+380.17
++pingpong/pingguard	0.119	0.470	+294.96
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/thirty-runs.sh b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/thirty-runs.sh
+new file mode 100644
+index 000000000..b3af90c3d
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/thirty-runs.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++# 30 oracle runs of each ping-pong program from a fresh empty dir: distinct
++# stdout, stderr and rc.
++B=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong
++for p in pingmsg pingsem pingguard; do
++    d=$(mktemp -d /tmp/claude-1000/p6-t23/o30.XXXX)
++    for i in $(seq 30); do
++        ( cd "$d" && ulimit -v 1048576 && LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -s KILL 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx $B/$p.rex 2>&1; echo "rc=$?" )
++    done | sort | uniq -c | sed "s/^/$p /"
++    rmdir "$d"
++    for i in $(seq 30); do
++        ( timeout -s KILL 20 /tmp/claude-1000/p6-t23/target/release/rexx-run $B/$p.rex 2>&1; echo "rc=$?" )
++    done | sort | uniq -c | sed "s/^/$p rexx-run /"
++done
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/thirty-runs.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/thirty-runs.txt
+new file mode 100644
+index 000000000..2c37b90c5
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/thirty-runs.txt
+@@ -0,0 +1,13 @@
++# 30 runs per side by thirty-runs.sh (rexx-run: a release build of e57dc8315): count, then line
++pingmsg      30 80000
++pingmsg      30 rc=0
++pingmsg rexx-run      30 80000
++pingmsg rexx-run      30 rc=0
++pingsem      30 done
++pingsem      30 rc=0
++pingsem rexx-run      30 done
++pingsem rexx-run      30 rc=0
++pingguard      30 done
++pingguard      30 rc=0
++pingguard rexx-run      30 done
++pingguard rexx-run      30 rc=0
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/wall.tsv b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/wall.tsv
+new file mode 100644
+index 000000000..1242fe2ae
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/wall.tsv
+@@ -0,0 +1,54 @@
++rexx-run	pingpong/pingmsg	r1	1.341
++oracle	pingpong/pingmsg	r1	0.652
++rexx-run	pingpong/pingsem	r1	0.122
++oracle	pingpong/pingsem	r1	0.432
++rexx-run	pingpong/pingguard	r1	0.119
++oracle	pingpong/pingguard	r1	0.464
++oracle	pingpong/pingmsg	r2	0.742
++rexx-run	pingpong/pingmsg	r2	1.327
++oracle	pingpong/pingsem	r2	0.721
++rexx-run	pingpong/pingsem	r2	0.119
++oracle	pingpong/pingguard	r2	0.550
++rexx-run	pingpong/pingguard	r2	0.119
++rexx-run	pingpong/pingmsg	r3	1.315
++oracle	pingpong/pingmsg	r3	0.640
++rexx-run	pingpong/pingsem	r3	0.119
++oracle	pingpong/pingsem	r3	0.420
++rexx-run	pingpong/pingguard	r3	0.120
++oracle	pingpong/pingguard	r3	0.447
++oracle	pingpong/pingmsg	r4	0.656
++rexx-run	pingpong/pingmsg	r4	1.287
++oracle	pingpong/pingsem	r4	0.517
++rexx-run	pingpong/pingsem	r4	0.121
++oracle	pingpong/pingguard	r4	0.582
++rexx-run	pingpong/pingguard	r4	0.118
++rexx-run	pingpong/pingmsg	r5	1.323
++oracle	pingpong/pingmsg	r5	1.003
++rexx-run	pingpong/pingsem	r5	0.117
++oracle	pingpong/pingsem	r5	0.592
++rexx-run	pingpong/pingguard	r5	0.116
++oracle	pingpong/pingguard	r5	0.577
++oracle	pingpong/pingmsg	r6	0.798
++rexx-run	pingpong/pingmsg	r6	1.347
++oracle	pingpong/pingsem	r6	0.733
++rexx-run	pingpong/pingsem	r6	0.121
++oracle	pingpong/pingguard	r6	0.470
++rexx-run	pingpong/pingguard	r6	0.119
++rexx-run	pingpong/pingmsg	r7	1.317
++oracle	pingpong/pingmsg	r7	0.626
++rexx-run	pingpong/pingsem	r7	0.117
++oracle	pingpong/pingsem	r7	0.421
++rexx-run	pingpong/pingguard	r7	0.118
++oracle	pingpong/pingguard	r7	0.470
++oracle	pingpong/pingmsg	r8	0.667
++rexx-run	pingpong/pingmsg	r8	1.325
++oracle	pingpong/pingsem	r8	0.739
++rexx-run	pingpong/pingsem	r8	0.123
++oracle	pingpong/pingguard	r8	0.464
++rexx-run	pingpong/pingguard	r8	0.118
++rexx-run	pingpong/pingmsg	r9	1.328
++oracle	pingpong/pingmsg	r9	0.619
++rexx-run	pingpong/pingsem	r9	0.126
++oracle	pingpong/pingsem	r9	0.581
++rexx-run	pingpong/pingguard	r9	0.119
++oracle	pingpong/pingguard	r9	0.502
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-corpus.md b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-corpus.md
+new file mode 100644
+index 000000000..851b714fd
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-corpus.md
+@@ -0,0 +1,119 @@
++# criterion 6 over the corpus, at 0ac73b804, from rust/:
++# memcap 8G cargo test --release -p rexx-exec --features sharing --test corpus -- --exact sharing_fraction_over_the_corpus --nocapture
++
++programs 787, objects 520530, made before the program 214064, shared 1088
++
++| program | objects | before program | shared |
++|---|---|---|---|
++| lang/method_reply.rex | 281 | 272 | 9 |
++| lang/method_reply_twice.rex | 280 | 272 | 9 |
++| lang/method_reply_no_result.rex | 277 | 272 | 5 |
++| lang/method_reply_exit_status.rex | 280 | 272 | 9 |
++| lang/method_reply_chain.rex | 286 | 272 | 1 |
++| lang/class_context_reply.rex | 471 | 272 | 5 |
++| lang/forward_after_reply.rex | 290 | 272 | 10 |
++| lang/object_start.rex | 331 | 272 | 5 |
++| lang/object_start_multidimensional.rex | 288 | 272 | 2 |
++| lang/directive_options_trace_reply.rex | 281 | 272 | 9 |
++| lang/send_resumable_entries.rex | 369 | 272 | 5 |
++| lang/started_waits_for_a_later_send.rex | 284 | 272 | 3 |
++| lang/started_waits_inside_a_call.rex | 287 | 272 | 8 |
++| lang/started_unwaited_says.rex | 282 | 272 | 7 |
++| lang/started_result_message.rex | 282 | 272 | 2 |
++| lang/started_raises.rex | 302 | 272 | 12 |
++| lang/message_wait_then_completed.rex | 282 | 272 | 2 |
++| lang/message_two_waiters.rex | 291 | 272 | 5 |
++| lang/message_start.rex | 295 | 272 | 3 |
++| lang/started_waited_in_a_replied_body.rex | 287 | 272 | 8 |
++| lang/started_waited_in_uninit.rex | 287 | 272 | 2 |
++| lang/context_thread_numbers.rex | 304 | 272 | 9 |
++| lang/context_thread_sequential.rex | 291 | 272 | 7 |
++| lang/context_thread_pool_bound.rex | 387 | 272 | 31 |
++| lang/context_thread_lazy.rex | 307 | 272 | 10 |
++| lang/message_start_error_condition.rex | 337 | 272 | 22 |
++| lang/message_result_reraise.rex | 393 | 272 | 17 |
++| lang/message_result_relayed.rex | 327 | 272 | 22 |
++| lang/message_accessors.rex | 361 | 272 | 5 |
++| lang/message_reuse.rex | 403 | 272 | 3 |
++| lang/started_numeric_address.rex | 319 | 272 | 5 |
++| lang/message_error_condition_after_main.rex | 318 | 272 | 12 |
++| lang/message_send_user_condition.rex | 313 | 272 | 2 |
++| lang/started_primitive_error_condition.rex | 342 | 272 | 22 |
++| lang/message_primitive_send_fails_main.rex | 322 | 272 | 11 |
++| lang/message_send_fails_main_frames.rex | 330 | 272 | 17 |
++| lang/message_halt_wait.rex | 399 | 272 | 19 |
++| lang/message_halt_self.rex | 339 | 272 | 20 |
++| lang/message_halt_untrapped.rex | 307 | 272 | 16 |
++| lang/message_halt_returning.rex | 364 | 272 | 27 |
++| lang/message_halt_loop_step.rex | 472 | 272 | 18 |
++| lang/message_halt_interpret.rex | 384 | 272 | 22 |
++| lang/pinned_busy_wait_interpret.rex | 291 | 272 | 3 |
++| lang/pinned_busy_wait_handler.rex | 308 | 272 | 9 |
++| lang/pinned_busy_wait_external.rex | 284 | 272 | 2 |
++| lang/message_halt_pinned_target.rex | 396 | 272 | 12 |
++| lang/main_ends_in_pinned_yield.rex | 286 | 272 | 2 |
++| lang/main_fails_in_pinned_yield.rex | 311 | 272 | 17 |
++| lang/sleepers_wake_in_deadline_order.rex | 293 | 272 | 4 |
++| lang/sleep_parks_in_if_do_and_argument.rex | 286 | 272 | 7 |
++| lang/sleeper_wakes_busy_main.rex | 285 | 272 | 7 |
++| lang/sleep_in_parse_template_and_when.rex | 315 | 272 | 6 |
++| lang/reply_then_wait.rex | 294 | 272 | 11 |
++| lang/reply_inside_constructs.rex | 326 | 272 | 11 |
++| lang/reply_continuation_error_trace.rex | 333 | 272 | 20 |
++| lang/reply_continuation_error_stderr.rex | 288 | 272 | 13 |
++| lang/reply_continuation_failed_send.rex | 324 | 272 | 19 |
++| lang/reply_split_after_a_trap_at_the_reply.rex | 316 | 272 | 14 |
++| lang/reply_split_after_a_trap_takes_the_failure.rex | 310 | 272 | 10 |
++| lang/reply_split_after_a_trap_does_not_wait.rex | 310 | 272 | 1 |
++| lang/reply_as_the_last_clause_numbers_the_replier.rex | 311 | 272 | 12 |
++| lang/context_of_another_activity.rex | 382 | 272 | 8 |
++| lang/context_moved_by_reply.rex | 303 | 272 | 3 |
++| lang/message_reply.rex | 410 | 272 | 23 |
++| lang/message_notify.rex | 314 | 272 | 14 |
++| lang/message_notify_error.rex | 381 | 272 | 17 |
++| lang/message_notify_single_slot.rex | 392 | 272 | 23 |
++| lang/alarm_fires_after_reply.rex | 297 | 272 | 6 |
++| lang/ticker_cancelled_by_its_target.rex | 291 | 272 | 3 |
++| lang/timer_cancel_in_whole_days.rex | 311 | 272 | 4 |
++| lang/timer_post_wakes_every_waiter.rex | 295 | 272 | 4 |
++| lang/timer_post_reads_the_waiters_cancel.rex | 304 | 272 | 6 |
++| lang/timer_remainder_modulo_2_32.rex | 294 | 272 | 3 |
++| lang/trace_object_activity_fields.rex | 1329 | 272 | 72 |
++| lang/uninit_after_every_activity.rex | 287 | 272 | 4 |
++| lang/trace_object_native_caller.rex | 616 | 272 | 33 |
++| lang/guard_serializes_started_sends.rex | 306 | 272 | 16 |
++| lang/reply_seen_by_a_guarded_send.rex | 300 | 272 | 1 |
++| lang/reply_continuation_parks_holding_the_guard.rex | 286 | 272 | 4 |
++| lang/reply_at_nesting_two_reserves_again.rex | 284 | 272 | 1 |
++| lang/guarded_getter_waits_for_reply.rex | 281 | 272 | 1 |
++| lang/guard_on_waits_in_an_unguarded_method.rex | 288 | 272 | 11 |
++| lang/guard_deadlock_two_activities.rex | 314 | 272 | 17 |
++| lang/message_wait_deadlock.rex | 326 | 272 | 3 |
++| lang/method_set_unguarded_is_not_reserved.rex | 292 | 272 | 8 |
++| lang/method_set_guarded_is_reserved.rex | 292 | 272 | 8 |
++| lang/guarded_empty_method_waits.rex | 284 | 272 | 7 |
++| lang/guard_held_before_the_first_start.rex | 286 | 272 | 2 |
++| lang/guard_on_lock_passes_between_activities.rex | 295 | 272 | 9 |
++| lang/guard_when_waits_for_a_store.rex | 284 | 272 | 7 |
++| lang/guard_when_stem_element_store.rex | 288 | 272 | 4 |
++| lang/guard_when_attribute_setter.rex | 284 | 272 | 3 |
++| lang/guard_when_drop_wakes.rex | 293 | 272 | 9 |
++| lang/guard_when_traces_each_evaluation.rex | 283 | 272 | 11 |
++| lang/guard_when_trace_object_waiting.rex | 456 | 272 | 22 |
++| lang/guard_when_replies_take_turns.rex | 328 | 272 | 16 |
++| lang/native_guard_on_when_updated.rex | 292 | 272 | 3 |
++| lang/native_guard_off_keeps_the_count.rex | 295 | 272 | 10 |
++| lang/guard_when_holds_the_lock_again.rex | 283 | 272 | 7 |
++| lang/guard_when_unwatches_at_its_end.rex | 284 | 272 | 2 |
++| lang/event_semaphore_post_wakes_every_waiter.rex | 291 | 272 | 5 |
++| lang/event_semaphore_timed_wait_ended_by_a_post.rex | 284 | 272 | 3 |
++| lang/mutex_semaphore_released_when_its_activity_ends.rex | 287 | 272 | 8 |
++| lang/mutex_semaphore_end_hands_over_to_a_waiter.rex | 291 | 272 | 9 |
++| lang/mutex_semaphore_stays_with_the_replier.rex | 289 | 272 | 1 |
++| lang/mutex_semaphore_timed_acquire.rex | 293 | 272 | 9 |
++| lang/sys_semaphores_across_activities.rex | 314 | 272 | 5 |
++| lang/sys_semaphore_poll_takes_at_its_poll.rex | 288 | 272 | 2 |
++| lang/sys_semaphore_post_waits_for_the_next_poll.rex | 284 | 272 | 2 |
++| lang/alarm_cancel_waits_for_the_timer.rex | 296 | 272 | 2 |
++| lang/alarm_message_target.rex | 298 | 272 | 8 |
++| lang/ticker_fires_on_its_replied_activity.rex | 292 | 272 | 11 |
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-derived.md b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-derived.md
+new file mode 100644
+index 000000000..6ecdc861d
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-derived.md
+@@ -0,0 +1,209 @@
++# criterion 6 over criterion 1's derived list of ooTest tests, at 0ac73b804, from rust/:
++# memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_the_derived_list --nocapture
++
++tests 202, objects 374510, made before the program 54944, shared 790
++
++| test | outcome | objects | before program | shared |
++|---|---|---|---|---|
++| base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS | pass, rc 0 | 1595 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_2 | pass, rc 0 | 2557 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_3 | pass, rc 0 | 2575 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_4 | failure, rc 1 | 2720 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_5 | failure, rc 1 | 2742 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_8 | pass, rc 0 | 2567 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_9 | pass, rc 0 | 2583 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_10 | failure, rc 1 | 2719 | 272 | 0 |
++| base/bif/TIME.testGroup TEST_11 | failure, rc 1 | 2742 | 272 | 0 |
++| base/class/Alarm.testGroup TEST_BASE_ALARM | pass, rc 0 | 1618 | 272 | 26 |
++| base/class/Alarm.testGroup TEST_ALARM_NO_TIME | pass, rc 0 | 1406 | 272 | 0 |
++| base/class/Alarm.testGroup TEST_ALARM_NO_TARGET | pass, rc 0 | 1406 | 272 | 0 |
++| base/class/Alarm.testGroup TEST_ALARM_BAD_TIME | pass, rc 0 | 1510 | 272 | 0 |
++| base/class/Alarm.testGroup TEST_ALARM_NEGATIVE_TIME | pass, rc 0 | 1414 | 272 | 0 |
++| base/class/Alarm.testGroup TEST_ALARM_BAD_TARGET | pass, rc 0 | 1408 | 272 | 0 |
++| base/class/Class.testGroup TEST_SUBCLASSES | pass, rc 0 | 1757 | 272 | 0 |
++| base/class/DateTime.testGroup TEST_ELAPSED1 | pass, rc 0 | 1598 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | 1424 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_ISPOSTED_ONE_ARG | pass, rc 0 | 1421 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_POST_ONE_ARG | pass, rc 0 | 1420 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_RESET_ONE_ARG | pass, rc 0 | 1420 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_POST_RESET | pass, rc 0 | 1345 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_WAIT_TWO_ARGS | pass, rc 0 | 1420 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_WAIT_NUMBER | pass, rc 0 | 1420 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | 1347 | 272 | 0 |
++| base/class/EventSemaphore.testGroup TEST_WAIT_CONCURRENT | pass, rc 0 | 1361 | 272 | 5 |
++| base/class/Message.testGroup TEST_START | pass, rc 0 | 1774 | 272 | 39 |
++| base/class/Message.testGroup TEST_REPLY | pass, rc 0 | 1800 | 272 | 40 |
++| base/class/Message.testGroup TEST_NOTIFY | pass, rc 0 | 1607 | 272 | 10 |
++| base/class/Message.testGroup TEST_SUPER_OVERRIDE | pass, rc 0 | 1620 | 272 | 6 |
++| base/class/Message.testGroup TEST_STARTWITH_NO_ARRAY | pass, rc 0 | 1661 | 272 | 0 |
++| base/class/Message.testGroup TEST_STARTWITH_NOT_ARRAY | refused at method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | 1427 | 272 | 0 |
++| base/class/Message.testGroup TEST_STARTWITH_TOO_MANY | pass, rc 0 | 1661 | 272 | 0 |
++| base/class/Message.testGroup TEST_REPLYWITH_NO_ARRAY | pass, rc 0 | 1661 | 272 | 0 |
++| base/class/Message.testGroup TEST_REPLYWITH_NOT_ARRAY | refused at method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | 1427 | 272 | 0 |
++| base/class/Message.testGroup TEST_REPLYWITH_TOO_MANY | pass, rc 0 | 1661 | 272 | 0 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | 1595 | 272 | 3 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | 1597 | 272 | 3 |
++| base/class/Message.testGroup TEST_REPLY_OVERRIDE_CONTEXT | pass, rc 0 | 1596 | 272 | 3 |
++| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_CONTEXT | pass, rc 0 | 1598 | 272 | 3 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | 1663 | 272 | 22 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | 1665 | 272 | 22 |
++| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_FOUND | pass, rc 0 | 1664 | 272 | 22 |
++| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | 1666 | 272 | 22 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | 1663 | 272 | 22 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | 1665 | 272 | 22 |
++| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NO_METHOD | pass, rc 0 | 1664 | 272 | 22 |
++| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NO_METHOD | pass, rc 0 | 1666 | 272 | 22 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | 1665 | 272 | 0 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | 1668 | 272 | 0 |
++| base/class/Message.testGroup TEST_REPLY_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | 1665 | 272 | 0 |
++| base/class/Message.testGroup TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | 1668 | 272 | 0 |
++| base/class/Message.testGroup TEST_HALT_START | pass, rc 0 | 1769 | 272 | 32 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | 1688 | 272 | 7 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | 1659 | 272 | 0 |
++| base/class/Message.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | 1697 | 272 | 7 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | 1696 | 272 | 7 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | 1659 | 272 | 0 |
++| base/class/Message.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | 1710 | 272 | 7 |
++| base/class/Method.testGroup TESTDIRECTIVES | refused at DO is not implemented | 907 | 272 | 0 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_CLASS | refused at DO is not implemented | 5539 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_OBJECT | refused at DO is not implemented | 5541 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STRING | refused at DO is not implemented | 5540 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_METHOD | refused at DO is not implemented | 5540 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_ROUTINE | refused at DO is not implemented | 5541 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_PACKAGE | refused at DO is not implemented | 5541 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MESSAGE | pass, rc 0 | 5732 | 272 | 11 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_STREAM | refused at DO is not implemented | 5540 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_MUTABLEBUFFER | refused at DO is not implemented | 5542 | 272 | 2 |
++| base/class/MethodArgs.testGroup TEST_REQUEST_STRING_FILE | refused at DO is not implemented | 5539 | 272 | 2 |
++| base/class/MutexSemaphore.testGroup TEST_NEW_ONE_ARG | pass, rc 0 | 1420 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_TWO_ARGS | pass, rc 0 | 1416 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_NUMBER | pass, rc 0 | 1416 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_RELEASE_ONE_ARG | pass, rc 0 | 1416 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_ACQUIRE_SIMPLE | pass, rc 0 | 1342 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_SIMPLE | pass, rc 0 | 1340 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_ACQUIRE_RELEASE_NESTED | pass, rc 0 | 1341 | 272 | 0 |
++| base/class/MutexSemaphore.testGroup TEST_EXCLUSION | pass, rc 0 | 1345 | 272 | 3 |
++| base/class/Object.testGroup TESTSTART01 | pass, rc 0 | 1936 | 272 | 2 |
++| base/class/Object.testGroup TESTSTARTWITH01 | pass, rc 0 | 1937 | 272 | 2 |
++| base/class/Object.testGroup TEST_START_NO_NAME | pass, rc 0 | 2003 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_NO_NAME2 | pass, rc 0 | 2003 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_NOT_STRING | pass, rc 0 | 2003 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_NO_METHOD | pass, rc 0 | 2003 | 272 | 21 |
++| base/class/Object.testGroup TEST_START_OVERRIDE | pass, rc 0 | 1990 | 272 | 8 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_CONTEXT | pass, rc 0 | 1940 | 272 | 3 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | 2004 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_NAME | pass, rc 0 | 2006 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_MISSING_SCOPE | pass, rc 0 | 2005 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_EXTRA_STUFF | pass, rc 0 | 2006 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_NON_STRING_NAME | pass, rc 0 | 2006 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | 2006 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | 2005 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_FOUND | pass, rc 0 | 2008 | 272 | 22 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | 2013 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_NO_METHOD | pass, rc 0 | 2013 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_NO_NAME | pass, rc 0 | 2004 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_NO_NAME2 | pass, rc 0 | 2005 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_NOT_STRING | pass, rc 0 | 2005 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_NO_METHOD | pass, rc 0 | 2004 | 272 | 21 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE | pass, rc 0 | 1991 | 272 | 8 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_CONTEXT | pass, rc 0 | 1941 | 272 | 3 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EMPTY_ARRAY | pass, rc 0 | 2006 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_NAME | pass, rc 0 | 2008 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_MISSING_SCOPE | pass, rc 0 | 2007 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_EXTRA_STUFF | pass, rc 0 | 2008 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_STRING_NAME | pass, rc 0 | 2008 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE | pass, rc 0 | 2008 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NON_CLASS_SCOPE2 | pass, rc 0 | 2007 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_FOUND | pass, rc 0 | 2009 | 272 | 22 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE | pass, rc 0 | 2015 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_NO_METHOD | pass, rc 0 | 2015 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF | pass, rc 0 | 2033 | 272 | 7 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | 2004 | 272 | 0 |
++| base/class/Object.testGroup TEST_START_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | 2040 | 272 | 7 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF | pass, rc 0 | 2039 | 272 | 7 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS | pass, rc 0 | 2006 | 272 | 0 |
++| base/class/Object.testGroup TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES | pass, rc 0 | 2047 | 272 | 7 |
++| base/class/RexxContext.testGroup TEST_INTERPRETER_THREAD_INVOCATION | pass, rc 0 | 1625 | 272 | 20 |
++| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_CANCEL | pass, rc 0 | 1435 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_STRING_TRIGGER | pass, rc 0 | 1439 | 272 | 4 |
++| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_CANCEL | pass, rc 0 | 1435 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | 1439 | 272 | 4 |
++| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_CANCEL | pass, rc 0 | 1436 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER | pass, rc 0 | 1440 | 272 | 4 |
++| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_CANCEL | pass, rc 0 | 1436 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER | pass, rc 0 | 1440 | 272 | 4 |
++| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE | pass, rc 0 | 1440 | 272 | 4 |
++| base/class/Ticker.testGroup TEST_TICKER_THREE_ARGS_STRING_TRIGGER_MESSAGE | pass, rc 0 | 1444 | 272 | 7 |
++| base/class/Ticker.testGroup TEST_TICKER_NO_ARGS | pass, rc 0 | 1501 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_NO_TIME | pass, rc 0 | 1502 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_NO_TARGET | pass, rc 0 | 1501 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_BAD_TIME | pass, rc 0 | 1502 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIME | pass, rc 0 | 1503 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_ALARM_TIME | pass, rc 0 | 1503 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_DATETIME_TIME | pass, rc 0 | 1509 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_NEGATIVE_TIMESPAN_TIME | pass, rc 0 | 1503 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_BAD_TARGET | pass, rc 0 | 1509 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_MESSAGE_NOTIFICATION_TARGET | pass, rc 0 | 1509 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_TICKER_FOUR_ARGS | pass, rc 0 | 1503 | 272 | 0 |
++| base/class/Ticker.testGroup TEST_ATTACHMENT_TOO_MANY_ARGS | pass, rc 0 | 1508 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_CANCEL_TOO_MANY_ARGS | pass, rc 0 | 1511 | 272 | 4 |
++| base/class/Ticker.testGroup TEST_CANCELED_TOO_MANY_ARGS | pass, rc 0 | 1512 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_CANCELLED_TOO_MANY_ARGS | pass, rc 0 | 1512 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_CANCEL_IMMEDIATELY | pass, rc 0 | 1436 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_CANCEL_TWICE | pass, rc 0 | 1436 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_INTERVAL_TOO_MANY_ARGS | pass, rc 0 | 1508 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_TICKER_INTERVAL_ZERO | pass, rc 0 | 1435 | 272 | 2 |
++| base/class/Ticker.testGroup TEST_TICKER_NEW_INTERVAL_TIMESPAN | pass, rc 0 | 1437 | 272 | 2 |
++| base/directives/ATTRIBUTE.testGroup TEST001 | pass, rc 0 | 1658 | 272 | 0 |
++| base/directives/ATTRIBUTE.testGroup TESTDELEGATE | failure, rc 1 | 1885 | 272 | 0 |
++| base/directives/CONSTANT.testGroup TEST_CONSTANT_METHOD_PROPERTIES | pass, rc 0 | 1440 | 272 | 0 |
++| base/directives/METHOD.testGroup TESTGUARDEDACCESS | pass, rc 0 | 1636 | 272 | 2 |
++| base/directives/METHOD.testGroup TESTDELEGATE | failure, rc 1 | 1853 | 272 | 0 |
++| base/keyword/CALL.testGroup TEST_4 | failure, rc 1 | 1598 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_WHEN_NOVALUE | pass, rc 0 | 1469 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_WHEN_NOT_BOOLEAN | pass, rc 0 | 1494 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_ON_OFF_CONSECUTIVE | pass, rc 0 | 1425 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_ON_DEFAULT | pass, rc 0 | 1430 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_ON | pass, rc 0 | 1420 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_OFF | pass, rc 0 | 1430 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_UNGUARDED | pass, rc 0 | 1430 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_ON_OFF | pass, rc 0 | 1430 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_NO_WAIT | pass, rc 0 | 1426 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_WHEN_USE_LOCAL_NO_WAIT | refused at USE LOCAL in a ::METHOD body is not implemented (Phase 5) | 1262 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT | pass, rc 0 | 1425 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_WHEN_MULTIPLE_NO_WAIT | pass, rc 0 | 1425 | 272 | 0 |
++| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE_TRIGGER | pass, rc 0 | 1434 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_WAIT_SIMPLE | pass, rc 0 | 1430 | 272 | 2 |
++| base/keyword/GUARD.testGroup TEST_WAIT_MULTIPLE | pass, rc 0 | 1430 | 272 | 2 |
++| base/keyword/RAISE.testGroup TEST_RAISE_INSERT_CRLF | failure, rc 1 | 1649 | 272 | 25 |
++| base/keyword/REPLY.testGroup TEST_REPLY_ROUTINE | pass, rc 0 | 1464 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_PROCEDURE | pass, rc 0 | 1465 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_CALL | pass, rc 0 | 1465 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_TWICE_REPLYASSERT | pass, rc 0 | 1429 | 272 | 4 |
++| base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_REPLYASSERT | pass, rc 0 | 1429 | 272 | 4 |
++| base/keyword/REPLY.testGroup TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT | pass, rc 0 | 1429 | 272 | 4 |
++| base/keyword/REPLY.testGroup TEST_REPLY_EXIT_CODE_REPLYASSERT | pass, rc 0 | 1429 | 272 | 4 |
++| base/keyword/REPLY.testGroup TEST_REPLY_STACK_REPLYASSERT | pass, rc 0 | 1462 | 272 | 9 |
++| base/keyword/REPLY.testGroup TEST_REPLY_PLAIN | pass, rc 0 | 1390 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_STRING | pass, rc 0 | 1390 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_ARRAY | pass, rc 0 | 1391 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_NIL | pass, rc 0 | 1390 | 272 | 0 |
++| base/keyword/REPLY.testGroup TEST_REPLY_NOP | pass, rc 0 | 1395 | 272 | 1 |
++| base/keyword/REPLY.testGroup TEST_REPLY__CODE_RETURN | pass, rc 0 | 1395 | 272 | 1 |
++| base/keyword/REPLY.testGroup TEST_REPLY__CODE_EXIT | pass, rc 0 | 1395 | 272 | 1 |
++| base/keyword/REPLY.testGroup TEST_REPLY_SAME_REPLYASSERT | pass, rc 0 | 1430 | 272 | 30 |
++| base/keyword/REPLY.testGroup TEST_REPLY_CONCURRENT | pass, rc 0 | 1569 | 272 | 7 |
++| base/keyword/TRACE.testGroup TEST_TRACE_GUARD | pass, rc 0 | 2209 | 272 | 0 |
++| base/keyword/TRACE.testGroup TEST_TRACE_REPLY | pass, rc 0 | 2180 | 272 | 20 |
++| base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR | refused at DO is not implemented | 1530 | 272 | 13 |
++| base/keyword/TRACE_TraceObject.testGroup TEST_CALLER_STACK_FRAME_REPLY_START | refused at DO is not implemented | 1469 | 272 | 12 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_NO_ARG | pass, rc 0 | 1418 | 272 | 0 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_TWO_ARGS | pass, rc 0 | 1418 | 272 | 0 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID | pass, rc 0 | 1420 | 272 | 0 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_NEGATIVE | pass, rc 0 | 1421 | 272 | 0 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_INVALID_TOO_LARGE | pass, rc 0 | 1422 | 272 | 0 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_DURATION | pass, rc 0 | 1491 | 272 | 0 |
++| base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT | pass, rc 0 | 1399 | 272 | 7 |
++| base/special.variables/RESULT_RC_SIGL.testGroup TEST_RESULT_WITH_REPLY | pass, rc 0 | 1393 | 272 | 2 |
++| doc/rexxref/chapter5/Section1.testGroup TEST_OBJECT_START | pass, rc 0 | 1342 | 272 | 7 |
++| regressions/bug2003_guard_when.testGroup TEST_GUARD_WHEN_1 | error, rc 2 | 1478 | 272 | 0 |
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt
+new file mode 100644
+index 000000000..4b8577f2e
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt
+@@ -0,0 +1,36 @@
++# Criterion 6's sharing feature costs nothing when off.
++# Release rexx-run without features from git archive trees of 811610f63 (base),
++# 0ac73b804 (head), and base with only head's frame.rs, body.rs, island.rs and
++# scheduler.rs's Posted assertion (aonly: A1-A5, no sharing code); each built
++# at one path in its own target dir by text-hash.sh, then
++# objcopy -O binary --only-section=.text; sha256sum; size.
++# base built twice (base2) as the determinism control.
++
++base  1fc85368757a9f4e17eb66dedd7e7c7c9232fd2dcc7271668e3234596a09b2cb 3130350
++base2 1fc85368757a9f4e17eb66dedd7e7c7c9232fd2dcc7271668e3234596a09b2cb
++aonly 7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
++head  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
++
++# head equals aonly: the sharing code adds no byte. base differs from aonly in
++# placement only: nm -S of base and head lists the same functions with the same sizes
++# except one name, Lent::wait's impl index (the new IslandPayload impls renumber it):
++
++3603d3602
++< _RNvMs3_NtCsa1IxyF9TJH_9rexx_exec6islandNtB5_4Lent4wait 0000000000000225
++3777a3777
++> _RNvMs5_NtCsa1IxyF9TJH_9rexx_exec6islandNtB5_4Lent4wait 0000000000000225
++
++# text-hash.sh:
++#!/bin/bash
++# Builds release rexx-run from each named archived tree, moved in turn to one
++# path, in its own target dir, and prints the sha256 of its .text section.
++set -e
++S=/tmp/claude-1000/p6-t23
++for t in "$@"; do
++    mv $S/$t $S/tree
++    find $S/tree -type f -exec touch {} +
++    ( cd $S/tree/rust && CARGO_TARGET_DIR=$S/target-$t cargo build --release --bin rexx-run 2>&1 | grep -E 'Compiling rexx-exec|Finished|error' )
++    mv $S/tree $S/$t
++    objcopy -O binary --only-section=.text $S/target-$t/release/rexx-run $S/$t.text
++    echo "$t $(sha256sum < $S/$t.text | cut -d' ' -f1) $(stat -c %s $S/$t.text)"
++done
+diff --git a/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md b/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
+index 5c5358c9f..5c5b3ea46 100644
+--- a/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
++++ b/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
+@@ -181,22 +181,24 @@ nesting (`ffi.rs:508-525`), and `native_handles` a per-interpreter stack, "inner
+ Moving the driver between OS threads needs `unsafe impl Send` for the interpreter island (its `Rc`,
+ `Cell` and `RefCell` interior). SAFETY: the island is reachable only through one root pointer and the
+ baton; a thread touches any island value (derives a borrow, clones or drops an `Rc`, reads or writes a
+ `Cell`) only while holding the baton; the baton is released only at a driver exit, where the
+ releasing thread holds no island value, only raw handles. Today's native call holds `Rc` clones across
+ the C call (`Rc::clone(&binding.library)`, `self.thread.clone()`, `dispatch/library.rs:86`, `:94`,
+ `:155`, `:165`); those become raw handles or move into the activity record before the exit. The grant
+ lands with its first user (S4) in a module the plan names, recorded as a Section 1 decision block with
+ R3's signal module; `unsafe` is otherwise confined to `rexx-api/src/ffi.rs`, `rexx-api/src/load.rs`,
+ `rexx-core/src/bytes.rs` and `rexx-core/src/frame.rs`. The `thread_local!`s `REFUSED`
+-(`rexx-api/src/layout.rs:423`) and `HOOK_THREW` (`rexx-api/src/load.rs:678`) belong to one native
+-call's own stack and stay per OS thread; they are the only non-test `thread_local!`s today.
++(`rexx-api/src/layout.rs:421`), `HOOK_THREW` (`rexx-api/src/load.rs:1518`) and `CALLING`
++(`rexx-api/src/ffi.rs:700`, ruling P56) belong to one native call's own stack and stay per OS
++thread; they are the only non-test `thread_local!`s
++(`/bin/grep -a -rn -B3 'thread_local!' --include=*.rs rust/crates`).
+ 
+ **Island memory lent to C.** C reads and writes some island memory through raw pointers while off
+ the baton: kept C strings (`kept_strings`, `dispatch/library.rs:984-1010`, pruned by
+ `drop_loose_kept_strings`) and the storage behind `BufferData` and `MutableBufferData`
+ (`dispatch/library/surface.rs:212-237`). The rule, per kind: storage lent to a native call is not
+ freed or reallocated in place while that call is in flight. A kept string is not pruned while any
+ call that received it is in flight; a MutableBuffer mutation that would reallocate lent storage
+ allocates new storage and keeps the old alive until the lending call completes. C reads and writes
+ through the old address after such a reallocation do not reach the buffer, as in the oracle, where
+ growth gives the buffer a new data object (`MutableBuffer::ensureCapacity`,
+@@ -334,21 +336,23 @@ reached, a release with ready activities leaves them for the next thread that ta
+   oracle's error. The evidence is that type-level fact plus a test of a context object read from
+   another live activity, a finished one and a moved (REPLY) one.
+ * **Collection points.** Every allocation remains one, as a stated constraint (the only instrument
+   that finds a missed root). A continuation switch and a driver exit are added; anything live across
+   either must be rooted, and **no island value is held across a driver exit** (P6-3).
+ * **Parallel-ready hooks.** `collect` calls the scheduler's `stop_the_world`, which today asserts that
+   the caller holds the baton. A future collector replaces that one function. A stress mode collects at
+   every countdown visit, switch and driver exit.
+ * **Isolation at the type level.** `ObjRef` becomes `!Send` and `!Sync` (a phantom raw-pointer marker;
+   a scratch build confirmed nothing sends one today), so the compiler refuses an object handle in the
+-  inbox, a completion or another interpreter.
++  inbox, a completion or another interpreter. Object handles reach a pool thread of the same
++  interpreter only inside `Islanded`, whose payloads are sealed and taken out under a lend (ruling
++  P52).
+ * **Sharing-fraction instrument.** A feature-gated build tags each object with the last activity that
+   resolved it and counts objects touched by more than one activity.
+ 
+ ---
+ 
+ ## 6. Rexx semantics
+ 
+ Oracle behaviour is Read or Measured in the reviews unless marked *(verify)*, which the plan settles
+ in the first task that needs it, with the command recorded.
+ 

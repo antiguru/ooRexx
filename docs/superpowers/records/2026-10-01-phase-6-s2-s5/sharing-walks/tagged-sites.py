@@ -5,7 +5,7 @@
 # Run from rust/.
 import re,subprocess,sys
 out=subprocess.run(['/bin/grep','-a','-rnE',r'heap(\(\))?\.(get|get_mut|body_text|is_class)\(','crates/rexx-exec/src','crates/rexx-classes/src','crates/rexx-api/src','--include=*.rs'],capture_output=True,text=True).stdout
-for line in out.splitlines():
+for line in sorted(out.splitlines(), key=lambda l: (l.split(':',2)[0], int(l.split(':',2)[1]))):
     f,n,_=line.split(':',2); n=int(n)
     src=open(f).read().split('\n')
     fn='?'

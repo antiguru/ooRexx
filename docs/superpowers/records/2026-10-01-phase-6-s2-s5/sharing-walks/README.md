@@ -12,7 +12,8 @@ python3 ../docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/itera
 `is_class`) with its function. `debug-checks.txt` lists every debug-only check that calls
 anything, marked `unshared` where it reads under `unshared!` (touches paused); a field or
 statement under `#[cfg(debug_assertions)]` ends at its `,` or `;`. `iterating-functions.txt` lists
-the functions of `tagged-sites.txt` that iterate anything, the candidates for a table walk.
+the functions of `tagged-sites.txt` with a loop in their own body; a loop that calls a function
+holding a tagged read is not listed.
 
 ## Walks: not counted
 
@@ -41,7 +42,8 @@ frame and root-counter reads, and `CALLING` in `ffi.rs`.
 Every other row of `tagged-sites.txt`, `get_mut` and `body_text` rows included, is an object read
 or written by the operation the running activity is performing on it: a message send, a variable
 or stem access, a conversion, a collection method, an UNINIT sent to the object
-(`run_one_uninit`), or the read of the stem `detach_exposed_tails` clears. Each function of
+(`run_one_uninit`, counted for the activity that runs it, so an UNINIT a collection runs in
+another activity counts its object shared), or the read of the stem `detach_exposed_tails` clears. Each function of
 `iterating-functions.txt` iterates the contents of the one object its operation targets (an array,
 a stem, a condition, a table or collection being read, a DO OVER snapshot), not a table of the
 interpreter's.

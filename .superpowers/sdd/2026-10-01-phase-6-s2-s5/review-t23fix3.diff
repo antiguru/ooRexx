@@ -1,0 +1,443 @@
+diff --git a/docs/superpowers/plans/phase-6-gate.md b/docs/superpowers/plans/phase-6-gate.md
+index 744c71a8a..3c72d67f1 100644
+--- a/docs/superpowers/plans/phase-6-gate.md
++++ b/docs/superpowers/plans/phase-6-gate.md
+@@ -965,34 +965,38 @@ handle" adds that object handles reach a pool thread of the same interpreter onl
+ | contexts resolve across all activities | `dispatch/context.rs:159` `at_context`, `scheduler.rs:723` `idle_context_owner` |
+ | live, finished, moved | `scheduler::tests::a_context_reads_an_activation_of_another_live_activity` (live, then 98.981 once finished), `scheduler::tests::a_context_follows_its_activation_to_a_reply_continuation` (moved by REPLY); corpus `context_of_another_activity`, `context_moved_by_reply` |
+ 
+ ### Criterion 6, the sharing fraction
+ 
+ The `sharing` feature of `rexx-exec` (forwarding `rexx-core`'s) tags each heap slot with the last
+ activity that resolved its object through `Heap::get`, `Heap::get_mut` or `Heap::body_text`, or made
+ it, and counts objects touched by more than one activity, separately for objects made before the
+ program (the interpreter and its library bootstrap) and objects the program made;
+ `Outcome::sharing` reports both. A collection runs with touches paused; the collector, the UNINIT
+-registry and the interpreter's table prunes read through the untagged `resolve` or `Heap::peek`; and
++registry, the interpreter's table prunes and a stem clear's rewrite of the exposer stems its table
++names read through the untagged `resolve`, `Heap::peek` or `Heap::peek_mut`; and
+ every debug-only check that reads an object reads under `unshared!`, so a debug build counts what a
+-release build does. The enumeration of tagged reads and debug-only checks, its commands and the
++release build does. The enumeration of tagged reads, debug-only checks and iterating functions, its commands and the
+ classification of each walk are in
+ `docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md`. `concurrency_tests`
+ witnesses: `sharing::one_activity_shares_nothing`;
+ `sharing::an_object_read_by_a_started_activity_is_shared`, which fails with the tag switch in
+ `Interp::switch_to` and `Interp::swap_running` removed;
+ `sharing::uninit_objects_another_activity_never_names_are_not_shared`, which failed (program shared
+-102) before the UNINIT registry walk resolved untagged; and
++102) before the UNINIT registry walk resolved untagged;
+ `sharing::a_collection_in_another_activity_shares_nothing_it_prunes`, which failed (program shared
+-102) before the collection's prunes did (`task-23-report.md`).
++102) before the collection's prunes did; and
++`sharing::a_stem_cleared_in_another_activity_shares_no_dead_exposer`, which failed (program shared
++103) before the exposer rewrite did (`task-23-report.md`). At `f078489bc` the corpus, derived-list
++and every-group runs give the shared counts below unchanged.
+ 
+-Off, it costs nothing: release `rexx-run` built without features from `2a9bbbe12` has the same
++Off, it costs nothing: release `rexx-run` built without features from `f078489bc` has the same
+ `.text` hash as one built from the base with only the static assertions applied, and that build has
+ the same functions with the same sizes as the base apart from one symbol's name
+ (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt`).
+ 
+ At `2a9bbbe12`, from `rust/`, release, each command and its table in the named file under
+ `docs/superpowers/records/2026-10-01-phase-6-s2-s5/`. The populations:
+ 
+ * corpus: every program of the corpus differential (`sharing-corpus.md`; the same command in a
+   debug build writes the same table);
+ * ooTest, every group: every `.testGroup` under `ootest/ooRexx`, except groups with a test that
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt
+index 53f9cdb9f..29bfb478e 100644
+--- a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt
+@@ -22,20 +22,24 @@ head  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+ 
+ # Task 23 fix round 1: d9e17e5c8, built the same way (git archive at the same
+ # path, its own target dir), without features:
+ fix1  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+ # equal to head and aonly.
+ 
+ # Task 23 fix round 2: 2a9bbbe12, built the same way, without features:
+ fix2  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+ # equal to head, aonly and fix1.
+ 
++# Task 23 fix round 3: f078489bc, built the same way, without features:
++fix3  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
++# equal to head, aonly, fix1 and fix2.
++
+ # text-hash.sh:
+ #!/bin/bash
+ # Builds release rexx-run from each named archived tree, moved in turn to one
+ # path, in its own target dir, and prints the sha256 of its .text section.
+ set -e
+ S=/tmp/claude-1000/p6-t23
+ for t in "$@"; do
+     mv $S/$t $S/tree
+     find $S/tree -type f -exec touch {} +
+     ( cd $S/tree/rust && CARGO_TARGET_DIR=$S/target-$t cargo build --release --bin rexx-run 2>&1 | grep -E 'Compiling rexx-exec|Finished|error' )
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md
+index 1effc04cc..92e200148 100644
+--- a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/README.md
+@@ -1,46 +1,54 @@
+-# Which heap reads the sharing instrument counts (Task 23 fix round 2)
++# Which heap reads the sharing instrument counts (Task 23 fix rounds 2 and 3)
+ 
+-At `2a9bbbe12`, from `rust/`:
++At `f078489bc`, from `rust/`:
+ 
+ ```
+ python3 ../docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/tagged-sites.py > tagged-sites.txt
+ python3 ../docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.py > debug-checks.txt
++python3 ../docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.py tagged-sites.txt > iterating-functions.txt
+ ```
+ 
+ `tagged-sites.txt` lists every call of a tagged accessor (`Heap::get`, `get_mut`, `body_text`,
+ `is_class`) with its function. `debug-checks.txt` lists every debug-only check that calls
+-anything, marked `unshared` where it reads under `unshared!` (touches paused).
++anything, marked `unshared` where it reads under `unshared!` (touches paused); a field or
++statement under `#[cfg(debug_assertions)]` ends at its `,` or `;`. `iterating-functions.txt` lists
++the functions of `tagged-sites.txt` that iterate anything, the candidates for a table walk.
+ 
+ ## Walks: not counted
+ 
+ | Where | What it reads | How it is untagged |
+ |---|---|---|
+ | `rexx-core/src/heap.rs` `Heap::collect` | every reachable object | private `resolve` only |
+ | `rexx-core/src/heap.rs` `Heap::clear_uninit_all` | the UNINIT registry | `resolve` and a slot match |
+ | `rexx-exec/src/lib.rs` `Interp::collect_now` | the liveness prunes of kept strings, guard pools and watches, and semaphores, and whatever else a collection calls | the whole collection runs with touches paused, and the three liveness prunes use `Heap::peek` |
+ | `rexx-exec/src/stem.rs` `record_exposer` | the stem-exposer table's weak cells, pruned as it doubles | `Heap::peek` |
+ | `rexx-exec/src/stem.rs` `weak_target` | an exposer's weak cell | `Heap::peek` |
++| `rexx-exec/src/stem.rs` `detach_exposed_tails` | the stems the exposer table names for a cleared stem, read and rewritten; until a collection the table still reaches the local stem of a returned `PROCEDURE EXPOSE` | `Heap::peek` and `Heap::peek_mut`; so the rewrite of a live exposer is not counted either |
+ 
+ Every collection goes through `collect_now` (`grep -rn 'heap\.collect(' crates/rexx-exec/src`:
+ one site, in it).
+ 
+ ## Debug-only checks: not counted
+ 
+ The `unshared` rows of `debug-checks.txt` read objects: the SAY route and a `StoreView`
+ re-derived, the `.NAME` cache's search, the required-string latch, an operand's operator gap, a DO
+ OVER snapshot's slots, and `to_text` beside `text_len`. Every other row calls nothing that
+ resolves a heap object: register, plan, slot, guard-table, trace-mode, number, library-table,
+ frame and root-counter reads, and `CALLING` in `ffi.rs`.
+ 
+ ## Resolutions: counted
+ 
+-Every other row of `tagged-sites.txt` is an object read by the operation the running activity is
+-performing on it: a message send, a variable or stem access, a conversion, a collection method, an
+-UNINIT sent to the object (`run_one_uninit`), or `detach_exposed_tails`' reads and writes of the
+-stems that expose a cleared stem's tails.
++Every other row of `tagged-sites.txt`, `get_mut` and `body_text` rows included, is an object read
++or written by the operation the running activity is performing on it: a message send, a variable
++or stem access, a conversion, a collection method, an UNINIT sent to the object
++(`run_one_uninit`), or the read of the stem `detach_exposed_tails` clears. Each function of
++`iterating-functions.txt` iterates the contents of the one object its operation targets (an array,
++a stem, a condition, a table or collection being read, a DO OVER snapshot), not a table of the
++interpreter's.
+ 
+ ## Check
+ 
+ The corpus table and the every-group table are measured in a release build and in a debug build at
+ `2a9bbbe12`: the corpus tables are byte-identical, and the every-group tables have the same shared
+-columns (`../sharing-corpus.md`, `../sharing-groups.md`).
++columns (`../sharing-corpus.md`, `../sharing-groups.md`). At `f078489bc` the corpus, derived-list
++and every-group runs (release) give the same shared counts as those records.
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.py b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.py
+index 4f3cb90d9..cea163596 100644
+--- a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.py
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.py
+@@ -22,25 +22,33 @@ def balanced(text, start, open_ch, close_ch):
+     return text[start:]
+ for f in sorted(files):
+     if '/tests' in f or f.endswith('tests.rs'):
+         continue
+     text = open(f).read()
+     spans = []
+     for m in re.finditer(r'debug_assert(_eq|_ne)?!\s*\(', text):
+         spans.append((m.start(), balanced(text, m.end() - 1, '(', ')')))
+     for m in re.finditer(r'#\[cfg\(debug_assertions\)\]\s*', text):
+         rest = text[m.end():]
+-        brace = rest.find('{')
+-        semi = rest.find(';')
+-        if brace != -1 and (semi == -1 or brace < semi):
+-            spans.append((m.start(), balanced(text, m.end() + brace, '{', '}')))
+-        else:
+-            spans.append((m.start(), rest[:semi + 1]))
++        # A field or a statement ends at a `,` or `;` outside brackets; an item
++        # or block that opens a brace first runs to the matching brace.
++        depth = 0
++        for at, ch in enumerate(rest):
++            if ch in '([<':
++                depth += 1
++            elif ch in ')]' or (ch == '>' and rest[at - 1] != '-'):
++                depth -= 1
++            elif depth == 0 and ch == '{':
++                spans.append((m.start(), balanced(text, m.end() + at, '{', '}')))
++                break
++            elif depth == 0 and ch in ',;':
++                spans.append((m.start(), rest[:at + 1]))
++                break
+     for start, span in sorted(spans):
+         # Drop string literals, then look for calls.
+         code = re.sub(r'"(\\.|[^"\\])*"', '""', span)
+         calls = sorted(set(re.findall(r'\.([a-z_][a-z0-9_]*)\s*\(', code)) |
+                        set(re.findall(r'\b([a-z_][a-z0-9_]*)\s*\(', code)) - {'debug_assert', 'debug_assert_eq', 'debug_assert_ne', 'matches', 'Some'})
+         if calls:
+             line = text.count('\n', 0, start) + 1
+             mark = 'unshared' if 'unshared!' in span else '-'
+             print(f"{f}:{line}\t{mark}\t{' '.join(calls)}")
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.txt
+index 23d7be72a..6f2f1a5b4 100644
+--- a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.txt
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/debug-checks.txt
+@@ -18,26 +18,24 @@ crates/rexx-exec/src/dispatch/reqstr.rs:89	unshared	required_string_latch_holds
+ crates/rexx-exec/src/environment.rs:713	unshared	rexx_package_class_uncached
+ crates/rexx-exec/src/environment/route.rs:57	unshared	output_route_uncached
+ crates/rexx-exec/src/eval.rs:277	-	is_none
+ crates/rexx-exec/src/eval.rs:1059	unshared	is_err is_none operator_operand_gap
+ crates/rexx-exec/src/eval.rs:1104	-	is_none is_ok parse_bytes
+ crates/rexx-exec/src/eval.rs:1108	-	is_none is_ok parse_bytes
+ crates/rexx-exec/src/guards.rs:490	-	owner running_activity
+ crates/rexx-exec/src/guards.rs:495	-	map running_activation
+ crates/rexx-exec/src/install.rs:1491	-	from_utf8_lossy is_none
+ crates/rexx-exec/src/install.rs:2248	-	routine_index
+-crates/rexx-exec/src/ir.rs:646	-	call_site_slot cfg copied for get holds_register index interned_konst interned_symbol konst map op_at ops_in ops_upto path position_at pub remember remember_call remember_konst remember_symbol resolved resolved_call saw_general send_name set setting_at time to trace tries_small_int
+ crates/rexx-exec/src/ir.rs:691	-	copied get
+ crates/rexx-exec/src/ir/compile.rs:204	-	assert_analysis_only_narrows
+ crates/rexx-exec/src/ir/compile.rs:339	-	mark
+ crates/rexx-exec/src/ir/compile.rs:503	-	any iter
+-crates/rexx-exec/src/ir/compile.rs:1221	-	clause_positions new
+ crates/rexx-exec/src/ir/compile.rs:1790	-	all iter rev skip
+ crates/rexx-exec/src/ir/compile.rs:1890	-	all intermediates iter results trace_events
+ crates/rexx-exec/src/ir/compile.rs:1904	-	all iter
+ crates/rexx-exec/src/ir/compile.rs:1912	-	all echoes_keyword echoes_values iter
+ crates/rexx-exec/src/ir/drive.rs:428	-	holds_register
+ crates/rexx-exec/src/ir/drive.rs:481	-	holds_register
+ crates/rexx-exec/src/ir/drive.rs:555	-	holds_register
+ crates/rexx-exec/src/ir/drive.rs:577	-	holds_register
+ crates/rexx-exec/src/ir/drive.rs:587	-	holds_register
+ crates/rexx-exec/src/ir/drive.rs:613	-	holds_register
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.py b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.py
+new file mode 100644
+index 000000000..3737301bc
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.py
+@@ -0,0 +1,26 @@
++#!/usr/bin/env python3
++# The functions of tagged-sites.txt's non-test rows that iterate anything
++# (`.iter()`, `.values()`, `.keys()`, `.iter_mut()`, `.values_mut()` or
++# `.drain()` with a `for`, `.map(` or `.filter`): the candidates for a walk of
++# the interpreter's own tables. Run from rust/ after tagged-sites.py, with its
++# output as the argument.
++import re, sys
++fns = {}
++for line in open(sys.argv[1]):
++    loc, fn, test = line.rstrip('\n').split('\t')
++    if test:
++        continue
++    path, number = loc.rsplit(':', 1)
++    fns.setdefault((path, fn), []).append(int(number))
++for (path, fn), numbers in sorted(fns.items()):
++    src = open(path).read().split('\n')
++    start = max(i for i in range(numbers[0]) if re.search(r'\bfn\s+' + fn + r'\b', src[i]))
++    indent = len(src[start]) - len(src[start].lstrip())
++    end = start + 1
++    while end < len(src) and not (src[end].startswith(' ' * indent + '}')
++                                  and len(src[end]) - len(src[end].lstrip()) == indent):
++        end += 1
++    body = '\n'.join(src[start:end])
++    if re.search(r'\.(iter|values|keys|iter_mut|values_mut|drain)\(\)', body) \
++            and re.search(r'for |\.map\(|\.filter', body):
++        print(f"{path}:{start + 1}\t{fn}")
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.txt
+new file mode 100644
+index 000000000..bed5e5ecd
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/iterating-functions.txt
+@@ -0,0 +1,12 @@
++crates/rexx-exec/src/condition.rs:512	condition_copy
++crates/rexx-exec/src/dispatch/array.rs:372	array_reshape
++crates/rexx-exec/src/dispatch/array/sort.rs:263	write_back
++crates/rexx-exec/src/dispatch/array/surface.rs:437	native_array_fill
++crates/rexx-exec/src/dispatch/hash/stem.rs:24	stem_tails
++crates/rexx-exec/src/dispatch/package.rs:635	table_pairs
++crates/rexx-exec/src/environment.rs:1192	native_keys
++crates/rexx-exec/src/run.rs:2349	stem_assigned_tails
++crates/rexx-exec/src/run/loops.rs:674	hash_collection_indexes
++crates/rexx-exec/src/run/loops.rs:629	over_snapshot
++crates/rexx-exec/src/stem.rs:565	detach_exposed_tails
++crates/rexx-exec/src/stem.rs:714	is_uninitialised_stem
+diff --git a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/tagged-sites.txt b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/tagged-sites.txt
+index 62b041ac6..3ae1a7545 100644
+--- a/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/tagged-sites.txt
++++ b/docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-walks/tagged-sites.txt
+@@ -40,27 +40,25 @@ crates/rexx-exec/src/dispatch.rs:2088	write_object_method
+ crates/rexx-exec/src/dispatch.rs:3361	run_one_uninit	
+ crates/rexx-exec/src/dispatch.rs:3600	message_term	
+ crates/rexx-exec/src/lib.rs:2931	class_owns	
+ crates/rexx-exec/src/stem.rs:295	stem_get_at	
+ crates/rexx-exec/src/stem.rs:326	stem_get_at	
+ crates/rexx-exec/src/stem.rs:360	stem_set_at	
+ crates/rexx-exec/src/stem.rs:422	stem_drop_tail_at	
+ crates/rexx-exec/src/stem.rs:500	expose_tail	
+ crates/rexx-exec/src/stem.rs:505	expose_tail	
+ crates/rexx-exec/src/stem.rs:517	expose_tail	
+-crates/rexx-exec/src/stem.rs:570	detach_exposed_tails	
+-crates/rexx-exec/src/stem.rs:586	detach_exposed_tails	
+-crates/rexx-exec/src/stem.rs:604	detach_exposed_tails	
+-crates/rexx-exec/src/stem.rs:620	tail_value	
+-crates/rexx-exec/src/stem.rs:633	set_tail	
+-crates/rexx-exec/src/stem.rs:690	is_stem	
+-crates/rexx-exec/src/stem.rs:714	is_uninitialised_stem	
++crates/rexx-exec/src/stem.rs:589	detach_exposed_tails	
++crates/rexx-exec/src/stem.rs:623	tail_value	
++crates/rexx-exec/src/stem.rs:636	set_tail	
++crates/rexx-exec/src/stem.rs:693	is_stem	
++crates/rexx-exec/src/stem.rs:717	is_uninitialised_stem	
+ crates/rexx-exec/src/run.rs:1526	pool_owner	
+ crates/rexx-exec/src/run.rs:1528	pool_owner	
+ crates/rexx-exec/src/run.rs:2117	exec_forward	
+ crates/rexx-exec/src/run.rs:2293	forward_arguments_conversion	
+ crates/rexx-exec/src/run.rs:2350	stem_assigned_tails	
+ crates/rexx-exec/src/run/loops.rs:608	over_target_gap	
+ crates/rexx-exec/src/run/loops.rs:620	is_hash_collection	
+ crates/rexx-exec/src/run/loops.rs:645	over_snapshot	
+ crates/rexx-exec/src/run/loops.rs:675	hash_collection_indexes	
+ crates/rexx-exec/src/run/condition.rs:187	derived_name_text	
+diff --git a/rust/crates/rexx-core/src/heap.rs b/rust/crates/rexx-core/src/heap.rs
+index c9fcabec4..8c67cc3d3 100644
+--- a/rust/crates/rexx-core/src/heap.rs
++++ b/rust/crates/rexx-core/src/heap.rs
+@@ -474,20 +474,30 @@ impl Heap {
+     /// [`Heap::get`] for a walk of the interpreter's own tables rather than
+     /// a program's resolution: the sharing instrument does not count it.
+     pub fn peek(&self, r: ObjRef) -> Option<&Object> {
+         let slot = self.resolve(r)?;
+         match &self.slots[slot] {
+             Slot::Live { object, .. } => Some(object),
+             Slot::Free { .. } => unreachable!("resolve rejects free slots"),
+         }
+     }
+ 
++    /// [`Heap::get_mut`] for a walk of the interpreter's own tables, which
++    /// the sharing instrument does not count, as [`Heap::peek`].
++    pub fn peek_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
++        let slot = self.resolve(r)?;
++        match &mut self.slots[slot] {
++            Slot::Live { object, .. } => Some(object),
++            Slot::Free { .. } => unreachable!("resolve rejects free slots"),
++        }
++    }
++
+     pub fn get_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
+         let slot = self.resolve(r)?;
+         #[cfg(feature = "sharing")]
+         self.resolved(slot);
+         match &mut self.slots[slot] {
+             Slot::Live { object, .. } => Some(object),
+             Slot::Free { .. } => unreachable!("resolve rejects free slots"),
+         }
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/stem.rs b/rust/crates/rexx-exec/src/stem.rs
+index 6a68c9587..32938ec17 100644
+--- a/rust/crates/rexx-exec/src/stem.rs
++++ b/rust/crates/rexx-exec/src/stem.rs
+@@ -551,30 +551,33 @@ impl Interp {
+             cells.retain(live);
+         }
+         let size = self.stem_exposers.len();
+         if fresh && size >= 64 && size.is_power_of_two() {
+             self.stem_exposers.retain(|_, cells| cells.iter().any(live));
+         }
+     }
+ 
+     /// `CompoundVariableTable::clear` over `home`: the elements another stem
+     /// exposes stay with that stem, holding what they hold now, and `home`
+-    /// no longer has them. Called before `home`'s tails are cleared.
++    /// no longer has them. Called before `home`'s tails are cleared. The
++    /// exposers are reached through the exposer table, which still reaches
++    /// one a returned `PROCEDURE` left as garbage until a collection, so they
++    /// are read untagged.
+     pub(crate) fn detach_exposed_tails(&mut self, home: ObjRef) {
+         let Some(cells) = self.stem_exposers.get(&home) else {
+             return;
+         };
+         let exposers: Vec<ObjRef> = cells
+             .iter()
+             .filter_map(|cell| self.weak_target(*cell))
+             .filter(|local| {
+-                matches!(self.heap.get(*local).map(|object| &object.body),
++                matches!(self.heap.peek(*local).map(|object| &object.body),
+                     Some(Body::Stem { exposed: Some(exposed), .. })
+                         if exposed.values().any(|value| *value == home))
+             })
+             .collect();
+         let Some(cells) = self.stem_exposers.remove(&home) else {
+             return;
+         };
+         if exposers.is_empty() {
+             return;
+         }
+@@ -594,21 +597,21 @@ impl Interp {
+             exposed: None,
+         };
+         // The cells go back in before the allocation, which can collect.
+         self.stem_exposers.insert(home, cells);
+         let orphan = self.alloc_with(BehaviourId::STEM, body);
+         self.roots.activity_mut().push_temp(orphan);
+         for local in exposers {
+             if let Some(Body::Stem {
+                 exposed: Some(exposed),
+                 ..
+-            }) = self.heap.get_mut(local).map(|object| &mut object.body)
++            }) = self.heap.peek_mut(local).map(|object| &mut object.body)
+             {
+                 for value in exposed.values_mut() {
+                     if *value == home {
+                         *value = orphan;
+                     }
+                 }
+             }
+         }
+         if let Some(cells) = self.stem_exposers.remove(&home) {
+             self.stem_exposers.insert(orphan, cells);
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 44bf91d31..a6450a920 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -665,20 +665,34 @@ mod sharing {
+     fn a_collection_in_another_activity_shares_nothing_it_prunes() {
+         let source = "s = .array~new\ndo i = 1 to 100\n  m = .mutexSemaphore~new\n  \
+                       m~acquire\n  m~release\n  s[i] = m\nend\n\
+                       say .t~new~start('other')~result\nsay s~items\n\
+                       ::class t\n::method other\n  call GC 'Force'\n  return 'ok'\n";
+         let (stdout, sharing) = sharing_of(source);
+         assert_eq!(stdout, "ok\n100\n");
+         assert!(sharing.program.shared < 50, "{sharing:?}");
+     }
+ 
++    /// A stem cleared in a started activity does not share the exposer
++    /// stems of returned `PROCEDURE EXPOSE` calls the exposer table still
++    /// reaches.
++    #[test]
++    fn a_stem_cleared_in_another_activity_shares_no_dead_exposer() {
++        let source = "h. = 0\ndo i = 1 to 100\n  call p\nend\n\
++                      say .t~new~start('clear', h.)~result\nsay h.1\nexit\n\
++                      p: procedure expose h.1\n  h.1 = h.1 + 1\n  return\n\
++                      ::class t\n::method clear\n  use arg s.\n  s.~empty\n  return 'ok'\n";
++        let (stdout, sharing) = sharing_of(source);
++        assert_eq!(stdout, "ok\n0\n");
++        assert!(sharing.program.shared < 50, "{sharing:?}");
++    }
++
+     fn add(total: &mut SharingReport, one: SharingReport) {
+         for (sum, count) in [
+             (&mut total.bootstrap, one.bootstrap),
+             (&mut total.program, one.program),
+         ] {
+             sum.objects += count.objects;
+             sum.shared += count.shared;
+         }
+     }
+ 
