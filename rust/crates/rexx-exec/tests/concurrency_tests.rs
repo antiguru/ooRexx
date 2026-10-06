@@ -2443,7 +2443,7 @@ mod group_runs {
             }
         }
 
-        /// The runs here, by group, part and mode, that are not an outcome
+        /// The runs here, by group, part and mode, that need not be an outcome
         /// the oracle produced, each with its [`key`] and reason.
         const DIFFERING: &[(&str, &str, &str, &str, &str)] = &[
             (
@@ -3013,20 +3013,34 @@ mod group_runs {
                     .join("ootest/ooRexx")
                     .join(dir)
                     .join(format!("{group}.testGroup"));
-                let text = read_lossy(&path);
+                let text = read_lossy(&path).to_ascii_uppercase();
+                // A name used beyond its own `::METHOD` lines is a helper,
+                // not a test, and stays.
+                let uses = |name: &str| {
+                    text.split(|c: char| {
+                        !(c.is_ascii_alphanumeric() || matches!(c, '_' | '!' | '?' | '.'))
+                    })
+                    .filter(|word| *word == name)
+                    .count()
+                };
+                let mut defined: std::collections::BTreeMap<String, usize> = Default::default();
+                for name in text.lines().filter_map(|line| {
+                    let line = line.trim_start();
+                    let rest = line.strip_prefix("::METHOD")?;
+                    let name = rest.split_whitespace().next()?.trim_matches(['\'', '"']);
+                    Some(name.to_string())
+                }) {
+                    *defined.entry(name).or_default() += 1;
+                }
                 left_out.extend(
-                    text.lines()
-                        .filter_map(|line| {
-                            let line = line.trim_start();
-                            let rest = line
-                                .get(..8)?
-                                .eq_ignore_ascii_case("::method")
-                                .then(|| &line[8..])?;
-                            let name = rest.split_whitespace().next()?.trim_matches(['\'', '"']);
-                            Some(name.to_ascii_uppercase())
+                    defined
+                        .into_iter()
+                        .filter(|(name, lines)| {
+                            name.starts_with("TEST")
+                                && !derived.contains(name)
+                                && uses(name) == *lines
                         })
-                        .filter(|name| name.starts_with("TEST") && !derived.contains(name))
-                        .map(|test| format!("{group}.{test}")),
+                        .map(|(test, _)| format!("{group}.{test}")),
                 );
             }
             let left_out = &left_out;
@@ -3158,7 +3172,7 @@ mod group_runs {
                         });
                     let name = format!("{file} {} {mode}", part.label());
                     match listed {
-                        Some((.., key, _)) if row.agrees[at] || row.keys[at] != *key => {
+                        Some((.., key, _)) if !row.agrees[at] && row.keys[at] != *key => {
                             failing
                                 .push(format!("{name}: listed as {key:?}, is {:?}", row.keys[at]));
                         }
