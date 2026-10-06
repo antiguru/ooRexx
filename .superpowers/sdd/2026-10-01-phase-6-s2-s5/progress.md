@@ -362,3 +362,4 @@ Task 23 wrap-up (N5-N7) done by the lead (implementer silent 2h, stopped).
 Task 23: complete.
 Task 24: dispatched s5-t24 (opus), base 4936f24c3, brief task-24-impl-brief.md.
 STATE for reboot (2026-10-06 evening): Tasks 1-23 complete. Task 24 running (s5-t24, base 4936f24c3, brief task-24-impl-brief.md, report task-24-report.md). On resume: if task-24-report.md says DONE, review it (two parallel reviewers, code and record, package from 4936f24c3); if partial, resume a fresh implementer from its last commit and the report. Then Task 25 (criteria 1, 9, S5 section, full gates), Task 26 (perf; base/S1 Ir in s5-find-perfbase.md), final review. Moritz asked to pause after s5-t24 finishes.
+Task 24 implementer: DONE_WITH_CONCERNS, 53e6b9bd6 c26e5c253 (base 4936f24c3); release tests 3040/0 (4 ignored). Not yet reviewed. PAUSED for reboot (Moritz). On resume: review Task 24 (two parallel reviewers, code and record, package 4936f24c3..c26e5c253), then Task 25.
