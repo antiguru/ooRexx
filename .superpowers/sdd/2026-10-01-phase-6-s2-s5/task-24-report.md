@@ -124,7 +124,7 @@ Brief `task-24-fix1-brief.md`. Scratch and target dirs under `/tmp/claude-1000/p
 ### Commits
 
 - 51e1d37cc: code, rows, scripts, probes, counts, gate record.
-- (this commit): row 24 rewrap, gate record line references, `output.txt` at 51e1d37cc, this
+- eae11f1c6: row 24 rewrap, gate record line references, `output.txt` at 51e1d37cc, this
   section, evidence `task-24-mutations/fix1-*`.
 
 ### Code
