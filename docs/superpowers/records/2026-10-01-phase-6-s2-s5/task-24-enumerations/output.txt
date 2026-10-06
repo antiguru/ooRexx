@@ -1,4 +1,4 @@
-HEAD 742913850ad65a492dfc1f22e27b2ff2e28b7f8c
+HEAD 51e1d37cc5fcc7bb3606957aae3663e549c9c230
 
 $ /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/' | /bin/grep -av ':[0-9]*:\s*//'
 --- begin
@@ -8,7 +8,7 @@ $ /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\
 --- begin
 --- end
 
-$ /bin/grep -a -rPzoc 'Phase\s+6' rust/crates --include=*.rs | /bin/grep -v ':0$' | /bin/grep -av '/tests\.rs:\|/tests/'
+$ find rust/crates -name '*.rs' | /bin/grep -av '/tests\.rs$\|/tests/' | sort | while read -r f; do perl -0pe 's/\\\n\s*//g' "$f" | /bin/grep -aPzq 'Phase\s+6' && echo "$f"; done
 --- begin
 --- end
 
@@ -71,5 +71,6 @@ $ bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/pr
 $ bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/probe.sh REXX_RUN control
 --- begin
 control.rex: rexx-exec: method "MAKEARRAY" of class "String" is not implemented (Phase 9)
+control.rex: not reached
 --- end
 

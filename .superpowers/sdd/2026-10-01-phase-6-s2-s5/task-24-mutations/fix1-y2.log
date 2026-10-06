@@ -1,0 +1,28 @@
+== T24F_Y2 unset
+test scheduler::tests::notifier_failures_too_many_to_nest_are_each_reported ... FAILED
+test scheduler::tests::a_notifier_failing_in_a_started_activity_replaces_its_failure ... ok
+test scheduler::tests::a_notifier_failing_on_a_started_success_is_the_sends_failure ... ok
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... ok
+test scheduler::tests::notifier_failures_in_several_started_activities_each_end_their_own ... ok
+thread 'scheduler::tests::notifier_failures_too_many_to_nest_are_each_reported' (44524) panicked at crates/rexx-exec/src/scheduler/tests/pool.rs:228:10:
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 1002 filtered out; finished in 0.23s
+== T24F_Y2 set
+test scheduler::tests::notifier_failures_too_many_to_nest_are_each_reported ... FAILED
+test scheduler::tests::a_notifier_failing_in_a_started_activity_replaces_its_failure ... ok
+test scheduler::tests::a_notifier_failing_on_a_started_success_is_the_sends_failure ... FAILED
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... FAILED
+test scheduler::tests::notifier_failures_in_several_started_activities_each_end_their_own ... FAILED
+thread 'scheduler::tests::notifier_failures_too_many_to_nest_are_each_reported' (44558) panicked at crates/rexx-exec/src/scheduler/tests/pool.rs:228:10:
+thread 'scheduler::tests::a_notifier_failing_on_a_started_success_is_the_sends_failure' (44556) panicked at crates/rexx-exec/src/scheduler/tests.rs:1091:5:
+assertion `left == right` failed
+  left: "in notifier\nmain 3\n"
+ right: "in notifier\nmain 3\nin notifier\nin notifier\n"
+thread 'scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome' (44555) panicked at crates/rexx-exec/src/scheduler/tests.rs:1147:5:
+assertion `left == right` failed:     15 *-* return 1/0
+  left: 0
+ right: 214
+thread 'scheduler::tests::notifier_failures_in_several_started_activities_each_end_their_own' (44557) panicked at crates/rexx-exec/src/scheduler/tests.rs:1110:5:
+assertion `left == right` failed
+  left: "notified\nnotified\nnotified\nmain end\n"
+ right: "notified\nnotified\nnotified\nnotified\nnotified\nnotified\nnotified\nnotified\nnotified\nmain end\n"
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 1002 filtered out; finished in 0.23s

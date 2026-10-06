@@ -5,7 +5,7 @@ Base 4936f24c3. Scratch and target dirs under `/tmp/claude-1000/p6-t24/`.
 ## Commits
 
 - 53e6b9bd6: the task's code, rows, tests, corpus move, enumeration scripts.
-- (second commit): gate record criterion 8 subsection, enumeration `output.txt` at 742913850,
+- c26e5c253: gate record criterion 8 subsection, enumeration `output.txt` at 742913850,
   this report and the mutation evidence (`task-24-mutations/`).
 
 ## What was done
@@ -16,7 +16,7 @@ Base 4936f24c3. Scratch and target dirs under `/tmp/claude-1000/p6-t24/`.
   `ValueDescriptor`, `Value`, a test's `Shared`, none holding an `ObjRef`).
 - The test `the_guard_instructions_answers_and_the_phase_6_refusals` renamed
   `..._and_their_refusals` (its name was false once Phase 6 closed).
-- Divergence rows 14-23 (`phase-4-exclusions.txt:1574-1748`), owner none:
+- Divergence rows 14-23 (`phase-4-exclusions.txt:1574-1745`), owner none:
   14 inverted pinned wait, 15 immovable REPLY, 16 wrapper keeps the baton, 17 HALT under
   nesting, 18 pinned busy-waiter, 19 callback waits for a baton-keeping call (P55/P57),
   20 a wait nothing left can end (P27/P65/P77), 21 program end (P39/P40/P75, u5),
@@ -80,7 +80,7 @@ dir (Compiling rexx-exec seen). Each test run with the variable unset (green) an
 | inv | an inverted wait refused as "nothing left to run" | an_inverted_pinned_wait_is_refused, an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted |
 | reply | the immovable-REPLY check skipped | the_guard_instructions_answers_and_their_refusals; with `--features pinning`, an_immovable_reply_is_counted_with_its_frames |
 | redir | a redirected command leaves the baton like an unredirected one | a_redirected_command_stops_every_other_activity |
-| halt | `Message~halt` delivered to the running activity | a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region |
+| halt | `Message~halt` queued on the running activity, so the buried target never halts (fix round 1: this reverts the halt reaching its target, not the delay) | a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region |
 | busy | inverted yields not counted (`--features pinning`) | pinned_busy_waiters_that_need_each_other_count_inverted_yields |
 | lone | a lone native call leaves its driver | a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity |
 | unsat | the wait nothing can end answers 11.1 | the_result_of_a_message_never_sent_is_refused, a_pinned_wait_nothing_can_end_is_refused, the_guard_instructions_answers_and_their_refusals |
@@ -116,3 +116,93 @@ carries DELIVERED; the false pass itself is closed-a.log / closed-b.log.
   binaries; the counts file's header says what they ran.
 - `mutations-2.log` shows the `stack` runs with no test lines: the process aborted, which
   `mutations-3.log` shows with the abort message.
+
+## Fix round 1
+
+Brief `task-24-fix1-brief.md`. Scratch and target dirs under `/tmp/claude-1000/p6-t24f/`.
+
+### Commits
+
+- 51e1d37cc: code, rows, scripts, probes, counts, gate record.
+- (this commit): row 24 rewrap, gate record line references, `output.txt` at 51e1d37cc, this
+  section, evidence `task-24-mutations/fix1-*`.
+
+### Code
+
+- C1: `oracle-crashes.txt` names `the_guard_instructions_answers_and_their_refusals`.
+- C2: README's compiled-extension rule covers `phase-6.txt` and `phase-8.txt`; `phase-6.txt`'s
+  header points at README's rules.
+- C3: `run.sh`'s third command joins `\` + newline + indentation (`perl -0pe 's/\\\n\s*//g'`) per
+  non-test file before `grep -Pzq 'Phase\s+6'`. The reviewer's continued literal, injected into a
+  scratch copy's `dispatch.rs`: old command prints nothing, new one prints
+  `rust/crates/rexx-exec/src/dispatch.rs` (`task-24-mutations/fix1-c3.txt`). The gate record says
+  `closed_phases` is the enforcement and the enumeration the listing.
+- C4: `open_owners` matches `OWNER` or any-case `Owner:` and the phase in any case; a resolution
+  word quoted in backticks or after `not` / `not yet` resolves nothing (`resolves`). A plain
+  any-case `owner` was tried first and flagged prose sentences in the real file, so the colon form
+  is required. New test `the_row_check_reads_owners_in_any_case_and_no_negated_resolution` (cases
+  I-N): red before the fix, `left: []` against the five expected sentences
+  (`fix1-closed-red.log`, `--no-fail-fast`); green after with the real file passing
+  (`fix1-closed-green.log`).
+- C5: mutation `fix1-y2.patch` (a notifier failure on a started success is reported and the
+  activity ends, not replacing the outcome): the test fails at y2's `exit_code` (`left: 0, right:
+  214`) with y1's assertions passed before it (`fix1-y2.log`). It also reddens
+  `a_notifier_failing_on_a_started_success_is_the_sends_failure` and
+  `notifier_failures_in_several_started_activities_each_end_their_own`, so y2 does not add
+  coverage against this mutation. `notifier_failures_too_many_to_nest_are_each_reported` fails in
+  both runs of that scratch tree: it needs `build/lib`, which the scratch copy lacks. The doc's
+  "mostly" now holds for y2 too (oracle 27/30, below); unchanged.
+- C6: no mutation found that undoes the delay. `a` is buried below `b`'s pinned region, so taking
+  the halt at `a`'s next clause would mean running `a`'s frames while `b`'s are above them on one
+  stack; the delay is the stack discipline, not a check a mutation can remove. The report's `halt`
+  row now says what that mutation reverts (the halt reaching its buried target). The reviewer's
+  run shows `halt` / `my_halt` also redden `message_halt_in_the_shape_of_test_halt_start` and
+  `a_message_halt_inside_its_handler_is_dropped`.
+- C7: `gate_tables/mod.rs`'s clause about Phase 6's close deleted.
+- C8: `probe.sh` prints `<probe>: not reached` for a probe with no line starting `ok` and no
+  Error 91.999. Method probes print nothing; the control prints its refusal and `control.rex: not
+  reached`; a scratch probe dying before its call (`x = 1/0` first) printed `early.rex: not
+  reached`.
+
+### Record
+
+- F1: row 22's y2 sentences per the review's fix text, with this round's oracle tally
+  (`counts.txt` section `fix round 1`, `y2 oracle`: 27 rc 0 `outer waited 3`, 3 rc 214; the rc 214
+  line is byte-identical to `y2 ours`, checked with `cmp`).
+- F2: row 22's P36 sentence per the review.
+- F3: row 23 cites the S4 measurement per the review.
+- F4 / P84: row 24 (`phase-4-exclusions.txt:1760`), owner none; evidence `task-7-review.md`
+  (kept call contexts, N1), `task-7-report.md` R-T7-2, R-T7-5; witnesses the gate-only
+  `outer_context.rs` tests and `scheduler::tests::callbacks::a_kept_call_context_used_from_another_threads_call_raises_98_983_there`.
+  Added to the gate record's table.
+- F5: `probes/foreign.cpp` (build line in its header) and `probes/lone_foreign.rex` committed;
+  `counts.txt`: oracle 30 `rc=134|E: terminate called after throwing an instance of
+  'NativeActivation*'|`, ours 30 `rc=137|`. Row 19 cites them.
+- F6: `count.sh` runs its sibling, `ours.sh` takes `$REXX_RUN`, both run dirs from `mktemp -d`
+  with the run dir stripped from stderr, `oracle.sh` is the rules' wrapper (`timeout -k 5 20`);
+  `EXTRA_LIB` appends a library directory. `counts.txt`'s header says which sections ran which
+  wrapper. Row 20: unsent.rex re-run under the rules' wrapper, `rc=137|0 0 abc LENGTH|wall 25.00 s`,
+  so the row says TERM at 20 s ignored, killed at 25 s.
+- F7: the Alarm/Ticker note says "with 6 in gate table C's `CLOSED_PHASES` (Task 24)".
+- F8: this report's commit and row range corrected. Rows 14-24 now span
+  `phase-4-exclusions.txt:1574-1782`; the gate record's row lines and the Alarm/Ticker line (5887)
+  updated.
+
+### Checks (P51), at 51e1d37cc plus this commit's prose
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0 (Checking rexx-exec seen; a
+  first run failed on `match_like_matches_macro` in `resolves`, fixed).
+- `memcap 8G cargo test --workspace --release --no-fail-fast` (target dir in scratch, test
+  binaries built first without memcap): 144 results, 3035 passed, 6 failed, 4 ignored. The six are
+  `rexx-bench-suite` `every_declared_runnability_still_holds` and `collection_arity` /
+  `introspection_arity`'s release-binary tests, each panicking that `rust/target/release/rexx-run`
+  does not exist (the scratch target dir). Re-run with `rust/target` a symlink to the scratch target
+  (removed after): 10, 24 and 26 passed, 0 failed.
+- `closed_phases` after this commit's row 24 rewrap: 6 passed.
+
+### Concerns
+
+- C5's mutation shows y2 can fail, not that it adds coverage: two existing notifier tests catch the
+  same mutation.
+- C6 has no delay-reverting mutation (reason above).

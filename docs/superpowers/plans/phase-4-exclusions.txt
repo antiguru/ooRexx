@@ -1765,16 +1765,18 @@ DEVIATIONS -- permanent, chosen
      GetRoutine answer from the keeping activity's top frame, and every
      other member raises 98.983 in the using activity's call. The oracle
      answers those four too, GetContextFuzz with 256 where this crate
-     answers 0 (it reads a Rexx activation as a native one); GetArguments,
-     GetArgument and GetRoutineName end in SIGSEGV, rc 139, and the rest
-     raise 98.983 against the keeping activity, then 44.1, and hang
+     answers 0 (the oracle reads a Rexx activation as a native one);
+     GetArguments, GetArgument and GetRoutineName end in SIGSEGV, rc 139,
+     and the rest raise 98.983 against the keeping activity, then 44.1, and
+     hang
      (.superpowers/sdd/2026-10-01-phase-6-s2-s5/task-7-review.md, finding on
      kept call contexts; task-7-report.md R-T7-2, R-T7-5). A member of a
      kept thread context does nothing here and raises 98.983 in the using
      call unless that call already holds a condition of its own; the oracle
      does nothing either, then ends in 44.1 and hangs, rc 137 under the
      wrapper, except where the call holds its own condition
-     (task-7-review.md N1). The oracle has no defined answer to match. Witnesses: rexx-exec's gate-only
+     (task-7-review.md N1). The oracle has no defined answer to match.
+     Witnesses: rexx-exec's gate-only
      outer_context::a_kept_call_context_used_by_another_activity_answers_or_raises
      and a_kept_thread_context_used_by_another_activity_does_nothing, and
      scheduler::tests::callbacks::a_kept_call_context_used_from_another_threads_call_raises_98_983_there.

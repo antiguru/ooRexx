@@ -1059,8 +1059,8 @@ directory (`pingpong/thirty-runs.txt`, by `pingpong/thirty-runs.sh`).
 
 Both enumerations are run by
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/run.sh REXX_RUN ORACLE_TREE`
-from the repository root; its output at `742913850` (code as at `53e6b9bd6`) is `output.txt` beside
-it. The S0/S1 commands (above), and the wrapped form restricted to non-test files:
+from the repository root; its output at `51e1d37cc` is `output.txt` beside it. The S0/S1 commands
+(above), and the wrapped form restricted to non-test files:
 
 ```
 /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/' | /bin/grep -av ':[0-9]*:\s*//'
@@ -1095,7 +1095,7 @@ probe's control, `probe.sh REXX_RUN control`, prints that refusal for
 alone, and gate table C's `CLOSED_PHASES` gains `6`. The Phase 6 corpus witnesses moved from
 `phase-8.txt` to `rust/corpus/phase-6.txt` (P17). Its tokenizer reads an identifier containing
 `CLOSED` as no resolution (P79); the Alarm and Ticker row it had passed over is resolved
-(`phase-4-exclusions.txt:5885`), citing gate table C
+(`phase-4-exclusions.txt:5887`), citing gate table C
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-gate-table-c.txt`).
 
 The divergences this design records are rows of `docs/superpowers/plans/phase-4-exclusions.txt`,

@@ -1,0 +1,8 @@
+# C3: a scratch copy of rust/crates (/tmp/claude-1000/p6-t24f/c3/rust/crates) with one line
+# appended to rexx-exec/src/dispatch.rs, run from the copy's root:
+pub const T24F_PROBE: &str = "refused (Phase \
+    6)";
+== old third command: /bin/grep -a -rPzoc 'Phase\s+6' rust/crates --include=*.rs | /bin/grep -v ':0$' | /bin/grep -av '/tests\.rs:\|/tests/'
+(no output)
+== new third command (run.sh at 51e1d37cc)
+rust/crates/rexx-exec/src/dispatch.rs

@@ -1,0 +1,15 @@
+diff --git 1/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/scheduler.rs 2/crates/rexx-exec/src/scheduler.rs
+index 8281e64..b52f8d7 100644
+--- 1/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/scheduler.rs
++++ 2/crates/rexx-exec/src/scheduler.rs
+@@ -1727,6 +1727,10 @@ impl Interp {
+             (Some(raised), _) => raised,
+             // A notification of the send's completion failed, which the
+             // message is told of as the send's own failure.
++            (None, Err(Failure::Raised(raised))) if std::env::var_os("T24F_Y2").is_some() => {
++                self.report_started_failure(&raised);
++                return Ok(Stopped::Ended);
++            }
+             (None, Err(Failure::Raised(raised))) => {
+                 self.yield_after_notifier_failure()?;
+                 if let Some(message) = started {

@@ -1,0 +1,67 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling crossbeam-utils v0.8.21
+   Compiling quote v1.0.47
+   Compiling rustversion v1.0.22
+   Compiling unicode-ident v1.0.24
+   Compiling once_cell v1.21.4
+   Compiling find-msvc-tools v0.1.9
+   Compiling crossbeam-epoch v0.9.20
+   Compiling shlex v2.0.1
+   Compiling log v0.4.34
+   Compiling regex-syntax v0.8.11
+   Compiling thiserror v1.0.69
+   Compiling lazy_static v1.5.1
+   Compiling rayon-core v1.13.0
+   Compiling pin-project-lite v0.2.17
+   Compiling thread_local v1.1.10
+   Compiling nu-ansi-term v0.50.3
+   Compiling smallvec v1.16.2
+   Compiling either v1.16.0
+   Compiling scoped-tls v1.0.1
+   Compiling rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling sharded-slab v0.1.7
+   Compiling cc v1.3.0
+   Compiling tracing-core v0.1.36
+   Compiling tracing-log v0.2.0
+   Compiling tracing v0.1.44
+   Compiling syn v2.0.119
+   Compiling crossbeam-deque v0.8.6
+   Compiling generator v0.8.10
+   Compiling regex-automata v0.4.14
+   Compiling rayon v1.12.0
+   Compiling thiserror-impl v1.0.69
+   Compiling datadriven v0.9.0
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling loom v0.7.2
+    Finished `release` profile [optimized + debuginfo] target(s) in 17.78s
+     Running tests/closed_phases.rs (/tmp/claude-1000/p6-t24f/target/release/deps/closed_phases-20278ab8b4bddbf8)
+
+running 6 tests
+test the_row_check_reads_owners_in_any_case_and_no_negated_resolution ... FAILED
+test the_row_check_tells_an_open_owner_from_a_resolved_one ... ok
+test no_open_exclusions_row_names_a_closed_phase ... ok
+test the_literal_scan_finds_a_phase_inside_a_longer_text ... ok
+test the_scan_finds_an_open_phase_it_is_not_asked_about ... ok
+test no_refusal_names_a_closed_phase ... ok
+
+failures:
+
+---- the_row_check_reads_owners_in_any_case_and_no_negated_resolution stdout ----
+
+thread 'the_row_check_reads_owners_in_any_case_and_no_negated_resolution' (42970) panicked at crates/rexx-exec/tests/closed_phases.rs:336:5:
+assertion `left == right` failed
+  left: []
+ right: ["OWNER: Phase 8", "OWNER: Phase 8", "OWNER: Phase 8", "Owner: Phase 8", "OWNER: phase 8"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_row_check_reads_owners_in_any_case_and_no_negated_resolution
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p rexx-exec --test closed_phases`
+error: 1 target failed:
+    `-p rexx-exec --test closed_phases`
