@@ -258,3 +258,113 @@ All exit statuses were taken from `$?` of the unpiped command.
 7. **Scratch.** The directories `target`, `target-tsan`, `target-base`, `target-bisect`,
    `target-loom`, `bisect/` and `base-s3/` under `p6-scratch/t22/` are deleted. Logs and scripts
    (44 MB) remain there.
+
+## Fix round 1
+
+Base `75f8aeda8` (the lead's ledger commit `4f811a962` landed on top while this round ran). Brief
+`task-22-fix1-brief.md`, from `task-22-review-timer.md`, `task-22-review-tsan.md` and
+`task-22-review-gate.md`. Code commit `c66650b52`; record commit after it. Evidence the record
+cites is in `s4-close-evidence/`.
+
+### Code items
+
+1. **T1, macOS.** The timerfd field and its arm/poll are under
+   `#[cfg(any(target_os = "linux", target_os = "android"))]`; other unix targets poll the socket
+   with the timeout (rustix rounds to whole milliseconds on `poll(2)`), capped at a day since
+   `poll(2)` takes a C int. `cargo check --target aarch64-apple-darwin -p rexx-exec`: rc 101, the
+   only error E0308 at `rexxutil.rs:154`. Mutant, both cfgs widened to `unix` / `not(unix)`: rc
+   101 with E0425, E0432 and E0433 (x3) from `rustix::time` timerfd items beside the E0308.
+2. **T2, T4.** The timer-slack sentence is gone; the doc says a wake, the timeout or an
+   interrupted poll returns, and the caller recomputes.
+3. **T3.** The rustix comment in `rexx-exec/Cargo.toml` names `event` and `time` and says "The
+   four features".
+4. **S1.** `HOLDBUFFER(buffer, key, mark)` marks `key` held under a static `Mutex`, then waits on
+   a `Condvar` (up to 5 s) for `BUFFERCHANGED(key)`; the other activity polls `BUFFERHELD(key)`
+   before changing the buffer and calls `BUFFERCHANGED` after. No files. The `hold_buffer` line
+   is gone from `rust/tsan.supp`. Results:
+   - TSan run at `c66650b52` clean (below), both `lent::a_buffer_*` tests ran.
+   - Mutant M-S1, `BUFFERCHANGED` pushes nothing: both tests FAILED (`left: "unawaited\n..."`),
+     5.03 s.
+   - TSan control, `HOLDBUFFER` sleeping 2 s in place of the lock wait, suppression file as
+     committed: exit 66, one `WARNING: ThreadSanitizer: data race`, frame #0 `read_volatile`
+     (`s4-close-evidence/tsan/control-no-handshake.*`). So the lock is what orders the pair, and
+     logging was live.
+   Both files restored by copy and `cmp` after each mutant.
+5. **S2.** `tsan.sh` skips the 13 depth tests by exact path (`--exact --skip`), and the signals
+   test the same way. Lib result `990 passed; ... 13 filtered out`; the three tests the substring
+   caught all ran and passed (`the_high_water_mark_is_the_deepest_the_stack_reached`,
+   `a_routines_own_clauses_echo_at_indent_zero_however_deep_the_call_site_is`,
+   `notifier_failures_too_many_to_nest_are_each_reported`, in `tsan/lib.txt`).
+6. **S3.** `scheduler::tests::pool::bounded_callback_recursion_nests_under_one_lend`: 25 levels of
+   `TestSendMessage0` callback recursion beside a started `idle` activity, asserting output
+   `bottom\nidled\n`, `exits == 1`, `takes == 1`. Passes in release and under TSan. Mutant M-S3,
+   the started activity removed (the call is then a lone one and keeps the baton, P43): FAILED,
+   `left: 0, right: 1` on `exits`.
+
+### Record items
+
+7. **G1.** The blocking-operations command was rerun at `c66650b52` with the directory prefix
+   stripped by `sed` (now part of the quoted command); the output block is that output, checked
+   equal to a fresh run by a script. Every output line's file and line is in the table (checked by
+   a script parsing the table against the block, no unclassified line and no stale table line).
+   New classes: `input.rs:80` (keeps the baton, read on a pool thread, P69/P60/DEVIATIONS 12-13),
+   `timer.rs:454` (the timer's own wait), `sync.rs:83`, `:127` (nonblocking wake I/O),
+   `#[cfg(test)]` sites in `scheduler/pool.rs` and `dispatch/library.rs`, the `signal.rs`,
+   `sync.rs`, `input.rs` test modules and the new `scheduler/tests/` files.
+8. **G2, G3.** The `ADDRESS` row now follows P64 with the DEVIATIONS 12 fallback; `input.rs` has
+   its own row per P69.
+9. **G5.** Queued list: added `2026-10-05-stdin-chars-after-drain`, dropped
+   `2026-10-03-interpret-translation-error-traceback`, and `send-site-cache-self-customization`
+   is labelled a design note.
+10. **G6.** All re-run at `c66650b52` (or across the trees for the probe) and cited:
+    - `overshoot.sh` / `overshoot.rex` / `overshoot.log`: every tree rebuilt from `git archive`
+      with a required `Compiling rexx-exec` line. Regression trees 0.011-0.020 s; the others
+      under 1 ms. The figures differ from the bisect note's (the S3 and Task 20 trees and
+      `c66650b52` read about 0.0004 s on this quiet run, `2e6917afe` 0.0001 s); one run per tree,
+      not interleaved, so no ordering among the sub-millisecond rows is claimed.
+    - `s2rows.sh` / `s2rows.log` / `s2-table.txt`: exit 0, 125.33 s, no P48 rerun, SysSleep
+      TEST_SLEEP_CONCURRENT `pass` / `same` at `s2-table.txt:138`; every other row equals G6's
+      table at `52b038a80` (script comparison).
+    - `pinning.sh` / `pinning.log` / `pinning-diff.py` / `pinning-diff.log`: exit 0, `18 passed`,
+      arrivals equal the S3 close's, no waits-by-kind diff in either mode; control (one count
+      altered in a copy of the log) prints the row. Outcomes differ between modes only on
+      `MutexSemaphore` TEST_EXCLUSION.
+    - `tsan.sh` / `tsan/`: one run, below.
+    - `loom.log`.
+    - Criterion 2 and `outer_context` now cite G4 and G6 lines of the `52b038a80` logs.
+11. **G7.** Dropped "prints 123 lines", "the ten more", "18 `measured::` tests" and "1127 in all";
+    the counts left are quoted from a cited log.
+12. **G8.** The 13 lib exclusions and the signals one are listed by exact path with a reason
+    each, and a sentence says the pool callback recursion runs bounded, not at depth.
+13. **G9.** (a) the REPLY cell is attributed to G4 (G6 and this run have `pass`); (b) P67 says it
+    holds for one interpreter per process; (c) `tsan.supp` names `"S4 close", "Criterion 3, race
+    checking"`.
+14. **LEAD lines** untouched, as are criteria 1's `52b038a80` citations.
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR` under `p6-scratch/t22f1/`, at `c66650b52`, each exit taken from
+the unpiped command:
+
+- `cargo fmt --all --check`: exit 0.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo test --workspace --release --no-run`: exit 0. Then `memcap 8G cargo test --workspace
+  --release`: exit 0, 144 `test result` lines, 3033 passed, 0 failed, 4 ignored (3032 before,
+  plus the bounded recursion test). A first attempt without a fresh `--no-run` (mutant restores
+  had touched sources) was OOM-killed by memcap while compiling; that is why the bar builds
+  first.
+- loom: `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --test loom`, own target dir: exit 0,
+  `15 passed; 0 failed`, 358.99 s.
+- TSan: `bash s4-close-evidence/tsan.sh <target> <logs>`: `api exit 0`, `lib exit 0`, `int exit
+  0`, `no tsan log`; rexx-api 70, rexx-exec lib 990 (13 filtered), `concurrency_tests` 32,
+  `program_end` 2, `signals` 36 (1 filtered), `stdin_contention` 1.
+
+### Concerns
+
+1. The S1 control and M-S1 run only the two `lent::a_buffer_*` tests; the TSan run itself is one
+   run, not ten.
+2. The overshoot rows are one run each in sequence; the sub-millisecond rows moved between this
+   run and the bisect note's, as they do run to run.
+3. The macOS check shows only that `rexx-exec` type-checks up to the pre-existing E0308; the
+   non-Linux wait has not run anywhere.
+4. Scratch `p6-scratch/t22f1/` is deleted.

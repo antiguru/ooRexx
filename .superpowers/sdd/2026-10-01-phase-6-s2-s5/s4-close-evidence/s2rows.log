@@ -1,0 +1,10 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 33s
+     Running tests/concurrency_tests.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/p6-scratch/t22f1/target/release/deps/concurrency_tests-16fda60c2ac789c8)
+
+running 1 test
+test group_runs::the_s2_rows_of_the_derived_list_in_both_modes has been running for over 60 seconds
+test group_runs::the_s2_rows_of_the_derived_list_in_both_modes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 31 filtered out; finished in 125.33s
+

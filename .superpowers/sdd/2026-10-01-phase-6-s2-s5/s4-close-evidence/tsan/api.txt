@@ -1,0 +1,109 @@
+   Compiling compiler_builtins v0.1.160 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/compiler-builtins/compiler-builtins)
+   Compiling core v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core)
+   Compiling libc v0.2.189
+   Compiling object v0.39.1
+   Compiling std v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std)
+   Compiling test v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/test)
+   Compiling memchr v2.8.3
+   Compiling quick-xml v0.37.5
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+   Compiling rustc-std-workspace-core v1.99.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/rustc-std-workspace-core)
+   Compiling alloc v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc)
+   Compiling adler2 v2.0.1
+   Compiling cfg-if v1.0.4
+   Compiling rustc-demangle v0.1.28
+   Compiling rustc-literal-escaper v0.0.8
+   Compiling unwind v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/unwind)
+   Compiling rustc-std-workspace-alloc v1.99.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/rustc-std-workspace-alloc)
+   Compiling panic_abort v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/panic_abort)
+   Compiling panic_unwind v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/panic_unwind)
+   Compiling gimli v0.34.0
+   Compiling std_detect v0.1.5 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std_detect)
+   Compiling hashbrown v0.17.1
+   Compiling miniz_oxide v0.9.1
+   Compiling addr2line v0.27.1
+   Compiling rustc-std-workspace-std v1.99.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/rustc-std-workspace-std)
+   Compiling proc_macro v0.0.0 (/home/moritz/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/proc_macro)
+   Compiling getopts v0.2.24
+   Compiling rustc-hash v2.1.2
+   Compiling libloading v0.8.9
+   Compiling rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Finished `test` profile [optimized + debuginfo] target(s) in 23.75s
+     Running unittests src/lib.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/p6-scratch/t22f1/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-api/186d7242ed42a757/out/rexx_api-186d7242ed42a757)
+
+running 70 tests
+test ffi::tests::a_callback_takes_the_baton_before_it_borrows_the_conversion ... ok
+test ffi::tests::a_callback_through_a_guarded_host_takes_the_baton_for_its_length ... ok
+test ffi::tests::a_command_environment_registers_a_handler_of_either_type ... ok
+test ffi::tests::a_context_we_handed_out_recovers_its_owner ... ok
+test ffi::tests::a_call_ending_below_a_later_one_leaves_the_later_one_innermost ... ok
+test ffi::tests::a_direct_handler_binds_the_callers_variable_and_answers ... ok
+test ffi::tests::a_copied_mutable_buffer_is_writable_to_its_capacity ... ok
+test ffi::tests::a_narrow_value_is_written_over_a_zeroed_word ... ok
+test ffi::tests::a_nested_attach_answers_the_calls_own_thread_context ... ok
+test ffi::tests::a_guarded_host_reached_without_the_baton_fails - should panic ... ok
+test ffi::tests::a_raise_hands_the_host_its_substitutions_as_an_array ... ok
+test ffi::tests::a_refusing_entry_records_itself_and_returns ... ok
+test ffi::tests::a_released_local_reference_still_answers ... ok
+test ffi::tests::a_redirecting_handler_reads_and_writes_each_stream ... ok
+test ffi::tests::a_surface_member_on_a_host_without_one_refuses ... ok
+test ffi::tests::a_thread_member_off_the_baton_takes_it_before_reading_the_table ... ok
+test ffi::tests::an_exit_context_throw_leaves_the_handler ... ok
+test ffi::tests::every_repr_reads_back_the_member_the_table_wrote ... ok
+test ffi::tests::object_memory_is_aligned_for_any_c_object ... ok
+test ffi::tests::the_condition_members_hold_read_and_clear_the_hosts_condition ... ok
+test ffi::tests::the_construction_members_answer_through_the_thread_table ... ok
+test ffi::tests::the_context_variable_members_set_read_and_drop ... ok
+test ffi::tests::the_cself_members_answer_the_held_buffers_bytes ... ok
+test ffi::tests::the_number_members_round_trip_through_their_out_pointers ... ok
+test ffi::tests::the_object_memory_members_allocate_grow_and_free ... ok
+test ffi::tests::the_public_struct_is_at_the_head_of_the_wrapper ... ok
+test ffi::tests::the_object_variable_members_set_read_and_drop ... ok
+test ffi::tests::the_send_members_and_the_routine_name_answer_through_the_host ... ok
+test ffi::tests::the_string_and_buffer_members_copy_and_write_through_their_addresses ... ok
+test ffi::tests::the_string_value_reference_and_name_members_answer_through_the_host ... ok
+test invoke::tests::a_classic_routine_is_refused_before_its_stub_is_entered ... ok
+test invoke::tests::a_classic_row_publishes_no_signature_and_calls_nothing ... ok
+test invoke::tests::a_closed_librarys_hook_does_not_run ... ok
+test invoke::tests::a_cstring_result_is_copied_up_to_its_first_nul ... ok
+test invoke::tests::a_hook_is_handed_the_thread_context_and_its_raise_is_kept ... ok
+test invoke::tests::a_hook_that_reaches_an_unwritten_member_is_refused ... ok
+test invoke::tests::a_nested_call_hands_the_thread_context_back_to_the_outer_call ... ok
+test invoke::tests::a_refused_member_is_the_calls_answer_and_a_nested_call_keeps_its_own ... ok
+test invoke::tests::a_result_word_carrying_the_optional_bit_is_refused_after_the_call ... ok
+test invoke::tests::a_routine_reads_numeric_settings_and_builds_a_double_through_its_contexts ... ok
+test invoke::tests::a_routine_runs_the_two_calls_a_method_runs ... ok
+test invoke::tests::a_signature_longer_than_the_array_is_refused_and_not_called ... ok
+test invoke::tests::a_signature_that_fills_the_array_is_run ... ok
+test invoke::tests::a_special_code_as_the_result_is_refused ... ok
+test invoke::tests::a_stub_reaches_its_activation_through_the_context_it_was_handed ... ok
+test invoke::tests::a_stub_reaches_its_activation_through_the_thread_context ... ok
+test invoke::tests::a_stub_reaches_the_instance_through_the_thread_context ... ok
+test invoke::tests::a_stub_that_publishes_no_signature_is_refused ... ok
+test invoke::tests::a_thread_context_kept_from_one_call_reaches_the_next ... ok
+test invoke::tests::a_throw_unwinds_the_extension_and_holds_the_condition ... ok
+test invoke::tests::an_argument_a_routine_does_not_consume_is_refused ... ok
+test invoke::tests::an_argument_the_signature_does_not_consume_is_refused ... ok
+test invoke::tests::an_argument_list_parameter_takes_arguments_nothing_else_consumes ... ok
+test invoke::tests::an_unknown_parameter_code_is_an_argument_position ... ok
+test invoke::tests::contexts_linking_one_table_share_its_constants ... ok
+test invoke::tests::the_call_publishes_its_array_on_the_context ... ok
+test invoke::tests::every_call_context_throw_member_unwinds_the_routine ... ok
+test invoke::tests::the_context_holds_no_array_once_the_call_is_over ... ok
+test invoke::tests::the_signature_call_publishes_no_array ... ok
+test invoke::tests::every_throw_member_unwinds_the_extension ... ok
+test invoke::tests::the_signature_call_runs_before_any_argument_is_touched ... ok
+test load::tests::a_held_row_keeps_its_mapping_open ... ok
+test load::tests::a_library_refused_for_its_version_keeps_only_its_unloader ... ok
+test redirect::tests::a_line_write_flushes_the_tail_and_one_target_interleaves ... ok
+test load::tests::a_routine_is_found_by_its_exact_spelling_before_its_case ... ok
+test load::tests::the_global_table_keeps_the_last_row_of_each_upper_cased_name ... ok
+test redirect::tests::the_input_buffer_holds_the_unread_lines_once ... ok
+test redirect::tests::buffers_split_into_the_oracles_lines ... ok
+test ffi::tests::an_aborting_entry_refuses_loudly ... ok
+test ffi::tests::a_thread_context_with_no_call_in_flight_aborts ... ok
+
+test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+

@@ -1,0 +1,25 @@
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+warning: function `await_buffer_changed` is never used
+   --> crates/rexx-api/src/load.rs:907:4
+    |
+907 | fn await_buffer_changed(key: &[u8]) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `rexx-api` (lib) generated 1 warning
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `test` profile [optimized + debuginfo] target(s) in 2.90s
+     Running unittests src/lib.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/p6-scratch/t22f1/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-exec/29b7299628c28281/out/rexx_exec-29b7299628c28281)
+
+running 2 tests
+test scheduler::tests::lent::a_buffer_changed_in_place_under_a_call_stays_shared ... ok
+test scheduler::tests::lent::a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1001 filtered out; finished in 3.11s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`
+
+Caused by:
+  process didn't exit successfully: `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/p6-scratch/t22f1/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-exec/29b7299628c28281/out/rexx_exec-29b7299628c28281 'scheduler::tests::lent::a_buffer'` (exit status: 66)
+note: test exited abnormally; to see the full output pass --no-capture to the harness.

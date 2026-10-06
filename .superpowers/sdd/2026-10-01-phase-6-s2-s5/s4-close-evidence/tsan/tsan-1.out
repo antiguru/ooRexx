@@ -1,0 +1,4 @@
+api exit 0
+lib exit 0
+int exit 0
+no tsan log

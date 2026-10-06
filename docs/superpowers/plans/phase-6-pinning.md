@@ -770,14 +770,15 @@ run's deadline under every opportunity (P46).
 
 ## S4 close
 
-At `b8ec39593`, from `rust/`:
+At `c66650b52`, from `rust/`, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence/pinning.sh`:
 
 ```
 RAYON_NUM_THREADS=4 CARGO_TARGET_DIR=<own dir> memcap 8G cargo test --release -p rexx-exec \
   --features pinning --test concurrency_tests -- measured:: --nocapture --test-threads=1
 ```
 
-Exit 0, 18 `measured::` tests passed. Arrivals per park, beside the S3 close:
+Exit 0, every `measured::` test passed (`pinning.log`: `test result: ok. 18 passed; 0 failed`).
+Arrivals per park, beside the S3 close, summed from the log's park tables by `pinning-diff.py`:
 
 | park | S3 normal | S3 every opportunity | S4 normal | S4 every opportunity |
 |---|---:|---:|---:|---:|
@@ -790,8 +791,15 @@ Exit 0, 18 `measured::` tests passed. Arrivals per park, beside the S3 close:
 | SysSleep | 173 | 172 | 173 | 172 |
 | Timer | 37 | 59 | 37 | 59 |
 
-The waits-by-kind tables of both modes are row for row the S3 close's above (checked by `diff`
-against this file's S3 tables). The same run at `52b038a80` gave the same arrivals and tables. No `NativeCall` or
+The waits-by-kind tables of both modes are row for row the S3 close's above:
+
+```
+E=.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence
+python3 $E/pinning-diff.py $E/pinning.log docs/superpowers/plans/phase-6-pinning.md > $E/pinning-diff.log
+```
+
+prints the arrivals and no diff line for either mode (`pinning-diff.log`); with one count in
+`pinning.log` altered, it prints that row. No `NativeCall` or
 `Command` park is counted: no test of the derived list waits for a native call or an `ADDRESS`
 command off the baton. No immovable `REPLY` and no inverted wait is counted in either mode. Every
 test's outcome is the same in both tables but `MutexSemaphore` TEST_EXCLUSION, which passes
