@@ -61,7 +61,7 @@ Re-run at this head, 30 runs per probe per side, same results as `s5-find-verify
 Commits: `aefb2eec4` (keys, started markers, rest part, `rexx` on PATH, corpus asserts),
 `9efe2b267` (`REST_LEFT_OUT`), `573076d31` (a refusal before any test ends the rest part),
 `bf558da52` (`DIFFERING` regenerated, P48 rerun, `alone.sh`/`alone.txt`, clock probes, queue note),
-and the records commit after it (hash in `git log`; it also removes the corpus asserts that a
+and `cd3f30781` (records; it also removes the corpus asserts that a
 replace had also put into `sharing_fraction_over_the_corpus`, which broke `--features sharing`).
 
 - C1: `pinning_report_over_the_corpus` asserts no unfinished run, no inverted wait, no pushed frame.
