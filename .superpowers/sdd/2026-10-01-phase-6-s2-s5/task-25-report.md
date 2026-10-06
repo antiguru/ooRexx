@@ -89,3 +89,19 @@ exit 0, 3042 passed, 0 failed, 4 ignored (built first with `--no-run` outside me
 
 Concerns: the whole-group test now takes about 13 minutes; a whole part that stops refusing before
 TEST_SUBCLASSES_GC or TEST_UNINIT would run them in process and hit the memcap.
+
+## Fix round 2
+
+Base `ccc606fb3` (the lead's P86 change). Commits: `9cef9f27b` (N1 `counted_only` masks the
+assertion count and compares with `agree`, N2 its four unit tests, N3 Method's reason and
+`alone.sh`), `ac9754ed8` (`alone.txt` rerun with Method TEST_NEW_NO_ARGS, N5 sentences),
+`a603bccfd` (N4: the whole-groups run at `ac9754ed8` and its record), and this report's commit.
+
+- N2 mutants, each run of `whole_groups::`: `counted_only` without `seen.len() > 1` fails
+  `one_oracle_outcome_is_not_counted_only`; the old key-based trigger fails
+  `outcomes_differing_in_stderr_alone_are_not_counted_only`; file restored from a copy.
+- N4: whole-groups at `ac9754ed8`: `test result: ok. 6 passed; 0 failed`, 773.19 s, no P48 rerun;
+  printed as listed and agreeing: `REPLY` whole every and `REPLY` derived every (both under P86).
+- Checks at `a603bccfd`: fmt 0; clippy workspace, pinning, sharing 0; `memcap 8G cargo test
+  --workspace --release` (default target, built first with `--no-run`) exit 0, 3047 passed, 0 failed,
+  4 ignored (sum of `test result` lines).
