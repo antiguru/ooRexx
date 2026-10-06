@@ -65,7 +65,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 # writable open handle where a read-only file's stamp is still the owner's to
 # set; and `uname`, for `SysVersion`. Both features are leaves here -- they
 # gate their modules and pull no further crate.
-rustix = { version = "1.1.4", features = ["fs", "system"] }
+rustix = { version = "1.1.4", features = ["event", "fs", "system", "time"] }
 # `sigaction` and the async-signal-safe `write` the signal module needs
 # (D-U3, `src/signal.rs`). Already in the graph through `std`'s users.
 libc = "0.2.186"

@@ -42,15 +42,16 @@ pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexG
     condvar.wait(guard).unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The timer thread's wake source: a socket pair whose read end the timer
-/// waits on, with a read timeout for its next deadline, and whose
-/// nonblocking write end registration changes and the signal handlers each
-/// write one byte to. It is never closed, so a byte written while no timer
-/// thread reads stays until one does.
+/// The timer thread's wake source: a socket pair and a timer. The timer
+/// thread polls the socket's read end and the timer, armed for its next
+/// deadline. Registration changes and the signal handlers each write one
+/// byte to the socket's nonblocking write end. The socket is never closed,
+/// so a byte written while no timer thread reads stays until one does.
 #[cfg(not(all(loom, test)))]
 pub(crate) struct Wake {
     reader: std::os::unix::net::UnixStream,
     writer: std::os::unix::net::UnixStream,
+    timer: std::os::fd::OwnedFd,
 }
 
 #[cfg(not(all(loom, test)))]
@@ -58,10 +59,20 @@ impl Wake {
     pub(crate) fn new() -> Wake {
         let (reader, writer) =
             std::os::unix::net::UnixStream::pair().expect("the timer's wake socket");
-        writer
-            .set_nonblocking(true)
-            .expect("a nonblocking wake socket");
-        Wake { reader, writer }
+        for end in [&reader, &writer] {
+            end.set_nonblocking(true)
+                .expect("a nonblocking wake socket");
+        }
+        let timer = rustix::time::timerfd_create(
+            rustix::time::TimerfdClockId::Monotonic,
+            rustix::time::TimerfdFlags::NONBLOCK | rustix::time::TimerfdFlags::CLOEXEC,
+        )
+        .expect("the timer's deadline timer");
+        Wake {
+            reader,
+            writer,
+            timer,
+        }
     }
 
     /// Wakes the timer. A full socket already holds a wake.
@@ -70,15 +81,35 @@ impl Wake {
         let _ = (&self.writer).write(&[0]);
     }
 
-    /// Blocks until a wake or `timeout`, taking every wake written.
+    /// Blocks until a wake or `timeout`, taking every wake written. The
+    /// deadline is a timerfd's, which expires within the thread's timer
+    /// slack.
     pub(crate) fn wait(&self, timeout: Option<Duration>) {
+        use rustix::event::{PollFd, PollFlags, poll};
+        use rustix::time::{Itimerspec, TimerfdTimerFlags, Timespec, timerfd_settime};
         use std::io::Read;
         if timeout == Some(Duration::ZERO) {
             return;
         }
-        let _ = self.reader.set_read_timeout(timeout);
+        let zero = Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        let deadline = Itimerspec {
+            it_interval: zero,
+            it_value: timeout
+                .and_then(|timeout| Timespec::try_from(timeout).ok())
+                .unwrap_or(zero),
+        };
+        let _ = timerfd_settime(&self.timer, TimerfdTimerFlags::empty(), &deadline);
+        let mut polled = [
+            PollFd::new(&self.reader, PollFlags::IN),
+            PollFd::new(&self.timer, PollFlags::IN),
+        ];
+        let _ = poll(&mut polled, None);
         let mut bytes = [0u8; 64];
         let _ = (&self.reader).read(&mut bytes);
+        let _ = rustix::io::read(&self.timer, &mut bytes[..8]);
     }
 
     /// Installs the signal handlers, writing to this socket.
@@ -167,4 +198,45 @@ pub(crate) fn advance(by: Duration) {
 loom::lazy_static! {
     static ref CLOCK: (Instant, std::sync::atomic::AtomicU64) =
         (Instant::now(), std::sync::atomic::AtomicU64::new(0));
+}
+
+#[cfg(all(test, not(loom)))]
+mod tests {
+    use super::Wake;
+    use std::time::{Duration, Instant};
+
+    /// A timed wait with nothing written ends at its timeout: the best of
+    /// three 300 ms waits is under 1 ms late. Measured at niceness 5, a
+    /// socket read timeout was 15 to 24 ms late and a poll timeout about
+    /// 1.5 ms.
+    #[test]
+    fn a_timed_wait_ends_close_to_its_timeout() {
+        let wake = Wake::new();
+        let timeout = Duration::from_millis(300);
+        let late = (0..3)
+            .map(|_| {
+                let began = Instant::now();
+                wake.wait(Some(timeout));
+                let waited = began.elapsed();
+                assert!(waited >= timeout, "a wait ended early, after {waited:?}");
+                waited - timeout
+            })
+            .min()
+            .expect("three waits");
+        assert!(late < Duration::from_millis(1), "{late:?} late");
+    }
+
+    /// A wake written before the wait ends it at once, and the wait takes
+    /// it, so the next wait runs to its timeout.
+    #[test]
+    fn a_written_wake_ends_one_wait() {
+        let wake = Wake::new();
+        wake.notify();
+        let began = Instant::now();
+        wake.wait(Some(Duration::from_secs(5)));
+        assert!(began.elapsed() < Duration::from_secs(1));
+        let began = Instant::now();
+        wake.wait(Some(Duration::from_millis(50)));
+        assert!(began.elapsed() >= Duration::from_millis(50));
+    }
 }
