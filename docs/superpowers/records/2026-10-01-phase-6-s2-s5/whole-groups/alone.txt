@@ -44,4 +44,5 @@ DateTime TEST_BRUTE_FORCE | oracle: Assertions: 12 Failures: 0 Errors: 0 | ours:
 Message TEST_REPLYWITH_NOT_ARRAY | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)
 MethodArgs TEST_REQUEST_STRING_CLASS | oracle: Assertions: 186 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
 Method TESTDIRECTIVES | oracle: Assertions: 9 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
+Method TEST_NEW_NO_ARGS | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
 Section1 TEST_OBJECT_OBJECTNAMEEQUALS | oracle: Assertions: 5 Failures: 0 Errors: 0 | ours: rexx-exec: method "OBJECTNAME=" of class "Object" is not implemented (Phase 9)

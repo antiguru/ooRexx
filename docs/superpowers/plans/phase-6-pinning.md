@@ -867,4 +867,6 @@ Waits by kind, summed over the frames of each:
 | inverted, immovable, late wake, inverted yield | 0 | 0 |
 
 The whole-group runs of criterion 1 (`phase-6-gate.md` `## S5`) carry no pinning report; they are
-checked only for an inverted-wait refusal on stderr and for a run that does not finish.
+checked only for an inverted-wait refusal on stderr and for a run that does not finish. `bug2003_guard_when`'s subject runs as a child `rexx`, outside the in-process report: its per-test
+run in `measured::` errors (rc 2, no `rexx` on `PATH`, `pinning-s5/pinning.log`), and only the
+whole-group runs reach it, checked for an inverted-wait refusal and a hang.

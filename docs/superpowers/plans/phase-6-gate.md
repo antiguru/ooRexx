@@ -1222,7 +1222,9 @@ normally and `REPLY` in both modes each gave one outcome in 30 of 30.
 one test per run, in both modes: no inverted-wait refusal and no immovable `REPLY`; no run fails to
 finish but `MutexSemaphore` TEST_EXCLUSION under every opportunity (P46). The whole-group runs of
 criterion 1 carry no pinning report; they are checked only for an inverted-wait refusal on stderr
-and for a run that does not finish.
+and for a run that does not finish. `bug2003_guard_when`'s subject runs as a child `rexx`, outside the in-process report: its per-test
+run in `measured::` errors (rc 2, no `rexx` on `PATH`, `pinning-s5/pinning.log`), and only the
+whole-group runs reach it, checked for an inverted-wait refusal and a hang.
 
 ### Criterion 10, the *(verify)* items of spec section 6 (Task 25)
 
