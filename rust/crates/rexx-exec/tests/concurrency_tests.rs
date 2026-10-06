@@ -2387,23 +2387,28 @@ mod group_runs {
         assert_eq!(passing, TRACE_OBJECT_PASSING);
     }
 
-    /// Each group file of criterion 1's derived list run whole, every test of
-    /// the file in one run but those reaching rxapi, on the oracle and on
-    /// this crate in both modes. Gate-only.
+    /// Each group file of criterion 1's derived list in one run on the
+    /// oracle and on this crate in both modes, whole and with only its tests
+    /// of the derived list, the tests reaching rxapi renamed out of both.
+    /// Gate-only.
     mod whole_groups {
+        use std::collections::BTreeSet;
         use std::path::{Path, PathBuf};
         use std::time::{Duration, Instant};
 
         use super::super::group_runner::{
             GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
             group_file, masked, outcome, reaching_rxapi, rows_in_parallel, run_crate_within,
-            run_oracle_within, skip,
+            run_oracle_within, skip, source_test_names,
         };
         use super::super::support::oracle;
         use super::{WALL_CLOCK, inverted};
 
         /// Where the table is written when set.
         const TABLE_ENV: &str = "REXX_WHOLE_GROUPS_TABLE";
+
+        /// A directory each run's descriptors are written to when set.
+        const DUMP_ENV: &str = "REXX_WHOLE_GROUPS_DUMP";
 
         /// Oracle runs per group, and per group whose oracle outcome varies or
         /// differs from ours (ruling P83).
@@ -2413,8 +2418,8 @@ mod group_runs {
         /// How many runs of one group run at once.
         const RUNS_AT_ONCE: usize = 5;
 
-        /// The bound on one oracle run of a whole group: `base/bif/TIME`
-        /// takes about 94 s.
+        /// The bound on one oracle run: `base/bif/TIME` whole takes about
+        /// 94 s.
         const ORACLE_DEADLINE: Duration = Duration::from_secs(300);
 
         /// The bound on one run here: the oracle's slowest run times
@@ -2422,27 +2427,55 @@ mod group_runs {
         const CRATE_FACTOR: u32 = 4;
         const CRATE_FLOOR: Duration = Duration::from_secs(60);
 
-        /// The groups whose run here, in the named mode, is not one the
-        /// oracle produced, each with its reason.
-        const DIFFERING: &[(&str, &str, &str)] = &[];
+        /// Which tests of the group a run holds.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Part {
+            Whole,
+            Derived,
+        }
 
-        /// One run with the copy's path replaced by `RUN`, so runs from
-        /// different copies compare.
-        fn relative(run: Run, at: &Path) -> Run {
-            let path = at.to_string_lossy().into_owned().into_bytes();
-            let replace = |bytes: Vec<u8>| {
-                let mut out = Vec::with_capacity(bytes.len());
-                let mut rest = bytes.as_slice();
-                while !rest.is_empty() {
-                    if rest.starts_with(&path) {
-                        out.extend_from_slice(b"RUN");
-                        rest = &rest[path.len()..];
-                    } else {
-                        out.push(rest[0]);
-                        rest = &rest[1..];
-                    }
+        impl Part {
+            fn label(self) -> &'static str {
+                match self {
+                    Part::Whole => "whole",
+                    Part::Derived => "derived",
                 }
-                out
+            }
+        }
+
+        /// The runs here, by group, part and mode, that are not an outcome
+        /// the oracle produced, each with its reason.
+        const DIFFERING: &[(&str, &str, &str, &str)] = &[];
+
+        /// `run` with the copy's path, and the copy's directory name in a
+        /// path the framework abbreviates, replaced by `RUN`, so runs from
+        /// different copies of one row compare.
+        fn relative(run: Run, at: &Path) -> Run {
+            let name = at.file_name().expect("a copy name").to_string_lossy();
+            let patterns = [
+                at.to_string_lossy().into_owned().into_bytes(),
+                format!("/run/{name}/").into_bytes(),
+            ];
+            let replace = |bytes: Vec<u8>| {
+                patterns.iter().fold(bytes, |bytes, pattern| {
+                    let with: &[u8] = if pattern.starts_with(b"/run/") {
+                        b"/run/RUN/"
+                    } else {
+                        b"RUN"
+                    };
+                    let mut out = Vec::with_capacity(bytes.len());
+                    let mut rest = bytes.as_slice();
+                    while !rest.is_empty() {
+                        if rest.starts_with(pattern) {
+                            out.extend_from_slice(with);
+                            rest = &rest[pattern.len()..];
+                        } else {
+                            out.push(rest[0]);
+                            rest = &rest[1..];
+                        }
+                    }
+                    out
+                })
             };
             Run {
                 stdout: replace(run.stdout),
@@ -2451,50 +2484,40 @@ mod group_runs {
             }
         }
 
-        /// The copy `name` below `run`, laid out with the tests reaching
-        /// rxapi renamed out, and the arguments that run the group whole.
-        fn copy(run: &Path, name: &str, dir: &str, group: &str) -> (PathBuf, String) {
+        /// The copy `name` below `run` with the tests of `left_out` renamed
+        /// out, and the group file's path in it.
+        fn copy(
+            run: &Path,
+            name: &str,
+            dir: &str,
+            group: &str,
+            left_out: &BTreeSet<String>,
+        ) -> (PathBuf, String) {
             let at = run.join(name);
             fresh_copy(&at, dir);
             let file = group_file(&at, dir, group);
-            skip(Path::new(&file), group, &reaching_rxapi(dir, &[group]));
+            skip(Path::new(&file), group, left_out);
             (at, file)
         }
 
-        /// The oracle runs numbered `from..to`, each with its duration.
-        fn oracle_runs(
-            oracle: &oracle::Oracle,
-            run: &Path,
-            dir: &str,
-            group: &str,
-            from: usize,
-            to: usize,
-        ) -> Vec<(Run, Duration)> {
-            let mut runs = Vec::new();
-            let numbers: Vec<usize> = (from..to).collect();
-            for batch in numbers.chunks(RUNS_AT_ONCE) {
+        /// Runs `body` over `items` with at most [`RUNS_AT_ONCE`] at once,
+        /// answering the results in order.
+        fn at_once<I: Sync, T: Send>(items: &[I], body: impl Fn(&I) -> T + Sync) -> Vec<T> {
+            let mut results = Vec::new();
+            for batch in items.chunks(RUNS_AT_ONCE) {
                 std::thread::scope(|scope| {
                     let handles: Vec<_> = batch
                         .iter()
-                        .map(|k| {
-                            scope.spawn(move || {
-                                let (at, file) = copy(run, &format!("o{k:02}"), dir, group);
-                                let args = ["-f", file.as_str(), "-U", "-V", VERBOSITY];
-                                let start = Instant::now();
-                                let theirs = run_oracle_within(oracle, &at, &args, ORACLE_DEADLINE);
-                                let took = start.elapsed();
-                                (relative(theirs, &at), took)
-                            })
-                        })
+                        .map(|item| scope.spawn(|| body(item)))
                         .collect();
-                    runs.extend(handles.into_iter().map(|handle| {
+                    results.extend(handles.into_iter().map(|handle| {
                         handle
                             .join()
                             .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
                     }));
                 });
             }
-            runs
+            results
         }
 
         /// The distinct outcomes of `runs`, each with its count, most
@@ -2518,112 +2541,119 @@ mod group_runs {
             }
         }
 
-        /// Where `ours` falls in `oracle`'s outcomes: the outcome's number,
-        /// or `None`.
-        fn place(oracle: &[(&Run, usize)], ours: &Run) -> Option<usize> {
-            oracle.iter().position(|(theirs, _)| agree(theirs, ours))
+        fn difference(theirs: &Run, ours: &Run) -> String {
+            first_difference(&masked(&theirs.stdout), &masked(&ours.stdout))
+                .replace(['\n', '\t'], " ")
         }
 
-        /// One group's result: the table's cells, whether each mode agrees
-        /// with the oracle, and whether each ended in an inverted wait or
-        /// did not finish.
-        struct Group {
+        /// One row's result: the table's cells, whether each mode agrees with
+        /// the oracle, and whether each ended in an inverted wait or did not
+        /// finish.
+        struct Row {
             cells: String,
             agrees: [bool; 2],
             stuck: [bool; 2],
         }
 
-        fn whole_group(oracle: &oracle::Oracle, run: &Path, file: &str) -> Group {
+        fn dump(file: &str, part: Part, side: &str, run: &Run) {
+            let Some(dir) = std::env::var_os(DUMP_ENV) else {
+                return;
+            };
+            let stem = format!("{}-{}-{side}", file.replace('/', "__"), part.label());
+            let dir = Path::new(&dir);
+            std::fs::create_dir_all(dir).expect("the dump directory");
+            std::fs::write(dir.join(format!("{stem}.out")), &run.stdout).expect("a dump");
+            std::fs::write(dir.join(format!("{stem}.err")), &run.stderr).expect("a dump");
+        }
+
+        fn one_row(
+            oracle: &oracle::Oracle,
+            run: &Path,
+            file: &str,
+            part: Part,
+            derived: &BTreeSet<String>,
+        ) -> Row {
             let (dir, group) = file
                 .trim_end_matches(".testGroup")
                 .rsplit_once('/')
                 .expect("a group below a directory");
-            let mut theirs = oracle_runs(oracle, run, dir, group, 0, ORACLE_RUNS);
+            let mut left_out = reaching_rxapi(dir, &[group]);
+            if part == Part::Derived {
+                left_out.extend(
+                    source_test_names(dir, group)
+                        .into_iter()
+                        .filter(|test| !derived.contains(test))
+                        .map(|test| format!("{group}.{test}")),
+                );
+            }
+            let left_out = &left_out;
+            let oracle_run = |k: &usize| {
+                let (at, path) = copy(run, &format!("o{k:02}"), dir, group, left_out);
+                let args = ["-f", path.as_str(), "-U", "-V", VERBOSITY];
+                let start = Instant::now();
+                let theirs = run_oracle_within(oracle, &at, &args, ORACLE_DEADLINE);
+                (relative(theirs, &at), start.elapsed())
+            };
+            let first: Vec<usize> = (0..ORACLE_RUNS).collect();
+            let mut theirs = at_once(&first, oracle_run);
             let slowest = theirs.iter().map(|(_, took)| *took).max().expect("a run");
             let deadline = (slowest * CRATE_FACTOR).max(CRATE_FLOOR);
-            let ours: Vec<Run> = std::thread::scope(|scope| {
-                let handles: Vec<_> = [
-                    ("n00", SwitchMode::None),
-                    ("e00", SwitchMode::EveryOpportunity),
-                ]
-                .into_iter()
-                .map(|(name, mode)| {
-                    scope.spawn(move || {
-                        let (at, file) = copy(run, name, dir, group);
-                        let args = ["-f", file.as_str(), "-U", "-V", VERBOSITY];
-                        relative(run_crate_within(&at, &args, mode, deadline), &at)
-                    })
-                })
-                .collect();
-                handles
-                    .into_iter()
-                    .map(|handle| {
-                        handle
-                            .join()
-                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-                    })
-                    .collect()
+            let modes = [
+                ("n00", SwitchMode::None),
+                ("e00", SwitchMode::EveryOpportunity),
+            ];
+            let ours = at_once(&modes, |(name, mode)| {
+                let (at, path) = copy(run, name, dir, group, left_out);
+                let args = ["-f", path.as_str(), "-U", "-V", VERBOSITY];
+                relative(run_crate_within(&at, &args, *mode, deadline), &at)
             });
             let settled = {
                 let seen = distribution(&theirs);
-                seen.len() == 1 && ours.iter().all(|run| place(&seen, run).is_some())
+                seen.len() == 1 && ours.iter().all(|run| agree(seen[0].0, run))
             };
             if !settled {
-                theirs.extend(oracle_runs(
-                    oracle,
-                    run,
-                    dir,
-                    group,
-                    ORACLE_RUNS,
-                    ORACLE_RUNS_UNSETTLED,
-                ));
+                let more: Vec<usize> = (ORACLE_RUNS..ORACLE_RUNS_UNSETTLED).collect();
+                theirs.extend(at_once(&more, oracle_run));
             }
             let seen = distribution(&theirs);
-            let mut cells = format!("{file}\t{}\t", theirs.len());
+            dump(file, part, "oracle", seen[0].0);
+            dump(file, part, "normal", &ours[0]);
+            dump(file, part, "every", &ours[1]);
+            let mut cells = format!("{file}\t{}\t{}\t", part.label(), theirs.len());
             for (at, (run, count)) in seen.iter().enumerate() {
-                if at > 0 {
-                    let detail = first_difference(&masked(&seen[0].0.stdout), &masked(&run.stdout))
-                        .replace(['\n', '\t'], " ");
-                    cells.push_str(&format!("; {}: {count} {}, {detail}", at + 1, summary(run)));
-                } else {
+                if at == 0 {
                     cells.push_str(&format!("1: {count} {}", summary(run)));
+                } else {
+                    let detail = difference(seen[0].0, run);
+                    cells.push_str(&format!("; {}: {count} {}, {detail}", at + 1, summary(run)));
                 }
             }
             let mut agrees = [false; 2];
             let mut stuck = [false; 2];
             for (at, run) in ours.iter().enumerate() {
                 stuck[at] = inverted(run) || run.status.is_none();
-                let cell = match place(&seen, run) {
+                let cell = match seen.iter().position(|(theirs, _)| agree(theirs, run)) {
                     Some(number) => {
                         agrees[at] = true;
                         format!("agrees with {}", number + 1)
                     }
                     None => {
-                        let refusal = String::from_utf8_lossy(&run.stderr)
+                        let detail = String::from_utf8_lossy(&run.stderr)
                             .lines()
                             .find(|line| line.starts_with("rexx-exec: "))
-                            .map(str::to_string);
-                        let detail = match refusal {
-                            Some(line) => line,
-                            None => {
-                                first_difference(&masked(&seen[0].0.stdout), &masked(&run.stdout))
-                                    .replace(['\n', '\t'], " ")
-                            }
-                        };
+                            .map_or_else(|| difference(seen[0].0, run), str::to_string);
                         format!("differs: {}, {detail}", summary(run))
                     }
                 };
                 cells.push_str(&format!("\t{cell}"));
             }
-            cells.push_str(&format!(
-                "\t{}",
-                if agree(&ours[0], &ours[1]) {
-                    "same"
-                } else {
-                    "differ"
-                }
-            ));
-            Group {
+            let same = if agree(&ours[0], &ours[1]) {
+                "same"
+            } else {
+                "differ"
+            };
+            cells.push_str(&format!("\t{same}"));
+            Row {
                 cells,
                 agrees,
                 stuck,
@@ -2631,42 +2661,68 @@ mod group_runs {
         }
 
         #[test]
-        fn each_group_of_the_derived_list_whole_in_both_modes() {
+        fn each_group_of_the_derived_list_in_one_run_in_both_modes() {
             if !gate_mode() {
                 eprintln!("group_runs: skipped without {GATE_ENV}");
                 return;
             }
             let (list, _) = super::super::derive(&super::super::worktree().join("ootest/ooRexx"));
+            let derived: BTreeSet<String> = list
+                .iter()
+                .map(|row| {
+                    let group = row.group.trim_end_matches(".testGroup");
+                    let group = group.rsplit_once('/').map_or(group, |(_, name)| name);
+                    format!("{group}.{}", row.test)
+                })
+                .collect();
             let mut files: Vec<String> = list.iter().map(|row| row.group.clone()).collect();
             files.dedup();
+            let rows: Vec<(&String, Part)> = files
+                .iter()
+                .flat_map(|file| [(file, Part::Whole), (file, Part::Derived)])
+                .collect();
             let oracle = oracle::locate();
             let results = rows_in_parallel(
                 "whole-groups",
-                &files,
-                |file| {
+                &rows,
+                |(file, _)| {
                     WALL_CLOCK
                         .iter()
                         .any(|row| row.starts_with(&format!("{file} ")))
                 },
-                |run, file| whole_group(&oracle, run, file),
+                |run, (file, part)| {
+                    let (_, group) = file
+                        .trim_end_matches(".testGroup")
+                        .rsplit_once('/')
+                        .expect("a group below a directory");
+                    let mine: BTreeSet<String> = derived
+                        .iter()
+                        .filter_map(|row| row.strip_prefix(&format!("{group}.")))
+                        .map(str::to_string)
+                        .collect();
+                    one_row(&oracle, run, file, *part, &mine)
+                },
             );
             let mut table = String::from(
-                "group\toracle runs\toracle outcomes\tnormal\tevery\tnormal against every\n",
+                "group\tpart\toracle runs\toracle outcomes\tnormal\tevery\tnormal against every\n",
             );
             let mut failing = Vec::new();
-            for (file, group) in files.iter().zip(&results) {
-                table.push_str(&group.cells);
+            for ((file, part), row) in rows.iter().zip(&results) {
+                table.push_str(&row.cells);
                 table.push('\n');
                 for (at, mode) in ["normal", "every"].into_iter().enumerate() {
                     let listed = DIFFERING
                         .iter()
-                        .any(|(row, listed_mode, _)| row == file && *listed_mode == mode);
-                    if group.stuck[at] && !listed {
-                        failing.push(format!("{file} {mode}: an inverted wait or a hang"));
-                    } else if !group.agrees[at] && !listed {
-                        failing.push(format!("{file} {mode}: not an oracle outcome"));
-                    } else if group.agrees[at] && listed {
-                        failing.push(format!("{file} {mode}: listed as differing, agrees"));
+                        .any(|(group, listed_part, listed_mode, _)| {
+                            group == file && *listed_part == part.label() && *listed_mode == mode
+                        });
+                    let name = format!("{file} {} {mode}", part.label());
+                    if row.stuck[at] && !listed {
+                        failing.push(format!("{name}: an inverted wait or a hang"));
+                    } else if !row.agrees[at] && !listed {
+                        failing.push(format!("{name}: not an oracle outcome"));
+                    } else if row.agrees[at] && listed {
+                        failing.push(format!("{name}: listed as differing, agrees"));
                     }
                 }
             }
