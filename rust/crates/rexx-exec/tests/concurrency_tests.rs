@@ -2397,9 +2397,9 @@ mod group_runs {
         use std::time::{Duration, Instant};
 
         use super::super::group_runner::{
-            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, directive_bodies, first_difference,
-            fresh_copy, gate_mode, group_file, masked, outcome, reaching_rxapi, read_lossy,
-            rows_in_parallel, run_crate_within, run_oracle_within, skip,
+            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
+            group_file, masked, outcome, reaching_rxapi, read_lossy, rows_in_parallel,
+            run_crate_within, run_oracle_within, skip,
         };
         use super::super::support::oracle;
         use super::{WALL_CLOCK, inverted};
@@ -3013,10 +3013,18 @@ mod group_runs {
                     .join("ootest/ooRexx")
                     .join(dir)
                     .join(format!("{group}.testGroup"));
+                let text = read_lossy(&path);
                 left_out.extend(
-                    directive_bodies(&read_lossy(&path))
-                        .into_iter()
-                        .map(|(name, _)| name.to_ascii_uppercase())
+                    text.lines()
+                        .filter_map(|line| {
+                            let line = line.trim_start();
+                            let rest = line
+                                .get(..8)?
+                                .eq_ignore_ascii_case("::method")
+                                .then(|| &line[8..])?;
+                            let name = rest.split_whitespace().next()?.trim_matches(['\'', '"']);
+                            Some(name.to_ascii_uppercase())
+                        })
                         .filter(|name| name.starts_with("TEST") && !derived.contains(name))
                         .map(|test| format!("{group}.{test}")),
                 );
