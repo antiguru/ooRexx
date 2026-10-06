@@ -2386,4 +2386,295 @@ mod group_runs {
             .collect();
         assert_eq!(passing, TRACE_OBJECT_PASSING);
     }
+
+    /// Each group file of criterion 1's derived list run whole, every test of
+    /// the file in one run but those reaching rxapi, on the oracle and on
+    /// this crate in both modes. Gate-only.
+    mod whole_groups {
+        use std::path::{Path, PathBuf};
+        use std::time::{Duration, Instant};
+
+        use super::super::group_runner::{
+            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
+            group_file, masked, outcome, reaching_rxapi, rows_in_parallel, run_crate_within,
+            run_oracle_within, skip,
+        };
+        use super::super::support::oracle;
+        use super::{WALL_CLOCK, inverted};
+
+        /// Where the table is written when set.
+        const TABLE_ENV: &str = "REXX_WHOLE_GROUPS_TABLE";
+
+        /// Oracle runs per group, and per group whose oracle outcome varies or
+        /// differs from ours (ruling P83).
+        const ORACLE_RUNS: usize = 5;
+        const ORACLE_RUNS_UNSETTLED: usize = 30;
+
+        /// How many runs of one group run at once.
+        const RUNS_AT_ONCE: usize = 5;
+
+        /// The bound on one oracle run of a whole group: `base/bif/TIME`
+        /// takes about 94 s.
+        const ORACLE_DEADLINE: Duration = Duration::from_secs(300);
+
+        /// The bound on one run here: the oracle's slowest run times
+        /// `CRATE_FACTOR`, and at least `CRATE_FLOOR`.
+        const CRATE_FACTOR: u32 = 4;
+        const CRATE_FLOOR: Duration = Duration::from_secs(60);
+
+        /// The groups whose run here, in the named mode, is not one the
+        /// oracle produced, each with its reason.
+        const DIFFERING: &[(&str, &str, &str)] = &[];
+
+        /// One run with the copy's path replaced by `RUN`, so runs from
+        /// different copies compare.
+        fn relative(run: Run, at: &Path) -> Run {
+            let path = at.to_string_lossy().into_owned().into_bytes();
+            let replace = |bytes: Vec<u8>| {
+                let mut out = Vec::with_capacity(bytes.len());
+                let mut rest = bytes.as_slice();
+                while !rest.is_empty() {
+                    if rest.starts_with(&path) {
+                        out.extend_from_slice(b"RUN");
+                        rest = &rest[path.len()..];
+                    } else {
+                        out.push(rest[0]);
+                        rest = &rest[1..];
+                    }
+                }
+                out
+            };
+            Run {
+                stdout: replace(run.stdout),
+                stderr: replace(run.stderr),
+                status: run.status,
+            }
+        }
+
+        /// The copy `name` below `run`, laid out with the tests reaching
+        /// rxapi renamed out, and the arguments that run the group whole.
+        fn copy(run: &Path, name: &str, dir: &str, group: &str) -> (PathBuf, String) {
+            let at = run.join(name);
+            fresh_copy(&at, dir);
+            let file = group_file(&at, dir, group);
+            skip(Path::new(&file), group, &reaching_rxapi(dir, &[group]));
+            (at, file)
+        }
+
+        /// The oracle runs numbered `from..to`, each with its duration.
+        fn oracle_runs(
+            oracle: &oracle::Oracle,
+            run: &Path,
+            dir: &str,
+            group: &str,
+            from: usize,
+            to: usize,
+        ) -> Vec<(Run, Duration)> {
+            let mut runs = Vec::new();
+            let numbers: Vec<usize> = (from..to).collect();
+            for batch in numbers.chunks(RUNS_AT_ONCE) {
+                std::thread::scope(|scope| {
+                    let handles: Vec<_> = batch
+                        .iter()
+                        .map(|k| {
+                            scope.spawn(move || {
+                                let (at, file) = copy(run, &format!("o{k:02}"), dir, group);
+                                let args = ["-f", file.as_str(), "-U", "-V", VERBOSITY];
+                                let start = Instant::now();
+                                let theirs = run_oracle_within(oracle, &at, &args, ORACLE_DEADLINE);
+                                let took = start.elapsed();
+                                (relative(theirs, &at), took)
+                            })
+                        })
+                        .collect();
+                    runs.extend(handles.into_iter().map(|handle| {
+                        handle
+                            .join()
+                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                    }));
+                });
+            }
+            runs
+        }
+
+        /// The distinct outcomes of `runs`, each with its count, most
+        /// frequent first.
+        fn distribution(runs: &[(Run, Duration)]) -> Vec<(&Run, usize)> {
+            let mut distinct: Vec<(&Run, usize)> = Vec::new();
+            for (run, _) in runs {
+                match distinct.iter_mut().find(|(seen, _)| agree(seen, run)) {
+                    Some((_, count)) => *count += 1,
+                    None => distinct.push((run, 1)),
+                }
+            }
+            distinct.sort_by(|a, b| b.1.cmp(&a.1));
+            distinct
+        }
+
+        fn summary(run: &Run) -> String {
+            match run.status {
+                Some(status) => format!("{}, rc {status}", outcome(&run.stdout)),
+                None => "did not finish".to_string(),
+            }
+        }
+
+        /// Where `ours` falls in `oracle`'s outcomes: the outcome's number,
+        /// or `None`.
+        fn place(oracle: &[(&Run, usize)], ours: &Run) -> Option<usize> {
+            oracle.iter().position(|(theirs, _)| agree(theirs, ours))
+        }
+
+        /// One group's result: the table's cells, whether each mode agrees
+        /// with the oracle, and whether each ended in an inverted wait or
+        /// did not finish.
+        struct Group {
+            cells: String,
+            agrees: [bool; 2],
+            stuck: [bool; 2],
+        }
+
+        fn whole_group(oracle: &oracle::Oracle, run: &Path, file: &str) -> Group {
+            let (dir, group) = file
+                .trim_end_matches(".testGroup")
+                .rsplit_once('/')
+                .expect("a group below a directory");
+            let mut theirs = oracle_runs(oracle, run, dir, group, 0, ORACLE_RUNS);
+            let slowest = theirs.iter().map(|(_, took)| *took).max().expect("a run");
+            let deadline = (slowest * CRATE_FACTOR).max(CRATE_FLOOR);
+            let ours: Vec<Run> = std::thread::scope(|scope| {
+                let handles: Vec<_> = [
+                    ("n00", SwitchMode::None),
+                    ("e00", SwitchMode::EveryOpportunity),
+                ]
+                .into_iter()
+                .map(|(name, mode)| {
+                    scope.spawn(move || {
+                        let (at, file) = copy(run, name, dir, group);
+                        let args = ["-f", file.as_str(), "-U", "-V", VERBOSITY];
+                        relative(run_crate_within(&at, &args, mode, deadline), &at)
+                    })
+                })
+                .collect();
+                handles
+                    .into_iter()
+                    .map(|handle| {
+                        handle
+                            .join()
+                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                    })
+                    .collect()
+            });
+            let settled = {
+                let seen = distribution(&theirs);
+                seen.len() == 1 && ours.iter().all(|run| place(&seen, run).is_some())
+            };
+            if !settled {
+                theirs.extend(oracle_runs(
+                    oracle,
+                    run,
+                    dir,
+                    group,
+                    ORACLE_RUNS,
+                    ORACLE_RUNS_UNSETTLED,
+                ));
+            }
+            let seen = distribution(&theirs);
+            let mut cells = format!("{file}\t{}\t", theirs.len());
+            for (at, (run, count)) in seen.iter().enumerate() {
+                if at > 0 {
+                    let detail = first_difference(&masked(&seen[0].0.stdout), &masked(&run.stdout))
+                        .replace(['\n', '\t'], " ");
+                    cells.push_str(&format!("; {}: {count} {}, {detail}", at + 1, summary(run)));
+                } else {
+                    cells.push_str(&format!("1: {count} {}", summary(run)));
+                }
+            }
+            let mut agrees = [false; 2];
+            let mut stuck = [false; 2];
+            for (at, run) in ours.iter().enumerate() {
+                stuck[at] = inverted(run) || run.status.is_none();
+                let cell = match place(&seen, run) {
+                    Some(number) => {
+                        agrees[at] = true;
+                        format!("agrees with {}", number + 1)
+                    }
+                    None => {
+                        let refusal = String::from_utf8_lossy(&run.stderr)
+                            .lines()
+                            .find(|line| line.starts_with("rexx-exec: "))
+                            .map(str::to_string);
+                        let detail = match refusal {
+                            Some(line) => line,
+                            None => {
+                                first_difference(&masked(&seen[0].0.stdout), &masked(&run.stdout))
+                                    .replace(['\n', '\t'], " ")
+                            }
+                        };
+                        format!("differs: {}, {detail}", summary(run))
+                    }
+                };
+                cells.push_str(&format!("\t{cell}"));
+            }
+            cells.push_str(&format!(
+                "\t{}",
+                if agree(&ours[0], &ours[1]) {
+                    "same"
+                } else {
+                    "differ"
+                }
+            ));
+            Group {
+                cells,
+                agrees,
+                stuck,
+            }
+        }
+
+        #[test]
+        fn each_group_of_the_derived_list_whole_in_both_modes() {
+            if !gate_mode() {
+                eprintln!("group_runs: skipped without {GATE_ENV}");
+                return;
+            }
+            let (list, _) = super::super::derive(&super::super::worktree().join("ootest/ooRexx"));
+            let mut files: Vec<String> = list.iter().map(|row| row.group.clone()).collect();
+            files.dedup();
+            let oracle = oracle::locate();
+            let results = rows_in_parallel(
+                "whole-groups",
+                &files,
+                |file| {
+                    WALL_CLOCK
+                        .iter()
+                        .any(|row| row.starts_with(&format!("{file} ")))
+                },
+                |run, file| whole_group(&oracle, run, file),
+            );
+            let mut table = String::from(
+                "group\toracle runs\toracle outcomes\tnormal\tevery\tnormal against every\n",
+            );
+            let mut failing = Vec::new();
+            for (file, group) in files.iter().zip(&results) {
+                table.push_str(&group.cells);
+                table.push('\n');
+                for (at, mode) in ["normal", "every"].into_iter().enumerate() {
+                    let listed = DIFFERING
+                        .iter()
+                        .any(|(row, listed_mode, _)| row == file && *listed_mode == mode);
+                    if group.stuck[at] && !listed {
+                        failing.push(format!("{file} {mode}: an inverted wait or a hang"));
+                    } else if !group.agrees[at] && !listed {
+                        failing.push(format!("{file} {mode}: not an oracle outcome"));
+                    } else if group.agrees[at] && listed {
+                        failing.push(format!("{file} {mode}: listed as differing, agrees"));
+                    }
+                }
+            }
+            eprintln!("{table}");
+            if let Some(path) = std::env::var_os(TABLE_ENV) {
+                std::fs::write(path, &table).expect("cannot write the table");
+            }
+            assert!(failing.is_empty(), "{failing:#?}");
+        }
+    }
 }

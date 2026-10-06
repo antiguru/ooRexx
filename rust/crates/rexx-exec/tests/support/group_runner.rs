@@ -387,12 +387,17 @@ pub fn agree(theirs: &Run, ours: &Run) -> bool {
 pub const ORACLE_TEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
 
 pub fn run_oracle(oracle: &oracle::Oracle, run: &Path, args: &[&str]) -> Run {
-    let outcome = oracle.run_within(
-        &run.join("testOORexx.rex"),
-        args,
-        None,
-        ORACLE_TEST_DEADLINE,
-    );
+    run_oracle_within(oracle, run, args, ORACLE_TEST_DEADLINE)
+}
+
+/// [`run_oracle`] under `deadline`.
+pub fn run_oracle_within(
+    oracle: &oracle::Oracle,
+    run: &Path,
+    args: &[&str],
+    deadline: std::time::Duration,
+) -> Run {
+    let outcome = oracle.run_within(&run.join("testOORexx.rex"), args, None, deadline);
     let status = (!did_not_finish(&outcome)).then(|| outcome.expect_exit_code());
     Run {
         stdout: outcome.stdout,
@@ -402,6 +407,16 @@ pub fn run_oracle(oracle: &oracle::Oracle, run: &Path, args: &[&str]) -> Run {
 }
 
 pub fn run_crate(run: &Path, args: &[&str], mode: SwitchMode) -> Run {
+    run_crate_within(run, args, mode, watchdog::ROW_DEADLINE)
+}
+
+/// [`run_crate`] under `deadline`.
+pub fn run_crate_within(
+    run: &Path,
+    args: &[&str],
+    mode: SwitchMode,
+    deadline: std::time::Duration,
+) -> Run {
     let driver = run.join("testOORexx.rex");
     let text = fs::read(&driver).expect("the copied driver");
     let lib = oracle::oracle_root().join("lib");
@@ -421,8 +436,10 @@ pub fn run_crate(run: &Path, args: &[&str], mode: SwitchMode) -> Run {
         }
     }
     .with_directory(run.to_path_buf())
-    .with_environment(environment);
-    let outcome = watchdog::run_bounded(&driver.to_string_lossy(), text, invocation);
+    .with_environment(environment)
+    .with_deadline(deadline);
+    let abandon = deadline + (watchdog::ROW_ABANDON - watchdog::ROW_DEADLINE);
+    let outcome = watchdog::run_bounded_with(&driver.to_string_lossy(), text, invocation, abandon);
     let status = (!watchdog::did_not_finish(&outcome)).then_some(outcome.exit_code);
     Run {
         stdout: outcome.stdout,
