@@ -1,0 +1,16 @@
+790de51c2 started 2026-10-06T22:05:35+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 9.85 10.93 7.55 1/1071 588557 2026-10-06T22:09:22+02:00
+G4 release test exit 101
+G5 debug build exit 0
+load G6 13.28 5.31 4.40 4/1043 783860 2026-10-06T22:32:28+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/790de51c2/logs/g4-test-release.txt:2
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/790de51c2/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-06T23:27:43+02:00

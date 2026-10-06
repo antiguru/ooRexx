@@ -3089,6 +3089,17 @@ mod group_runs {
             )
         }
 
+        /// [`key`] without its assertion count.
+        fn uncounted(key: &str) -> String {
+            match key.split_once(", assertions ") {
+                Some((class, rest)) => {
+                    let rest = rest.split_once(',').map_or("", |(_, rest)| rest);
+                    format!("{class},{rest}")
+                }
+                None => key.to_string(),
+            }
+        }
+
         /// `run` with the copy's path, and the copy's directory name in a
         /// path the framework abbreviates, replaced by `RUN`, so runs from
         /// different copies of one row compare.
@@ -3375,6 +3386,12 @@ mod group_runs {
             }
             let mut started_cells =
                 format!("{file}\t{}\tskipped [{}]", part.label(), refusing.join(" "));
+            // Ruling P86: where the oracle's runs differ from each other only
+            // in their assertion count, the count is not compared.
+            let counted_only = seen.len() > 1
+                && seen
+                    .iter()
+                    .all(|(run, _)| uncounted(&key(run)) == uncounted(&key(seen[0].0)));
             let mut keys = [String::new(), String::new()];
             let mut agrees = [false; 2];
             let mut stuck = [false; 2];
@@ -3385,6 +3402,10 @@ mod group_runs {
                     Some(number) => {
                         agrees[at] = true;
                         format!("agrees with {}", number + 1)
+                    }
+                    None if counted_only && uncounted(&keys[at]) == uncounted(&key(seen[0].0)) => {
+                        agrees[at] = true;
+                        format!("agrees but for the assertion count (P86): {}", keys[at])
                     }
                     None => format!("differs: {}; {}", keys[at], difference(seen[0].0, run)),
                 };
@@ -3408,6 +3429,22 @@ mod group_runs {
                 stuck,
             };
             (row, normal)
+        }
+
+        #[test]
+        fn a_key_without_its_count_keeps_status_and_tests() {
+            assert_eq!(
+                uncounted("pass, assertions 10, rc 0, last started T, failing []"),
+                "pass, rc 0, last started T, failing []"
+            );
+            assert_ne!(
+                uncounted("pass, assertions 10, rc 0, last started T, failing []"),
+                uncounted("failure, assertions 10, rc 1, last started T, failing [T]")
+            );
+            assert_eq!(
+                uncounted("rexx-exec: DO is not implemented, rc 120, last started T, failing []"),
+                "rexx-exec: DO is not implemented, rc 120, last started T, failing []"
+            );
         }
 
         #[test]

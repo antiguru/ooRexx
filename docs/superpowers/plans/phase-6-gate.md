@@ -1143,7 +1143,10 @@ group holding a wall-clock test that is not allowed runs again once (P48). Each 
 interpreter as `rexx` from `PATH`: the oracle its `build/bin`, this crate a link to its `rexx-run`
 (under every opportunity with `REXX_SWITCH_MODE=every`). An outcome is stdout masked as the per-test
 runner masks it (each copy's path replaced), stderr and exit status. "Agrees" means the outcome is
-one the oracle produced. A run's key is its refusal or summary, its status, the last test it started
+one the oracle produced, or, where the oracle's own runs differ from each other only in their
+assertion count, has their class, status, last started test and failing tests (ruling P86; at
+`790de51c2` G4's `REPLY` derived normal run passed with 10 assertions where the oracle's 30 runs
+passed with 11 to 18, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/790de51c2/logs/g4-test-release.txt:2105`, P41). A run's key is its refusal or summary, its status, the last test it started
 and its failing tests. At `bf558da52`, from `rust/`, release:
 
 ```
