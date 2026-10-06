@@ -1659,20 +1659,12 @@ pub(crate) fn directory_get(
     if let Some(view) = view
         && view.generation == interp.store_generation
     {
-        #[cfg(debug_assertions)]
-        {
-            #[cfg(feature = "sharing")]
-            interp.heap.sharing_pause(true);
-            let fresh = read_view(interp, directory).ok();
-            #[cfg(feature = "sharing")]
-            interp.heap.sharing_pause(false);
-            assert_eq!(
-                Some(*view),
-                fresh,
-                "a StoreView was reused after its directory's pool changed without a \
-                 bump_store_generation"
-            );
-        }
+        debug_assert_eq!(
+            Some(*view),
+            unshared!(interp, read_view(interp, directory).ok()),
+            "a StoreView was reused after its directory's pool changed without a \
+             bump_store_generation"
+        );
         return Ok((view_get(interp, directory, key, view)?, None));
     }
     let view = read_view(interp, directory)?;

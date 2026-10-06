@@ -655,9 +655,15 @@ impl Interp {
         );
         self.roots.activity_mut().push_temp(snapshot);
         debug_assert_eq!(
-            self.array_slots(snapshot)
-                .map(|slots| slots.iter().copied().flatten().collect::<Vec<_>>())
-                .as_deref(),
+            unshared!(
+                self,
+                self.array_slots(snapshot).map(|slots| slots
+                    .iter()
+                    .copied()
+                    .flatten()
+                    .collect::<Vec<_>>())
+            )
+            .as_deref(),
             Some(items.as_slice()),
             "a DO OVER's cursor is not the snapshot's own slots, so the snapshot does not root it"
         );

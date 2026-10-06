@@ -56,12 +56,7 @@ impl Interp {
             // redirect `.OUTPUT`.
             #[cfg(debug_assertions)]
             {
-                #[cfg(feature = "sharing")]
-                self.heap.sharing_pause(true);
-                let fresh = self.output_route_uncached();
-                #[cfg(feature = "sharing")]
-                self.heap.sharing_pause(false);
-                let fresh = fresh?;
+                let fresh = unshared!(self, self.output_route_uncached())?;
                 assert_eq!(
                     cached, fresh,
                     "the cached SAY route is stale, so some writer does not bump \

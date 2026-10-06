@@ -28,6 +28,19 @@ use std::rc::Rc;
 // `pinned!` and `park_point!`, ahead of every module that uses them.
 #[macro_use]
 mod pinning;
+
+/// `$body`, a read the program does not make (a debug-only check), with the
+/// sharing instrument's touches paused.
+macro_rules! unshared {
+    ($interp:expr, $body:expr) => {{
+        #[cfg(feature = "sharing")]
+        $interp.heap.sharing_pause(true);
+        let answer = $body;
+        #[cfg(feature = "sharing")]
+        $interp.heap.sharing_pause(false);
+        answer
+    }};
+}
 #[cfg(feature = "pinning")]
 pub use pinning::{ParkKind, PinKind, PinReport};
 
@@ -2842,6 +2855,9 @@ impl Interp {
     /// that what an allocation pays when nothing is due is the test alone.
     #[inline(never)]
     fn collect_now(&mut self) {
+        // Nothing a collection reads is the running activity's resolution.
+        #[cfg(feature = "sharing")]
+        self.heap.sharing_pause(true);
         crate::scheduler::Scheduler::stop_the_world(self);
         // Everything the interpreter holds outside `RootSet`, handed to the
         // collector as temporaries for the length of the sweep.
@@ -2856,17 +2872,17 @@ impl Interp {
         let heap = &self.heap;
         self.kept_strings.retain(|object, _| {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
-                || heap.get(*object).is_some()
+                || heap.peek(*object).is_some()
         });
         self.drop_loose_kept_strings();
         let heap = &self.heap;
         self.activities.guards.prune_pools(|object| {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
-                || heap.get(object).is_some()
+                || heap.peek(object).is_some()
         });
         self.activities.semaphores.prune(|object| {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
-                || heap.get(object).is_some()
+                || heap.peek(object).is_some()
         });
         // A sweep can free a class the registry named, which unlinks its row
         // and leaves any `.NAME` answer derived from it naming nothing.
@@ -2897,6 +2913,8 @@ impl Interp {
         if !self.stress_collect {
             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
         }
+        #[cfg(feature = "sharing")]
+        self.heap.sharing_pause(false);
     }
 
     /// Flags a class carrying a class-side `UNINIT` so the collector

@@ -87,7 +87,7 @@ impl Interp {
             return self.required_string_dispatch(value);
         }
         debug_assert!(
-            self.required_string_latch_holds(value),
+            unshared!(self, self.required_string_latch_holds(value)),
             "the required-string latch is off where the protocol would answer differently \
              or raise"
         );

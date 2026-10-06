@@ -658,6 +658,20 @@ mod sharing {
         assert!(sharing.program.shared < 100, "{sharing:?}");
     }
 
+    /// Semaphores the main activity made are not shared when a started
+    /// activity collects: the collector's prune of the semaphore table is not
+    /// a touch.
+    #[test]
+    fn a_collection_in_another_activity_shares_nothing_it_prunes() {
+        let source = "s = .array~new\ndo i = 1 to 100\n  m = .mutexSemaphore~new\n  \
+                      m~acquire\n  m~release\n  s[i] = m\nend\n\
+                      say .t~new~start('other')~result\nsay s~items\n\
+                      ::class t\n::method other\n  call GC 'Force'\n  return 'ok'\n";
+        let (stdout, sharing) = sharing_of(source);
+        assert_eq!(stdout, "ok\n100\n");
+        assert!(sharing.program.shared < 50, "{sharing:?}");
+    }
+
     fn add(total: &mut SharingReport, one: SharingReport) {
         for (sum, count) in [
             (&mut total.bootstrap, one.bootstrap),
@@ -728,9 +742,11 @@ mod sharing {
         );
     }
 
-    /// Every ooTest group file run whole, in process, but a group with a test
-    /// that reaches rxapi (`group_runner::reaching_rxapi`).
+    /// Every ooTest group file run in process until its end or its first
+    /// refusal or deadline, but a group with a test that reaches rxapi
+    /// (`group_runner::reaching_rxapi`).
     #[test]
+    #[ignore = "most of 8 GB; run alone with RAYON_NUM_THREADS=4 and --ignored"]
     fn sharing_fraction_over_every_ootest_group() {
         let root = worktree().join("ootest/ooRexx");
         let mut groups = Vec::new();

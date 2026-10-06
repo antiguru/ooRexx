@@ -529,7 +529,7 @@ impl Interp {
 
     /// The stem a weak reference `cell` still reaches, if any.
     fn weak_target(&self, cell: ObjRef) -> Option<ObjRef> {
-        match self.heap.get(cell).map(|object| &object.body) {
+        match self.heap.peek(cell).map(|object| &object.body) {
             Some(Body::WeakRef(target)) if *target != ObjRef::NIL => Some(*target),
             _ => None,
         }
@@ -541,7 +541,7 @@ impl Interp {
         let cell = self.alloc_with(BehaviourId::OBJECT, Body::WeakRef(local));
         let heap = &self.heap;
         let live = |cell: &ObjRef| {
-            matches!(heap.get(*cell).map(|object| &object.body),
+            matches!(heap.peek(*cell).map(|object| &object.body),
                 Some(Body::WeakRef(target)) if *target != ObjRef::NIL)
         };
         let fresh = !self.stem_exposers.contains_key(&home);

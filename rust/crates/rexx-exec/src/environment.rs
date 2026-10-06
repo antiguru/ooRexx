@@ -712,7 +712,7 @@ impl Interp {
         if let Some(&hit) = self.rexx_class_cache.get(upper) {
             debug_assert_eq!(
                 Some(hit),
-                self.rexx_package_class_uncached(upper),
+                unshared!(self, self.rexx_package_class_uncached(upper)),
                 "the .NAME cache answered {upper:?} with a class the search no longer finds, so \
                  some table this cache is derived from was mutated without \
                  Interp::invalidate_rexx_class_cache"

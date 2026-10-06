@@ -257,7 +257,7 @@ impl Interp {
         // function exists to avoid.
         debug_assert_eq!(
             answer,
-            self.to_text(value).len(),
+            unshared!(self, self.to_text(value).len()),
             "text_len disagrees with to_text"
         );
         answer

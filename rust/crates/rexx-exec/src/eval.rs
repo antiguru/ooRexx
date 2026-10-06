@@ -1057,7 +1057,8 @@ impl Interp {
         // object against the very text it renders as answers `0` on the
         // oracle and `1` here; see `Loud::operator_operand`.
         debug_assert!(
-            left_number.is_err() || self.operator_operand_gap(left_value).is_none(),
+            left_number.is_err()
+                || unshared!(self, self.operator_operand_gap(left_value)).is_none(),
             "a left operand that parsed as a number reported an operator gap"
         );
         if left_number.is_err()
