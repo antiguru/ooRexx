@@ -360,3 +360,5 @@ Task 23 fix round 3: f078489bc ea52f92d1 9c2c6db44. Re-review 3 -> t23-rr3.
 Task 23 re-review 3: APPROVED (task-23-rereview-3.md); N5-N7 minor. Ruling P82: an UNINIT run by a collection in another activity is a real cross-activity use and stays counted; the record says the figure depends on which activity triggers collection — cost if wrong: a slightly larger shared count. N5-N7 wrap-up to s5-t23, lead checks the diff.
 Task 23 wrap-up (N5-N7) done by the lead (implementer silent 2h, stopped).
 Task 23: complete.
+Task 24: dispatched s5-t24 (opus), base 4936f24c3, brief task-24-impl-brief.md.
+STATE for reboot (2026-10-06 evening): Tasks 1-23 complete. Task 24 running (s5-t24, base 4936f24c3, brief task-24-impl-brief.md, report task-24-report.md). On resume: if task-24-report.md says DONE, review it (two parallel reviewers, code and record, package from 4936f24c3); if partial, resume a fresh implementer from its last commit and the report. Then Task 25 (criteria 1, 9, S5 section, full gates), Task 26 (perf; base/S1 Ir in s5-find-perfbase.md), final review. Moritz asked to pause after s5-t24 finishes.
