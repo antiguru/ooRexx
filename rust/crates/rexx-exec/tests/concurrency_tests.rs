@@ -3013,34 +3013,13 @@ mod group_runs {
                     .join("ootest/ooRexx")
                     .join(dir)
                     .join(format!("{group}.testGroup"));
-                let text = read_lossy(&path).to_ascii_uppercase();
-                // A name used beyond its own `::METHOD` lines is a helper,
-                // not a test, and stays.
-                let uses = |name: &str| {
-                    text.split(|c: char| {
-                        !(c.is_ascii_alphanumeric() || matches!(c, '_' | '!' | '?' | '.'))
-                    })
-                    .filter(|word| *word == name)
-                    .count()
-                };
-                let mut defined: std::collections::BTreeMap<String, usize> = Default::default();
-                for name in text.lines().filter_map(|line| {
-                    let line = line.trim_start();
-                    let rest = line.strip_prefix("::METHOD")?;
-                    let name = rest.split_whitespace().next()?.trim_matches(['\'', '"']);
-                    Some(name.to_string())
-                }) {
-                    *defined.entry(name).or_default() += 1;
-                }
                 left_out.extend(
-                    defined
+                    super::super::units(&read_lossy(&path))
                         .into_iter()
-                        .filter(|(name, lines)| {
-                            name.starts_with("TEST")
-                                && !derived.contains(name)
-                                && uses(name) == *lines
-                        })
-                        .map(|(test, _)| format!("{group}.{test}")),
+                        .filter(|unit| unit.test)
+                        .map(|unit| unit.name.to_ascii_uppercase())
+                        .filter(|test| !derived.contains(test))
+                        .map(|test| format!("{group}.{test}")),
                 );
             }
             let left_out = &left_out;
