@@ -2705,10 +2705,15 @@ mod group_runs {
                         refusing.push(format!("{test} (unbounded)"));
                     }
                 }
-                while refused(&last).is_some() {
-                    let test = started(&last)
-                        .pop()
-                        .unwrap_or_else(|| panic!("{file}: a refusal before any test started"));
+                let mut before = false;
+                while let Some(line) = refused(&last) {
+                    let Some(test) = started(&last).pop() else {
+                        rows[0]
+                            .started
+                            .push_str(&format!("\trest not run: {line} before any test started"));
+                        before = true;
+                        break;
+                    };
                     assert!(!refusing.contains(&test), "{file}: {test} refused twice");
                     left_out.insert(format!("{group}.{test}"));
                     refusing.push(test);
@@ -2719,7 +2724,7 @@ mod group_runs {
                         &at,
                     );
                 }
-                if !refusing.is_empty() {
+                if !refusing.is_empty() && !before {
                     rows.push(one_row(oracle, run, file, Part::Rest, &left_out, &refusing).0);
                 }
             }
