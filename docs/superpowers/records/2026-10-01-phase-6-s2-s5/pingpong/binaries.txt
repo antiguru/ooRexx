@@ -1,0 +1,3 @@
+# 2026-10-06T10:12:26Z rounds=9 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib load=2.27 4.29 9.14
+# rexx-run /tmp/claude-1000/p6-t23/target/release/rexx-run fc3aeca627bc06c6cd4eae06daa78c97971ba5a936726ec8df2a1157dc915ac0
+# end load=1.85 3.99 8.89

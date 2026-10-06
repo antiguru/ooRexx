@@ -125,8 +125,8 @@ impl Drop for Lent<'_> {
     }
 }
 
-// Neither the interpreter nor a frame moves to another thread except as an
-// `Islanded` payload (static_assertions' `assert_not_impl_any`).
+// The interpreter moves to another thread only as an `Islanded` payload, and a
+// frame not at all (static_assertions' `assert_not_impl_any`).
 trait AmbiguousIfSend<A> {
     fn some_item() {}
 }

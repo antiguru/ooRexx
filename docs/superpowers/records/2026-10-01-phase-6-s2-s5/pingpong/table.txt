@@ -1,0 +1,4 @@
+program	rexx-run median	oracle median	oracle d%
+pingmsg	1.322	0.686	-48.11
+pingsem	0.122	0.446	+265.57
+pingguard	0.121	0.502	+314.88

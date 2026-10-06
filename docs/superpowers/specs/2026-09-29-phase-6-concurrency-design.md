@@ -188,8 +188,10 @@ the C call (`Rc::clone(&binding.library)`, `self.thread.clone()`, `dispatch/libr
 lands with its first user (S4) in a module the plan names, recorded as a Section 1 decision block with
 R3's signal module; `unsafe` is otherwise confined to `rexx-api/src/ffi.rs`, `rexx-api/src/load.rs`,
 `rexx-core/src/bytes.rs` and `rexx-core/src/frame.rs`. The `thread_local!`s `REFUSED`
-(`rexx-api/src/layout.rs:423`) and `HOOK_THREW` (`rexx-api/src/load.rs:678`) belong to one native
-call's own stack and stay per OS thread; they are the only non-test `thread_local!`s today.
+(`rexx-api/src/layout.rs:421`), `HOOK_THREW` (`rexx-api/src/load.rs:1518`) and `CALLING`
+(`rexx-api/src/ffi.rs:700`, ruling P56) belong to one native call's own stack and stay per OS
+thread; they are the only non-test `thread_local!`s
+(`/bin/grep -a -rn -B3 'thread_local!' --include=*.rs rust/crates`).
 
 **Island memory lent to C.** C reads and writes some island memory through raw pointers while off
 the baton: kept C strings (`kept_strings`, `dispatch/library.rs:984-1010`, pruned by
@@ -341,7 +343,9 @@ reached, a release with ready activities leaves them for the next thread that ta
   every countdown visit, switch and driver exit.
 * **Isolation at the type level.** `ObjRef` becomes `!Send` and `!Sync` (a phantom raw-pointer marker;
   a scratch build confirmed nothing sends one today), so the compiler refuses an object handle in the
-  inbox, a completion or another interpreter.
+  inbox, a completion or another interpreter. Object handles reach a pool thread of the same
+  interpreter only inside `Islanded`, whose payloads are sealed and taken out under a lend (ruling
+  P52).
 * **Sharing-fraction instrument.** A feature-gated build tags each object with the last activity that
   resolved it and counts objects touched by more than one activity.
 

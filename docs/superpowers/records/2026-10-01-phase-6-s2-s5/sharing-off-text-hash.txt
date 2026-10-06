@@ -1,0 +1,36 @@
+# Criterion 6's sharing feature costs nothing when off.
+# Release rexx-run without features from git archive trees of 811610f63 (base),
+# 0ac73b804 (head), and base with only head's frame.rs, body.rs, island.rs and
+# scheduler.rs's Posted assertion (aonly: A1-A5, no sharing code); each built
+# at one path in its own target dir by text-hash.sh, then
+# objcopy -O binary --only-section=.text; sha256sum; size.
+# base built twice (base2) as the determinism control.
+
+base  1fc85368757a9f4e17eb66dedd7e7c7c9232fd2dcc7271668e3234596a09b2cb 3130350
+base2 1fc85368757a9f4e17eb66dedd7e7c7c9232fd2dcc7271668e3234596a09b2cb
+aonly 7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+head  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+
+# head equals aonly: the sharing code adds no byte. base differs from aonly in
+# placement only: nm -S of base and head lists the same functions with the same sizes
+# except one name, Lent::wait's impl index (the new IslandPayload impls renumber it):
+
+3603d3602
+< _RNvMs3_NtCsa1IxyF9TJH_9rexx_exec6islandNtB5_4Lent4wait 0000000000000225
+3777a3777
+> _RNvMs5_NtCsa1IxyF9TJH_9rexx_exec6islandNtB5_4Lent4wait 0000000000000225
+
+# text-hash.sh:
+#!/bin/bash
+# Builds release rexx-run from each named archived tree, moved in turn to one
+# path, in its own target dir, and prints the sha256 of its .text section.
+set -e
+S=/tmp/claude-1000/p6-t23
+for t in "$@"; do
+    mv $S/$t $S/tree
+    find $S/tree -type f -exec touch {} +
+    ( cd $S/tree/rust && CARGO_TARGET_DIR=$S/target-$t cargo build --release --bin rexx-run 2>&1 | grep -E 'Compiling rexx-exec|Finished|error' )
+    mv $S/tree $S/$t
+    objcopy -O binary --only-section=.text $S/target-$t/release/rexx-run $S/$t.text
+    echo "$t $(sha256sum < $S/$t.text | cut -d' ' -f1) $(stat -c %s $S/$t.text)"
+done

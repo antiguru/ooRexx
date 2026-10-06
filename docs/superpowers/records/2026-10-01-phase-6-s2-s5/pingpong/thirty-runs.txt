@@ -1,0 +1,13 @@
+# 30 runs per side by thirty-runs.sh (rexx-run: a release build of 0ac73b804): count, then line
+pingmsg      30 80000
+pingmsg      30 rc=0
+pingmsg rexx-run      30 80000
+pingmsg rexx-run      30 rc=0
+pingsem      30 done
+pingsem      30 rc=0
+pingsem rexx-run      30 done
+pingsem rexx-run      30 rc=0
+pingguard      30 done
+pingguard      30 rc=0
+pingguard rexx-run      30 done
+pingguard rexx-run      30 rc=0
