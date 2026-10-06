@@ -1,0 +1,513 @@
+diff --git a/docs/superpowers/plans/phase-6-gate.md b/docs/superpowers/plans/phase-6-gate.md
+index de49d367d..4c756685d 100644
+--- a/docs/superpowers/plans/phase-6-gate.md
++++ b/docs/superpowers/plans/phase-6-gate.md
+@@ -449,99 +449,131 @@ wall time (`ooTest.frm:2449-2465`): on `base/class/Ticker`, one run each, this c
+ dot after `Searching for test containers` and the oracle two.
+ Unmodified, `testOORexx.rex -f METHOD.testGroup -V 1` from a scratch copy runs the ticker and the
+ tests and stops at rc 120 at `routine "RXFUNCQUERY" is not implemented (Phase 10)` only; the L2
+ rows (`phase-4-exclusions.txt`, the roadmap's row 8, `phase-8-gate.md`) record it, and the Rung
+ reads `L2 -> 10`.
+ 
+ ## S4
+ 
+ ### Blocking operations (Task 18)
+ 
+-The command, run from the worktree root at Task 18's fix round 1, prints 123 lines (113 at
+-`bddcd480e`; the ten more are Task 18's own: `scheduler/pool.rs:174`, `scheduler/tests/pool.rs`
+-and `command.rs:436`, `:466`, `:493`, `:587`, `:690`):
++The command, run from the worktree root at `c66650b52` (Task 22 fix round 1), with the
++directory prefix stripped from its output:
+ 
+ ```
+-/bin/grep -a -rn 'std::process\|\.wait(\|std::fs\|fs::\|thread::sleep\|File::\|stdin()\|\.read(\|\.write(' rust/crates/rexx-exec/src
++/bin/grep -a -rn 'std::process\|\.wait(\|std::fs\|fs::\|thread::sleep\|File::\|stdin()\|\.read(\|\.write(' rust/crates/rexx-exec/src \
++  | sed 's|^rust/crates/rexx-exec/src/||'
+ ```
+ 
+ Classification, by site (paths under `rust/crates/rexx-exec/src/`):
+ 
+ | Hits | Class | Reason |
+ |---|---|---|
+-| `command.rs:622` (`collect`'s child wait) and `:466` (its reads), reached through `Block::stream` from `Scheduler::exit_for_block` and through `Block::wait` at `command.rs:690` | off-baton | an `ADDRESS` command with nothing redirected, where another activity is alive or a test mode is set: the child starts on the baton, a pool thread posts what it writes to the inbox as it arrives and then its return code, and the clause settles `RC` once the activity wakes; no island value crosses (bytes and a return code). Where no pool thread is free, `command.rs:690` waits on the baton |
+-| `command.rs:20`, `:395`, `:436`, `:493`, `:519`, `:530`, `:587` | not an operation | types, imports and the child's builder; the spawn itself (fork and exec) runs on the baton |
++| `command.rs:644` (`collect`'s child wait) and `:467` (its reads), reached through `Block::stream` from `Scheduler::exit_for_block` and through `Block::wait` at `command.rs:712` | off-baton | an `ADDRESS` command with nothing redirected (P64): the child starts on the baton, a pool thread posts what it writes to the inbox as it arrives and then its return code, and the clause settles `RC` once the activity wakes; no island value crosses (bytes and a return code). Where no pool thread can be reserved, `command.rs:712` waits on the baton, uninterruptible (DEVIATIONS 12) |
++| `command.rs:20`, `:395`, `:436`, `:515`, `:541`, `:552`, `:609` | not an operation | types, imports and the child's builder; the spawn itself (fork and exec) runs on the baton |
+ | `command.rs:310` | stays on the baton | `cd`'s directory test, a local `stat` |
+-| `install.rs:651`, `:913`, `:1772`, `lib.rs:2108` | spec 2.1 wrapper (package loaders, `::REQUIRES` and external routine files) | reached from nested Rust frames, so pinned |
+-| `builtin/platform.rs:91`, `:99`, `:164`, `:169`; `builtin/rexxutil.rs:67`, `:78`, `:96`, `:99`, `:118`, `:121`, `:154`, `:597`, `:598`, `:619`, `:752`; `dispatch/files.rs` (every hit) | stays on the baton | single local filesystem calls (`stat`, `access`, `unlink`, `mkdir`, `rename`, `utimensat`, `readdir`) that wait on no other activity; a recorded divergence where a filesystem stalls (the oracle releases its kernel lock around a native routine) |
+-| `dispatch/stream.rs` (every hit); `input.rs:75`, `:128` | spec 2.1 wrapper (the stream BIFs and methods; `PULL` and console input) | pinned, counted by the pinning report |
++| `input.rs:80` (`read_stdin_chunk`) | keeps the baton | a read of the default input stream: a pool thread reads, and the reader keeps the baton and idles on the inbox (P69, DEVIATIONS 13); not a park; a halt ends it (P60). Where no pool thread can be reserved, the read runs on the baton, uninterruptible (DEVIATIONS 12) |
++| `install.rs:651`, `:913`, `:1772`, `lib.rs:2171` | spec 2.1 wrapper (package loaders, `::REQUIRES` and external routine files) | reached from nested Rust frames, so pinned |
++| `builtin/platform.rs:91`, `:99`, `:164`, `:169`; `builtin/rexxutil.rs:67`, `:78`, `:96`, `:99`, `:118`, `:121`, `:154`, `:611`, `:612`, `:633`, `:766`; `dispatch/files.rs` (every hit) | stays on the baton | single local filesystem calls (`stat`, `access`, `unlink`, `mkdir`, `rename`, `utimensat`, `readdir`) that wait on no other activity; a recorded divergence where a filesystem stalls (the oracle releases its kernel lock around a native routine) |
++| `dispatch/stream.rs` (every hit) | spec 2.1 wrapper (the stream BIFs and methods) | pinned, counted by the pinning report |
+ | `builtin/numeric.rs:581` | not blocking | the process id, as `RANDOM`'s seed |
++| `sync.rs:83`, `:127` | not blocking | the wake socket's nonblocking write (`Wake::notify`) and read |
+ | `run.rs:1437`, `:1574`, `run/interpret.rs:159`, `parse_template.rs:654` | not I/O | `Interp::read`, a variable read |
+-| `builtin/convert.rs:996`, `:1005`, `dispatch/library/surface.rs:651`, `input.rs:129` | not I/O | writes and reads of memory |
+-| `sync.rs:42`, `scheduler/pool.rs:174` | not reached from a resumable entry | the baton's and a pool thread's own condition-variable waits |
+-| `input.rs:448`, `tests.rs`, `builtin/tests.rs`, `plan/tests.rs`, `run/tests/indent.rs`, `dispatch/library/tests.rs`, `dispatch/native/tests.rs`, `ir/corpus_shape_tests.rs`, `scheduler/tests/pool.rs`, `bin/rexx-run.rs`, `bin/rexx-ir.rs` | not reached from a resumable entry | tests and binaries |
++| `builtin/convert.rs:996`, `:1005`, `dispatch/library/surface.rs:661`, `input.rs:215`, `input.rs:359`, `builtin/rexxutil.rs:87` | not I/O | writes and reads of memory, `reading_stdin` (a state change) and a doc comment |
++| `sync.rs:42`, `scheduler/pool.rs:188`, `timer.rs:454` | not reached from a resumable entry | the baton's and a pool thread's own condition-variable waits, and the timer thread's own wait on its wake source (`Wake::wait`) |
++| `scheduler/pool.rs:43`, `dispatch/library.rs:1155` (`#[cfg(test)]` code), `signal.rs:213`, `:238`, `:270`, `sync.rs:234`, `:251`, `:254`, `input.rs:593` (their `tests` modules), `tests.rs`, `builtin/tests.rs`, `plan/tests.rs`, `run/tests/indent.rs`, `dispatch/library/tests.rs`, `dispatch/native/tests.rs`, `ir/corpus_shape_tests.rs`, `scheduler/tests/pool.rs`, `scheduler/tests/lent.rs`, `scheduler/tests/callbacks.rs`, `bin/rexx-run.rs`, `bin/rexx-ir.rs` | not reached from a resumable entry | tests and binaries |
+ 
+ <details><summary>The command's output</summary>
+ 
+ ```
++signal.rs:213:        let output = std::process::Command::new(std::env::current_exe().expect("this binary"))
++signal.rs:238:                std::thread::sleep(std::time::Duration::from_millis(200));
++signal.rs:270:            std::thread::sleep(std::time::Duration::from_secs(1));
+ install.rs:651:        let Ok(text) = std::fs::read(&resolved) else {
+ install.rs:913:            match std::fs::metadata(require::normalize(candidate, cwd)) {
+ install.rs:1772:        let Ok(text) = std::fs::read(&resolved) else {
+-scheduler/pool.rs:174:                    .wait(mail)
++scheduler/pool.rs:43:        std::thread::sleep(std::time::Duration::from_millis(100));
++scheduler/pool.rs:188:                    .wait(mail)
+ scheduler/tests/pool.rs:105:    std::thread::sleep(Duration::from_millis(200));
+-scheduler/tests/pool.rs:416:    let path = std::env::temp_dir().join(format!("rexx-pool-{}", std::process::id()));
+-scheduler/tests/pool.rs:417:    let _ = std::fs::remove_file(&path);
+-scheduler/tests/pool.rs:427:    let _ = std::fs::remove_file(&path);
++scheduler/tests/pool.rs:148:    mark.1 = std::fs::read_to_string(path).map_or(0, |read| read.lines().count());
++scheduler/tests/pool.rs:435:    let path = std::env::temp_dir().join(format!("rexx-lent-panic-{}", std::process::id()));
++scheduler/tests/pool.rs:436:    let _ = std::fs::remove_file(&path);
++scheduler/tests/pool.rs:451:    let written = std::fs::read_to_string(&path).expect("the file");
++scheduler/tests/pool.rs:452:    let _ = std::fs::remove_file(&path);
++scheduler/tests/pool.rs:469:    let path = std::env::temp_dir().join(format!("rexx-native-panic-{}", std::process::id()));
++scheduler/tests/pool.rs:470:    let _ = std::fs::remove_file(&path);
++scheduler/tests/pool.rs:485:    let written = std::fs::read_to_string(&path).expect("the file");
++scheduler/tests/pool.rs:486:    let _ = std::fs::remove_file(&path);
++scheduler/tests/pool.rs:545:    let path = std::env::temp_dir().join(format!("rexx-pool-{}", std::process::id()));
++scheduler/tests/pool.rs:546:    let _ = std::fs::remove_file(&path);
++scheduler/tests/pool.rs:556:    let _ = std::fs::remove_file(&path);
++scheduler/tests/lent.rs:53:    let path = std::env::temp_dir().join(format!("rexx-lent-{}-{test}", std::process::id()));
++scheduler/tests/lent.rs:54:    let _ = std::fs::remove_file(&path);
++scheduler/tests/lent.rs:65:    let _ = std::fs::remove_file(&path);
++scheduler/tests/callbacks.rs:53:    std::thread::sleep(Duration::from_millis(MILLIS));
++scheduler/tests/callbacks.rs:233:    let path = std::env::temp_dir().join(format!("rexx-interleaved-{}", std::process::id()));
++scheduler/tests/callbacks.rs:234:    let _ = std::fs::remove_file(&path);
++scheduler/tests/callbacks.rs:249:    let written = std::fs::read_to_string(&path).unwrap_or_default();
++scheduler/tests/callbacks.rs:250:    let _ = std::fs::remove_file(&path);
++scheduler/tests/callbacks.rs:309:    let path = std::env::temp_dir().join(format!("rexx-batched-{}", std::process::id()));
++scheduler/tests/callbacks.rs:310:    let _ = std::fs::remove_file(&path);
++scheduler/tests/callbacks.rs:335:    let _ = std::fs::remove_file(&path);
+ command.rs:20:use std::process::Stdio;
+ command.rs:310:    match std::fs::metadata(&path) {
+ command.rs:395:fn exit_code(status: std::process::ExitStatus) -> i32 {
+ command.rs:436:    running: std::process::Child,
+-command.rs:466:    while let Ok(count) = reader.read(&mut piece) {
+-command.rs:493:        running: std::process::Child,
+-command.rs:519:            let mut builder = std::process::Command::new(format!("{SHELL_DIRECTORY}/{shell}"));
+-command.rs:530:            let mut builder = std::process::Command::new(OsStr::from_bytes(program));
+-command.rs:587:    mut running: std::process::Child,
+-command.rs:622:    let rc = match running.wait() {
+-command.rs:690:                    Err(block) => block.wait(),
+-lib.rs:2108:        let Ok(text) = std::fs::read(&resolved) else {
++command.rs:467:        match reader.read(&mut piece) {
++command.rs:515:        running: std::process::Child,
++command.rs:541:            let mut builder = std::process::Command::new(format!("{SHELL_DIRECTORY}/{shell}"));
++command.rs:552:            let mut builder = std::process::Command::new(OsStr::from_bytes(program));
++command.rs:609:    mut running: std::process::Child,
++command.rs:644:    let rc = match running.wait() {
++command.rs:712:                    Err(block) => block.wait(),
++timer.rs:454:        registry.wake.wait(timeout);
++lib.rs:2171:        let Ok(text) = std::fs::read(&resolved) else {
+ run.rs:1437:                    let (value, _novalue) = self.read(code, *id);
+ run.rs:1574:                    let (value, _novalue) = self.read(code, *id);
+ builtin/numeric.rs:581:    u64::from(nanos) << 32 ^ u64::from(std::process::id())
+ builtin/platform.rs:91:    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+ builtin/platform.rs:99:    let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
+ builtin/platform.rs:164:    if !std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_dir()) {
+ builtin/platform.rs:169:    let resolved = std::fs::canonicalize(&candidate)
+ builtin/rexxutil.rs:67:    let found = !path.is_empty() && std::fs::metadata(&path).is_ok();
+ builtin/rexxutil.rs:78:    let found = !path.is_empty() && std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+ builtin/rexxutil.rs:87:/// would give -- measured, and a port calling `std::fs::remove_file` and
+ builtin/rexxutil.rs:96:    if path.is_empty() || !rustix::fs::access(path.as_str(), rustix::fs::Access::WRITE_OK).is_ok() {
+ builtin/rexxutil.rs:99:    let code = match rustix::fs::unlink(path.as_str()) {
+ builtin/rexxutil.rs:118:    let code = match rustix::fs::unlink(path.as_str()) {
+ builtin/rexxutil.rs:121:            match rustix::fs::rmdir(path.as_str()) {
+ builtin/rexxutil.rs:154:    let code = match rustix::fs::mkdir(path.as_str(), rustix::fs::Mode::from_bits_truncate(mode)) {
+-builtin/rexxutil.rs:597:fn attributes(meta: &std::fs::Metadata) -> Vec<u8> {
+-builtin/rexxutil.rs:598:    use std::os::unix::fs::PermissionsExt as _;
+-builtin/rexxutil.rs:619:fn entry_line(options: TreeOptions, path: &str, meta: &std::fs::Metadata) -> Vec<u8> {
+-builtin/rexxutil.rs:752:    let Ok(entries) = std::fs::read_dir(directory) else {
++builtin/rexxutil.rs:611:fn attributes(meta: &std::fs::Metadata) -> Vec<u8> {
++builtin/rexxutil.rs:612:    use std::os::unix::fs::PermissionsExt as _;
++builtin/rexxutil.rs:633:fn entry_line(options: TreeOptions, path: &str, meta: &std::fs::Metadata) -> Vec<u8> {
++builtin/rexxutil.rs:766:    let Ok(entries) = std::fs::read_dir(directory) else {
+ builtin/tests.rs:204:    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+ builtin/convert.rs:996:            Piece::Range(start, length).write(&mut out);
+ builtin/convert.rs:1005:        piece.write(&mut out);
+ run/interpret.rs:159:                let (value, _novalue) = self.read(code, *id);
+ run/tests/indent.rs:218:        for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+ run/tests/indent.rs:227:            let bytes = std::fs::read(&path).expect("a readable corpus program");
+ sync.rs:42:    condvar.wait(guard).unwrap_or_else(PoisonError::into_inner)
++sync.rs:83:        let _ = (&self.writer).write(&[0]);
++sync.rs:127:        let _ = (&self.reader).read(&mut [0u8; 64]);
++sync.rs:234:                wake.wait(Some(timeout));
++sync.rs:251:        wake.wait(Some(Duration::from_secs(5)));
++sync.rs:254:        wake.wait(Some(Duration::from_millis(50)));
+ parse_template.rs:654:                let (value, novalue) = self.read(code, id);
+ tests.rs:26:        for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+ tests.rs:35:            let bytes = std::fs::read(&path).expect("a readable corpus program");
+ dispatch/library/tests.rs:191:    let text = std::fs::read(&path).expect("the corpus witness is readable");
+ dispatch/library/tests.rs:478:    let text = std::fs::read(&path).expect("the corpus witness is readable");
+-dispatch/library/surface.rs:651:            data.write(0, &bytes);
++dispatch/library/surface.rs:661:            data.write(0, &bytes);
+ dispatch/files.rs:52:fn reachable(path: &str, mode: rustix::fs::Access) -> bool {
+ dispatch/files.rs:53:    rustix::fs::access(path, mode).is_ok()
+ dispatch/files.rs:67:    let there = std::fs::metadata(&path).is_ok();
+ dispatch/files.rs:79:    let yes = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+ dispatch/files.rs:91:    let yes = std::fs::metadata(&path).is_ok_and(|meta| meta.is_dir());
+ dispatch/files.rs:108:    let yes = std::fs::metadata(&path).is_ok() && path.contains("/.");
+ dispatch/files.rs:120:    let yes = reachable(&path, rustix::fs::Access::READ_OK);
+ dispatch/files.rs:132:    let yes = reachable(&path, rustix::fs::Access::WRITE_OK);
+ dispatch/files.rs:150:    let size = std::fs::metadata(&path).map_or(0, |meta| meta.len());
+ dispatch/files.rs:168:    let Ok(entries) = std::fs::read_dir(&path) else {
+@@ -556,20 +588,21 @@ dispatch/files.rs:319:    rustix::fs::utimensat(rustix::fs::CWD, path, &times, r
+ dispatch/files.rs:362:    let made = std::fs::create_dir(&path).is_ok();
+ dispatch/files.rs:378:    if !reachable(&path, rustix::fs::Access::WRITE_OK) {
+ dispatch/files.rs:381:    let gone = std::fs::remove_file(&path).is_ok();
+ dispatch/files.rs:394:    let gone = std::fs::remove_dir(&path).is_ok();
+ dispatch/files.rs:412:    if from == to || std::fs::symlink_metadata(&to).is_ok() {
+ dispatch/files.rs:415:    let moved = std::fs::rename(&from, &to).is_ok();
+ dispatch/files.rs:428:    if let Ok(meta) = std::fs::metadata(&path) {
+ dispatch/files.rs:429:        use std::os::unix::fs::PermissionsExt as _;
+ dispatch/files.rs:438:        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(rewritten));
+ dispatch/files.rs:559:        if std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_file()) {
++dispatch/library.rs:1155:            let mut file = std::fs::OpenOptions::new()
+ dispatch/stream.rs:232:    let exists = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+ dispatch/stream.rs:251:    match std::fs::metadata(&path) {
+ dispatch/stream.rs:271:    let modified = std::fs::metadata(&path)
+ dispatch/stream.rs:332:/// opens on unix and `SysFile::open` closes it again and substitutes this
+ dispatch/stream.rs:575:    if parsed.read_only && !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
+ dispatch/stream.rs:585:    let mut opening = std::fs::OpenOptions::new();
+ dispatch/stream.rs:587:        opening.read(true);
+ dispatch/stream.rs:589:        opening.read(true).write(true).create(true);
+ dispatch/stream.rs:611:    if metadata.as_ref().is_none_or(std::fs::Metadata::is_dir) {
+ dispatch/stream.rs:684:fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
+@@ -588,31 +621,31 @@ dispatch/stream.rs:799:        Err(_) if for_write => match std::fs::OpenOptions
+ dispatch/stream.rs:809:        Err(_) => match std::fs::OpenOptions::new().read(true).open(&path) {
+ dispatch/stream.rs:1314:fn write_at(file: &mut std::fs::File, position: u64, bytes: &[u8]) -> std::io::Result<()> {
+ dispatch/stream.rs:1769:fn count_lines_upto(file: &mut std::fs::File, position: i64) -> std::io::Result<u64> {
+ dispatch/native/tests.rs:36:            let text = std::fs::read(&path).unwrap_or_else(|e| {
+ ir/corpus_shape_tests.rs:16:use std::fs;
+ ir/corpus_shape_tests.rs:493:        fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+ ir/corpus_shape_tests.rs:509:        let text = fs::read_to_string(&path)
+ ir/corpus_shape_tests.rs:560:            fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+ plan/tests.rs:173:        for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+ plan/tests.rs:182:            let bytes = std::fs::read(&path).expect("a readable corpus program");
+-input.rs:75:                ProgramInput::Stdin => Source::Stdin(std::io::stdin()),
+-input.rs:128:            Source::Stdin(stdin) => stdin.lock().read(&mut buffer),
+-input.rs:129:            Source::Bytes(cursor) => cursor.read(&mut buffer),
+-input.rs:448:        let count = Dribble(b'z').read(&mut buffer).expect("the source answers");
++input.rs:80:        match std::io::stdin().lock().read(&mut chunk) {
++input.rs:215:            Source::Bytes(cursor) => cursor.read(&mut buffer),
++input.rs:359:            self.input.reading_stdin();
++input.rs:593:        let count = Dribble(b'z').read(&mut buffer).expect("the source answers");
+ bin/rexx-ir.rs:15:use std::process::ExitCode;
+ bin/rexx-ir.rs:31:    let text = match std::fs::read(&path) {
+ bin/rexx-run.rs:16:use std::process::ExitCode;
+-bin/rexx-run.rs:39:            use std::os::unix::fs::FileTypeExt;
+-bin/rexx-run.rs:40:            std::fs::metadata(format!("/proc/self/fd/{fd}"))
+-bin/rexx-run.rs:75:    let text = match std::fs::read(&path) {
+-bin/rexx-run.rs:90:    let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
++bin/rexx-run.rs:40:            use std::os::unix::fs::FileTypeExt;
++bin/rexx-run.rs:41:            std::fs::metadata(format!("/proc/self/fd/{fd}"))
++bin/rexx-run.rs:76:    let text = match std::fs::read(&path) {
++bin/rexx-run.rs:91:    let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
+ ```
+ 
+ </details>
+ 
+ ### Migration divergences (Task 18, spec section 11)
+ 
+ * Successive native calls of one activity may run on different pool threads, so a thread-affine
+   extension behaves differently from the oracle, where an activity's calls share its thread.
+ * Pool threads get the interpreter thread's stack (`INTERPRETER_STACK_BYTES`), not the oracle's
+   512 KiB: a callback runs Rexx code there, and the translator's, evaluator's and activation
+@@ -657,117 +690,148 @@ finished 2026-10-06T01:20:34+02:00
+ 
+ G4 release: 3029 passed, 1 failed. G6 debug: 3034 passed, 0 failed (sums of `test result` lines).
+ G4's failure is `the_s2_rows_of_the_derived_list_in_both_modes`, at `base/rexxutil/SysSleep`
+ TEST_SLEEP_CONCURRENT, after its P48 rerun (`g4-test-release.txt:2052`, `:2190`). G6 passed the
+ same row only because both modes failed it alike: its cell is `differ: rc 1: oracle Failures 0,
+ ours Failures 1` / `same (P48 rerun)` (`g6-criterion-one-table.txt`).
+ 
+ The cause is a regression from `532bf29fa`. The timer thread waited in a socket read with
+ `SO_RCVTIMEO`, which the kernel runs on its timer wheel, so a `SysSleep` ended late. The test
+ allows 26 ms. Measured by `call time 'r'; call SysSleep 0.3; say time('e') - 0.3` repeated
+-4 times in one program, with release `rexx-run` built from `git archive` of the Task 20 and earlier
+-trees and of `532bf29fa`, and from the worktree for `52b038a80` and `2e6917afe`:
++4 times in one program (`overshoot.rex`), with release `rexx-run` built from `git archive` of
++each tree, then the oracle, one run each on a quiet machine. Script and log, under
++`.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence/`:
++
++```
++bash overshoot.sh <scratch> 7266ae03c a48312f8e 532bf29fa 52b038a80 2e6917afe c66650b52 > overshoot.log
++```
+ 
+ | tree | overshoot, s |
+ |---|---|
+-| `7266ae03c` (S3 close) | 0.000147 0.000114 0.000095 0.000113 |
+-| `a48312f8e` (Task 20) | 0.000197 0.000115 0.000120 0.000112 |
+-| `532bf29fa` (Task 21) | 0.016163 0.019948 0.019998 0.019950 |
+-| `52b038a80` | 0.014898 0.023956 0.019899 0.020352 |
+-| `2e6917afe` | 0.000164 0.000086 0.000077 0.000087 |
+-| oracle | 0.000226 0.000173 0.002361 0.000206 |
++| `7266ae03c` (S3 close) | 0.000800 0.000426 0.000426 0.000411 |
++| `a48312f8e` (Task 20) | 0.000578 0.000429 0.000469 0.000203 |
++| `532bf29fa` (Task 21) | 0.014161 0.019931 0.019998 0.019978 |
++| `52b038a80` | 0.011344 0.019943 0.020057 0.019918 |
++| `2e6917afe` | 0.000097 0.000064 0.000081 0.000095 |
++| `c66650b52` (Task 22 fix round 1) | 0.000456 0.000418 0.000413 0.000433 |
++| oracle | 0.000146 0.000128 0.000128 0.000185 |
+ 
+-`2e6917afe` (Task 22) arms a timerfd for the deadline and polls it beside the wake socket. A
+-`ppoll` timeout alone was about 1.5 ms late under niceness 5. `sync.rs`
+-`a_timed_wait_ends_close_to_its_timeout` fails on both variants: 19.7 ms late with the socket
+-timeout and 1.5 ms with the `ppoll` timeout, against its 1 ms bound. At `b8ec39593`, from
+-`rust/`:
++`2e6917afe` (Task 22) arms a timerfd for the deadline and polls it beside the wake socket; other
++unix targets wait on the poll's timeout (`c66650b52`). A `ppoll` timeout alone was about 1.5 ms
++late under niceness 5. `sync.rs` `a_timed_wait_ends_close_to_its_timeout` fails on both
++variants: 19.7 ms late with the socket timeout and 1.5 ms with the `ppoll` timeout, against its
++1 ms bound. At `c66650b52`, from `rust/`, `s4-close-evidence/s2rows.sh`:
+ 
+ ```
+ REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=<file> cargo test --release -p rexx-exec \
+   --test concurrency_tests -- group_runs::the_s2_rows
+ ```
+ 
+-exits 0 with no P48 rerun, and the row is `pass` / `same`. Every other row's cells are G6's, but
+-`base/keyword/REPLY` TEST_REPLY_TWICE_REPLYASSERT, whose normal cell is `differ: rc 0: oracle 1,
+-ours 0`: the oracle counts 1 in some runs, as the P41 table above records.
++exits 0 with no P48 rerun (`s2rows.log`), and the row is `pass` / `same` (`s2-table.txt:138`).
++Every other row's cells are G6's; `base/keyword/REPLY` TEST_REPLY_TWICE_REPLYASSERT's normal cell
++is `pass` here and in G6, and `differ: rc 0: oracle 1, ours 0` in G4: the oracle counts 1 in
++some runs, as the P41 table above records.
+ 
+ LEAD: the G4 disposition (a rerun of G4 on the Task 22 head, or the row run above as its
+ replacement) goes here.
+ 
+ #### Criteria
+ 
+ * **Criterion 1.** G4's and G6's tables (`g4-criterion-one-table.txt`,
+   `g4-criterion-one-s3-table.txt`, `g4-timer-table.txt` and the G6 ones) equal the S3 close's rows
+   above, apart from `SysSleep` TEST_SLEEP_CONCURRENT, which the regression above made fail and
+   `2e6917afe` passes, and `REPLY` TEST_REPLY_TWICE_REPLYASSERT's normal cell, which follows the
+   oracle's run (P41). Every Alarm and Ticker test passes in both modes in both gate runs.
+-* **Criterion 2.** `the_framework_ticker_runs_without_dash_u` passes in G4 and in G6.
++* **Criterion 2.** `the_framework_ticker_runs_without_dash_u` passes in G4 and in G6
++  (`g4-test-release.txt:1660`, `g6-test-debug.txt:1664`); `the_alarm_and_ticker_groups_pass_in_both_modes`
++  passes in both (`g4-test-release.txt:2047`, `g6-test-debug.txt:2052`).
+ * **Criterion 3.** Below: the ThreadSanitizer run is clean, and G9's `loom` passes.
+ * **Criterion 9.** `phase-6-pinning.md` `## S4 close`: no inverted-wait refusal, no immovable
+   `REPLY`, and no hang in either mode over the derived list. The test that ends at the run's
+   deadline under every opportunity is `MutexSemaphore` TEST_EXCLUSION, the oracle's own hang
+   (P46).
+ * The gate-only `outer_context.rs` tests (Task 19's kept-context 98.983 programs, against the
+   oracle) pass in G4 and in G6: `a_kept_outer_context_reaches_its_callers_variables`,
+   `a_kept_call_context_used_by_another_activity_answers_or_raises` and
+-  `a_kept_thread_context_used_by_another_activity_does_nothing` (`g4-test-release.txt:3405-3407`).
++  `a_kept_thread_context_used_by_another_activity_does_nothing` (`g4-test-release.txt:3405-3407`,
++  `g6-test-debug.txt:3254-3256`).
+ 
+ #### Criterion 3, race checking
+ 
+ The ThreadSanitizer run, gate-only, from `rust/` with the installed nightly
+-(`rustc 1.100.0-nightly (4aa1fbcf4 2026-09-08)`, its `rust-src` component):
++(`rustc 1.100.0-nightly (4aa1fbcf4 2026-09-08)`, its `rust-src` component), is
++`.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence/tsan.sh`:
+ 
+ ```
+-export CARGO_TARGET_DIR=<own dir> RUSTFLAGS="-Zsanitizer=thread"
+-export TSAN_OPTIONS="log_path=<dir>/tsan suppressions=$PWD/tsan.supp allocator_may_return_null=1 second_deadlock_stack=1"
+-T="cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu"
+-$T -p rexx-api --lib
+-DEPTH="recursion deep eval_limit max_eval_depth the_stack_span a_stack_within_the_margin \
+-  nested_pinned_waits_are_bounded notifier_failures_too_many_to_nest the_translator_on_a_pool_thread"
+-$T -p rexx-exec --lib -- $(for t in $DEPTH; do echo --skip $t; done)
+-$T -p rexx-exec --test signals --test stdin_contention --test program_end --test concurrency_tests \
+-  --no-fail-fast -- --skip only_the_interpreter_and_its_waits_take_the_halting_signals
++bash tsan.sh <target dir> <log dir>
+ ```
+ 
+-Clean means every command exits 0 and `<dir>` holds no `tsan.*` file. `rexx-run`, which the
++It runs `cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu` under
++`RUSTFLAGS="-Zsanitizer=thread"` and `TSAN_OPTIONS="log_path=<log dir>/tsan
++suppressions=$PWD/tsan.supp allocator_may_return_null=1 second_deadlock_stack=1"` on rexx-api's
++lib tests, rexx-exec's lib tests less the exclusions below (`--exact --skip <path>`), and the
++`signals`, `stdin_contention`, `program_end` and `concurrency_tests` targets less one test.
++
++Clean means every command exits 0 and `<log dir>` holds no `tsan.*` file. `rexx-run`, which the
+ integration tests start, is built with the same flags, and its children write to `log_path`
+ too: `sigint_ends_a_parse_pull` run with `verbosity=1` added left a `Running under
+ ThreadSanitizer` log for the test process and for each `rexx-run` it started.
+ 
+ The covered paths: the baton, the inbox and completions (`scheduler::`, the lib's program
+ runs, each on an interpreter thread with the timer), the timer and its wake source (`sync::`,
+ every `SysSleep`, `GUARD WHEN` and slice), the driver pool (`scheduler::tests::pool`, `::native`,
+ `::callbacks`, `::lent`, rexx-api's `ffi::` callbacks), signals (`signals.rs`, `signal::`) and
+ the stdin read (`stdin_contention.rs`, `input::`). `concurrency_tests` runs here without
+-`REXX_CORPUS_GATE`: its rows against the oracle are timing-dependent and run in G4 and G6.
++`REXX_CORPUS_GATE`: its rows against the oracle are timing-dependent and run in G4 and G6. The
++pool's callback recursion runs bounded, 25 levels
++(`scheduler::tests::pool::bounded_callback_recursion_nests_under_one_lend`: one driver exit, one
++baton take), not at depth.
+ 
+-Result at `b8ec39593` with `tsan.supp` as committed, the command run 10 times: in every run
+-each command exits 0 and no report is written; rexx-api lib 70 passed, rexx-exec lib 986 passed
+-with 16 filtered out, `concurrency_tests` 32, `program_end` 2, `signals` 36 with 1 filtered out,
+-`stdin_contention` 1, 1127 in all.
++Result at `c66650b52`, one run, `tsan.sh` output and the test logs in `s4-close-evidence/tsan/`:
++`api exit 0`, `lib exit 0`, `int exit 0`, `no tsan log`. The `test result` lines: rexx-api lib
++`70 passed`; rexx-exec lib `990 passed ... 13 filtered out`; `concurrency_tests` `32 passed`,
++`program_end` `2 passed`, `signals` `36 passed ... 1 filtered out`, `stdin_contention` `1 passed`.
+ 
+-Reports and exclusions, each triaged:
++Excluded, each by exact path:
++
++| test | reason |
++|---|---|
++| `eval::tests::a_native_chain_past_the_eval_limit_runs` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames; an `eval::tests` depth test crashed TSan under `gdb` at 65,551 frames, 65,526 of them `Plan::note` |
++| `eval::tests::eval_raises_11_1_exactly_one_term_past_max_eval_depth` | the same |
++| `eval::tests::eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer` | the same |
++| `ir::drive::tests::recursion_by_function_call_keeps_the_native_stack_flat` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames |
++| `ir::drive::tests::recursion_by_new_into_init_keeps_the_native_stack_flat` | the same |
++| `ir::drive::tests::recursion_by_send_keeps_the_native_stack_flat` | the same |
++| `scheduler::tests::a_stack_within_the_margin_is_refused` | a thread stack sized against the stack margin, which TSan's frames change |
++| `scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining` | reaches Error 11 at a smaller depth than it asserts under TSan |
++| `scheduler::tests::pool::callback_recursion_on_a_pool_thread_reaches_the_depth_cap` | 141,427 frames of `TestSendMessage0` callbacks crashed TSan under `gdb`; its bounded form runs |
++| `scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames (a pool thread's) |
++| `scheduler::tests::pool::the_translator_on_a_pool_thread_has_the_interpreter_threads_stack` | translator nesting to a depth calibrated to a pool thread's stack |
++| `scheduler::tests::recursion_is_bounded_by_the_stack_remaining` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames |
++| `tests::the_stack_span_does_not_depend_on_what_else_the_program_evaluated` | measures the native stack span, which TSan's frames change |
++| `only_the_interpreter_and_its_waits_take_the_halting_signals` (`signals`) | counts the `rexx-run` threads with the halting signals blocked, and TSan adds its own background thread: in a TSan `rexx-run`, `/proc/<pid>/task/*/status` shows a second `rexx-run` thread with `SigBlk: fffffffe3ffbea07` (nearly every signal) beside this crate's `0000000000004003` (SIGHUP, SIGINT, SIGTERM) |
++
++Reports, each triaged:
+ 
+ | what | where | verdict |
+ |---|---|---|
+-| data race, read and write of a mutable buffer's bytes | `rexx_api::load::hold_buffer` on a pool thread against `BufferBytes::extend_from_slice` / `try_reserve_exact` on the holder, `scheduler::tests::lent` `a_buffer_changed_in_place_under_a_call_stays_shared` and `a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds` | false positive: the test orders the two through a file the activity writes after changing the buffer and the routine waits for; TSan models no ordering through the filesystem. Suppressed, `race:rexx_api::load::hold_buffer` |
++| data race, read and write of a mutable buffer's bytes | `rexx_api::load::hold_buffer` on a pool thread against `BufferBytes::extend_from_slice` / `try_reserve_exact` on the holder, `scheduler::tests::lent` `a_buffer_changed_in_place_under_a_call_stays_shared` and `a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds` | false positive at `b8ec39593`: the test ordered the two through a file. Since `c66650b52` it orders them through a lock (`BUFFERHELD`, `BUFFERCHANGED`), and no suppression covers it. Control: with `HOLDBUFFER` sleeping in place of the lock wait, the two tests write one data race report (`tsan/control-no-handshake.*`) |
+ | data race in `free` | glibc's `_dl_close_worker` under `Library::close` at program end on two interpreter threads (`dispatch::library::tests::a_library_call_answers_the_same_under_a_collection_at_every_allocation` and another test's run); found once | false positive: both run under the dynamic linker's `dl_load_lock`, taken inside ld.so where TSan does not see it. Suppressed, `race:_dl_close_worker` |
+-| SEGV in `__tsan_func_entry` / `__tsan::CurrentStackId` | `eval::tests` depth tests (65,551 frames, 65,526 of them `Plan::note`), `scheduler::tests::pool::callback_recursion_on_a_pool_thread_reaches_the_depth_cap` (141,427 frames of `TestSendMessage0` callbacks); found under `gdb` | TSan's shadow call stack holds 65536 frames. Not a race. Excluded with every test that measures recursion against the native stack (`DEPTH`), which also fail on TSan's larger frames (`nested_pinned_waits_are_bounded_by_the_stack_remaining` reaches Error 11 at a smaller depth). The pool's other tests run |
+-| `only_the_interpreter_and_its_waits_take_the_halting_signals` fails | lists one more `rexx-run` thread with the halting signals blocked | TSan's background thread, named for the process: in a TSan `rexx-run`, `/proc/<pid>/task/*/status` shows a second `rexx-run` thread with `SigBlk: fffffffe3ffbea07` (nearly every signal) beside this crate's `0000000000004003` (SIGHUP, SIGINT, SIGTERM). Excluded |
++| SEGV in `__tsan_func_entry` / `__tsan::CurrentStackId` | the depth tests above; found under `gdb` | TSan's shadow call stack. Not a race. Excluded |
+ 
+-`tsan.supp` holds the suppressions in this table, each with its reason.
++`tsan.supp` holds the one suppression, with its reason.
+ 
+-**loom.** G9: `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --test loom`, 15 passed in
+-371.56 s (`g9-loom.txt`), the registration models under the P58 preemption bound. `2e6917afe`
+-changes only the shipped `Wake`; the loom model of it is unchanged, and the loom tests build at
+-`b8ec39593` (`cargo test -p rexx-exec --test loom --no-run` under `--cfg loom`, exit 0).
++**loom.** G9 at `52b038a80`: `RUSTFLAGS="--cfg loom" cargo test -p rexx-exec --test loom`, 15
++passed in 371.56 s (`g9-loom.txt`), the registration models under the P58 preemption bound. At
++`c66650b52`, in a target dir of its own: `test result: ok. 15 passed; 0 failed ... finished in
++358.99s` (`s4-close-evidence/loom.log`). `2e6917afe` and `c66650b52` change only the shipped `Wake`; the loom model of it is
++unchanged.
+ 
+ #### Rulings and licensed divergences of S4
+ 
+ Rulings, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/progress.md`:
+ 
+ * P50: no API callback touches island state off the baton; the Conversion split and the
+   baton-guarded `Host` accessor landed in Task 17.
+ * P51: per-task checks are fmt, clippy and `cargo test --workspace --release`; the full gates run
+   at stage closes.
+ * P52: a pool thread runs the native call and the holder lends the baton through the inbox.
+@@ -788,30 +852,31 @@ Rulings, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/progress.md`:
+ * P61: handlers install over `SIG_DFL` and `SIG_IGN` for SIGINT and SIGTERM, over `SIG_DFL` only
+   for SIGHUP.
+ * P62: handlers install at `rexx-run` and the C API's interpreter creation only.
+ * P63: `ADDRESS` children start with SIGPIPE at its default (DEVIATIONS entry 11).
+ * P64: every unredirected `ADDRESS` command waits off the baton; without a pool reservation it
+   waits inline, uninterruptible (DEVIATIONS entry 12).
+ * P65: a halt withdraws semaphore waits and not message waits; a message wait whose runner the
+   halt does not wake can end in the loud "nothing left to run" refusal.
+ * P66 and P68: withdrawn by P69.
+ * P67, as amended: SIGINT, SIGTERM and SIGHUP are blocked in pool, timer and other crate threads
+-  and unblocked around the child wait and the stdin read; the interpreter thread keeps them.
++  and unblocked around the child wait and the stdin read; the interpreter thread keeps them. It
++  holds for one interpreter per process (queued `2026-10-05-two-interpreters-signal-race`).
+ * P69: no other activity runs during a read of the default input stream (DEVIATIONS entry 13).
+ 
+ DEVIATIONS rows added in S4 (`phase-4-exclusions.txt`), each with owner none:
+ 
+ * 9, a native call's old MutableBuffer storage outlives a collection (Task 20, spec 2.5);
+ * 10, a signal halts where the oracle dies or hangs, and wakes what the oracle leaves waiting
+   (Task 21, P59-P61);
+ * 11, an `ADDRESS` command's child starts with SIGPIPE at its default (P63);
+ * 12, a blocking wait a signal does not end (P60, P64);
+ * 13, no other activity runs during a read of the default input stream (P69).
+ 
+ The Migration divergences above (Task 18) are the others S4 records.
+ 
+ #### Queued in S4
+ 
+-`.superpowers/sdd/queued/`: `2026-10-03-interpret-translation-error-traceback`,
+-`2026-10-04-aborted-run-leaks-interp`, `2026-10-04-send-site-cache-self-customization`,
+-`2026-10-05-call-on-notready-stdin-eof`, `2026-10-05-stream-fifo-terminal-seek`,
+-`2026-10-05-two-interpreters-signal-race`.
++`.superpowers/sdd/queued/`: `2026-10-04-aborted-run-leaks-interp`,
++`2026-10-05-call-on-notready-stdin-eof`, `2026-10-05-stdin-chars-after-drain`,
++`2026-10-05-stream-fifo-terminal-seek`, `2026-10-05-two-interpreters-signal-race`; and a design
++note, not a defect, `2026-10-04-send-site-cache-self-customization`.
+diff --git a/docs/superpowers/plans/phase-6-pinning.md b/docs/superpowers/plans/phase-6-pinning.md
+index 9a91b6952..c4ed4e3d9 100644
+--- a/docs/superpowers/plans/phase-6-pinning.md
++++ b/docs/superpowers/plans/phase-6-pinning.md
+@@ -763,40 +763,48 @@ Every opportunity:
+ | pinned yield | - | TraceWrapper > Unknown | 43 |
+ | pinned yield | - | TraceWrapper > Unknown > OpExec > Forward | 70 |
+ | pinned yield | - | TraceWrapper > Unknown > OpExec > Forward > Conversion | 7 |
+ 
+ No immovable `REPLY` and no inverted wait is counted in either mode. Every test's outcome is the
+ same in the two tables but `MutexSemaphore` TEST_EXCLUSION, which passes normally and ends at the
+ run's deadline under every opportunity (P46).
+ 
+ ## S4 close
+ 
+-At `b8ec39593`, from `rust/`:
++At `c66650b52`, from `rust/`, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence/pinning.sh`:
+ 
+ ```
+ RAYON_NUM_THREADS=4 CARGO_TARGET_DIR=<own dir> memcap 8G cargo test --release -p rexx-exec \
+   --features pinning --test concurrency_tests -- measured:: --nocapture --test-threads=1
+ ```
+ 
+-Exit 0, 18 `measured::` tests passed. Arrivals per park, beside the S3 close:
++Exit 0, every `measured::` test passed (`pinning.log`: `test result: ok. 18 passed; 0 failed`).
++Arrivals per park, beside the S3 close, summed from the log's park tables by `pinning-diff.py`:
+ 
+ | park | S3 normal | S3 every opportunity | S4 normal | S4 every opportunity |
+ |---|---:|---:|---:|---:|
+ | GuardOn | 36 | 67 | 36 | 67 |
+ | GuardWhen | 54 | 54 | 54 | 54 |
+ | Reply | 91 | 91 | 91 | 91 |
+ | MessageResult | 98 | 98 | 98 | 98 |
+ | MessageWait | 11 | 11 | 11 | 11 |
+ | SemaphoreWait | 8 | 7 | 8 | 7 |
+ | SysSleep | 173 | 172 | 173 | 172 |
+ | Timer | 37 | 59 | 37 | 59 |
+ 
+-The waits-by-kind tables of both modes are row for row the S3 close's above (checked by `diff`
+-against this file's S3 tables). The same run at `52b038a80` gave the same arrivals and tables. No `NativeCall` or
++The waits-by-kind tables of both modes are row for row the S3 close's above:
++
++```
++E=.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence
++python3 $E/pinning-diff.py $E/pinning.log docs/superpowers/plans/phase-6-pinning.md > $E/pinning-diff.log
++```
++
++prints the arrivals and no diff line for either mode (`pinning-diff.log`); with one count in
++`pinning.log` altered, it prints that row. No `NativeCall` or
+ `Command` park is counted: no test of the derived list waits for a native call or an `ADDRESS`
+ command off the baton. No immovable `REPLY` and no inverted wait is counted in either mode. Every
+ test's outcome is the same in both tables but `MutexSemaphore` TEST_EXCLUSION, which passes
+ normally and ends at the run's deadline under every opportunity (P46).
+ 
+ A read of the default input stream is not a park. It keeps the baton and idles on the inbox
+ until its chunk or a halt arrives (P69, DEVIATIONS entry 13), so the report has no kind for it;
+ the `Input` park kind of Task 21's fix round 3 was removed with P66 at `4cf934a48`.

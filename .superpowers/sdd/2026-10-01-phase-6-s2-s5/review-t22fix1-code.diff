@@ -1,0 +1,547 @@
+diff --git a/rust/crates/rexx-api/src/load.rs b/rust/crates/rexx-api/src/load.rs
+index 70691967a..4cf3e4ac2 100644
+--- a/rust/crates/rexx-api/src/load.rs
++++ b/rust/crates/rexx-api/src/load.rs
+@@ -873,27 +873,72 @@ pub unsafe extern "C-unwind" fn hold_c_string(
+         let appeared = await_file(&path);
+         let same = copy
+             .iter()
+             .enumerate()
+             .all(|(at, byte)| held.add(at).cast::<u8>().read_volatile() == *byte);
+         (*arguments).value.value_logical_t = usize::from(appeared && same);
+     }
+     std::ptr::null_mut()
+ }
+ 
+-/// `HOLDBUFFER(buffer, path, mark)`: keeps the address and length
+-/// `MutableBufferData` and `MutableBufferLength` answer, writes a file at
+-/// `path` with `.held` appended, waits up to five seconds for a file at
+-/// `path`, then reads that many bytes from that address and writes `mark`
+-/// over its start, answering what it read, or `unawaited` where no file
+-/// appeared: a native holding a buffer's storage across other activities'
+-/// work, for a test.
++/// The keys `HOLDBUFFER` holds a buffer's storage for, and the keys whose
++/// buffer `BUFFERCHANGED` says another activity has changed: a handshake
++/// through a lock, so that ThreadSanitizer sees the change ordered before
++/// the routine's access.
++struct BufferHandshake {
++    held: Vec<Vec<u8>>,
++    changed: Vec<Vec<u8>>,
++}
++
++static BUFFER_HANDSHAKE: Mutex<BufferHandshake> = Mutex::new(BufferHandshake {
++    held: Vec::new(),
++    changed: Vec::new(),
++});
++
++static BUFFER_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
++
++fn buffer_handshake() -> std::sync::MutexGuard<'static, BufferHandshake> {
++    BUFFER_HANDSHAKE
++        .lock()
++        .unwrap_or_else(std::sync::PoisonError::into_inner)
++}
++
++/// Waits up to five seconds for `BUFFERCHANGED(key)`, answering whether it
++/// came, and ends `key`'s hold either way.
++fn await_buffer_changed(key: &[u8]) -> bool {
++    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
++    let mut handshake = buffer_handshake();
++    let changed = loop {
++        if let Some(at) = handshake.changed.iter().position(|k| k == key) {
++            handshake.changed.swap_remove(at);
++            break true;
++        }
++        let left = deadline.saturating_duration_since(std::time::Instant::now());
++        if left.is_zero() {
++            break false;
++        }
++        handshake = BUFFER_CHANGED
++            .wait_timeout(handshake, left)
++            .unwrap_or_else(std::sync::PoisonError::into_inner)
++            .0;
++    };
++    handshake.held.retain(|k| k != key);
++    changed
++}
++
++/// `HOLDBUFFER(buffer, key, mark)`: keeps the address and length
++/// `MutableBufferData` and `MutableBufferLength` answer, says through
++/// `BUFFERHELD(key)` that it holds them, waits up to five seconds for
++/// `BUFFERCHANGED(key)`, then reads that many bytes from that address and
++/// writes `mark` over its start, answering what it read, or `unawaited`
++/// where `BUFFERCHANGED` did not come: a native holding a buffer's storage
++/// across other activities' work, for a test.
+ ///
+ /// # Safety
+ /// As [`send_then_await`].
+ #[doc(hidden)]
+ pub unsafe extern "C-unwind" fn hold_buffer(
+     context: *mut RexxCallContext_,
+     arguments: *mut ValueDescriptor,
+ ) -> *mut u16 {
+     use crate::values::code;
+     static SIGNATURE: [u16; 5] = [
+@@ -902,48 +947,91 @@ pub unsafe extern "C-unwind" fn hold_buffer(
+         code::CSTRING,
+         code::CSTRING,
+         ARGUMENT_TERMINATOR,
+     ];
+     if arguments.is_null() {
+         return SIGNATURE.as_ptr().cast_mut();
+     }
+     // SAFETY: as `send_then_await`'s; `SIGNATURE` declares three arguments.
+     // The interpreter keeps the storage at the address it answered for as
+     // long as the call is in flight. The test changes the buffer only after
+-    // the `.held` file appears, so the length answered is that storage's.
++    // `BUFFERHELD` answers true, so the length answered is that storage's.
+     unsafe {
+         let buffer = (*arguments.add(1)).value.value_RexxMutableBufferObject;
+-        let path = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING);
+-        let path = PathBuf::from(path.to_string_lossy().into_owned());
++        let key = CStr::from_ptr((*arguments.add(2)).value.value_CSTRING).to_bytes();
+         let mark = CStr::from_ptr((*arguments.add(3)).value.value_CSTRING).to_bytes();
+         let thread = (*context).threadContext;
+         let functions = &*(*thread).functions;
+         let data = (functions.MutableBufferData)(thread, buffer).cast::<u8>();
+         let length = (functions.MutableBufferLength)(thread, buffer);
+-        let mut held = path.clone().into_os_string();
+-        held.push(".held");
+-        let _ = std::fs::write(held, b"held");
+-        let read: Vec<u8> = if await_file(&path) {
++        buffer_handshake().held.push(key.to_vec());
++        let read: Vec<u8> = if await_buffer_changed(key) {
+             let read = (0..length).map(|at| data.add(at).read_volatile()).collect();
+             for (at, byte) in mark.iter().take(length).enumerate() {
+                 data.add(at).write_volatile(*byte);
+             }
+             read
+         } else {
+             b"unawaited".to_vec()
+         };
+         (*arguments).value.value_RexxObjectPtr =
+             (functions.NewString)(thread, read.as_ptr().cast(), read.len()).cast();
+     }
+     std::ptr::null_mut()
+ }
+ 
++/// `BUFFERHELD(key)`: whether `HOLDBUFFER(, key)` holds its buffer's
++/// storage, for a test.
++///
++/// # Safety
++/// As [`send_then_await`].
++#[doc(hidden)]
++pub unsafe extern "C-unwind" fn buffer_held(
++    _context: *mut RexxCallContext_,
++    arguments: *mut ValueDescriptor,
++) -> *mut u16 {
++    use crate::values::code;
++    static SIGNATURE: [u16; 3] = [code::LOGICAL_T, code::CSTRING, ARGUMENT_TERMINATOR];
++    if arguments.is_null() {
++        return SIGNATURE.as_ptr().cast_mut();
++    }
++    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares one argument.
++    unsafe {
++        let key = CStr::from_ptr((*arguments.add(1)).value.value_CSTRING).to_bytes();
++        let held = buffer_handshake().held.iter().any(|k| k == key);
++        (*arguments).value.value_logical_t = usize::from(held);
++    }
++    std::ptr::null_mut()
++}
++
++/// `BUFFERCHANGED(key)`: says to `HOLDBUFFER(, key)` that its buffer has
++/// been changed, for a test.
++///
++/// # Safety
++/// As [`send_then_await`].
++#[doc(hidden)]
++pub unsafe extern "C-unwind" fn buffer_changed(
++    _context: *mut RexxCallContext_,
++    arguments: *mut ValueDescriptor,
++) -> *mut u16 {
++    use crate::values::code;
++    static SIGNATURE: [u16; 3] = [code::REXX_OBJECT_PTR, code::CSTRING, ARGUMENT_TERMINATOR];
++    if arguments.is_null() {
++        return SIGNATURE.as_ptr().cast_mut();
++    }
++    // SAFETY: as `send_then_await`'s; `SIGNATURE` declares one argument.
++    let key = unsafe { CStr::from_ptr((*arguments.add(1)).value.value_CSTRING).to_bytes() };
++    buffer_handshake().changed.push(key.to_vec());
++    BUFFER_CHANGED.notify_all();
++    std::ptr::null_mut()
++}
++
+ /// `FINISHEDINPLACE(text, made)`: makes a buffer string of `made` bytes,
+ /// asks for its `StringData` before filling it with `x` through
+ /// `BufferStringData`, writing `text` over its start and finishing it at
+ /// `text`'s length, and answers what the first address then holds up to its
+ /// first NUL.
+ ///
+ /// # Safety
+ /// As [`send_then_await`].
+ #[doc(hidden)]
+ pub unsafe extern "C-unwind" fn finished_in_place(
+diff --git a/rust/crates/rexx-exec/Cargo.toml b/rust/crates/rexx-exec/Cargo.toml
+index 47a7ee6db..020b1f93f 100644
+--- a/rust/crates/rexx-exec/Cargo.toml
++++ b/rust/crates/rexx-exec/Cargo.toml
+@@ -56,22 +56,23 @@ rexx-lib = { path = "../rexx-lib" }
+ # RUSTSEC-2020-0071) and `wasmbind`. What is left compiles four crates on
+ # this target -- chrono, num-traits, iana-time-zone and the autocfg build
+ # helper -- and chrono's own unix path carries no `unsafe` and no libc call:
+ # it parses TZif out of `/etc/localtime` itself.
+ chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+ # The system calls `std` does not expose: `access(2)`, which answers for the
+ # caller's own credentials where a mode bit does not; `utimensat` with
+ # `UTIME_OMIT`, which sets one file stamp and leaves the other, and which
+ # `std`'s own `File::set_times` cannot stand in for because it needs a
+ # writable open handle where a read-only file's stamp is still the owner's to
+-# set; and `uname`, for `SysVersion`. Both features are leaves here -- they
+-# gate their modules and pull no further crate.
++# set; and `uname`, for `SysVersion`. `event` and `time` are the timer
++# thread's `poll` and Linux `timerfd`. The four features are leaves here --
++# they gate their modules and pull no further crate.
+ rustix = { version = "1.1.4", features = ["event", "fs", "system", "time"] }
+ # `sigaction` and the async-signal-safe `write` the signal module needs
+ # (D-U3, `src/signal.rs`). Already in the graph through `std`'s users.
+ libc = "0.2.186"
+ 
+ [features]
+ # The pinned-park counter, `src/pinning.rs`.
+ pinning = []
+ 
+ [dev-dependencies]
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/lent.rs b/rust/crates/rexx-exec/src/scheduler/tests/lent.rs
+index 93ae4254a..bfdc9867e 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/lent.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/lent.rs
+@@ -30,64 +30,63 @@ extern "C-unwind" fn take_c_string(
+     if arguments.is_null() {
+         return TAKES_C_STRING.as_ptr().cast_mut();
+     }
+     std::ptr::null_mut()
+ }
+ 
+ fn library() -> rexx_api::load::Library {
+     rexx_api::load::routines_only(&[
+         ("HOLDCSTRING", rexx_api::load::hold_c_string),
+         ("HOLDBUFFER", rexx_api::load::hold_buffer),
++        ("BUFFERHELD", rexx_api::load::buffer_held),
++        ("BUFFERCHANGED", rexx_api::load::buffer_changed),
+         ("FINISHEDINPLACE", rexx_api::load::finished_in_place),
+         ("TAKECSTRING", take_c_string),
+     ])
+ }
+ 
+ /// Runs `source` with this module's routines as the library `lenttest`,
+ /// after replacing `PATH` in it with a file of the test's own, which the
+-/// program writes to say its other activity is done, with
+-/// [`crate::set_fail_native_wait`] set where `fail_native_wait`.
++/// program writes to say its other activity is done, or the test's key for
++/// `HOLDBUFFER`, with [`crate::set_fail_native_wait`] set where
++/// `fail_native_wait`.
+ fn run_lent(test: &str, source: &str, fail_native_wait: bool) -> Ran {
+     let path = std::env::temp_dir().join(format!("rexx-lent-{}-{test}", std::process::id()));
+-    let mut held = path.clone().into_os_string();
+-    held.push(".held");
+-    let files = [path.clone(), held.into()];
+-    for file in &files {
+-        let _ = std::fs::remove_file(file);
+-    }
++    let _ = std::fs::remove_file(&path);
+     let source = source.replace("PATH", &path.to_string_lossy());
+     let ran = run_shaped(
+         &source,
+         Shape {
+             library: (b"lenttest", library),
+             fail_native_wait,
+             ..SHAPE
+         },
+     )
+     .expect("the run did not panic");
+-    for file in &files {
+-        let _ = std::fs::remove_file(file);
+-    }
++    let _ = std::fs::remove_file(&path);
+     ran
+ }
+ 
+ fn run(test: &str, source: &str) -> Ran {
+     run_lent(test, source, false)
+ }
+ 
+ const ROUTINES: &str = "::requires 'lenttest' LIBRARY\n::class t\n";
+ 
+ /// The method that says the other activity is done.
+ const DONE: &str = "  call lineout 'PATH', 'done'\n  call lineout 'PATH'\n";
+ 
+ /// The method that waits for `HOLDBUFFER` to hold its buffer's address.
+-const HELD: &str = "  do 500 until SysFileExists('PATH.held')\n    call SysSleep 0.01\n  end\n";
++const HELD: &str = "  do 500 until BUFFERHELD('PATH')\n    call SysSleep 0.01\n  end\n";
++
++/// The method that says to `HOLDBUFFER` that its buffer has changed.
++const CHANGED: &str = "  call BUFFERCHANGED 'PATH'\n";
+ 
+ /// **A handle-carried value's kept string outlives a prune made while its
+ /// call is in flight**: another activity asks for more kept strings than the
+ /// prune's bound while the call holds one.
+ #[test]
+ fn a_held_handle_carried_string_survives_another_activitys_prune() {
+     let ran = run(
+         "carried",
+         &format!(
+             "m = .t~new~start('churn')\nsay HOLDCSTRING('abc', 'PATH')\nsay m~result\n\
+@@ -121,42 +120,42 @@ fn a_held_heap_string_survives_another_activitys_collection() {
+ /// until the call ends**: the call reads what it held, and its writes there
+ /// are not seen, as in the oracle, whose growth also moves the bytes.
+ #[test]
+ fn a_buffer_grown_under_a_call_keeps_the_storage_the_call_holds() {
+     let ran = run(
+         "grown",
+         &format!(
+             "b = .mutablebuffer~new('abcdefghijklmnopqrstuvwxyz')\nm = .t~new~start('grow', b)\n\
+              say HOLDBUFFER(b, 'PATH', 'ZZ')\nsay b~substr(1, 4) b~length\nsay m~result\n\
+              {ROUTINES}::method grow\n  use arg b\n{HELD}  b~append(copies('y', 5000))\n\
+-             {DONE}  return 'grown'\n"
++             {CHANGED}  return 'grown'\n"
+         ),
+     );
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(
+         ran.stdout(),
+         "abcdefghijklmnopqrstuvwxyz\nabcd 5026\ngrown\n"
+     );
+ }
+ 
+ /// **A buffer changed in place while a call holds its address stays
+ /// shared**: the call reads the other activity's write, and Rexx reads the
+ /// call's, as both would through the oracle's one storage.
+ #[test]
+ fn a_buffer_changed_in_place_under_a_call_stays_shared() {
+     let ran = run(
+         "overlaid",
+         &format!(
+             "b = .mutablebuffer~new('abcdefghijklmnopqrstuvwxyz')\nm = .t~new~start('overlay', b)\n\
+              say HOLDBUFFER(b, 'PATH', 'ZZ')\nsay b~substr(1, 4) b~length\nsay m~result\n\
+              {ROUTINES}::method overlay\n  use arg b\n{HELD}  b~overlay('XY', 3)\n\
+-             {DONE}  return 'overlaid'\n"
++             {CHANGED}  return 'overlaid'\n"
+         ),
+     );
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(
+         ran.stdout(),
+         "abXYefghijklmnopqrstuvwxyz\nZZXY 26\noverlaid\n"
+     );
+ }
+ 
+ /// **Finishing a buffer string keeps the address `StringData` answered for
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+index 050667df7..26e13bcac 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+@@ -329,20 +329,40 @@ fn deep_pinned_recursion_on_a_pool_thread_raises_11() {
+ fn callback_recursion_on_a_pool_thread_reaches_the_depth_cap() {
+     let ran = run(DEEP, None);
+     assert_eq!(ran.outcome.exit_code, 245, "{}", ran.stderr());
+     let levels = ran.stderr().matches("SEND0").count();
+     assert!(
+         levels + 2 >= crate::run::MAX_ACTIVATION_DEPTH,
+         "{levels} levels"
+     );
+ }
+ 
++/// The same recursion bounded at 25 levels nests every native call on the
++/// pool thread its first callback was lent the baton on: one driver exit,
++/// one take. ThreadSanitizer runs this one, not the deep ones.
++#[test]
++fn bounded_callback_recursion_nests_under_one_lend() {
++    let ran = run(
++        "m = .t~new~start('idle')\nsay .k~new~send0(.r~new(25), 'deep')\nsay m~result\n\
++         ::class t\n::method idle\n  call SysSleep 0.5\n  return 'idled'\n\
++         ::class r\n::method init\n  expose left\n  use arg left\n\
++         ::method deep\n  expose left\n  left = left - 1\n  if left = 0 then return 'bottom'\n\
++         return .k~new~send0(self, 'deep')\n\
++         ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
++        None,
++    );
++    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
++    assert_eq!(ran.stdout(), "bottom\nidled\n");
++    assert_eq!(ran.exits, 1);
++    assert_eq!(ran.takes, 1);
++}
++
+ /// The translator, run by a callback on a pool thread, has the interpreter
+ /// thread's stack: deep nesting and long operator chains translate as they
+ /// do there.
+ #[test]
+ fn the_translator_on_a_pool_thread_has_the_interpreter_threads_stack() {
+     let ran = run(
+         "m = .t~new~start('idle')\nsay .k~new~send0(.r~new, 'deep')\n\
+          ::class t\n::method idle\n  call SysSleep 0.1\n\
+          ::class r\n::method deep\n  \
+          interpret 'x =' copies('(', 3000)'1'copies(')', 3000)\n  \
+diff --git a/rust/crates/rexx-exec/src/sync.rs b/rust/crates/rexx-exec/src/sync.rs
+index 95dbaed06..f28a36bd1 100644
+--- a/rust/crates/rexx-exec/src/sync.rs
++++ b/rust/crates/rexx-exec/src/sync.rs
+@@ -35,88 +35,103 @@ use std::time::{Duration, Instant};
+ /// critical section here writes its fields before anything can panic.
+ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+ }
+ 
+ /// Waits on `condvar`, giving up `guard` meanwhile.
+ pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
+     condvar.wait(guard).unwrap_or_else(PoisonError::into_inner)
+ }
+ 
+-/// The timer thread's wake source: a socket pair and a timer. The timer
+-/// thread polls the socket's read end and the timer, armed for its next
+-/// deadline. Registration changes and the signal handlers each write one
++/// The timer thread's wake source: a socket pair and, on Linux, a timerfd.
++/// The timer thread polls the socket's read end and the timerfd, armed for
++/// its next deadline; on other unix targets the deadline is the poll's
++/// timeout. Registration changes and the signal handlers each write one
+ /// byte to the socket's nonblocking write end. The socket is never closed,
+ /// so a byte written while no timer thread reads stays until one does.
+ #[cfg(not(all(loom, test)))]
+ pub(crate) struct Wake {
+     reader: std::os::unix::net::UnixStream,
+     writer: std::os::unix::net::UnixStream,
++    #[cfg(any(target_os = "linux", target_os = "android"))]
+     timer: std::os::fd::OwnedFd,
+ }
+ 
+ #[cfg(not(all(loom, test)))]
+ impl Wake {
+     pub(crate) fn new() -> Wake {
+         let (reader, writer) =
+             std::os::unix::net::UnixStream::pair().expect("the timer's wake socket");
+         for end in [&reader, &writer] {
+             end.set_nonblocking(true)
+                 .expect("a nonblocking wake socket");
+         }
+-        let timer = rustix::time::timerfd_create(
+-            rustix::time::TimerfdClockId::Monotonic,
+-            rustix::time::TimerfdFlags::NONBLOCK | rustix::time::TimerfdFlags::CLOEXEC,
+-        )
+-        .expect("the timer's deadline timer");
+         Wake {
+             reader,
+             writer,
+-            timer,
++            #[cfg(any(target_os = "linux", target_os = "android"))]
++            timer: rustix::time::timerfd_create(
++                rustix::time::TimerfdClockId::Monotonic,
++                rustix::time::TimerfdFlags::NONBLOCK | rustix::time::TimerfdFlags::CLOEXEC,
++            )
++            .expect("the timer's deadline timer"),
+         }
+     }
+ 
+     /// Wakes the timer. A full socket already holds a wake.
+     pub(crate) fn notify(&self) {
+         use std::io::Write;
+         let _ = (&self.writer).write(&[0]);
+     }
+ 
+-    /// Blocks until a wake or `timeout`, taking every wake written. The
+-    /// deadline is a timerfd's, which expires within the thread's timer
+-    /// slack.
++    /// Blocks until a wake, `timeout`, or an interrupted poll, taking every
++    /// wake written. The caller recomputes its deadline on every return.
+     pub(crate) fn wait(&self, timeout: Option<Duration>) {
+         use rustix::event::{PollFd, PollFlags, poll};
+-        use rustix::time::{Itimerspec, TimerfdTimerFlags, Timespec, timerfd_settime};
+         use std::io::Read;
+         if timeout == Some(Duration::ZERO) {
+             return;
+         }
+-        let zero = Timespec {
+-            tv_sec: 0,
+-            tv_nsec: 0,
+-        };
+-        let deadline = Itimerspec {
+-            it_interval: zero,
+-            it_value: timeout
+-                .and_then(|timeout| Timespec::try_from(timeout).ok())
+-                .unwrap_or(zero),
+-        };
+-        let _ = timerfd_settime(&self.timer, TimerfdTimerFlags::empty(), &deadline);
+-        let mut polled = [
+-            PollFd::new(&self.reader, PollFlags::IN),
+-            PollFd::new(&self.timer, PollFlags::IN),
+-        ];
+-        let _ = poll(&mut polled, None);
+-        let mut bytes = [0u8; 64];
+-        let _ = (&self.reader).read(&mut bytes);
+-        let _ = rustix::io::read(&self.timer, &mut bytes[..8]);
++        #[cfg(any(target_os = "linux", target_os = "android"))]
++        {
++            use rustix::time::{Itimerspec, TimerfdTimerFlags, Timespec, timerfd_settime};
++            let zero = Timespec {
++                tv_sec: 0,
++                tv_nsec: 0,
++            };
++            let deadline = Itimerspec {
++                it_interval: zero,
++                it_value: timeout
++                    .and_then(|timeout| Timespec::try_from(timeout).ok())
++                    .unwrap_or(zero),
++            };
++            let _ = timerfd_settime(&self.timer, TimerfdTimerFlags::empty(), &deadline);
++            let mut polled = [
++                PollFd::new(&self.reader, PollFlags::IN),
++                PollFd::new(&self.timer, PollFlags::IN),
++            ];
++            let _ = poll(&mut polled, None);
++            let _ = rustix::io::read(&self.timer, &mut [0u8; 8]);
++        }
++        #[cfg(not(any(target_os = "linux", target_os = "android")))]
++        {
++            // `poll(2)`'s timeout is a C int of milliseconds, so a wait is
++            // capped at a day and the caller recomputes after it.
++            let timeout = timeout
++                .map(|timeout| timeout.min(Duration::from_secs(86_400)))
++                .and_then(|timeout| rustix::time::Timespec::try_from(timeout).ok());
++            let _ = poll(
++                &mut [PollFd::new(&self.reader, PollFlags::IN)],
++                timeout.as_ref(),
++            );
++        }
++        let _ = (&self.reader).read(&mut [0u8; 64]);
+     }
+ 
+     /// Installs the signal handlers, writing to this socket.
+     pub(crate) fn install_signals(&self) {
+         use std::os::fd::AsRawFd;
+         crate::signal::install(self.writer.as_raw_fd());
+     }
+ 
+     /// Whether a signal arrived since the last call.
+     pub(crate) fn take_signal(&self) -> bool {
+diff --git a/rust/tsan.supp b/rust/tsan.supp
+index 62155778b..0b33e88e0 100644
+--- a/rust/tsan.supp
++++ b/rust/tsan.supp
+@@ -1,17 +1,9 @@
+ # ThreadSanitizer suppressions for the Phase 6 criterion 3 run
+-# (docs/superpowers/plans/phase-6-gate.md, S4, "Criterion 3").
++# (docs/superpowers/plans/phase-6-gate.md, "S4 close", "Criterion 3, race
++# checking").
+ #
+-# `HOLDBUFFER` (rexx-api load.rs) is a test routine on a pool thread that
+-# reads and writes a mutable buffer's storage through `MutableBufferData`
+-# after another activity has changed that buffer. The test orders the two
+-# through a file: the activity writes the buffer, then the file, and the
+-# routine touches the storage only once it sees the file. TSan models no
+-# ordering through the filesystem, so it reports the activity's write and
+-# the routine's access as concurrent.
+-race:rexx_api::load::hold_buffer
+-
+ # glibc's dlclose: two interpreters in one test process each close a
+ # library they loaded, and `_dl_close_worker` frees on one thread what it
+ # allocated on the other. Both run under the dynamic linker's
+ # `dl_load_lock`, which ld.so takes internally where TSan does not see it.
+ race:_dl_close_worker
