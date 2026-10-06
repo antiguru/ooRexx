@@ -1124,3 +1124,95 @@ Probes and counts (30 runs per side; one for row 20's single-activity program) f
 20, 21, 22 and 23 are in
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-divergences/`; for rows 14, 15 and 18 in
 `.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/refusals/out5/counts.txt`.
+
+### Criterion 1, the derived list's tests (Task 25)
+
+Per-test rows: the gate tests `group_runs::the_s2_rows_of_the_derived_list_in_both_modes` and
+`group_runs::the_s3_rows_of_the_derived_list_in_both_modes` (G4, G6).
+
+Whole-group rows: `group_runs::whole_groups::each_group_of_the_derived_list_in_one_run_in_both_modes`,
+gate-only. Each group file of the derived list runs in one run twice: whole, and with only its
+tests of the derived list (`part` `derived`); the tests reaching rxapi are renamed out of both. Each
+run is made on the oracle 5 times, and 30 times when the oracle's outcomes vary or one of ours is not
+among them (ruling P83), then here normally and under `EveryOpportunity`. An outcome is stdout
+masked as the per-test runner masks it (each copy's path replaced), stderr and exit status. "Agrees"
+means the outcome is one the oracle produced. At `7c9871515`, from `rust/`, release:
+
+```
+REXX_CORPUS_GATE=1 RAYON_NUM_THREADS=4 REXX_WHOLE_GROUPS_TABLE=<file> memcap 8G cargo test --release \
+  -p rexx-exec --test concurrency_tests -- whole_groups --nocapture
+```
+
+`test result: ok. 1 passed; 0 failed` (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/run.log`);
+the table, with each group's oracle outcomes and their counts, is `whole-groups/table.txt` beside it.
+The test passes when every run agrees or is a row of its `DIFFERING` list with the same refusal or
+summary; no run ends in an inverted wait, and no run fails to finish but the P46 row.
+
+Agreeing in both modes, whole and derived: `Alarm`, `EventSemaphore`, `Ticker`, `SysSleep`,
+`RESULT_RC_SIGL` and `bug2003_guard_when`. Agreeing in both modes in the derived part only:
+`STREAM`, `Class`, `DateTime`, `Object`, `RexxContext`, `CONSTANT`, `TRACE`, `Section1`.
+
+The rows that differ, each with its reason (`DIFFERING`):
+
+| group | part | mode | ours | reason |
+|---|---|---|---|---|
+| `MutexSemaphore` | both | every | the run's deadline | TEST_EXCLUSION's own race, which the oracle hangs in too (P46); agrees normally |
+| `REPLY` | both | every | 19 assertions whole, 18 derived, rc 0 | every continuation runs before the program ends; the oracle races them with its end (P41, `phase-4-exclusions.txt` row 22); the oracle's assertion counts vary over its 30 runs (`table.txt`); agrees normally |
+| `TIME` | both | both | failure, rc 1 | elapsed-clock defect, queued `2026-10-02-elapsed-clock-per-routine-and-reset`: TEST_4, 5, 10, 11 as in their own runs, and whole, TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R, which pass alone and fail after earlier tests because a method does not start with a fresh elapsed clock |
+| `CALL` | derived | both | failure, rc 1 | TEST_4, the same elapsed-clock defect, as in its own run |
+| `Message` | both | both | refused, `MAKEARRAY` (Phase 9) | TEST_STARTWITH_NOT_ARRAY, as in its own run |
+| `Method`, `MethodArgs`, `TRACE_TraceObject` | both | both | refused, `DO is not implemented` | the derived tests refused in their own runs (S3 table above; queued `2026-10-02-do-with-over-refusal`) |
+| `ATTRIBUTE`, `METHOD` | derived | both | failure, rc 1 | TESTDELEGATE, as in its own run (Method delegate attributes, outside Phase 6) |
+| `GUARD` | derived | both | refused, `USE LOCAL` (Phase 5) | TEST_WHEN_USE_LOCAL_NO_WAIT, as in its own run |
+| `RAISE` | derived | both | failure, rc 1 | TEST_RAISE_INSERT_CRLF, as in its own run (message text conversion, outside Phase 6) |
+| `RAISE` | whole | both | failure, rc 1 | TEST_RAISE_INSERT_CRLF, and tests outside the derived list that fail alone too |
+| `STREAM` | whole | both | error, rc 2 | tests outside the derived list that fail alone too |
+| `Class`, `DateTime`, `Object`, `RexxContext`, `ATTRIBUTE`, `CONSTANT`, `METHOD`, `CALL`, `GUARD`, `TRACE`, `Section1` | whole | both | refused | a test outside the derived list refuses (its owner in the message), outside Phase 6 |
+
+"Fail alone too" is `whole-groups/alone.sh`, from the repository root, its output `alone.txt`:
+
+```
+bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/alone.sh REXX_RUN SCRATCH
+```
+
+Each named STREAM and RAISE test fails alone here and passes alone on the oracle; the TIME
+`_R` tests pass alone on both; the method clock probe prints `1` on the oracle and `0` here.
+
+### Criterion 9, pinned waits (Task 25)
+
+`phase-6-pinning.md` `## S5`: over the derived list and the corpus, in both modes, no inverted-wait
+refusal and no immovable `REPLY`. No run fails to finish but `MutexSemaphore` TEST_EXCLUSION under
+every opportunity (P46).
+
+### Criterion 10, the *(verify)* items of spec section 6 (Task 25)
+
+```
+grep -n -i 'verify' docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
+```
+
+answers line 356 (the definition), line 430 (the item) and line 518 (this criterion): section 6
+(lines 354-437) holds one item, the UNINIT ordering of lines 429-431, settled in `## S2` `### UNINIT ordering`.
+Re-run at `dd578201c` (the interpreter's source as at `6e70817a9`) with release `rexx-run`, each
+probe 30 times on the oracle, here, and here under every opportunity, from the repository root:
+
+```
+bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-10/run.sh REXX_RUN SCRATCH 30 > summary.txt
+```
+
+Probes in `criterion-10/probes/` (the S2 record's, byte for byte; `corpus_uaea.rex` is
+`corpus/lang/uninit_after_every_activity.rex`), output `criterion-10/summary.txt`:
+
+| probe | oracle | here, both modes |
+|---|---|---|
+| u1 | 30 `main end\|activity end\|uninit live` | the same, 30 each |
+| u2 | 30 `activity end\|main end\|uninit dropped` | the same, 30 each |
+| u3 | 30 `activity end\|main end\|uninit dropped 1` | 30 `uninit dropped 2\|activity end\|main end` each |
+| u4 | 30 `activity loop done\|uninit dropped\|activity end\|main end` | 30 `activity loop done\|activity end\|uninit dropped\|main end` each |
+| u5 | 28 with `uninit after reply`, 2 without | 30 without each |
+| t3 | 30 `main end\|uninit starts\|uninit after start`, rc 7 | the same, 30 each |
+| t7 | 30 `main end\|uninit starts a poller` | the same, 30 each |
+| corpus witness | 30 `main end\|started activity end\|uninit of the object the started activity dropped` | the same, 30 each |
+
+Every stderr is empty and every rc 0 but t3's. Holds: u3 and u4 differ in collection timing (the GC-ordering
+ruling of 2026-09-01, `docs/superpowers/plans/2026-08-27-phase-5b.md:646`), and u5's REPLY continuation
+never runs here, an outcome the oracle produced in 2 of 30 (P39, `phase-4-exclusions.txt` row 21).

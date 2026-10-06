@@ -807,3 +807,55 @@ normally and ends at the run's deadline under every opportunity (P46).
 A read of the default input stream is not a park. It keeps the baton and idles on the inbox
 until its chunk or a halt arrives (P69, DEVIATIONS entry 13), so the report has no kind for it;
 the `Input` park kind of Task 21's fix round 3 was removed with P66 at `4cf934a48`.
+
+## S5
+
+At `dd578201c` (the interpreter's source as at `6e70817a9`), from `rust/`,
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/pinning-s5/pinning.sh TARGET_DIR OUT_DIR`, which
+runs the S4 close's command and the corpus report in both modes:
+
+```
+RAYON_NUM_THREADS=4 CARGO_TARGET_DIR=<own dir> memcap 8G cargo test --release -p rexx-exec \
+  --features pinning --test concurrency_tests -- measured:: --nocapture --test-threads=1
+CARGO_TARGET_DIR=<own dir> memcap 8G cargo test --release -p rexx-exec --features pinning \
+  --test corpus -- --exact pinning_report_over_the_corpus --nocapture
+REXX_CORPUS_SWITCH=every <the same>
+```
+
+Each exits 0 (`status.txt`); `pinning.log`: `test result: ok. 18 passed; 0 failed`. Over the
+derived list, arrivals per park and the waits-by-kind tables of both modes are the S4 close's:
+
+```
+R=docs/superpowers/records/2026-10-01-phase-6-s2-s5/pinning-s5
+python3 $R/pinning-diff.py $R/pinning.log docs/superpowers/plans/phase-6-pinning.md > $R/pinning-diff.log
+```
+
+prints the S4 close's arrivals and no diff line for either mode. No immovable `REPLY` and no
+inverted wait is counted in either mode. The only run that does not finish is `MutexSemaphore`
+TEST_EXCLUSION under every opportunity (P46); its normal run passes.
+
+The corpus: every program of the corpus differential through the same report,
+`corpus.rs` `pinning_report_over_the_corpus`, the mode from `REXX_CORPUS_SWITCH`. Tables, with
+each program that reached a wait: `pinning-corpus.md` and `pinning-corpus-every-opportunity.md`.
+Both read `programs 787, did not finish []`. Arrivals per park:
+
+| park | normal | every opportunity |
+|---|---:|---:|
+| GuardOn | 18 | 18 |
+| GuardWhen | 26 | 26 |
+| MessageResult | 116 | 116 |
+| MessageWait | 70 | 70 |
+| Reply | 46 | 46 |
+| SemaphoreWait | 10 | 10 |
+| SysSemWait | 13 | 13 |
+| SysSleep | 158 | 151 |
+| Timer | 18 | 18 |
+
+Waits by kind, summed over the frames of each:
+
+| wait | normal | every opportunity |
+|---|---:|---:|
+| pinned | 13 | 13 |
+| deferred slice | 9 | 117 |
+| pinned yield | 7 | 44 |
+| inverted, immovable, late wake, inverted yield | 0 | 0 |
