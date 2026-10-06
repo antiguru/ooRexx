@@ -9,7 +9,7 @@
 - `dd578201c` corpus pinning report (`corpus.rs`), criterion-10 re-run, whole-group record
 - `7532f17ba` pinning evidence, `alone.txt`, queue note (method elapsed clock)
 - `fcf8e1470` `sort_by_key` for clippy
-- the docs commit (hash in the lead's ledger; `git log -1` after this file)
+- `a79128b7d` S5 records for criteria 1, 9, 10 in `phase-6-gate.md` and `phase-6-pinning.md`; this report
 
 ## Step 1, criterion 1
 
