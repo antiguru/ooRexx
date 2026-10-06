@@ -214,7 +214,7 @@ Re-review `task-24-rereview-1.md` (N1, N2, the run-dir note). Scratch under
 
 ### Commits
 
-- (see the ledger; this section is in the round's single commit)
+- 988bc56e8: rows 22 and 23, tid probe and tallies, scripts, gate record, this section.
 
 ### Changes
 
