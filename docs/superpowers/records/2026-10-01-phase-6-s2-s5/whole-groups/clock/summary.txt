@@ -1,0 +1,16 @@
+== oracle a (30 runs)
+     30 m2 fresh: 1|rc=0|
+== ours a (30 runs)
+     30 m2 fresh: 0|rc=0|
+== oracle b (30 runs)
+     30 method fresh: 1|rc=0|
+== ours b (30 runs)
+     30 method fresh: 0|rc=0|
+== oracle d (30 runs)
+     30 caller untouched: 1|rc=0|
+== ours d (30 runs)
+     30 caller untouched: 0|rc=0|
+== oracle e (30 runs)
+     30 started fresh: 1|rc=0|
+== ours e (30 runs)
+     30 started fresh: 1|rc=0|

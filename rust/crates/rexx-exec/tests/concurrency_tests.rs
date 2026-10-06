@@ -2472,7 +2472,554 @@ mod group_runs {
 
         /// The runs here, by group, part and mode, that need not be an outcome
         /// the oracle produced, each with its [`key`] and reason.
-        const DIFFERING: &[(&str, &str, &str, &str, &str)] = &[];
+        const DIFFERING: &[(&str, &str, &str, &str, &str)] = &[
+            (
+                "base/bif/STREAM.testGroup",
+                "whole",
+                "normal",
+                "error, assertions 195, rc 2, last started TEST_WRONG_TOO_MANY_ARGS_S, failing [TEST_RELATIVE_FILE_EXISTS TEST_RELATIVE_FILE_EXISTS2 TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994 TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt), and TEST_RELATIVE_FILE_EXISTS and _EXISTS2, which fail on the oracle too",
+            ),
+            (
+                "base/bif/STREAM.testGroup",
+                "whole",
+                "every",
+                "error, assertions 195, rc 2, last started TEST_WRONG_TOO_MANY_ARGS_S, failing [TEST_RELATIVE_FILE_EXISTS TEST_RELATIVE_FILE_EXISTS2 TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994 TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt), and TEST_RELATIVE_FILE_EXISTS and _EXISTS2, which fail on the oracle too",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "whole",
+                "normal",
+                "failure, assertions 506, rc 1, last started TEST_9, failing [TEST_VALIDOPT_BIGCHAR_R TEST_VALIDOPT_LITTLECHAR_R TEST_10 TEST_11 TEST_4 TEST_5]",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone, and TEST_VALIDOPT_*_R, which pass alone, after earlier tests (whole-groups/clock)",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "whole",
+                "every",
+                "failure, assertions 506, rc 1, last started TEST_9, failing [TEST_VALIDOPT_BIGCHAR_R TEST_VALIDOPT_LITTLECHAR_R TEST_10 TEST_11 TEST_4 TEST_5]",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone, and TEST_VALIDOPT_*_R, which pass alone, after earlier tests (whole-groups/clock)",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 65, rc 1, last started TEST_9, failing [TEST_10 TEST_11 TEST_4 TEST_5]",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone",
+            ),
+            (
+                "base/bif/TIME.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 65, rc 1, last started TEST_9, failing [TEST_10 TEST_11 TEST_4 TEST_5]",
+                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone",
+            ),
+            (
+                "base/class/Class.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"TEST1\" of class \"TESTDEFINE1\" is not implemented (Phase 9), rc 120, last started TEST_CLASS_DEFINE, failing []",
+                "a test outside the derived list refuses: TEST_CLASS_DEFINE, Phase 9",
+            ),
+            (
+                "base/class/Class.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"TEST1\" of class \"TESTDEFINE1\" is not implemented (Phase 9), rc 120, last started TEST_CLASS_DEFINE, failing []",
+                "a test outside the derived list refuses: TEST_CLASS_DEFINE, Phase 9",
+            ),
+            (
+                "base/class/Class.testGroup",
+                "rest",
+                "normal",
+                "failure, assertions 202, rc 1, last started TEST_UNINHERIT_TWO_ARGS, failing [TEST_ACTIVATE TEST_METHODS]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/class/Class.testGroup",
+                "rest",
+                "every",
+                "failure, assertions 202, rc 1, last started TEST_UNINHERIT_TWO_ARGS, failing [TEST_ACTIVATE TEST_METHODS]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/class/DateTime.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_BRUTE_FORCE, failing []",
+                "a test outside the derived list refuses: TEST_BRUTE_FORCE, DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/DateTime.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_BRUTE_FORCE, failing []",
+                "a test outside the derived list refuses: TEST_BRUTE_FORCE, DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
+                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
+                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
+                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
+            ),
+            (
+                "base/class/Message.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
+                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/Method.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+                "refuses before any test starts, as TESTDIRECTIVES alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/MethodArgs.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/class/MutexSemaphore.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: the run exceeded its deadline, rc none, last started TEST_RELEASE_ONE_ARG, failing []",
+                "TEST_EXCLUSION's own race: the oracle hangs in it when that schedule is forced (SysSleep 0.01 after step = 6, P46)",
+            ),
+            (
+                "base/class/MutexSemaphore.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: the run exceeded its deadline, rc none, last started TEST_RELEASE_ONE_ARG, failing []",
+                "TEST_EXCLUSION's own race: the oracle hangs in it when that schedule is forced (SysSleep 0.01 after step = 6, P46)",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_RUN_ARRAY_ARGUMENT, failing []",
+                "a test outside the derived list refuses: TEST_RUN_ARRAY_ARGUMENT, Phase 9",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_RUN_ARRAY_ARGUMENT, failing []",
+                "a test outside the derived list refuses: TEST_RUN_ARRAY_ARGUMENT, Phase 9",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "rest",
+                "normal",
+                "failure, assertions 247, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/class/Object.testGroup",
+                "rest",
+                "every",
+                "failure, assertions 247, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/class/RexxContext.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: CONDITION option \"O\" answers a Directory, which is not implemented, rc 120, last started TESTCONDITION01, failing []",
+                "a test outside the derived list refuses: TESTCONDITION01, CONDITION('O')",
+            ),
+            (
+                "base/class/RexxContext.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: CONDITION option \"O\" answers a Directory, which is not implemented, rc 120, last started TESTCONDITION01, failing []",
+                "a test outside the derived list refuses: TESTCONDITION01, CONDITION('O')",
+            ),
+            (
+                "base/class/RexxContext.testGroup",
+                "rest",
+                "normal",
+                "failure, assertions 354, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/class/RexxContext.testGroup",
+                "rest",
+                "every",
+                "failure, assertions 354, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 25.925: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TESTABSTRACTTWICE, failing []",
+                "a test outside the derived list refuses: TESTABSTRACTTWICE, a syntax error the parser here does not report",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 25.925: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TESTABSTRACTTWICE, failing []",
+                "a test outside the derived list refuses: TESTABSTRACTTWICE, a syntax error the parser here does not report",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "rest",
+                "normal",
+                "failure, assertions 232, rc 1, last started TEST_SET_RETURN, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "rest",
+                "every",
+                "failure, assertions 232, rc 1, last started TEST_SET_RETURN, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 187, rc 1, last started TESTDELEGATE, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/ATTRIBUTE.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 187, rc 1, last started TESTDELEGATE, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/CONSTANT.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: constant_TestGroup does not parse here: 19.916: String or symbol expected as ::CONSTANT value. is not implemented (Phase 5), rc 120, last started TEST_BAD_NEGATIVE, failing []",
+                "a test outside the derived list refuses: TEST_BAD_NEGATIVE, a syntax error the parser here does not report",
+            ),
+            (
+                "base/directives/CONSTANT.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: constant_TestGroup does not parse here: 19.916: String or symbol expected as ::CONSTANT value. is not implemented (Phase 5), rc 120, last started TEST_BAD_NEGATIVE, failing []",
+                "a test outside the derived list refuses: TEST_BAD_NEGATIVE, a syntax error the parser here does not report",
+            ),
+            (
+                "base/directives/CONSTANT.testGroup",
+                "rest",
+                "normal",
+                "error, assertions 156, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/directives/CONSTANT.testGroup",
+                "rest",
+                "every",
+                "error, assertions 156, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 25.902: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TESTABSTRACTEXTERNAL, failing []",
+                "a test outside the derived list refuses: TESTABSTRACTEXTERNAL, a syntax error the parser here does not report",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 25.902: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TESTABSTRACTEXTERNAL, failing []",
+                "a test outside the derived list refuses: TESTABSTRACTEXTERNAL, a syntax error the parser here does not report",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "rest",
+                "normal",
+                "failure, assertions 139, rc 1, last started TESTSTRINGNAME, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "rest",
+                "every",
+                "failure, assertions 139, rc 1, last started TESTSTRINGNAME, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 67, rc 1, last started TESTGUARDEDACCESS, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/directives/METHOD.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 67, rc 1, last started TESTGUARDEDACCESS, failing [TESTDELEGATE]",
+                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 19.2: String or symbol expected after CALL keyword. is not implemented (Phase 5), rc 120, last started TEST_INVALID, failing []",
+                "a test outside the derived list refuses: TEST_INVALID, a syntax error the parser here does not report",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 19.2: String or symbol expected after CALL keyword. is not implemented (Phase 5), rc 120, last started TEST_INVALID, failing []",
+                "a test outside the derived list refuses: TEST_INVALID, a syntax error the parser here does not report",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "rest",
+                "normal",
+                "failure, assertions 169, rc 1, last started TEST_SYMBOL, failing [TEST_4]",
+                "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "rest",
+                "every",
+                "failure, assertions 169, rc 1, last started TEST_SYMBOL, failing [TEST_4]",
+                "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 7, rc 1, last started TEST_4, failing [TEST_4]",
+                "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/keyword/CALL.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 7, rc 1, last started TEST_4, failing [TEST_4]",
+                "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: test does not parse here: 25.913: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TEST_INVALID_OPTION_ONOFF, failing []",
+                "a test outside the derived list refuses: TEST_INVALID_OPTION_ONOFF, a syntax error the parser here does not report",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: test does not parse here: 25.913: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TEST_INVALID_OPTION_ONOFF, failing []",
+                "a test outside the derived list refuses: TEST_INVALID_OPTION_ONOFF, a syntax error the parser here does not report",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: USE LOCAL in a ::METHOD body is not implemented (Phase 5), rc 120, last started TEST_WHEN_USE_LOCAL_NO_WAIT, failing []",
+                "TEST_WHEN_USE_LOCAL_NO_WAIT refuses, as alone (USE LOCAL, Phase 5)",
+            ),
+            (
+                "base/keyword/GUARD.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: USE LOCAL in a ::METHOD body is not implemented (Phase 5), rc 120, last started TEST_WHEN_USE_LOCAL_NO_WAIT, failing []",
+                "TEST_WHEN_USE_LOCAL_NO_WAIT refuses, as alone (USE LOCAL, Phase 5)",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "whole",
+                "normal",
+                "failure, assertions 120, rc 1, last started TEST_RAISE_USER, failing [TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02]",
+                "TEST_RAISE_INSERT_CRLF as alone, and tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "whole",
+                "every",
+                "failure, assertions 120, rc 1, last started TEST_RAISE_USER, failing [TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02]",
+                "TEST_RAISE_INSERT_CRLF as alone, and tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "derived",
+                "normal",
+                "failure, assertions 0, rc 1, last started TEST_RAISE_INSERT_CRLF, failing [TEST_RAISE_INSERT_CRLF]",
+                "TEST_RAISE_INSERT_CRLF, as alone: message text conversion, outside Phase 6",
+            ),
+            (
+                "base/keyword/RAISE.testGroup",
+                "derived",
+                "every",
+                "failure, assertions 0, rc 1, last started TEST_RAISE_INSERT_CRLF, failing [TEST_RAISE_INSERT_CRLF]",
+                "TEST_RAISE_INSERT_CRLF, as alone: message text conversion, outside Phase 6",
+            ),
+            (
+                "base/keyword/REPLY.testGroup",
+                "whole",
+                "every",
+                "pass, assertions 19, rc 0, last started TEST_REPLY__CODE_RETURN, failing []",
+                "every continuation runs before the program ends; the oracle races them with its end (P41, phase-4-exclusions.txt row 22)",
+            ),
+            (
+                "base/keyword/REPLY.testGroup",
+                "derived",
+                "every",
+                "pass, assertions 18, rc 0, last started TEST_REPLY__CODE_RETURN, failing []",
+                "every continuation runs before the program ends; the oracle races them with its end (P41, phase-4-exclusions.txt row 22)",
+            ),
+            (
+                "base/keyword/TRACE.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_TRACE_LABEL_WITH_FORWARD, failing []",
+                "a test outside the derived list refuses: TEST_TRACE_LABEL_WITH_FORWARD, DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/keyword/TRACE.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_TRACE_LABEL_WITH_FORWARD, failing []",
+                "a test outside the derived list refuses: TEST_TRACE_LABEL_WITH_FORWARD, DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/keyword/TRACE.testGroup",
+                "rest",
+                "normal",
+                "error, assertions 94, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/keyword/TRACE.testGroup",
+                "rest",
+                "every",
+                "error, assertions 94, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "rest",
+                "normal",
+                "error, assertions 14, rc 2, last started TEST_TRACEOBJECT_OPTION_INVALID, failing [TEST_CALLER_STACK_FRAME]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "rest",
+                "every",
+                "error, assertions 14, rc 2, last started TEST_TRACEOBJECT_OPTION_INVALID, failing [TEST_CALLER_STACK_FRAME]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "derived",
+                "normal",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "base/keyword/TRACE_TraceObject.testGroup",
+                "derived",
+                "every",
+                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+            ),
+            (
+                "doc/rexxref/chapter5/Section1.testGroup",
+                "whole",
+                "normal",
+                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_OBJECT_OBJECTNAMEEQUALS, failing []",
+                "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
+            ),
+            (
+                "doc/rexxref/chapter5/Section1.testGroup",
+                "whole",
+                "every",
+                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_OBJECT_OBJECTNAMEEQUALS, failing []",
+                "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
+            ),
+        ];
 
         /// The line `TestCase~execute` starts each test with, in the copy's
         /// `OOREXXUNIT.CLS`, and what it becomes: the same line, which also
@@ -2690,7 +3237,7 @@ mod group_runs {
                         .map(|test| format!("{group}.{test}")),
                 );
             }
-            let (row, ours) = one_row(oracle, run, file, part, &left_out, &[]);
+            let (row, ours) = checked(oracle, run, file, part, &left_out, &[]);
             let mut rows = vec![row];
             if part == Part::Whole {
                 let refused = |run: &Run| {
@@ -2725,10 +3272,55 @@ mod group_runs {
                     );
                 }
                 if !refusing.is_empty() && !before {
-                    rows.push(one_row(oracle, run, file, Part::Rest, &left_out, &refusing).0);
+                    rows.push(checked(oracle, run, file, Part::Rest, &left_out, &refusing).0);
                 }
             }
             rows
+        }
+
+        /// What one mode of `row` amounts to against the oracle and
+        /// [`DIFFERING`]: `Ok` when allowed, else why not.
+        fn verdict(file: &str, row: &Row, at: usize) -> Result<(), String> {
+            let mode = ["normal", "every"][at];
+            let listed = DIFFERING.iter().find(|(group, part, listed_mode, ..)| {
+                *group == file && *part == row.part.label() && *listed_mode == mode
+            });
+            match listed {
+                Some(_) if row.agrees[at] => Ok(()),
+                Some((.., key, _)) if row.keys[at] != *key => {
+                    Err(format!("listed as {key:?}, is {:?}", row.keys[at]))
+                }
+                Some(_) => Ok(()),
+                None if row.stuck[at] => Err("an inverted wait or a hang".to_string()),
+                None if !row.agrees[at] => {
+                    Err(format!("not an oracle outcome: {:?}", row.keys[at]))
+                }
+                None => Ok(()),
+            }
+        }
+
+        /// [`one_row`], run again once when a mode is not allowed and the
+        /// group holds a row whose outcome depends on the wall clock (ruling
+        /// P48).
+        fn checked(
+            oracle: &oracle::Oracle,
+            run: &Path,
+            file: &str,
+            part: Part,
+            left_out: &BTreeSet<String>,
+            refusing: &[String],
+        ) -> (Row, Run) {
+            let first = one_row(oracle, run, file, part, left_out, refusing);
+            let timed = WALL_CLOCK
+                .iter()
+                .any(|row| row.starts_with(&format!("{file} ")));
+            if !timed || (0..2).all(|at| verdict(file, &first.0, at).is_ok()) {
+                return first;
+            }
+            eprintln!("P48 rerun: {file} {}", part.label());
+            let (mut row, normal) = one_row(oracle, run, file, part, left_out, refusing);
+            row.cells.push_str(" (P48 rerun)");
+            (row, normal)
         }
 
         /// One row: `file` with the tests of `left_out` renamed out, on the
@@ -2871,29 +3463,15 @@ mod group_runs {
                     started.push_str(&row.started);
                     started.push('\n');
                     for (at, mode) in ["normal", "every"].into_iter().enumerate() {
-                        let listed = DIFFERING.iter().find(|(group, part, listed_mode, ..)| {
+                        let name = format!("{file} {} {mode}", row.part.label());
+                        let listed = DIFFERING.iter().any(|(group, part, listed_mode, ..)| {
                             group == file && *part == row.part.label() && *listed_mode == mode
                         });
-                        let name = format!("{file} {} {mode}", row.part.label());
-                        match listed {
-                            Some(_) if row.agrees[at] => listed_agreeing.push(name),
-                            Some((.., key, _)) if row.keys[at] != *key => {
-                                failing.push(format!(
-                                    "{name}: listed as {key:?}, is {:?}",
-                                    row.keys[at]
-                                ));
-                            }
-                            Some(_) => {}
-                            None if row.stuck[at] => {
-                                failing.push(format!("{name}: an inverted wait or a hang"));
-                            }
-                            None if !row.agrees[at] => {
-                                failing.push(format!(
-                                    "{name}: not an oracle outcome: {:?}",
-                                    row.keys[at]
-                                ));
-                            }
-                            None => {}
+                        if listed && row.agrees[at] {
+                            listed_agreeing.push(name.clone());
+                        }
+                        if let Err(why) = verdict(file, row, at) {
+                            failing.push(format!("{name}: {why}"));
                         }
                     }
                 }

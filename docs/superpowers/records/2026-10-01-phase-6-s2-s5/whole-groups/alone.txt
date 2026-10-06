@@ -9,4 +9,39 @@ RAISE TEST_RAISE_SYNTAX_EXIT_02 | oracle: Assertions: 17 Failures: 0 Errors: 0 |
 RAISE TEST_RAISE_SYNTAX_RETURN_02 | oracle: Assertions: 17 Failures: 0 Errors: 0 | ours: Assertions: 14 Failures: 1 Errors: 0 
 TIME TEST_VALIDOPT_BIGCHAR_R | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 0 Errors: 0 
 TIME TEST_VALIDOPT_LITTLECHAR_R | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 0 Errors: 0 
-method clock probe | oracle: 1 | ours: 0
+Class TEST_ACTIVATE | oracle: Assertions: 4 Failures: 0 Errors: 0 | ours: Assertions: 0 Failures: 1 Errors: 0 
+Class TEST_METHODS | oracle: Assertions: 11 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+Class TEST_CLASS_DEFINE | oracle: Assertions: 13 Failures: 0 Errors: 0 | ours: rexx-exec: method "TEST1" of class "TESTDEFINE1" is not implemented (Phase 9)
+Object TEST_INSTANCEMETHOD | oracle: Assertions: 22 Failures: 0 Errors: 0 | ours: Assertions: 4 Failures: 1 Errors: 0 
+Object TEST_RUN | oracle: Assertions: 17 Failures: 0 Errors: 0 | ours: Assertions: 3 Failures: 1 Errors: 0 
+Object TEST_SETMETHOD | oracle: Assertions: 22 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+Object TEST_SETMETHOD_SCOPE | oracle: Assertions: 15 Failures: 0 Errors: 0 | ours: Assertions: 9 Failures: 1 Errors: 0 
+Object TEST_RUN_ARRAY_ARGUMENT | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)
+RexxContext TESTRS01 | oracle: Assertions: 2 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+RexxContext TESTCONDITION01 | oracle: Assertions: 3 Failures: 0 Errors: 0 | ours: rexx-exec: CONDITION option "O" answers a Directory, which is not implemented
+CONSTANT TEST_EXPRESSION_NOVALUE_ERROR | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 0 Failures: 0 Errors: 1 
+CONSTANT TEST_BAD_NEGATIVE | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: constant_TestGroup does not parse here: 19.916: String or symbol expected as ::CONSTANT value. is not implemented (Phase 5)
+ATTRIBUTE TESTABSTRACTTWICE | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: test does not parse here: 25.925: Invalid subkeyword found. is not implemented (Phase 5)
+METHOD TESTABSTRACTEXTERNAL | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: test does not parse here: 25.902: Invalid subkeyword found. is not implemented (Phase 5)
+CALL TEST_INVALID | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: test does not parse here: 19.2: String or symbol expected after CALL keyword. is not implemented (Phase 5)
+GUARD TEST_INVALID_OPTION_ONOFF | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: test does not parse here: 25.913: Invalid subkeyword found. is not implemented (Phase 5)
+TRACE TEST_TRACE_? | oracle: Assertions: 2 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_?A | oracle: Assertions: 3 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_?I | oracle: Assertions: 3 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_?R | oracle: Assertions: 3 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_?_OPTION | oracle: Assertions: 6 Failures: 0 Errors: 0 | ours: Assertions: 5 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_DROP | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_EXIT | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_EXPOSE | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 0 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_IGNORED | oracle: Assertions: 5 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_NUMERIC_DEBUG | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 0 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_OTHER_ENTRYPOINT | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 1 Failures: 1 Errors: 0 
+TRACE TEST_TRACE_PROCEDURE | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: Assertions: 0 Failures: 0 Errors: 1 
+TRACE TEST_TRACE_LABEL_WITH_FORWARD | oracle: Assertions: 35 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
+TRACE_TraceObject TEST_CALLER_STACK_FRAME | oracle: Assertions: 9 Failures: 0 Errors: 0 | ours: Assertions: 0 Failures: 0 Errors: 1 
+TRACE_TraceObject TEST_CALLER_STACK_FRAME_REPLY_START | oracle: Assertions: 22 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
+DateTime TEST_BRUTE_FORCE | oracle: Assertions: 12 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
+Message TEST_REPLYWITH_NOT_ARRAY | oracle: Assertions: 1 Failures: 0 Errors: 0 | ours: rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)
+MethodArgs TEST_REQUEST_STRING_CLASS | oracle: Assertions: 186 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
+Method TESTDIRECTIVES | oracle: Assertions: 9 Failures: 0 Errors: 0 | ours: rexx-exec: DO is not implemented
+Section1 TEST_OBJECT_OBJECTNAMEEQUALS | oracle: Assertions: 5 Failures: 0 Errors: 0 | ours: rexx-exec: method "OBJECTNAME=" of class "Object" is not implemented (Phase 9)
