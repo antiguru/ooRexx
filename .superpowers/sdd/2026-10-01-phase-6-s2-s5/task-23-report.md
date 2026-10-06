@@ -212,3 +212,10 @@ Code commit `f078489bc`; records, gate and this section in the commit after it.
    re-derived. Program objects differ only in the `TIME` (deadline) and `SysSleep` (pass this
    time) rows of the every-group run. The feature-off `.text` hash at `f078489bc` equals
    `0ac73b804`'s.
+
+Checks at `ea52f92d1` (own target dir): fmt 0; clippy `-D warnings` 0 with no feature, `sharing`,
+`pinning`, and `sharing,pinning`; `cargo test -p rexx-core --doc` 3 passed and 5 compile_fail
+passed; `cargo test --workspace --release --no-fail-fast` (built first, then run under `memcap 8G`)
+exits 0, 3036 passed and 0 failed. At `f078489bc`, the five `sharing` witnesses (`--release
+--features sharing --test concurrency_tests -- sharing:: --skip every_ootest --skip derived_list`):
+5 passed; `refusal_sites`: 5 passed.
