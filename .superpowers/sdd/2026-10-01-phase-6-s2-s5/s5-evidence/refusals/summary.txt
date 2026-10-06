@@ -1,0 +1,33 @@
+ev_isposted SAME
+ev_new SAME
+ev_post SAME
+ev_reset SAME
+ev_uninit SAME
+ev_wait SAME
+msg_arguments SAME
+msg_completed SAME
+msg_errorcondition SAME
+msg_halt SAME
+msg_haserror SAME
+msg_hasresult SAME
+msg_messagecomplete SAME
+msg_messagename SAME
+msg_new SAME
+msg_notify_before SAME
+msg_notify SAME
+/tmp/claude-1000/p6-s5-refusals/run.sh: line 6: 2194360 Killed                     ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx p.rex ) > $O/$b.oracle 2>&1
+msg_reply DIFF REFUSED
+/tmp/claude-1000/p6-s5-refusals/run.sh: line 6: 2201063 Killed                     ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx p.rex ) > $O/$b.oracle 2>&1
+msg_replywith DIFF REFUSED
+msg_result SAME
+msg_send SAME
+msg_sendwith SAME
+msg_start SAME
+msg_startwith SAME
+msg_target SAME
+msg_triggered SAME
+msg_wait SAME
+mx_acquire SAME
+mx_new SAME
+mx_release SAME
+mx_uninit SAME

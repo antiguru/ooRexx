@@ -1,0 +1,6 @@
+ok 1
+     5 *-*   nop;
+Error 4 running /tmp/claude-1000/p6-s5-refusals/run.jdd6y3/p.rex line 5:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+ok 1 
+rc 0

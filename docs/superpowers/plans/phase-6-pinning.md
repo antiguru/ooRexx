@@ -798,8 +798,7 @@ E=.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence
 python3 $E/pinning-diff.py $E/pinning.log docs/superpowers/plans/phase-6-pinning.md > $E/pinning-diff.log
 ```
 
-prints the arrivals and no diff line for either mode (`pinning-diff.log`); with one count in
-`pinning.log` altered, it prints that row. No `NativeCall` or
+prints the arrivals and no diff line for either mode (`pinning-diff.log`). No `NativeCall` or
 `Command` park is counted: no test of the derived list waits for a native call or an `ADDRESS`
 command off the baton. No immovable `REPLY` and no inverted wait is counted in either mode. Every
 test's outcome is the same in both tables but `MutexSemaphore` TEST_EXCLUSION, which passes

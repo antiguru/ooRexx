@@ -480,7 +480,7 @@ Classification, by site (paths under `rust/crates/rexx-exec/src/`):
 | `run.rs:1437`, `:1574`, `run/interpret.rs:159`, `parse_template.rs:654` | not I/O | `Interp::read`, a variable read |
 | `builtin/convert.rs:996`, `:1005`, `dispatch/library/surface.rs:661`, `input.rs:215`, `input.rs:359`, `builtin/rexxutil.rs:87` | not I/O | writes and reads of memory, `reading_stdin` (a state change) and a doc comment |
 | `sync.rs:42`, `scheduler/pool.rs:188`, `timer.rs:454` | not reached from a resumable entry | the baton's and a pool thread's own condition-variable waits, and the timer thread's own wait on its wake source (`Wake::wait`) |
-| `scheduler/pool.rs:43`, `dispatch/library.rs:1155` (`#[cfg(test)]` code), `signal.rs:213`, `:238`, `:270`, `sync.rs:234`, `:251`, `:254`, `input.rs:593` (their `tests` modules), `tests.rs`, `builtin/tests.rs`, `plan/tests.rs`, `run/tests/indent.rs`, `dispatch/library/tests.rs`, `dispatch/native/tests.rs`, `ir/corpus_shape_tests.rs`, `scheduler/tests/pool.rs`, `scheduler/tests/lent.rs`, `scheduler/tests/callbacks.rs`, `bin/rexx-run.rs`, `bin/rexx-ir.rs` | not reached from a resumable entry | tests and binaries |
+| `scheduler/pool.rs:43` and `dispatch/library.rs:1155` (both `#[cfg(test)]` code), `signal.rs:213`, `:238`, `:270`, `sync.rs:234`, `:251`, `:254`, `input.rs:593` (their `tests` modules), `tests.rs`, `builtin/tests.rs`, `plan/tests.rs`, `run/tests/indent.rs`, `dispatch/library/tests.rs`, `dispatch/native/tests.rs`, `ir/corpus_shape_tests.rs`, `scheduler/tests/pool.rs`, `scheduler/tests/lent.rs`, `scheduler/tests/callbacks.rs`, `bin/rexx-run.rs`, `bin/rexx-ir.rs` | not reached from a resumable entry | tests and binaries |
 
 <details><summary>The command's output</summary>
 
@@ -695,10 +695,9 @@ same row only because both modes failed it alike: its cell is `differ: rc 1: ora
 ours Failures 1` / `same (P48 rerun)` (`g6-criterion-one-table.txt`).
 
 The cause is a regression from `532bf29fa`. The timer thread waited in a socket read with
-`SO_RCVTIMEO`, which the kernel runs on its timer wheel, so a `SysSleep` ended late. The test
-allows 26 ms. Measured by `call time 'r'; call SysSleep 0.3; say time('e') - 0.3` repeated
+`SO_RCVTIMEO`, which the kernel runs on its timer wheel, so a `SysSleep` ended late. Measured by `call time 'r'; call SysSleep 0.3; say time('e') - 0.3` repeated
 4 times in one program (`overshoot.rex`), with release `rexx-run` built from `git archive` of
-each tree, then the oracle, one run each on a quiet machine. Script and log, under
+each tree, then the oracle, one run each. Script and log, under
 `.superpowers/sdd/2026-10-01-phase-6-s2-s5/s4-close-evidence/`:
 
 ```
@@ -716,10 +715,9 @@ bash overshoot.sh <scratch> 7266ae03c a48312f8e 532bf29fa 52b038a80 2e6917afe c6
 | oracle | 0.000146 0.000128 0.000128 0.000185 |
 
 `2e6917afe` (Task 22) arms a timerfd for the deadline and polls it beside the wake socket; other
-unix targets wait on the poll's timeout (`c66650b52`). A `ppoll` timeout alone was about 1.5 ms
-late under niceness 5. `sync.rs` `a_timed_wait_ends_close_to_its_timeout` fails on both
-variants: 19.7 ms late with the socket timeout and 1.5 ms with the `ppoll` timeout, against its
-1 ms bound. At `c66650b52`, from `rust/`, `s4-close-evidence/s2rows.sh`:
+unix targets wait on the poll's timeout (`c66650b52`, which leaves the Linux path as `2e6917afe`'s).
+The rows of the S3 close and both fixes are under half a millisecond, against 11 to 20 ms on the
+regressed trees. `sync.rs` `a_timed_wait_ends_close_to_its_timeout` bounds the lateness at 1 ms. At `c66650b52`, from `rust/`, `s4-close-evidence/s2rows.sh`:
 
 ```
 REXX_CORPUS_GATE=1 REXX_CRITERION_ONE_TABLE=<file> cargo test --release -p rexx-exec \
@@ -795,7 +793,7 @@ Excluded, each by exact path:
 
 | test | reason |
 |---|---|
-| `eval::tests::a_native_chain_past_the_eval_limit_runs` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames; an `eval::tests` depth test crashed TSan under `gdb` at 65,551 frames, 65,526 of them `Plan::note` |
+| `eval::tests::a_native_chain_past_the_eval_limit_runs` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames; an `eval::tests` depth test crashed TSan under `gdb`, its stack nearly all `Plan::note` |
 | `eval::tests::eval_raises_11_1_exactly_one_term_past_max_eval_depth` | the same |
 | `eval::tests::eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer` | the same |
 | `ir::drive::tests::recursion_by_function_call_keeps_the_native_stack_flat` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames |
@@ -803,12 +801,12 @@ Excluded, each by exact path:
 | `ir::drive::tests::recursion_by_send_keeps_the_native_stack_flat` | the same |
 | `scheduler::tests::a_stack_within_the_margin_is_refused` | a thread stack sized against the stack margin, which TSan's frames change |
 | `scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining` | reaches Error 11 at a smaller depth than it asserts under TSan |
-| `scheduler::tests::pool::callback_recursion_on_a_pool_thread_reaches_the_depth_cap` | 141,427 frames of `TestSendMessage0` callbacks crashed TSan under `gdb`; its bounded form runs |
+| `scheduler::tests::pool::callback_recursion_on_a_pool_thread_reaches_the_depth_cap` | nested `TestSendMessage0` callbacks crashed TSan under `gdb` past its shadow stack; its bounded form runs |
 | `scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames (a pool thread's) |
 | `scheduler::tests::pool::the_translator_on_a_pool_thread_has_the_interpreter_threads_stack` | translator nesting to a depth calibrated to a pool thread's stack |
 | `scheduler::tests::recursion_is_bounded_by_the_stack_remaining` | recursion to a depth limit calibrated to the native stack; TSan enlarges every frame, and its shadow call stack holds 65536 frames |
 | `tests::the_stack_span_does_not_depend_on_what_else_the_program_evaluated` | measures the native stack span, which TSan's frames change |
-| `only_the_interpreter_and_its_waits_take_the_halting_signals` (`signals`) | counts the `rexx-run` threads with the halting signals blocked, and TSan adds its own background thread: in a TSan `rexx-run`, `/proc/<pid>/task/*/status` shows a second `rexx-run` thread with `SigBlk: fffffffe3ffbea07` (nearly every signal) beside this crate's `0000000000004003` (SIGHUP, SIGINT, SIGTERM) |
+| `only_the_interpreter_and_its_waits_take_the_halting_signals` (`signals`) | counts the `rexx-run` threads with the halting signals blocked, and TSan adds its own background thread: in a TSan `rexx-run`, `/proc/<pid>/task/*/status` shows a second `rexx-run` thread with nearly every signal blocked beside this crate's thread blocking SIGHUP, SIGINT and SIGTERM |
 
 Reports, each triaged:
 

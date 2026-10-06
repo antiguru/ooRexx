@@ -1,0 +1,34 @@
+# probe crate depending on rexx-core at 540e6a72e
+== examples/a_fail.rs
+use rexx_core::{FrameArena, FrameBlock};
+fn keep(_: Box<dyn std::any::Any>) {}
+fn main() {
+    let arena = FrameArena::new(FrameBlock::DEFAULT);
+    keep(Box::new(arena.reserve(1)));
+}
+error[E0597]: `arena` does not live long enough
+error: could not compile `probe` (example "a_fail") due to 1 previous error
+rc=101
+== examples/b_ok.rs
+use rexx_core::{Body, FrameArena, FrameBlock};
+fn keep(_: Box<dyn std::any::Any>) {}
+const fn require_static<T: 'static>() {}
+const _: () = require_static::<Body>();
+fn main() {
+    let arena = FrameArena::new(FrameBlock::DEFAULT);
+    let frame = arena.reserve(1);
+    keep(Box::new(frame.get(0)));
+    arena.release(frame);
+}
+rc=0
+== examples/c_fail.rs
+use rexx_core::{FrameArena, FrameBlock};
+fn require_send<T: Send>(_: T) {}
+fn main() {
+    let arena = FrameArena::new(FrameBlock::DEFAULT);
+    require_send(arena.reserve(1));
+}
+error[E0277]: `NonNull<std::cell::Cell<ObjRef>>` cannot be sent between threads safely
+error[E0277]: `RefCell<Vec<NonNull<std::cell::Cell<ObjRef>>>>` cannot be shared between threads safely
+error[E0277]: `RefCell<Vec<usize>>` cannot be shared between threads safely
+rc=101

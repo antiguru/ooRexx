@@ -1,0 +1,7 @@
+s3 sent m0
+main got 0
+main sent m2
+done
+S2 got 20
+S1 got 10
+rc 0

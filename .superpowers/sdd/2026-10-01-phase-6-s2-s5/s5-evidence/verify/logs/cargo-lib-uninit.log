@@ -1,0 +1,52 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling crossbeam-utils v0.8.21
+   Compiling rustversion v1.0.22
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling shlex v2.0.1
+   Compiling once_cell v1.21.4
+   Compiling crossbeam-epoch v0.9.20
+   Compiling find-msvc-tools v0.1.9
+   Compiling regex-syntax v0.8.11
+   Compiling log v0.4.34
+   Compiling lazy_static v1.5.1
+   Compiling pin-project-lite v0.2.17
+   Compiling rayon-core v1.13.0
+   Compiling thiserror v1.0.69
+   Compiling nu-ansi-term v0.50.3
+   Compiling smallvec v1.16.2
+   Compiling either v1.16.0
+   Compiling scoped-tls v1.0.1
+   Compiling rexx-extract v0.1.0 (/tmp/claude-1000/p6-s5-verify/tree/rust/crates/rexx-extract)
+   Compiling thread_local v1.1.10
+   Compiling sharded-slab v0.1.7
+   Compiling cc v1.3.0
+   Compiling tracing-core v0.1.36
+   Compiling tracing v0.1.44
+   Compiling tracing-log v0.2.0
+   Compiling syn v2.0.119
+   Compiling crossbeam-deque v0.8.6
+   Compiling generator v0.8.10
+   Compiling rayon v1.12.0
+   Compiling regex-automata v0.4.14
+   Compiling thiserror-impl v1.0.69
+   Compiling datadriven v0.9.0
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling loom v0.7.2
+   Compiling rexx-exec v0.1.0 (/tmp/claude-1000/p6-s5-verify/tree/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2m 18s
+     Running unittests src/lib.rs (/tmp/claude-1000/p6-s5-verify/target/release/deps/rexx_exec-71cab73253713432)
+
+running 8 tests
+test tests::a_class_side_uninit_sets_neither_flag ... ok
+test tests::the_uninit_flags_are_set_for_the_classes_a_file_declares ... ok
+test run::tests::scope::use_arg_alias_reports_the_kind_mismatch_before_the_uninitialised_target ... ok
+test scheduler::tests::an_activity_a_termination_uninit_starts_is_not_waited_for ... ok
+test scheduler::tests::an_uninit_a_collection_readied_runs_when_its_activity_ends ... ok
+test scheduler::tests::every_refusal_of_the_uninits_at_an_activitys_end_is_reported ... ok
+test run::tests::scope::use_arg_alias_requires_an_uninitialised_target ... ok
+test run::tests::scope::use_arg_alias_treats_an_empty_stem_as_uninitialised ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 995 filtered out; finished in 0.08s
+

@@ -1,0 +1,53 @@
+  interpret 'do while \g~x; end'
+  g~y = 1
+  return 'A ended'
+::method b unguarded
+  use arg g
+  interpret 'g~x = 1; do while \g~y; end'
+##### inverted
+oracle distinct outputs:
+      7 e50de23bfed6c6d646e50484276d297d
+     23 eaadd436d647175faffb2959e25a83b0
+ours distinct outputs:
+     30 8316bb4f236ac750a2e81b57a3080e04
+##### immovable
+oracle distinct outputs:
+     30 429e567cd095e6fb1dc92cf7a4d63af0
+ours distinct outputs:
+     30 54b5e80173b502bdaa41f82bde9f3dc5
+##### busy2
+oracle distinct outputs:
+     30 b3f24e20b4423689ceae186156363431
+ours distinct outputs:
+      1 0f2c94414aa8c6df3e5a3c82d441ac55
+      1 1005a669067ff8d0d53827e0e742b307
+      1 1a34e5e528a33a1201e0bd0d7f8b95d0
+      1 1e137bcbd866a3f72d887f81e07ef245
+      1 274797f8652982106454e28e95ad3fd6
+      1 2fb8b472c7f084a27eb0828eec69f642
+      1 422edb0e5cb7757043b91efb6d4a486c
+      1 49ddb06c95d78e234443831a5c934e11
+      1 50439576fce129346433198219ad5852
+      1 511b4556a8f335962ae6486a06381e3b
+      1 54a5a40b312e62260e424b0474e9f3f1
+      1 5ad1785fcc8df0874074e22ffc3f9218
+      1 6873353c78dc49d091ca2698280fa8f2
+      1 6afa474b22e63e01e6b2e54d302c40b3
+      1 6cdb948cd52a4f3a28c238e0d3f8b350
+      1 7d7b09b761cd8696f7031c41765504b8
+      1 80288668e3fb1e2a12dde1d7d938e294
+      1 81a67cffc1c1d7d529627a4b91c4af33
+      1 87940ae235b64a2db80e9a5870312f0c
+      1 9fc32eede381088c1d02ad67ee3c538b
+      1 a8052b9e8348efa630cc8aa7e53e86bc
+      1 abe7bd5dbe5441c209ff9e9c2aab457e
+      1 ae56c12f39c65db4b5e70e57cf331cc5
+      1 c282ede0e3ae72c7026200da6c53a202
+      1 c52c050a90317c85a4a7ae3285f4ff31
+      1 d4879ebe340bf1a55f574e5de62334c1
+      1 f6c63f2df0a55db7aeae51ac142a7869
+      1 f758f83e3afd11971d6bf4638cc715be
+      1 fb930d4224c80588722248cae931a4a4
+      1 fc2baa671ccb2ad4c858af5da82920b9
+
+[exited with code 0]

@@ -1,0 +1,14 @@
+alarm_construct SAME
+alarm_fires SAME
+ev_uninit SAME
+guard_when SAME
+msg_halt_started DIFF
+msg_reply SAME
+msg_replywith SAME
+msg_result_unsent DIFF REFUSED
+msg_wait_unsent DIFF REFUSED
+mx_uninit SAME
+reply_in_do SAME
+/tmp/claude-1000/p6-s5-refusals/run.sh: line 6: 2277871 Segmentation fault         ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx p.rex ) > $O/$b.oracle 2>&1
+syssem DIFF
+ticker_construct SAME

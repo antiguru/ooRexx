@@ -1,0 +1,49 @@
+      9 42ec8cb457ff25b6eb3dc7ab2958a9dd
+      3 552b1de7965aadd35700a3cab34c47dc
+     46 7c263a2bb47c560fdff895f91bfdcd6b
+      2 f827d9144c97a6b48872d9f942259ba3
+== oracle.11
+enter a
+u d
+u c
+exit a
+enter b
+exit b
+end
+rc 0
+== oracle.26
+enter b
+u d
+u c
+exit b
+enter a
+exit a
+end
+rc 0
+== oracle.22
+enter b
+u c
+u d
+exit b
+enter a
+exit a
+end
+rc 0
+== oracle.1
+enter a
+u c
+u d
+exit a
+enter b
+exit b
+end
+rc 0
+== ours.1
+enter a
+u c
+u d
+exit a
+enter b
+exit b
+end
+rc 0

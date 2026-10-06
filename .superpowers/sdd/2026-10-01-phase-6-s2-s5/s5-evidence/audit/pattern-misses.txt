@@ -1,0 +1,90 @@
+$ /bin/grep -a -rn "unsafe impl" rust/crates
+./rexx-exec/src/island.rs:38:unsafe impl<T> Send for Islanded<T> {}
+./rexx-api/src/ffi.rs:109:unsafe impl Send for ValueDescriptor {}
+./rexx-api/src/ffi.rs:112:unsafe impl Send for Value {}
+./rexx-api/src/ffi.rs:6283:        unsafe impl Send for Shared {}
+
+$ /bin/grep -a -rn -E "thread::(Builder|scope)|Condvar|thread_local!|OnceLock|LazyLock|lazy_static" --include=*.rs rust/crates
+./rexx-exec/src/baton.rs:18:use crate::sync::{Condvar, Mutex, lock, thread, wait};
+./rexx-exec/src/baton.rs:23:    changed: Condvar,
+./rexx-exec/src/baton.rs:50:            changed: Condvar::new(),
+./rexx-exec/src/island.rs:134:        std::thread::scope(|scope| {
+./rexx-exec/src/scheduler.rs:2278:thread_local! {
+./rexx-exec/src/scheduler.rs:2314:thread_local! {
+./rexx-exec/src/builtin.rs:16:use std::sync::OnceLock;
+./rexx-exec/src/builtin.rs:620:    static NAMES: OnceLock<FxHashSet<&'static str>> = OnceLock::new();
+./rexx-exec/src/builtin.rs:635:    static NAMES: OnceLock<FxHashSet<&'static str>> = OnceLock::new();
+./rexx-exec/src/builtin.rs:672:    static ROWS: OnceLock<FxHashMap<&'static [u8], u16>> = OnceLock::new();
+./rexx-exec/src/install.rs:2481:thread_local! {
+./rexx-exec/src/scheduler/pool.rs:16:use std::sync::{Arc, Condvar, Mutex, PoisonError};
+./rexx-exec/src/scheduler/pool.rs:75:    arrived: Condvar,
+./rexx-exec/src/scheduler/pool.rs:121:            arrived: Condvar::new(),
+./rexx-exec/src/scheduler/pool.rs:123:        let spawned = std::thread::Builder::new()
+./rexx-exec/src/scheduler/tests.rs:279:    let kept = std::thread::Builder::new()
+./rexx-exec/src/scheduler/tests.rs:322:    let kept = std::thread::Builder::new()
+./rexx-exec/src/scheduler/tests.rs:600:    let armed = std::thread::Builder::new()
+./rexx-exec/src/scheduler/tests/pool.rs:15:use std::sync::{Condvar, Mutex};
+./rexx-exec/src/scheduler/tests/pool.rs:30:    arrived: Condvar,
+./rexx-exec/src/scheduler/tests/pool.rs:37:            arrived: Condvar::new(),
+./rexx-exec/src/scheduler/tests/pool.rs:239:    std::thread::Builder::new()
+./rexx-exec/src/scheduler/tests/native.rs:49:    std::thread::Builder::new()
+./rexx-exec/src/command.rs:618:    let err = std::thread::scope(|scope| {
+./rexx-exec/src/timer.rs:24:    Arc, AtomicU32, Condvar, Mutex, MutexGuard, Ordering, Wake, lock, now, thread, wait,
+./rexx-exec/src/timer.rs:87:    arrived: Condvar,
+./rexx-exec/src/timer.rs:104:            arrived: Condvar::new(),
+./rexx-exec/src/timer.rs:205:        let timer = thread::Builder::new()
+./rexx-exec/src/timer.rs:267:    static REGISTRY: std::sync::LazyLock<Registry> = std::sync::LazyLock::new(Registry::new);
+./rexx-exec/src/timer.rs:274:    loom::lazy_static! {
+./rexx-exec/src/lib.rs:228:thread_local! {
+./rexx-exec/src/lib.rs:257:thread_local! {
+./rexx-exec/src/lib.rs:271:thread_local! {
+./rexx-exec/src/lib.rs:3124:    let interpreter = std::thread::Builder::new()
+./rexx-exec/src/sync.rs:21:pub(crate) use loom::sync::{Arc, Condvar, Mutex, MutexGuard};
+./rexx-exec/src/sync.rs:27:pub(crate) use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+./rexx-exec/src/sync.rs:41:pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
+./rexx-exec/src/sync.rs:149:    arrived: Condvar,
+./rexx-exec/src/sync.rs:158:            arrived: Condvar::new(),
+./rexx-exec/src/sync.rs:213:loom::lazy_static! {
+./rexx-exec/src/dispatch/library/tests.rs:688:thread_local! {
+./rexx-exec/src/dispatch/library.rs:1277:thread_local! {
+./rexx-exec/src/ir/compile.rs:1929:thread_local! {
+./rexx-exec/src/ir/corpus_shape_tests.rs:540:    let sweep = std::thread::Builder::new()
+./rexx-exec/src/ir/counters.rs:17:thread_local! {
+./rexx-exec/src/ir/counters.rs:36:thread_local! {
+./rexx-exec/src/ir/counters.rs:62:thread_local! {
+./rexx-exec/src/ir/counters.rs:82:thread_local! {
+./rexx-exec/src/ir/counters.rs:102:thread_local! {
+./rexx-exec/src/ir/counters.rs:122:thread_local! {
+./rexx-exec/src/ir/counters.rs:142:thread_local! {
+./rexx-exec/src/ir/counters.rs:162:thread_local! {
+./rexx-exec/src/ir/counters.rs:182:thread_local! {
+./rexx-exec/src/ir/counters.rs:202:thread_local! {
+./rexx-exec/src/ir/counters.rs:222:thread_local! {
+./rexx-exec/src/bin/rexx-ir.rs:43:    let rendered = std::thread::Builder::new()
+./rexx-exec/tests/watchdog/mod.rs:48:    std::thread::Builder::new()
+./rexx-exec/tests/support/group_runner.rs:655:    static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+./rexx-exec/tests/support/group_runner.rs:683:static TURN: std::sync::Condvar = std::sync::Condvar::new();
+./rexx-exec/tests/support/group_runner.rs:778:    let alone: Vec<(usize, T)> = std::thread::scope(|scope| {
+./rexx-parse/examples/depth_probe.rs:21:            let handle = std::thread::Builder::new()
+./rexx-parse/examples/depth_probe.rs:39:            let handle = std::thread::Builder::new()
+./rexx-parse/examples/depth_probe.rs:61:            let handle = std::thread::Builder::new()
+./rexx-parse/examples/depth_probe.rs:102:            let mut builder = std::thread::Builder::new();
+./rexx-parse/examples/depth_probe.rs:126:            let handle = std::thread::Builder::new()
+./rexx-parse/examples/depth_probe.rs:150:            let mut builder = std::thread::Builder::new();
+./rexx-parse/examples/depth_probe.rs:184:            let handle = std::thread::Builder::new()
+./rexx-parse/examples/depth_probe.rs:205:            let handle = std::thread::Builder::new()
+./rexx-parse/tests/deep.rs:42:    std::thread::Builder::new()
+./rexx-parse/tests/deep.rs:60:    let handle = std::thread::Builder::new()
+./rexx-api/src/layout.rs:421:thread_local! {
+./rexx-api/src/load.rs:897:static BUFFER_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
+./rexx-api/src/load.rs:1518:thread_local! {
+./rexx-api/src/invoke/tests.rs:46:thread_local! {
+./rexx-api/src/ffi.rs:700:thread_local! {
+./rexx-api/src/ffi.rs:4485:thread_local! {
+./rexx-api/src/ffi.rs:4796:thread_local! {
+./rexx-api/src/ffi.rs:4852:thread_local! {
+./rexx-api/src/ffi.rs:4926:thread_local! {
+./rexx-api/src/ffi.rs:5014:thread_local! {
+./rexx-api/src/ffi.rs:6294:        std::thread::scope(|scope| {
+./rexx-api/tests/invoke.rs:67:thread_local! {
+./rexx-num/src/addsub.rs:198:thread_local! {

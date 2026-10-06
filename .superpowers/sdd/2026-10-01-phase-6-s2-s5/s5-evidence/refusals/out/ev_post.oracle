@@ -1,0 +1,4 @@
+     1 *-* say "ok" s~post s~isPosted
+Error 91 running /tmp/claude-1000/p6-s5-refusals/run.9f8p0Y/p.rex line 1:  No result object.
+Error 91.999:  Message "POST" did not return a result.
+rc 165

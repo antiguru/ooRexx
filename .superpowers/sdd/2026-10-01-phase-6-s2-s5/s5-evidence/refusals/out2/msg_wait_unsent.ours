@@ -1,0 +1,3 @@
+before
+rexx-exec: a wait that nothing left to run can end is not implemented
+rc 120

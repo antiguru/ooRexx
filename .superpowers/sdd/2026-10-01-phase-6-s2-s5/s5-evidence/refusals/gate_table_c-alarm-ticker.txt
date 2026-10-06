@@ -1,0 +1,11 @@
+test every_closed_phase_this_table_owns_rows_for_is_gated ... ok
+  agree          loud=no  5a   Alarm                                    class covered utilityclasses.xml:51 alarm.rex
+  agree          loud=no  5a   AlarmNotification                        class covered utilityclasses.xml:322 alarmnotification.rex
+  agree          loud=no  5a   Ticker                                   class covered utilityclasses.xml:10169 ticker.rex
+  agree          loud=no  5a   Alarm <- Object                          provide.xml:841                    alarm__object.rex
+  agree          loud=no  5a   AlarmNotification <- Object              provide.xml:842                    alarmnotification__object.rex
+  agree          loud=no  5a   Ticker <- Object                         provide.xml:899                    ticker__object.rex
+  Alarm                        instance  loud=no  6                                7    row(s): agree=7                                  alarm__instance.rex
+  AlarmNotification            instance  loud=no  5c                               2    row(s): agree=2                                  alarmnotification__instance.rex
+  Ticker                       instance  loud=no  6                                6    row(s): agree=6                                  ticker__instance.rex
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.63s

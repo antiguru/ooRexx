@@ -1,0 +1,73 @@
+== oracle u1 (30 runs)
+     30 main end|activity end|uninit live|rc=0|stderr=
+max seconds 0.32
+== ours u1 (30 runs)
+     30 main end|activity end|uninit live|rc=0|stderr=
+max seconds 0.39
+== oracle u2 (30 runs)
+     30 activity end|main end|uninit dropped|rc=0|stderr=
+max seconds 0.03
+== ours u2 (30 runs)
+     30 activity end|main end|uninit dropped|rc=0|stderr=
+max seconds 0.04
+== oracle u3 (30 runs)
+     30 activity end|main end|uninit dropped 1|rc=0|stderr=
+max seconds 0.01
+== ours u3 (30 runs)
+     30 uninit dropped 2|activity end|main end|rc=0|stderr=
+max seconds 0.03
+== oracle u4 (30 runs)
+     30 activity loop done|uninit dropped|activity end|main end|rc=0|stderr=
+max seconds 0.05
+== ours u4 (30 runs)
+     30 activity loop done|activity end|uninit dropped|main end|rc=0|stderr=
+max seconds 0.09
+== oracle u5 (30 runs)
+      2 main end|uninit before reply|rc=0|stderr=
+     28 main end|uninit before reply|uninit after reply|rc=0|stderr=
+max seconds 0.02
+== ours u5 (30 runs)
+     30 main end|uninit before reply|rc=0|stderr=
+max seconds 0.03
+== oracle t3 (30 runs)
+     30 main end|uninit starts|uninit after start|rc=7|stderr=
+max seconds 0.01
+== ours t3 (30 runs)
+     30 main end|uninit starts|uninit after start|rc=7|stderr=
+max seconds 0.03
+== oracle t7 (30 runs)
+     30 main end|uninit starts a poller|rc=0|stderr=
+max seconds 0.01
+== ours t7 (30 runs)
+     30 main end|uninit starts a poller|rc=0|stderr=
+max seconds 0.03
+== every u1 (30 runs)
+     30 main end|activity end|uninit live|rc=0|stderr=
+max seconds 0.33
+== every u2 (30 runs)
+     30 activity end|main end|uninit dropped|rc=0|stderr=
+max seconds 0.03
+== every u3 (30 runs)
+     30 uninit dropped 2|activity end|main end|rc=0|stderr=
+max seconds 0.03
+== every u4 (30 runs)
+     30 activity loop done|activity end|uninit dropped|main end|rc=0|stderr=
+max seconds 0.09
+== every u5 (30 runs)
+     30 main end|uninit before reply|rc=0|stderr=
+max seconds 0.03
+== every t3 (30 runs)
+     30 main end|uninit starts|uninit after start|rc=7|stderr=
+max seconds 0.03
+== every t7 (30 runs)
+     30 main end|uninit starts a poller|rc=0|stderr=
+max seconds 0.03
+== oracle corpus_uaea (30 runs)
+     30 main end|started activity end|uninit of the object the started activity dropped|rc=0|stderr=
+max seconds 0.33
+== ours corpus_uaea (30 runs)
+     30 main end|started activity end|uninit of the object the started activity dropped|rc=0|stderr=
+max seconds 0.35
+== every corpus_uaea (30 runs)
+     30 main end|started activity end|uninit of the object the started activity dropped|rc=0|stderr=
+max seconds 0.35

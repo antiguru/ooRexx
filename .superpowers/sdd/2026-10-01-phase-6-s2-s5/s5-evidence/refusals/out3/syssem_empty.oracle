@@ -1,0 +1,6 @@
+ok 0 0 0
+       *-* Compiled routine "SYSPOSTEVENTSEM".
+     1 *-* say "ok" SysPostEventSem(h) SysWaitEventSem(h, 0) SysResetEventSem(h) SysCloseEventSem(h)
+Error 88 running REXX:  Invalid argument.
+Error 88.907:  Argument 1 must be in the range 0 to 18446744073709551615; found "".
+rc 168

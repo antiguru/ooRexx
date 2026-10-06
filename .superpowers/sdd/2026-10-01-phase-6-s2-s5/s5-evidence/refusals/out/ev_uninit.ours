@@ -1,0 +1,4 @@
+     1 *-* say "ok" s~uninit;
+Error 91 running /tmp/claude-1000/p6-s5-refusals/run.gFs0cY/p.rex line 1:  No result object.
+Error 91.999:  Message "UNINIT" did not return a result.
+rc 165

@@ -1,0 +1,92 @@
+== invert
+1179:     divergence, it inverts it, and it costs four committed corpus programs to
+4178:  own probe and each was inverted -- with limb 1 reverted only the first
+== immovable
+== wrapper
+937:     MEASURED, oracle, standard wrapper, fresh empty directory, three
+1148:     MEASURED, standard oracle wrapper, a fresh empty directory per run, three
+2608:  where cgroups exist, the wrapper should move to a memory limit and this
+2803:  RE-MEASURED at the closing commit, 8,000,000 iterations, same wrapper:
+2957:  engines. Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper
+3054:  Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper from a
+3082:  under the standard oracle wrapper from a fresh empty directory,
+4415:  TWO SHAPES, TWO EXIT CODES. Measured 2026-08-16, standard oracle wrapper,
+5125:the oracle under the standard wrapper and this crate's release rexx-run at
+5254:  wrapper-derived context pointers of F8 and X5 (the stub tests pass on
+5289:standard wrapper and this crate's release rexx-run at 273e8f608, both with the
+== busy
+== pinned
+595:  wrong, so the rule is pinned by the programs together and by neither alone.
+777:     SO THE PINNED UNNORMALISED WITNESSES ARE NOT A FORMALITY. They are the
+792:     WHAT SURVIVES SO A GROSS ERROR STILL FAILS: a small set of pinned
+796:     tests asserting an exact indent -- pinned by name rather than
+808:     NONE OF THE THREE PINNED WITNESSES DEMONSTRATES THE COUNTER DEFECT
+810:     wording, not by the task that pinned the names). The defect needs a
+812:     pinned witnesses raise on a FIRST iteration, before any pass completes
+815:     fail" above asks for -- nothing pinned anywhere exercises the counter
+1674:This section is pinned ASYMMETRICALLY, deliberately, and the asymmetry is the
+1899:  as the measured record of why that deviation exists, and because the pinned
+2323:  implemented and pinned by unit tests. It is recorded because a reader who
+3879:  `NUMERIC FORM <expr>` is loud in every build including the pinned one, so it
+3951:  same text. Measured on both engines, and on the pinned pre-Phase-5 build:
+3953:    say (.nil == 'The NIL object')   oracle 0 rc 0   crate 1 rc 0   pinned 1 rc 0
+3954:    say (.nil =  'The NIL object')   oracle 0 rc 0   crate 1 rc 0   pinned 1 rc 0
+== nested scheduler
+== halt.\{0,40\}nest
+== nohup
+1477:     over a handler (P61). So under nohup, where SIGHUP is ignored, the
+1502:     Witnesses: rexx-exec's tests/signals.rs, under_nohup_sigint_still_halts,
+1507:     runs each, under timeout -s SIGNAL 1: the sleep program under nohup ends
+== callback
+5039:  escalates a condition of the same name inside the callback
+5041:  so the SYNTAX leaves the handler there and nothing after the callback
+5043:  returned, so the handler's later callbacks run and its answer is
+5045:  raises2.cls, opts_callback.rex and opts_both.rex, each a handler that
+5046:  returns right after raising). OWNER: none; the callback would have to
+== baton
+1534:     stream, or a redirected command's wait, which runs on the baton holder's
+1551:     The reader keeps the baton until its chunk or a halt arrives, so every
+== reply
+1303:     `REPLY` runs the rest of a method on another thread
+1304:     (`corpus/lang/directive_options_trace_reply.rex`), and under `::options
+1334:     both directions, so a program that gains a `REPLY` later is a red test
+1361:     `lang/directive_options_trace_reply.rex` and `stderr_mode` gives it
+4046:  `REPLY` runs too, and `corpus/lang/method_reply.rex` is its row.
+4058:  had to: two of the three routes that limb listed are `REPLY` and the `GUARD`
+4060:  an activity. `REPLY` here does not spawn one -- the body it leaves owed is
+4075:  that can -- `~start`, a `REPLY` that really does run concurrently, or
+4078:  owns the scheduling `REPLY` and `GUARD` are written against here.
+== phase 6
+4077:  guard real rather than inheriting a silent no-op. That is Phase 6's, which
+4706:WHEN expression true is not implemented (Phase 6)"; with -U, which starts no
+4709:rxapi. So L2 is blocked by Phase 6's GUARD WHEN and Phase 10's RXFUNCQUERY;
+4712:AT PHASE 6 S3 (measured 2026-10-03 at 7266ae03c): the same command runs the
+4739:  Phase 9 or Phase 6, and rexx-api/tests/layout.rs's
+4930:  It was re-homed to Phase 6 at Phase 8's close as D3's frame-ownership
+4945:  FIXED 2026-09-30 (Phase 6 Task 7) for a name the outer activation never
+5653:    expression true is not implemented (Phase 6)
+5655:    implemented (Phase 6)
+5659:  not implemented (Phase 6)", rc 120 against the oracle's six "instance 1"
+5662:  Phase 6, which the refusal itself names -- `alarm_startTimer` and
+5667:  neither is gated today because Phase 6 is not in `CLOSED_PHASES`, and this
+== p6-
+== spec 2026-09-29
+1441:     (spec 2026-09-29 2.5). OWNER: none.
+1469:     ORACLE LEAVES WAITING (spec 2026-09-29 section 4, rulings P59-P61).
+1549:     (spec 2026-09-29 2.1, ruling P69). OWNER: none.
+== owner: none
+1441:     (spec 2026-09-29 2.5). OWNER: none.
+1470:     OWNER: none.
+1519:     P63). OWNER: none.
+1530: 12. A BLOCKING WAIT A SIGNAL DOES NOT END (ruling P60). OWNER: none.
+1549:     (spec 2026-09-29 2.1, ruling P69). OWNER: none.
+4837:  which the next entry explains. OWNER: none; a C++ exception's text is not
+4858:  their order among themselves, and so do the extension's. OWNER: none; A1 is
+4953:  raises and answers NULL. OWNER: none; the header specifies no value on
+4968:  as the oracle's. OWNER: none. Matching it needs a real C++ exception,
+4977:  unwinder, agrees with the oracle. OWNER: none, for the reason the entry
+5011:  fix round's build. OWNER: none; the redirector context would have to
+5020:  type 30 -1"). OWNER: none; this crate does not call address 0.
+5028:  send a null name. OWNER: none.
+5046:  returns right after raising). OWNER: none; the callback would have to
+5069:  rust/crates/rexx-exec/src/run.rs and src/ir/compile.rs. OWNER: none

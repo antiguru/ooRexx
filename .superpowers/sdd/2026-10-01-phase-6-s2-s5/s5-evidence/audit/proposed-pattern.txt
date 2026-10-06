@@ -1,0 +1,183 @@
+rust/crates/rexx-exec/src/baton.rs:18:use crate::sync::{Condvar, Mutex, lock, thread, wait};
+rust/crates/rexx-exec/src/baton.rs:21:    state: Mutex<State<L>>,
+rust/crates/rexx-exec/src/baton.rs:23:    changed: Condvar,
+rust/crates/rexx-exec/src/baton.rs:26:    takes: std::sync::atomic::AtomicU64,
+rust/crates/rexx-exec/src/baton.rs:50:            changed: Condvar::new(),
+rust/crates/rexx-exec/src/baton.rs:52:            takes: std::sync::atomic::AtomicU64::new(0),
+rust/crates/rexx-exec/src/signal.rs:25:use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+rust/crates/rexx-exec/src/signal.rs:36:static PENDING: AtomicBool = AtomicBool::new(false);
+rust/crates/rexx-exec/src/signal.rs:40:static WAKE: AtomicI32 = AtomicI32::new(-1);
+rust/crates/rexx-exec/src/signal.rs:237:            let raiser = std::thread::spawn(|| {
+rust/crates/rexx-exec/src/signal.rs:269:        let raiser = std::thread::spawn(|| {
+rust/crates/rexx-exec/src/island.rs:38:unsafe impl<T> Send for Islanded<T> {}
+rust/crates/rexx-exec/src/island.rs:134:        std::thread::scope(|scope| {
+rust/crates/rexx-exec/src/scheduler.rs:2278:thread_local! {
+rust/crates/rexx-exec/src/scheduler.rs:2314:thread_local! {
+rust/crates/rexx-exec/src/install.rs:2481:thread_local! {
+rust/crates/rexx-exec/src/scheduler/pool.rs:16:use std::sync::{Arc, Condvar, Mutex, PoisonError};
+rust/crates/rexx-exec/src/scheduler/pool.rs:52:    shared: Arc<Shared>,
+rust/crates/rexx-exec/src/scheduler/pool.rs:58:    state: Mutex<State>,
+rust/crates/rexx-exec/src/scheduler/pool.rs:70:    mailbox: Arc<Mailbox>,
+rust/crates/rexx-exec/src/scheduler/pool.rs:74:    mail: Mutex<Option<Mail>>,
+rust/crates/rexx-exec/src/scheduler/pool.rs:75:    arrived: Condvar,
+rust/crates/rexx-exec/src/scheduler/pool.rs:83:fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+rust/crates/rexx-exec/src/scheduler/pool.rs:121:            arrived: Condvar::new(),
+rust/crates/rexx-exec/src/scheduler/pool.rs:123:        let spawned = std::thread::Builder::new()
+rust/crates/rexx-exec/src/scheduler/pool.rs:177:fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
+rust/crates/rexx-exec/src/scheduler/tests.rs:279:    let kept = std::thread::Builder::new()
+rust/crates/rexx-exec/src/scheduler/tests.rs:322:    let kept = std::thread::Builder::new()
+rust/crates/rexx-exec/src/scheduler/tests.rs:600:    let armed = std::thread::Builder::new()
+rust/crates/rexx-exec/src/scheduler/tests.rs:1320:        std::thread::spawn(move || inbox.post(7))
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:15:use std::sync::{Condvar, Mutex};
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:29:    counts: Mutex<(usize, usize, usize)>,
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:30:    arrived: Condvar,
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:37:            arrived: Condvar::new(),
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:91:static THREADS: Mutex<Vec<(&str, ThreadId)>> = Mutex::new(Vec::new());
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:136:static BOOM_MARK: Mutex<(Option<std::path::PathBuf>, usize)> = Mutex::new((None, 0));
+rust/crates/rexx-exec/src/scheduler/tests/pool.rs:239:    std::thread::Builder::new()
+rust/crates/rexx-exec/src/scheduler/tests/native.rs:49:    std::thread::Builder::new()
+rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs:29:static THREADS: Mutex<Vec<(usize, ThreadId)>> = Mutex::new(Vec::new());
+rust/crates/rexx-exec/src/command.rs:618:    let err = std::thread::scope(|scope| {
+rust/crates/rexx-exec/src/timer.rs:24:    Arc, AtomicU32, Condvar, Mutex, MutexGuard, Ordering, Wake, lock, now, thread, wait,
+rust/crates/rexx-exec/src/timer.rs:64:pub(crate) struct Requests(AtomicU32);
+rust/crates/rexx-exec/src/timer.rs:85:    queue: Mutex<Queue<T>>,
+rust/crates/rexx-exec/src/timer.rs:87:    arrived: Condvar,
+rust/crates/rexx-exec/src/timer.rs:99:            requests: Requests(AtomicU32::new(0)),
+rust/crates/rexx-exec/src/timer.rs:104:            arrived: Condvar::new(),
+rust/crates/rexx-exec/src/timer.rs:178:    inbox: Arc<Inbox<Posted>>,
+rust/crates/rexx-exec/src/timer.rs:205:        let timer = thread::Builder::new()
+rust/crates/rexx-exec/src/timer.rs:245:    state: Mutex<State>,
+rust/crates/rexx-exec/src/timer.rs:287:    inbox: Arc<Inbox<Posted>>,
+rust/crates/rexx-exec/src/timer.rs:321:    pub(crate) fn inbox(&self) -> Arc<Inbox<Posted>> {
+rust/crates/rexx-exec/src/lib.rs:228:thread_local! {
+rust/crates/rexx-exec/src/lib.rs:257:thread_local! {
+rust/crates/rexx-exec/src/lib.rs:271:thread_local! {
+rust/crates/rexx-exec/src/lib.rs:1223:    baton: crate::sync::Arc<crate::island::InterpBaton>,
+rust/crates/rexx-exec/src/lib.rs:3124:    let interpreter = std::thread::Builder::new()
+rust/crates/rexx-exec/src/sync.rs:19:pub(crate) use loom::sync::atomic::{AtomicU32, Ordering};
+rust/crates/rexx-exec/src/sync.rs:21:pub(crate) use loom::sync::{Arc, Condvar, Mutex, MutexGuard};
+rust/crates/rexx-exec/src/sync.rs:25:pub(crate) use std::sync::atomic::{AtomicU32, Ordering};
+rust/crates/rexx-exec/src/sync.rs:27:pub(crate) use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+rust/crates/rexx-exec/src/sync.rs:36:pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+rust/crates/rexx-exec/src/sync.rs:41:pub(crate) fn wait<'a, T>(condvar: &Condvar, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
+rust/crates/rexx-exec/src/sync.rs:148:    woken: Mutex<bool>,
+rust/crates/rexx-exec/src/sync.rs:149:    arrived: Condvar,
+rust/crates/rexx-exec/src/sync.rs:150:    signalled: loom::sync::atomic::AtomicBool,
+rust/crates/rexx-exec/src/sync.rs:158:            arrived: Condvar::new(),
+rust/crates/rexx-exec/src/sync.rs:159:            signalled: loom::sync::atomic::AtomicBool::new(false),
+rust/crates/rexx-exec/src/sync.rs:214:    static ref CLOCK: (Instant, std::sync::atomic::AtomicU64) =
+rust/crates/rexx-exec/src/sync.rs:215:        (Instant::now(), std::sync::atomic::AtomicU64::new(0));
+rust/crates/rexx-exec/src/dispatch/library/tests.rs:688:thread_local! {
+rust/crates/rexx-exec/src/dispatch/library/tests.rs:735:static PROGRAM_HOOKS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+rust/crates/rexx-exec/src/dispatch/library.rs:1081:    baton: Arc<InterpBaton>,
+rust/crates/rexx-exec/src/dispatch/library.rs:1082:    inbox: Arc<Inbox<Posted>>,
+rust/crates/rexx-exec/src/dispatch/library.rs:1094:        baton: &Arc<InterpBaton>,
+rust/crates/rexx-exec/src/dispatch/library.rs:1095:        inbox: Arc<Inbox<Posted>>,
+rust/crates/rexx-exec/src/dispatch/library.rs:1206:    baton: Arc<InterpBaton>,
+rust/crates/rexx-exec/src/dispatch/library.rs:1207:    inbox: Arc<Inbox<Posted>>,
+rust/crates/rexx-exec/src/dispatch/library.rs:1211:    pub(crate) fn new(baton: &Arc<InterpBaton>, inbox: Arc<Inbox<Posted>>) -> Requester {
+rust/crates/rexx-exec/src/dispatch/library.rs:1277:thread_local! {
+rust/crates/rexx-exec/src/ir/compile.rs:1929:thread_local! {
+rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs:540:    let sweep = std::thread::Builder::new()
+rust/crates/rexx-exec/src/ir/counters.rs:17:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:36:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:62:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:82:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:102:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:122:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:142:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:162:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:182:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:202:thread_local! {
+rust/crates/rexx-exec/src/ir/counters.rs:222:thread_local! {
+rust/crates/rexx-exec/src/bin/rexx-ir.rs:43:    let rendered = std::thread::Builder::new()
+rust/crates/rexx-exec/tests/watchdog/mod.rs:48:    std::thread::Builder::new()
+rust/crates/rexx-exec/tests/loom.rs:29:use loom::sync::atomic::{AtomicUsize, Ordering};
+rust/crates/rexx-exec/tests/loom.rs:36:fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
+rust/crates/rexx-exec/tests/loom.rs:52:        let inside = Arc::new(AtomicUsize::new(0));
+rust/crates/rexx-exec/tests/loom.rs:56:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:74:        let inside = Arc::new(AtomicUsize::new(0));
+rust/crates/rexx-exec/tests/loom.rs:79:                thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:101:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:175:        let other = thread::spawn(|| {
+rust/crates/rexx-exec/tests/loom.rs:191:        let handler = thread::spawn(timer::signal);
+rust/crates/rexx-exec/tests/loom.rs:209:        let handler = thread::spawn(timer::signal);
+rust/crates/rexx-exec/tests/loom.rs:239:fn touch(inside: &AtomicUsize) {
+rust/crates/rexx-exec/tests/loom.rs:257:        let inside = Arc::new(AtomicUsize::new(0));
+rust/crates/rexx-exec/tests/loom.rs:263:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:295:            thread::spawn(move || inbox.post(7))
+rust/crates/rexx-exec/tests/loom.rs:318:        let inside = Arc::new(AtomicUsize::new(0));
+rust/crates/rexx-exec/tests/loom.rs:322:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:333:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:356:        let inside = Arc::new(AtomicUsize::new(0));
+rust/crates/rexx-exec/tests/loom.rs:365:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/loom.rs:399:            thread::spawn(move || inbox.post(3))
+rust/crates/rexx-exec/tests/loom.rs:420:            thread::spawn(move || {
+rust/crates/rexx-exec/tests/signals.rs:124:    let reader = std::thread::spawn(move || {
+rust/crates/rexx-exec/tests/signals.rs:132:    let errors = std::thread::spawn(move || {
+rust/crates/rexx-exec/tests/support/group_runner.rs:677:static ROWS: std::sync::Mutex<Rows> = std::sync::Mutex::new(Rows {
+rust/crates/rexx-exec/tests/support/group_runner.rs:683:static TURN: std::sync::Condvar = std::sync::Condvar::new();
+rust/crates/rexx-exec/tests/support/group_runner.rs:778:    let alone: Vec<(usize, T)> = std::thread::scope(|scope| {
+rust/crates/rexx-exec/tests/support/oracle.rs:26:use std::sync::atomic::{AtomicUsize, Ordering};
+rust/crates/rexx-exec/tests/support/oracle.rs:70:    invocations: AtomicUsize,
+rust/crates/rexx-exec/tests/support/oracle.rs:150:        invocations: AtomicUsize::new(0),
+rust/crates/rexx-exec/tests/support/oracle.rs:356:    thread::spawn(move || {
+rust/crates/rexx-exec/tests/support/oracle.rs:361:    thread::spawn(move || {
+rust/crates/rexx-exec/tests/prompt_before_read.rs:68:    std::thread::spawn(move || {
+rust/crates/rexx-exec/tests/stdin_contention.rs:77:    let out = std::thread::spawn(move || {
+rust/crates/rexx-exec/tests/stdin_contention.rs:82:    let err = std::thread::spawn(move || {
+rust/crates/rexx-exec/tests/program_end.rs:47:    std::thread::spawn(move || {
+rust/crates/rexx-parse/src/selector.rs:19:pub struct Selector(Arc<[u8]>);
+rust/crates/rexx-parse/src/selector.rs:44:pub(crate) struct SelectorTable(FxHashSet<Arc<[u8]>>);
+rust/crates/rexx-parse/src/selector.rs:57:        let fresh: Arc<[u8]> = Arc::from(name);
+rust/crates/rexx-parse/examples/depth_probe.rs:21:            let handle = std::thread::Builder::new()
+rust/crates/rexx-parse/examples/depth_probe.rs:39:            let handle = std::thread::Builder::new()
+rust/crates/rexx-parse/examples/depth_probe.rs:61:            let handle = std::thread::Builder::new()
+rust/crates/rexx-parse/examples/depth_probe.rs:102:            let mut builder = std::thread::Builder::new();
+rust/crates/rexx-parse/examples/depth_probe.rs:126:            let handle = std::thread::Builder::new()
+rust/crates/rexx-parse/examples/depth_probe.rs:150:            let mut builder = std::thread::Builder::new();
+rust/crates/rexx-parse/examples/depth_probe.rs:184:            let handle = std::thread::Builder::new()
+rust/crates/rexx-parse/examples/depth_probe.rs:205:            let handle = std::thread::Builder::new()
+rust/crates/rexx-parse/tests/deep.rs:42:    std::thread::Builder::new()
+rust/crates/rexx-parse/tests/deep.rs:60:    let handle = std::thread::Builder::new()
+rust/crates/rexx-api/src/layout.rs:421:thread_local! {
+rust/crates/rexx-api/src/load.rs:29:use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+rust/crates/rexx-api/src/load.rs:113:    handle: Mutex<Option<libloading::Library>>,
+rust/crates/rexx-api/src/load.rs:114:    open: AtomicBool,
+rust/crates/rexx-api/src/load.rs:116:    calls: AtomicUsize,
+rust/crates/rexx-api/src/load.rs:120:    fn new(handle: Option<libloading::Library>) -> Arc<Mapping> {
+rust/crates/rexx-api/src/load.rs:123:            open: AtomicBool::new(true),
+rust/crates/rexx-api/src/load.rs:124:            calls: AtomicUsize::new(0),
+rust/crates/rexx-api/src/load.rs:134:        struct InFlight<'a>(&'a AtomicUsize);
+rust/crates/rexx-api/src/load.rs:205:    mapping: Arc<Mapping>,
+rust/crates/rexx-api/src/load.rs:770:        let foreign = std::thread::spawn(move || {
+rust/crates/rexx-api/src/load.rs:819:        let answered = std::thread::spawn(move || {
+rust/crates/rexx-api/src/load.rs:892:static BUFFER_HANDSHAKE: Mutex<BufferHandshake> = Mutex::new(BufferHandshake {
+rust/crates/rexx-api/src/load.rs:897:static BUFFER_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
+rust/crates/rexx-api/src/load.rs:1157:    mapping: Arc<Mapping>,
+rust/crates/rexx-api/src/load.rs:1203:    mapping: Arc<Mapping>,
+rust/crates/rexx-api/src/load.rs:1210:    fn new(mapping: &Arc<Mapping>, stub: impl FnOnce() -> Option<S>) -> Held<S> {
+rust/crates/rexx-api/src/load.rs:1518:thread_local! {
+rust/crates/rexx-api/src/load.rs:1558:    mapping: Arc<Mapping>,
+rust/crates/rexx-api/src/load.rs:1981:    mapping: &Arc<Mapping>,
+rust/crates/rexx-api/src/load.rs:2018:    mapping: &Arc<Mapping>,
+rust/crates/rexx-api/src/invoke/tests.rs:46:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:109:unsafe impl Send for ValueDescriptor {}
+rust/crates/rexx-api/src/ffi.rs:112:unsafe impl Send for Value {}
+rust/crates/rexx-api/src/ffi.rs:619:pub type Requester = std::sync::Arc<dyn crate::values::Baton + Send + Sync>;
+rust/crates/rexx-api/src/ffi.rs:700:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:4485:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:4796:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:4852:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:4926:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:5014:thread_local! {
+rust/crates/rexx-api/src/ffi.rs:6283:        unsafe impl Send for Shared {}
+rust/crates/rexx-api/src/ffi.rs:6294:        std::thread::scope(|scope| {
+rust/crates/rexx-api/tests/invoke.rs:67:thread_local! {
+rust/crates/rexx-api/tests/invoke.rs:754:            let mut native = std::thread::spawn(move || native)
+rust/crates/rexx-api/tests/invoke.rs:758:            let completion = std::thread::spawn(move || completion)
+rust/crates/rexx-classes/tests/uninit_sweep_order.rs:10:    use std::sync::atomic::{AtomicU32, Ordering};
+rust/crates/rexx-classes/tests/uninit_sweep_order.rs:11:    static NEXT: AtomicU32 = AtomicU32::new(1);
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:14:    use std::sync::atomic::{AtomicU32, Ordering};
+rust/crates/rexx-classes/tests/native_classes_wiring.rs:15:    static NEXT: AtomicU32 = AtomicU32::new(1);
+rust/crates/rexx-num/src/addsub.rs:198:thread_local! {

@@ -1,0 +1,14 @@
+$ memcap 8G cargo test -p rexx-core --doc
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 65) ... ok
+test crates/rexx-core/src/frame.rs - frame::FrameArena (line 150) ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test crates/rexx-core/src/frame.rs - frame::FrameArena (line 139) - compile fail ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 57) - compile fail ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 52) - compile fail ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+$ memcap 8G cargo test -p rexx-exec --lib -- a_context_reads_an_activation_of_another_live_activity a_context_follows_its_activation_to_a_reply_continuation island::
+test island::tests::an_island_value_is_made_only_on_the_baton - should panic ... ok
+test island::tests::an_island_value_is_taken_only_on_the_baton - should panic ... ok
+test scheduler::tests::a_context_reads_an_activation_of_another_live_activity ... ok
+test scheduler::tests::a_context_follows_its_activation_to_a_reply_continuation ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 999 filtered out; finished in 0.14s

@@ -1,0 +1,1 @@
+h = SysCreateEventSem(); say "ok" SysPostEventSem(h) SysWaitEventSem(h, 0) SysResetEventSem(h) SysCloseEventSem(h); m = SysCreateMutexSem(); say "ok" SysRequestMutexSem(m, 0) SysReleaseMutexSem(m) SysCloseMutexSem(m)

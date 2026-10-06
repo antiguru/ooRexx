@@ -1,0 +1,9 @@
+38:const CLOSED: &[&str] = &["Phase 6", "Phase 7", "Phase 8"];
+335:            if line.contains("\"Phase 10\"") {
+   Compiling rexx-exec v0.1.0 (/tmp/claude-1000/p6-s5-refusals/tree/rust/crates/rexx-exec)
+test the_row_check_tells_an_open_owner_from_a_resolved_one ... ok
+test no_open_exclusions_row_names_a_closed_phase ... ok
+test the_literal_scan_finds_a_phase_inside_a_longer_text ... ok
+test the_scan_finds_an_open_phase_it_is_not_asked_about ... ok
+test no_refusal_names_a_closed_phase ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
