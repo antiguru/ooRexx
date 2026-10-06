@@ -1,0 +1,174 @@
+--- rust/crates/rexx-exec/src/lib.rs	2026-10-06 14:07:56.881704867 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/src/lib.rs	2026-10-06 17:36:04.717770021 +0200
+@@ -254,6 +254,11 @@
+     )
+ }
+ 
++#[doc(hidden)]
++pub fn t24(name: &str) -> bool {
++    std::env::var("T24_MUT").is_ok_and(|v| v == name)
++}
++
+ /// Gives the pool threads of interpreters this thread makes `bytes` of stack.
+ #[cfg(test)]
+ pub(crate) fn set_pool_stack(bytes: usize) {
+@@ -3368,7 +3373,7 @@
+     // The oracle's termination waits for every activity
+     // (`InterpreterInstance::terminate`); a refusal in main ends the run
+     // without the wait (ruling P40).
+-    let started = if refused_main {
++    let started = if refused_main && !crate::t24("p40") {
+         interp.take_late_failures()
+     } else {
+         interp.run_started_to_end()
+@@ -3383,6 +3388,10 @@
+     // 214, and one ending `exit 7` prints it and exits 7.
+     // An activity those `UNINIT`s start is not waited for (ruling P39).
+     refused.extend(interp.terminate());
++    if crate::t24("term") {
++        let late = interp.run_started_to_end();
++        report_late_failures(&mut interp, late, path, &mut exit_code);
++    }
+     for loud in refused {
+         interp
+             .trace
+--- rust/crates/rexx-exec/src/scheduler.rs	2026-10-06 11:57:35.396538000 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/src/scheduler.rs	2026-10-06 17:44:08.001429200 +0200
+@@ -995,6 +995,9 @@
+         }
+         let failure = match self.run_others(false) {
+             Ok(Waited::Woken) => return None,
++            Ok(Waited::Blocked { .. }) if crate::t24("unsat") => {
++                Raised::insufficient_stack().into()
++            }
+             Ok(Waited::Blocked { .. }) => Loud::unsatisfiable_wait().into(),
+             Err(failure) => failure,
+         };
+@@ -1015,8 +1018,13 @@
+         pinned_unpark!(self);
+         let failure = match waited {
+             Ok(Waited::Woken) => return None,
+-            Ok(Waited::Blocked { inverted: false }) => Loud::unsatisfiable_wait().into(),
+-            Ok(Waited::Blocked { inverted: true }) => {
++            Ok(Waited::Blocked { inverted: false }) if crate::t24("unsat") => {
++                Raised::insufficient_stack().into()
++            }
++            Ok(Waited::Blocked { inverted }) if !inverted || crate::t24("inv") => {
++                Loud::unsatisfiable_wait().into()
++            }
++            Ok(Waited::Blocked { .. }) => {
+                 inverted_wait!(self, reason);
+                 Loud::inverted_wait(reason.waits_for()).into()
+             }
+@@ -1070,7 +1078,7 @@
+     /// expression level raises 11.1 rather than risk the thread's end.
+     #[inline(always)]
+     pub(crate) fn stack_exhausted<T>(&self, here: *const T) -> bool {
+-        self.stack_base.abs_diff(here as usize) > self.stack_room
++        self.stack_base.abs_diff(here as usize) > self.stack_room && !crate::t24("stack")
+     }
+ 
+     /// A new timer, not posted, which ends with a wait on it where
+@@ -1763,6 +1771,10 @@
+                 self.report_started_failure(&failed);
+                 return Ok(());
+             }
++            Err(Failure::Raised(_)) if crate::t24("replace") => {
++                self.report_started_failure(&failed);
++                return Ok(());
++            }
+             Err(Failure::Raised(replaced)) => replaced,
+             Err(failure) => return Err(failure),
+         };
+@@ -2038,6 +2050,9 @@
+     /// nests, so one made with less than half the stack's room left is not
+     /// made, keeping room for the code of the activities ending below it.
+     fn yield_after_notifier_failure(&mut self) -> Result<(), Failure> {
++        if crate::t24("notif") {
++            return Ok(());
++        }
+         let probe = 0u8;
+         if !self.any_ready()
+             || self.stack_base.abs_diff(&raw const probe as usize) > self.stack_room / 2
+@@ -2058,7 +2073,7 @@
+         pinned_yield!(self);
+         self.yield_at_slice();
+         let (_, set_aside) = self.run_round(true)?;
+-        if set_aside {
++        if set_aside && !crate::t24("busy") {
+             inverted_yield!(self);
+         }
+         Ok(())
+@@ -2127,7 +2142,7 @@
+             return false;
+         }
+         let runs = |activity: &Activity| matches!(activity.root_then, Some(Then::Started(started)) if started == message);
+-        let target = if runs(&self.activity) {
++        let target = if runs(&self.activity) || crate::t24("halt") {
+             Some(&mut self.activity)
+         } else {
+             self.activities
+--- rust/crates/rexx-exec/src/run.rs	2026-10-06 17:04:34.018243261 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/src/run.rs	2026-10-06 17:27:38.896265182 +0200
+@@ -2065,7 +2065,7 @@
+             return Err(Raised::reply_twice().into());
+         }
+         // Past its driver's level the only pin is this `Op::Exec`'s own.
+-        if self.activity.pin_depth != self.activity.driver_pins + 1 {
++        if self.activity.pin_depth != self.activity.driver_pins + 1 && !crate::t24("reply") {
+             immovable_reply!(self);
+             return Err(Loud::immovable_reply().into());
+         }
+--- rust/crates/rexx-exec/src/command.rs	2026-10-05 22:30:21.214586343 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/src/command.rs	2026-10-06 17:27:38.896364610 +0200
+@@ -706,7 +706,9 @@
+         }
+         let spawned = match start(self, &handler, command, io)? {
+             Child::Ran(spawned) => spawned,
+-            Child::Running { running, .. } if io.is_none() && !self.activity.resuming => {
++            Child::Running { running, .. }
++                if (io.is_none() || crate::t24("redir")) && !self.activity.resuming =>
++            {
+                 match self.exit_for_block(Block { running }) {
+                     Ok(token) => return Ok(Commanded::Left(token)),
+                     Err(block) => block.wait(),
+--- rust/crates/rexx-exec/src/dispatch/library.rs	2026-10-05 04:41:37.081141776 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/src/dispatch/library.rs	2026-10-06 17:27:38.896439268 +0200
+@@ -318,7 +318,10 @@
+     pub(crate) fn leaves_driver(&self) -> bool {
+         self.activity.pin_depth == 0
+             && !self.activity.resuming
+-            && (self.switch.is_some() || self.stress_collect || self.others_live())
++            && (self.switch.is_some()
++                || self.stress_collect
++                || self.others_live()
++                || crate::t24("lone"))
+     }
+ 
+     /// The running activity's native call, its completion drained: its
+--- rust/crates/rexx-exec/src/dispatch.rs	2026-10-05 21:27:09.210689340 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/src/dispatch.rs	2026-10-06 17:48:06.894554984 +0200
+@@ -3334,7 +3334,7 @@
+         ));
+         resumed.first = Some(crate::scheduler::First::Reply);
+         resumed.root_then = Some(Then::Pass);
+-        let others_ready = self.any_ready();
++        let others_ready = (self.any_ready() && !crate::t24("p36")) || crate::t24("p36y");
+         let spawned = self.spawn(continuation);
+         if let crate::guards::Transfer::Moved(key) = transfer {
+             self.activities.guards.transfer(key, spawned);
+--- rust/crates/rexx-exec/tests/closed_phases.rs	2026-10-06 17:18:30.397394715 +0200
++++ /tmp/claude-1000/p6-t24/mut/rust/crates/rexx-exec/tests/closed_phases.rs	2026-10-06 17:27:45.698496621 +0200
+@@ -289,7 +289,11 @@
+ 
+ /// Whether `word` stands alone at `at` in `text`.
+ fn word_at(text: &str, at: usize, word: &str) -> bool {
+-    let joined = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
++    let joined = |c: char| {
++        c.is_ascii_alphanumeric()
++            || c == '-'
++            || (c == '_' && std::env::var("T24_MUT").as_deref() != Ok("tok"))
++    };
+     text[at..].starts_with(word)
+         && !text[..at].chars().next_back().is_some_and(joined)
+         && !text[at + word.len()..].chars().next().is_some_and(joined)

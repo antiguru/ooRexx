@@ -1,0 +1,21 @@
+### replace: scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome
+-- control (T24_MUT unset)
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.04s
+-- mutated (T24_MUT=replace)
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... FAILED
+thread 'scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome' (3640037) panicked at crates/rexx-exec/src/scheduler/tests.rs:1138:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.02s
+
+### stack: scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11 (mutated)
+running 1 test
+
+thread 'rexx-pool' (3640047) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+exit status 0
+### stack: scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining (mutated)
+running 1 test
+
+thread 'rexx-interp' (3640051) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+exit status 0

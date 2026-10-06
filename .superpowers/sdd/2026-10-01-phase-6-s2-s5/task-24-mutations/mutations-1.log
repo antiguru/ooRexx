@@ -1,0 +1,106 @@
+### inv: scheduler::tests::an_inverted_pinned_wait_is_refused scheduler::tests::an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted
+-- control (T24_MUT unset)
+test scheduler::tests::an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted ... ok
+test scheduler::tests::an_inverted_pinned_wait_is_refused ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 0.03s
+-- mutated (T24_MUT=inv)
+test scheduler::tests::an_inverted_pinned_wait_is_refused ... FAILED
+test scheduler::tests::an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted ... FAILED
+thread 'scheduler::tests::an_inverted_pinned_wait_is_refused' (3638817) panicked at crates/rexx-exec/src/scheduler/tests.rs:145:5:
+thread 'scheduler::tests::an_inversion_the_refusing_loop_set_aside_is_refused_as_inverted' (3638816) panicked at crates/rexx-exec/src/scheduler/tests.rs:191:5:
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 0.02s
+
+### reply: run::tests::message::the_guard_instructions_answers_and_their_refusals
+-- control (T24_MUT unset)
+test run::tests::message::the_guard_instructions_answers_and_their_refusals ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.08s
+-- mutated (T24_MUT=reply)
+test run::tests::message::the_guard_instructions_answers_and_their_refusals ... FAILED
+thread 'run::tests::message::the_guard_instructions_answers_and_their_refusals' (3638837) panicked at crates/rexx-exec/src/run/tests/message.rs:387:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.09s
+
+### redir: scheduler::tests::pool::a_redirected_command_stops_every_other_activity
+-- control (T24_MUT unset)
+test scheduler::tests::pool::a_redirected_command_stops_every_other_activity ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 1.33s
+-- mutated (T24_MUT=redir)
+test scheduler::tests::pool::a_redirected_command_stops_every_other_activity ... FAILED
+thread 'scheduler::tests::pool::a_redirected_command_stops_every_other_activity' (3638866) panicked at crates/rexx-exec/src/scheduler/tests/pool.rs:552:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 1.03s
+
+### halt: scheduler::tests::a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region
+-- control (T24_MUT unset)
+test scheduler::tests::a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.11s
+-- mutated (T24_MUT=halt)
+test scheduler::tests::a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region has been running for over 60 seconds
+test scheduler::tests::a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region ... FAILED
+thread 'scheduler::tests::a_halt_of_an_activity_below_a_pinned_region_waits_for_the_region' (3638888) panicked at crates/rexx-exec/src/scheduler/tests.rs:504:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 60.02s
+
+### lone: scheduler::tests::pool::a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity
+-- control (T24_MUT unset)
+test scheduler::tests::pool::a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.53s
+-- mutated (T24_MUT=lone)
+test scheduler::tests::pool::a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity ... FAILED
+thread 'scheduler::tests::pool::a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity' (3638992) panicked at crates/rexx-exec/src/scheduler/tests/pool.rs:573:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.03s
+
+### unsat: scheduler::tests::the_result_of_a_message_never_sent_is_refused scheduler::tests::a_pinned_wait_nothing_can_end_is_refused run::tests::message::the_guard_instructions_answers_and_their_refusals
+-- control (T24_MUT unset)
+test scheduler::tests::a_pinned_wait_nothing_can_end_is_refused ... ok
+test scheduler::tests::the_result_of_a_message_never_sent_is_refused ... ok
+test run::tests::message::the_guard_instructions_answers_and_their_refusals ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1004 filtered out; finished in 0.09s
+-- mutated (T24_MUT=unsat)
+test scheduler::tests::the_result_of_a_message_never_sent_is_refused ... FAILED
+test scheduler::tests::a_pinned_wait_nothing_can_end_is_refused ... FAILED
+test run::tests::message::the_guard_instructions_answers_and_their_refusals ... FAILED
+thread 'scheduler::tests::the_result_of_a_message_never_sent_is_refused' (3639018) panicked at crates/rexx-exec/src/scheduler/tests.rs:242:5:
+thread 'scheduler::tests::a_pinned_wait_nothing_can_end_is_refused' (3639017) panicked at crates/rexx-exec/src/scheduler/tests.rs:225:5:
+thread 'run::tests::message::the_guard_instructions_answers_and_their_refusals' (3639016) panicked at crates/rexx-exec/src/run/tests/message.rs:388:9:
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 1004 filtered out; finished in 0.07s
+
+### term: scheduler::tests::a_termination_uninits_reply_continuation_is_not_waited_for scheduler::tests::an_activity_a_termination_uninit_starts_is_not_waited_for
+-- control (T24_MUT unset)
+test scheduler::tests::an_activity_a_termination_uninit_starts_is_not_waited_for ... ok
+test scheduler::tests::a_termination_uninits_reply_continuation_is_not_waited_for ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 0.02s
+-- mutated (T24_MUT=term)
+test scheduler::tests::a_termination_uninits_reply_continuation_is_not_waited_for ... FAILED
+test scheduler::tests::an_activity_a_termination_uninit_starts_is_not_waited_for has been running for over 60 seconds
+test scheduler::tests::an_activity_a_termination_uninit_starts_is_not_waited_for ... FAILED
+thread 'scheduler::tests::a_termination_uninits_reply_continuation_is_not_waited_for' (3639039) panicked at crates/rexx-exec/src/scheduler/tests.rs:1216:5:
+thread 'scheduler::tests::an_activity_a_termination_uninit_starts_is_not_waited_for' (3639040) panicked at crates/rexx-exec/src/scheduler/tests.rs:1199:5:
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 60.01s
+
+### p40: scheduler::tests::a_refusal_in_main_does_not_wait_for_the_other_activities
+-- control (T24_MUT unset)
+test scheduler::tests::a_refusal_in_main_does_not_wait_for_the_other_activities ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.02s
+-- mutated (T24_MUT=p40)
+test scheduler::tests::a_refusal_in_main_does_not_wait_for_the_other_activities has been running for over 60 seconds
+test scheduler::tests::a_refusal_in_main_does_not_wait_for_the_other_activities ... FAILED
+thread 'scheduler::tests::a_refusal_in_main_does_not_wait_for_the_other_activities' (3639143) panicked at crates/rexx-exec/src/scheduler/tests.rs:1268:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 60.01s
+
+### notif: scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome
+-- control (T24_MUT unset)
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.04s
+-- mutated (T24_MUT=notif)
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.04s
+
+### p36: scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch scheduler::tests::a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready
+-- control (T24_MUT unset)
+test scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch ... ok
+test scheduler::tests::a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 0.04s
+-- mutated (T24_MUT=p36)
+test scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch ... ok
+test scheduler::tests::a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready ... FAILED
+thread 'scheduler::tests::a_reply_yields_at_the_next_boundary_only_where_another_activity_is_ready' (3639272) panicked at crates/rexx-exec/src/scheduler/tests.rs:891:5:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1005 filtered out; finished in 0.02s
+

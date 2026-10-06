@@ -1,0 +1,9 @@
+### p36y: scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch
+-- control (T24_MUT unset)
+test scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.02s
+-- mutated (T24_MUT=p36y)
+test scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch ... FAILED
+thread 'scheduler::tests::a_reply_leaves_its_sender_running_until_an_ordinary_switch' (3640654) panicked at crates/rexx-exec/src/scheduler/tests.rs:869:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.02s
+

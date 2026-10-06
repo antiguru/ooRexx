@@ -1,0 +1,18 @@
+### reply: measured::an_immovable_reply_is_counted_with_its_frames
+-- control (T24_MUT unset)
+test measured::an_immovable_reply_is_counted_with_its_frames ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.04s
+-- mutated (T24_MUT=reply)
+test measured::an_immovable_reply_is_counted_with_its_frames ... FAILED
+thread 'measured::an_immovable_reply_is_counted_with_its_frames' (3640336) panicked at crates/rexx-exec/tests/concurrency_tests.rs:922:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.02s
+
+### busy: measured::pinned_busy_waiters_that_need_each_other_count_inverted_yields
+-- control (T24_MUT unset)
+test measured::pinned_busy_waiters_that_need_each_other_count_inverted_yields ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 49 filtered out; finished in 2.01s
+-- mutated (T24_MUT=busy)
+test measured::pinned_busy_waiters_that_need_each_other_count_inverted_yields ... FAILED
+thread 'measured::pinned_busy_waiters_that_need_each_other_count_inverted_yields' (3640347) panicked at crates/rexx-exec/tests/concurrency_tests.rs:1002:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 2.01s
+

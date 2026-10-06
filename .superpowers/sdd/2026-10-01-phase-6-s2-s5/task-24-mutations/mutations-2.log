@@ -1,0 +1,31 @@
+### replace: scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome
+-- control (T24_MUT unset)
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.04s
+-- mutated (T24_MUT=replace)
+test scheduler::tests::a_notifier_failing_inside_a_pinned_notifier_wait_replaces_the_outcome ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.04s
+
+### stack: scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11
+-- control (T24_MUT unset)
+test scheduler::tests::pool::deep_pinned_recursion_on_a_pool_thread_raises_11 ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.14s
+-- mutated (T24_MUT=stack)
+
+### stack: scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining
+-- control (T24_MUT unset)
+test scheduler::tests::nested_pinned_waits_are_bounded_by_the_stack_remaining ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1006 filtered out; finished in 0.75s
+-- mutated (T24_MUT=stack)
+
+### tok: the_row_check_tells_an_open_owner_from_a_resolved_one no_open_exclusions_row_names_a_closed_phase
+-- control (T24_MUT unset)
+test the_row_check_tells_an_open_owner_from_a_resolved_one ... ok
+test no_open_exclusions_row_names_a_closed_phase ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+-- mutated (T24_MUT=tok)
+test the_row_check_tells_an_open_owner_from_a_resolved_one ... FAILED
+test no_open_exclusions_row_names_a_closed_phase ... ok
+thread 'the_row_check_tells_an_open_owner_from_a_resolved_one' (3639728) panicked at crates/rexx-exec/tests/closed_phases.rs:325:5:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+

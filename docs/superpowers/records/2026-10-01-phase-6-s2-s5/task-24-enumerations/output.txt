@@ -1,0 +1,75 @@
+HEAD 742913850ad65a492dfc1f22e27b2ff2e28b7f8c
+
+$ /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/' | /bin/grep -av ':[0-9]*:\s*//'
+--- begin
+--- end
+
+$ /bin/grep -a -rn 'Phase 6' rust/crates --include=*.rs | /bin/grep -av '/tests\.rs\|/tests/'
+--- begin
+--- end
+
+$ /bin/grep -a -rPzoc 'Phase\s+6' rust/crates --include=*.rs | /bin/grep -v ':0$' | /bin/grep -av '/tests\.rs:\|/tests/'
+--- begin
+--- end
+
+$ /bin/grep -a -rln 'Phase 6' rust/crates --include=*.rs   # liveness: the test files still match
+--- begin
+rust/crates/rexx-exec/tests/gate_table_c.rs
+rust/crates/rexx-exec/tests/api_group_tests.rs
+rust/crates/rexx-exec/tests/closed_phases.rs
+rust/crates/rexx-exec/tests/concurrency_tests.rs
+rust/crates/rexx-exec/tests/program_end.rs
+--- end
+
+$ /bin/grep -a -c 'Phase 6' rust/corpus/refusal-sites.tsv
+--- begin
+0
+--- end
+
+$ python3 docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/methods.py ORACLE_TREE | /bin/grep MISSING
+--- begin
+--- end
+
+$ python3 docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/methods.py ORACLE_TREE
+--- begin
+Setup.cpp:1052	Message	class NEW	dispatch.rs:1022 RESUMABLE_CLASS_METHODS
+Setup.cpp:1056	Message	COMPLETED	dispatch.rs:696 NATIVE_METHODS
+Setup.cpp:1057	Message	HASERROR	dispatch.rs:709 NATIVE_METHODS
+Setup.cpp:1058	Message	HASRESULT	dispatch.rs:715 NATIVE_METHODS
+Setup.cpp:1059	Message	NOTIFY	dispatch.rs:727 NATIVE_METHODS
+Setup.cpp:1060	Message	RESULT	dispatch.rs:952 RESUMABLE_METHODS
+Setup.cpp:1061	Message	TARGET	dispatch.rs:742 NATIVE_METHODS
+Setup.cpp:1062	Message	MESSAGENAME	dispatch.rs:721 NATIVE_METHODS
+Setup.cpp:1063	Message	ARGUMENTS	dispatch.rs:690 NATIVE_METHODS
+Setup.cpp:1064	Message	ERRORCONDITION	dispatch.rs:702 NATIVE_METHODS
+Setup.cpp:1065	Message	SEND	dispatch.rs:953 RESUMABLE_METHODS
+Setup.cpp:1066	Message	START	dispatch.rs:735 NATIVE_METHODS
+Setup.cpp:1067	Message	REPLY	dispatch.rs:728 NATIVE_METHODS
+Setup.cpp:1068	Message	SENDWITH	dispatch.rs:954 RESUMABLE_METHODS
+Setup.cpp:1069	Message	STARTWITH	dispatch.rs:736 NATIVE_METHODS
+Setup.cpp:1070	Message	REPLYWITH	dispatch.rs:729 NATIVE_METHODS
+Setup.cpp:1073	Message	MESSAGECOMPLETE	dispatch.rs:940 RESUMABLE_METHODS
+Setup.cpp:1074	Message	TRIGGERED	dispatch.rs:946 RESUMABLE_METHODS
+Setup.cpp:1075	Message	WAIT	dispatch.rs:964 RESUMABLE_METHODS
+Setup.cpp:1076	Message	HALT	dispatch.rs:708 NATIVE_METHODS
+Setup.cpp:1327	EventSemaphore	class NEW	dispatch.rs:982 RESUMABLE_CLASS_METHODS
+Setup.cpp:1331	EventSemaphore	UNINIT	dispatch.rs:680 NATIVE_METHODS
+Setup.cpp:1332	EventSemaphore	POST	dispatch.rs:670 NATIVE_METHODS
+Setup.cpp:1333	EventSemaphore	RESET	dispatch.rs:671 NATIVE_METHODS
+Setup.cpp:1334	EventSemaphore	WAIT	dispatch.rs:965 RESUMABLE_METHODS
+Setup.cpp:1335	EventSemaphore	ISPOSTED	dispatch.rs:664 NATIVE_METHODS
+Setup.cpp:1350	MutexSemaphore	class NEW	dispatch.rs:984 RESUMABLE_CLASS_METHODS
+Setup.cpp:1354	MutexSemaphore	UNINIT	dispatch.rs:756 NATIVE_METHODS
+Setup.cpp:1355	MutexSemaphore	RELEASE	dispatch.rs:750 NATIVE_METHODS
+Setup.cpp:1356	MutexSemaphore	ACQUIRE	dispatch.rs:966 RESUMABLE_METHODS
+--- end
+
+$ bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/probe.sh REXX_RUN method-probes
+--- begin
+--- end
+
+$ bash docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-enumerations/probe.sh REXX_RUN control
+--- begin
+control.rex: rexx-exec: method "MAKEARRAY" of class "String" is not implemented (Phase 9)
+--- end
+
