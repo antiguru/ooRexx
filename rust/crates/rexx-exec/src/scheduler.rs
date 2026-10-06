@@ -165,6 +165,12 @@ pub(crate) enum Posted {
     Input(Vec<u8>),
 }
 
+// Another thread posts it, so it holds no `ObjRef`.
+const _: () = {
+    const fn require_send<T: Send>() {}
+    require_send::<Posted>();
+};
+
 /// A native call's completion, posted to the inbox by the thread that ran
 /// the call, for the activity that made it.
 pub(crate) struct Completed {
@@ -692,6 +698,10 @@ impl Interp {
     pub(crate) fn new_activity(&mut self) -> Box<Idle> {
         let mut activity = Activity::new();
         activity.number = self.activities.pooled.pop_front().flatten();
+        #[cfg(feature = "sharing")]
+        {
+            activity.sharing_tag = self.heap.sharing_tag();
+        }
         let mut roots = ActivityRoots::new();
         roots.set_frame_block(self.roots.activity().frames().size());
         Box::new(Idle { activity, roots })
@@ -950,6 +960,8 @@ impl Interp {
         };
         std::mem::swap(&mut self.activity, &mut idle.activity);
         std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
+        #[cfg(feature = "sharing")]
+        self.heap.share_as(self.activity.sharing_tag);
         let outgoing = std::mem::replace(&mut table.running, next);
         if ended {
             table.retired.extend(idle.activity.thread.take());
@@ -1369,6 +1381,8 @@ impl Interp {
         };
         std::mem::swap(&mut self.activity, &mut idle.activity);
         std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
+        #[cfg(feature = "sharing")]
+        self.heap.share_as(self.activity.sharing_tag);
         table.idle[running.0 as usize] = Some(idle);
         table.running = next;
     }

@@ -18,12 +18,21 @@
 use std::ptr::NonNull;
 
 use crate::Interp;
+use crate::dispatch::library::OffBaton;
 
 /// The baton every interpreter's state is reached under.
 pub(crate) type InterpBaton = crate::baton::Baton<Island>;
 
 /// A value of the interpreter's that moves to another OS thread.
 pub(crate) struct Islanded<T>(T);
+
+/// What an [`Islanded`] may carry: each payload is listed here, and its
+/// argument in the `Send` grant below.
+pub(crate) trait IslandPayload {}
+
+impl IslandPayload for NonNull<Interp> {}
+
+impl IslandPayload for (Box<OffBaton>, rexx_api::ffi::ThreadContext) {}
 
 // SAFETY: D-U2. The island is reachable only through one root pointer and the
 // baton, and a thread does no refcount operation and no interior access on an
@@ -34,8 +43,13 @@ pub(crate) struct Islanded<T>(T);
 // `Rc` and `Cell` interior needs. A call run where it is made keeps a
 // `ThreadContext` clone across the release, made before the release and
 // dropped after the reacquire; a pool thread's clone moves here and is dropped
-// under a lend. `Sync` is not granted.
-unsafe impl<T> Send for Islanded<T> {}
+// under a lend. `Sync` is not granted. Per payload: the root pointer
+// `NonNull<Interp>` is dereferenced only by `Lent::interp`, while its lender
+// waits; a native call's `(Box<OffBaton>, ThreadContext)`, which holds
+// `ObjRef`s and an `Rc`, is taken out by `PooledCall::run` under a lend and
+// put back on the activity's record, and its context dropped, under the
+// recall's lend.
+unsafe impl<T: IslandPayload> Send for Islanded<T> {}
 
 impl<T> Islanded<T> {
     /// `value`, made by the baton's holder.
@@ -110,6 +124,21 @@ impl Drop for Lent<'_> {
         }
     }
 }
+
+// Neither the interpreter nor a frame moves to another thread except as an
+// `Islanded` payload (static_assertions' `assert_not_impl_any`).
+trait AmbiguousIfSend<A> {
+    fn some_item() {}
+}
+impl<T: ?Sized> AmbiguousIfSend<()> for T {}
+impl<T: ?Sized + Send> AmbiguousIfSend<u8> for T {}
+const _: fn() = || {
+    let _ = <Interp as AmbiguousIfSend<_>>::some_item;
+    let _ = <rexx_core::RegFrame<'static> as AmbiguousIfSend<_>>::some_item;
+};
+
+#[cfg(test)]
+impl IslandPayload for i32 {}
 
 #[cfg(test)]
 mod tests {

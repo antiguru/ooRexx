@@ -84,6 +84,35 @@ impl Default for FrameBlock {
 }
 
 /// One activation's register frame, usable while its arena is borrowed.
+///
+/// A frame cannot be held by a `'static` value, which every heap `Body` is:
+///
+/// ```compile_fail,E0597
+/// use rexx_core::{FrameArena, FrameBlock};
+/// fn keep(_: Box<dyn std::any::Any>) {}
+/// let arena = FrameArena::new(FrameBlock::DEFAULT);
+/// keep(Box::new(arena.reserve(1)));
+/// ```
+///
+/// nor sent to another thread:
+///
+/// ```compile_fail,E0277
+/// use rexx_core::{FrameArena, FrameBlock};
+/// fn require_send<T: Send>(_: T) {}
+/// let arena = FrameArena::new(FrameBlock::DEFAULT);
+/// require_send(arena.reserve(1));
+/// ```
+///
+/// while a register's value, an `ObjRef`, can be:
+///
+/// ```
+/// use rexx_core::{FrameArena, FrameBlock};
+/// fn keep(_: Box<dyn std::any::Any>) {}
+/// let arena = FrameArena::new(FrameBlock::DEFAULT);
+/// let frame = arena.reserve(1);
+/// keep(Box::new(frame.get(0)));
+/// arena.release(frame);
+/// ```
 #[derive(Copy, Clone, Debug)]
 pub struct RegFrame<'a> {
     base: NonNull<Cell<ObjRef>>,

@@ -539,6 +539,8 @@ fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
         chunks_refused: 0,
         #[cfg(feature = "pinning")]
         pinning: rexx_exec::PinReport::default(),
+        #[cfg(feature = "sharing")]
+        sharing: rexx_exec::SharingReport::default(),
     }
 }
 

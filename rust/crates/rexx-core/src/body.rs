@@ -133,6 +133,12 @@ pub enum Body {
     VarRef(Box<VarRef>),
 }
 
+// A heap value names no borrowed frame (spec 2026-09-29 section 5, D3).
+const _: () = {
+    const fn require_static<T: 'static>() {}
+    require_static::<Body>();
+};
+
 /// The variable one [`Body::VarRef`] names.
 #[derive(Clone, Debug)]
 pub struct VarRef {

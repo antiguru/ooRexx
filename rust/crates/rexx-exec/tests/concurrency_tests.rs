@@ -522,6 +522,171 @@ mod group_runner;
 mod support;
 mod watchdog;
 
+/// One test of criterion 1's derived list, run in process, for the
+/// instruments that read an `Outcome` field a feature adds.
+#[cfg(any(feature = "pinning", feature = "sharing"))]
+mod derived_runs {
+    use std::fs;
+    use std::path::Path;
+
+    use rexx_exec::{Invocation, Outcome, SwitchMode};
+
+    use super::group_runner::fresh_copy;
+
+    pub(super) fn run_test(
+        run: &Path,
+        group: &str,
+        test: &str,
+        mode: Option<SwitchMode>,
+    ) -> Outcome {
+        let dir = Path::new(group).parent().and_then(Path::to_str);
+        fresh_copy(run, dir.expect("a group directory"));
+        let driver = run.join("testOORexx.rex");
+        let text = fs::read(&driver).expect("the copied driver");
+        let group_file = run.join("ooRexx").join(group);
+        let args = format!("-f {} -U -V 2 -t {test}", group_file.display());
+        let lib = super::support::oracle::oracle_root().join("lib");
+        let mut environment: Vec<(Vec<u8>, Vec<u8>)> = std::env::vars()
+            .filter(|(name, _)| name != "LD_LIBRARY_PATH")
+            .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
+            .collect();
+        environment.push((
+            b"LD_LIBRARY_PATH".to_vec(),
+            lib.to_string_lossy().into_owned().into_bytes(),
+        ));
+        let invocation = Invocation::with_argument(args.into_bytes());
+        let invocation = match mode {
+            Some(mode) => invocation.with_switch_mode(mode),
+            None => invocation,
+        }
+        .with_directory(run.to_path_buf())
+        .with_environment(environment);
+        let outcome = super::watchdog::run_bounded(&driver.to_string_lossy(), text, invocation);
+        fs::remove_dir_all(run).unwrap_or_else(|e| panic!("cannot remove {}: {e}", run.display()));
+        outcome
+    }
+
+    /// The run's outcome: the refusal, a deadline, or the summary's class.
+    pub(super) fn outcome_of(outcome: &Outcome) -> String {
+        let stderr = String::from_utf8_lossy(&outcome.stderr);
+        if let Some(line) = stderr.lines().find(|line| line.starts_with("rexx-exec: ")) {
+            return format!("refused at {}", &line["rexx-exec: ".len()..]);
+        }
+        if super::watchdog::did_not_finish(outcome) {
+            return "did not finish".to_string();
+        }
+        let stdout = String::from_utf8_lossy(&outcome.stdout);
+        let value = |label: &str| {
+            stdout
+                .lines()
+                .find_map(|line| line.strip_prefix(label))
+                .map(|rest| rest.trim().to_string())
+        };
+        let class = match (value("Errors:"), value("Failures:"), value("Tests ran:")) {
+            (_, _, Some(ran)) if ran == "0" => "no test ran",
+            (Some(errors), _, _) if errors != "0" => "error",
+            (_, Some(failures), _) if failures != "0" => "failure",
+            (Some(_), Some(_), _) => "pass",
+            _ => "no summary",
+        };
+        format!("{class}, rc {}", outcome.exit_code)
+    }
+}
+
+/// Criterion 6's sharing fraction (spec 2026-09-29 section 9).
+#[cfg(feature = "sharing")]
+mod sharing {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use rayon::prelude::*;
+    use rexx_exec::{Invocation, SharingReport, run_program};
+
+    use super::derive;
+    use super::derived_runs::{outcome_of, run_test};
+    use super::group_runner::worktree;
+
+    fn sharing_of(source: &str) -> (String, SharingReport) {
+        let outcome = run_program(
+            "probe.rex",
+            source.as_bytes().to_vec(),
+            Invocation::none().with_deadline(super::support::oracle::RUN_DEADLINE),
+        );
+        (
+            String::from_utf8_lossy(&outcome.stdout).into_owned(),
+            outcome.sharing,
+        )
+    }
+
+    /// One activity shares nothing, however much it allocates and reads.
+    #[test]
+    fn one_activity_shares_nothing() {
+        let (stdout, sharing) = sharing_of(
+            "a = .array~new
+do i = 1 to 50
+  a[i] = i * 2
+end
+say a[50]
+",
+        );
+        assert_eq!(stdout, "100\n");
+        assert!(sharing.objects > sharing.before_program, "{sharing:?}");
+        assert_eq!(sharing.shared, 0, "{sharing:?}");
+    }
+
+    /// An array the main activity made and a started one reads is shared.
+    #[test]
+    fn an_object_read_by_a_started_activity_is_shared() {
+        let source = "a = .array~of('x', 'y')\nm = .t~new~start('look', a)\nsay m~result\n\
+                      ::class t\n::method look\n  use arg a\n  return a[2]\n";
+        let (stdout, sharing) = sharing_of(source);
+        assert_eq!(stdout, "y\n");
+        assert!(sharing.shared > 0, "{sharing:?}");
+    }
+
+    #[test]
+    fn sharing_fraction_over_the_derived_list() {
+        let (list, _) = derive(&worktree().join("ootest/ooRexx"));
+        let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("sharing-{}", std::process::id()));
+        let rows: Vec<(String, String, SharingReport)> = list
+            .par_iter()
+            .enumerate()
+            .map(|(at, row)| {
+                let outcome = run_test(&base.join(at.to_string()), &row.group, &row.test, None);
+                (
+                    format!("{} {}", row.group, row.test),
+                    outcome_of(&outcome),
+                    outcome.sharing,
+                )
+            })
+            .collect();
+        let mut table = String::from(
+            "| test | outcome | objects | before program | shared |\n|---|---|---|---|---|\n",
+        );
+        let mut total = SharingReport::default();
+        for (test, outcome, sharing) in &rows {
+            total.objects += sharing.objects;
+            total.before_program += sharing.before_program;
+            total.shared += sharing.shared;
+            table.push_str(&format!(
+                "| {test} | {outcome} | {} | {} | {} |\n",
+                sharing.objects, sharing.before_program, sharing.shared
+            ));
+        }
+        let text = format!(
+            "tests {}, objects {}, made before the program {}, shared {}\n\n{table}",
+            rows.len(),
+            total.objects,
+            total.before_program,
+            total.shared
+        );
+        let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sharing-derived.md");
+        fs::write(&out, &text).expect("cannot write the table");
+        println!("{text}\nwritten to {}", out.display());
+    }
+}
+
 #[cfg(feature = "pinning")]
 mod measured {
     use std::collections::BTreeMap;
@@ -532,7 +697,8 @@ mod measured {
     use rexx_exec::{Invocation, Outcome, ParkKind, PinKind, PinReport, SwitchMode, run_program};
 
     use super::derive;
-    use super::group_runner::{fresh_copy, worktree};
+    use super::derived_runs::{outcome_of, run_test};
+    use super::group_runner::worktree;
 
     /// The external routine every probe of [`report_of`] can call.
     const EXTF: &str =
@@ -1180,60 +1346,6 @@ mod measured {
             1,
             "{report:?}"
         );
-    }
-
-    fn run_test(run: &Path, group: &str, test: &str, mode: Option<SwitchMode>) -> Outcome {
-        let dir = Path::new(group).parent().and_then(Path::to_str);
-        fresh_copy(run, dir.expect("a group directory"));
-        let driver = run.join("testOORexx.rex");
-        let text = fs::read(&driver).expect("the copied driver");
-        let group_file = run.join("ooRexx").join(group);
-        let args = format!("-f {} -U -V 2 -t {test}", group_file.display());
-        let lib = super::support::oracle::oracle_root().join("lib");
-        let mut environment: Vec<(Vec<u8>, Vec<u8>)> = std::env::vars()
-            .filter(|(name, _)| name != "LD_LIBRARY_PATH")
-            .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
-            .collect();
-        environment.push((
-            b"LD_LIBRARY_PATH".to_vec(),
-            lib.to_string_lossy().into_owned().into_bytes(),
-        ));
-        let invocation = Invocation::with_argument(args.into_bytes());
-        let invocation = match mode {
-            Some(mode) => invocation.with_switch_mode(mode),
-            None => invocation,
-        }
-        .with_directory(run.to_path_buf())
-        .with_environment(environment);
-        let outcome = super::watchdog::run_bounded(&driver.to_string_lossy(), text, invocation);
-        fs::remove_dir_all(run).unwrap_or_else(|e| panic!("cannot remove {}: {e}", run.display()));
-        outcome
-    }
-
-    /// The run's outcome: the refusal, a deadline, or the summary's class.
-    fn outcome_of(outcome: &Outcome) -> String {
-        let stderr = String::from_utf8_lossy(&outcome.stderr);
-        if let Some(line) = stderr.lines().find(|line| line.starts_with("rexx-exec: ")) {
-            return format!("refused at {}", &line["rexx-exec: ".len()..]);
-        }
-        if super::watchdog::did_not_finish(outcome) {
-            return "did not finish".to_string();
-        }
-        let stdout = String::from_utf8_lossy(&outcome.stdout);
-        let value = |label: &str| {
-            stdout
-                .lines()
-                .find_map(|line| line.strip_prefix(label))
-                .map(|rest| rest.trim().to_string())
-        };
-        let class = match (value("Errors:"), value("Failures:"), value("Tests ran:")) {
-            (_, _, Some(ran)) if ran == "0" => "no test ran",
-            (Some(errors), _, _) if errors != "0" => "error",
-            (_, Some(failures), _) if failures != "0" => "failure",
-            (Some(_), Some(_), _) => "pass",
-            _ => "no summary",
-        };
-        format!("{class}, rc {}", outcome.exit_code)
     }
 
     fn frames_text(frames: &[PinKind]) -> String {

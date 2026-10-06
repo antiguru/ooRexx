@@ -74,6 +74,8 @@ pub fn abandoned(path: &str, after: Duration) -> Outcome {
         chunks_refused: 0,
         #[cfg(feature = "pinning")]
         pinning: rexx_exec::PinReport::default(),
+        #[cfg(feature = "sharing")]
+        sharing: rexx_exec::SharingReport::default(),
     }
 }
 

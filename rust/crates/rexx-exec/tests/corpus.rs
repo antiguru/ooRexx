@@ -943,3 +943,50 @@ fn demonstrate_the_report_reaches_a_plain_cargo_test() {
          bypassing libtest's capture. Full child output:\n{text}"
     );
 }
+
+/// Criterion 6's sharing fraction over the corpus (spec 2026-09-29 section
+/// 9): the crate's side of every program [`corpus_differential`] runs, the
+/// counts summed, and each program with a shared object listed.
+#[cfg(feature = "sharing")]
+#[test]
+fn sharing_fraction_over_the_corpus() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    let mut rows =
+        String::from("| program | objects | before program | shared |\n|---|---|---|---|\n");
+    let mut total = rexx_exec::SharingReport::default();
+    for rel_path in &subset {
+        let abs = fs::canonicalize(corpus_dir.join(rel_path))
+            .unwrap_or_else(|e| panic!("cannot resolve corpus entry {rel_path}: {e}"));
+        let dir = run_directory(rel_path);
+        let sidecar = sidecar_for(&corpus_dir, rel_path);
+        let overrides = resolved_environment(&sidecar, &dir);
+        let cwd = prepare_run_directory(&dir, &sidecar);
+        let sharing = run_rust(&abs, &cwd, &overrides, sidecar.stdin.as_deref()).sharing;
+        total.objects += sharing.objects;
+        total.before_program += sharing.before_program;
+        total.shared += sharing.shared;
+        if sharing.shared != 0 {
+            writeln!(
+                rows,
+                "| {rel_path} | {} | {} | {} |",
+                sharing.objects, sharing.before_program, sharing.shared
+            )
+            .expect("a String takes a write");
+        }
+    }
+    let text = format!(
+        "programs {}, objects {}, made before the program {}, shared {}\n\n{rows}",
+        subset.len(),
+        total.objects,
+        total.before_program,
+        total.shared
+    );
+    let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sharing-corpus.md");
+    fs::write(&out, &text).expect("cannot write the table");
+    println!("{text}\nwritten to {}", out.display());
+}

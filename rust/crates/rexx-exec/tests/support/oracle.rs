@@ -634,6 +634,8 @@ mod tests {
             chunks_refused: 0,
             #[cfg(feature = "pinning")]
             pinning: rexx_exec::PinReport::default(),
+            #[cfg(feature = "sharing")]
+            sharing: rexx_exec::SharingReport::default(),
         }
     }
 
@@ -686,6 +688,8 @@ mod tests {
             chunks_refused: 0,
             #[cfg(feature = "pinning")]
             pinning: rexx_exec::PinReport::default(),
+            #[cfg(feature = "sharing")]
+            sharing: rexx_exec::SharingReport::default(),
         }
     }
 

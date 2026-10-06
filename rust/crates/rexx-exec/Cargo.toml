@@ -74,6 +74,8 @@ libc = "0.2.186"
 [features]
 # The pinned-park counter, `src/pinning.rs`.
 pinning = []
+# The sharing-fraction instrument, `Outcome::sharing`.
+sharing = ["rexx-core/sharing"]
 
 [dev-dependencies]
 # Case tables as data files rather than `const` arrays in Rust sources, for

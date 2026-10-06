@@ -66,6 +66,22 @@ pub struct Heap {
     /// what it says it tested. Not reset by anything; a fresh count needs a
     /// fresh `Heap`.
     collections: u64,
+    #[cfg(feature = "sharing")]
+    sharing: Sharing,
+}
+
+/// The sharing-fraction instrument (spec 2026-09-29 section 5): each slot's
+/// object is tagged with the last activity that resolved it through
+/// [`Heap::get`], [`Heap::get_mut`] or [`Heap::body_text`], or else made it.
+#[cfg(feature = "sharing")]
+#[derive(Default)]
+struct Sharing {
+    /// Per slot: the tag, and whether a second activity has resolved it.
+    tags: Vec<std::cell::Cell<(u32, bool)>>,
+    current: std::cell::Cell<u32>,
+    serials: u32,
+    objects: u64,
+    shared: std::cell::Cell<u64>,
 }
 
 impl Heap {
@@ -78,6 +94,8 @@ impl Heap {
             immortal: Vec::new(),
             uninit: Vec::new(),
             collections: 0,
+            #[cfg(feature = "sharing")]
+            sharing: Sharing::default(),
         }
     }
 
@@ -359,6 +377,8 @@ impl Heap {
                     },
                     generation,
                 };
+                #[cfg(feature = "sharing")]
+                self.made(slot);
                 ObjRef::heap(slot, generation)
             }
             None => {
@@ -373,6 +393,8 @@ impl Heap {
                     },
                     generation: 0,
                 });
+                #[cfg(feature = "sharing")]
+                self.made(slot);
                 ObjRef::heap(slot, 0)
             }
         }
@@ -405,13 +427,19 @@ impl Heap {
                         ..
                     },
                 generation: live,
-            } if *live == generation => Some(bytes.as_slice()),
+            } if *live == generation => {
+                #[cfg(feature = "sharing")]
+                self.resolved(slot as usize);
+                Some(bytes.as_slice())
+            }
             _ => None,
         }
     }
 
     pub fn get(&self, r: ObjRef) -> Option<&Object> {
         let slot = self.resolve(r)?;
+        #[cfg(feature = "sharing")]
+        self.resolved(slot);
         match &self.slots[slot] {
             Slot::Live { object, .. } => Some(object),
             Slot::Free { .. } => unreachable!("resolve rejects free slots"),
@@ -420,6 +448,8 @@ impl Heap {
 
     pub fn get_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
         let slot = self.resolve(r)?;
+        #[cfg(feature = "sharing")]
+        self.resolved(slot);
         match &mut self.slots[slot] {
             Slot::Live { object, .. } => Some(object),
             Slot::Free { .. } => unreachable!("resolve rejects free slots"),
@@ -442,6 +472,52 @@ impl Heap {
     /// a slot an earlier collection freed.
     pub fn will_grow(&self) -> bool {
         self.free_head.is_none()
+    }
+
+    /// A tag for a new activity, distinct from every earlier one and from
+    /// the tag a new heap starts with.
+    #[cfg(feature = "sharing")]
+    pub fn sharing_tag(&mut self) -> u32 {
+        self.sharing.serials += 1;
+        self.sharing.serials
+    }
+
+    /// Resolves and makes objects as `tag` from here on.
+    #[cfg(feature = "sharing")]
+    pub fn share_as(&self, tag: u32) {
+        self.sharing.current.set(tag);
+    }
+
+    /// How many objects were made, and how many of them more than one
+    /// activity touched.
+    #[cfg(feature = "sharing")]
+    pub fn sharing_counts(&self) -> (u64, u64) {
+        (self.sharing.objects, self.sharing.shared.get())
+    }
+
+    #[cfg(feature = "sharing")]
+    fn made(&mut self, slot: u32) {
+        let tag = (self.sharing.current.get(), false);
+        let slot = slot as usize;
+        if slot == self.sharing.tags.len() {
+            self.sharing.tags.push(std::cell::Cell::new(tag));
+        } else {
+            self.sharing.tags[slot].set(tag);
+        }
+        self.sharing.objects += 1;
+    }
+
+    #[cfg(feature = "sharing")]
+    fn resolved(&self, slot: usize) {
+        let current = self.sharing.current.get();
+        let cell = &self.sharing.tags[slot];
+        let (tag, shared) = cell.get();
+        if tag != current {
+            if !shared {
+                self.sharing.shared.set(self.sharing.shared.get() + 1);
+            }
+            cell.set((current, true));
+        }
     }
 }
 

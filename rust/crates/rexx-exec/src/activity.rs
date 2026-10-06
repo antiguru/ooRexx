@@ -335,6 +335,9 @@ pub(crate) struct Activity {
     pub(crate) waiting_traced: Option<bool>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
+    /// The heap's tag for this activity, `Heap::sharing_tag`.
+    #[cfg(feature = "sharing")]
+    pub(crate) sharing_tag: u32,
 }
 
 /// What a spawned activity keeps of the activity and frame that started it
@@ -437,6 +440,8 @@ impl Activity {
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
+            #[cfg(feature = "sharing")]
+            sharing_tag: 0,
         }
     }
 
@@ -551,6 +556,8 @@ impl Activity {
             waiting_traced: _,
             #[cfg(feature = "pinning")]
                 pins: _,
+            #[cfg(feature = "sharing")]
+                sharing_tag: _,
         } = self;
         if let Some(exec) = guard_exec {
             out.extend(exec.watched.iter().flat_map(|var| [var.owner, var.scope]));

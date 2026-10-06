@@ -307,6 +307,21 @@ pub struct Outcome {
     /// The would-be park points the run reached.
     #[cfg(feature = "pinning")]
     pub pinning: PinReport,
+    #[cfg(feature = "sharing")]
+    pub sharing: SharingReport,
+}
+
+/// The sharing fraction's counts (spec 2026-09-29 section 5): objects
+/// touched means resolved through the heap's accessors, or made.
+#[cfg(feature = "sharing")]
+#[derive(Copy, Clone, Debug, Default)]
+pub struct SharingReport {
+    /// Objects made, the library bootstrap's included.
+    pub objects: u64,
+    /// Of those, the ones the library bootstrap made.
+    pub before_program: u64,
+    /// Objects touched by more than one activity.
+    pub shared: u64,
 }
 
 /// How deep evaluation went and how much stack it took to get there.
@@ -1349,6 +1364,10 @@ struct Interp {
     /// from -- see `Interp::bootstrap_library` for why the boundary is
     /// there and not at process start.
     collections_before_program: u64,
+    /// How many objects the heap had made when the library bootstrap
+    /// finished.
+    #[cfg(feature = "sharing")]
+    objects_before_program: u64,
     #[cfg(feature = "pinning")]
     pinning: pinning::Pinning,
     /// Every activity but the running one.
@@ -2013,6 +2032,8 @@ impl Interp {
             method_objects: FxHashMap::default(),
             library_bootstrap: false,
             collections_before_program: 0,
+            #[cfg(feature = "sharing")]
+            objects_before_program: 0,
             #[cfg(feature = "pinning")]
             pinning: pinning::Pinning::default(),
             activities: scheduler::Activities::new(thread_table),
@@ -2135,6 +2156,10 @@ impl Interp {
         // rather than by the program, which is the criterion measuring
         // nothing.
         self.collections_before_program = self.heap.collections_performed();
+        #[cfg(feature = "sharing")]
+        {
+            self.objects_before_program = self.heap.sharing_counts().0;
+        }
         #[cfg(feature = "pinning")]
         self.pinning.reset();
         self.chunks_refused = 0;
@@ -2707,6 +2732,8 @@ impl Interp {
             method_bodies: _,
             library_bootstrap: _,
             collections_before_program: _,
+            #[cfg(feature = "sharing")]
+                objects_before_program: _,
             #[cfg(feature = "pinning")]
                 pinning: _,
             activities,
@@ -3192,6 +3219,8 @@ fn execute_on(
                 chunks_refused: 0,
                 #[cfg(feature = "pinning")]
                 pinning: PinReport::default(),
+                #[cfg(feature = "sharing")]
+                sharing: SharingReport::default(),
             };
         }
     };
@@ -3386,6 +3415,15 @@ fn execute_on(
         chunks_refused,
         #[cfg(feature = "pinning")]
         pinning: interp.pinning.take(&interp.activity.pins),
+        #[cfg(feature = "sharing")]
+        sharing: {
+            let (objects, shared) = interp.heap.sharing_counts();
+            SharingReport {
+                objects,
+                before_program: interp.objects_before_program,
+                shared,
+            }
+        },
     };
     // A pool thread still running a call ends it under the baton, through
     // this interpreter's state, which therefore outlives the run.

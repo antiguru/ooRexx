@@ -8,9 +8,10 @@
 #   -T        print the table for OUTDIR's wall.tsv without running
 # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
 #      ORACLE_ROOT   the oracle's build directory (default /home/moritz/dev/repos/ooRexx/build)
+#      PROGRAMS      the programs to run (default: callgrind.sh's PROGRAMS)
 #
 # Each binary is copied to OUTDIR/stage/rexx-run before each of its runs; bash's
-# `time` times the interpreter process. Programs: callgrind.sh's PROGRAMS.
+# `time` times the interpreter process.
 # Exits 1 if a run exits non-zero or its stdout differs from the first binary's
 # (except on TIMED).
 set -u
@@ -35,7 +36,7 @@ lib=${REXX_LIB_DIR:-$oracle_root/lib}
 [ -n "$out" ] || out=$(mktemp -d)
 mkdir -p "$out/stage"
 out=$(cd "$out" && pwd)
-PROGRAMS=$(sed -n '/^PROGRAMS="/,/"$/p' "$here/callgrind.sh" | tr -d '"' | sed 's/^PROGRAMS=//')
+PROGRAMS=${PROGRAMS:-$(sed -n '/^PROGRAMS="/,/"$/p' "$here/callgrind.sh" | tr -d '"' | sed 's/^PROGRAMS=//')}
 prog() {
     if [ "$1" = rexxcps ]; then echo "$here/../bench-rexxcps/rexxcps.rex"; else echo "$here/$1.rex"; fi
 }

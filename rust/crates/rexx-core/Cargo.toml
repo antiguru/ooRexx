@@ -15,6 +15,10 @@ rexx-num = { path = "../rexx-num" }
 # for what it replaces and why the default one costs what it does.
 rustc-hash = "2.1.2"
 
+[features]
+# The sharing-fraction instrument's tags, `Heap::sharing_counts`.
+sharing = []
+
 [dev-dependencies]
 criterion = "0.8.2"
 
