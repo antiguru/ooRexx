@@ -397,7 +397,18 @@ pub fn run_oracle_within(
     args: &[&str],
     deadline: std::time::Duration,
 ) -> Run {
-    let outcome = oracle.run_within(&run.join("testOORexx.rex"), args, None, deadline);
+    let path = env::join_paths(
+        std::iter::once(oracle::oracle_root().join("bin"))
+            .chain(env::var_os("PATH").iter().flat_map(env::split_paths)),
+    )
+    .expect("a PATH");
+    let outcome = oracle.run_within_env(
+        &run.join("testOORexx.rex"),
+        args,
+        None,
+        deadline,
+        &[("PATH", path)],
+    );
     let status = (!did_not_finish(&outcome)).then(|| outcome.expect_exit_code());
     Run {
         stdout: outcome.stdout,
@@ -420,14 +431,31 @@ pub fn run_crate_within(
     let driver = run.join("testOORexx.rex");
     let text = fs::read(&driver).expect("the copied driver");
     let lib = oracle::oracle_root().join("lib");
+    let bin = interpreter_bin(run);
+    let path = env::join_paths(
+        std::iter::once(bin).chain(env::var_os("PATH").iter().flat_map(env::split_paths)),
+    )
+    .expect("a PATH");
     let mut environment: Vec<(Vec<u8>, Vec<u8>)> = env::vars()
-        .filter(|(name, _)| name != "LD_LIBRARY_PATH")
+        .filter(|(name, _)| {
+            !matches!(
+                name.as_str(),
+                "LD_LIBRARY_PATH" | "PATH" | "REXX_SWITCH_MODE"
+            )
+        })
         .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
         .collect();
     environment.push((
         b"LD_LIBRARY_PATH".to_vec(),
         lib.to_string_lossy().into_owned().into_bytes(),
     ));
+    environment.push((
+        b"PATH".to_vec(),
+        path.to_string_lossy().into_owned().into_bytes(),
+    ));
+    if mode == SwitchMode::EveryOpportunity {
+        environment.push((b"REXX_SWITCH_MODE".to_vec(), b"every".to_vec()));
+    }
     let invocation = Invocation::with_argument(args.join(" ").into_bytes());
     let invocation = match mode {
         SwitchMode::None => invocation,
@@ -446,6 +474,22 @@ pub fn run_crate_within(
         stderr: outcome.stderr,
         status,
     }
+}
+
+/// A directory beside `run` holding `rexx`, a link to this crate's `rexx-run`,
+/// so a test running `rexx` as a command runs the side under test; the
+/// oracle's side gets its own `bin` directory instead.
+fn interpreter_bin(run: &Path) -> PathBuf {
+    let bin = run.parent().expect("a parent").join("bin-rexx");
+    fs::create_dir_all(&bin).expect("the interpreter bin directory");
+    let link = bin.join("rexx");
+    match std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx-run"), &link) {
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+            panic!("cannot link {}: {e}", link.display())
+        }
+        _ => {}
+    }
+    bin
 }
 
 /// Renames each test of `group` that `left_out` names in the copy's group

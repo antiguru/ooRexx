@@ -1001,12 +1001,25 @@ fn sharing_fraction_over_the_corpus() {
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("sharing-corpus.md");
     fs::write(&out, &text).expect("cannot write the table");
     println!("{text}\nwritten to {}", out.display());
+    assert!(
+        unfinished.is_empty(),
+        "programs that did not finish: {unfinished:?}"
+    );
+    assert!(
+        inverted.is_empty(),
+        "programs with an inverted wait: {inverted:?}"
+    );
+    assert!(
+        unbalanced.is_empty(),
+        "runs ending with a frame pushed: {unbalanced:?}"
+    );
 }
 
 /// Criterion 9's pinning report over the corpus (spec 2026-09-29 section 9):
 /// the crate's side of every program [`corpus_differential`] runs, in the
 /// mode `REXX_CORPUS_SWITCH` names, the arrivals summed per park and the
-/// waits per kind, with each program that reached a wait listed.
+/// waits per kind, with each program that reached a wait listed. Panics when a
+/// program does not finish, reaches an inverted wait or ends with a frame pushed.
 #[cfg(feature = "pinning")]
 #[test]
 fn pinning_report_over_the_corpus() {
@@ -1031,6 +1044,8 @@ fn pinning_report_over_the_corpus() {
     let mut programs =
         String::from("| program | wait | park | frames | count |\n|---|---|---|---|---|\n");
     let mut unfinished = Vec::new();
+    let mut inverted = Vec::new();
+    let mut unbalanced = Vec::new();
     for rel_path in &subset {
         let abs = fs::canonicalize(corpus_dir.join(rel_path))
             .unwrap_or_else(|e| panic!("cannot resolve corpus entry {rel_path}: {e}"));
@@ -1043,6 +1058,12 @@ fn pinning_report_over_the_corpus() {
             unfinished.push(rel_path.clone());
         }
         let report = outcome.pinning;
+        if !report.inverted.is_empty() {
+            inverted.push(rel_path.clone());
+        }
+        if report.unbalanced != 0 {
+            unbalanced.push(rel_path.clone());
+        }
         for ((park, _), count) in &report.parks {
             let total = arrivals.entry(format!("{park:?}")).or_default();
             total.0 += 1;
@@ -1098,4 +1119,16 @@ fn pinning_report_over_the_corpus() {
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join(file);
     fs::write(&out, &text).expect("cannot write the table");
     println!("{text}\nwritten to {}", out.display());
+    assert!(
+        unfinished.is_empty(),
+        "programs that did not finish: {unfinished:?}"
+    );
+    assert!(
+        inverted.is_empty(),
+        "programs with an inverted wait: {inverted:?}"
+    );
+    assert!(
+        unbalanced.is_empty(),
+        "runs ending with a frame pushed: {unbalanced:?}"
+    );
 }

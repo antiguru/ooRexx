@@ -179,8 +179,21 @@ impl Oracle {
         stdin: Option<&[u8]>,
         deadline: Duration,
     ) -> CppOutcome {
+        self.run_within_env(path, args, stdin, deadline, &[])
+    }
+
+    /// [`Oracle::run_within`] with `env` set in the oracle's environment.
+    pub fn run_within_env(
+        &self,
+        path: &Path,
+        args: &[&str],
+        stdin: Option<&[u8]>,
+        deadline: Duration,
+        env: &[(&str, std::ffi::OsString)],
+    ) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let mut command = self.wrapped(path, args);
+        command.envs(env.iter().map(|(name, value)| (*name, value)));
         command
             .stdin(match stdin {
                 None => Stdio::null(),
