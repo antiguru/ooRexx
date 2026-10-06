@@ -1147,26 +1147,27 @@ one the oracle produced, or, where the oracle's own runs differ from each other 
 assertion count, has their class, status, last started test and failing tests (ruling P86; at
 `790de51c2` G4's `REPLY` derived normal run passed with 10 assertions where the oracle's 30 runs
 passed with 11 to 18, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/790de51c2/logs/g4-test-release.txt:2105`, P41). A run's key is its refusal or summary, its status, the last test it started
-and its failing tests. At `bf558da52`, from `rust/`, release:
+and its failing tests. At `ac9754ed8`, from `rust/`, release:
 
 ```
 REXX_CORPUS_GATE=1 RAYON_NUM_THREADS=4 REXX_WHOLE_GROUPS_TABLE=<file> REXX_WHOLE_GROUPS_STARTED=<file> \
   memcap 8G cargo test --release -p rexx-exec --test concurrency_tests -- whole_groups --nocapture
 ```
 
-`test result: ok. 1 passed; 0 failed`, no P48 rerun
+`test result: ok. 6 passed; 0 failed`, the gate test and the P86 trigger's unit tests, no P48 rerun
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/whole-groups/run.log`). Beside it, `table.txt`
 holds each row's oracle outcomes with their counts and keys and our two runs' keys, and
 `started.txt` the tests each of our runs started and the tests each rest run skipped. The test
 passes when every run agrees or is a row of its `DIFFERING` list with the same key; no unlisted run
-ends in an inverted wait or fails to finish. A listed row that agrees is printed: here `REPLY` whole
-under every opportunity, whose 19 assertions one of the oracle's 30 runs produced.
+ends in an inverted wait or fails to finish. A listed row that agrees is printed: here `REPLY`
+whole and derived under every opportunity, 19 and 18 assertions, each agreeing under P86.
 
 Agreeing in both modes (`table.txt`): `Alarm`, `EventSemaphore`, `Ticker`, `SysSleep`,
 `RESULT_RC_SIGL` and `bug2003_guard_when`, whole and derived; `STREAM`, `Class`, `DateTime`,
 `Object`, `RexxContext`, `CONSTANT`, `TRACE` and `Section1`, derived; `DateTime`, `Message`,
-`MethodArgs`, `GUARD` and `Section1`, rest. `bug2003_guard_when` runs `rexx guard_when.rex`, which
-passes on both sides, 12 assertions. `MutexSemaphore` both parts and `REPLY` derived agree normally.
+`MethodArgs`, `GUARD` and `Section1`, rest; `REPLY` whole and derived, under every opportunity by
+P86. `bug2003_guard_when` runs `rexx guard_when.rex`, which passes on both sides, 12 assertions.
+`MutexSemaphore` and `REPLY`, both parts, agree normally.
 
 A run that refuses ends there, so it covers only the tests before the refusal (`started.txt`): the
 `Message` derived run starts 4 of its derived tests and the rest run 65 tests with
@@ -1179,7 +1180,7 @@ The rows that differ, each with its reason (`DIFFERING`):
 | group | parts | modes | reason |
 |---|---|---|---|
 | `MutexSemaphore` | whole, derived | every | TEST_EXCLUSION's own race: the oracle passes it in each of its 30 runs as written and hangs when that schedule is forced (`SysSleep 0.01` after `step = 6`, P46) |
-| `REPLY` | whole, derived | every | every continuation runs before the program ends; the oracle races them with its end (P41, `phase-4-exclusions.txt` row 22) |
+| `REPLY` | whole, derived | every | every continuation runs before the program ends; the oracle races them with its end (P41, `phase-4-exclusions.txt` row 22); in this run both agree under P86 and are printed |
 | `TIME` | whole, derived | both | elapsed-clock defect, queued `2026-10-02-elapsed-clock-per-routine-and-reset`: TEST_4, 5, 10 and 11, as alone; whole, TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R, which pass alone, after earlier tests, because a method shares its caller's and earlier methods' elapsed clock (`whole-groups/clock/`) |
 | `CALL` | derived, rest | both | TEST_4, the same elapsed-clock defect, as alone |
 | `Message` | whole, derived | both | TEST_REPLYWITH_NOT_ARRAY refuses, as alone (`MAKEARRAY`, Phase 9) |
