@@ -1716,12 +1716,12 @@ DEVIATIONS -- permanent, chosen
      its orders here, or an order the oracle was not seen to take. Where a
      REPLY's sender and continuation interleave (P36, P41), the oracle yields
      inside the REPLY; here the sender yields at its next clause boundary
-     when another activity is ready and otherwise runs on until an ordinary
-     switch. Where a started activity's notifier
-     fails inside main's pinned notifier wait (P38), main is buried below
-     that round, so the failure replaces the message's outcome before main
-     reads it, the oracle's minority schedule taken every time: a value and
-     the exit status differ from its usual run. The clause a
+     when an activity other than the new continuation is ready, and
+     otherwise runs on until an ordinary switch. Where a started activity's
+     notifier fails inside main's pinned notifier wait (P38), main is buried
+     below that round, so the failure replaces the message's outcome before
+     main reads it, the oracle's minority schedule taken every time: a value
+     and the exit status differ from its usual run. The clause a
      cross-activity HALT lands on inside a loop (P32) follows this crate's
      countdown, not the oracle's per-activation instruction count.
 
@@ -1754,8 +1754,10 @@ DEVIATIONS -- permanent, chosen
      divergences`, the programs of task-18-review.md finding 8): recursion
      through a native callback with a second activity alive ends in Error 11
      at the activation cap, 9999 or 10000 levels, and on the oracle at about
-     7750. Thread affinity is not measured: no extension in this tree is
-     thread-affine.
+     7750. Measured 2026-10-06, 30 runs each (the counts file of row 16,
+     program probes/tid.rex): main calls rxunixsys's SysGettid six times
+     while a started activity runs; the oracle answers one thread id in
+     every run, this crate more than one in 3 of 30.
 
  24. A CONTEXT KEPT FROM ANOTHER ACTIVITY'S CALL ANSWERS OR RAISES 98.983
      WHERE THE ORACLE CRASHES OR HANGS (rulings P37, P84). OWNER: none.

@@ -1095,7 +1095,7 @@ probe's control, `probe.sh REXX_RUN control`, prints that refusal for
 alone, and gate table C's `CLOSED_PHASES` gains `6`. The Phase 6 corpus witnesses moved from
 `phase-8.txt` to `rust/corpus/phase-6.txt` (P17). Its tokenizer reads an identifier containing
 `CLOSED` as no resolution (P79); the Alarm and Ticker row it had passed over is resolved
-(`phase-4-exclusions.txt:5887`), citing gate table C
+(`phase-4-exclusions.txt:5889`), citing gate table C
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-gate-table-c.txt`).
 
 The divergences this design records are rows of `docs/superpowers/plans/phase-4-exclusions.txt`,
@@ -1118,9 +1118,9 @@ each with owner none, its reason and its witness or why it has none:
 | 21 | 1692 | program end and termination UNINITs, u5 among them (P39, P40, P75) |
 | 22 | 1711 | one schedule where the oracle's threads race (P32, P36, P38, P41) |
 | 23 | 1742 | thread migration and Error 11 depth on a pool thread (spec section 11) |
-| 24 | 1760 | a context kept from another activity's call (P37, P84) |
+| 24 | 1762 | a context kept from another activity's call (P37, P84) |
 
 Probes and counts (30 runs per side; one for row 20's single-activity program) for rows 16, 17, 19,
-20, 21 and 22 are in
+20, 21, 22 and 23 are in
 `docs/superpowers/records/2026-10-01-phase-6-s2-s5/task-24-divergences/`; for rows 14, 15 and 18 in
 `.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/refusals/out5/counts.txt`.

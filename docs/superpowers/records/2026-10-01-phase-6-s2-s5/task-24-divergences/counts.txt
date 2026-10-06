@@ -5,6 +5,7 @@
 # Sections after `fix round 1`: oracle.sh is the rules' wrapper, ours.sh runs $REXX_RUN, a release
 # rexx-run built at 974267cc0; lone_foreign runs with EXTRA_LIB naming the directory of a
 # libforeign.so built from probes/foreign.cpp by the line in its header.
+# Sections after `fix round 2`: the same scripts, rexx-run built at 611f44014.
 == redirect_wrapper ours
      30 rc=0|main 0|w 1|w 2|w 3|
 == redirect_wrapper oracle
@@ -57,3 +58,9 @@ rc=120|0 0 abc LENGTH|E: rexx-exec: a wait that nothing left to run can end is n
 rc=137|0 0 abc LENGTH|wall 25.00 s
 == lone_foreign ours (EXTRA_LIB: the directory holding libforeign.so)
      30 rc=137|
+== fix round 2
+== tid oracle
+     30 rc=0|main same tid 1|
+== tid ours (EXTRA_LIB: the oracle's build/lib, for librxunixsys.so)
+      3 rc=0|main same tid 0|
+     27 rc=0|main same tid 1|

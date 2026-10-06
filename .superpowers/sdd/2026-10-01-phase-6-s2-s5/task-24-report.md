@@ -206,3 +206,41 @@ Brief `task-24-fix1-brief.md`. Scratch and target dirs under `/tmp/claude-1000/p
 - C5's mutation shows y2 can fail, not that it adds coverage: two existing notifier tests catch the
   same mutation.
 - C6 has no delay-reverting mutation (reason above).
+
+## Fix round 2
+
+Re-review `task-24-rereview-1.md` (N1, N2, the run-dir note). Scratch under
+`/tmp/claude-1000/p6-t24f2/`.
+
+### Commits
+
+- (see the ledger; this section is in the round's single commit)
+
+### Changes
+
+- N1: `probes/tid.rex` (the reviewer's program) committed; `counts.txt` section `fix round 2`:
+  oracle 30 `rc=0|main same tid 1|`; ours (`EXTRA_LIB` the oracle's `build/lib`) 27
+  `main same tid 1`, 3 `main same tid 0`. Row 23's false sentence replaced with that measurement.
+- N2: row 22 reads "when an activity other than the new continuation is ready" (P36).
+- `oracle.sh` and `ours.sh` remove their run dir on EXIT (`rm -f` of the three files they write,
+  then `rmdir`); after the 60 tid runs `$TMPDIR` held nothing.
+- Line references: rows 14-24 start at 1574, 1592, 1608, 1626, 1642, 1658, 1673, 1692, 1711, 1742,
+  1762, row 24 ends at 1784, the Alarm/Ticker DELIVERED line is 5889; the gate record's table,
+  Alarm reference and the rows-with-counts sentence (now including 23) updated.
+
+### Checks (P51)
+
+- `cargo fmt --all --check`: exit 0. `cargo clippy --workspace --all-targets -- -D warnings`: exit 0
+  (Checking rexx-exec seen).
+- `memcap 8G cargo test --workspace --release --no-fail-fast` with `rust/target` a symlink to the
+  scratch target: 144 results, 3023 passed, 18 failed, 4 ignored. The 18 are in `package_requires`
+  (`a_requires_cycle_is_the_oracles_own_report`) and `signals`, each comparing a run-directory path
+  under `CARGO_TARGET_TMPDIR`, which the symlink makes differ. Re-run with
+  `CARGO_TARGET_DIR=/tmp/claude-1000/p6-t24f2/target` (no symlink): 24 and 37 passed, 0 failed. The
+  binary-path tests that failed in round 1 passed in the symlinked run.
+
+### Concerns
+
+- No single target-dir layout passes the whole suite outside `rust/target` itself: the binary-path
+  tests need `rust/target/release/rexx-run`, and the path-comparing tests fail when `rust/target` is
+  a symlink.
