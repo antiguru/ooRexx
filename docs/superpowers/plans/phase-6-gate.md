@@ -911,57 +911,57 @@ note, not a defect, `2026-10-04-send-site-cache-self-customization`.
 
 ### Criterion 4, the single-owner audit (Task 23)
 
-The inventory is derived by ruling P71's command, from the repository root at `0ac73b804`; its
+The inventory is derived by ruling P71's command, from the repository root at `d9e17e5c8`; its
 output is `docs/superpowers/records/2026-10-01-phase-6-s2-s5/criterion-4-inventory.txt`:
 
 ```
 /bin/grep -a -rn 'unsafe impl\|thread::spawn\|thread::Builder\|thread::scope\|Arc<\|Mutex<\|Condvar\|Atomic\|thread_local!' rust/crates
 ```
 
-Every hit falls in a row below (file and line at `0ac73b804`). A plain `static` needs no row: the
+Every hit falls in a row below (file and line at `d9e17e5c8`). A plain `static` needs no row: the
 compiler requires it to be `Sync`.
 
 | Site | Cross-thread type | Why sound | Fact or test |
 |---|---|---|---|
-| `rexx-exec/src/island.rs:52` | `Islanded<T>`, for the payloads `IslandPayload` lists (`:31`): `NonNull<Interp>` (`Island`) and `(Box<OffBaton>, ThreadContext)` (`PooledCall::work`, `dispatch/library.rs:1077`), which holds `ObjRef`s and an `Rc` | made and taken only on the baton; moved untouched; `Lent<'b>` bounds the `&mut Interp` | `unsafe impl<T: IslandPayload> Send` (P72): a third payload does not compile (`task-23-report.md`); `island::tests::an_island_value_is_made_only_on_the_baton`, `..._taken_only_on_the_baton`; TSan (criterion 3) |
-| `rexx-exec/src/island.rs:130-138` | `Interp`, `RegFrame<'static>` | neither is `Send` | not-`Send` assertion (A3); its control, the same assertion on `u64`, fails E0283 (`task-23-report.md`) |
+| `rexx-exec/src/island.rs:56` | `Islanded<T>`, for the payloads `IslandPayload` lists (`:31`): `NonNull<Interp>` (`Island`) and `(Box<OffBaton>, ThreadContext)` (`PooledCall::work`, `dispatch/library.rs:1077`); the box holds `ObjRef`s and no `Rc` or `Cell`, the context is an `Rc` | made and taken only on the baton; moved untouched; the root pointer is dereferenced only by its lendee, through `Lent::interp` or a callback's `HostRef`, while the lender waits; the context drops under a lend, and an abandoned call's box drops off the baton |  `unsafe impl<T: IslandPayload> Send` (P72): a third payload does not compile (`task-23-report.md`); `island::tests::an_island_value_is_made_only_on_the_baton`, `..._taken_only_on_the_baton`; TSan (criterion 3) |
+| `rexx-exec/src/island.rs:132-142` | `Interp`, `RegFrame<'static>` | neither is `Send` | not-`Send` assertion (A3); its control, the same assertion on `u64`, fails E0283 (`task-23-report.md`) |
 | `rexx-exec/src/baton.rs:21,23,26` | `Baton<L>`: `Mutex<State>`, `Condvar`, test `AtomicU64` | the holder and lend state is the lock's data; `lent()` answers only to the lendee | `tests/loom.rs` baton models; TSan |
-| `rexx-exec/src/timer.rs:64,85,87,178,245,287,321`; `lib.rs:1238`; `dispatch/library.rs:1081-1211` | `Arc<Inbox<Posted>>`, `Arc<InterpBaton>`, `Requests(AtomicU32)` | `Posted` holds no `ObjRef`; request bits publish no data | `require_send::<Posted>()` (`scheduler.rs:171`, A4); `ObjRef` compile_fail (`rexx-core/src/handle.rs:52`, `:57`); `tests/loom.rs` inbox and timer models; `scheduler::tests::a_post_from_another_thread_ends_an_idle` |
+| `rexx-exec/src/timer.rs:64,85,87,178,245,287,321`; `lib.rs:1239`; `dispatch/library.rs:1081-1211` | `Arc<Inbox<Posted>>`, `Arc<InterpBaton>`, `Requests(AtomicU32)` | `Posted` holds no `ObjRef`; request bits publish no data | `require_send::<Posted>()` (`scheduler.rs:171`, A4); `ObjRef` compile_fail (`rexx-core/src/handle.rs:52`, `:57`); `tests/loom.rs` inbox and timer models; `scheduler::tests::a_post_from_another_thread_ends_an_idle` |
 | `rexx-exec/src/scheduler/pool.rs:52-83,123,177` | `Arc<Shared>`, `Arc<Mailbox>`, `Job = Box<dyn FnOnce() + Send>` | a job is `Send` by its type; the job kinds (`scheduler.rs:633` native call, `:664` blocking operation, `input.rs:377` stdin) capture `Send` values and `Islanded` | the type of `Job`; `scheduler/tests/pool.rs` |
 | `rexx-exec/src/timer.rs:205` | timer thread | touches only the registry (`Mutex<State>`) and inboxes | `static REGISTRY` (`Sync` by the compiler); loom timer models |
-| `rexx-exec/src/lib.rs:3151` | interpreter thread | its body is `FnOnce + Send + 'static`; `Interp` is built on it | the closure's bound; A3 |
+| `rexx-exec/src/lib.rs:3142` | interpreter thread | its body is `FnOnce + Send + 'static`; `Interp` is built on it | the closure's bound; A3 |
 | `rexx-exec/src/command.rs:618` | pipe drain, `thread::scope` | captures pipes and `&(dyn Fn + Sync)` only | the `Sync` bound |
-| `rexx-exec/src/signal.rs:36,40` | `static PENDING: AtomicBool`, `WAKE: AtomicI32` | async-signal-safe flags; carry no data | `signal.rs` unit tests; loom `timer::signal` models |
+| `rexx-exec/src/signal.rs:36,40` | `static PENDING: AtomicBool`, `WAKE: AtomicI32` | async-signal-safe flags; carry no data | `signal.rs` unit tests (raiser threads `:237`, `:269`); loom `timer::signal` models |
 | `rexx-exec/src/sync.rs` | std or loom re-exports, `Wake` | the shim the loom models compile | `tests/loom.rs` |
 | `rexx-api/src/ffi.rs:109,112` | `unsafe impl Send for ValueDescriptor`, `Value` | a word and two ints; pointer members are addresses, dereferenced in `unsafe` at their sites | `require_send::<NativeCall>()`, `<Completion>()` (`invoke.rs:250-254`); `rexx-api/tests/invoke.rs:754-760` moves both across threads |
-| `rexx-api/src/ffi.rs:619` | `Requester = Arc<dyn Baton + Send + Sync>` | a foreign thread reaches the interpreter only by taking the baton | `HostRef` debug asserts (`ffi.rs:192`, `:208`, `:1320`) tested by `ffi.rs:6330`; `scheduler/tests/callbacks.rs` |
+| `rexx-api/src/ffi.rs:619` | `Requester = Arc<dyn Baton + Send + Sync>` | a foreign thread reaches the interpreter only by taking the baton | `HostRef` debug asserts (`ffi.rs:192`, `:208`) tested by `ffi.rs:6330`; `scheduler/tests/callbacks.rs` |
 | `rexx-api/src/ffi.rs:700`, `layout.rs:421`, `load.rs:1518` | non-test `thread_local!`s `CALLING`, `REFUSED`, `HOOK_THREW` | per native call on one OS thread's stack; no `ObjRef` | a `thread_local!` value is not sent; every other `thread_local!` hit is `#[cfg(test)]` or in a test file (`/bin/grep -a -rn -B3 'thread_local!' --include=*.rs rust/crates`) |
 | `rexx-api/src/load.rs:113-205,1157-2018` | `Arc<Mapping>` (`Mutex<Option<Library>>`, `AtomicBool`, `AtomicUsize`) | a close refuses while a call is counted in flight; the row outlives its mapping by the `Arc` | compile_fail `load.rs:191`, `:1681`; `load.rs` tests |
 | `rexx-api/src/load.rs:746-900` (doc-hidden) | foreign-thread and buffer-handshake test natives (P70) | play an extension's foreign thread | `scheduler/tests/callbacks.rs`, `scheduler/tests/lent.rs` |
 | `rexx-parse/src/selector.rs:19,44` | `Selector(Arc<[u8]>)` | immutable bytes | `Arc<[u8]>: Send + Sync` |
-| test, tool and probe files: `rexx-api/src/ffi.rs` tests, `rexx-api/src/invoke/tests.rs`, `rexx-api/tests/invoke.rs`, `rexx-exec/src/scheduler/tests*`, `rexx-exec/src/dispatch/library/tests.rs`, `rexx-exec/src/ir/corpus_shape_tests.rs`, `rexx-exec/src/bin/rexx-ir.rs`, `rexx-exec/tests/*`, `rexx-classes/tests/*`, `rexx-parse/tests/deep.rs`, `rexx-parse/examples/depth_probe.rs`; and `#[cfg(test)]` counters in `rexx-exec/src/{lib,scheduler,install,ir/compile,ir/counters,dispatch/library}.rs`, `rexx-num/src/addsub.rs` | test harness, tool and probe threads, test counters | outside the interpreter or compiled only for tests | not in the shipped interpreter |
+| test, tool and probe files: `rexx-api/src/ffi.rs` tests, `rexx-exec/src/island.rs` tests (`:167`), `rexx-exec/src/signal.rs` tests (`:237`, `:269`), `rexx-api/src/invoke/tests.rs`, `rexx-api/tests/invoke.rs`, `rexx-exec/src/scheduler/tests*`, `rexx-exec/src/dispatch/library/tests.rs`, `rexx-exec/src/ir/corpus_shape_tests.rs`, `rexx-exec/src/bin/rexx-ir.rs`, `rexx-exec/tests/*`, `rexx-classes/tests/*`, `rexx-parse/tests/deep.rs`, `rexx-parse/examples/depth_probe.rs`; and `#[cfg(test)]` `thread_local!` test statics in `rexx-exec/src/{lib,scheduler,install,ir/compile,ir/counters,dispatch/library}.rs`, `rexx-num/src/addsub.rs` | test harness, tool and probe threads, test statics | outside the interpreter or compiled only for tests | not in the shipped interpreter |
 
 The static assertions Task 23 adds (the S5 audit's A1-A5, `s5-find-audit.md`):
 
 * A1, `rexx-core/src/frame.rs:90`, `:99`: compile_fail doctests, a `RegFrame` held by a `'static`
   value (E0597) and sent (E0277), with a compiling control holding the register's `ObjRef`.
-* A2, `rexx-core/src/body.rs:138`: `require_static::<Body>()`.
-* A3, `rexx-exec/src/island.rs:130-138`: `Interp` and `RegFrame<'static>` are not `Send`.
+* A2, `rexx-core/src/body.rs:139`: `require_static::<Body>()`.
+* A3, `rexx-exec/src/island.rs:132-142`: `Interp` and `RegFrame<'static>` are not `Send`.
 * A4, `rexx-exec/src/scheduler.rs:171`: `require_send::<Posted>()`.
-* A5, `rexx-exec/src/island.rs:31`, `:52`: `Islanded`'s payloads sealed (P72).
+* A5, `rexx-exec/src/island.rs:31`, `:56`: `Islanded`'s payloads sealed (P72).
 
 `cargo test -p rexx-core --doc` at `0ac73b804`: 3 passed, and 5 compile_fail passed.
 
-Two spec sentences are amended to what holds (P73), in
+Spec sentences are amended to what holds (P73), in
 `docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md`: section 5's "refuses an object
 handle" adds that object handles reach a pool thread of the same interpreter only inside
-`Islanded` (P52); section 2.5's non-test `thread_local!`s add `CALLING` (P56).
+`Islanded` (P52, P72); section 2.5's non-test `thread_local!`s add `CALLING` (P56).
 
 ### Criterion 5, D3 frame ownership
 
 | Claim | Fact or test |
 |---|---|
-| no heap object holds a frame | `Body` has no lifetime (`rexx-core/src/body.rs:57`) and is `'static` (A2, `:138`); `RegFrame<'a>` borrows its arena (`frame.rs:117`), cannot outlive it (compile_fail `frame.rs:168`), cannot be held by a `'static` value or sent (A1, `frame.rs:90`, `:99`); `NativeState::Pointer(*mut c_void)` (`body.rs:177`) is a raw pointer outside the lifetime fact and holds C-supplied addresses only (P74) |
+| no heap object holds a frame | `Body` has no lifetime (`rexx-core/src/body.rs:57`) and is `'static` (A2, `:139`); `RegFrame<'a>` borrows its arena (`frame.rs:117`), cannot outlive it (compile_fail `frame.rs:168`), cannot be held by a `'static` value or sent (A1, `frame.rs:90`, `:99`); `NativeState::Pointer(*mut c_void)` (`body.rs:177`) is a raw pointer outside the lifetime fact; it holds a C-supplied address (`dispatch/library.rs:1428`) or an Alarm or Ticker timer id (`dispatch/time_support.rs:201`), never a frame (P74) |
 | contexts resolve across all activities | `dispatch/context.rs:159` `at_context`, `scheduler.rs:723` `idle_context_owner` |
 | live, finished, moved | `scheduler::tests::a_context_reads_an_activation_of_another_live_activity` (live, then 98.981 once finished), `scheduler::tests::a_context_follows_its_activation_to_a_reply_continuation` (moved by REPLY); corpus `context_of_another_activity`, `context_moved_by_reply` |
 
@@ -969,52 +969,67 @@ handle" adds that object handles reach a pool thread of the same interpreter onl
 
 The `sharing` feature of `rexx-exec` (forwarding `rexx-core`'s) tags each heap slot with the last
 activity that resolved its object through `Heap::get`, `Heap::get_mut` or `Heap::body_text`, or made
-it, and counts objects touched by more than one activity; `Outcome::sharing` reports the counts.
-`concurrency_tests` `sharing::one_activity_shares_nothing` and
-`sharing::an_object_read_by_a_started_activity_is_shared` witness it; the second fails with the
-tag switch in `Interp::switch_to` and `Interp::swap_running` removed (`task-23-report.md`).
+it, and counts objects touched by more than one activity, separately for objects made before the program
+(the interpreter and its library bootstrap) and objects the program made; `Outcome::sharing` reports
+both. The collector's walks and the UNINIT registry's resolve untagged, and the debug-only
+re-derivations of the SAY route and of a directory's `StoreView` read with touches paused, so a
+debug build counts what a release build does. `concurrency_tests` witnesses:
+`sharing::one_activity_shares_nothing`; `sharing::an_object_read_by_a_started_activity_is_shared`,
+which fails with the tag switch in `Interp::switch_to` and `Interp::swap_running` removed; and
+`sharing::uninit_objects_another_activity_never_names_are_not_shared`, which failed (program shared
+102) before the registry walk resolved untagged (`task-23-report.md`).
 
-Off, it costs nothing: release `rexx-run` built without features from `0ac73b804` has the same
-`.text` hash as one built from the base with only the static assertions applied, and the same
-functions with the same sizes as the base apart from one symbol's name
+Off, it costs nothing: release `rexx-run` built without features from `d9e17e5c8` has the same
+`.text` hash as one built from the base with only the static assertions applied, and that build has
+the same functions with the same sizes as the base apart from one symbol's name
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/sharing-off-text-hash.txt`).
 
-At `0ac73b804`, from `rust/`, files in `docs/superpowers/records/2026-10-01-phase-6-s2-s5/`:
+At `d9e17e5c8`, from `rust/`, release, each command and its table in the named file under
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/`. The populations:
 
-```
-memcap 8G cargo test --release -p rexx-exec --features sharing --test corpus -- --exact sharing_fraction_over_the_corpus --nocapture
-memcap 8G cargo test --release -p rexx-exec --features sharing --test concurrency_tests -- --exact sharing::sharing_fraction_over_the_derived_list --nocapture
-```
+* corpus: every program of the corpus differential (`sharing-corpus.md`; the same command in a
+  debug build writes the same table);
+* ooTest, every group: every `.testGroup` under `ootest/ooRexx` run whole through `testOORexx.rex`
+  in process, except groups with a test that reaches rxapi, which the record lists
+  (`sharing-groups.md`, with each group's outcome);
+* ooTest, criterion 1's derived list: each test run alone (`sharing-derived.md`);
+* ooTest, the in-process harnesses: every run of ours in the keyword, bif and expression assertion
+  harnesses' differential tests and in `api_group_tests`, which runs each test of `API/oo`'s
+  CONVERSION, FUNCTION and METHOD groups but those reaching rxapi
+  (`sharing-ootest-harnesses.md`).
 
-| run | record | objects | made before the program | shared | shared / objects |
+| population | runs | bootstrap objects | bootstrap shared | program objects | program shared |
 |---|---|---|---|---|---|
-| corpus, every program of the differential | `sharing-corpus.md` | 520530 | 214064 | 1088 | 0.21% |
-| ooTest, criterion 1's derived list | `sharing-derived.md` | 374510 | 54944 | 790 | 0.21% |
-
-Each record lists its programs or tests with a shared object (corpus) or every test with its
-outcome (derived list).
+| corpus | 787 | 214064 | 500 (0.234%) | 306466 | 585 (0.191%) |
+| ooTest, every group | 388 | 105536 | 66 (0.063%) | 1872392 | 157 (0.008%) |
+| ooTest, criterion 1's derived list | 202 | 54944 | 306 (0.557%) | 319566 | 391 (0.122%) |
+| ooTest, keyword assertion bodies | 896 | 243712 | 0 | 15676 | 0 |
+| ooTest, bif assertion runs | 10184 | 2770048 | 0 | 12609 | 0 |
+| ooTest, expression assertion rows | 4259 | 1158448 | 0 | 10858 | 0 |
+| ooTest, `api_group_tests` | 577 | 156944 | 0 | 1222310 | 0 |
 
 ### Criterion 7, the ping-pong benchmark
 
 `rust/bench-programs/pingpong/pingmsg.rex` (a message started and its result awaited),
 `pingsem.rex` (two activities alternating through two `EventSemaphore`s) and `pingguard.rex` (two
 activities passing a turn through `GUARD ON WHEN`). Recorded, not gated. From `rust/`, `rexx-run` a
-release build of `e57dc8315` without features, 32 CPUs:
+release build without features from a `git archive` of `d9e17e5c8` (the build whose `.text` hash
+criterion 6 cites), 32 CPUs:
 
 ```
-PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard" bash bench-programs/wallclock.sh -r 9 -o OUT -x "pingpong/pingmsg pingpong/pingsem pingpong/pingguard" rexx-run=TARGET/release/rexx-run
+PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard" bash bench-programs/wallclock.sh -r 9 -o OUT -x "pingpong/pingmsg pingpong/pingsem pingpong/pingguard" rexx-run=REXX_RUN
 ```
 
-Load averages 1.18 3.46 6.68 before and 1.42 3.31 6.52 after
+Load averages 2.27 8.41 10.09 before and 2.10 7.78 9.83 after
 (`docs/superpowers/records/2026-10-01-phase-6-s2-s5/pingpong/binaries.txt`); every run exited 0 with
 the same stdout on both sides. Medians of 9 interleaved runs, seconds (`pingpong/table.txt`, runs in
 `pingpong/wall.tsv`):
 
 | program | rexx-run | oracle |
 |---|---|---|
-| `pingmsg` | 1.325 | 0.656 |
-| `pingsem` | 0.121 | 0.581 |
-| `pingguard` | 0.119 | 0.470 |
+| `pingmsg` | 1.354 | 0.676 |
+| `pingsem` | 0.121 | 0.446 |
+| `pingguard` | 0.122 | 0.567 |
 
-Each program gave one stdout and rc 0 in 30 runs on each side (`pingpong/thirty-runs.txt`, by
-`pingpong/thirty-runs.sh`).
+Each program gave one stdout and rc 0 in 30 runs on each side, each side from a fresh empty
+directory (`pingpong/thirty-runs.txt`, by `pingpong/thirty-runs.sh`).

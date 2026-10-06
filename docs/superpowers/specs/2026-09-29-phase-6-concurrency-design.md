@@ -344,8 +344,8 @@ reached, a release with ready activities leaves them for the next thread that ta
 * **Isolation at the type level.** `ObjRef` becomes `!Send` and `!Sync` (a phantom raw-pointer marker;
   a scratch build confirmed nothing sends one today), so the compiler refuses an object handle in the
   inbox, a completion or another interpreter. Object handles reach a pool thread of the same
-  interpreter only inside `Islanded`, whose payloads are sealed and taken out under a lend (ruling
-  P52).
+  interpreter only inside `Islanded`, whose payloads are sealed and taken out under a lend (rulings
+  P52, P72).
 * **Sharing-fraction instrument.** A feature-gated build tags each object with the last activity that
   resolved it and counts objects touched by more than one activity.
 

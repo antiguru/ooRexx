@@ -1,4 +1,4 @@
-# criterion 4 inventory (ruling P71), at 0ac73b804, from the repo root:
+# criterion 4 inventory (ruling P71), at d9e17e5c8, from the repo root:
 # /bin/grep -a -rn 'unsafe impl\|thread::spawn\|thread::Builder\|thread::scope\|Arc<\|Mutex<\|Condvar\|Atomic\|thread_local!' rust/crates
 rust/crates/rexx-exec/src/baton.rs:18:use crate::sync::{Condvar, Mutex, lock, thread, wait};
 rust/crates/rexx-exec/src/baton.rs:21:    state: Mutex<State<L>>,
@@ -11,8 +11,8 @@ rust/crates/rexx-exec/src/signal.rs:36:static PENDING: AtomicBool = AtomicBool::
 rust/crates/rexx-exec/src/signal.rs:40:static WAKE: AtomicI32 = AtomicI32::new(-1);
 rust/crates/rexx-exec/src/signal.rs:237:            let raiser = std::thread::spawn(|| {
 rust/crates/rexx-exec/src/signal.rs:269:        let raiser = std::thread::spawn(|| {
-rust/crates/rexx-exec/src/island.rs:52:unsafe impl<T: IslandPayload> Send for Islanded<T> {}
-rust/crates/rexx-exec/src/island.rs:163:        std::thread::scope(|scope| {
+rust/crates/rexx-exec/src/island.rs:56:unsafe impl<T: IslandPayload> Send for Islanded<T> {}
+rust/crates/rexx-exec/src/island.rs:167:        std::thread::scope(|scope| {
 rust/crates/rexx-exec/src/scheduler.rs:2292:thread_local! {
 rust/crates/rexx-exec/src/scheduler.rs:2328:thread_local! {
 rust/crates/rexx-exec/src/install.rs:2481:thread_local! {
@@ -54,8 +54,8 @@ rust/crates/rexx-exec/src/timer.rs:321:    pub(crate) fn inbox(&self) -> Arc<Inb
 rust/crates/rexx-exec/src/lib.rs:228:thread_local! {
 rust/crates/rexx-exec/src/lib.rs:257:thread_local! {
 rust/crates/rexx-exec/src/lib.rs:271:thread_local! {
-rust/crates/rexx-exec/src/lib.rs:1238:    baton: crate::sync::Arc<crate::island::InterpBaton>,
-rust/crates/rexx-exec/src/lib.rs:3151:    let interpreter = std::thread::Builder::new()
+rust/crates/rexx-exec/src/lib.rs:1239:    baton: crate::sync::Arc<crate::island::InterpBaton>,
+rust/crates/rexx-exec/src/lib.rs:3142:    let interpreter = std::thread::Builder::new()
 rust/crates/rexx-exec/src/sync.rs:19:pub(crate) use loom::sync::atomic::{AtomicU32, Ordering};
 rust/crates/rexx-exec/src/sync.rs:21:pub(crate) use loom::sync::{Arc, Condvar, Mutex, MutexGuard};
 rust/crates/rexx-exec/src/sync.rs:25:pub(crate) use std::sync::atomic::{AtomicU32, Ordering};
@@ -93,7 +93,7 @@ rust/crates/rexx-exec/src/ir/counters.rs:182:thread_local! {
 rust/crates/rexx-exec/src/ir/counters.rs:202:thread_local! {
 rust/crates/rexx-exec/src/ir/counters.rs:222:thread_local! {
 rust/crates/rexx-exec/src/bin/rexx-ir.rs:43:    let rendered = std::thread::Builder::new()
-rust/crates/rexx-exec/tests/watchdog/mod.rs:48:    std::thread::Builder::new()
+rust/crates/rexx-exec/tests/watchdog/mod.rs:74:    std::thread::Builder::new()
 rust/crates/rexx-exec/tests/loom.rs:29:use loom::sync::atomic::{AtomicUsize, Ordering};
 rust/crates/rexx-exec/tests/loom.rs:36:fn hold(baton: &Baton<u32>, inside: &AtomicUsize) {
 rust/crates/rexx-exec/tests/loom.rs:52:        let inside = Arc::new(AtomicUsize::new(0));

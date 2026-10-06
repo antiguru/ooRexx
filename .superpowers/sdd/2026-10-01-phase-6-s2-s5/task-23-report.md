@@ -89,3 +89,51 @@ At `300aa2695`: `cargo test --workspace --release --no-fail-fast` (built first, 
 - The sharing tags live in `rexx-core`'s heap behind a forwarded feature, not in `rexx-exec` alone.
 - "ooTest" for criterion 6 is criterion 1's derived list, not every ooTest test.
 - Clippy and fmt were last run at `e57dc8315`; `300aa2695` changes no Rust source.
+
+## Fix round 1
+
+Code commit `d9e17e5c8`; records and gate in the commit after it.
+
+1. C1: the grant's SAFETY note (`island.rs:36-55`) names `HostRef`'s `Deref`/`DerefMut` through
+   `Island::host` beside `Lent::interp`, and the abandoned call's off-baton drop of the box.
+   Checked: `OffBaton` is `HeldCall` (`Held` = optional stub fn pointer + `Arc<Mapping>`, plus a
+   `MethodId` or a `c_int`), `NativeCall` (words) and `CStringPool` (`ObjRef` words, boxed and
+   vector bytes): no `Rc` or `Cell`. The `ThreadContext` is dropped explicitly (`drop(thread)`)
+   while `ended`, the recall's lend, is live, so no change was needed there.
+2. C2: `clear_uninit_all` filters with `resolve` and a slot match. Witness
+   `sharing::uninit_objects_another_activity_never_names_are_not_shared`: with the old
+   `self.get(r)` filter restored temporarily it fails, `program: SharingCount { objects: 112,
+   shared: 102 }`; with the fix it passes. Restored by copy, `cmp` clean.
+3. C3: two debug-only read paths found by a temporary backtrace on each new shared mark, diffed
+   between a debug and a release `rexx-run` on `lang/method_reply.rex`: `output_route`'s
+   `#[cfg(debug_assertions)]` re-derivation and `directory_get`'s `debug_assert_eq!` re-reading a
+   `StoreView`. Both now run with touches paused. A first version used a bool and the nested pause
+   (route, then a directory read inside it) cleared it early, which showed as new marks; the pause
+   is a depth now. Corpus table in a debug build and in a release build at `d9e17e5c8`:
+   byte-identical (`diff` empty).
+4. C4: `SharingReport { bootstrap, program }`, each a `SharingCount { objects, shared }`.
+   `Heap::sharing_program_starts` at the bootstrap's end marks later slots as the program's.
+5. C5: `-x ORACLE_PROGRAMS`.
+6. F1: populations measured at `d9e17e5c8`: corpus; every `.testGroup` run whole in process (new
+   test `sharing::sharing_fraction_over_every_ootest_group`, skipping groups `reaching_rxapi`
+   lists); criterion 1's derived list; the keyword, bif and expression assertion harnesses
+   (through a `REXX_SHARING_LOG` line per run, written by `watchdog::log_sharing`, which
+   `run_bounded_with` and `keyword_assertions::evaluate` call); and `api_group_tests` under its gate
+   with the same log, because the every-group run skips `API/oo/FUNCTION` whole while
+   `api_group_tests` runs its tests that do not reach rxapi. The
+   every-group run at the default 32 rayon threads was OOM-killed at the 8G cap after logging
+   386 runs; with `RAYON_NUM_THREADS=4` it completes. Each log's sums equal its table's totals.
+7. F2: the P74 clause names both producers of `NativeState::Pointer`: `new_pointer`
+   (`dispatch/library.rs:1428`) and `handle_object` (`dispatch/time_support.rs:201`).
+8. F3, F4: `ffi.rs:1320` dropped; island and signal test threads added to the test row and the
+   signal row; "test statics". Inventory re-run at `d9e17e5c8`: same line set as before but four
+   moved lines (island.rs, lib.rs, watchdog), record replaced.
+9. F5: "(rulings P52, P72)". F6: no count.
+10. F7: `thirty-runs.sh` takes the binary as `$1` and runs it from its own fresh empty dir; re-run.
+    The ping-pong wall clock was re-run too, with a binary built without features in its own
+    target dir: the earlier runs used `target/release/rexx-run` of a target dir where
+    `--features sharing` test builds also ran, and whether that file was the feature-off build was
+    not established. Medians moved by at most 0.14 s on the oracle side and 0.03 s on ours.
+
+Not done: a type-level check that `OffBaton` holds no `Rc` or `Cell`; the claim is in the SAFETY
+note only.

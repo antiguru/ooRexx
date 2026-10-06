@@ -20,6 +20,11 @@ head  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
 3777a3777
 > _RNvMs5_NtCsa1IxyF9TJH_9rexx_exec6islandNtB5_4Lent4wait 0000000000000225
 
+# Task 23 fix round 1: d9e17e5c8, built the same way (git archive at the same
+# path, its own target dir), without features:
+fix1  7c00da6895962f58e3a7b416c97efaa8430b6a1a05cc39b787de424b8b475d6f 3130350
+# equal to head and aonly.
+
 # text-hash.sh:
 #!/bin/bash
 # Builds release rexx-run from each named archived tree, moved in turn to one

@@ -1,4 +1,4 @@
-# 30 runs per side by thirty-runs.sh (rexx-run: a release build of e57dc8315): count, then line
+# 30 runs per side, each from a fresh empty dir, by: bash thirty-runs.sh REXX_RUN (REXX_RUN: a release build of d9e17e5c8 without features): count, then line
 pingmsg      30 80000
 pingmsg      30 rc=0
 pingmsg rexx-run      30 80000
