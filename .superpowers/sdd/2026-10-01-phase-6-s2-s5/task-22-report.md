@@ -255,6 +255,6 @@ All exit statuses were taken from `$?` of the unpiped command.
 6. **A queued note may be missing.** progress.md says "Queued: chars/lines answer 1 after a read
    drained the pipe, oracle 0". I found no file for it under `.superpowers/sdd/queued/`; I
    searched for `drained`. It is not listed among the S4 queued notes.
-7. **Scratch is not cleaned yet.** The directories `target`, `target-tsan`, `target-base`,
-   `target-bisect`, `target-loom` and `bisect/` are under `p6-scratch/t22/`. They are deleted at
-   the end of this task (below).
+7. **Scratch.** The directories `target`, `target-tsan`, `target-base`, `target-bisect`,
+   `target-loom`, `bisect/` and `base-s3/` under `p6-scratch/t22/` are deleted. Logs and scripts
+   (44 MB) remain there.
