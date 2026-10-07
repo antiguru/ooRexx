@@ -112,17 +112,50 @@ pub(crate) struct FlatLoop {
     header_clause: HeaderClause,
     /// The echo site `header_clause` names when it is `Iterate`.
     iterate_site: IterateSite,
-    /// `Some(true)` for `UNTIL`, `Some(false)` for `WHILE`, `None` for a loop
-    /// with neither. **The condition's own node is not held here**, because
-    /// this outlives the borrow of `code` a reference to it would need; the
-    /// node is read back off the `DO` instruction at the one point per pass
-    /// that tests it, and this says whether that read is owed at all.
-    conditional: Option<bool>,
-    /// Whether a pass's header takes [`Interp::flat_loop_header_general`]:
-    /// a `WHILE`, a `COUNTER`, or both.
-    general_header: bool,
+    /// What a pass boundary tests beyond the advance. **The condition's own
+    /// node is not held here**, because this outlives the borrow of `code` a
+    /// reference to it would need; the node is read back off the `DO`
+    /// instruction at the one point per pass that tests it.
+    test: PassTest,
     counter: Option<LoopCounter>,
     state: LoopState,
+}
+
+/// A flat loop's per-pass tests: `UNTIL` after the body, and whether the
+/// header takes [`Interp::flat_loop_header_general`] for a `WHILE` or a
+/// `COUNTER`. The two are bits of one byte, so a loop with neither pays one
+/// test of it per pass.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum PassTest {
+    Plain = 0,
+    Until = 1,
+    General = 2,
+    UntilGeneral = 3,
+}
+
+impl PassTest {
+    fn of(body: &Loop) -> PassTest {
+        match (&body.conditional, body.counter.is_some()) {
+            (Some(cond), counted) if cond.until => {
+                if counted {
+                    PassTest::UntilGeneral
+                } else {
+                    PassTest::Until
+                }
+            }
+            (Some(_), _) | (None, true) => PassTest::General,
+            (None, false) => PassTest::Plain,
+        }
+    }
+
+    fn until(self) -> bool {
+        self as u8 & 1 != 0
+    }
+
+    fn general(self) -> bool {
+        self as u8 & 2 != 0
+    }
 }
 
 impl FlatLoop {
@@ -144,8 +177,7 @@ impl FlatLoop {
             end_line: 0,
             header_clause: HeaderClause::Do,
             iterate_site: None,
-            conditional: None,
-            general_header: false,
+            test: PassTest::Plain,
             counter: None,
             state: LoopState::Forever,
         }
@@ -536,9 +568,29 @@ impl Interp {
         );
     }
 
+    /// One `Op::LoopHeaderValue`: a `COUNTER`'s reset, or `value` validated
+    /// and filed in `values` with the register `src` it came from where that
+    /// register roots the running loop's snapshot or supplier.
+    pub(crate) fn file_header_value(
+        &mut self,
+        code: &Code<'_>,
+        instruction: &Instruction,
+        role: HeaderRole,
+        src: u16,
+        value: ObjRef,
+        values: &mut LoopHeaderValues,
+    ) -> Result<(), Failure> {
+        match role {
+            HeaderRole::Counter => return self.reset_loop_counter(code, instruction, value),
+            HeaderRole::Over | HeaderRole::With => values.over_register = Some(src),
+            _ => {}
+        }
+        self.accept_header_value(role, value, values)
+    }
+
     /// Validates one header value against whatever its role requires and files
     /// it in `values`.
-    pub(crate) fn accept_header_value(
+    fn accept_header_value(
         &mut self,
         role: HeaderRole,
         value: ObjRef,
@@ -613,7 +665,7 @@ impl Interp {
                 values.over = Some(value);
             }
             HeaderRole::With => values.supplier = Some(self.with_supplier(value)?),
-            // `Interp::reset_loop_counter` files this role.
+            // [`Interp::file_header_value`] answers this role itself.
             HeaderRole::Counter => {}
         }
         Ok(())
@@ -644,7 +696,7 @@ impl Interp {
 
     /// A `COUNTER`'s reset to `value` and its `>K>` line, at the `DO`/`LOOP`
     /// clause's own indent, before any header expression runs.
-    pub(crate) fn reset_loop_counter(
+    fn reset_loop_counter(
         &mut self,
         code: &Code<'_>,
         instruction: &Instruction,
@@ -1569,9 +1621,7 @@ impl Interp {
             do_line,
             header_clause: HeaderClause::Do,
             iterate_site: None,
-            conditional: body.conditional.as_ref().map(|cond| cond.until),
-            general_header: body.counter.is_some()
-                || body.conditional.as_ref().is_some_and(|cond| !cond.until),
+            test: PassTest::of(body),
             counter: LoopCounter::of(code, body),
             state,
         };
@@ -1714,7 +1764,7 @@ impl Interp {
         // test `WHILE` or advance a control variable, so the echo here is
         // unconditional rather than sharing the top-of-loop one below -- which
         // is why that one is not emitted at all for an `UNTIL` loop.
-        if flat.conditional == Some(true) {
+        if flat.test.until() {
             if echoing
                 && let Some((line, text)) =
                     self.clause_site(source, &code.body.instructions[flat.do_index])
@@ -1853,7 +1903,7 @@ impl Interp {
         flat: &mut FlatLoop,
         counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
-        if flat.general_header {
+        if flat.test.general() {
             return self.flat_loop_header_general(code, source, flat, counted);
         }
         let header_line = flat.header_line();
@@ -1864,17 +1914,21 @@ impl Interp {
         let blame = flat.header_clause;
         let site = &flat.iterate_site;
         let state = &mut flat.state;
-        let header = self.in_counted_clause(code, header_line, counted, |it| {
-            let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
-                Ok(advanced) => advanced,
-                Err(failure) => {
-                    it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
-                    return Err(failure);
-                }
-            };
-            it.settle_block_indent(advanced, do_indent);
-            Ok(advanced)
-        });
+        // `in_counted_clause` spelled out rather than given a closure: the
+        // closure's inlining into the driver is a codegen decision that
+        // unrelated changes to the flat path flip (+18.6% on `emptyloop`).
+        let entry = self.enter_clause(header_line, counted);
+        let ran = match self.loop_advance(code, state, do_indent, loop_indent) {
+            Ok(advanced) => {
+                self.settle_block_indent(advanced, do_indent);
+                Ok(advanced)
+            }
+            Err(failure) => {
+                self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                Err(failure)
+            }
+        };
+        let header = self.leave_clause(entry, code, ran);
         let header = match header {
             Ok(header) => header,
             // The boundary's own failure, a requested `HALT`, is blamed as the
@@ -1898,17 +1952,7 @@ impl Interp {
         flat: &mut FlatLoop,
         counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
-        let cond = match flat.conditional {
-            Some(false) => match loop_conditional_of(code, flat.do_index) {
-                Some(cond) => Some(cond),
-                None => {
-                    return Err(
-                        Loud::instruction(&code.body.instructions[flat.do_index].kind).into(),
-                    );
-                }
-            },
-            _ => None,
-        };
+        let cond = loop_conditional_of(code, flat.do_index).filter(|cond| !cond.until);
         let header_line = flat.header_line();
         let do_indent = flat.do_indent;
         let loop_indent = flat.loop_indent;
