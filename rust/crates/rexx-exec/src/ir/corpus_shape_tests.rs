@@ -378,11 +378,16 @@ fn check_body(
             let mut slot = 0u32;
             let mut group = 0;
             for (op_at, op) in region.iter().enumerate() {
-                if !matches!(op, Op::LoopHeaderValue { .. }) {
+                let Op::LoopHeaderValue { role, .. } = op else {
                     continue;
-                }
-                let expected =
-                    crate::run::loop_header_slot(loop_, slot).map_or(Root::EvalExpr, root_of);
+                };
+                // A `COUNTER`'s slot has no expression and loads its reset
+                // value as a constant.
+                let expected = if *role == crate::run::HeaderRole::Counter {
+                    Root::Const
+                } else {
+                    crate::run::loop_header_slot(loop_, slot).map_or(Root::EvalExpr, root_of)
+                };
                 let actual = region[group..op_at].iter().filter_map(Root::of).next_back();
                 assert_eq!(
                     actual,

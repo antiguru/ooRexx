@@ -1,0 +1,32 @@
+# COUNTER, DO WITH and a stem OVER: a header slot with no expression, a
+# supplier, and a stem's tails.
+
+# do with
+program
+do with index i item v over .array~of('a', 'b')
+  say i v
+end
+----
+rc> 0
+out> 1 a
+out> 2 b
+
+# do counter
+program
+do counter c i = 1 to 2
+  nop
+end
+say c i
+----
+rc> 0
+out> 2 3
+
+# do over a stem target
+program
+a.1 = 1
+do qq over a.
+  say qq
+end
+----
+rc> 0
+out> 1

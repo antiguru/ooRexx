@@ -170,7 +170,7 @@ Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:582	agrees	no	no ro
 Loud	library_source	body	crates/rexx-exec/src/lib.rs:622	off-send-surface	-	-	-
 Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
 Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
-Loud	loop_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
+Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
 Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
 Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1504	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
 Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.972	o~sendWith(o, (1))

@@ -89,8 +89,7 @@ mod loops;
 #[cfg(test)]
 use loops::numeric_less;
 pub(crate) use loops::{
-    FlatLoop, FlatStart, FlatStep, HeaderPlan, HeaderRole, LoopHeaderValues, loop_header_plan,
-    loop_header_slot,
+    FlatLoop, FlatStart, FlatStep, HeaderRole, LoopHeaderValues, loop_header_plan, loop_header_slot,
 };
 
 /// Where control goes after one instruction (the design's "Control flow").
@@ -943,12 +942,6 @@ impl Interp {
             },
             InstructionKind::Otherwise => Ok(Flow::Next),
 
-            // `DO`/`LOOP`, every kind but `DO WITH` (the loud path,
-            // `run_loop`'s own doc comment) -- Task 11. Resolves the whole
-            // construct itself, every iteration, exactly the discipline
-            // `If`/`Select` already established: see `Flow::Leave`'s own
-            // doc comment for why `Do`'s own arm never returns until the
-            // entire loop is over, one way or another.
             // `DO`/`LOOP`, `IF` and `SELECT` are **not** reachable here.
             InstructionKind::Do(_)
             | InstructionKind::Loop(_)

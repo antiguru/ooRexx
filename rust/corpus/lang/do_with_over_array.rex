@@ -1,0 +1,2 @@
+/* DO WITH binds INDEX and ITEM from the supplier. */
+do with index i item v over .array~of('a', 'b'); say i v; end

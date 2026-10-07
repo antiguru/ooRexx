@@ -21,3 +21,25 @@ lang/scope_case_text_absorbed_other.rex
 lang/scope_internal_depth.rex
 lang/scope_debug_pause_routine.rex
 lang/scope_case_text_debug_line.rex
+
+# Task 2: COUNTER on every loop kind, DO WITH ... OVER a supplier, and DO OVER a
+# stem's tails (sorted, or a single tail: the order is deviation 1's).
+lang/do_counter_ctrl.rex
+lang/do_counter_rep.rex
+lang/do_counter_forever.rex
+lang/do_counter_while.rex
+lang/do_counter_until.rex
+lang/loop_counter.rex
+lang/loop_label_counter.rex
+lang/do_counter_over.rex
+lang/do_counter_trace.rex
+lang/do_with_over_array.rex
+lang/do_with_index_only.rex
+lang/do_with_item_only.rex
+lang/do_with_over_dir.rex
+lang/do_with_counter.rex
+lang/do_with_trace.rex
+lang/do_with_supplier_subclass.rex
+lang/do_with_errors.rex
+lang/do_over_stem_one.rex
+lang/do_over_stem_three.rex

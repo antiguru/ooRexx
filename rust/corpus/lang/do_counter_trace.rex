@@ -1,0 +1,13 @@
+/* COUNTER is reset to 0 before the header is evaluated and assigned on each
+   pass entered, traced as an assignment and a COUNTER keyword. */
+trace i
+c = 'pre'
+do counter c i = 1 to c + 2; end
+say c i
+do counter q 0; end
+say q
+n = 0
+do counter w while n < 2; n = n + 1; end
+do counter u until u > 1; end
+do counter s.1 2; end
+say s.1

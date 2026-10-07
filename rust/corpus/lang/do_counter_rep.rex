@@ -1,0 +1,2 @@
+/* COUNTER on a repeat count. */
+do counter c 3; end; say c

@@ -1,0 +1,2 @@
+/* COUNTER on DO WITH. */
+do counter c with index i item v over .array~of('a', 'b'); end; say c i v

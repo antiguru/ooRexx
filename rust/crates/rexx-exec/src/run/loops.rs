@@ -16,8 +16,9 @@ use super::{
     ConditionTrace, ControlExpr, Cow, Decoded, Expr, ExprKind, Failure, Flow, Instruction,
     InstructionKind, Interp, Loop, LoopConditional, LoopKind, Loud, NameShape, Novalue, Number,
     ObjRef, ProgramSource, Raised, RegFrame, SymbolId, compare_decoded, exact_small_int,
-    raised_for_count_not_whole, raised_iterate_wrong_kind, raised_repetition_count_not_whole,
-    raised_until_not_logical, raised_while_not_logical, shape_of, within_digits,
+    logical_value, raised_for_count_not_whole, raised_iterate_wrong_kind,
+    raised_repetition_count_not_whole, raised_until_not_logical, raised_while_not_logical,
+    shape_of, within_digits,
 };
 use crate::clause::DeadlineCounted;
 
@@ -117,6 +118,10 @@ pub(crate) struct FlatLoop {
     /// node is read back off the `DO` instruction at the one point per pass
     /// that tests it, and this says whether that read is owed at all.
     conditional: Option<bool>,
+    /// Whether a pass's header takes [`Interp::flat_loop_header_general`]:
+    /// a `WHILE`, a `COUNTER`, or both.
+    general_header: bool,
+    counter: Option<LoopCounter>,
     state: LoopState,
 }
 
@@ -140,6 +145,8 @@ impl FlatLoop {
             header_clause: HeaderClause::Do,
             iterate_site: None,
             conditional: None,
+            general_header: false,
+            counter: None,
             state: LoopState::Forever,
         }
     }
@@ -205,16 +212,16 @@ pub(crate) enum FlatStep {
 /// What drives one repeating `DO`/`LOOP`'s own iteration, once its header
 /// has already been evaluated and validated -- everything `LoopKind` can be
 /// except `Simple` (a block, never repeats, and `run_loop_with_header`'s own
-/// `Simple` arm never builds one of these at all) and `With` (the loud path).
+/// `Simple` arm never builds one of these at all).
 enum LoopState {
     Forever,
     /// `DO expr`: a fixed repeat count, decremented to zero.
     Count {
         remaining: u64,
     },
-    /// `DO name OVER expr`, a **non-stem** target only (Deviation 1: a stem
-    /// target takes the loud path in `run_loop_with_header` before one of
-    /// these is ever built): binds `control` to each of `items` in turn.
+    /// `DO name OVER expr`: binds `control` to each of `items` in turn. A
+    /// stem target iterates its tails in this crate's order rather than the
+    /// oracle's (Deviation 1, `phase-4-exclusions.txt`).
     OverItems {
         control: SymbolId,
         /// [`control_slot`], taken once when this loop was entered.
@@ -254,6 +261,44 @@ enum LoopState {
         /// function without passing through the top of the driver's loop.
         stepped: bool,
     },
+    /// `DO WITH INDEX i ITEM v OVER expr`: steps the supplier the target
+    /// answered `SUPPLIER` with, `WithLoop::checkIteration`
+    /// (`instructions/DoBlockComponents.cpp`).
+    With(Box<WithState>),
+}
+
+/// A `DO WITH` loop's supplier and the names it binds.
+struct WithState {
+    index: Option<SymbolId>,
+    item: Option<SymbolId>,
+    supplier: ObjRef,
+    /// Whether the next advance is the first, which reads the supplier's
+    /// current pair rather than stepping past it.
+    first: bool,
+    remaining: Option<u64>,
+}
+
+/// A loop's `COUNTER` variable and the passes entered so far
+/// (`DoBlock::setCounter`).
+#[derive(Clone, Copy)]
+struct LoopCounter {
+    name: SymbolId,
+    /// [`control_slot`], taken once when this loop was entered.
+    at: Option<usize>,
+    shape: NameShape,
+    passes: u64,
+}
+
+impl LoopCounter {
+    fn of(code: &Code<'_>, body: &Loop) -> Option<LoopCounter> {
+        let name = body.counter?;
+        Some(LoopCounter {
+            name,
+            at: control_slot(code, name),
+            shape: shape_of(code.symbols.name(name).as_bytes()),
+            passes: 0,
+        })
+    }
 }
 
 /// A controlled loop's running control value.
@@ -300,6 +345,11 @@ pub(crate) enum HeaderRole {
     Count,
     /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
     Over,
+    /// `DO WITH ... OVER expr`'s target, echoed under the `WITH` tag.
+    With,
+    /// A `COUNTER` variable's reset to `0`, ahead of every header
+    /// expression (`DoBlock::DoBlock`). Its slot has no expression.
+    Counter,
     /// `DO name OVER expr FOR expr`'s count, **echoed under the `FOR` tag**
     /// (measured against the oracle: `do qq over zs for 1` prints
     /// `>K>   "FOR" => "1"`, on both `trace i` and `trace r` -- the same tag
@@ -318,6 +368,8 @@ impl HeaderRole {
             HeaderRole::By => Some("BY"),
             HeaderRole::For | HeaderRole::Count | HeaderRole::OverFor => Some("FOR"),
             HeaderRole::Over => Some("OVER"),
+            HeaderRole::With => Some("WITH"),
+            HeaderRole::Counter => Some("COUNTER"),
         }
     }
 
@@ -330,6 +382,8 @@ impl HeaderRole {
             HeaderRole::For | HeaderRole::OverFor => "a DO header's FOR value",
             HeaderRole::Count => "a DO header's repeat count",
             HeaderRole::Over => "a DO header's OVER target",
+            HeaderRole::With => "a DO header's WITH target",
+            HeaderRole::Counter => "a DO header's COUNTER",
         }
     }
 }
@@ -339,14 +393,14 @@ impl HeaderRole {
 /// (`Controlled::order`, recorded because an expression can have side
 /// effects).
 pub(crate) struct HeaderPlan {
-    roles: [HeaderRole; 4],
+    roles: [HeaderRole; 5],
     len: usize,
 }
 
 impl HeaderPlan {
     fn new() -> HeaderPlan {
         HeaderPlan {
-            roles: [HeaderRole::Initial; 4],
+            roles: [HeaderRole::Initial; 5],
             len: 0,
         }
     }
@@ -354,7 +408,7 @@ impl HeaderPlan {
     fn push(&mut self, role: HeaderRole) {
         debug_assert!(
             self.len < self.roles.len(),
-            "a DO/LOOP header has more expressions than TO, BY, FOR and one control value"
+            "a DO/LOOP header has more slots than a COUNTER, TO, BY, FOR and one control value"
         );
         self.roles[self.len] = role;
         self.len += 1;
@@ -366,13 +420,12 @@ impl HeaderPlan {
     }
 }
 
-/// The header of `body`, or `None` for a `DO`/`LOOP` this crate refuses
-/// **before evaluating anything**.
-pub(crate) fn loop_header_plan(body: &Loop) -> Option<HeaderPlan> {
-    if body.counter.is_some() {
-        return None;
-    }
+/// The header of `body`.
+pub(crate) fn loop_header_plan(body: &Loop) -> HeaderPlan {
     let mut plan = HeaderPlan::new();
+    if body.counter.is_some() {
+        plan.push(HeaderRole::Counter);
+    }
     match &body.kind {
         // A block and a `FOREVER` loop each have no header expression at all.
         LoopKind::Simple | LoopKind::Forever => {}
@@ -393,20 +446,20 @@ pub(crate) fn loop_header_plan(body: &Loop) -> Option<HeaderPlan> {
                 });
             }
         }
-        LoopKind::Over {
-            target, for_count, ..
-        } => {
-            if matches!(target.kind, ExprKind::Stem(_)) {
-                return None;
-            }
+        LoopKind::Over { for_count, .. } => {
             plan.push(HeaderRole::Over);
             if for_count.is_some() {
                 plan.push(HeaderRole::OverFor);
             }
         }
-        LoopKind::With { .. } => return None,
+        LoopKind::With { for_count, .. } => {
+            plan.push(HeaderRole::With);
+            if for_count.is_some() {
+                plan.push(HeaderRole::OverFor);
+            }
+        }
     }
-    Some(plan)
+    plan
 }
 
 /// The expression `role` names in `kind`, or `None` when that kind has no
@@ -420,6 +473,8 @@ fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
         (LoopKind::Controlled(ctrl), HeaderRole::For) => ctrl.for_count.as_ref(),
         (LoopKind::Over { target, .. }, HeaderRole::Over) => Some(target),
         (LoopKind::Over { for_count, .. }, HeaderRole::OverFor) => for_count.as_ref(),
+        (LoopKind::With { target, .. }, HeaderRole::With) => Some(target),
+        (LoopKind::With { for_count, .. }, HeaderRole::OverFor) => for_count.as_ref(),
         _ => None,
     }
 }
@@ -427,7 +482,7 @@ fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
 /// The expression of `body`'s header at `slot` -- the compiled stream's own
 /// addressing, where a slot is a position in [`HeaderPlan::roles`].
 pub(crate) fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
-    let plan = loop_header_plan(body)?;
+    let plan = loop_header_plan(body);
     let role = *plan.roles().get(slot as usize)?;
     header_expr_for(&body.kind, role)
 }
@@ -447,9 +502,12 @@ pub(crate) struct LoopHeaderValues {
     for_remaining: Option<u64>,
     /// A `DO OVER`'s target value.
     over: Option<ObjRef>,
-    /// The register `over` was evaluated into, `None` off the compiled engine
-    /// and for every loop that is not a `DO OVER`. [`Interp::flat_loop_start`]
-    /// writes the snapshot back into it; see [`LoopState::OverItems`].
+    /// The supplier a `DO WITH`'s target answered `SUPPLIER` with.
+    supplier: Option<ObjRef>,
+    /// The register `over` or the `DO WITH` target was evaluated into, `None`
+    /// off the compiled engine and for every other loop.
+    /// [`Interp::flat_loop_start`] writes the snapshot or the supplier back
+    /// into it, which roots it while the loop runs.
     pub(crate) over_register: Option<u16>,
     /// A bare `DO expr`'s repeat count.
     count: Option<u64>,
@@ -554,6 +612,78 @@ impl Interp {
                 }
                 values.over = Some(value);
             }
+            HeaderRole::With => values.supplier = Some(self.with_supplier(value)?),
+            // `Interp::reset_loop_counter` files this role.
+            HeaderRole::Counter => {}
+        }
+        Ok(())
+    }
+
+    /// `WithLoop::setup`: the supplier `value` answers `SUPPLIER` with, 98.994
+    /// when that is not a `Supplier`.
+    fn with_supplier(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        let caller = self.caller();
+        let answered = pinned!(
+            self,
+            crate::pinning::PinKind::LoopHeader,
+            self.send_message(value, b"SUPPLIER", None, &[], caller)
+        )?;
+        if let Some(supplier) = answered {
+            self.roots.activity_mut().push_temp(supplier);
+            let class = self.class_of_value(supplier);
+            let wanted = self.classes().lookup("Supplier");
+            if let (Some(class), Some(wanted)) = (class, wanted)
+                && self.classes().is_a(class, wanted)
+            {
+                return Ok(supplier);
+            }
+        }
+        let found = self.string_value_text(value);
+        Err(Raised::syntax(98, 994, vec![found]).into())
+    }
+
+    /// A `COUNTER`'s reset to `value` and its `>K>` line, at the `DO`/`LOOP`
+    /// clause's own indent, before any header expression runs.
+    pub(crate) fn reset_loop_counter(
+        &mut self,
+        code: &Code<'_>,
+        instruction: &Instruction,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        let (InstructionKind::Do(body) | InstructionKind::Loop(body)) = &instruction.kind else {
+            return Err(Loud::loop_op_off_its_node().into());
+        };
+        let Some(counter) = LoopCounter::of(code, body) else {
+            return Err(Loud::loop_op_off_its_node().into());
+        };
+        let indent = self.activity.clause_state.current_value_indent;
+        self.bind_control(code, counter.name, indent, value, counter.at, counter.shape)?;
+        self.echo_header_value(HeaderRole::Counter, value);
+        Ok(())
+    }
+
+    /// One pass's `COUNTER` assignment and its `>K>` line, at the loop body's
+    /// indent (`DoBlock::setCounter`).
+    fn count_pass(
+        &mut self,
+        code: &Code<'_>,
+        counter: &mut LoopCounter,
+        loop_indent: usize,
+    ) -> Result<(), Failure> {
+        counter.passes += 1;
+        let value = self.counted(usize::try_from(counter.passes).unwrap_or(usize::MAX));
+        self.roots.activity_mut().push_temp(value);
+        self.bind_control(
+            code,
+            counter.name,
+            loop_indent,
+            value,
+            counter.at,
+            counter.shape,
+        )?;
+        if self.trace_mode().results {
+            let text = self.string_value_text(value);
+            self.trace_keyword(loop_indent, "COUNTER", &text);
         }
         Ok(())
     }
@@ -759,16 +889,6 @@ impl Interp {
         engine: BodyEngine<'_>,
         values: LoopHeaderValues,
     ) -> Result<Flow, Failure> {
-        // **The refusal, here rather than at the driver's own entry.**
-        // `loop_header_plan` answers `None` for
-        // exactly the three forms this crate does not run, and every arm below
-        // relies on that answer: `LoopKind::With` has no `LoopState`, and a
-        // `COUNTER` or a stem `OVER` reaches an `expect` on a value nothing
-        // evaluated. Measured, before this check existed: all three panicked on
-        // the compiled stream, and no test in the workspace was red.
-        if loop_header_plan(body).is_none() {
-            return Err(Loud::instruction(&instruction.kind).into());
-        }
         let body_start = index + 1;
         let end_index = body
             .end
@@ -919,7 +1039,11 @@ impl Interp {
                     remaining: values.for_remaining,
                 }
             }
-            LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
+            LoopKind::With {
+                index: with_index,
+                item,
+                ..
+            } => self.with_state(*with_index, *item, &values),
         };
         self.run_repeating(
             code,
@@ -932,8 +1056,27 @@ impl Interp {
             body.conditional.as_ref(),
             source,
             state,
+            LoopCounter::of(code, body),
             engine,
         )
+    }
+
+    /// A `DO WITH`'s state, from the supplier its header filed.
+    fn with_state(
+        &self,
+        index: Option<SymbolId>,
+        item: Option<SymbolId>,
+        values: &LoopHeaderValues,
+    ) -> LoopState {
+        LoopState::With(Box::new(WithState {
+            index,
+            item,
+            supplier: values
+                .supplier
+                .expect("a DO WITH's plan always names its target"),
+            first: true,
+            remaining: values.for_remaining,
+        }))
     }
 
     /// Leaves `current_value_indent` at the indent a **block instruction's**
@@ -987,6 +1130,7 @@ impl Interp {
         conditional: Option<&LoopConditional>,
         source: Option<&ProgramSource>,
         mut state: LoopState,
+        mut counter: Option<LoopCounter>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
         // The loop's own two spaces of indent, added once here rather than
@@ -1102,6 +1246,9 @@ impl Interp {
                                 return Err(failure);
                             }
                         }
+                    }
+                    if let Some(counter) = counter.as_mut() {
+                        it.count_pass(code, counter, loop_indent)?;
                     }
                     HeaderOutcome::Continue
                 };
@@ -1326,13 +1473,6 @@ impl Interp {
         if matches!(body.kind, LoopKind::Simple) && body.label.is_none() {
             return self.flat_block_start(code, index, instruction, source);
         }
-        // **`loop_header_plan` is the whole refusal**, exactly as it is for
-        // `run_loop_with_header`: it answers `None` for a `COUNTER`, a stem
-        // `OVER` and `DO WITH`, which this crate does not run on either
-        // engine, and the nested path is where that becomes the loud error.
-        if loop_header_plan(body).is_none() {
-            return Ok(FlatStart::Fallback(values));
-        }
         let over_register = values.over_register;
         let state = match &body.kind {
             LoopKind::Forever => LoopState::Forever,
@@ -1372,11 +1512,13 @@ impl Interp {
                     remaining: values.for_remaining,
                 }
             }
-            // A labelled block, and `DO WITH`, which `loop_header_plan`
-            // refuses above.
-            LoopKind::Simple | LoopKind::With { .. } => {
-                return Ok(FlatStart::Fallback(values));
-            }
+            LoopKind::With {
+                index: with_index,
+                item,
+                ..
+            } => self.with_state(*with_index, *item, &values),
+            // A labelled block.
+            LoopKind::Simple => return Ok(FlatStart::Fallback(values)),
         };
         // **The snapshot's only root once this answers `Flat`**: the driver
         // then closes this clause and pops the temps frame `over_snapshot`
@@ -1384,10 +1526,12 @@ impl Interp {
         // allocated in the enclosing scope and released past the whole loop
         // (`ir/compile.rs`), and nothing reads the target again, so its
         // register holds the snapshot instead.
-        if let LoopState::OverItems { snapshot, .. } = &state
-            && let Some(register) = over_register
-        {
-            registers.set(register, *snapshot);
+        if let Some(register) = over_register {
+            match &state {
+                LoopState::OverItems { snapshot, .. } => registers.set(register, *snapshot),
+                LoopState::With(with) => registers.set(register, with.supplier),
+                _ => {}
+            }
         }
         let end_index = body
             .end
@@ -1400,9 +1544,8 @@ impl Interp {
             .clause_line_at(code, index, instruction, source)
             .unwrap_or_else(|| self.activity.clause_state.line());
         // **Built where it will live, not on the stack and then moved
-        // there.** A `FlatLoop` is 328 bytes, 200 of them the `LoopState` a
-        // controlled loop's three `Number`s live in, and the version that
-        // built one here and assigned it into the box afterwards wrote those
+        // there.** A `FlatLoop` holds the `LoopState` a controlled loop's
+        // three `Number`s live in, and the version that built one here and assigned it into the box afterwards wrote those
         // bytes twice per loop entry -- which for a nested loop is twice per
         // iteration of the loop above it. Measured on `do n = 1 to N ; do j =
         // 1 to 1 ; end ; end`: -5.871% retired instructions, with
@@ -1427,6 +1570,9 @@ impl Interp {
             header_clause: HeaderClause::Do,
             iterate_site: None,
             conditional: body.conditional.as_ref().map(|cond| cond.until),
+            general_header: body.counter.is_some()
+                || body.conditional.as_ref().is_some_and(|cond| !cond.until),
+            counter: LoopCounter::of(code, body),
             state,
         };
         let header = match self.flat_loop_header(code, source, &mut boxed, counted) {
@@ -1707,8 +1853,8 @@ impl Interp {
         flat: &mut FlatLoop,
         counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
-        if flat.conditional == Some(false) {
-            return self.flat_loop_header_while(code, source, flat, counted);
+        if flat.general_header {
+            return self.flat_loop_header_general(code, source, flat, counted);
         }
         let header_line = flat.header_line();
         let do_indent = flat.do_indent;
@@ -1741,19 +1887,27 @@ impl Interp {
         flat_header_outcome(header, resume)
     }
 
-    /// [`Interp::flat_loop_header`] for a loop that carries a
-    /// `WHILE`: the same advance, then the condition, both inside the one
-    /// clause the oracle re-enters to make this decision.
+    /// [`Interp::flat_loop_header`] for a loop that carries a `WHILE` or a
+    /// `COUNTER`: the same advance, then the condition, then the counter, all
+    /// inside the one clause the oracle re-enters to make this decision.
     #[inline(never)]
-    fn flat_loop_header_while(
+    fn flat_loop_header_general(
         &mut self,
         code: &Code<'_>,
         source: Option<&ProgramSource>,
         flat: &mut FlatLoop,
         counted: DeadlineCounted,
     ) -> Result<Option<Flow>, Failure> {
-        let Some(cond) = loop_conditional_of(code, flat.do_index) else {
-            return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
+        let cond = match flat.conditional {
+            Some(false) => match loop_conditional_of(code, flat.do_index) {
+                Some(cond) => Some(cond),
+                None => {
+                    return Err(
+                        Loud::instruction(&code.body.instructions[flat.do_index].kind).into(),
+                    );
+                }
+            },
+            _ => None,
         };
         let header_line = flat.header_line();
         let do_indent = flat.do_indent;
@@ -1763,6 +1917,7 @@ impl Interp {
         let blame = flat.header_clause;
         let site = &flat.iterate_site;
         let state = &mut flat.state;
+        let counter = &mut flat.counter;
         let header = self.in_counted_clause(code, header_line, counted, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
@@ -1775,28 +1930,37 @@ impl Interp {
                 it.settle_block_indent(false, do_indent);
                 return Ok(false);
             }
-            // Overrides what stepping the `DO`/`LOOP` instruction set:
-            // `WHILE`'s condition is evaluated here, inside that same step,
-            // never through a `Op::Clause`'s region of its own.
-            it.activity.clause_state.current_value_indent = loop_indent;
-            let held = match pinned!(
-                it,
-                crate::pinning::PinKind::LoopHeader,
-                it.eval_condition(
-                    code,
-                    &cond.condition,
-                    ConditionTrace::Keyword(loop_indent, "WHILE"),
-                    raised_while_not_logical,
-                )
-            ) {
-                Ok(held) => held,
-                Err(failure) => {
-                    it.blame_while_failure(code, source, do_index, loop_indent);
-                    return Err(failure);
+            if let Some(cond) = cond {
+                // Overrides what stepping the `DO`/`LOOP` instruction set:
+                // `WHILE`'s condition is evaluated here, inside that same step,
+                // never through a `Op::Clause`'s region of its own.
+                it.activity.clause_state.current_value_indent = loop_indent;
+                let held = match pinned!(
+                    it,
+                    crate::pinning::PinKind::LoopHeader,
+                    it.eval_condition(
+                        code,
+                        &cond.condition,
+                        ConditionTrace::Keyword(loop_indent, "WHILE"),
+                        raised_while_not_logical,
+                    )
+                ) {
+                    Ok(held) => held,
+                    Err(failure) => {
+                        it.blame_while_failure(code, source, do_index, loop_indent);
+                        return Err(failure);
+                    }
+                };
+                if !held {
+                    it.settle_block_indent(false, do_indent);
+                    return Ok(false);
                 }
-            };
-            it.settle_block_indent(held, do_indent);
-            Ok(held)
+            }
+            if let Some(counter) = counter.as_mut() {
+                it.count_pass(code, counter, loop_indent)?;
+            }
+            it.settle_block_indent(true, do_indent);
+            Ok(true)
         });
         let header = match header {
             Ok(header) => header,
@@ -1832,6 +1996,7 @@ impl Interp {
                 *remaining -= 1;
                 Ok(true)
             }
+            LoopState::With(with) => self.with_advance(code, with, loop_indent),
             LoopState::OverItems {
                 control,
                 at,
@@ -2270,6 +2435,62 @@ impl Interp {
             !numeric_less(to, &current, digits, fuzz).map_err(Raised::from)?
         };
         Ok(within)
+    }
+
+    /// `WithLoop::checkIteration` and then the `FOR` budget: steps the
+    /// supplier past the first pass, binds `INDEX` and then `ITEM`, and
+    /// consults `FOR` only after both are bound.
+    #[inline(never)]
+    fn with_advance(
+        &mut self,
+        code: &Code<'_>,
+        with: &mut WithState,
+        loop_indent: usize,
+    ) -> Result<bool, Failure> {
+        let supplier = with.supplier;
+        if !with.first {
+            self.supplier_send(supplier, b"NEXT")?;
+        }
+        with.first = false;
+        let available = self.supplier_send(supplier, b"AVAILABLE")?;
+        let text = self.string_value_text(available);
+        if !logical_value(&text)
+            .ok_or_else(|| Failure::from(Raised::syntax(34, 906, vec![text])))?
+        {
+            return Ok(false);
+        }
+        for (name, message) in [(with.index, &b"INDEX"[..]), (with.item, &b"ITEM"[..])] {
+            if let Some(name) = name {
+                let value = self.supplier_send(supplier, message)?;
+                self.roots.activity_mut().push_temp(value);
+                self.bind_control(
+                    code,
+                    name,
+                    loop_indent,
+                    value,
+                    control_slot(code, name),
+                    shape_of(code.symbols.name(name).as_bytes()),
+                )?;
+            }
+        }
+        if let Some(remaining) = with.remaining.as_mut() {
+            if *remaining == 0 {
+                return Ok(false);
+            }
+            *remaining -= 1;
+        }
+        Ok(true)
+    }
+
+    /// `message` sent to a `DO WITH`'s supplier, `.nil` for no result.
+    fn supplier_send(&mut self, supplier: ObjRef, message: &[u8]) -> Result<ObjRef, Failure> {
+        let caller = self.caller();
+        let answered = pinned!(
+            self,
+            crate::pinning::PinKind::LoopHeader,
+            self.send_message(supplier, message, None, &[], caller)
+        )?;
+        Ok(answered.unwrap_or(ObjRef::NIL))
     }
 
     /// Writes `value` into `control`'s own variable, through whichever of

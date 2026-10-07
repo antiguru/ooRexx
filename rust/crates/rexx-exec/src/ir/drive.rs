@@ -1576,20 +1576,30 @@ macro_rules! region_ops {
                      reserved"
                     );
                     let value = $registers.get(*src);
-                    let values =
-                        $header.get_or_insert_with(LoopHeaderValues::default);
-                    if let Err(failure) =
-                        $self.accept_header_value(*role, value, values)
-                    {
-                        break $cold Err(failure);
-                    }
-                    // Which register roots a flattened
-                    // `DO OVER`'s snapshot, recorded here
-                    // because this op is the only place
-                    // that knows it -- see
-                    // `LoopState::OverItems`.
-                    if matches!(role, crate::run::HeaderRole::Over) {
-                        values.over_register = Some(*src);
+                    if matches!(role, crate::run::HeaderRole::Counter) {
+                        if let Err(failure) =
+                            $self.reset_loop_counter($code, $clause, value)
+                        {
+                            break $cold Err(failure);
+                        }
+                    } else {
+                        let values =
+                            $header.get_or_insert_with(LoopHeaderValues::default);
+                        if let Err(failure) =
+                            $self.accept_header_value(*role, value, values)
+                        {
+                            break $cold Err(failure);
+                        }
+                        // Which register roots a flattened
+                        // `DO OVER`'s snapshot or `DO WITH`'s
+                        // supplier, recorded here because this
+                        // op is the only place that knows it.
+                        if matches!(
+                            role,
+                            crate::run::HeaderRole::Over | crate::run::HeaderRole::With
+                        ) {
+                            values.over_register = Some(*src);
+                        }
                     }
                 }
                 // The construct itself, from the values the ops

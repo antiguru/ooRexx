@@ -1,0 +1,19 @@
+count 18
+/* A Supplier subclass is stepped by message: AVAILABLE, INDEX, ITEM, NEXT. */
+do with index i item v over .y~new; say i v; end
+say 'done'
+::class y subclass supplier
+::method init
+  self~init:super(.array~of('a', 'b'), .array~of(1, 2))
+::method available
+  say 'avail'
+  return self~available:super
+::method next
+  say 'next'
+  forward class (super)
+::method item
+  say 'item'
+  forward class (super)
+::method index
+  say 'index'
+  forward class (super)

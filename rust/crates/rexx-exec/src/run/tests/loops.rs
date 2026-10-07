@@ -194,39 +194,20 @@ fn do_until_re_echoes_its_clause_exactly_once_per_pass_not_twice_or_zero() {
 }
 
 #[test]
-fn do_with_takes_the_loud_path() {
+fn do_with_binds_index_and_item_from_the_supplier() {
     let mut interp = Interp::new();
-    let failure = run_source(&mut interp, b"do with index i over 'x'\nsay i\nend").unwrap_err();
-    let Failure::Loud(loud) = failure else {
-        panic!("expected Loud, got {failure:?}");
-    };
-    // Review finding I1: `instruction.kind` here is `InstructionKind::Do`,
-    // which this crate implements -- `lib.rs`'s `owned_message` must not
-    // attribute this to a phase (there is none to blame; `DO WITH` is
-    // Phase 5's *reason*, but the message names the construct, not the
-    // reason). Mutation-kill for deleting the `None` carve-out in
-    // `owned_message`: this assertion is what turns that deletion into a
-    // failure here.
-    assert_eq!(
-        loud.message, "DO is not implemented",
-        "a construct 4a does implement must not be attributed to a phase; \
-         see lib.rs's owned_message"
+    let out = say_output(
+        &mut interp,
+        b"do with index i item v over .array~of('a', 'b')\nsay i v\nend",
     );
+    assert_eq!(out, b"1 a\n2 b\n".to_vec());
 }
 
 #[test]
-fn do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on() {
+fn do_counter_counts_the_passes_entered_on_a_controlled_loop() {
     let mut interp = Interp::new();
-    let failure = run_source(&mut interp, b"do counter c i = 1 to 3\nnop\nend").unwrap_err();
-    let Failure::Loud(loud) = failure else {
-        panic!("expected Loud, got {failure:?}");
-    };
-    // Same mutation-kill as `do_with_takes_the_loud_path`, above.
-    assert_eq!(
-        loud.message, "DO is not implemented",
-        "a construct 4a does implement must not be attributed to a phase; \
-         see lib.rs's owned_message"
-    );
+    let out = say_output(&mut interp, b"do counter c i = 1 to 3\nnop\nend\nsay c i");
+    assert_eq!(out, b"3 4\n".to_vec());
 }
 
 // ---- DO i = TO/BY/FOR (controlled), and DO OVER ----
@@ -557,50 +538,16 @@ fn a_do_over_for_echoes_the_for_keyword_the_oracle_prints() {
     );
 }
 
-/// Deviation 1 (`phase-4-exclusions.txt`): `DO OVER` on a stem does not
-/// reproduce the oracle's traversal order, and takes the loud path
-/// instead -- detected from `target`'s own syntax (a bare `NAME.`
-/// parses as `ExprKind::Stem`), never by evaluating it.
+/// A stem target binds its tails, bare or parenthesised.
 #[test]
-fn do_over_a_stem_target_takes_the_loud_path() {
-    let mut interp = Interp::new();
-    let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over a.\nsay v\nend").unwrap_err();
-    let Failure::Loud(loud) = failure else {
-        panic!("expected Loud, got {failure:?}");
-    };
-    // Same mutation-kill as `do_with_takes_the_loud_path` (above, in this
-    // module): `DO`/`LOOP` is implemented regardless of which deviation
-    // routed this particular clause to the loud path.
-    assert_eq!(
-        loud.message, "DO is not implemented",
-        "a construct 4a does implement must not be attributed to a phase; \
-         see lib.rs's owned_message"
-    );
-}
-
-/// A stem target wrapped in parens is **also** caught -- corrected after
-/// review, which found this task's own comment on the `Over` arm
-/// claimed the opposite (`over (a.)` "is not detected"). It is detected:
-/// a single parenthesised sub-expression collapses to that
-/// sub-expression's own `ExprKind` rather than wrapping it in
-/// `ExprKind::List`, so `(a.)` is already `ExprKind::Stem` by the time
-/// `loop_header_plan`'s own `matches!` check sees it, with nothing extra
-/// needed. The safe direction either way (loud, never a silent
-/// divergence), but the comment was wrong about which one it is.
-#[test]
-fn do_over_a_parenthesised_stem_target_is_also_caught() {
-    let mut interp = Interp::new();
-    let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over (a.)\nsay v\nend").unwrap_err();
-    let Failure::Loud(loud) = failure else {
-        panic!("expected Loud, got {failure:?}");
-    };
-    // Same mutation-kill as `do_with_takes_the_loud_path` (above, in this
-    // module).
-    assert_eq!(
-        loud.message, "DO is not implemented",
-        "a construct 4a does implement must not be attributed to a phase; \
-         see lib.rs's owned_message"
-    );
+fn do_over_a_stem_target_binds_its_tails() {
+    for source in [
+        &b"a.1 = 'x'\ndo v over a.\nsay v\nend"[..],
+        b"a.1 = 'x'\ndo v over (a.)\nsay v\nend",
+    ] {
+        let mut interp = Interp::new();
+        assert_eq!(say_output(&mut interp, source), b"1\n".to_vec());
+    }
 }
 
 /// F1 (branch review, Important): `initial`/`to`/`by` are rounded under

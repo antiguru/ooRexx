@@ -1,0 +1,2 @@
+/* COUNTER on DO FOREVER, left by LEAVE. */
+do counter c forever; if c = 2 then leave; end; say c

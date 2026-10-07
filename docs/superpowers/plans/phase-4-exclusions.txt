@@ -855,11 +855,10 @@ DEVIATIONS -- permanent, chosen
      times in samples/windows/ under oodialog/ and ole/, of which at least two
      print in iteration order. All are Windows-only samples that no gate runs.
 
-     Consequence, and it is a rule rather than an observation: NO CORPUS
-     PROGRAM MAY CONTAIN DO OVER ON A STEM. Such a program could never pass,
-     because the oracle's order is deterministic and ours is a different
-     deterministic order. DO OVER on a string or a number is fine -- each
-     iterates once, yielding itself.
+     Consequence, and it is a rule rather than an observation: A CORPUS
+     PROGRAM WITH DO OVER ON A STEM PRINTS NOTHING THAT DEPENDS ON THE ORDER
+     -- a stem with one tail, or the tails collected and sorted. DO OVER on a
+     string or a number is fine -- each iterates once, yielding itself.
 
   2. The EVALUATION-depth limit raises 11.1 where the oracle raises nothing.
 
@@ -4086,9 +4085,7 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   than from the clause. Recorded here so it is not rediscovered as a Phase 5
   regression; closing it belongs to whichever task owns `RAISE`.
 
-  WHAT THE TABLE STILL CANNOT SEE. `DO x OVER` a stem is loud for its own
-  earlier reason and so cannot distinguish this gap from that one.
-  `NUMERIC FORM <expr>` is loud in every build including the pinned one, so it
+  WHAT THE TABLE STILL CANNOT SEE. `NUMERIC FORM <expr>` is loud in every build including the pinned one, so it
   is out of scope rather than agreeing. And a surface added later is not in
   this table by construction, which is why every row names the conversion it
   makes: a new caller of `requestArray`, of a unary operator, or of a

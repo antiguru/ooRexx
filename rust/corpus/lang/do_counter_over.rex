@@ -1,0 +1,2 @@
+/* COUNTER on DO OVER. */
+do counter c x over .array~of('a', 'b'); end; say c x

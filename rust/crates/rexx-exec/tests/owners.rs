@@ -209,8 +209,7 @@ tags!(loop_tag, LOOP_TAGS, LoopKind, {
     LoopKind::Count(_) => ("Count", Owner::InScope),
     LoopKind::Controlled(_) => ("Controlled", Owner::InScope),
     LoopKind::Over { .. } => ("Over", Owner::InScope),
-    // `DO WITH ... OVER` sends SUPPLIER, which nothing in this crate answers.
-    LoopKind::With { .. } => ("With", Owner::Phase("Phase 5")),
+    LoopKind::With { .. } => ("With", Owner::InScope),
 });
 
 tags!(prefix_op_tag, PREFIX_OP_TAGS, PrefixOp, {
@@ -322,7 +321,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     // when the command dispatch landed, and `Address` when its redirections
     // did.
     ("InstructionKind", "Options", "Phase 5"),
-    ("LoopKind", "With", "Phase 5"),
 ];
 
 /// Every phase name the split table names, spelled exactly as it spells them.

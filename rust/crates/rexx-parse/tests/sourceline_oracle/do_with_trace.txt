@@ -1,0 +1,9 @@
+count 8
+/* DO WITH traces its target under WITH and binds INDEX and ITEM before FOR
+   is consulted. */
+trace r
+do counter k with index x item y over .array~of('a') for 5; end
+say k x y
+trace i
+do with item y over .array~of('a', 'b') for 1; end
+say y

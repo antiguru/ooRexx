@@ -26,7 +26,7 @@ use super::{
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
 use crate::run::{
-    HeaderPlan, QueueKeyword, ReturnKeyword, if_targets, loop_header_plan, loop_header_slot,
+    HeaderRole, QueueKeyword, ReturnKeyword, if_targets, loop_header_plan, loop_header_slot,
     otherwise_range, when_targets,
 };
 use crate::trace::ChunkTrace;
@@ -279,7 +279,7 @@ pub(crate) fn compile(
                 // that compiles natively resolves its reads against it,
                 // exactly as an assignment's value does.
                 let header_plan = loop_header_plan(body_node);
-                let roles = header_plan.as_ref().map_or(&[][..], HeaderPlan::roles);
+                let roles = header_plan.roles();
                 let mut header = Vec::with_capacity(roles.len());
                 for &role in roles {
                     header.push((role, registers.alloc()?));
@@ -298,6 +298,16 @@ pub(crate) fn compile(
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 for (slot, &(role, dst)) in header.iter().enumerate() {
                     let slot = instruction_index(slot)?;
+                    // The counter's reset value, filed before any header
+                    // expression is evaluated; its op echoes it.
+                    if role == HeaderRole::Counter {
+                        ops.push(Op::Const {
+                            dst,
+                            konst: consts.intern(b"0")?,
+                        });
+                        ops.push(Op::LoopHeaderValue { role, src: dst });
+                        continue;
+                    }
                     // **Each slot decides for itself**, so a header holding one
                     // expression outside the native set keeps native ops for
                     // its others. A slot `loop_header_slot` has no expression
