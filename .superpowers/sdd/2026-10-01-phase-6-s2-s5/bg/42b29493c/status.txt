@@ -1,0 +1,16 @@
+42b29493c started 2026-10-07T08:55:43+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 12.66 17.04 12.68 2/1216 3770084 2026-10-07T09:00:11+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 13.65 5.38 5.42 1/1193 3941532 2026-10-07T09:24:18+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/logs/g4-test-release.txt:0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-07T09:57:55+02:00

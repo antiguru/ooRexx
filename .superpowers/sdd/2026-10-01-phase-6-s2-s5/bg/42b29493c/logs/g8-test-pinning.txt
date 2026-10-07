@@ -1,0 +1,67 @@
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-inventory)
+   Compiling cfg-if v1.0.4
+   Compiling rustc-hash v2.1.2
+   Compiling rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-classes)
+   Compiling rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-lib)
+   Compiling once_cell v1.21.4
+   Compiling linux-raw-sys v0.12.1
+   Compiling iana-time-zone v0.1.65
+   Compiling log v0.4.34
+   Compiling bitflags v2.13.1
+   Compiling regex-syntax v0.8.11
+   Compiling lazy_static v1.5.1
+   Compiling pin-project-lite v0.2.17
+   Compiling smallvec v1.16.2
+   Compiling nu-ansi-term v0.50.3
+   Compiling scoped-tls v1.0.1
+   Compiling either v1.16.0
+   Compiling rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-extract)
+   Compiling libc v0.2.186
+   Compiling crossbeam-utils v0.8.21
+   Compiling crossbeam-epoch v0.9.20
+   Compiling rustix v1.1.4
+   Compiling rayon-core v1.13.0
+   Compiling thiserror v1.0.69
+   Compiling num-traits v0.2.19
+   Compiling libloading v0.8.9
+   Compiling thread_local v1.1.10
+   Compiling generator v0.8.10
+   Compiling sharded-slab v0.1.7
+   Compiling datadriven v0.9.0
+   Compiling tracing-core v0.1.36
+   Compiling rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-num)
+   Compiling tracing v0.1.44
+   Compiling tracing-log v0.2.0
+   Compiling chrono v0.4.45
+   Compiling crossbeam-deque v0.8.6
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-core)
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-parse)
+   Compiling rayon v1.12.0
+   Compiling regex-automata v0.4.14
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-api)
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/tree/rust/crates/rexx-exec)
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling loom v0.7.2
+    Finished `test` profile [optimized + debuginfo] target(s) in 35.58s
+     Running tests/concurrency_tests.rs (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/target-pinning/debug/deps/concurrency_tests-ebeee65b433747cb)
+
+running 15 tests
+test measured::a_park_point_native_is_not_a_frame_above_itself ... ok
+test measured::a_slice_deferred_inside_a_sort_comparator_is_counted_once ... ok
+test measured::a_sleep_in_a_tree_evaluated_expression_is_a_pinned_wait ... ok
+test measured::an_immovable_reply_is_counted_with_its_frames ... ok
+test measured::a_pinned_busy_wait_counts_its_pinned_yields ... ok
+test measured::an_inverted_wait_is_counted_with_its_kind_and_frames ... ok
+test measured::a_park_records_the_pinned_frames_above_it ... ok
+test measured::a_park_inside_a_recursing_native_is_under_a_pinned_frame ... ok
+test measured::a_sleep_is_a_pinned_wait_only_under_a_pinned_frame ... ok
+test measured::a_wait_is_a_park_point ... ok
+test measured::a_guard_when_is_a_pinned_wait_only_under_a_pinned_frame ... ok
+test measured::a_park_inside_a_stackless_entry_is_under_no_pinned_frame ... ok
+test measured::a_park_under_each_frame_kind_records_it ... ok
+test measured::a_buried_sleeper_due_first_is_a_late_wake ... ok
+test measured::a_new_into_init_is_stackless_or_pinned ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 1.21s
+

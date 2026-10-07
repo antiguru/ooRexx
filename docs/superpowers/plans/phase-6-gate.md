@@ -1297,3 +1297,54 @@ Load 0.63 5.74 6.88 at start, 1.05 1.93 4.47 at end. Over the bar at r3: `sendlo
 `extcall` +15.82%, `strings` +6.64%; `dispatch` +5.41% is inside its 14.91% band. The
 extension-call loop: oracle 0.530 s, r3 1.076 s. `extcall`'s wall rise from s1 is not attributed,
 because head was not measured in the wall run.
+
+### S5 close
+
+Run on `42b29493c` by `.superpowers/sdd/2026-10-01-phase-6-s2-s5/p6-gates/bggates.sh`; status file
+`.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/status.txt`, logs beside it in `logs/`.
+Its result lines, verbatim apart from the repository path:
+
+```
+42b29493c started 2026-10-07T08:55:43+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 12.66 17.04 12.68 2/1216 3770084 2026-10-07T09:00:11+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 13.65 5.38 5.42 1/1193 3941532 2026-10-07T09:24:18+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/logs/g4-test-release.txt:0
+.superpowers/sdd/2026-10-01-phase-6-s2-s5/bg/42b29493c/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-07T09:57:55+02:00
+```
+
+G4 release: 3049 passed, 0 failed. G6 debug: 3053 passed, 0 failed (sums of `test result` lines).
+`each_group_of_the_derived_list_in_one_run_in_both_modes` passes in both (`g4-test-release.txt:2066`,
+`g6-test-debug.txt:2070`), as do `the_s2_rows_of_the_derived_list_in_both_modes`,
+`the_alarm_and_ticker_groups_pass_in_both_modes` and `the_framework_ticker_runs_without_dash_u`.
+
+Earlier runs of the same script in S5, each red, with the ruling that followed (`bg/<sha>/status.txt`):
+
+| head | red gate | cause | ruling |
+|---|---|---|---|
+| `790de51c2` | G4 | `REPLY` outcomes differing from the oracle's only in the assertion count | P86 |
+| `ccc606fb3` | G6 | a `debug_assert` in trace analysis after interactive debug | P87 |
+| `c484f4516` | G4 | `SysSleep` TEST_SLEEP_DURATION under a concurrent callgrind run; passed at quiet load | none |
+| `b6efbfd53` | G4 | `REPLY` derived, every opportunity, rc 1: the continuation's `TIME('E')` restarted at 0 | P89 |
+
+P89 (`0e15e6590`) copies the elapsed clock and the `RANDOM` seed to a `REPLY` continuation; its
+witness is `scheduler::tests::a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed`
+(`g4-test-release.txt:1581`). The performance figures above were measured at `05aac0c58`, before
+P89; no program under `rust/bench-programs/` contains `REPLY` (`grep -il reply rust/bench-programs/*.rex`,
+no output).
+
+Against the `b6efbfd53` run, `diff` of `g4-criterion-one-table.txt` changes three rows. `REPLY`
+TEST_REPLY_TWICE_REPLYASSERT and TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT now pass; the oracle
+counts 1 in some runs and 0 in others (P41). `TIME` TEST_11's mode cell reads `same` in place
+of `same apart from elapsed values`. In `g6-criterion-one-table.txt` only the second `REPLY` row changes, to
+`pass`.
