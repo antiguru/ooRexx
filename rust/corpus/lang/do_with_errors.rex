@@ -1,5 +1,6 @@
 /* DO WITH's failures: no SUPPLIER method, a SUPPLIER answer that is not a
-   supplier, and an AVAILABLE that is not logical. */
+   supplier, and an AVAILABLE that is not logical; then COUNTER, WHILE and
+   UNTIL beside the supplier. */
 signal on syntax name s1
 do with index i over 5; say i; end
 s1: say 'A' condition('o')~code condition('o')~message
@@ -16,6 +17,8 @@ do counter c with index i item v over q while c < 1; say c i v; end
 say c i v
 do counter c with index i item v over q until c > 0; say c i v; end
 say c i v
+do with index i item v over q until i > 0; say i v; end
+say i v
 ::class x
 ::method supplier
   return 'nope'
