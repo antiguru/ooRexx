@@ -140,3 +140,36 @@ inside.
    threaded through it so it stays right. Deleting it is a separate decision.
 4. The queued item `2026-10-02-do-with-over-refusal` is resolved by this task. I did not close the
    queue file, which is the controller's to do.
+
+## Fix round 1
+
+Findings from `task-2-review.md`.
+
+1. **I1, per-pass temporaries.** `count_pass` and `with_advance` (`run/loops.rs`) now open a frame
+   per pass, as the controlled loop does, and pop it once the counter or INDEX/ITEM variable holds
+   the value. `with_advance` also roots the AVAILABLE answer inside that frame. A `?` path leaves
+   the frame to the outer truncation.
+   - New crate test `run::tests::loops::counter_and_with_passes_do_not_accumulate_temps`. It reads
+     the temporaries stack's capacity after the run as its high-water mark, through
+     `Roots::temps_capacity`, a new accessor in `rexx-core/src/roots.rs`. Its assertions:
+     - COUNTER's mark is the same after 100 passes and after 20000, and under 1000.
+     - DO WITH over 30000 items reaches the same mark as building that collection's supplier alone.
+   - RED: with only `count_pass`'s pop removed, it fails with "COUNTER: 32768 temporaries live at
+     once after 20000 passes". With only `with_advance`'s pop removed, the DO WITH assertion fails.
+     A probe without the pop showed temps rising 3 a pass, to 60031 over 20000 passes.
+   - Peak memory, `/usr/bin/time -f %M` on release binaries, `do counter c 30000000`: before
+     255,428 kB, after 18,860 kB, oracle 20,688 kB. A COUNTER DO WITH over a 1,000,000-item array:
+     105,844 kB before and 105,676 kB after (the array dominates), oracle 227,556 kB.
+2. **Whole-group rows.** `docs/superpowers/plans/phase-6-1-gate.md` `## Task 2` now has one line
+   per newly visible failing row, each with the alone-run that shows it and its cause outside the
+   loop work. Moritz's ruling on the emptyloop wall clock is recorded there too.
+3. **M3.** `HeaderRole::OverFor`'s doc now names both `DO name OVER expr FOR expr` and
+   `DO WITH ... OVER expr FOR expr`.
+
+Commands and output, all at the fix-round tree:
+
+- `cargo fmt --all --check`: exit 0. `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`: exit 0.
+- `memcap 8G cargo test -j 4 -p rexx-exec --lib run::tests::loops`: 40 passed, 0 failed.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle`:
+  exit 0, with 29 passed / 1 ignored and 21 passed.
+- `memcap 8G cargo test -j 4 -p rexx-core`: every binary `ok`, 0 failed.

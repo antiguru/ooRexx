@@ -382,10 +382,12 @@ pub(crate) enum HeaderRole {
     /// A `COUNTER` variable's reset to `0`, ahead of every header
     /// expression (`DoBlock::DoBlock`). Its slot has no expression.
     Counter,
-    /// `DO name OVER expr FOR expr`'s count, **echoed under the `FOR` tag**
-    /// (measured against the oracle: `do qq over zs for 1` prints
-    /// `>K>   "FOR" => "1"`, on both `trace i` and `trace r` -- the same tag
-    /// a controlled loop's own `FOR` and a bare `DO`'s repeat count carry).
+    /// The `FOR` count of `DO name OVER expr FOR expr` and of `DO WITH ...
+    /// OVER expr FOR expr`, **echoed under the `FOR` tag** (measured against
+    /// the oracle: `do qq over zs for 1` prints `>K>   "FOR" => "1"`, on both
+    /// `trace i` and `trace r` -- the same tag a controlled loop's own `FOR`
+    /// and a bare `DO`'s repeat count carry; `do_with_trace.rex` measures the
+    /// `DO WITH` form).
     OverFor,
 }
 
@@ -724,6 +726,9 @@ impl Interp {
     ) -> Result<(), Failure> {
         counter.passes += 1;
         let value = self.counted(usize::try_from(counter.passes).unwrap_or(usize::MAX));
+        // A pass's own frame: the counter variable roots `value` once it is
+        // bound, so nothing pushed here outlives the pass.
+        let pass = self.roots.activity_mut().push_frame();
         self.roots.activity_mut().push_temp(value);
         self.bind_control(
             code,
@@ -737,6 +742,7 @@ impl Interp {
             let text = self.string_value_text(value);
             self.trace_keyword(loop_indent, "COUNTER", &text);
         }
+        self.roots.activity_mut().pop_frame(pass);
         Ok(())
     }
 
@@ -2492,15 +2498,21 @@ impl Interp {
         loop_indent: usize,
     ) -> Result<bool, Failure> {
         let supplier = with.supplier;
+        // A pass's own frame, as `count_pass`'s: the bound variables root
+        // INDEX and ITEM once written. The `?` paths leave it to the outer
+        // truncation.
+        let pass = self.roots.activity_mut().push_frame();
         if !with.first {
             self.supplier_send(supplier, b"NEXT")?;
         }
         with.first = false;
         let available = self.supplier_send(supplier, b"AVAILABLE")?;
+        self.roots.activity_mut().push_temp(available);
         let text = self.string_value_text(available);
         if !logical_value(&text)
             .ok_or_else(|| Failure::from(Raised::syntax(34, 906, vec![text])))?
         {
+            self.roots.activity_mut().pop_frame(pass);
             return Ok(false);
         }
         for (name, message) in [(with.index, &b"INDEX"[..]), (with.item, &b"ITEM"[..])] {
@@ -2517,6 +2529,7 @@ impl Interp {
                 )?;
             }
         }
+        self.roots.activity_mut().pop_frame(pass);
         if let Some(remaining) = with.remaining.as_mut() {
             if *remaining == 0 {
                 return Ok(false);

@@ -210,6 +210,38 @@ fn do_counter_counts_the_passes_entered_on_a_controlled_loop() {
     assert_eq!(out, b"3 4\n".to_vec());
 }
 
+/// A `COUNTER` or `DO WITH` pass roots nothing past its own end: the most
+/// temporaries live at once is the same for a long loop as for a short one.
+#[test]
+fn counter_and_with_passes_do_not_accumulate_temps() {
+    fn high_water(source: &str) -> usize {
+        let mut interp = Interp::new();
+        say_output(&mut interp, source.as_bytes());
+        interp.roots.activity().temps_capacity()
+    }
+    let counter = |n: usize| high_water(&format!("do counter c {n}\nend\nsay c"));
+    let long = counter(20000);
+    assert!(
+        long < 1000,
+        "COUNTER: {long} temporaries live at once after 20000 passes"
+    );
+    assert_eq!(
+        counter(100),
+        long,
+        "COUNTER: the high-water mark grows with the pass count"
+    );
+    // A dense collection's `SUPPLIER` roots two temporaries per item while it
+    // is built, so the loop over it is held to that build's own mark. At 30000
+    // items the build needs 65536 slots, and three more temporaries a pass
+    // would need 131072.
+    let build = "a = .array~new\ndo j = 1 to 30000\na[j] = j\nend\n";
+    assert_eq!(
+        high_water(&format!("{build}do with index i item v over a\nend\nsay i")),
+        high_water(&format!("{build}s = a~supplier\nsay s~index")),
+        "DO WITH over 30000 items: the loop raises the high-water mark past the supplier's own"
+    );
+}
+
 // ---- DO i = TO/BY/FOR (controlled), and DO OVER ----
 
 #[test]

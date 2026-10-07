@@ -386,6 +386,12 @@ impl ActivityRoots {
         self.temps.len()
     }
 
+    /// How many temporaries the stack has room for: at least the most it has
+    /// held at once, which a test reads after a run as its high-water mark.
+    pub fn temps_capacity(&self) -> usize {
+        self.temps.capacity()
+    }
+
     /// Opens a segment of `initial_len` unassigned slots for the frame
     /// numbered `serial`.
     fn push_segment(&mut self, initial_len: usize, serial: u64) -> SlotFrame {

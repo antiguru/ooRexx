@@ -122,3 +122,19 @@ cycles at fewer instructions, and `perf annotate` puts it in `loop_advance` (20.
 37.4% at r1, where `cgdiff.py` gives it 49,999,953 fewer instructions). Two further rounds moved it the wrong way:
 `DO WITH`'s state out of `LoopState` (+6.5% cycles) and the counter boxed in `FlatLoop` (+10%).
 Neither landed. Three rounds are spent; this stops for Moritz's ruling.
+
+Ruling (Moritz, 2026-10-07): the `emptyloop` wall-clock overrun is accepted for now and is
+re-checked at Task 12 with a layout control.
+
+Whole-group rows that `4d46b76b0` rewrote. Each failure was visible only once DO COUNTER stopped
+refusing, and none of them is caused by the loops. Each test was run alone on both engines from an
+ooTest copy with every other `test_*` method renamed. The oracle passes every one; the column says
+what ours fails on.
+
+| group | test | ours, alone | cause |
+|---|---|---|---|
+| TRACE_TraceObject | TEST_VARIABLE | rc 1: `assertSame` 6 against 0, "number of variable related trace objects" (line 162) | no collected TraceObject has a VARIABLE entry |
+| TRACE_TraceObject | TEST_CALLER_STACK_FRAME_REPLY_START | rc 1: `assertEquals` at line 706, a count of 0 where 2 is expected | no CALLERSTACKFRAME carries a THREAD entry |
+| TRACE_TraceObject | TEST_TRACEOBJECT_COLLECTOR | rc 2: 97.1 at line 276, `.nil` does not understand STARTSWITH | the collector gathers fewer trace lines than the test produces |
+| TRACE | TEST_TRACE_LABEL_WITH_FORWARD | rc 1: `test_forwarded3.rex` traces 10 lines against 12 (line 1188) | FORWARD/REPLY `>I>`/`<I<` lines across the replied activity |
+| Method | TEST_NEWFILE_CONTEXT_FLOATINGMETHOD, TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE, TEST_NEW_CONTEXT_OMITTED, TEST_NEW_ARRAY_FROM_FILE, TEST_NEW_FILE_COMPILED | rc 2: three `assertEquals`/`assertOneOrAnother` failures and two 98.971 | Method NEW's file, array and context shapes; the whole run refuses at Method NEW (Phase 9) |
