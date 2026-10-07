@@ -1,0 +1,15 @@
+/* CONDITION('D') after RAISE NOVALUE with no DESCRIPTION is the null
+   string; a DESCRIPTION is answered, and a variable read carries its name. */
+signal on novalue name h
+call sub
+say 'back'
+exit
+sub: raise novalue return
+sub2: raise novalue description 'dd' return
+h: say 'D=['condition('D')']' condition('C')
+signal on novalue name h2
+call sub2
+h2: say 'D=['condition('D')']'
+signal on novalue name h3
+say zunsetvar
+h3: say 'D=['condition('D')']'

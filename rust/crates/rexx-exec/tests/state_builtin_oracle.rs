@@ -28,10 +28,7 @@ struct Case {
     source: &'static str,
 }
 
-/// The cases whose three descriptors must **not** agree. Empty since the
-/// condition object landed: `condition_object` and `condition_additional`
-/// were the last two, both refusing through `Loud::builtin_option_object`
-/// because this crate built no Directory to answer with. The list stays --
+/// The cases whose three descriptors must **not** agree.
 /// [`every_state_builtin_case_matches_the_oracle_except_the_declared_gaps`]
 /// polices it in both directions, so a case that starts differing is as red
 /// as a declared gap that starts agreeing.

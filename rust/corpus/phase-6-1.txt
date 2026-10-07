@@ -55,3 +55,6 @@ lang/use_arg_msg_trace.rex
 # Task 3: .context~condition answers a copy of the condition object.
 lang/context_condition.rex
 lang/context_condition_call.rex
+
+# Task 3: CONDITION('D') after RAISE NOVALUE with no DESCRIPTION.
+lang/condition_d_raise_novalue.rex

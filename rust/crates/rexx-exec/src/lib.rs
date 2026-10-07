@@ -686,16 +686,6 @@ impl Loud {
         }
     }
 
-    /// A builtin's option letter whose answer this crate cannot produce.
-    fn builtin_option_object(routine: &str, option: u8, why: &str) -> Loud {
-        Loud {
-            message: format!(
-                "{routine} option \"{}\" answers {why}, which is not implemented",
-                option.escape_ascii()
-            ),
-        }
-    }
-
     /// A `PARSE` template trigger that needs an operand and has none.
     fn parse_trigger_operand() -> Loud {
         Loud {

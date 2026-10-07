@@ -17,7 +17,6 @@ use rexx_core::{BehaviourId, Body, ObjRef};
 
 use super::{Args, optional_string, whole_number};
 use crate::Interp;
-use crate::Loud;
 use crate::activation::TrappedCondition;
 use crate::error::{Failure, Raised};
 
@@ -346,22 +345,12 @@ pub(crate) fn condition(
             let name = condition.name.to_vec();
             Ok(interp.text_built(name))
         }
-        (b'D', Some(condition)) => match (&condition.description, &condition.name[..]) {
-            (Some(description), _) => {
+        (b'D', Some(condition)) => match &condition.description {
+            Some(description) => {
                 let description = description.clone();
                 Ok(interp.text_built(description))
             }
-            // The one pair this crate cannot answer: the oracle's `NOVALUE`
-            // description is the variable's own derived name (measured,
-            // `ZUNSETVAR`) and nothing on the read path carries it as far as
-            // `novalue_check`. `Raised::description` has the whole note.
-            (None, b"NOVALUE") => {
-                Err(
-                    Loud::builtin_option_object("CONDITION", b'D', "the NOVALUE variable's name")
-                        .into(),
-                )
-            }
-            (None, _) => Ok(interp.text(b"")),
+            None => Ok(interp.text(b"")),
         },
         (b'E', Some(condition)) => match condition.code_sub {
             Some(sub) => Ok(interp.text(sub.to_string().as_bytes())),
