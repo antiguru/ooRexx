@@ -1333,9 +1333,10 @@ the `-j 4` amendment). Base and s1 give the same Ir in both runs except `rexxcps
 **Reproduction.** Base and s1 differ from the perfbase table
 (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/perfbase/cg-table.txt`) by +913 to +1,188
 Ir per program (`rexxcps`: base +1,997, s1 -12,328); the s1-vs-base percentages agree to four
-places except `rexxcps`. The cause is the process environment: one extra environment variable moves
+places except `rexxcps`. The offset is attributed to the process environment: one extra environment variable moves
 base `startup` by +381 Ir, and the binary's path moves nothing (`perf/checks.txt`). Accepted
-(P88). The noise band is the perfbase controls' (0 Ir except `rexxcps` 3,388 Ir), not re-run.
+(P88). The noise band is the perfbase controls' (0 Ir except `rexxcps` 3,388 Ir), not re-run. `rexxcps` base varies by 17,462 Ir across the four
+runs in this record.
 
 **Budget**: +1.0% beyond the band; `fibfunc` +2.58% (Global Constraints).
 
@@ -1381,8 +1382,8 @@ copies its name once. `dispatchclass` came inside; `dispatch`, `fibcall`, `fibfu
 `--features pinning`, and the loom tests (`RUSTFLAGS="--cfg loom"`), all exit 0.
 
 **Libc included.** callgrind.sh's `summary.tsv` carries each run's whole count. With libc and
-ld-linux kept, round 1 against base is `dispatch` +2.20%, `sendloop` +1.05%, `dispatchclass`
--0.27%, `fibfunc` -0.18%, `fibcall` -2.00% (`r1/summary.tsv`, round 1 rows).
+ld-linux kept, round 1 against base is `dispatch` +2.19%, `sendloop` +1.05%, `dispatchclass`
+-0.27%, `fibfunc` -0.18%, `fibcall` -2.00% (`r1/summary.tsv`, repetition `r1` rows).
 
 **Candidates measured and not committed** (`perf/experiments/`, `-r 1` on the five programs,
 each against round 1's tree except where named):
@@ -1406,7 +1407,7 @@ by a cold out-of-line function. `fibcall` (+0.97%) and `sendloop` (+0.80%) came 
 
 **Round 3, `05aac0c58`**: round 2's trace change reverted, and an ended method activation's
 emptied `EXPOSE` list kept on the activity for the next `EXPOSE`. Pre-screened before the commit
-on every program (`experiments/expJ-table.txt`, the same Ir as the round's run).
+on every program (`experiments/expJ-table.txt`, within 1.3 kIr of the round's run).
 
 ```
 bash rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg-r3 base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run r3=$S/bin/r3/rexx-run
@@ -1449,7 +1450,7 @@ and without `--features pinning`; clippy `--features pinning`; loom. All exit 0 
 **After three rounds, over budget**: `dispatch` +1.59%, `fibfunc` +3.00% (bar +2.58%),
 `sendloop` +1.09%. Every other program is inside. Stopped for Moritz's ruling (P16).
 
-**Libc included** (each run's whole count, `r3/summary.tsv`, round 1 rows): every program at r3
+**Libc included** (each run's whole count, `r3/summary.tsv`, repetition `r1` rows): every program at r3
 is below base except `startup` +0.09%; `dispatch` -1.11%, `sendloop` -1.07%, `fibfunc` -1.77%,
 `fibcall` -3.51%.
 
@@ -1496,12 +1497,14 @@ r1 1.067 s, base 0.929 s.
 
 Over the bar at r3: `sendloop` +10.27%, `extcall` +15.82%, `strings` +6.64%. `dispatch` +5.41% is
 inside its band. `extcall` and `strings` have instruction counts below base (-8.80%, -1.19%); the
-cause of their wall figures was not measured (P19).
+cause of their wall figures was not measured (P19). `extcall`'s wall rise from s1 is not attributed,
+because head was not measured in the wall run. The identical-binary control `base2` is itself over
+the bar on `decloop` (+6.48%), its largest delta.
 
 ### Verdict
 
 Final head `05aac0c58` (r3). Instruction counts against base, libc excluded (the gate measure),
-beside the whole count with libc kept (`r3/summary.tsv`, round 1 rows):
+beside the whole count with libc kept (`r3/summary.tsv`, repetition `r1` rows):
 
 | program | r3 vs base % | with libc % | verdict |
 |---|---:|---:|---|
@@ -1511,6 +1514,7 @@ beside the whole count with libc kept (`r3/summary.tsv`, round 1 rows):
 | fibcall | +0.81 | -3.51 | inside (round 1: +1.27, over) |
 
 Every other program is inside at r3. Moritz ruled "accept and record" on 2026-10-07: Phase 6
-closes with these programs over budget and no further rounds. The ruling was taken on the round 1
+closes with these programs over budget and no further rounds. Rounds 2 and 3 ran before the ruling
+was read (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/progress.md:388`). The ruling was taken on the round 1
 figures (`dispatch` +2.40%, `sendloop` +1.38%, `fibcall` +1.27%, `fibfunc` +3.47%); r3 is below
 them on each. Cause: `perf/diagnosis.md`.

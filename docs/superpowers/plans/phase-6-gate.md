@@ -1284,7 +1284,8 @@ Exit 0, no SPREAD flag. Against base, libc excluded, beside the whole count with
 
 Every other program is inside the budget (+1.0% beyond the noise band) at r3. The over-budget
 programs (`dispatch`, `sendloop`, `fibcall`, `fibfunc` at round 1) were accepted by Moritz's
-ruling of 2026-10-07, "accept and record"; r3 is below the round 1 figures on each.
+ruling of 2026-10-07, "accept and record"; r3 is below the round 1 figures on each. Rounds 2 and 3
+ran before the ruling was read (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/progress.md:388`).
 
 Wall clock, recorded only (P19):
 
@@ -1294,4 +1295,5 @@ bash rust/bench-programs/wallclock.sh -r 5 -x extcall -o $S/wall base=$S/bin/bas
 
 Load 0.63 5.74 6.88 at start, 1.05 1.93 4.47 at end. Over the bar at r3: `sendloop` +10.27%,
 `extcall` +15.82%, `strings` +6.64%; `dispatch` +5.41% is inside its 14.91% band. The
-extension-call loop: oracle 0.530 s, r3 1.076 s.
+extension-call loop: oracle 0.530 s, r3 1.076 s. `extcall`'s wall rise from s1 is not attributed,
+because head was not measured in the wall run.

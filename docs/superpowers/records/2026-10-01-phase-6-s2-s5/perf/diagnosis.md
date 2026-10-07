@@ -97,4 +97,4 @@ no rows on `fibfunc` or `fibcall`.
   5 Ir per send and nothing per call (`experiments/expD-table.txt`): what is left of an allocation
   in the gate measure is small, because malloc and free are libc.
 - With libc kept, round 1 against base is below base on `fibfunc` (-0.18%) and `fibcall`
-  (-2.00%) and above on `dispatch` (+2.20%) and `sendloop` (+1.05%).
+  (-2.00%) and above on `dispatch` (+2.19%) and `sendloop` (+1.05%).
