@@ -318,7 +318,7 @@ fn context_condition(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     at_context(interp, receiver, |interp, depth| {
-        if frame(interp, depth)?.condition.is_some() {
+        if frame(interp, depth)?.condition().is_some() {
             return Err(Loud::builtin_option_object("CONDITION", b'O', "a Directory").into());
         }
         Ok(Some(ObjRef::NIL))

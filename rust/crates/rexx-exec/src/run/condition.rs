@@ -381,18 +381,19 @@ impl Interp {
             None => self.build_trapped_condition_object(&raised, &unwound)?,
         };
         self.attach_condition(object);
-        self.activation_mut().condition = Some(TrappedCondition {
-            name: raised.condition.as_bytes().into(),
-            // Only a `SYNTAX` condition has a `CODE` item at all
-            // (`Activity::createExceptionObject` is the one place it is put
-            // in), so the name and not `reportable()` is the test: measured,
-            // a trapped `HALT` reports `E` as the null string, and `HALT` is
-            // the one non-`SYNTAX` condition this crate numbers.
-            code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
-            call: false,
-            description: raised.description.clone(),
-            object: Some(object),
-        });
+        self.activation_mut()
+            .replace_condition(Some(TrappedCondition {
+                name: raised.condition.as_bytes().into(),
+                // Only a `SYNTAX` condition has a `CODE` item at all
+                // (`Activity::createExceptionObject` is the one place it is put
+                // in), so the name and not `reportable()` is the test: measured,
+                // a trapped `HALT` reports `E` as the null string, and `HALT` is
+                // the one non-`SYNTAX` condition this crate numbers.
+                code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
+                call: false,
+                description: raised.description.clone(),
+                object: Some(object),
+            }));
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
         self.activity.active_condition = Some(ActiveCondition {
@@ -535,26 +536,28 @@ impl Interp {
         // its copy at call time and the caller must be left as it was --
         // measured, `condition()` back in the caller after a `CALL ON`
         // handler returns is the null string.
-        let enclosing_condition = self.activation_mut().condition.replace(TrappedCondition {
-            name: key.clone(),
-            // No condition reaching here has a `CODE`, and both halves of
-            // that are measured. A `CALL ON` trap cannot name `SYNTAX`
-            // directly -- `call on syntax` is a 25.1 translation error --
-            // and `CALL ON ANY`, the one spelling that could smuggle it in,
-            // does not catch a `SYNTAX` condition either: `call on any name
-            // uh` with `say 1/0` is the ordinary fatal 42.3 at rc 214 on
-            // both interpreters. `TrapHandler::canHandle` is the C++ side of
-            // the same rule.
-            code_sub: None,
-            call: true,
-            description: pending.description.clone(),
-            // Carried from the queue rather than built here. By delivery the
-            // raising clause has finished and its routine may have returned,
-            // so `POSITION` and `STACKFRAMES` no longer exist to be read --
-            // measured, `POSITION` is 7 for a command inside a routine, not
-            // the caller's own `call` line.
-            object: pending.object,
-        });
+        let enclosing_condition = self
+            .activation_mut()
+            .replace_condition(Some(TrappedCondition {
+                name: key.clone(),
+                // No condition reaching here has a `CODE`, and both halves of
+                // that are measured. A `CALL ON` trap cannot name `SYNTAX`
+                // directly -- `call on syntax` is a 25.1 translation error --
+                // and `CALL ON ANY`, the one spelling that could smuggle it in,
+                // does not catch a `SYNTAX` condition either: `call on any name
+                // uh` with `say 1/0` is the ordinary fatal 42.3 at rc 214 on
+                // both interpreters. `TrapHandler::canHandle` is the C++ side of
+                // the same rule.
+                code_sub: None,
+                call: true,
+                description: pending.description.clone(),
+                // Carried from the queue rather than built here. By delivery the
+                // raising clause has finished and its routine may have returned,
+                // so `POSITION` and `STACKFRAMES` no longer exist to be read --
+                // measured, `POSITION` is 7 for a command inside a routine, not
+                // the caller's own `call` line.
+                object: pending.object,
+            }));
         let queued_before = self.activity.pending_traps.len();
         // `CallType::Subroutine` because a `CALL ON` handler is a `CALL`, and
         // that reaches `PARSE SOURCE` when the trap's name resolves to a
@@ -585,7 +588,7 @@ impl Interp {
         for pending in self.activity.pending_traps.iter_mut().skip(queued_before) {
             pending.queued_during_delivery = true;
         }
-        self.activation_mut().condition = enclosing_condition;
+        self.activation_mut().replace_condition(enclosing_condition);
         // `trapUndelay`. The `if let` mirrors the C++ testing the handler
         // for null before enabling it; nothing a Rexx program can do
         // removes the entry between here and the delay above, so the arm is
@@ -1019,8 +1022,7 @@ impl Interp {
             raised.delivery.positionless = false;
             raised.position = 0;
             self.reraise_failure_levels();
-            self.activity.reraised_object =
-                self.activation().condition.as_ref().and_then(|c| c.object);
+            self.activity.reraised_object = self.activation().condition().and_then(|c| c.object);
             self.activity.reraise_leaving = top + 1;
         }
         Err(raised.into())

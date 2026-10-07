@@ -889,7 +889,7 @@ impl Interp {
                 // `CONDITION()` answers and a reset inside the callee dies
                 // with it. `TrappedCondition`'s own doc comment has the
                 // four-line transcript.
-                let condition = caller.condition.clone();
+                let condition = caller.condition().cloned();
                 let mut callee = Activation::nested(
                     callee_id,
                     program,

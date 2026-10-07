@@ -357,22 +357,27 @@ pub(crate) struct Activation {
     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
     /// `NOVALUE`, `USER FOO`, ...
     pub(crate) traps: TrapMap,
-    /// The condition `CONDITION()` reports in this activation, or `None`
-    /// when no handler has been entered here. [`TrappedCondition`] carries
-    /// the measurements for the copy-on-call, never-write-back rule it
-    /// follows along with [`traps`].
-    pub(crate) condition: Option<TrappedCondition>,
+    /// What this activation holds only once a handler, `RANDOM` or
+    /// `SETLOCAL` has run in it, allocated on the first.
+    pub(crate) cold: Option<Box<ActivationCold>>,
     /// `DATE`/`TIME`'s clock reading, in `builtin::datetime`'s own
     /// microseconds-since-0001-01-01 unit -- the last value this activation
-    /// ever read, or `None` before its first one. **This is not itself the
-    /// per-clause cache** -- see [`clock_stale`] for that half -- because
+    /// ever read, or [`NO_CLOCK`] before its first one. **This is not itself
+    /// the per-clause cache** -- see [`clock_stale`] for that half -- because
     /// `RexxActivation::getTime`'s own lazy `TIME('R')` reset
     /// (`execution/RexxActivation.cpp:3400`-`3406`) needs the *stale* value
     /// still readable one call after the clause that produced it stopped
-    /// being current, to anchor the reset to. Overwriting this straight to
-    /// `None` on invalidation, an earlier version of this field's own
-    /// shape, made that value unrecoverable by the time a reset needed it.
-    pub(crate) cached_clock: Option<i64>,
+    /// being current, to anchor the reset to.
+    pub(crate) cached_clock: i64,
+    /// `TIME('E')`/`TIME('R')`'s anchor, `settings.elapsedTime`: the reading
+    /// elapsed time is measured from, in [`cached_clock`]'s unit, or
+    /// [`NO_CLOCK`] before this activation's first `E` or `R`.
+    #[expect(dead_code, reason = "read once the elapsed clock moves here")]
+    pub(crate) elapsed_anchor: i64,
+    /// The innermost `SELECT CASE`'s value here, which an absorbed `WHEN`
+    /// compares against; `None` inside a plain `SELECT`.
+    #[expect(dead_code, reason = "read once the case text moves here")]
+    pub(crate) current_case_text: Option<Vec<u8>>,
     /// Whether [`cached_clock`] needs a fresh read before this activation's
     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
     /// doc names, set `true` once per instruction by `Op::Clause`'s region
@@ -488,13 +493,14 @@ pub(crate) struct MethodIdentity {
     pub(crate) receiver: ObjRef,
 }
 
-/// An activation's flags in one byte, which keeps [`Activation`] at 512
-/// bytes: forwarded, `ActivationSettings::isGuarded`, and `objectScope ==
-/// SCOPE_RESERVED`.
+/// An activation's flags in one byte: forwarded, `ActivationSettings::
+/// isGuarded`, and `objectScope == SCOPE_RESERVED`.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct ActivationFlags(u8);
 
-const _: () = assert!(size_of::<Activation>() == 512);
+/// Every call pushes one, so the size is pinned: a field that grows it has to
+/// pay for itself on the call path (ruling R4).
+const _: () = assert!(size_of::<Activation>() == 480);
 
 impl ActivationFlags {
     const FORWARDED: u8 = 1;
@@ -535,6 +541,31 @@ impl ActivationFlags {
             self.0 &= !bit;
         }
     }
+}
+
+/// [`Activation::cached_clock`] and [`Activation::elapsed_anchor`] before
+/// their first reading: the oracle's own `elapsedTime == 0`.
+pub(crate) const NO_CLOCK: i64 = 0;
+
+/// The part of an activation most never use, boxed off the call path.
+#[derive(Default)]
+pub(crate) struct ActivationCold {
+    /// The condition `CONDITION()` reports in this activation, or `None`
+    /// when no handler has been entered here. [`TrappedCondition`] carries
+    /// the measurements for the copy-on-call, never-write-back rule it
+    /// follows along with [`Activation::traps`].
+    pub(crate) condition: Option<TrappedCondition>,
+    /// The condition `RAISE PROPAGATE` re-raises here, `settings.conditionObj`.
+    #[expect(dead_code, reason = "read once the propagated condition moves here")]
+    pub(crate) active_condition: Option<Rc<crate::ActiveCondition>>,
+    /// `RANDOM`'s state for a top-level activation, `None` before its first
+    /// draw.
+    #[expect(dead_code, reason = "read once the seed moves here")]
+    pub(crate) random_seed: Option<u64>,
+    /// What each outstanding `SETLOCAL` saved, innermost last: the directory
+    /// and the whole environment.
+    #[expect(dead_code, reason = "read once the list moves here")]
+    pub(crate) locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
 }
 
 /// What a `REPLY` leaves its activation until the activation ends.
@@ -611,8 +642,10 @@ impl Activation {
             address: AddressState::default(),
             io_configs: None,
             traps: TrapMap::default(),
-            condition: None,
-            cached_clock: None,
+            cold: None,
+            cached_clock: NO_CLOCK,
+            elapsed_anchor: NO_CLOCK,
+            current_case_text: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -678,13 +711,20 @@ impl Activation {
             address: inherited.address,
             io_configs: inherited.io_configs,
             traps: inherited.traps,
-            condition: inherited.condition,
+            cold: inherited.condition.map(|condition| {
+                Box::new(ActivationCold {
+                    condition: Some(condition),
+                    ..ActivationCold::default()
+                })
+            }),
             // Not inherited, matching every other field this constructor
             // does not take from `inherited`: a fresh `RexxActivation`
             // constructs a fresh, invalid `RexxDateTime timeStamp`
             // regardless of its caller, and this is that same "start
             // invalid" rather than something `Inherited` should carry.
-            cached_clock: None,
+            cached_clock: NO_CLOCK,
+            elapsed_anchor: NO_CLOCK,
+            current_case_text: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -739,8 +779,10 @@ impl Activation {
             address: AddressState::default(),
             io_configs: None,
             traps: TrapMap::default(),
-            condition: None,
-            cached_clock: None,
+            cold: None,
+            cached_clock: NO_CLOCK,
+            elapsed_anchor: NO_CLOCK,
+            current_case_text: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -790,8 +832,10 @@ impl Activation {
             address: AddressState::default(),
             io_configs: None,
             traps: TrapMap::default(),
-            condition: None,
-            cached_clock: None,
+            cold: None,
+            cached_clock: NO_CLOCK,
+            elapsed_anchor: NO_CLOCK,
+            current_case_text: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -825,6 +869,27 @@ impl Activation {
     /// [`Activation::invoked_as`].
     pub(crate) fn invoked_with(&self) -> &[Option<ObjRef>] {
         self.call_arguments.as_deref().unwrap_or_default()
+    }
+
+    /// The condition `CONDITION()` reports here.
+    pub(crate) fn condition(&self) -> Option<&TrappedCondition> {
+        self.cold.as_deref()?.condition.as_ref()
+    }
+
+    /// Replaces [`Activation::condition`], answering the one it held.
+    pub(crate) fn replace_condition(
+        &mut self,
+        condition: Option<TrappedCondition>,
+    ) -> Option<TrappedCondition> {
+        if condition.is_none() && self.cold.is_none() {
+            return None;
+        }
+        std::mem::replace(&mut self.cold_mut().condition, condition)
+    }
+
+    /// The cold part, allocated on the first ask.
+    pub(crate) fn cold_mut(&mut self) -> &mut ActivationCold {
+        self.cold.get_or_insert_with(Box::default)
     }
 
     /// Appends every `ObjRef` this activation holds to `out`.
@@ -861,8 +926,10 @@ impl Activation {
             // Plain bookkeeping: counters and flags, no `ObjRef` among them.
             debug: _,
             traps: _,
-            condition,
+            cold,
             cached_clock: _,
+            elapsed_anchor: _,
+            current_case_text: _,
             clock_stale: _,
             context_object,
             notify_message,
@@ -887,7 +954,7 @@ impl Activation {
             call: _,
             description: _,
             object,
-        }) = condition
+        }) = cold.as_deref().and_then(|cold| cold.condition.as_ref())
         {
             out.extend(*object);
         }

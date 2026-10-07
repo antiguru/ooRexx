@@ -693,7 +693,7 @@ impl Activity {
                 .iter()
                 .map(std::ops::Deref::deref)
                 .chain(suspended.iter().map(Box::as_ref))
-                .filter_map(|activation| activation.condition.as_ref()?.object),
+                .filter_map(|activation| activation.condition()?.object),
         );
     }
 }

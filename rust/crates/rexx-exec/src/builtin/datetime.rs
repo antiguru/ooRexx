@@ -29,6 +29,7 @@ use rexx_num::Number;
 
 use super::{Args, optional_string};
 use crate::Interp;
+use crate::activation::NO_CLOCK;
 use crate::error::{Failure, Raised};
 
 // ---- the calendar, ported from `RexxDateTime` ----
@@ -769,20 +770,18 @@ fn real_clock_base_time() -> i64 {
 /// the cache lives on the activation rather than on `Interp`.
 fn now_base_time(interp: &mut Interp) -> i64 {
     if !interp.activation().clock_stale {
-        return interp
-            .activation()
-            .cached_clock
-            .expect("a clock that is not stale was read at least once");
+        return interp.activation().cached_clock;
     }
     if interp.activity.pending_elapsed_reset {
-        if let Some(stale) = interp.activation().cached_clock {
+        let stale = interp.activation().cached_clock;
+        if stale != NO_CLOCK {
             interp.activity.elapsed_anchor = Some(stale);
         }
         interp.activity.pending_elapsed_reset = false;
     }
     let micros = real_clock_base_time();
     let activation = interp.activation_mut();
-    activation.cached_clock = Some(micros);
+    activation.cached_clock = micros;
     activation.clock_stale = false;
     micros
 }

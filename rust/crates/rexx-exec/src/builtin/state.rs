@@ -320,7 +320,7 @@ pub(crate) fn condition(
     // Resolved before the option is answered, because two of the options
     // have a distinct answer when there is no condition at all and the rest
     // share one.
-    let active: Option<TrappedCondition> = interp.activation().condition.clone();
+    let active: Option<TrappedCondition> = interp.activation().condition().cloned();
     match (style, &active) {
         // `.NIL` with nothing active, and not the null string the letters
         // below answer -- measured, `say condition('O')` and `condition('A')`
@@ -338,7 +338,7 @@ pub(crate) fn condition(
             None => Ok(ObjRef::NIL),
         },
         (b'R', _) => {
-            interp.activation_mut().condition = None;
+            interp.activation_mut().replace_condition(None);
             Ok(interp.text(b""))
         }
         (b'C' | b'D' | b'E' | b'I' | b'S', None) => Ok(interp.text(b"")),
