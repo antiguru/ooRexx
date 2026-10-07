@@ -558,22 +558,46 @@ pub(crate) fn random(
 
 /// `RexxActivation::getRandomSeed`: install a supplied seed, then advance the
 /// stream once and answer the new state.
+/// The state is the nearest top-level activation's, seeded on its first
+/// unseeded draw from the activity's generator.
 fn next_seed(interp: &mut Interp, seed: Option<i64>) -> u64 {
-    if let Some(seed) = seed {
+    let held = match seed {
         // "flipping all of the bits gives us a better spread", then thirteen
         // scrambles, then the unconditional fourteenth below.
-        let mut state = !(seed as u64);
-        for _ in 0..13 {
-            state = randomize(state);
+        Some(seed) => {
+            let mut state = !(seed as u64);
+            for _ in 0..13 {
+                state = randomize(state);
+            }
+            Some(state)
         }
-        interp.activity.random_seed = Some(state);
+        None => interp
+            .top_level_activation_mut()
+            .and_then(|activation| activation.cold.as_deref()?.random_seed),
+    };
+    let state = randomize(held.unwrap_or_else(|| activation_seed(interp)));
+    if let Some(activation) = interp.top_level_activation_mut() {
+        activation.cold_mut().random_seed = Some(state);
     }
-    let state = interp.activity.random_seed.get_or_insert_with(initial_seed);
-    *state = randomize(*state);
-    *state
+    state
 }
 
-/// The starting state for a program that never supplies a seed.
+/// `Activity::getRandomSeed`: a new activation's seed, advancing the
+/// activity's generator once. A splitmix64 step, so successive activations'
+/// streams are not shifted copies of one another.
+fn activation_seed(interp: &mut Interp) -> u64 {
+    let source = interp
+        .activity
+        .random_source
+        .get_or_insert_with(initial_seed);
+    *source = source.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut mixed = *source;
+    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    mixed ^ (mixed >> 31)
+}
+
+/// The generator's starting state.
 fn initial_seed() -> u64 {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -372,11 +372,9 @@ pub(crate) struct Activation {
     /// `TIME('E')`/`TIME('R')`'s anchor, `settings.elapsedTime`: the reading
     /// elapsed time is measured from, in [`cached_clock`]'s unit, or
     /// [`NO_CLOCK`] before this activation's first `E` or `R`.
-    #[expect(dead_code, reason = "read once the elapsed clock moves here")]
     pub(crate) elapsed_anchor: i64,
     /// The innermost `SELECT CASE`'s value here, which an absorbed `WHEN`
     /// compares against; `None` inside a plain `SELECT`.
-    #[expect(dead_code, reason = "read once the case text moves here")]
     pub(crate) current_case_text: Option<Vec<u8>>,
     /// Whether [`cached_clock`] needs a fresh read before this activation's
     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
@@ -494,7 +492,8 @@ pub(crate) struct MethodIdentity {
 }
 
 /// An activation's flags in one byte: forwarded, `ActivationSettings::
-/// isGuarded`, and `objectScope == SCOPE_RESERVED`.
+/// isGuarded`, `objectScope == SCOPE_RESERVED`, the elapsed clock's pending
+/// reset (`elapsedReset`), and `debugPause`.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct ActivationFlags(u8);
 
@@ -506,6 +505,8 @@ impl ActivationFlags {
     const FORWARDED: u8 = 1;
     const GUARDED: u8 = 2;
     const RESERVED: u8 = 4;
+    const ELAPSED_RESET: u8 = 8;
+    const DEBUG_PAUSE: u8 = 16;
 
     /// A method activation's flags: `guarded`, and holding its lock where
     /// `reserved`.
@@ -534,6 +535,26 @@ impl ActivationFlags {
         self.set(Self::RESERVED, reserved);
     }
 
+    /// Whether a `TIME('R')`, or a clock read going backward, waits to move
+    /// the elapsed anchor at the next fresh clock read.
+    pub(crate) fn elapsed_reset(self) -> bool {
+        self.0 & Self::ELAPSED_RESET != 0
+    }
+
+    pub(crate) fn set_elapsed_reset(&mut self, reset: bool) {
+        self.set(Self::ELAPSED_RESET, reset);
+    }
+
+    /// Whether this activation is running a line typed at a debug pause:
+    /// `RexxActivation::debugPause`, which `inDebug` and `noTracing` read.
+    pub(crate) fn debug_pause(self) -> bool {
+        self.0 & Self::DEBUG_PAUSE != 0
+    }
+
+    pub(crate) fn set_debug_pause(&mut self, paused: bool) {
+        self.set(Self::DEBUG_PAUSE, paused);
+    }
+
     fn set(&mut self, bit: u8, on: bool) {
         if on {
             self.0 |= bit;
@@ -556,16 +577,29 @@ pub(crate) struct ActivationCold {
     /// follows along with [`Activation::traps`].
     pub(crate) condition: Option<TrappedCondition>,
     /// The condition `RAISE PROPAGATE` re-raises here, `settings.conditionObj`.
-    #[expect(dead_code, reason = "read once the propagated condition moves here")]
     pub(crate) active_condition: Option<Rc<crate::ActiveCondition>>,
     /// `RANDOM`'s state for a top-level activation, `None` before its first
     /// draw.
-    #[expect(dead_code, reason = "read once the seed moves here")]
     pub(crate) random_seed: Option<u64>,
     /// What each outstanding `SETLOCAL` saved, innermost last: the directory
     /// and the whole environment.
-    #[expect(dead_code, reason = "read once the list moves here")]
     pub(crate) locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
+}
+
+impl ActivationCold {
+    /// What an internal call or `CALL ON` handler starts from: the caller's
+    /// two conditions, and neither its seed nor its `SETLOCAL` list, which
+    /// stay on the top-level activation.
+    pub(crate) fn inherited(&self) -> Option<Box<ActivationCold>> {
+        if self.condition.is_none() && self.active_condition.is_none() {
+            return None;
+        }
+        Some(Box::new(ActivationCold {
+            condition: self.condition.clone(),
+            active_condition: self.active_condition.clone(),
+            ..ActivationCold::default()
+        }))
+    }
 }
 
 /// What a `REPLY` leaves its activation until the activation ends.
@@ -700,7 +734,11 @@ impl Activation {
             reply: ReplyState::None,
             replied_a_value: false,
             replied: None,
-            flags: ActivationFlags::default(),
+            flags: {
+                let mut flags = ActivationFlags::default();
+                flags.set_elapsed_reset(inherited.elapsed_reset);
+                flags
+            },
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -711,19 +749,13 @@ impl Activation {
             address: inherited.address,
             io_configs: inherited.io_configs,
             traps: inherited.traps,
-            cold: inherited.condition.map(|condition| {
-                Box::new(ActivationCold {
-                    condition: Some(condition),
-                    ..ActivationCold::default()
-                })
-            }),
-            // Not inherited, matching every other field this constructor
-            // does not take from `inherited`: a fresh `RexxActivation`
-            // constructs a fresh, invalid `RexxDateTime timeStamp`
-            // regardless of its caller, and this is that same "start
-            // invalid" rather than something `Inherited` should carry.
-            cached_clock: NO_CLOCK,
-            elapsed_anchor: NO_CLOCK,
+            cold: inherited.cold,
+            // The caller's stamp, invalid: `RexxActivation`'s internal-call
+            // constructor copies the settings and sets `timeStamp.valid =
+            // false` (`RexxActivation.cpp:241`), so a reset the caller left
+            // pending anchors to the caller's last reading.
+            cached_clock: inherited.cached_clock,
+            elapsed_anchor: inherited.elapsed_anchor,
             current_case_text: None,
             clock_stale: true,
             context_object: None,
@@ -1005,7 +1037,12 @@ pub(crate) struct Inherited {
     pub(crate) address: AddressState,
     pub(crate) io_configs: Option<Rc<IoConfigs>>,
     pub(crate) traps: TrapMap,
-    pub(crate) condition: Option<TrappedCondition>,
+    /// The caller's `CONDITION()` and `RAISE PROPAGATE` conditions
+    /// ([`ActivationCold::inherited`]).
+    pub(crate) cold: Option<Box<ActivationCold>>,
+    pub(crate) cached_clock: i64,
+    pub(crate) elapsed_anchor: i64,
+    pub(crate) elapsed_reset: bool,
 }
 
 /// The code body a `(program, selector)` pair denotes: `None` is
@@ -1080,6 +1117,26 @@ impl Interp {
             .map(Box::as_mut)
             .find(|frame| matches!(frame.entry, Entry::TopLevel | Entry::Method))
             .map(|frame| &mut frame.streams)
+    }
+
+    /// The innermost activation that is not an internal call: the one
+    /// `RANDOM`'s seed and `SETLOCAL`'s list belong to (the oracle's
+    /// `isInternalLevelCall` delegation to `parent`).
+    pub(crate) fn top_level_activation_mut(&mut self) -> Option<&mut Activation> {
+        if self
+            .activity
+            .running
+            .as_deref()
+            .is_some_and(|frame| frame.entry != Entry::InternalCall)
+        {
+            return self.activity.running.as_deref_mut();
+        }
+        self.activity
+            .suspended
+            .iter_mut()
+            .rev()
+            .map(Box::as_mut)
+            .find(|frame| frame.entry != Entry::InternalCall)
     }
 
     /// The activation at `depth`, counted as [`Activity::frames`] counts: `0`
@@ -1201,7 +1258,7 @@ impl Interp {
         // `trace_cache`'s own invariant: the setting travels with whichever
         // activation is running, and this changes which one that is.
         self.activity.trace_cache =
-            crate::trace::TraceCache::of(boxed.trace_mode, self.activity.debug_pause);
+            crate::trace::TraceCache::of(boxed.trace_mode, boxed.flags.debug_pause());
         // The clause the activation being suspended is stopped on, which is
         // what its own `StackFrame` reports for as long as it stays
         // suspended: `Activity::clause_state` is about to start describing the
@@ -1230,17 +1287,30 @@ impl Interp {
     /// Ends the running activation and resumes its caller, answering the
     /// activation that ended.
     pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
-        let ended = self.activity.running.take()?;
+        let mut ended = self.activity.running.take()?;
+        // An activation ending with `SETLOCAL`s outstanding restores the
+        // oldest (`RexxActivation.cpp:1494-1500`); one a `REPLY` moves on
+        // ends later, on its continuation's activity.
+        if let Some(cold) = ended.cold.as_deref_mut()
+            && !cold.locals.is_empty()
+            && ended
+                .replied
+                .as_ref()
+                .is_none_or(|replied| replied.continuation.is_none())
+        {
+            let oldest = cold.locals.swap_remove(0);
+            cold.locals.clear();
+            self.restore_local_environment(oldest);
+        }
         self.activity.running = self.activity.suspended.pop();
         // The resumed caller's setting, or `OFF` where nothing is left to
         // resume -- which is the state `Interp::new` starts in.
-        self.activity.trace_cache = crate::trace::TraceCache::of(
-            self.activity
-                .running
-                .as_deref()
-                .map_or(TraceMode::OFF, |resumed| resumed.trace_mode),
-            self.activity.debug_pause,
-        );
+        self.activity.trace_cache = match self.activity.running.as_deref() {
+            Some(resumed) => {
+                crate::trace::TraceCache::of(resumed.trace_mode, resumed.flags.debug_pause())
+            }
+            None => crate::trace::TraceCache::of(TraceMode::OFF, false),
+        };
         Some(ended)
     }
 
@@ -1265,7 +1335,7 @@ impl Interp {
     /// value through [`Activation::nested`] instead, never through here.
     pub(crate) fn set_trace_mode(&mut self, mode: TraceMode) {
         self.activation_mut().trace_mode = mode;
-        self.activity.trace_cache = crate::trace::TraceCache::of(mode, self.activity.debug_pause);
+        self.activity.trace_cache = crate::trace::TraceCache::of(mode, self.debug_pause());
     }
 }
 

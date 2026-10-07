@@ -1051,34 +1051,120 @@ fn a_context_follows_its_activation_to_a_reply_continuation() {
     in_modes(&waiting, true, "24 after 2 1\n");
 }
 
-/// A `REPLY` continuation keeps the elapsed clock and `RANDOM` seed its
-/// method set before the `REPLY`, and a reset the `REPLY` clause made; the
-/// draws are the oracle's.
+/// A `REPLY` continuation keeps its method's own `RANDOM` seed, and main's
+/// stream is main's own: oracle 5 of 5 runs `main 214`, `m 457`, `got 1`,
+/// `cont 100`, `main 807`.
 #[test]
-fn a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed() {
-    let program = |before_reply: &str, reply: &str, rest: &str| {
-        format!(
-            "o = .k~new\nsay o~m\n\
-             do while o~rest == ''\n  call SysSleep 0.01\nend\nsay o~rest\n\
-             ::class k\n::attribute rest get unguarded\n\
-             ::method m\n  expose rest\n  rest = ''\n  t = time('E')\n  \
-             x = random(1, 100000, 7)\n{before_reply}  reply {reply}\n  \
-             call SysSleep 0.01\n  rest = {rest} random(1, 100000) random(1, 100000)\n"
-        )
-    };
+fn a_reply_continuation_keeps_its_methods_seed_and_main_keeps_its_own() {
     in_modes(
-        &program("", "x", "(time('E') > 0)"),
+        "say 'main' random(1,1000,3)\no = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\n\
+         say 'main' random(1,1000)\n\
+         ::class t\n::method m\n  say 'm' random(1,1000,11)\n  reply 1\n  \
+         say 'cont' random(1,1000)\n",
         true,
-        "54876\n1 72518 13736\n",
+        "main 214\nm 457\ngot 1\ncont 100\nmain 807\n",
     );
+}
+
+/// A `REPLY` continuation keeps the elapsed clock its method reset before
+/// the `REPLY`, and main's clock is main's own: oracle 5 of 5 runs
+/// `got 1`, `cont 1 1`, `main 1`.
+#[test]
+fn a_reply_continuation_keeps_its_methods_elapsed_clock() {
     in_modes(
-        &program(
-            "  call SysSleep 0.2\n",
-            "x (time('R') > 0.1)",
-            "(time('E') < 0.1)",
-        ),
+        "o = .t~new\nx = time('e')\ncall SysSleep 0.1\nsay 'got' o~m\ncall SysSleep 0.3\n\
+         say 'main' (time('e') >= 0.4)\n\
+         ::class t\n::method m\n  call SysSleep 0.1\n  call time 'r'\n  reply 1\n  \
+         call SysSleep 0.02\n  e = time('e')\n  say 'cont' (e > 0) (e < 0.1)\n",
         true,
-        "54876 1\n1 72518 13736\n",
+        "got 1\ncont 1 1\nmain 1\n",
+    );
+}
+
+/// A method starts with an elapsed clock of its own, which its `REPLY`
+/// continuation keeps: oracle 5 of 5 runs `m before zero 1`, `main got 7`,
+/// `main elapsed 1`, `m after 1 1`, `m after below main 1`.
+#[test]
+fn a_method_starts_its_own_elapsed_clock_across_a_reply() {
+    in_modes(
+        "call time 'r'\ncall SysSleep 0.05\no = .t~new\nsay 'main got' o~m\n\
+         e = time('e')\nsay 'main elapsed' (e >= 0.05)\ncall SysSleep 0.3\n\
+         say 'm after below main' (o~after < time('e'))\n\
+         ::class t\n::attribute after get unguarded\n::method m\n  expose after\n  \
+         after = 99\n  say 'm before zero' (time('e') = 0)\n  reply 7\n  \
+         call SysSleep 0.01\n  after = time('e')\n  say 'm after' (after > 0) (after < 0.2)\n",
+        true,
+        "m before zero 1\nmain got 7\nmain elapsed 1\nm after 1 1\nm after below main 1\n",
+    );
+}
+
+/// A method's `SETLOCAL` list moves with its `REPLY` continuation, and main's
+/// `ENDLOCAL` finds main's own list empty: oracle 5 of 5 runs `got 1`,
+/// `cont endlocal 1`, `main endlocal 0`. One restore in the process
+/// (`oracle-crashes.txt` entry 10b).
+#[test]
+fn a_reply_continuation_keeps_its_methods_setlocal_list() {
+    in_modes(
+        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main endlocal' endlocal()\n\
+         ::class t\n::method m\n  call setlocal\n  call value 'P6X', 'yes', 'ENVIRONMENT'\n  \
+         reply 1\n  say 'cont endlocal' endlocal()\n",
+        true,
+        "got 1\ncont endlocal 1\nmain endlocal 0\n",
+    );
+}
+
+/// The condition a method's `SIGNAL ON` handler took moves with the `REPLY`
+/// the handler makes, so `RAISE PROPAGATE` in the continuation re-raises it:
+/// oracle 5 of 5 runs report 42.3 at rc 0 after `got 1`, `cont propagates`,
+/// `main done`.
+#[test]
+fn a_reply_continuation_propagates_its_methods_condition() {
+    let outcome = run(
+        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main done'\n\
+         ::class t\n::method m\n  signal on syntax\n  x = 1/0\n  return 0\n\
+         syntax:\n  reply 1\n  say 'cont propagates'\n  raise propagate\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "got 1\ncont propagates\nmain done\n");
+    let reports = stderr(&outcome);
+    assert!(reports.contains("Error 42.3:"), "{reports}");
+    assert!(!reports.contains("98.918"), "{reports}");
+}
+
+/// A `REPLY` inside a `CALL ON` handler is the handler's, not the method's:
+/// oracle 5 of 5 runs 91.999 at rc 165 with nothing on stdout.
+#[test]
+fn a_reply_in_a_call_on_handler_does_not_reply_for_the_method() {
+    let outcome = run(
+        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main done'\n\
+         ::class t\n::method m\n  call on user foo name h\n  raise user foo\n  \
+         say 'cont after handler'\n  signal on any name trapped\n  raise propagate\n  \
+         say 'cont no propagate'\n  return\n\
+         h:\n  reply 1\n  say 'handler continues'\n  return\n\
+         trapped:\n  say 'cont trapped' condition('C')\n  return\n",
+    );
+    assert_eq!(outcome.exit_code, 165, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "");
+    assert!(
+        stderr(&outcome).contains("Error 91.999:"),
+        "{}",
+        stderr(&outcome)
+    );
+}
+
+/// A `SELECT CASE` value travels with the activation a `REPLY` moves, and
+/// an internal call's own `SELECT CASE` in the continuation does not reach
+/// it: oracle 5 of 5 runs `got 1`, `cont other`, `main done`.
+#[test]
+fn a_reply_continuation_keeps_its_select_case_value() {
+    in_modes(
+        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main done'\n\
+         ::class t\n::method m\n  select case 'a'\n    when 'a' then do\n      reply 1\n      \
+         select case 'b'\n        when g() then when 'zz' then say 'cont absorbed zz'\n        \
+         otherwise say 'cont other'\n      end\n    end\n    otherwise nop\n  end\n  return\n\
+         g:\n  select case 'zz'\n    when 'zz' then return 'b'\n    otherwise return 'y'\n  end\n",
+        true,
+        "got 1\ncont other\nmain done\n",
     );
 }
 

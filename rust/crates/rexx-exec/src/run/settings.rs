@@ -27,7 +27,7 @@ impl Interp {
     /// `trace 2` traces the two clauses it skips the pause for and
     /// `trace -2` traces neither.
     fn set_debug_skip(&mut self, count: i64) -> Result<(), Failure> {
-        if !self.activity.debug_pause {
+        if !self.debug_pause() {
             return Err(raised_numeric_trace_interactive_only().into());
         }
         self.activation_mut().debug.skip = count.abs();
@@ -62,7 +62,7 @@ impl Interp {
         // instruction the program cannot use is what a line typed at the
         // pause uses to end debug -- measured, `trace off` at a prompt ends
         // the session and the pause with it.
-        if self.trace_mode().debug && !self.activity.debug_pause {
+        if self.trace_mode().debug && !self.debug_pause() {
             return;
         }
         let merged = crate::trace::applied(self.trace_mode(), request);

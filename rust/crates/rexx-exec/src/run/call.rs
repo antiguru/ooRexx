@@ -888,8 +888,17 @@ impl Interp {
                 // Same one-way rule again: an internal call sees the caller's
                 // `CONDITION()` answers and a reset inside the callee dies
                 // with it. `TrappedCondition`'s own doc comment has the
-                // four-line transcript.
-                let condition = caller.condition().cloned();
+                // four-line transcript. `RAISE PROPAGATE`'s condition and the
+                // elapsed clock are copied the same way.
+                let cold = caller
+                    .cold
+                    .as_deref()
+                    .and_then(crate::activation::ActivationCold::inherited);
+                let (cached_clock, elapsed_anchor, elapsed_reset) = (
+                    caller.cached_clock,
+                    caller.elapsed_anchor,
+                    caller.flags.elapsed_reset(),
+                );
                 let mut callee = Activation::nested(
                     callee_id,
                     program,
@@ -910,7 +919,10 @@ impl Interp {
                         // inheritance one-way (`checkIOConfigTable`).
                         io_configs: caller_io_configs,
                         traps,
-                        condition,
+                        cold,
+                        cached_clock,
+                        elapsed_anchor,
+                        elapsed_reset,
                     },
                 );
                 callee.extra = extra;

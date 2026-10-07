@@ -2540,23 +2540,42 @@ impl Interp {
         self.trace.extend_from_slice(bytes);
     }
 
-    /// `SETLOCAL`: saves the directory and the whole environment, and answers
+    /// `SETLOCAL`: saves the directory and the whole environment on the
+    /// nearest top-level activation's list (`pushEnvironment`), and answers
     /// whether it saved one.
     pub(crate) fn push_local_environment(&mut self) -> bool {
-        self.activity
-            .locals
-            .push((self.cwd.clone(), self.env.clone()));
-        true
+        let saved = (self.cwd.clone(), self.env.clone());
+        match self.top_level_activation_mut() {
+            Some(activation) => {
+                activation.cold_mut().locals.push(saved);
+                true
+            }
+            None => false,
+        }
     }
 
-    /// `ENDLOCAL`: restores the innermost saved pair, answering whether there
-    /// was one. **A restore puts back the names it saved and removes nothing
-    /// added since** -- measured on the oracle, and `restoreEnvironment` only
-    /// re-`putenv`s what it holds.
+    /// `ENDLOCAL`: restores the innermost pair the nearest top-level
+    /// activation saved, answering whether there was one.
     pub(crate) fn pop_local_environment(&mut self) -> bool {
-        let Some((cwd, saved)) = self.activity.locals.pop() else {
-            return false;
-        };
+        let saved = self
+            .top_level_activation_mut()
+            .and_then(|activation| activation.cold.as_deref_mut()?.locals.pop());
+        match saved {
+            Some(saved) => {
+                self.restore_local_environment(saved);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Puts back one saved `SETLOCAL` pair. **A restore puts back the names
+    /// it saved and removes nothing added since** -- measured on the oracle,
+    /// and `restoreEnvironment` only re-`putenv`s what it holds.
+    pub(crate) fn restore_local_environment(
+        &mut self,
+        (cwd, saved): (std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>),
+    ) {
         self.cwd = cwd;
         for (name, value) in saved {
             let at = self.env.iter().position(|(held, _)| *held == name);
@@ -2565,7 +2584,6 @@ impl Interp {
                 None => self.env.push((name, value)),
             }
         }
-        true
     }
 
     /// `RXTRACE=ON` in the interpreter's own environment, which starts every

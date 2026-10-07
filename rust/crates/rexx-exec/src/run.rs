@@ -897,7 +897,7 @@ impl Interp {
                 values,
                 false_target,
                 ..
-            } => match self.activity.current_case_text.clone() {
+            } => match self.activation().current_case_text.clone() {
                 Some(case_text) => {
                     let indent = self.activity.clause_state.current_value_indent;
                     if self.test_case_when(code, values, &case_text, indent)? {

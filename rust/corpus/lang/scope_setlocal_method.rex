@@ -1,0 +1,9 @@
+/* A method's SETLOCAL is on the method's own list, restored when the method
+   ends; main's ENDLOCAL finds its own list empty. One restore in the
+   process (oracle-crashes.txt entry 10b). */
+o = .t~new
+o~m
+say 'main endlocal' endlocal()
+::class t
+::method m
+  say 'm setlocal' setlocal()

@@ -200,7 +200,7 @@ impl Interp {
     /// empty nor `=` runs as an `INTERPRET` fragment; the pause ends when the
     /// fragment ended debug or changed a setting from inside it.
     pub(crate) fn debug_pause_after_clause(&mut self) -> Result<bool, Failure> {
-        if self.activity.debug_pause {
+        if self.debug_pause() {
             return Ok(false);
         }
         if self.activation().debug.bypass {

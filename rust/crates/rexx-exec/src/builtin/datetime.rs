@@ -769,18 +769,17 @@ fn real_clock_base_time() -> i64 {
 /// only once [`Activation::clock_stale`] says so. See its own doc for why
 /// the cache lives on the activation rather than on `Interp`.
 fn now_base_time(interp: &mut Interp) -> i64 {
-    if !interp.activation().clock_stale {
-        return interp.activation().cached_clock;
+    let activation = interp.activation_mut();
+    if !activation.clock_stale {
+        return activation.cached_clock;
     }
-    if interp.activity.pending_elapsed_reset {
-        let stale = interp.activation().cached_clock;
-        if stale != NO_CLOCK {
-            interp.activity.elapsed_anchor = Some(stale);
+    if activation.flags.elapsed_reset() {
+        if activation.cached_clock != NO_CLOCK {
+            activation.elapsed_anchor = activation.cached_clock;
         }
-        interp.activity.pending_elapsed_reset = false;
+        activation.flags.set_elapsed_reset(false);
     }
     let micros = real_clock_base_time();
-    let activation = interp.activation_mut();
     activation.cached_clock = micros;
     activation.clock_stale = false;
     micros
@@ -853,17 +852,20 @@ fn now(interp: &mut Interp) -> Timestamp {
 }
 
 /// `TIME('E')`/`TIME('R')`'s own reading: elapsed microseconds, formatted,
-/// since [`Activity::elapsed_anchor`] -- lazily anchored to `reading` on the
-/// very first call. A reset (`reset` set, or the clock read backward) does
-/// **not** move the anchor here -- it only arms [`Interp::
-/// pending_elapsed_reset`], which [`now_base_time`]'s own cache-miss path
-/// is what actually consumes, matching the oracle's own lazy order.
+/// since the running activation's elapsed anchor -- lazily anchored to
+/// `reading` on its first call. A reset (`reset` set, or the clock read
+/// backward) does **not** move the anchor here -- it only sets the
+/// activation's elapsed-reset flag, which [`now_base_time`]'s own cache-miss
+/// path consumes, matching the oracle's own lazy order.
 fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
-    let anchor = *interp.activity.elapsed_anchor.get_or_insert(reading);
-    let threshold = reading - anchor;
+    let activation = interp.activation_mut();
+    if activation.elapsed_anchor == NO_CLOCK {
+        activation.elapsed_anchor = reading;
+    }
+    let threshold = reading - activation.elapsed_anchor;
     let text = match threshold {
         negative if negative < 0 => {
-            interp.activity.pending_elapsed_reset = true;
+            activation.flags.set_elapsed_reset(true);
             b"0".to_vec()
         }
         0 => b"0".to_vec(),
@@ -872,7 +874,7 @@ fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
         }
     };
     if reset {
-        interp.activity.pending_elapsed_reset = true;
+        activation.flags.set_elapsed_reset(true);
     }
     text
 }

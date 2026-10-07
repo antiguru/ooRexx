@@ -1,0 +1,22 @@
+# Phase 6.1 corpus subset -- loose ends of closed phases. The union with the
+# earlier phase-*.txt files is what the harnesses read, not this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored.
+
+# Task 1: the elapsed clock, RANDOM's seed, SETLOCAL's list, the condition
+# RAISE PROPAGATE reads, SELECT CASE's value and the debug pause belong to an
+# activation, not to its activity.
+lang/scope_clock_routine.rex
+lang/scope_clock_external.rex
+lang/scope_clock_internal.rex
+lang/scope_random_seed.rex
+lang/scope_random_unseeded.rex
+lang/scope_setlocal_method.rex
+lang/scope_setlocal_routine.rex
+lang/scope_propagate_routine.rex
+lang/scope_propagate_after_routine.rex
+lang/scope_case_text_absorbed.rex
+lang/scope_case_text_absorbed_other.rex
+lang/scope_internal_depth.rex
+lang/scope_debug_pause_routine.rex

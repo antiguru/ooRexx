@@ -1774,7 +1774,7 @@ macro_rules! open_clause {
         // [`Interp::traced_mode`] answers `OFF` under it by
         // design, which is not the program's own setting.
         #[cfg(debug_assertions)]
-        if !$self.activity.debug_pause
+        if !$self.debug_pause()
             && let Some(crate::ir::trace_flow::Setting::Known(claimed)) = $chunk.setting_at($index)
         {
             debug_assert_eq!(
@@ -2981,9 +2981,6 @@ impl Interp {
         continuation.activation_indent = self.activity.activation_indent;
         continuation.indent_offset = self.activity.indent_offset;
         continuation.clause_line_override = self.activity.clause_line_override;
-        continuation.elapsed_anchor = self.activity.elapsed_anchor;
-        continuation.pending_elapsed_reset = self.activity.pending_elapsed_reset;
-        continuation.random_seed = self.activity.random_seed;
         if let Some(replied) = self.activation_mut().replied.as_mut() {
             replied.continuation = Some(idle);
         }

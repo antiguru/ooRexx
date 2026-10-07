@@ -1,0 +1,8 @@
+count 7
+/* An external program starts with an elapsed clock of its own, as a
+   ::ROUTINE does. */
+call time 'r'
+x = 0
+do i = 1 to 300000; x = x + 1; end
+t = extr()
+say 'external zero:' (t = 0)

@@ -621,6 +621,28 @@ and the next restore hands those pointers to `free`. Exactly one restore per
 process survives, whatever the nesting -- which is why the paired program above
 dies too.
 
+A termination restore counts. An activation ending with a `SETLOCAL` outstanding
+restores the oldest (`RexxActivation.cpp:1494-1500`), so a `::ROUTINE` that
+leaves one open spends the process's one restore on its return:
+
+    call r
+    say 'main sees' value('P61X',,'ENVIRONMENT')
+    call s
+    say 'after internal' value('P61X',,'ENVIRONMENT') endlocal()
+    exit
+    s:
+      call setlocal
+      call value 'P61X', 'internal', 'ENVIRONMENT'
+      return
+    ::routine r
+      call setlocal
+      call value 'P61X', 'routine', 'ENVIRONMENT'
+      return
+
+SIGABRT, rc 134, `free(): invalid pointer` on stderr after `main sees routine`
+on stdout, 5 of 5 runs: main's `ENDLOCAL` is the second restore. This crate
+prints `after internal internal 1`, rc 0.
+
 The control is what makes that reading discriminating rather than merely
 consistent: `say endlocal(); say endlocal()` with no `SETLOCAL` anywhere answers
 `0` and `0` at rc 0 (measured, same wrapper). An absent list is safe; an emptied

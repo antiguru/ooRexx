@@ -20,18 +20,12 @@ use crate::activation::Activation;
 use crate::clause::ClauseState;
 use crate::error::{Failure, FailureSite};
 use crate::plan::Package;
-use crate::{ActiveCondition, CallContext, FragmentLevel, NativeFrame, PendingTrap};
+use crate::{CallContext, FragmentLevel, NativeFrame, PendingTrap};
 
 /// What each execution of the interpreter needs its own copy of.
 pub(crate) struct Activity {
     /// A buffer lent out for a builtin call's evaluated argument values.
     pub(crate) value_buffer: Vec<Option<ObjRef>>,
-    /// What each outstanding `SETLOCAL` saved, innermost last: the directory
-    /// and the whole environment, which `ENDLOCAL` puts back. The oracle keeps
-    /// this on the top-level activation and an internal routine's `SETLOCAL`
-    /// therefore outlives its return (`platform/unix/ExternalFunctions.cpp`,
-    /// and `funct.xml` says otherwise -- measured, the file is wrong).
-    pub(crate) locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
     /// The activation running right now, held in a field of its own rather
     /// than at the top of [`Activity::suspended`].
     pub(crate) running: Option<Box<Activation>>,
@@ -115,9 +109,6 @@ pub(crate) struct Activity {
     pub(crate) flat_spares: Vec<Box<crate::run::FlatLoop>>,
     /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
     pub(crate) pending_traps: VecDeque<PendingTrap>,
-    /// The condition whose handler is running, for `RAISE PROPAGATE` to
-    /// re-raise.
-    pub(crate) active_condition: Option<ActiveCondition>,
     /// The object a `RAISE ... ADDITIONAL` named, held from the raise until
     /// the condition object is built. **The raise's own value and not a
     /// rebuild of it**: measured, `additional 'JUSTONE'` puts a `String` in
@@ -143,19 +134,6 @@ pub(crate) struct Activity {
     /// How many of the levels that `RAISE PROPAGATE` leaves are still to be
     /// left, which add no frame and no origin: the object has its frames.
     pub(crate) reraise_leaving: usize,
-    /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
-    /// `case` text, or `None` inside a plain `SELECT` (or before any
-    /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
-    /// **absorbed** `WhenCase` needs that nothing else threads to it: a
-    /// *listed* `WhenCase` gets `case_text` handed to it directly by
-    /// `Select`'s own explicit arm (`run.rs`), but an absorbed one (a
-    /// `WhenCase` reached only through ordinary `Op::Clause`'s region
-    /// stepping, because it is itself the `THEN` consequence of a
-    /// preceding `WHEN`/`WHEN CASE`, `ast.rs`'s own doc comment on
-    /// `whens`) has no such hand-off -- it is stepped like any other
-    /// instruction, with nothing carrying its enclosing `SELECT CASE`'s
-    /// own comparison value along.
-    pub(crate) current_case_text: Option<Vec<u8>>,
     /// **F3's own perimeter, found by review -- and corrected twice more,
     /// each correction found by re-verifying the previous one rather than
     /// trusting it.** When an absorbed `WhenCase` (`run.rs`'s own doc
@@ -221,11 +199,6 @@ pub(crate) struct Activity {
     /// The index, in the innermost running fragment's body, of its clause
     /// being stepped.
     pub(crate) fragment_clause: usize,
-    /// Whether a line typed at an interactive-debug pause is running.
-    /// `RexxActivation::noTracing` includes this, so a pause's own fragment
-    /// traces nothing and pauses nowhere. Written only through
-    /// [`Interp::replace_debug_pause`], which keeps `trace_cache` in step.
-    pub(crate) debug_pause: bool,
     /// Whether a trace line is being delivered to `.TRACEOUTPUT`. A traced
     /// clause inside that delivery writes to the buffer instead of routing
     /// again: the oracle SIGSEGVs in the one shape that reaches this
@@ -253,25 +226,9 @@ pub(crate) struct Activity {
     /// The name the last invocation entered under, which the next one under
     /// the same name shares ([`Activity::invocation_name`]).
     last_name: Option<Rc<[u8]>>,
-    /// `RANDOM`'s generator state: the seed the next call will scramble, or
-    /// `None` before any call has drawn one.
-    pub(crate) random_seed: Option<u64>,
-    /// `TIME('E')`/`TIME('R')`'s anchor: the clock reading (`builtin::
-    /// datetime`'s microseconds-since-0001-01-01 unit) elapsed time is
-    /// measured from, or `None` before any `E`/`R` call has run.
-    /// ```text
-    /// zz=time('E'); call burn; call sub; say 'after' time('E')   [sub does n2 = time('R')]
-    ///   oracle:  inside 0.725271  inside-after-R 0.000004  after 0.725387
-    ///   crate:   inside 33.889432 inside-after-R 0.000005  after 0.000013
-    /// ```
-    pub(crate) elapsed_anchor: Option<i64>,
-    /// Whether a `TIME('R')` (or a clock read going backward) is waiting
-    /// to move [`elapsed_anchor`] the next time the clock cache next
-    /// refreshes -- `RexxActivation`'s own `elapsedReset` state flag
-    /// (`execution/ActivationSettings.hpp:121`), consumed by
-    /// `builtin::datetime::now_base_time`'s cache-miss path. See
-    /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
-    pub(crate) pending_elapsed_reset: bool,
+    /// The generator each top-level activation's `RANDOM` seed is drawn
+    /// from (`Activity::getRandomSeed`), `None` until the first is drawn.
+    pub(crate) random_source: Option<u64>,
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
     pub(crate) requires_installing: Vec<Box<str>>,
@@ -383,7 +340,6 @@ impl Activity {
     pub(crate) fn new() -> Activity {
         Activity {
             value_buffer: Vec::new(),
-            locals: Vec::new(),
             running: None,
             suspended: Vec::new(),
             spare_activations: Vec::new(),
@@ -402,13 +358,11 @@ impl Activity {
             replied_level: None,
             native_tails: Vec::new(),
             pending_traps: VecDeque::new(),
-            active_condition: None,
             pending_additional: None,
             reraised_object: None,
             reraise_leaving: 0,
             pending_result: None,
             pending_rc: None,
-            current_case_text: None,
             indent_offset: 0,
             activation_indent: 0,
             failure_site: None,
@@ -426,7 +380,6 @@ impl Activity {
             fragment_depth: 0,
             fragments: Vec::new(),
             fragment_clause: 0,
-            debug_pause: false,
             routing_trace: false,
             depth: 0,
             max_depth: 0,
@@ -437,9 +390,7 @@ impl Activity {
             region_procedure_permitted: false,
             call_context: CallContext::default(),
             last_name: None,
-            random_seed: None,
-            elapsed_anchor: None,
-            pending_elapsed_reset: false,
+            random_source: None,
             requires_installing: Vec::new(),
             pin_depth: 0,
             driver_pins: 0,
@@ -514,13 +465,11 @@ impl Activity {
             // Overwritten at reuse, as `spare_activations` is.
             flat_spares: _,
             pending_traps,
-            active_condition: _,
             pending_additional,
             reraised_object,
             reraise_leaving: _,
             pending_result,
             pending_rc,
-            current_case_text: _,
             indent_offset: _,
             activation_indent: _,
             failure_site: _,
@@ -541,7 +490,6 @@ impl Activity {
             fragment_depth: _,
             fragments: _,
             fragment_clause: _,
-            debug_pause: _,
             routing_trace: _,
             depth: _,
             max_depth: _,
@@ -554,11 +502,8 @@ impl Activity {
             // `CallContext::object_roots` is the parked case's other route.
             call_context: _,
             last_name: _,
-            random_seed: _,
-            elapsed_anchor: _,
-            pending_elapsed_reset: _,
+            random_source: _,
             requires_installing: _,
-            locals: _,
             pin_depth: _,
             driver_pins: _,
             native_park,

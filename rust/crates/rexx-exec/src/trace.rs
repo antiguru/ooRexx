@@ -53,10 +53,28 @@ impl Interp {
         answer
     }
 
-    /// Sets [`Activity::debug_pause`], answering the value it replaces.
+    /// Sets the running activation's debug-pause flag, answering the value it
+    /// replaces.
     pub(crate) fn replace_debug_pause(&mut self, paused: bool) -> bool {
         self.activity.trace_cache = TraceCache::of(self.activity.trace_cache.mode(), paused);
-        std::mem::replace(&mut self.activity.debug_pause, paused)
+        let flags = &mut self.activation_mut().flags;
+        let was = flags.debug_pause();
+        flags.set_debug_pause(paused);
+        was
+    }
+
+    /// Whether the running activation is running a line typed at a debug
+    /// pause.
+    #[inline(always)]
+    pub(crate) fn debug_pause(&self) -> bool {
+        let paused = self.activity.trace_cache.paused();
+        debug_assert_eq!(
+            self.running_activation()
+                .is_some_and(|activation| activation.flags.debug_pause()),
+            paused,
+            "the cached debug pause is not the running activation's"
+        );
+        paused
     }
 
     /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a
@@ -70,7 +88,7 @@ impl Interp {
     /// merges into -- is [`Interp::trace_mode`] and is untouched.
     #[inline(always)]
     pub(crate) fn traced_mode(&self) -> TraceMode {
-        if self.activity.debug_pause {
+        if self.debug_pause() {
             return TraceMode::OFF;
         }
         self.trace_mode()

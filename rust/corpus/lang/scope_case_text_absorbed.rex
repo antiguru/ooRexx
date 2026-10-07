@@ -1,0 +1,13 @@
+/* An absorbed WHEN compares against its own SELECT CASE's value, not the
+   value of a SELECT CASE an internal call ran in between. */
+select case 'a'
+  when g() then when 'a' then say 'absorbed matched a'
+  otherwise say 'other'
+end
+say 'done'
+exit
+g:
+  select case 'zz'
+    when 'zz' then return 'a'
+    otherwise return 'y'
+  end

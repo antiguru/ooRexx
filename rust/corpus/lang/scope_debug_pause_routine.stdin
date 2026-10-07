@@ -1,0 +1,17 @@
+call s
+.stderr~lineout('T1')
+
+.stderr~lineout('T2')
+
+.stderr~lineout('T3')
+
+.stderr~lineout('T4')
+
+.stderr~lineout('T5')
+
+.stderr~lineout('T6')
+
+.stderr~lineout('T7')
+
+.stderr~lineout('T8')
+

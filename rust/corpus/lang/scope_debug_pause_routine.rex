@@ -1,0 +1,12 @@
+/* A routine called from a line typed at a debug pause traces and pauses
+   under its own TRACE ?R; the pause belongs to the activation running the
+   typed line. */
+trace ?r
+x = 1
+say 'main'
+exit
+::routine s
+  trace ?r
+  y = 2
+  say 'in s'
+  return

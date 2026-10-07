@@ -49,12 +49,11 @@ impl Interp {
     }
 
     /// Hands a `SELECT` its case text: the value its `WHEN CASE`s compare
-    /// against, and `Activity::current_case_text` for the **absorbed** ones that
-    /// have no other way to reach it (`lib.rs`'s own doc comment on the
-    /// field).
+    /// against, and the activation's `current_case_text` for the **absorbed**
+    /// ones that have no other way to reach it.
     pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
         let text = value.map(|value| self.to_text(value).to_vec());
-        self.activity.current_case_text = text.clone();
+        self.activation_mut().current_case_text = text.clone();
         text
     }
 

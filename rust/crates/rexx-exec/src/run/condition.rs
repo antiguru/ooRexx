@@ -361,11 +361,9 @@ impl Interp {
             let value = self.text(rc);
             self.assign_by_name(b"RC", value);
         }
-        // What `CONDITION()` reports for the rest of this activation.
-        // Written here and not onto `active_condition` below, because the
-        // two have different lifetimes: this one dies with the activation
-        // (`TrappedCondition`), while `active_condition` is the interpreter's
-        // one slot for `RAISE PROPAGATE`.
+        // What `CONDITION()` reports for the rest of this activation, kept
+        // apart from `active_condition` below, which carries the echo sites
+        // `RAISE PROPAGATE` puts back.
         // Built here, on the raising clause, because everything in it is a
         // raise-time fact: `POSITION` is the innermost level's line and
         // `STACKFRAMES` the levels left above the stack as it stands now.
@@ -396,11 +394,11 @@ impl Interp {
             }));
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
-        self.activity.active_condition = Some(ActiveCondition {
+        self.activation_mut().cold_mut().active_condition = Some(Rc::new(ActiveCondition {
             raised: *raised,
             site,
             sites,
-        });
+        }));
         // **The failed clause's own boundary, and the one place it can
         // happen** (fix round 3). `Op::Clause`'s region ends a *completing*
         // clause; a clause that raised has not completed, and at that moment
@@ -504,12 +502,17 @@ impl Interp {
         // and never clearing at all gave silence at rc 0. Restoring gives the
         // oracle's answer in all three measured shapes, the "nothing was
         // active, restore `None`" one included.
-        let enclosing = self.activity.active_condition.take();
-        self.activity.active_condition = Some(ActiveCondition {
-            raised,
-            site: None,
-            sites: Vec::new(),
-        });
+        // Set here for the handler's activation to inherit
+        // (`RexxActivation.cpp:3340`), and put back once it returns.
+        let enclosing = self
+            .activation_mut()
+            .cold_mut()
+            .active_condition
+            .replace(Rc::new(ActiveCondition {
+                raised,
+                site: None,
+                sites: Vec::new(),
+            }));
         let key: Box<[u8]> = pending.condition.clone();
         // The entry the trap was found under, `ANY` where the condition has
         // none: the trap instruction's own condition is what the oracle
@@ -600,18 +603,12 @@ impl Interp {
             // The handler returned; execution resumes at the clause after
             // the one that finished.
             Ok(Ended::Returned(_)) => {
-                self.activity.active_condition = enclosing;
+                self.activation_mut().cold_mut().active_condition = enclosing;
                 Ok(None)
             }
-            // The handler failed rather than returned. **Reachable but
-            // unobservable, kept deliberately** (fix round 3). The
-            // re-review's panic probe found four programs that take this
-            // arm and no test that does, and established why nothing can see
-            // it: every path that goes on to read `active_condition` passes
-            // through `offer_to_trap` first, which overwrites the field
-            // wholesale. So this line changes no output while that holds.
+            // The handler failed rather than returned.
             Err(failure) => {
-                self.activity.active_condition = enclosing;
+                self.activation_mut().cold_mut().active_condition = enclosing;
                 Err(failure)
             }
             // `EXIT` inside the handler ends the program, exactly as it does
@@ -988,7 +985,12 @@ impl Interp {
 
     /// `RAISE PROPAGATE`: re-raise the condition whose handler is running.
     fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
-        let Some(active) = &self.activity.active_condition else {
+        let Some(active) = self
+            .activation()
+            .cold
+            .as_deref()
+            .and_then(|cold| cold.active_condition.clone())
+        else {
             return Err(Raised::syntax(98, 918, Vec::new()).into());
         };
         if !active.raised.reportable() {

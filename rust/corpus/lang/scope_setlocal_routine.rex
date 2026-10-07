@@ -1,0 +1,9 @@
+/* A ::ROUTINE that ends with a SETLOCAL outstanding restores it at its end. */
+call value 'P61X', 'orig', 'ENVIRONMENT'
+call r
+say 'main sees' value('P61X',,'ENVIRONMENT')
+exit
+::routine r
+  call setlocal
+  call value 'P61X', 'routine', 'ENVIRONMENT'
+  return

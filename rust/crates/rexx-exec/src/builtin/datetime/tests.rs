@@ -106,10 +106,9 @@ fn parse_numbers<const N: usize>(stdout: &str) -> [f64; N] {
 /// The first `TIME('R')` a program runs answers `0`; a later one answers
 /// elapsed time **since the last reset**, not since the first call.
 /// Driven through real burns and real clause boundaries rather than a
-/// fabricated `Activity::elapsed_anchor` -- a raw `dispatch` call with no
-/// clause boundary in between never marks the clock cache stale, so a
-/// reset's own *lazy* application (`Activity::elapsed_anchor`'s own doc)
-/// would never be exercised by that shape, only assumed.
+/// fabricated elapsed anchor -- a raw `dispatch` call with no clause
+/// boundary in between never marks the clock cache stale, so a reset's own
+/// *lazy* application would never be exercised by that shape, only assumed.
 #[test]
 fn time_r_resets_relative_to_the_last_reset_not_program_start() {
     let stdout = output(
@@ -179,38 +178,18 @@ fn time_e_does_not_reset_the_anchor_time_r_does() {
     assert!(e3 > e2, "e2 = {e2}, e3 = {e3}");
 }
 
-/// The real divergence `Activity::elapsed_anchor`'s own doc names: a
-/// callee's own `TIME('R')` resets the *caller's* elapsed-time anchor
-/// too, once the callee returns, because both read and write the one
-/// field this crate shares between them where the oracle's own
-/// per-activation copy dies with the callee's frame. Declared rather
-/// than silent -- this is the shape that shows it, not a value: the
-/// caller's own reading after `call sub` returns is close to `0`
-/// rather than close to the caller's own accumulated elapsed time.
+/// A callee's own `TIME('R')` resets its copy of the elapsed clock and
+/// leaves the caller's running: oracle `0.001349 0.000003 0.001359`, the
+/// caller's reading after the call at least the callee's reading before its
+/// reset.
 #[test]
-fn a_callees_own_time_r_leaks_into_the_caller_after_it_returns() {
-    // The callee reads `E` both before and after its own `R`, matching
-    // the transcript this pins exactly -- without that follow-up read
-    // *inside* the callee, the reset stays pending across the `CALL`
-    // boundary and is instead consumed later against whichever
-    // activation happens to be on top when the next real clock read
-    // occurs, which does not reliably reproduce the leak. Measured:
-    // dropping the callee's own second `E` here changes `after` from
-    // "near zero" back to "comparable to the burn", because the
-    // pending reset then gets consumed against the *caller's* own
-    // stale reading (which predates the callee entirely) rather than
-    // the callee's own recent one.
+fn a_callees_own_time_r_stays_in_the_callee() {
     let stdout = output(
-        b"zz = time('E')\ncall burn\ncall sub\nsay time('E')\nexit\nsub:\n  n1 = time('E')\n  n2 = time('R')\n  n3 = time('E')\n  return\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+        b"zz = time('E')\ncall burn\ncall sub\nsay n1 n3 time('E')\nexit\nsub:\n  n1 = time('E')\n  n2 = time('R')\n  n3 = time('E')\n  return\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
     );
-    let [after]: [f64; 1] = parse_numbers(&stdout);
-    // If the callee's reset had stayed inside its own frame (the
-    // oracle's own behaviour, measured directly: `inside 0.001751` /
-    // `after 0.001814`, the two comparable), `after` would still
-    // reflect elapsed time since the very first `time('E')`,
-    // comparable to the burn's own duration. It does not here: the
-    // callee's reset is visible to the caller.
-    assert!(after < 0.05, "after = {after}, expected the leak (near 0)");
+    let [before_reset, after_reset, after]: [f64; 3] = parse_numbers(&stdout);
+    assert!(after_reset < before_reset, "{stdout}");
+    assert!(after >= before_reset, "{stdout}");
 }
 
 // ---- DATE's option letters: the deterministic conversion form ----

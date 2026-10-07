@@ -1,0 +1,6 @@
+count 5
+/* An internal call starts from a copy of its caller's elapsed clock, and a
+   TIME('R') inside it resets the copy, not the caller's. */
+call time 'r'; call SysSleep 0.05; x = time('E'); call s
+say (time('e') >= 0.05); exit
+s: tt = time('R'); return
