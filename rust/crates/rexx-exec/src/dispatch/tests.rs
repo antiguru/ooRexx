@@ -474,22 +474,8 @@ fn an_argument_with_no_string_value_raises_where_one_with_a_string_value_answers
 /// run are **loud**, and the neighbouring shapes that it can run are not.
 #[test]
 fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
-    // (source, the refusal's own text after `rexx-exec: `). The tail
-    // differs by row and is not a shared suffix: `Loud::method_body`
-    // names Phase 5 as the owner and `Loud::accessor_variable` names
-    // none, on the reasoning that constructor's doc gives.
+    // (source, the refusal's own text after `rexx-exec: `).
     let refused: &[(&str, &str)] = &[
-        // A generated accessor over a variable that is not a simple name.
-        // Oracle rc 0 both: the stem answers `5` for the round trip and
-        // the compound answers its own derived name `a.b`.
-        (
-            ".K~'A.' = 5\nsay .K~'A.'\n::class K\n::attribute \"a.\" class\n",
-            "a generated accessor for the attribute \"a.\" is not implemented",
-        ),
-        (
-            "say .K~'A.B'\n::class K\n::attribute \"a.b\" class\n",
-            "a generated accessor for the attribute \"a.b\" is not implemented",
-        ),
         // oracle rc 0, printing `4`: `USE LOCAL` binds its list against
         // the method's own scope pool.
         (
@@ -526,6 +512,17 @@ fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
         (
             "say .K~a\n::class K\n::attribute a class get\n  return 11\n",
             "11\n",
+        ),
+        // A generated accessor over a stem and over a compound, oracle rc 0:
+        // the stem's round trip, and the compound's derived name in the
+        // attribute's own spelling.
+        (
+            ".K~'A.' = 5\nsay .K~'A.'\n::class K\n::attribute \"a.\" class\n",
+            "5\n",
+        ),
+        (
+            "say .K~'A.B'\n::class K\n::attribute \"a.b\" class\n",
+            "a.b\n",
         ),
     ] {
         assert_eq!(

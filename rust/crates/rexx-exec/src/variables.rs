@@ -13,6 +13,7 @@
 //! to, and the scope pools.
 
 use crate::activation::{Activation, InstanceVar};
+use crate::run::{NameShape, shape_of};
 use crate::{Code, Interp, Novalue};
 use rexx_core::{Body, ObjRef, SlotFrame};
 use rexx_parse::SymbolId;
@@ -147,6 +148,65 @@ impl Interp {
             return self.store_watched(owner, scope, name, Some(value));
         }
         Interp::pools_in(object).set(scope, name, value);
+    }
+
+    /// The value an accessor's or `DELEGATE`'s name holds in `scope`'s pool on
+    /// `owner` (`RexxVariableBase::getValue(VariableDictionary *)`): a simple
+    /// variable's value or derived name, the stem (made if the pool has none),
+    /// or one tail of that stem.
+    pub(crate) fn pool_value(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) -> ObjRef {
+        match shape_of(name) {
+            NameShape::Simple => match self.pools_of(owner).and_then(|pools| pools.get(scope, name))
+            {
+                Some(value) => value,
+                None => self.text(name),
+            },
+            NameShape::Stem => self.pool_stem(owner, scope, name),
+            NameShape::Compound => {
+                let (stem_name, key) = direct_compound(name);
+                let stem = self.pool_stem(owner, scope, stem_name);
+                self.stem_object_compound(stem, key)
+            }
+        }
+    }
+
+    /// Assigns an accessor's name in `scope`'s pool on `owner`
+    /// (`RexxVariableBase::set(VariableDictionary *, ...)`): a stem takes a
+    /// stem as it is and wraps anything else as a new stem's default, and a
+    /// compound writes one tail of the pool's stem.
+    pub(crate) fn set_pool_value(
+        &mut self,
+        owner: ObjRef,
+        scope: ObjRef,
+        name: &[u8],
+        value: ObjRef,
+    ) {
+        match shape_of(name) {
+            NameShape::Simple => self.set_pool_variable(owner, scope, name, value),
+            NameShape::Stem => {
+                let stem = self.stem_assignment_value(name, value);
+                self.set_pool_variable(owner, scope, name, stem);
+            }
+            NameShape::Compound => {
+                let (stem_name, key) = direct_compound(name);
+                let stem = self.pool_stem(owner, scope, stem_name);
+                self.stem_object_write(stem, key, value);
+            }
+        }
+    }
+
+    /// The stem `scope`'s pool on `owner` holds under `stem_name`, made empty
+    /// if it holds none (`VariableDictionary::getStem`).
+    fn pool_stem(&mut self, owner: ObjRef, scope: ObjRef, stem_name: &[u8]) -> ObjRef {
+        if let Some(stem) = self
+            .pools_of(owner)
+            .and_then(|pools| pools.get(scope, stem_name))
+        {
+            return stem;
+        }
+        let stem = self.empty_stem(stem_name);
+        self.set_pool_variable(owner, scope, stem_name, stem);
+        stem
     }
 
     /// [`Interp::set_pool_variable`]'s other half: the name returns to the
@@ -292,4 +352,16 @@ impl Interp {
         let derived = code.symbols.name(id).as_bytes();
         self.text(derived)
     }
+}
+
+/// A compound name's stem, its period included, and its tail: everything
+/// after the first period, taken literally (`buildCompoundVariable` with
+/// `direct`, which `LanguageParser::getRetriever` builds for an attribute or
+/// `DELEGATE` name).
+fn direct_compound(name: &[u8]) -> (&[u8], &[u8]) {
+    let dot = name
+        .iter()
+        .position(|&b| b == b'.')
+        .expect("NameShape::Compound guarantees at least one period");
+    name.split_at(dot + 1)
 }

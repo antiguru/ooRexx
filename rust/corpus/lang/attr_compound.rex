@@ -1,0 +1,31 @@
+/* ::ATTRIBUTE on a compound name reads and writes one tail of the object's
+   stem: an unset tail answers its derived name, the tail is everything after
+   the first period taken literally (never the pool's I), and the stem's
+   default answers for an unset tail. */
+o = .t~new
+say o~a.b
+o~a.b = 5
+say o~a.b o~peek
+o~a.i = 'via-i'
+say o~a.i o~a.b o~peek
+o~setup
+say o~a.b o~a.i o~a.c o~peek
+o~a.i = 'b-now'
+say o~a.b o~peek
+o~a.x.y = 'xy'
+say o~a.x.y o~peek2
+::class t
+::attribute "A.B"
+::attribute "A.I"
+::attribute "A.C" get
+::attribute "A.X.Y"
+::method peek2
+expose a.
+return a.['X.Y']
+::method peek
+expose a.
+return a.b a.i a.~items
+::method setup
+expose a. i
+i = 'B'
+a. = 'dflt'

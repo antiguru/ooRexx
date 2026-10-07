@@ -864,7 +864,7 @@ impl Interp {
 
     /// Writes one tail of a stem object, keeping the insertion ordinal a tail
     /// already has -- the order `allIndexes` answers in depends on it.
-    fn stem_object_write(&mut self, object: ObjRef, key: &[u8], value: ObjRef) {
+    pub(crate) fn stem_object_write(&mut self, object: ObjRef, key: &[u8], value: ObjRef) {
         let Some(found) = self.heap.get_mut(object) else {
             return;
         };

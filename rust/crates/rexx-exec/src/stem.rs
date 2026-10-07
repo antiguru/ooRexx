@@ -618,6 +618,24 @@ impl Interp {
         }
     }
 
+    /// One tail of the stem object `stem` as
+    /// `StemClass::evaluateCompoundVariableValue` answers it with no
+    /// activation: the tail's value, the default for a tail never held, and
+    /// otherwise the stem's own name with `key` appended.
+    pub(crate) fn stem_object_compound(&mut self, stem: ObjRef, key: &[u8]) -> ObjRef {
+        let (resolved, name) = match self.heap.get(stem).map(|object| &object.body) {
+            Some(Body::Stem { exposed, name, .. }) => {
+                let home = exposed_home(exposed, key).unwrap_or(stem);
+                (self.tail_value(home, key), name.clone())
+            }
+            _ => (None, Box::default()),
+        };
+        match resolved {
+            Some(value) => value,
+            None => self.derived_tail_name(&name, key),
+        }
+    }
+
     /// What `key` holds in `stem`, the default where the tail is absent.
     pub(crate) fn tail_value(&self, stem: ObjRef, key: &[u8]) -> Option<ObjRef> {
         match self.heap.get(stem).map(|object| &object.body) {

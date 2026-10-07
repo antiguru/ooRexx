@@ -58,3 +58,9 @@ lang/context_condition_call.rex
 
 # Task 3: CONDITION('D') after RAISE NOVALUE with no DESCRIPTION.
 lang/condition_d_raise_novalue.rex
+
+# Task 3: ::ATTRIBUTE and DELEGATE on a stem or compound name.
+lang/attr_compound.rex
+lang/attr_stem.rex
+lang/delegate_compound.rex
+lang/delegate_stem.rex

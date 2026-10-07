@@ -2916,9 +2916,7 @@ impl Interp {
     }
 
     /// A generated getter: the value the attribute's variable holds in the
-    /// declaring scope's pool on the receiver, or -- for a variable nothing
-    /// has assigned -- the derived name, which is that variable's own
-    /// spelling.
+    /// declaring scope's pool on the receiver ([`Interp::pool_value`]).
     fn read_attribute(
         &mut self,
         _cleared: Cleared,
@@ -2932,13 +2930,7 @@ impl Interp {
         }
         let variable = self.accessor_variable(generated)?;
         let owner = self.pool_owner(receiver)?;
-        let stored = self
-            .pools_of(owner)
-            .and_then(|pools| pools.get(resolution.scope, &variable));
-        Ok(Some(match stored {
-            Some(value) => value,
-            None => self.text(&variable),
-        }))
+        Ok(Some(self.pool_value(owner, resolution.scope, &variable)))
     }
 
     /// A generated setter: assigns the attribute's variable in the declaring
@@ -2959,7 +2951,7 @@ impl Interp {
         };
         let variable = self.accessor_variable(generated)?;
         let owner = self.pool_owner(receiver)?;
-        self.set_pool_variable(owner, resolution.scope, &variable, value);
+        self.set_pool_value(owner, resolution.scope, &variable, value);
         Ok(None)
     }
 
@@ -3017,13 +3009,7 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let variable = self.delegate_variable(generated)?;
         let owner = self.pool_owner(receiver)?;
-        let stored = self
-            .pools_of(owner)
-            .and_then(|pools| pools.get(resolution.scope, &variable));
-        let target = match stored {
-            Some(value) => value,
-            None => self.text(&variable),
-        };
+        let target = self.pool_value(owner, resolution.scope, &variable);
         self.roots.activity_mut().push_temp(target);
         Ok(target)
     }
@@ -3043,9 +3029,7 @@ impl Interp {
         )
     }
 
-    /// The variable a `DELEGATE` method addresses, refusing the name shapes
-    /// whose storage this crate has no representation for -- see
-    /// [`Loud::delegate_variable`].
+    /// The variable a `DELEGATE` method addresses.
     fn delegate_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         let Some(directive) = program.directives.get(generated.directive) else {
@@ -3054,16 +3038,10 @@ impl Interp {
         let Some(symbol) = crate::delegate_variable(&directive.kind) else {
             return Err(Loud::missing_body().into());
         };
-        let variable = program.symbols.name(symbol).as_bytes();
-        if crate::run::shape_of(variable) != crate::run::NameShape::Simple {
-            return Err(Loud::delegate_variable(variable).into());
-        }
-        Ok(variable.into())
+        Ok(program.symbols.name(symbol).as_bytes().into())
     }
 
-    /// The variable a generated accessor addresses, refusing the name shapes
-    /// whose storage this crate has no representation for -- see
-    /// [`Loud::accessor_variable`].
+    /// The variable a generated accessor addresses.
     fn accessor_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
         let program = &self.programs[generated.program.0];
         // `get` rather than an index, and `None` rather than a panic, for the
@@ -3074,9 +3052,6 @@ impl Interp {
         let Some(variable) = crate::accessor_variable(&directive.kind) else {
             return Err(Loud::missing_body().into());
         };
-        if crate::run::shape_of(variable) != crate::run::NameShape::Simple {
-            return Err(Loud::accessor_variable(variable).into());
-        }
         Ok(variable.into())
     }
 

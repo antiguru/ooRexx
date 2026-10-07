@@ -663,29 +663,6 @@ impl Loud {
         }
     }
 
-    /// A generated `::METHOD ATTRIBUTE`/`::ATTRIBUTE` accessor whose
-    /// variable is a stem or a single compound tail.
-    fn accessor_variable(name: &[u8]) -> Loud {
-        Loud {
-            message: format!(
-                "a generated accessor for the attribute \"{}\" is not implemented",
-                String::from_utf8_lossy(name)
-            ),
-        }
-    }
-
-    /// A `DELEGATE` whose variable is a stem or a single compound tail, the
-    /// same storage gap [`Loud::accessor_variable`] refuses reached from a
-    /// different directive.
-    fn delegate_variable(name: &[u8]) -> Loud {
-        Loud {
-            message: format!(
-                "a DELEGATE to the variable \"{}\" is not implemented",
-                String::from_utf8_lossy(name)
-            ),
-        }
-    }
-
     /// A `PARSE` template trigger that needs an operand and has none.
     fn parse_trigger_operand() -> Loud {
         Loud {

@@ -1,0 +1,15 @@
+count 14
+/* DELEGATE to a compound name sends to that tail's value in the object's
+   pool; the tail is taken literally, so A.K is never the pool's K. */
+o = .t~new
+say o~length o~reverse
+say o~m
+::class t
+::method init
+expose a. k
+k = 'B'
+a.b = 'xyz'
+a.c = 'abc'
+::method length delegate a.b
+::method reverse delegate a.k
+::method m delegate a.c
