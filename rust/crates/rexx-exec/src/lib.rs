@@ -1925,7 +1925,7 @@ struct CallContext {
     /// The resolved routine name, as errors 40.3 and 40.4 spell it --
     /// measured, `Not enough arguments in invocation of SUB2`, the label's
     /// own upcased spelling.
-    name: Vec<u8>,
+    name: Rc<[u8]>,
     /// The arguments in source order, an omitted position (`call sub 1,,3`)
     /// left as `None` rather than closed up. Measured: that call into `use
     /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
@@ -2222,7 +2222,7 @@ impl Interp {
         let saved = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
-                name: name.to_vec(),
+                name: Rc::from(name),
                 arguments: Rc::from(arguments),
                 receiver: None,
             },
@@ -2272,7 +2272,7 @@ impl Interp {
         let saved = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
-                name: program.name.as_bytes().to_vec(),
+                name: Rc::from(program.name.as_bytes()),
                 arguments: Rc::from(arguments),
                 receiver: None,
             },
@@ -2358,7 +2358,7 @@ impl Interp {
         if let Err(failure) = self.install_directives(program_id, &program) {
             if called {
                 let arguments = Rc::clone(&self.activity.call_context.arguments);
-                let name = self.activity.call_context.name.clone();
+                let name = Rc::clone(&self.activity.call_context.name);
                 self.capture_site_frame(&failure, b"ROUTINE", &name, &arguments, program_id);
                 self.seal_site_level();
             }
@@ -3246,7 +3246,7 @@ fn execute_on(
     // goes into the same `call_context` a `CALL` fills -- see that field's own
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
-    interp.activity.call_context.name = path.as_bytes().to_vec();
+    interp.activity.call_context.name = Rc::from(path.as_bytes());
     let parts = invocation.into_parts();
     interp
         .roots

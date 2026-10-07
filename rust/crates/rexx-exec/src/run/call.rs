@@ -668,7 +668,7 @@ impl Interp {
             &ended,
             Ok(Ended::Returned(None) | Ended::Exited(None)) | Err(Failure::Exited(None))
         )
-        .then(|| self.activity.call_context.name.clone());
+        .then(|| Rc::clone(&self.activity.call_context.name));
         let ended = self.finish_call(ended)?;
         function_value(ended, name.as_deref().unwrap_or_default())
     }
@@ -981,7 +981,7 @@ impl Interp {
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
-                name: name.to_vec(),
+                name: Rc::from(name),
                 arguments,
                 // Read out of the caller's own convention before this
                 // replaces it, which is the only place it can be read from:

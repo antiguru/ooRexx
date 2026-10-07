@@ -2421,7 +2421,7 @@ impl Interp {
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
-                name: b"::CONSTANT".to_vec(),
+                name: Rc::from(&b"::CONSTANT"[..]),
                 arguments: Rc::from(&[][..]),
                 receiver: Some(class),
             },

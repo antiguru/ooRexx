@@ -480,7 +480,7 @@ pub(crate) struct MethodIdentity {
     /// The message name, already upcased by the parser -- measured,
     /// `::method MiXeD` announces `"MIXED"` and `::method "quoted"`
     /// announces `"QUOTED"`.
-    pub(crate) name: Box<[u8]>,
+    pub(crate) name: Rc<[u8]>,
     /// The defining class, whose `~id` is printed unmodified -- measured,
     /// `::class 'k'` announces `with scope "k"`.
     pub(crate) scope: ObjRef,

@@ -401,7 +401,7 @@ impl Interp {
     #[inline(always)]
     pub(crate) fn record_call_convention(&mut self) {
         let arguments = Rc::clone(&self.activity.call_context.arguments);
-        // **The name is copied only where nothing else records it.** A
+        // **The name is shared only where nothing else records it.** A
         // method activation already carries the message name it was entered
         // under on `Activation::method_identity`, and that is the hot path:
         // measured, `instructions:u` on `bench-programs/dispatch.rex`, one
@@ -409,7 +409,7 @@ impl Interp {
         // `Rc<[u8]>` built here for every send and +0.093% with this test in
         // front of it.
         let name = (self.activation().entry != crate::activation::Entry::Method)
-            .then(|| Rc::from(&self.activity.call_context.name[..]));
+            .then(|| Rc::clone(&self.activity.call_context.name));
         let activation = self.activation_mut();
         if let Some(name) = name {
             activation.call_name = Some(name);
@@ -1657,7 +1657,7 @@ impl Interp {
                 return Err(if in_method {
                     Raised::not_enough_method_arguments(minimum).into()
                 } else {
-                    let name = self.activity.call_context.name.clone();
+                    let name = Rc::clone(&self.activity.call_context.name);
                     Raised::not_enough_arguments(&name, minimum).into()
                 });
             }
@@ -1665,7 +1665,7 @@ impl Interp {
                 return Err(if in_method {
                     Raised::too_many_method_arguments(targets.len()).into()
                 } else {
-                    let name = self.activity.call_context.name.clone();
+                    let name = Rc::clone(&self.activity.call_context.name);
                     Raised::too_many_arguments(&name, targets.len()).into()
                 });
             }
@@ -1825,7 +1825,7 @@ impl Interp {
             None if strict => Err(if in_method {
                 Raised::missing_method_argument(position).into()
             } else {
-                let call = self.activity.call_context.name.clone();
+                let call = Rc::clone(&self.activity.call_context.name);
                 Raised::missing_argument(&call, position).into()
             }),
             None => {
@@ -2083,7 +2083,7 @@ impl Interp {
             return Err(Raised::forward_outside_method().into());
         };
         let receiver = identity.receiver;
-        let own_name = identity.name.clone();
+        let own_name = Rc::clone(&identity.name);
         let indent = self.activity.clause_state.current_value_indent;
 
         // The option order is the C++'s, and it is observable in the trace:
@@ -2101,7 +2101,7 @@ impl Interp {
             Some(expr) => {
                 let value = self.forward_keyword(code, expr, "MESSAGE")?;
                 let text = self.required_string_value(value)?;
-                self.to_text(text).to_ascii_uppercase().into_boxed_slice()
+                Rc::from(self.to_text(text).to_ascii_uppercase())
             }
         };
         let start_scope = match &forward.class {
