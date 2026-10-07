@@ -282,7 +282,6 @@ impl ChunkTrace {
 pub(crate) struct TraceCache {
     mode: TraceMode,
     chunk: ChunkTrace,
-    paused: bool,
 }
 
 impl TraceCache {
@@ -295,14 +294,7 @@ impl TraceCache {
             } else {
                 ChunkTrace::of(mode)
             },
-            paused,
         }
-    }
-
-    /// The running activation's debug-pause flag.
-    #[inline(always)]
-    pub(crate) fn paused(self) -> bool {
-        self.paused
     }
 
     #[inline(always)]

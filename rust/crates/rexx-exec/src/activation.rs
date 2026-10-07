@@ -1286,14 +1286,42 @@ impl Interp {
 
     /// Ends the running activation and resumes its caller, answering the
     /// activation that ended.
+    #[inline(always)]
     pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
-        let mut ended = self.activity.running.take()?;
-        // An activation ending with `SETLOCAL`s outstanding restores the
-        // oldest (`RexxActivation.cpp:1494-1500`); one a `REPLY` moves on
-        // ends later, on its continuation's activity.
-        if let Some(cold) = ended.cold.as_deref_mut()
+        if self
+            .activity
+            .running
+            .as_deref()
+            .is_some_and(|ending| ending.cold.is_some())
+        {
+            self.end_cold();
+        }
+        let ended = self.activity.running.take()?;
+        self.activity.running = self.activity.suspended.pop();
+        // The resumed caller's setting, or `OFF` where nothing is left to
+        // resume -- which is the state `Interp::new` starts in.
+        self.activity.trace_cache = crate::trace::TraceCache::of(
+            self.activity
+                .running
+                .as_deref()
+                .map_or(TraceMode::OFF, |resumed| resumed.trace_mode),
+            self.debug_pause(),
+        );
+        Some(ended)
+    }
+
+    /// An activation ending with `SETLOCAL`s outstanding restores the oldest
+    /// (`RexxActivation.cpp:1494-1500`); one a `REPLY` moves on ends later,
+    /// on its continuation's activity.
+    #[cold]
+    #[inline(never)]
+    fn end_cold(&mut self) {
+        let Some(ending) = self.activity.running.as_deref_mut() else {
+            return;
+        };
+        if let Some(cold) = ending.cold.as_deref_mut()
             && !cold.locals.is_empty()
-            && ended
+            && ending
                 .replied
                 .as_ref()
                 .is_none_or(|replied| replied.continuation.is_none())
@@ -1302,16 +1330,6 @@ impl Interp {
             cold.locals.clear();
             self.restore_local_environment(oldest);
         }
-        self.activity.running = self.activity.suspended.pop();
-        // The resumed caller's setting, or `OFF` where nothing is left to
-        // resume -- which is the state `Interp::new` starts in.
-        self.activity.trace_cache = match self.activity.running.as_deref() {
-            Some(resumed) => {
-                crate::trace::TraceCache::of(resumed.trace_mode, resumed.flags.debug_pause())
-            }
-            None => crate::trace::TraceCache::of(TraceMode::OFF, false),
-        };
-        Some(ended)
     }
 
     /// The `TRACE` setting in force right now: the *running* activation's.

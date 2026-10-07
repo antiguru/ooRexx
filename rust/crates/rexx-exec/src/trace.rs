@@ -67,14 +67,8 @@ impl Interp {
     /// pause.
     #[inline(always)]
     pub(crate) fn debug_pause(&self) -> bool {
-        let paused = self.activity.trace_cache.paused();
-        debug_assert_eq!(
-            self.running_activation()
-                .is_some_and(|activation| activation.flags.debug_pause()),
-            paused,
-            "the cached debug pause is not the running activation's"
-        );
-        paused
+        self.running_activation()
+            .is_some_and(|activation| activation.flags.debug_pause())
     }
 
     /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a
