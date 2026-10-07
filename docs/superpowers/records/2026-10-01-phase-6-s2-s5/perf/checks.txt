@@ -1,0 +1,10 @@
+# Reproduction check commands (from the worktree root), 2026-10-07.
+# cgpath: base/s1 binaries copied to the perfbase scratch paths, beside this task's base binary.
+mkdir -p /tmp/claude-1000/p6-s5-perfbase/bin/base /tmp/claude-1000/p6-s5-perfbase/bin/s1
+cp /tmp/claude-1000/p6-t26/bin/base/rexx-run /tmp/claude-1000/p6-s5-perfbase/bin/base/rexx-run
+cp /tmp/claude-1000/p6-t26/bin/s1/rexx-run /tmp/claude-1000/p6-s5-perfbase/bin/s1/rexx-run
+bash rust/bench-programs/callgrind.sh -r 1 -j 4 -p "startup alloc4c assign" -o /tmp/claude-1000/p6-t26/cgpath base=/tmp/claude-1000/p6-s5-perfbase/bin/base/rexx-run s1=/tmp/claude-1000/p6-s5-perfbase/bin/s1/rexx-run t26base=/tmp/claude-1000/p6-t26/bin/base/rexx-run
+# exit 0; table in cgpath-table.txt
+# cgenv: one extra environment variable (environment was 53 variables, 3160 bytes by `env | wc`).
+PADVAR_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX=yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy bash rust/bench-programs/callgrind.sh -r 1 -j 4 -p "startup" -o /tmp/claude-1000/p6-t26/cgenv base=/tmp/claude-1000/p6-t26/bin/base/rexx-run
+# table in cgenv-table.txt
