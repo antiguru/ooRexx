@@ -43,3 +43,11 @@ lang/do_with_supplier_subclass.rex
 lang/do_with_errors.rex
 lang/do_over_stem_one.rex
 lang/do_over_stem_three.rex
+
+# Task 3: USE ARG into a message or bracket term.
+lang/use_arg_msg.rex
+lang/use_arg_bracket.rex
+lang/use_strict_arg_msg.rex
+lang/use_arg_msg_default.rex
+lang/use_arg_msg_method.rex
+lang/use_arg_msg_trace.rex

@@ -1,0 +1,11 @@
+count 10
+/* USE ARG into a bracket term sends []= with the argument first. */
+o = .array~new
+call sub 'x', 'y'
+say o[1] o[2] o~items
+d = .directory~new
+call sub2 'v'
+say d~k
+exit
+sub: use arg o[1], o[1 + 1]; return
+sub2: use arg d['K']; return

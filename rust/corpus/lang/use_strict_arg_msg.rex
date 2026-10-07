@@ -1,0 +1,12 @@
+/* USE STRICT ARG into a message term; an omitted position with no default
+   is still an error. */
+o = .t~new
+call sub 'x'
+say o~a
+call sub2 , 'y'
+exit
+sub: use strict arg o~a; return
+sub2: use strict arg o~a, o~b; return
+::class t
+::attribute a
+::attribute b

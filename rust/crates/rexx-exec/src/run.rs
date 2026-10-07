@@ -1783,6 +1783,35 @@ impl Interp {
                 None => None,
             },
         };
+        // A message or bracket term assigns through PARSE's arm; its `drop` is
+        // a no-op (`ExpressionBaseVariable.hpp:65`), so an omitted argument
+        // without a default leaves it alone.
+        if matches!(target.target.kind, ExprKind::Message { .. }) {
+            return match value {
+                Some(value) => {
+                    let indent = self.activity.clause_state.current_value_indent;
+                    let rendered = self.result_text(value);
+                    if let Some(rendered) = &rendered {
+                        self.trace_result(indent, rendered);
+                    }
+                    self.assign_expr_target(
+                        code,
+                        &target.target,
+                        value,
+                        rendered.as_deref(),
+                        indent,
+                        None,
+                    )
+                }
+                None if strict => Err(if in_method {
+                    Raised::missing_method_argument(position).into()
+                } else {
+                    let call = Rc::clone(&self.activity.call_context.name);
+                    Raised::missing_argument(&call, position).into()
+                }),
+                None => Ok(()),
+            };
+        }
         let name = self.use_target_name(code, target)?;
         match value {
             Some(value) => {

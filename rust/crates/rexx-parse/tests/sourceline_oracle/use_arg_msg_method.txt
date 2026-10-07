@@ -1,0 +1,8 @@
+count 7
+/* USE ARG into a message term on SELF inside a method. */
+say .t~new~m('v')
+::class t
+::attribute a
+::method m
+use arg self~a
+return self~a

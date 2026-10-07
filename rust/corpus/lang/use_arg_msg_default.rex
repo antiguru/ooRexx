@@ -1,0 +1,10 @@
+/* USE ARG into a message term takes the default for an omitted argument. */
+o = .t~new
+call sub
+say o~a
+call sub 'given'
+say o~a
+exit
+sub: use arg o~a = 'dflt'; return
+::class t
+::attribute a
