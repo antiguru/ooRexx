@@ -65,6 +65,9 @@ fn table_owner(witness: &Witness) -> &'static str {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Category {
+    /// Unconstructed, because no `InstructionKind` variant is out of scope;
+    /// `#[expect]` for the reason `Expr` gives.
+    #[expect(dead_code, reason = "no InstructionKind variant is phase-owned today")]
     Instruction,
     /// **Unconstructed, because no `ExprKind` variant is out of scope.**
     /// `#[expect]` rather than `#[allow]` so that the attribute itself goes red
@@ -75,18 +78,10 @@ enum Category {
 }
 
 /// One witness per phase-owned row of `owners.rs`'s `INSTRUCTION_TAGS`.
-const INSTRUCTION_WITNESSES: &[Witness] = &[
-    // Which variants need a row here is `owners.rs`'s to say, and the
-    // assertion below reads it: a variant this crate implements must not
-    // carry one, because the row would assert a loud failure that does not
-    // happen. `Command` had a row here until the command dispatch landed, and
-    // `Address` until its redirections did.
-    Witness {
-        tag: "Options",
-        source: "options 'x'\n",
-        category: Category::Instruction,
-    },
-];
+/// Which variants need a row here is `owners.rs`'s to say, and the assertion
+/// below reads it: a variant this crate implements must not carry one, because
+/// the row would assert a loud failure that does not happen.
+const INSTRUCTION_WITNESSES: &[Witness] = &[];
 
 /// Every out-of-scope `ExprKind`, one witness each, every one wrapped in
 /// `SAY`, which is implemented, so the wrapper is never itself the gap -- see
@@ -205,7 +200,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call and Address), no more \
          and no fewer"
     );
-    assert_eq!(expected_instructions.len(), 1);
+    assert_eq!(expected_instructions.len(), 0);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -236,7 +231,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        42
+        43
     );
     assert_eq!(
         EXPR_TAGS

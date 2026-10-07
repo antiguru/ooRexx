@@ -143,6 +143,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/message_send_unknown_method_on_nil.rex",
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
+    "lang/options.rex",
     "lang/scope_case_text_absorbed.rex",
     "lang/scope_case_text_absorbed_other.rex",
     "lang/scope_case_text_debug_line.rex",

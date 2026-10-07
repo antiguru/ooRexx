@@ -1187,6 +1187,17 @@ impl Interp {
             // `FORWARD` and its options. See `exec_forward`.
             InstructionKind::Forward(forward) => self.exec_forward(code, forward),
 
+            // `OPTIONS`: the expression is evaluated, converted and traced, and
+            // nothing else (`RexxInstructionOptions::execute`).
+            InstructionKind::Options { expression } => {
+                let value = self.eval(code, expression)?;
+                self.roots.activity_mut().push_temp(value);
+                let value = self.required_string_value(value)?;
+                let text = self.to_text(value).to_vec();
+                self.trace_result(self.activity.clause_state.current_value_indent, &text);
+                Ok(Flow::Next)
+            }
+
             other => Err(Loud::instruction(other).into()),
         }
     }

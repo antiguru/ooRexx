@@ -64,3 +64,7 @@ lang/attr_compound.rex
 lang/attr_stem.rex
 lang/delegate_compound.rex
 lang/delegate_stem.rex
+
+# Task 3: OPTIONS evaluates and traces its expression and does nothing else.
+lang/options.rex
+lang/options_expr.rex

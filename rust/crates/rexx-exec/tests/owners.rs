@@ -150,8 +150,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // command's three streams go. The row was split by target kind while
     // `STREAM` was owed, and is one row again now that none is.
     InstructionKind::Address(_) => ("Address", Owner::InScope),
-    // ---- Phase 5's ----
-    InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
+    InstructionKind::Options { .. } => ("Options", Owner::InScope),
 },
 // ---- `CALL`, still arm-grained although every arm is now in scope ----
 // The four resolve by four different rules -- a label search, a run-time
@@ -315,13 +314,7 @@ impl Coverage {
 /// owner arm above that is not also made here is a test failure, which is
 /// the point: relabelling a variant is a plan amendment, not a drive-by
 /// `match` edit.
-pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
-    // Every arm of `CALL` and every form of `ADDRESS` is in scope, so those
-    // appear in `INSTRUCTION_TAGS` and not here. `Command` left this list
-    // when the command dispatch landed, and `Address` when its redirections
-    // did.
-    ("InstructionKind", "Options", "Phase 5"),
-];
+pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[];
 
 /// Every phase name the split table names, spelled exactly as it spells them.
 /// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
@@ -448,7 +441,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        42
+        43
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -469,7 +462,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
             .count(),
-        1
+        0
     );
     // Zero, and asserted rather than dropped: no instruction is owed to Phase
     // 7 now that `ADDRESS`'s redirections are dispatched, and this is what

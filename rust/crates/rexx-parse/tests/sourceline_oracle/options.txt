@@ -1,0 +1,4 @@
+count 3
+/* OPTIONS evaluates its expression and does nothing else. */
+options 'ETMODE'
+say 'ok'

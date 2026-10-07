@@ -978,8 +978,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // single-dimensional array this crate does not build -- fails loudly
         // through `Loud::object_position` rather than answering.
         InstructionKind::Forward(_) => None,
-        InstructionKind::Options { .. } => Some("Phase 5"),
-        InstructionKind::Command { .. } => None,
+        InstructionKind::Options { .. } | InstructionKind::Command { .. } => None,
     }
 }
 

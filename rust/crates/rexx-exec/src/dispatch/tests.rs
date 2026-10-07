@@ -1725,22 +1725,18 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
 /// outside it.
 #[test]
 fn a_reqstr_context_whose_instruction_is_another_phases_is_still_loud() {
-    for (source, message) in [
-        (
-            "options .K\n::class K\n::method makeString class\n  return 'NOVALUE'\n",
-            "rexx-exec: OPTIONS is not implemented (Phase 5)\n",
+    assert_eq!(
+        run_source(
+            "address 'SYSTEM' .K with output using (.rexxqueue~new)\n::class K\n\
+             ::method makeString class\n  return 'true'\n"
         ),
         (
-            "address 'SYSTEM' .K with output using (.rexxqueue~new)\n::class K\n::method makeString class\n  return 'true'\n",
-            "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10)\n",
-        ),
-    ] {
-        assert_eq!(
-            run_source(source),
-            (120, String::new(), message.to_string()),
-            "{source:?}"
-        );
-    }
+            120,
+            String::new(),
+            "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10)\n"
+                .to_string()
+        )
+    );
 }
 
 /// An `Interp` whose class registry holds one class awaiting a class-side

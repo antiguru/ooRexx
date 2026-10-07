@@ -3252,38 +3252,6 @@ above.
   prose around the drain, which owns no behaviour, so recording it was that
   task's whole disposition.
 
-  THE BARE OPTIONS INSTRUCTION IS REFUSED WHERE THE ORACLE RUNS THE PROGRAM.
-  This row has an owner, which is why it says so rather than reading as a
-  divergence nobody has assigned: instruction_owner in rexx-exec/src/lib.rs
-  gives InstructionKind::Options the Phase 5 owner, and the refusal is loud, at
-  NOT_IMPLEMENTED_EXIT with a message naming the phase. It is here because the
-  EXCLUSIONS section above covers the ::OPTIONS DIRECTIVE only, and the reason
-  recorded there is the directive's own -- its whole effect is to change package
-  settings, so there is no unused ::OPTIONS. That reason does not carry to the
-  instruction, and this row is where the instruction is recorded.
-
-  Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper from a
-  fresh empty directory, on a two-line program whose first line is
-  options 'nothing' and whose second is say 'ran':
-
-    oracle               rc 0, stdout "ran", stderr empty
-    tree-walker and ir   rc 120, stdout empty, stderr
-                         "rexx-exec: OPTIONS is not implemented (Phase 5)"
-
-  WHY THE ORACLE RUNS IT. RexxInstructionOptions::execute
-  (interpreter/instructions/OptionsInstruction.cpp) traces the instruction and
-  evaluates its expression as a string, so an error inside that expression still
-  raises. The word scan that would act on the resulting string sits inside
-  #ifdef _DEBUG, under a comment saying processing is currently disabled. So in
-  the build this project measures against, an OPTIONS instruction whose
-  expression evaluates has no effect beyond the tracing and the interactive
-  pause that execute performs for it, and refusing the program is an
-  over-refusal in the sense the directives section above defines: it rejects a
-  program the oracle runs.
-
-  NOT FIXED, decided by Moritz on 2026-08-15. Recorded so that a reader meeting
-  the loud message does not conclude the oracle refuses it too.
-
   A USER CONDITION RAISED IN A ::ROUTINE REACHES THE CALLER'S TRAP ON THE
   ORACLE AND NOT HERE, WHEN THE RAISE HAS NO TAIL OR AN `EXIT` TAIL. Both
   engines agree with each other and diverge from the oracle on STDOUT ONLY:
