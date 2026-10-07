@@ -1396,6 +1396,61 @@ each against round 1's tree except where named):
 | the same, kept on the activity at recycle | +0.05% | +0.89% | +0.50% | +0.51% |
 
 None removes cost on every program. The last two add about 24 Ir per `fibfunc` and `fibcall`
-call, programs that run no `EXPOSE`. No round 2 or 3 was committed.
+call, programs that run no `EXPOSE`.
+
+**Round 2, `634f591a8`**: an invocation whose name repeats the last one's shares that `Rc<[u8]>`
+(`Activity::invocation_name`, its miss path cold), and a stepped clause's trace line is written
+by a cold out-of-line function. `fibcall` (+0.97%) and `sendloop` (+0.80%) came inside;
+`dispatch` stayed over at +1.98% and `fibfunc` at +2.88%, and `nop` went from -1.63% to +1.55%
+(3 Ir more per clause) (`perf/r2/`).
+
+**Round 3, `05aac0c58`**: round 2's trace change reverted, and an ended method activation's
+emptied `EXPOSE` list kept on the activity for the next `EXPOSE`. Pre-screened before the commit
+on every program (`experiments/expJ-table.txt`, the same Ir as the round's run).
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg-r3 base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run r3=$S/bin/r3/rexx-run
+```
+
+Exit 0, no SPREAD flag (`perf/r3/`). r3 `rexx-run` sha256
+`12e1aaff0928466c45402d34eddb7b493e3b5147792da5820fcd5af27a4eb78c`, `.text` 3,130,094 bytes; r2
+`5f239506423a189a075a4ec84b0c4ed6d7804d0d53054db1959fd77de08a38bc`, 3,128,158 bytes.
+
+| program | r3 Ir | r3 vs base % | r3 vs s1 % | r3 |
+|---|---:|---:|---:|---|
+| alloc | 20345537834 | -19.16 | +0.37 | inside |
+| alloc4c | 3140691434 | -2.60 | -1.13 | inside |
+| arith | 11488858585 | -0.27 | -0.08 | inside |
+| assign | 18983599846 | -3.33 | +0.76 | inside |
+| compound | 8937498535 | -3.60 | -2.72 | inside |
+| decloop | 2469011300 | -3.75 | -2.64 | inside |
+| decrender | 4228327271 | -2.76 | -1.14 | inside |
+| dispatch | 20809503350 | +1.59 | +1.54 | over |
+| dispatchclass | 15794935625 | -0.35 | +1.97 | inside |
+| emptyloop | 7786100327 | -16.35 | -15.91 | inside |
+| extcall | 7552641992 | -8.80 | -8.24 | inside |
+| fibcall | 8413280937 | +0.81 | +1.06 | inside |
+| fibfunc | 8228291323 | +3.00 | +1.10 | over |
+| heapshape | 2334068698 | -28.81 | -1.68 | inside |
+| nop | 9283341078 | -1.63 | +0.47 | inside |
+| parse | 1536337094 | -0.37 | +0.15 | inside |
+| sayloop | 109048758 | -5.02 | -4.94 | inside |
+| sendloop | 14013811196 | +1.09 | +2.26 | over |
+| startup | 58097646 | +0.04 | +0.05 | inside |
+| strings | 17537481859 | -1.19 | +0.19 | inside |
+| textnum | 1155146412 | -1.82 | +0.23 | inside |
+| varlookup | 13437530753 | -9.68 | -7.08 | inside |
+| rexxcps | 17788422476 | -0.16 | +0.71 | inside |
+
+Each round's checks, before its commit: fmt; clippy `-D warnings`; `cargo test --workspace
+--release --no-run`, then `memcap 8G cargo test --workspace --release`; `concurrency_tests` with
+and without `--features pinning`; clippy `--features pinning`; loom. All exit 0 in every round.
+
+**After three rounds, over budget**: `dispatch` +1.59%, `fibfunc` +3.00% (bar +2.58%),
+`sendloop` +1.09%. Every other program is inside. Stopped for Moritz's ruling (P16).
+
+**Libc included** (each run's whole count, `r3/summary.tsv`, round 1 rows): every program at r3
+is below base except `startup` +0.09%; `dispatch` -1.11%, `sendloop` -1.07%, `fibfunc` -1.77%,
+`fibcall` -3.51%.
 
 Wall clock not measured (over budget; Step 3).

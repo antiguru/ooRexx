@@ -1,0 +1,77 @@
+diff -ru base-r2/rust/crates/rexx-exec/src/activity.rs trees/exp/rust/crates/rexx-exec/src/activity.rs
+--- a/rust/crates/rexx-exec/src/activity.rs	2026-10-07 04:23:33.000000000 +0200
++++ b/rust/crates/rexx-exec/src/activity.rs	2026-10-07 04:42:16.685254205 +0200
+@@ -56,6 +56,9 @@
+                   return the very thing this parks"
+     )]
+     pub(crate) spare_activations: Vec<Box<Activation>>,
++    /// An ended method activation's emptied `EXPOSE` list, kept for its
++    /// capacity until the next `EXPOSE` takes it.
++    pub(crate) spare_exposed: Vec<(usize, crate::activation::InstanceVar)>,
+     /// The native activations on the stack, innermost last. Each carries the
+     /// objects an extension's handles name (D5), rooted by
+     /// [`Activity::object_roots`] for exactly as long as the frame is on this
+@@ -384,6 +387,7 @@
+             running: None,
+             suspended: Vec::new(),
+             spare_activations: Vec::new(),
++            spare_exposed: Vec::new(),
+             thread: None,
+             native_handles: Vec::new(),
+             native_spares: Vec::new(),
+@@ -481,6 +485,8 @@
+             // A finished activation's leftovers, overwritten at reuse and read
+             // by nothing in between.
+             spare_activations: _,
++            // Empty whenever it is kept.
++            spare_exposed: _,
+             // Handles for constants that are not heap objects, and the
+             // innermost native call, whose frame `native_handles` roots.
+             thread: _,
+diff -ru base-r2/rust/crates/rexx-exec/src/dispatch.rs trees/exp/rust/crates/rexx-exec/src/dispatch.rs
+--- a/rust/crates/rexx-exec/src/dispatch.rs	2026-10-07 04:23:33.000000000 +0200
++++ b/rust/crates/rexx-exec/src/dispatch.rs	2026-10-07 04:42:16.685254205 +0200
+@@ -3257,6 +3257,11 @@
+         let callee_context = std::mem::replace(&mut self.activity.call_context, saved_context);
+         let Some(replied) = callee.replied.take() else {
+             self.roots.activity_mut().pop_slots(callee.frame);
++            if callee.exposed.capacity() > 0 {
++                let mut exposed = std::mem::take(&mut callee.exposed);
++                exposed.clear();
++                self.activity.spare_exposed = exposed;
++            }
+             // **Back to the pool**, which until now only `Interp::invoke_call`
+             // fed. The pool is drained by every push and was filled by the
+             // `CALL` path alone, so a program of method sends missed it every
+diff -ru base-r2/rust/crates/rexx-exec/src/run.rs trees/exp/rust/crates/rexx-exec/src/run.rs
+--- a/rust/crates/rexx-exec/src/run.rs	2026-10-07 04:23:33.000000000 +0200
++++ b/rust/crates/rexx-exec/src/run.rs	2026-10-07 04:42:16.685254205 +0200
+@@ -1473,6 +1473,9 @@
+         }
+         let slot = self.slot_of(&name);
+         let var = InstanceVar { owner, scope, name };
++        if self.activation().exposed.capacity() == 0 {
++            self.activation_mut().exposed = std::mem::take(&mut self.activity.spare_exposed);
++        }
+         let activation = self.activation_mut();
+         // Replaced rather than appended: `expose v v` is legal and rc 0 on the
+         // oracle, and two entries for one slot would leave every later read
+diff -ru base-r2/rust/crates/rexx-exec/src/trace.rs trees/exp/rust/crates/rexx-exec/src/trace.rs
+--- a/rust/crates/rexx-exec/src/trace.rs	2026-10-07 04:23:33.000000000 +0200
++++ b/rust/crates/rexx-exec/src/trace.rs	2026-10-07 04:42:16.685254205 +0200
+@@ -100,15 +100,6 @@
+         if !self.tracing_clause(is_label, is_command) {
+             return;
+         }
+-        self.emit_clause(line, indent, text);
+-    }
+-
+-    /// [`Interp::trace_stepped_clause`]'s line, once tracing asks for it:
+-    /// kept out of line so the op loop the check is inlined into holds no
+-    /// state for it.
+-    #[cold]
+-    #[inline(never)]
+-    fn emit_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
+         self.trace_debug_source();
+         let start = self.trace.len();
+         push_clause(&mut self.trace, line, indent, text);

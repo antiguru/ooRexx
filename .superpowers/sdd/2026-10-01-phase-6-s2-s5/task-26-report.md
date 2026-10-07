@@ -120,8 +120,30 @@ gates' `finished` line at 03:05:29):
 
 Every other program inside (`phase-6-perf.md` `## S2-S5 gate`, full table).
 
-Rounds 2 and 3 not committed. Five further candidates were built in a scratch tree and measured on
-the five programs (`perf/experiments/`, table in the record): none removes cost on every program;
-the best for `dispatch` (-1.05%) adds about 24 Ir per call on `fibfunc` and `fibcall`. I stopped
-rather than commit a candidate that moves programs over budget further over. Wall clock (Step 2)
-and Step 4 not done: still over budget.
+Rounds 2 and 3 run after the lead's restatement of P88 (`phase-6-perf.md` `## S2-S5 gate` has
+the tables; evidence `perf/r2/`, `perf/r3/`, `perf/experiments/`).
+
+Round 2, `634f591a8`: repeated invocation names share one `Rc` (inline hit, cold miss); stepped
+clause trace emission out of line. Checks as round 1, all exit 0 (3048 passed, 0 failed). Result:
+`fibcall` +0.97% and `sendloop` +0.80% inside; `dispatch` +1.98%, `fibfunc` +2.88% over; `nop`
++1.55% over (was -1.63%, 3 Ir more per clause).
+
+Round 3, `05aac0c58`: round 2's trace change reverted; an ended method activation's emptied
+`EXPOSE` list kept for the next `EXPOSE`. Checks as round 1, all exit 0 (3048 passed, 0 failed;
+concurrency_tests 38, with pinning 56, loom 15). Pre-screened on every program as `expJ` before
+the commit.
+
+| program | r3 vs base % | r3 vs s1 % | verdict |
+|---|---:|---:|---|
+| dispatch | +1.59 | +1.54 | over |
+| dispatchclass | -0.35 | +1.97 | inside |
+| fibcall | +0.81 | +1.06 | inside |
+| fibfunc | +3.00 | +1.10 | over (bar 2.58) |
+| nop | -1.63 | +0.47 | inside |
+| sendloop | +1.09 | +2.26 | over |
+
+Every other program inside. With libc included, every program at r3 is below base except
+`startup` +0.09%.
+
+Three rounds spent; stopped for Moritz's ruling (P16). Wall clock and Step 4 not done. Final code
+head `05aac0c58`; code commits after `c484f4516`: `ba8f7c581`, `634f591a8`, `05aac0c58`.
