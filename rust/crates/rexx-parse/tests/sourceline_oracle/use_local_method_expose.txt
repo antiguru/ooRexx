@@ -1,0 +1,26 @@
+count 25
+/* USE LOCAL beside EXPOSE: a name USE LOCAL does not list is the same
+   object variable another method exposes. */
+o = .t~new
+o~init2
+say o~m o~v
+say o~m2 o~v o~w
+::class t
+::method init2
+expose v
+v = 1
+::method v
+expose v
+return v
+::method w
+expose w
+return w
+::method m
+use local a
+a = 5
+v = 9
+return a v
+::method m2
+use local
+v = v + 1; w = 'w'
+return v

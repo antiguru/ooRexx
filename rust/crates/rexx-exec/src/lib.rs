@@ -655,14 +655,6 @@ impl Loud {
         }
     }
 
-    /// `USE LOCAL` as a `::METHOD`'s first instruction, which is the one
-    /// placement the oracle runs (measured, rc 0).
-    fn use_local_in_a_method() -> Loud {
-        Loud {
-            message: owned_message("USE LOCAL in a ::METHOD body", Some("Phase 5")),
-        }
-    }
-
     /// A `PARSE` template trigger that needs an operand and has none.
     fn parse_trigger_operand() -> Loud {
         Loud {
@@ -921,11 +913,8 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // loudly, and the external file search behind those three runs. So
         // there is no residual claim on the `CALL` keyword here at all.
         InstructionKind::Call(_) => None,
-        // `Use` is `None` even
-        // though `USE LOCAL` can only ever fail here: it fails with the
-        // oracle's own two errors (98.993/99.910), measured, which is an
-        // implemented instruction answering the same bytes the oracle
-        // answers -- not a gap.
+        // `Use` is `None`: every form runs, and `USE LOCAL` anywhere but a
+        // method's first instruction answers the oracle's own 98.993/99.910.
         InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
         // All three `Signal` arms are implemented, so unlike
         // `Call` above this one needs no arm-grained match. `RAISE` needs none

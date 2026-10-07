@@ -84,10 +84,8 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Interpret { .. } => ("Interpret", Owner::InScope),
     InstructionKind::Return { .. } => ("Return", Owner::InScope),
     // `PROCEDURE` isolates the callee's pool and aliases the exposed names;
-    // `USE ARG`/`USE STRICT ARG` bind the call's arguments. `USE LOCAL` can
-    // only ever fail here, since this crate has no method invocations -- but
-    // it fails with the oracle's own 98.993/99.910, measured, which is an
-    // implemented instruction answering the right bytes and not a gap.
+    // `USE ARG`/`USE STRICT ARG` bind the call's arguments, and `USE LOCAL`
+    // binds every unlisted name to a method's object pool.
     InstructionKind::Procedure { .. } => ("Procedure", Owner::InScope),
     InstructionKind::Use(_) => ("Use", Owner::InScope),
     // Whole rather than arm-grained the way `Call` is, both of them. All

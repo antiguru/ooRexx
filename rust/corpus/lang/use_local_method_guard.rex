@@ -1,0 +1,16 @@
+/* GUARD WHEN in a USE LOCAL method reads a name USE LOCAL did not list
+   from the object's pool. */
+o = .t~new
+o~set
+say o~waitit
+::class t
+::method set
+expose flag
+flag = 1
+::method waitit
+use local a
+trace r
+guard on when flag = 1
+a = 'local'
+trace o
+return 'passed' flag a

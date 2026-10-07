@@ -470,32 +470,9 @@ fn an_argument_with_no_string_value_raises_where_one_with_a_string_value_answers
     }
 }
 
-/// The `::METHOD` and `::ATTRIBUTE` shapes whose body this crate cannot
-/// run are **loud**, and the neighbouring shapes that it can run are not.
+/// The `::METHOD` and `::ATTRIBUTE` shapes beside the plain one each run.
 #[test]
-fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
-    // (source, the refusal's own text after `rexx-exec: `).
-    let refused: &[(&str, &str)] = &[
-        // oracle rc 0, printing `4`: `USE LOCAL` binds its list against
-        // the method's own scope pool.
-        (
-            "say .K~m\n::class K\n::method m class\n  use local zz\n  zz = 4\n  return zz\n",
-            "USE LOCAL in a ::METHOD body is not implemented (Phase 5)",
-        ),
-    ];
-    for (source, refusal) in refused {
-        let (code, stdout, stderr) = run_source(source);
-        assert_eq!(
-            (code, stdout.as_str(), stderr.as_str()),
-            (
-                crate::NOT_IMPLEMENTED_EXIT,
-                "",
-                format!("rexx-exec: {refusal}\n").as_str()
-            ),
-            "{source:?}"
-        );
-    }
-
+fn a_method_body_of_each_shape_runs() {
     for (source, expected) in [
         (
             "say .K~m\n::class K\n::method m class protected\n  return 7\n",
@@ -523,6 +500,11 @@ fn a_method_body_this_crate_cannot_run_is_loud_and_its_neighbours_still_run() {
         (
             "say .K~'A.B'\n::class K\n::attribute \"a.b\" class\n",
             "a.b\n",
+        ),
+        // Oracle rc 0: `USE LOCAL` keeps its listed name local.
+        (
+            "say .K~m\n::class K\n::method m class\n  use local zz\n  zz = 4\n  return zz\n",
+            "4\n",
         ),
     ] {
         assert_eq!(

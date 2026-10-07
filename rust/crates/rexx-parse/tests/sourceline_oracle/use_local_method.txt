@@ -1,0 +1,10 @@
+count 9
+/* USE LOCAL as a method's first instruction keeps its listed names local
+   and binds every other name to the object's pool for the method's scope. */
+o = .t~new
+say o~m
+::class t
+::method m
+use local a
+a = 5
+return a

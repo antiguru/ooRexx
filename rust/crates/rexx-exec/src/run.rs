@@ -12,7 +12,7 @@
 //! The instruction loop: `Flow`, `step`, and the two functions that run it.
 
 use crate::activation::{
-    Activation, CallType, Entry, Inherited, InstanceVar, ReplyState, TraceEntry, Trap,
+    Activation, AutoExpose, CallType, Entry, Inherited, InstanceVar, ReplyState, TraceEntry, Trap,
     TrappedCondition, body_of,
 };
 use crate::builtin;
@@ -1400,6 +1400,9 @@ impl Interp {
         // calling `inner: procedure` with no list, which assigns `v` -- the
         // object variable is unchanged.
         activation.exposed = exposed;
+        if let Some(cold) = activation.cold.as_deref_mut() {
+            cold.auto_expose = None;
+        }
         for (name, stem_name, key, home) in tails {
             self.expose_tail(home, &stem_name, &key);
             self.trace_exposed_tail(&name, &stem_name, &key);
@@ -1476,7 +1479,12 @@ impl Interp {
             return self.expose_object_tail(owner, scope, &name);
         }
         let slot = self.slot_of(&name);
-        let var = InstanceVar { owner, scope, name };
+        self.expose_slot(slot, InstanceVar { owner, scope, name });
+        Ok(())
+    }
+
+    /// Binds slot `slot` of the running activation to `var`.
+    fn expose_slot(&mut self, slot: usize, var: InstanceVar) {
         if self.activation().exposed.capacity() == 0 {
             self.activation_mut().exposed = std::mem::take(&mut self.activity.spare_exposed);
         }
@@ -1488,7 +1496,6 @@ impl Interp {
             Some(bound) => bound.1 = var,
             None => activation.exposed.push((slot, var)),
         }
-        Ok(())
     }
 
     /// `RexxCompoundVariable::expose`: the tail `name` spells becomes the same
@@ -1603,7 +1610,7 @@ impl Interp {
         first_instruction: bool,
     ) -> Result<(), Failure> {
         match use_ {
-            Use::Local { .. } => {
+            Use::Local { variables } => {
                 // 98.993 is "this is not a method invocation" and 99.910 is
                 // "it is one, but this is not its first instruction", so
                 // what decides between them is the entry kind rather than
@@ -1615,13 +1622,7 @@ impl Interp {
                     Entry::Method => true,
                 };
                 if first_instruction && method_invocation {
-                    // The one shape the oracle **runs**: measured, `use
-                    // local` as a `::METHOD`'s first instruction is rc 0.
-                    // What it does is bind every name in its list as a
-                    // local, which is `EXPOSE`'s own machinery seen from the
-                    // other side, so it is loud until that lands rather than
-                    // answering a condition the oracle does not raise.
-                    Err(Loud::use_local_in_a_method().into())
+                    self.use_local(code, variables)
                 } else if first_instruction {
                     Err(Raised::use_local_outside_method().into())
                 } else {
@@ -1634,6 +1635,63 @@ impl Interp {
                 targets,
             } => self.exec_use_arg(code, *strict, *allow_optionals, targets),
         }
+    }
+
+    /// `USE LOCAL` as a method's first instruction
+    /// (`RexxActivation::autoExpose`): the listed names and `SELF`, `SUPER`,
+    /// `RC`, `SIGL` and `RESULT` stay local, and every other name binds to the
+    /// receiver's pool for the method's scope, a name first met later
+    /// included ([`Interp::slot_of`]).
+    fn use_local(&mut self, code: &Code<'_>, variables: &[VariableRef]) -> Result<(), Failure> {
+        let Some(identity) = self.activation().method_identity.as_ref() else {
+            return Err(Raised::use_local_outside_method().into());
+        };
+        let (scope, receiver) = (identity.scope, identity.receiver);
+        let owner = self.pool_owner(receiver)?;
+        let mut local: Vec<Box<[u8]>> = [b"SELF".as_slice(), b"SUPER", b"RC", b"SIGL", b"RESULT"]
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        for variable in variables {
+            let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = variable;
+            local.push(code.symbols.name(*id).as_bytes().into());
+        }
+        let auto = AutoExpose {
+            owner,
+            scope,
+            local: local.into(),
+        };
+        let activation = self.activation();
+        let mut names: Vec<(usize, Box<[u8]>)> = activation
+            .plan
+            .names
+            .iter()
+            .chain(activation.extra.iter())
+            .map(|(name, slot)| (*slot, name.clone()))
+            .collect();
+        names.sort_unstable_by_key(|(slot, _)| *slot);
+        for (slot, name) in names {
+            self.auto_expose_slot(&auto, slot, name);
+        }
+        self.activation_mut().cold_mut().auto_expose = Some(auto);
+        Ok(())
+    }
+
+    /// Binds `slot`, named `name`, to `auto`'s pool unless the name is one
+    /// `USE LOCAL` keeps local or a compound, which reaches the pool through
+    /// its stem.
+    pub(crate) fn auto_expose_slot(&mut self, auto: &AutoExpose, slot: usize, name: Box<[u8]>) {
+        if shape_of(&name) == NameShape::Compound || auto.local.contains(&name) {
+            return;
+        }
+        self.expose_slot(
+            slot,
+            InstanceVar {
+                owner: auto.owner,
+                scope: auto.scope,
+                name,
+            },
+        );
     }
 
     /// `USE ARG`/`USE STRICT ARG`: bind the call's arguments to this

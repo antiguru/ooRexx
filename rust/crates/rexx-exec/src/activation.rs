@@ -584,19 +584,34 @@ pub(crate) struct ActivationCold {
     /// What each outstanding `SETLOCAL` saved, innermost last: the directory
     /// and the whole environment.
     pub(crate) locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
+    /// Where a name this activation meets for the first time binds after a
+    /// method's `USE LOCAL`, or `None` without one.
+    pub(crate) auto_expose: Option<AutoExpose>,
+}
+
+/// A `USE LOCAL` method's object pool and the names it keeps local
+/// (`RexxLocalVariables::setAutoExpose`).
+#[derive(Clone)]
+pub(crate) struct AutoExpose {
+    pub(crate) owner: ObjRef,
+    pub(crate) scope: ObjRef,
+    /// The listed names and `SELF`, `SUPER`, `RC`, `SIGL` and `RESULT`.
+    pub(crate) local: Rc<[Box<[u8]>]>,
 }
 
 impl ActivationCold {
     /// What an internal call or `CALL ON` handler starts from: the caller's
-    /// two conditions, and neither its seed nor its `SETLOCAL` list, which
-    /// stay on the top-level activation.
+    /// two conditions and its `USE LOCAL` pool, and neither its seed nor its
+    /// `SETLOCAL` list, which stay on the top-level activation.
     pub(crate) fn inherited(&self) -> Option<Box<ActivationCold>> {
-        if self.condition.is_none() && self.active_condition.is_none() {
+        if self.condition.is_none() && self.active_condition.is_none() && self.auto_expose.is_none()
+        {
             return None;
         }
         Some(Box::new(ActivationCold {
             condition: self.condition.clone(),
             active_condition: self.active_condition.clone(),
+            auto_expose: self.auto_expose.clone(),
             ..ActivationCold::default()
         }))
     }
@@ -989,6 +1004,11 @@ impl Activation {
         }) = cold.as_deref().and_then(|cold| cold.condition.as_ref())
         {
             out.extend(*object);
+        }
+        if let Some(AutoExpose { owner, scope, .. }) =
+            cold.as_deref().and_then(|cold| cold.auto_expose.as_ref())
+        {
+            out.extend([*owner, *scope]);
         }
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.

@@ -68,3 +68,9 @@ lang/delegate_stem.rex
 # Task 3: OPTIONS evaluates and traces its expression and does nothing else.
 lang/options.rex
 lang/options_expr.rex
+
+# Task 3: USE LOCAL as a method's first instruction.
+lang/use_local_method.rex
+lang/use_local_method_expose.rex
+lang/use_local_method_dynamic.rex
+lang/use_local_method_guard.rex

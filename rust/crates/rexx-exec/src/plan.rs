@@ -817,6 +817,11 @@ impl Interp {
         let frame = activation.frame;
         let slot = self.roots.activity_mut().grow_slots_of(frame, 1);
         self.activation_mut().extra.insert(name.into(), slot);
+        if let Some(auto) =
+            (self.activation().cold.as_deref()).and_then(|cold| cold.auto_expose.clone())
+        {
+            self.auto_expose_slot(&auto, slot, name.into());
+        }
         slot
     }
 
