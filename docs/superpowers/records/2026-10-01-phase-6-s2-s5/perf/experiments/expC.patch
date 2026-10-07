@@ -1,0 +1,130 @@
+diff -ru base-c484/rust/crates/rexx-exec/src/activation.rs trees/exp/rust/crates/rexx-exec/src/activation.rs
+--- base-c484/rust/crates/rexx-exec/src/activation.rs	2026-10-07 02:04:37.000000000 +0200
++++ trees/exp/rust/crates/rexx-exec/src/activation.rs	2026-10-07 02:50:58.729515930 +0200
+@@ -480,7 +480,7 @@
+     /// The message name, already upcased by the parser -- measured,
+     /// `::method MiXeD` announces `"MIXED"` and `::method "quoted"`
+     /// announces `"QUOTED"`.
+-    pub(crate) name: Box<[u8]>,
++    pub(crate) name: std::rc::Rc<[u8]>,
+     /// The defining class, whose `~id` is printed unmodified -- measured,
+     /// `::class 'k'` announces `with scope "k"`.
+     pub(crate) scope: ObjRef,
+diff -ru base-c484/rust/crates/rexx-exec/src/dispatch.rs trees/exp/rust/crates/rexx-exec/src/dispatch.rs
+--- base-c484/rust/crates/rexx-exec/src/dispatch.rs	2026-10-07 02:04:37.000000000 +0200
++++ trees/exp/rust/crates/rexx-exec/src/dispatch.rs	2026-10-07 02:50:58.729515930 +0200
+@@ -3150,10 +3150,11 @@
+         // send inside the body resolves as all name one field rather than
+         // each taking its own copy of this function's argument.
+         let arguments = self.shared_arguments(args);
++        let name: Rc<[u8]> = Rc::from(name);
+         let saved_context = std::mem::replace(
+             &mut self.activity.call_context,
+             crate::CallContext {
+-                name: name.to_vec(),
++                name: Rc::clone(&name),
+                 arguments,
+                 receiver: Some(receiver),
+             },
+@@ -3175,7 +3176,7 @@
+             plan,
+             frame,
+             MethodIdentity {
+-                name: name.into(),
++                name,
+                 scope: resolution.scope,
+                 receiver,
+             },
+diff -ru base-c484/rust/crates/rexx-exec/src/install.rs trees/exp/rust/crates/rexx-exec/src/install.rs
+--- base-c484/rust/crates/rexx-exec/src/install.rs	2026-10-07 02:04:37.000000000 +0200
++++ trees/exp/rust/crates/rexx-exec/src/install.rs	2026-10-07 02:50:58.729515930 +0200
+@@ -2421,7 +2421,7 @@
+         let saved_context = std::mem::replace(
+             &mut self.activity.call_context,
+             CallContext {
+-                name: b"::CONSTANT".to_vec(),
++                name: std::rc::Rc::from(&b"::CONSTANT"[..]),
+                 arguments: Rc::from(&[][..]),
+                 receiver: Some(class),
+             },
+diff -ru base-c484/rust/crates/rexx-exec/src/lib.rs trees/exp/rust/crates/rexx-exec/src/lib.rs
+--- base-c484/rust/crates/rexx-exec/src/lib.rs	2026-10-07 02:04:37.000000000 +0200
++++ trees/exp/rust/crates/rexx-exec/src/lib.rs	2026-10-07 02:50:58.729515930 +0200
+@@ -1925,7 +1925,7 @@
+     /// The resolved routine name, as errors 40.3 and 40.4 spell it --
+     /// measured, `Not enough arguments in invocation of SUB2`, the label's
+     /// own upcased spelling.
+-    name: Vec<u8>,
++    name: Rc<[u8]>,
+     /// The arguments in source order, an omitted position (`call sub 1,,3`)
+     /// left as `None` rather than closed up. Measured: that call into `use
+     /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
+@@ -2222,7 +2222,7 @@
+         let saved = std::mem::replace(
+             &mut self.activity.call_context,
+             CallContext {
+-                name: name.to_vec(),
++                name: Rc::from(name),
+                 arguments: Rc::from(arguments),
+                 receiver: None,
+             },
+@@ -2272,7 +2272,7 @@
+         let saved = std::mem::replace(
+             &mut self.activity.call_context,
+             CallContext {
+-                name: program.name.as_bytes().to_vec(),
++                name: Rc::from(program.name.as_bytes()),
+                 arguments: Rc::from(arguments),
+                 receiver: None,
+             },
+@@ -3246,7 +3246,7 @@
+     // goes into the same `call_context` a `CALL` fills -- see that field's own
+     // doc for what reads it and for the three measured invocations that tell
+     // "no argument" from "one empty argument" apart.
+-    interp.activity.call_context.name = path.as_bytes().to_vec();
++    interp.activity.call_context.name = Rc::from(path.as_bytes());
+     let parts = invocation.into_parts();
+     interp
+         .roots
+diff -ru base-c484/rust/crates/rexx-exec/src/run/call.rs trees/exp/rust/crates/rexx-exec/src/run/call.rs
+--- base-c484/rust/crates/rexx-exec/src/run/call.rs	2026-10-07 02:04:37.000000000 +0200
++++ trees/exp/rust/crates/rexx-exec/src/run/call.rs	2026-10-07 02:50:58.729515930 +0200
+@@ -981,7 +981,7 @@
+         let saved_context = std::mem::replace(
+             &mut self.activity.call_context,
+             CallContext {
+-                name: name.to_vec(),
++                name: Rc::from(name),
+                 arguments,
+                 // Read out of the caller's own convention before this
+                 // replaces it, which is the only place it can be read from:
+diff -ru base-c484/rust/crates/rexx-exec/src/run.rs trees/exp/rust/crates/rexx-exec/src/run.rs
+--- base-c484/rust/crates/rexx-exec/src/run.rs	2026-10-07 02:04:37.000000000 +0200
++++ trees/exp/rust/crates/rexx-exec/src/run.rs	2026-10-07 02:50:58.729515930 +0200
+@@ -401,7 +401,7 @@
+     #[inline(always)]
+     pub(crate) fn record_call_convention(&mut self) {
+         let arguments = Rc::clone(&self.activity.call_context.arguments);
+-        // **The name is copied only where nothing else records it.** A
++        // **The name is shared only where nothing else records it.** A
+         // method activation already carries the message name it was entered
+         // under on `Activation::method_identity`, and that is the hot path:
+         // measured, `instructions:u` on `bench-programs/dispatch.rex`, one
+@@ -409,7 +409,7 @@
+         // `Rc<[u8]>` built here for every send and +0.093% with this test in
+         // front of it.
+         let name = (self.activation().entry != crate::activation::Entry::Method)
+-            .then(|| Rc::from(&self.activity.call_context.name[..]));
++            .then(|| Rc::clone(&self.activity.call_context.name));
+         let activation = self.activation_mut();
+         if let Some(name) = name {
+             activation.call_name = Some(name);
+@@ -2101,7 +2101,7 @@
+             Some(expr) => {
+                 let value = self.forward_keyword(code, expr, "MESSAGE")?;
+                 let text = self.required_string_value(value)?;
+-                self.to_text(text).to_ascii_uppercase().into_boxed_slice()
++                std::rc::Rc::from(self.to_text(text).to_ascii_uppercase())
+             }
+         };
+         let start_scope = match &forward.class {

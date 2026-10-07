@@ -1305,3 +1305,97 @@ this records only. Bar: the larger of +-4% and the program's zero-work band (rul
 Over the bar: `decrender` +5.68%, `sendloop` +10.14%, `textnum` +8.79%. `dispatch` (+8.94%) is
 inside its 14.91% band. `sendloop`, `decrender` and `textnum` each have instruction counts below base. The cause of their
 wall figures was not measured (P19).
+
+## S2-S5 gate
+
+Base `1754a3b5a`, S1 close `1a81353e3`, head `c484f4516`, round 1 `ba8f7c581`. Each built from
+`git archive REV | tar -x` into its own tree and target directory, every file touched, `memcap 8G
+cargo build --release -p rexx-exec --bin rexx-run`; every build log carries one `Compiling
+rexx-exec` line. `S` is `/tmp/claude-1000/p6-t26`. Evidence:
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/perf/` (`build.sh`, `cg.sh`, `r1/round.sh`,
+the tables, `summary.tsv`, build logs, `hashes.txt`).
+
+| name | sha256 of `rexx-run` | `.text` bytes |
+|---|---|---:|
+| base | `6dcfcfd92ae84897e9c0127b41852bbe1f891c32bc70b82ea9aa945023ed36cd` | 2,732,523 |
+| s1 | `a41ae66fdee043891951ca14af4f5922b996a6b30a5df44cebe33903ba6d8cc1` | 2,833,355 |
+| head | `f5ff3be9f249c60a95c21140271e3f6a091887d40467b4a8ff98e3f5cac7ab8b` | 3,130,478 |
+| r1 | `37fa51acfcc1c0ae6acc980cb00c669d9b8764d558b4573a70a74ecd19ab55fe` | 3,128,510 |
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run head=$S/bin/head/rexx-run
+bash rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg-r1 base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run r1=$S/bin/r1/rexx-run
+```
+
+Both exit 0, no SPREAD flag. The head run overlapped the background gates' G4 (`-j 16`, before
+the `-j 4` amendment). Base and s1 give the same Ir in both runs except `rexxcps`.
+
+**Reproduction.** Base and s1 differ from the perfbase table
+(`.superpowers/sdd/2026-10-01-phase-6-s2-s5/s5-evidence/perfbase/cg-table.txt`) by +913 to +1,188
+Ir per program (`rexxcps`: base +1,997, s1 -12,328); the s1-vs-base percentages agree to four
+places except `rexxcps`. The cause is the process environment: one extra environment variable moves
+base `startup` by +381 Ir, and the binary's path moves nothing (`perf/checks.txt`). Accepted
+(P88). The noise band is the perfbase controls' (0 Ir except `rexxcps` 3,388 Ir), not re-run.
+
+**Budget**: +1.0% beyond the band; `fibfunc` +2.58% (Global Constraints).
+
+| program | base Ir | s1 Ir | head Ir | head vs base % | r1 Ir | r1 vs base % | r1 vs s1 % | r1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| alloc | 25168678552 | 20270018733 | 20306537732 | -19.32 | 20345537944 | -19.16 | +0.37 | inside |
+| alloc4c | 3224395147 | 3176498954 | 3140691245 | -2.60 | 3140691544 | -2.60 | -1.13 | inside |
+| arith | 11520060248 | 11498165931 | 11488858483 | -0.27 | 11488858695 | -0.27 | -0.08 | inside |
+| assign | 19637557608 | 18840415736 | 18983599529 | -3.33 | 18983599956 | -3.33 | +0.76 | inside |
+| compound | 9271611305 | 9187029589 | 8937498289 | -3.60 | 8937498645 | -3.60 | -2.72 | inside |
+| decloop | 2565175813 | 2536049191 | 2469011111 | -3.75 | 2469011410 | -3.75 | -2.64 | inside |
+| decrender | 4348396391 | 4276915138 | 4228327169 | -2.76 | 4228327381 | -2.76 | -1.14 | inside |
+| dispatch | 20483284942 | 20493850247 | 21219503159 | +3.59 | 20974503424 | +2.40 | +2.35 | over |
+| dispatchclass | 15850195790 | 15490532866 | 16022935465 | +1.09 | 15826935681 | -0.15 | +2.17 | inside |
+| emptyloop | 9308098509 | 9259510179 | 7786100225 | -16.35 | 7786100437 | -16.35 | -15.91 | inside |
+| extcall | 8281259626 | 8230425336 | 7552641804 | -8.80 | 7549642102 | -8.83 | -8.27 | inside |
+| fibcall | 8345686523 | 8324736299 | 8476898128 | +1.57 | 8451513416 | +1.27 | +1.52 | over |
+| fibfunc | 7988911869 | 8138967467 | 8302021934 | +3.92 | 8266523802 | +3.47 | +1.57 | over |
+| heapshape | 3278634306 | 2373955779 | 2332058986 | -28.87 | 2334068808 | -28.81 | -1.68 | inside |
+| nop | 9437300276 | 9240156972 | 9283340889 | -1.63 | 9283341188 | -1.63 | +0.47 | inside |
+| parse | 1541986815 | 1534028319 | 1536336992 | -0.37 | 1536337204 | -0.37 | +0.15 | inside |
+| sayloop | 114813474 | 114714872 | 109048569 | -5.02 | 109048868 | -5.02 | -4.94 | inside |
+| sendloop | 13863190672 | 13703470952 | 14298810887 | +3.14 | 14053811252 | +1.38 | +2.56 | over |
+| startup | 58074163 | 58070010 | 58097457 | +0.04 | 58097756 | +0.04 | +0.05 | inside |
+| strings | 17749287588 | 17503789392 | 17537481670 | -1.19 | 17537481969 | -1.19 | +0.19 | inside |
+| textnum | 1176579585 | 1152443733 | 1155146223 | -1.82 | 1155146522 | -1.82 | +0.23 | inside |
+| varlookup | 14878111883 | 14461721850 | 13437530651 | -9.68 | 13437530863 | -9.68 | -7.08 | inside |
+| rexxcps | 17817352138 | 17663726114 | 17798509267 | -0.11 | 17794581994 | -0.13 | +0.74 | inside |
+
+Base and s1 columns are the head run's; the r1 percentages are against them. Head was over budget
+on `dispatch`, `dispatchclass`, `fibcall`, `fibfunc`, `sendloop`.
+
+**Diagnosis** (`perf/diagnosis.md`): the S1-to-head cost on the over-budget programs is inlining
+lost on the send path (the same work outlined, allocation through the generic
+`RawVecInner::try_allocate_in`), a larger entry block in `ops_loop_steady` (loop-invariant
+addresses spilled once per entry, +44 Ir per `fibfunc` call), and new checks of a few Ir each.
+
+**Round 1, `ba8f7c581`**: the calling convention's name and a method's identity name are one
+`Rc<[u8]>`, and `record_call_convention` shares it rather than copying it, so each invocation
+copies its name once. `dispatchclass` came inside; `dispatch`, `fibcall`, `fibfunc` and
+`sendloop` stay over. Checks before the commit: fmt, clippy `-D warnings`, `memcap 8G cargo test
+--workspace --release` exit 0, `concurrency_tests` with and without `--features pinning`, clippy
+`--features pinning`, and the loom tests (`RUSTFLAGS="--cfg loom"`), all exit 0.
+
+**Libc included.** callgrind.sh's `summary.tsv` carries each run's whole count. With libc and
+ld-linux kept, round 1 against base is `dispatch` +2.20%, `sendloop` +1.05%, `dispatchclass`
+-0.27%, `fibfunc` -0.18%, `fibcall` -2.00% (`r1/summary.tsv`, round 1 rows).
+
+**Candidates measured and not committed** (`perf/experiments/`, `-r 1` on the five programs,
+each against round 1's tree except where named):
+
+| candidate | dispatch | sendloop | fibfunc | fibcall |
+|---|---:|---:|---:|---:|
+| `#[inline(always)]` on `FrameArena::reserve` (against head) | +0.05% | -0.04% | -0.02% | -0.02% |
+| last invocation name shared when the bytes repeat | -0.12% | -0.18% | -0.00% | -0.00% |
+| permission settled before the op loop when the entry is the granted clause | -0.76% | +0.07% | +0.11% | +0.20% |
+| a pooled activation keeps its `EXPOSE` list's capacity, in `push_activation` | -1.05% | +0.96% | +0.50% | +0.49% |
+| the same, kept on the activity at recycle | +0.05% | +0.89% | +0.50% | +0.51% |
+
+None removes cost on every program. The last two add about 24 Ir per `fibfunc` and `fibcall`
+call, programs that run no `EXPOSE`. No round 2 or 3 was committed.
+
+Wall clock not measured (over budget; Step 3).

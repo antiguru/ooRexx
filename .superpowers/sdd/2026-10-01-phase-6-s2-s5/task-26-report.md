@@ -96,3 +96,32 @@ The amendment arrived after the runs. The gate status file
 - `cgpath` and `cgenv` checks: `-j 4`, until 02:26:46.
 Callgrind counts do not depend on `-j`. G4's wall-clock tests ran beside a `-j 16` callgrind load and
 may need a re-run if any of them failed.
+
+## Ruling P88: rounds
+
+Diagnosis first: `perf/diagnosis.md` (profiles of s1 and head on `sendloop`, `dispatch`,
+`fibfunc`, `fibcall`, `dispatchclass`; scripts in `perf/prof-scripts/`).
+
+Round 1, `ba8f7c581`: one shared `Rc<[u8]>` name per invocation (calling convention, method
+identity, `record_call_convention`). Checks: fmt; clippy `-D warnings`; `cargo test --workspace
+--release --no-run`, then `memcap 8G cargo test --workspace --release` exit 0 (3048 passed, 0
+failed, 4 ignored, summed from `test result:` lines); `concurrency_tests` exit 0 (38 passed) and
+with `--features pinning` exit 0 (56 passed); clippy `--features pinning` exit 0; loom
+(`RUSTFLAGS="--cfg loom"`) exit 0 (15 passed). Measured with `r1/round.sh` (`-j 16`, after the
+gates' `finished` line at 03:05:29):
+
+| program | r1 vs base % | r1 vs s1 % | verdict |
+|---|---:|---:|---|
+| dispatch | +2.40 | +2.35 | over |
+| dispatchclass | -0.15 | +2.17 | inside |
+| fibcall | +1.27 | +1.52 | over |
+| fibfunc | +3.47 | +1.57 | over (bar 2.58) |
+| sendloop | +1.38 | +2.56 | over |
+
+Every other program inside (`phase-6-perf.md` `## S2-S5 gate`, full table).
+
+Rounds 2 and 3 not committed. Five further candidates were built in a scratch tree and measured on
+the five programs (`perf/experiments/`, table in the record): none removes cost on every program;
+the best for `dispatch` (-1.05%) adds about 24 Ir per call on `fibfunc` and `fibcall`. I stopped
+rather than commit a candidate that moves programs over budget further over. Wall clock (Step 2)
+and Step 4 not done: still over budget.
