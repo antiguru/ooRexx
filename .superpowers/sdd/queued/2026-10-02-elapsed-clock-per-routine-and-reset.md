@@ -46,3 +46,29 @@ reaches a method) oracle 30 `1`, ours 30 `0`; `d.rex` (a method's reset reaches 
 30 `caller untouched: 1`, ours 30 `0`; `e.rex` (a started method) 30 `1` on both. So `TIME`
 TEST_VALIDOPT_BIGCHAR_R and TEST_VALIDOPT_LITTLECHAR_R pass alone and fail in a whole-group run
 after earlier tests (`whole-groups/table.txt`, their failing-test lists).
+
+REPLY diagnosis (2026-10-07, `.superpowers/sdd/2026-10-01-phase-6-s2-s5/reply-rc-diagnosis.md`): a
+method's first `TIME('E')` reads the caller's running clock, where the oracle starts the method
+fresh. Probe, one run each, at 05aac0c58:
+
+    say "main" time("e")
+    call SysSleep 0.05
+    o = .t~new
+    say "main got" o~m
+    say "main after" time("e")
+    call SysSleep 0.3
+    ::class t
+    ::method m
+      say "m before" time("e")
+      call SysSleep 0.02
+      say "m before2" time("e")
+      reply 7
+      call SysSleep 0.01
+      say "m after" time("e")
+
+Oracle `m before 0`, `m before2 0.020647`, `main after 0.071721`, `m after 0.031880`; ours
+`m before 0.050234`, `m before2 0.070365`, `main after 0.070484`, `m after 0`. The `m after 0`
+half was the REPLY continuation starting a fresh clock, fixed under ruling P89. The rest is this
+item's per-activity clock: in the oracle it is `ActivationSettings::elapsedTime`, which moves with
+the activation. `RANDOM`'s `random_seed` also sits on `Activity` (`activity.rs:258`); P89 carries it
+across a REPLY, and whether it is per-activation elsewhere was not probed.

@@ -1051,6 +1051,37 @@ fn a_context_follows_its_activation_to_a_reply_continuation() {
     in_modes(&waiting, true, "24 after 2 1\n");
 }
 
+/// A `REPLY` continuation keeps its activation's elapsed clock, a reset the
+/// `REPLY` clause made to it, and its `RANDOM` seed; the draws are the
+/// oracle's.
+#[test]
+fn a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed() {
+    let program = |before_reply: &str, reply: &str, rest: &str| {
+        format!(
+            "o = .k~new\nsay o~m\n\
+             do while o~rest == ''\n  call SysSleep 0.01\nend\nsay o~rest\n\
+             ::class k\n::attribute rest get unguarded\n\
+             ::method m\n  expose rest\n  rest = ''\n  t = time('E')\n  \
+             x = random(1, 100000, 7)\n{before_reply}  reply {reply}\n  \
+             call SysSleep 0.01\n  rest = {rest} random(1, 100000) random(1, 100000)\n"
+        )
+    };
+    in_modes(
+        &program("", "x", "(time('E') > 0)"),
+        true,
+        "54876\n1 72518 13736\n",
+    );
+    in_modes(
+        &program(
+            "  call SysSleep 0.2\n",
+            "x (time('R') > 0.1)",
+            "(time('E') < 0.1)",
+        ),
+        true,
+        "54876 1\n1 72518 13736\n",
+    );
+}
+
 /// A started send's failure whose notifier fails is replaced by the
 /// notifier's failure: the message is told of that one, both runs of the
 /// notifier fail and both are reported, the send's own failure never; the
