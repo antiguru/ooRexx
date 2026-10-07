@@ -1,0 +1,8 @@
+count 7
+/* A `TRACE` instruction is ignored while interactive debug is on, so the
+   clause after `trace off` still traces its intermediate values. */
+
+trace ?i
+nop
+trace off
+say 1+2

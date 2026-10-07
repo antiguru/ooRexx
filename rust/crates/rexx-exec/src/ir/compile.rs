@@ -198,8 +198,9 @@ pub(crate) fn compile(
     // gated back on, so this decision is only safe where the setting the
     // clause runs under is settled. `trace_flow` settles it per clause, from
     // the setting the chunk is keyed under; a clause it cannot settle answers
-    // [`super::trace_flow::Setting::Unknown`], which keeps the echoes and
-    // keeps their run-time gate.
+    // [`super::trace_flow::Setting::Disagrees`] or
+    // [`super::trace_flow::Setting::Unknown`], which keep the echoes and keep
+    // their run-time gate.
     let settings = super::trace_flow::analyse(body, plan, trace);
     #[cfg(debug_assertions)]
     assert_analysis_only_narrows(plan, trace, &settings);

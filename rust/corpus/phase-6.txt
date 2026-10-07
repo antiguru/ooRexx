@@ -199,3 +199,6 @@ lang/alarm_cancel_waits_for_the_timer.rex
 lang/alarm_message_target.rex
 lang/ticker_fires_on_its_replied_activity.rex
 lang/call_argument_concatenates_a_rexx_string_method.rex
+# The clause after a `TRACE` that interactive debug ignored keeps the value
+# lines of the setting still in force.
+lang/trace_debug_ignores_trace.rex

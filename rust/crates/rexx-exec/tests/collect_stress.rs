@@ -140,6 +140,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/select_when_bodies.rex",
     "lang/string_caseless.rex",
     "lang/string_compare.rex",
+    "lang/trace_debug_ignores_trace.rex",
     "lang/trace_debug_skip.rex",
     "lang/trace_numeric_request.rex",
     "lang/trace_output.rex",

@@ -32,19 +32,25 @@ pub(crate) enum Setting {
     Unreached,
     /// The setting every path reaching this instruction leaves in force.
     Known(ChunkTrace),
-    /// The lattice's bottom: two paths here disagree, or one of them ran
-    /// something whose setting the source does not fix.
+    /// Two paths here leave settings the source fixes and that disagree.
+    /// None of them is interactive debug, so a `TRACE` reached from here is
+    /// obeyed.
+    Disagrees,
+    /// The lattice's bottom: a path here ran something whose setting the
+    /// source does not fix, which may be interactive debug.
     Unknown,
 }
 
 impl Setting {
-    /// The meet: agreement gives the setting, disagreement gives bottom, and
-    /// top meets anything to that thing.
+    /// The meet: agreement gives the setting, disagreement gives
+    /// `Disagrees`, `Unknown` absorbs everything, and top meets anything to
+    /// that thing.
     fn meet(self, other: Setting) -> Setting {
         match (self, other) {
             (Setting::Unreached, answer) | (answer, Setting::Unreached) => answer,
             (Setting::Known(one), Setting::Known(two)) if one == two => Setting::Known(one),
-            _ => Setting::Unknown,
+            (Setting::Unknown, _) | (_, Setting::Unknown) => Setting::Unknown,
+            _ => Setting::Disagrees,
         }
     }
 
@@ -54,7 +60,7 @@ impl Setting {
     pub(crate) fn echoes_values(self) -> bool {
         match self {
             Setting::Known(trace) => trace.intermediates(),
-            Setting::Unreached | Setting::Unknown => true,
+            Setting::Unreached | Setting::Disagrees | Setting::Unknown => true,
         }
     }
 
@@ -63,7 +69,7 @@ impl Setting {
     pub(crate) fn echoes_keyword(self) -> bool {
         match self {
             Setting::Known(trace) => trace.results(),
-            Setting::Unreached | Setting::Unknown => true,
+            Setting::Unreached | Setting::Disagrees | Setting::Unknown => true,
         }
     }
 }
@@ -346,14 +352,20 @@ pub(crate) fn for_emission(plan: &Plan, index: usize, pool: Setting) -> Setting 
 
 /// The optimizing function: an instruction that does not change the setting
 /// passes its pool through, one whose own text fixes a setting produces that
-/// setting, and one that can change it to something the source does not fix
-/// produces bottom. The virtual label node passes its pool through.
+/// setting unless the pool may be debug, and one that can change it to
+/// something the source does not fix produces bottom. The virtual label node
+/// passes its pool through.
 fn apply(events: &[TraceEvent], virtual_node: usize, node: usize, pool: Setting) -> Setting {
     if node == virtual_node {
         return pool;
     }
     match events[node] {
         TraceEvent::Keeps => pool,
+        // A `TRACE` instruction is ignored under interactive debug
+        // (`Interp::apply_trace_request`), and only `Unknown` can be debug:
+        // `literal_trace_event` answers `Unknown` for every debug setting and
+        // `analyse` refuses a debugging entry.
+        TraceEvent::Sets(_) if pool == Setting::Unknown => Setting::Unknown,
         TraceEvent::Sets(trace) => Setting::Known(trace),
         TraceEvent::Unknown => Setting::Unknown,
     }
@@ -442,6 +454,19 @@ mod tests {
         );
     }
 
+    /// A `TRACE` after something that may have entered interactive debug is
+    /// ignored if it did, so it settles nothing.
+    #[test]
+    fn a_trace_after_an_unknown_setting_settles_nothing() {
+        assert_eq!(
+            settings_of(
+                b"trace value '?a'\nnop\ntrace off\nsay 'b'",
+                TraceMode::NORMAL
+            ),
+            vec![off(), Setting::Unknown, Setting::Unknown, Setting::Unknown]
+        );
+    }
+
     /// The `TRACE()` builtin changes the setting in the activation that calls
     /// it -- measured -- so a call that could be it is bottom.
     #[test]
@@ -501,11 +526,11 @@ mod tests {
     /// The same shape with a setting the entry disagrees with, which is what
     /// says the two edges are load-bearing rather than decoration.
     ///
-    /// * the **header** is bottom: it runs under the entry setting on the
+    /// * the **header** is `Disagrees`: it runs under the entry setting on the
     ///   first pass and under `I` on every later one, which is the back edge;
     /// * the clauses **after** the `TRACE`, inside the loop, are `Known(I)` --
     ///   and they are the hot half;
-    /// * the instruction **past the `END`** is bottom, because a loop that
+    /// * the instruction **past the `END`** is `Disagrees`, because a loop that
     ///   runs no passes at all leaves the entry setting in force, which is the
     ///   zero-trip edge.
     #[test]
@@ -517,11 +542,11 @@ mod tests {
                 TraceMode::NORMAL
             ),
             vec![
-                Setting::Unknown,
-                Setting::Unknown,
+                Setting::Disagrees,
+                Setting::Disagrees,
                 intermediates,
                 intermediates,
-                Setting::Unknown,
+                Setting::Disagrees,
             ]
         );
     }
@@ -543,11 +568,11 @@ mod tests {
         );
         assert_eq!(
             settings.last().copied(),
-            Some(Setting::Unknown),
+            Some(Setting::Disagrees),
             "the instruction past the END, which the LEAVE reaches: {settings:?}"
         );
         // The control: the same body with the `LEAVE` replaced by a `NOP`
-        // settles there, so the bottom above is the `LEAVE`'s edge doing it
+        // settles there, so the `Disagrees` above is the `LEAVE`'s edge doing it
         // rather than anything else in the shape.
         assert_eq!(
             settings_of(
@@ -562,7 +587,7 @@ mod tests {
 
     /// A label is entered from outside this body's own edges, so it answers
     /// the meet of the entry pool and every instruction's output: known where
-    /// they agree, and bottom as soon as one of them does not.
+    /// they agree, and `Disagrees` as soon as one of them does not.
     #[test]
     fn a_label_answers_the_meet_over_the_whole_body() {
         assert_eq!(
@@ -580,7 +605,7 @@ mod tests {
         );
         assert_eq!(
             disagreeing[3..],
-            [Setting::Unknown; 3],
+            [Setting::Disagrees; 3],
             "the label and what follows it, against an entry the body disagrees with"
         );
         assert_eq!(
