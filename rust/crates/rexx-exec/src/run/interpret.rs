@@ -254,6 +254,9 @@ impl Interp {
     /// runs.
     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
         let saved_pause = self.replace_debug_pause(true);
+        // A `SELECT CASE` typed at the pause opens and closes inside the
+        // line; the construct the pause interrupted keeps its own value.
+        let saved_case = self.activation().current_case_text.clone();
         self.activity.fragment_depth += 1;
         let (line, indent) = (
             self.activity.clause_state.line(),
@@ -274,6 +277,7 @@ impl Interp {
         self.leave_fragment_level();
         self.leave_fragment(saved_entry);
         self.replace_debug_pause(saved_pause);
+        self.activation_mut().current_case_text = saved_case;
         match outcome {
             Ok(_) => Ok(()),
             Err(Failure::Raised(raised)) => {

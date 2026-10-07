@@ -20,3 +20,4 @@ lang/scope_case_text_absorbed.rex
 lang/scope_case_text_absorbed_other.rex
 lang/scope_internal_depth.rex
 lang/scope_debug_pause_routine.rex
+lang/scope_case_text_debug_line.rex

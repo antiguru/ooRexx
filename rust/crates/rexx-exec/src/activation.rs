@@ -357,8 +357,8 @@ pub(crate) struct Activation {
     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
     /// `NOVALUE`, `USER FOO`, ...
     pub(crate) traps: TrapMap,
-    /// What this activation holds only once a handler, `RANDOM` or
-    /// `SETLOCAL` has run in it, allocated on the first.
+    /// The conditions, `RANDOM` seed and `SETLOCAL` list, allocated on the
+    /// first write or inherited from the caller ([`ActivationCold::inherited`]).
     pub(crate) cold: Option<Box<ActivationCold>>,
     /// `DATE`/`TIME`'s clock reading, in `builtin::datetime`'s own
     /// microseconds-since-0001-01-01 unit -- the last value this activation

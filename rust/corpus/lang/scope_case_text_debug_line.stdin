@@ -1,0 +1,11 @@
+
+.stderr~lineout("T1")
+select case "zz"; when "zz" then nop; end
+
+
+
+
+
+
+
+

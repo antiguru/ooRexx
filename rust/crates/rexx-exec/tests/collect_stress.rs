@@ -138,6 +138,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/no_trailing_newline.rex",
     "lang/scope_case_text_absorbed.rex",
     "lang/scope_case_text_absorbed_other.rex",
+    "lang/scope_case_text_debug_line.rex",
     "lang/scope_debug_pause_routine.rex",
     "lang/select_when.rex",
     "lang/select_when_absorption.rex",
