@@ -144,9 +144,9 @@ readied `UNINIT`s run when an activity's dispatch ends, main's included, and ter
 every activity before its collection and sweep; it does not wait for the activities the sweep's
 `UNINIT`s start. This crate runs readied `UNINIT`s at a forced collection, when an activity ends
 and when main ends, waits for every activity, then sweeps, and does not run what the sweep started
-(ruling P39). `u3` (this crate runs it at the forced collection, on activity 2) and `u4` (the
-oracle runs it at an activation return, `RexxActivation.cpp:705`) differ in collection timing,
-which is not a specified observable.
+(ruling P39). `u3` and `u4` each differ from the oracle in collection timing, which is not a
+specified observable: here `u3` runs it at the forced collection, on activity 2; the oracle runs
+`u4`'s at an activation return (`RexxActivation.cpp:705`).
 Witnesses: `corpus/lang/uninit_after_every_activity.rex`; the ending activity and `t7`'s shape
 are crate-side (`scheduler/tests.rs`).
 
