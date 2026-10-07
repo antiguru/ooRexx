@@ -156,7 +156,9 @@ impl Interp {
     /// or one tail of that stem.
     pub(crate) fn pool_value(&mut self, owner: ObjRef, scope: ObjRef, name: &[u8]) -> ObjRef {
         match shape_of(name) {
-            NameShape::Simple => match self.pools_of(owner).and_then(|pools| pools.get(scope, name))
+            NameShape::Simple => match self
+                .pools_of(owner)
+                .and_then(|pools| pools.get(scope, name))
             {
                 Some(value) => value,
                 None => self.text(name),
