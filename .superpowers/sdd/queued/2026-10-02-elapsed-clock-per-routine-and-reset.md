@@ -71,4 +71,8 @@ Oracle `m before 0`, `m before2 0.020647`, `main after 0.071721`, `m after 0.031
 half was the REPLY continuation starting a fresh clock, fixed under ruling P89. The rest is this
 item's per-activity clock: in the oracle it is `ActivationSettings::elapsedTime`, which moves with
 the activation. `RANDOM`'s `random_seed` also sits on `Activity` (`activity.rs:258`); P89 carries it
-across a REPLY, and whether it is per-activation elsewhere was not probed.
+across a REPLY. The oracle seeds each activation from its activity (`RexxActivation.cpp:174`,
+`:312`). Measured by the Phase 6 final review (`final-review.md` M2): main `random(1,1000,7)`, a
+method `random(1,1000,11)`, main `random()`: oracle 517, ours 99. A method that never read the
+clock, replying after main ran `time('R')`, reads `time('E')` 0.70 in its continuation where the
+oracle reads 0 (3/3). Fixing the scope moves both fields to the activation, and P89's copy with them.

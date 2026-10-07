@@ -142,10 +142,11 @@ count.
 Rule (`concurrency/Activity.cpp:249`, `:324`, `runtime/InterpreterInstance.cpp:562-581`):
 readied `UNINIT`s run when an activity's dispatch ends, main's included, and termination waits for
 every activity before its collection and sweep; it does not wait for the activities the sweep's
-`UNINIT`s start. This crate runs readied `UNINIT`s when an activity ends and when main ends, waits
-for every activity, then sweeps, and does not run what the sweep started (ruling P39). The
-oracle's further run at an activation return (`RexxActivation.cpp:705`) is collection timing,
-which is not a specified observable; `u3` and `u4` answer differently here for that reason.
+`UNINIT`s start. This crate runs readied `UNINIT`s at a forced collection, when an activity ends
+and when main ends, waits for every activity, then sweeps, and does not run what the sweep started
+(ruling P39). `u3` (this crate runs it at the forced collection, on activity 2) and `u4` (the
+oracle runs it at an activation return, `RexxActivation.cpp:705`) differ in collection timing,
+which is not a specified observable.
 Witnesses: `corpus/lang/uninit_after_every_activity.rex`; the ending activity and `t7`'s shape
 are crate-side (`scheduler/tests.rs`).
 

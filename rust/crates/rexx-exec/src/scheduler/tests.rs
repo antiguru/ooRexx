@@ -1051,9 +1051,9 @@ fn a_context_follows_its_activation_to_a_reply_continuation() {
     in_modes(&waiting, true, "24 after 2 1\n");
 }
 
-/// A `REPLY` continuation keeps its activation's elapsed clock, a reset the
-/// `REPLY` clause made to it, and its `RANDOM` seed; the draws are the
-/// oracle's.
+/// A `REPLY` continuation keeps the elapsed clock and `RANDOM` seed its
+/// method set before the `REPLY`, and a reset the `REPLY` clause made; the
+/// draws are the oracle's.
 #[test]
 fn a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed() {
     let program = |before_reply: &str, reply: &str, rest: &str| {
@@ -1079,6 +1079,20 @@ fn a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed() {
         ),
         true,
         "54876 1\n1 72518 13736\n",
+    );
+}
+
+/// One store wakes every activity parked in a `GUARD WHEN` on the variable.
+#[test]
+fn a_store_wakes_every_guard_when_waiter() {
+    in_modes(
+        "o = .k~new\na = o~start('w', 'a')\nb = o~start('w', 'b')\ncall SysSleep 0.2\n\
+         o~set\nsay a~result b~result\n\
+         ::class k\n::method init\n  expose v\n  v = 0\n\
+         ::method set unguarded\n  expose v\n  v = 1\n\
+         ::method w unguarded\n  expose v\n  use arg n\n  guard off when v = 1\n  return n\n",
+        true,
+        "a b\n",
     );
 }
 
