@@ -3257,6 +3257,11 @@ impl Interp {
         let callee_context = std::mem::replace(&mut self.activity.call_context, saved_context);
         let Some(replied) = callee.replied.take() else {
             self.roots.activity_mut().pop_slots(callee.frame);
+            if callee.exposed.capacity() > 0 {
+                let mut exposed = std::mem::take(&mut callee.exposed);
+                exposed.clear();
+                self.activity.spare_exposed = exposed;
+            }
             // **Back to the pool**, which until now only `Interp::invoke_call`
             // fed. The pool is drained by every push and was filled by the
             // `CALL` path alone, so a program of method sends missed it every

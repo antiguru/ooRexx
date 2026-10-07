@@ -100,15 +100,6 @@ impl Interp {
         if !self.tracing_clause(is_label, is_command) {
             return;
         }
-        self.emit_clause(line, indent, text);
-    }
-
-    /// [`Interp::trace_stepped_clause`]'s line, once tracing asks for it:
-    /// kept out of line so the op loop the check is inlined into holds no
-    /// state for it.
-    #[cold]
-    #[inline(never)]
-    fn emit_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
         self.trace_debug_source();
         let start = self.trace.len();
         push_clause(&mut self.trace, line, indent, text);

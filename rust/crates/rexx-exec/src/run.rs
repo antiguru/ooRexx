@@ -1473,6 +1473,9 @@ impl Interp {
         }
         let slot = self.slot_of(&name);
         let var = InstanceVar { owner, scope, name };
+        if self.activation().exposed.capacity() == 0 {
+            self.activation_mut().exposed = std::mem::take(&mut self.activity.spare_exposed);
+        }
         let activation = self.activation_mut();
         // Replaced rather than appended: `expose v v` is legal and rc 0 on the
         // oracle, and two entries for one slot would leave every later read
