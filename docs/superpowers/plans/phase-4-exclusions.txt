@@ -3843,13 +3843,14 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     arithmetic, object LEFT     sends the operator            97.1      refuses
     &, |, &&, object LEFT       sends the operator            97.1      refuses
     prefix + - \                sends the operator            97.1      refuses
-    DO header initial           unary + on the value          97.1      refuses
-    DO header TO                unary + on the value          97.1      refuses
-    DO header BY                unary + on the value          97.1      refuses
-    DO control variable         unary + at the increment      97.1      refuses
     DO OVER target              requestArray                  98.913    refuses
-    RAISE SYNTAX ADDITIONAL     requestArray                  98.939    refuses
     -------------------------------------------------------------------------
+    DO header initial           unary + on the value          97.1      agrees
+    DO header TO                unary + on the value          97.1      agrees
+    DO header BY                unary + on the value          97.1      agrees
+    DO control variable         + at the increment            97.1      agrees
+    RAISE SYNTAX ADDITIONAL     requestArray                  98.939    agrees
+    FORWARD ARGUMENTS           requestArray                  98.946    agrees
     any operator, object RIGHT  the left operand converts it  41.1 / 1  agrees
     2 ** object                 whole-number conversion       26.8      agrees
     || and abuttal and blank    stringValue() on both sides   rendering agrees
@@ -3884,6 +3885,11 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     a method's RETURN value     nothing                       rendering agrees
     an instance variable        nothing                       rendering agrees
     -------------------------------------------------------------------------
+
+  The DO rows send the operator, so a value whose `+` answers is a number like
+  any other. Where `+` answers an object the oracle goes on sending to (measured,
+  `do i = .environment to 5` is 97.1 on `>` against `.nil`), the loop refuses
+  through `Loud::object_position`.
 
   THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a
   message receiver now, so a ::METHOD body runs, and that opens the positions
@@ -4022,10 +4028,6 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   implemented", where the oracle answers 88.913. Whichever task makes one
   reachable owes it a row above:
 
-    ForwardInstruction.cpp:185        FORWARD ARGUMENTS -- the FORWARD
-                                      instruction itself is loud (measured,
-                                      rc 120 inside a ::METHOD body that does
-                                      now run)
     CommandIOConfiguration.cpp:367    ADDRESS ... WITH INPUT USING (expr) --
                                       delivered by Phase 7
     ObjectClass.cpp:2136              ~sendWith / ~startWith's message NAME

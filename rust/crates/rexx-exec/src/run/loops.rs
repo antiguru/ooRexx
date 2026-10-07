@@ -753,7 +753,7 @@ impl Interp {
         if self.array_slots_of(value).is_some() {
             return Ok(value);
         }
-        let converted = self.request_array_for_over(value)?;
+        let converted = self.request_array_value(value)?;
         if let Some(converted) = converted
             && self.array_slots_of(converted).is_some()
         {
@@ -763,12 +763,10 @@ impl Interp {
         Err(Raised::object_not_single_dimensional(&found).into())
     }
 
-    /// [`Interp::over_target_array`]'s `requestArray` limb, which is a message
-    /// send on one path and a direct call on the other.
-    pub(crate) fn request_array_for_over(
-        &mut self,
-        value: ObjRef,
-    ) -> Result<Option<ObjRef>, Failure> {
+    /// `RexxInternalObject::requestArray`'s conversion, which is a message
+    /// send on one path and a direct call on the other: `None` where a
+    /// primitive has no `MAKEARRAY`, and otherwise what the send answers.
+    pub(crate) fn request_array_value(&mut self, value: ObjRef) -> Result<Option<ObjRef>, Failure> {
         let caller = self.caller();
         if self.is_base_class(value) {
             if self.lookup(value, b"MAKEARRAY", None).is_none() {
@@ -900,8 +898,8 @@ impl Interp {
             );
             return Ok(shortcut);
         }
-        if let Some(kind) = self.operator_operand_gap(value) {
-            return Err(Loud::object_position(role.value_name(), kind).into());
+        if self.operator_operand_gap(value).is_some() {
+            return self.header_object_number(role, value);
         }
         let result = self.header_number_body(value, entry_digits);
         // Blamed on any failure past the object-position check above, not
@@ -916,6 +914,25 @@ impl Interp {
             self.blame_stem_forwarded_operator(b"+", value);
         }
         result
+    }
+
+    /// A header value that is an object: `ControlledLoop::setup`'s
+    /// `callOperatorMethod(OPERATOR_PLUS)` is a message to it, 97.1 where it
+    /// has no `+`, and what it answers is the loop's number. A `BY` answer
+    /// that is itself an object is sent the setup's `<` against 0 next.
+    #[cold]
+    #[inline(never)]
+    fn header_object_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
+        let answer = self.apply_prefix(rexx_parse::PrefixOp::Plus, value)?;
+        self.roots.activity_mut().push_temp(answer);
+        if self.operator_message_receiver(answer).is_none() {
+            return self.header_number(role, answer);
+        }
+        if role == HeaderRole::By {
+            let zero = self.counted(0);
+            self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
+        }
+        Err(Loud::object_position(role.value_name(), "an object a `+` answered").into())
     }
 
     /// [`Interp::header_number`]'s own computation for a position that
@@ -2205,7 +2222,8 @@ impl Interp {
                         if let Some(previous) = self.variable(frame, slot)
                             && matches!(previous.decode(), Decoded::Heap { .. })
                         {
-                            let sum = self.controlled_step_wide(previous, by, digits)?;
+                            let sum =
+                                self.controlled_step_wide(previous, by, Some(bound), digits)?;
                             let stepped_value = ControlValue::Wide(sum);
                             let within = Self::controlled_within_wide(
                                 &stepped_value,
@@ -2363,8 +2381,12 @@ impl Interp {
                     match stepped {
                         Some(sum) => *current = ControlValue::Small(sum),
                         None => {
-                            *current =
-                                ControlValue::Wide(self.controlled_step_wide(previous, by, digits)?)
+                            *current = ControlValue::Wide(self.controlled_step_wide(
+                                previous,
+                                by,
+                                to.as_ref(),
+                                digits,
+                            )?)
                         }
                     }
                 }
@@ -2438,19 +2460,58 @@ impl Interp {
         &mut self,
         previous: ObjRef,
         by: &Number,
+        to: Option<&Number>,
         digits: u64,
     ) -> Result<Number, Failure> {
         // The control variable is the **left** operand of the oracle's own
         // implicit `+`, so an object assigned to it inside the body is 97.1
         // there -- measured, `do i = 1 to 3; i = .array; end` prints one
         // iteration and then raises.
-        if let Some(kind) = self.operator_operand_gap(previous) {
-            return Err(Loud::object_position("a controlled DO's control variable", kind).into());
+        if self.operator_operand_gap(previous).is_some() {
+            return self.controlled_step_object(previous, by, to, digits);
         }
         let read = self.arith_operand(previous)?;
         read.add(by, digits)
             .map_err(Raised::from)
             .map_err(Failure::from)
+    }
+
+    /// `DoBlock::checkControl`'s increment of a control variable holding an
+    /// object: `+` sent to it with `BY`, 97.1 where it has none, and what it
+    /// answers is the next value. An answer that is itself an object is sent
+    /// the `TO` comparison next.
+    #[cold]
+    #[inline(never)]
+    fn controlled_step_object(
+        &mut self,
+        previous: ObjRef,
+        by: &Number,
+        to: Option<&Number>,
+        digits: u64,
+    ) -> Result<Number, Failure> {
+        let form = self.activation().settings.form();
+        let step = self.number(by.clone(), crate::eval::saturate_digits(digits), form);
+        self.roots.activity_mut().push_temp(step);
+        let answer = self.apply_binary(rexx_parse::Operator::Plus, previous, step)?;
+        self.roots.activity_mut().push_temp(answer);
+        if self.operator_message_receiver(answer).is_none() {
+            return self.arith_operand(answer);
+        }
+        if let Some(to) = to {
+            let bound = self.number(to.clone(), crate::eval::saturate_digits(digits), form);
+            self.roots.activity_mut().push_temp(bound);
+            let compare = if by.signum() < 0 {
+                rexx_parse::Operator::LessThan
+            } else {
+                rexx_parse::Operator::GreaterThan
+            };
+            self.apply_binary(compare, answer, bound)?;
+        }
+        Err(Loud::object_position(
+            "a controlled DO's control variable",
+            "an object a `+` answered",
+        )
+        .into())
     }
 
     /// The handle a controlled pass binds when [`exact_small_int`] declines

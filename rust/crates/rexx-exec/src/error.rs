@@ -1758,6 +1758,12 @@ impl Raised {
         Raised::syntax(98, 946, Vec::new())
     }
 
+    /// 98.939: a `RAISE SYNTAX ... ADDITIONAL` value `requestArray` cannot
+    /// answer as a single-dimensional array. No substitutions.
+    pub(crate) fn syntax_additional() -> Raised {
+        Raised::syntax(98, 939, Vec::new())
+    }
+
     /// 98.935: a second `REPLY` in one method invocation. No substitutions.
     pub(crate) fn reply_twice() -> Raised {
         Raised::syntax(98, 935, Vec::new())

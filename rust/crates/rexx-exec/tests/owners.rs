@@ -95,10 +95,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // have forced an arm-grained entry is `ADDITIONAL <array>`, and it answers:
     // measured on both engines, three descriptors, `raise syntax 40.4
     // additional (1,,3)` and `... array (1,,3)` are byte-identical to each
-    // other and to the oracle. What has no code is an `ADDITIONAL` value under
-    // a `SYNTAX` condition that is a class object or one of the interpreter's
-    // own, and that is refused through `Loud::object_position` rather than
-    // through this table.
+    // other and to the oracle.
     InstructionKind::Signal(_) => ("Signal", Owner::InScope),
     InstructionKind::Raise(_) => ("Raise", Owner::InScope),
     // Both whole: `queue.rs` stores every line either writes and neither has
@@ -136,10 +133,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // instruction index cannot restore -- fails loudly.
     InstructionKind::Reply { .. } => ("Reply", Owner::InScope),
     // Re-sends the message the method was entered with, to whatever `TO`,
-    // `MESSAGE`, `CLASS`, `ARGUMENTS` and `ARRAY` leave of the context. In
-    // scope in the same sense `Guard` is: every option executes, and the
-    // sub-case with no code -- an `ARGUMENTS` value whose conversion this
-    // crate does not build -- fails loudly.
+    // `MESSAGE`, `CLASS`, `ARGUMENTS` and `ARRAY` leave of the context.
     InstructionKind::Forward(_) => ("Forward", Owner::InScope),
     // One keyword, two jobs, both in scope. Naming an environment --
     // `ADDRESS env`, `ADDRESS VALUE expr`, the bare toggle -- is

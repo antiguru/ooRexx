@@ -1502,7 +1502,7 @@ impl Host for Interp {
         let converted = if self.array_slots_of(object).is_some() {
             Some(object)
         } else {
-            match self.request_array_for_over(object) {
+            match self.request_array_value(object) {
                 Ok(converted) => converted,
                 Err(failure) => return Err(self.hold_native_condition(failure)),
             }

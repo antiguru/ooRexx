@@ -284,9 +284,8 @@ enum Conversion {
     Tails,
     /// `TheNilObject`, which `FORWARD` reports as 98.946.
     Refused,
-    /// A conversion this crate does not build. The string is the noun
-    /// [`Loud::object_position`] puts in the refusal.
-    NotBuilt(&'static str),
+    /// [`Interp::request_array_value`]'s send.
+    Requested,
 }
 
 /// `StringUtil::makearray` with the default separator
@@ -2368,15 +2367,36 @@ impl Interp {
                 }
             }
             Conversion::Refused => return Err(Raised::forward_arguments().into()),
-            Conversion::NotBuilt(kind) => {
-                return Err(Loud::object_position("FORWARD ARGUMENTS", kind).into());
-            }
+            Conversion::Requested => match self.single_dimension_request(value)? {
+                Some(array) => {
+                    let slots = self.array_slots_of(array).unwrap_or_default();
+                    values.extend(slots);
+                }
+                None => return Err(Raised::forward_arguments().into()),
+            },
         }
         Ok(())
     }
 
+    /// `requestArray` over `value` when it answers a single-dimensional
+    /// array, rooted; `None` where the oracle reports `TheNilObject` or a
+    /// multi-dimensional answer.
+    pub(crate) fn single_dimension_request(
+        &mut self,
+        value: ObjRef,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(array) = self.request_array_value(value)? else {
+            return Ok(None);
+        };
+        self.roots.activity_mut().push_temp(array);
+        if self.array_slots_of(array).is_none() || self.is_multi_dimensional_array(array) {
+            return Ok(None);
+        }
+        Ok(Some(array))
+    }
+
     /// Which arm of `requestArray` this value takes.
-    fn forward_arguments_conversion(&mut self, value: ObjRef) -> Conversion {
+    fn forward_arguments_conversion(&self, value: ObjRef) -> Conversion {
         match value.decode() {
             Decoded::Nil => return Conversion::Refused,
             // `RexxInteger::makeArray` and `NumberString::makeArray` both
@@ -2407,13 +2427,7 @@ impl Interp {
             // which looks `MAKEARRAY` up in the behaviour and sends it, and
             // otherwise answers `.nil` (`RexxObject::requestRexx`,
             // `classes/ObjectClass.cpp:1920`-`:1940`).
-            Some(Body::Instance { .. }) => {
-                if self.answers_message(value, "MAKEARRAY") {
-                    Conversion::NotBuilt("an instance of a user class")
-                } else {
-                    Conversion::Refused
-                }
-            }
+            Some(Body::Instance { .. }) => Conversion::Requested,
             // **Not the referent's conversion**, which is what
             // `~request('ARRAY')` answers and is a different route:
             // `requestArray` looks `MAKEARRAY` up in the receiver's own
@@ -2424,9 +2438,7 @@ impl Interp {
             // instruction over `v` itself is rc 0 -- so this arm may not
             // chase the way the string conversion beside it does.
             Some(Body::VarRef(_)) => Conversion::Refused,
-            Some(Body::Native(_) | Body::WeakRef(_)) | None => {
-                Conversion::NotBuilt("one of the interpreter's own objects")
-            }
+            Some(Body::Native(_) | Body::WeakRef(_)) | None => Conversion::Requested,
         }
     }
 

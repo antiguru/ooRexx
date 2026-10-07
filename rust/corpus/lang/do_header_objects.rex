@@ -1,0 +1,20 @@
+/* An object as a DO header's initial, TO or BY value is sent +: 97.1 where
+   it has none, a BY answer that is an object is sent <, and a + that answers
+   a number gives the loop that number. */
+call t1; call t2; call t3; call t4; call t5; call t6
+exit
+t1: signal on syntax name x1; do i = 1 to .array; end; return
+x1: say 't1' rc condition('O')~code; return
+t2: signal on syntax name x2; do i = 1 to .array~of(1); end; return
+x2: say 't2' rc condition('O')~code; return
+t3: signal on syntax name x3; do i = 1 to 3 by .context; end; return
+x3: say 't3' rc condition('O')~code; return
+t4: signal on syntax name x4; do i = 1 to 3 by .t~new; end; return
+x4: say 't4' rc condition('O')~message; return
+t5: signal on syntax name x5; do i = 1 to 3 by .local; end; return
+x5: say 't5' rc condition('O')~message; return
+t6: do i = .p~new(1) to .p~new(3) by .p~new(1); say 't6' i; end; return
+::class t
+::class p
+::method init; expose v; use arg v
+::method '+'; expose v; use arg o; if arg() = 0 then return v; return v + o

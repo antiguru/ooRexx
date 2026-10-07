@@ -74,3 +74,12 @@ lang/use_local_method.rex
 lang/use_local_method_expose.rex
 lang/use_local_method_dynamic.rex
 lang/use_local_method_guard.rex
+
+# Task 3: objects as DO header values and control variables are sent the
+# operator; FORWARD ARGUMENTS and RAISE SYNTAX ADDITIONAL take requestArray.
+lang/do_to_class.rex
+lang/do_header_objects.rex
+lang/do_ctrl_class.rex
+lang/do_ctrl_objects.rex
+lang/forward_args_object.rex
+lang/raise_additional_object.rex

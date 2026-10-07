@@ -699,7 +699,7 @@ impl Interp {
         // literal `&2`.
         let mut additional: Vec<Vec<u8>> = Vec::new();
         if let Some(expr) = &raise.additional {
-            let value = self.eval(code, expr)?;
+            let mut value = self.eval(code, expr)?;
             self.roots.activity_mut().push_temp(value);
             // **A surface that is neither `stringValue()` nor an operator,
             // and only under one condition.** `RaiseInstruction::execute`
@@ -725,18 +725,21 @@ impl Interp {
             // `Raised::message` is the only other reader and runs for a
             // catalogue entry alone, so nothing else sees the split.
             let converted = raise.condition.eq_ignore_ascii_case(b"SYNTAX");
-            let slots = self.array_slots_of(value);
-            if converted
-                && slots.is_none()
-                && let Some(kind) = self.operator_operand_gap(value)
-            {
-                return Err(Loud::object_position("a RAISE ADDITIONAL value", kind).into());
-            }
+            let mut slots = self.array_slots_of(value);
             // The object on the line, the same split the two keywords above
             // take. Measured, `trace i` over `raise syntax 93.900 additional
             // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
             let traced = self.string_value_text(value);
             self.trace_keyword(indent, "ADDITIONAL", &traced);
+            if converted && slots.is_none() && self.operator_operand_gap(value).is_some() {
+                // `requestArray`, and 98.939 for `TheNilObject` or a
+                // multi-dimensional answer.
+                let Some(array) = self.single_dimension_request(value)? else {
+                    return Err(Raised::syntax_additional().into());
+                };
+                value = array;
+                slots = self.array_slots_of(array);
+            }
             // The object itself, for the condition object to carry. The
             // substitution list below is a different thing: it is what a
             // catalogue message renders from, and only a `SYNTAX` condition

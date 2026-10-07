@@ -505,10 +505,9 @@ impl Loud {
         }
     }
 
-    /// One of the objects [`Loud::operator_operand`] refuses, in a position
-    /// that is not an operator's operand: a `DO` header's value, `DO OVER`'s
-    /// target, a controlled loop's own control variable at the increment, or
-    /// a `RAISE SYNTAX` clause's `ADDITIONAL` value.
+    /// An object in a `DO` header position the loop cannot run on: `DO
+    /// OVER`'s target, or an object a header value's or control variable's
+    /// `+` answered where the oracle goes on sending to it.
     fn object_position(position: &str, kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),
@@ -923,11 +922,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // `raise syntax 40.4 additional (1,,3)` and `... array (1,,3)` are
         // byte-identical to each other and to the oracle, because
         // `requestArray` answers an array unchanged and both spellings
-        // therefore build the same substitution list. `ADDITIONAL`'s one shape
-        // with no code here -- a `SYNTAX` condition whose value is a class
-        // object or one of the interpreter's own -- fails loudly through
-        // `Loud::object_position` rather than through this table, which is
-        // where `Expose`'s own two sub-cases are refused too.
+        // therefore build the same substitution list.
         InstructionKind::Signal(_) | InstructionKind::Raise(_) => None,
         // Both keywords are whole: `queue.rs`
         // stores every line either writes, and neither has a shape this
@@ -961,13 +956,9 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // code here -- a `REPLY` with Rust frames inside its method body --
         // fails loudly through `Loud::immovable_reply` rather than answering.
         InstructionKind::Guard(_) | InstructionKind::Reply { .. } => None,
-        // `FORWARD` is `None` in the sense `Guard` and `Reply` above are: the
-        // instruction executes and every option is built, and the one
-        // sub-case with no code -- an `ARGUMENTS` value whose conversion to a
-        // single-dimensional array this crate does not build -- fails loudly
-        // through `Loud::object_position` rather than answering.
-        InstructionKind::Forward(_) => None,
-        InstructionKind::Options { .. } | InstructionKind::Command { .. } => None,
+        InstructionKind::Forward(_)
+        | InstructionKind::Options { .. }
+        | InstructionKind::Command { .. } => None,
     }
 }
 

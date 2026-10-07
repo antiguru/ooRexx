@@ -164,36 +164,45 @@ fn a_class_objects_operators_are_sent_as_messages() {
 }
 
 /// **R12 at the one numeric surface that is not an operator**: a
-/// controlled `DO` header's `initial`, `TO` and `BY` values.
+/// controlled `DO` header's `initial`, `TO` and `BY` values are sent `+`
+/// (`ControlledLoop::setup`), so an object without one is 97.1. Measured,
+/// oracle rc 159 for each.
 #[test]
-fn an_object_in_a_do_headers_numeric_position_is_loud() {
-    let cases: &[(&[u8], &str, &str)] = &[
-        (b"do i = .array to 5\nend\n", "initial", "a class object"),
-        (b"do i = 1 to .array\nend\n", "TO", "a class object"),
-        (b"do i = 1 to 5 by .array\nend\n", "BY", "a class object"),
-        (
-            b"do i = .environment to 5\nend\n",
-            "initial",
-            "an instance of a user class",
-        ),
-        (
-            b"do i = .Object~superClasses to 5\nend\n",
-            "initial",
-            "an array",
-        ),
-    ];
-    for (source, role, kind) in cases {
+fn an_object_in_a_do_headers_numeric_position_is_sent_plus() {
+    for (source, object) in [
+        (&b"do i = .array to 5\nend\n"[..], "The Array class"),
+        (b"do i = 1 to .array\nend\n", "The Array class"),
+        (b"do i = 1 to 5 by .array\nend\n", "The Array class"),
+        (b"do i = .Object~superClasses to 5\nend\n", "an Array"),
+    ] {
         let (code, stdout, stderr) = run_source(source);
-        let expected = format!(
-            "rexx-exec: {kind} as a DO header's {role} value is not implemented (Phase 5)\n"
-        );
         assert_eq!(
-            (code, stdout.as_str(), stderr.as_str()),
-            (120, "", expected.as_str()),
-            "{:?}",
+            (code, stdout.as_str()),
+            (159, ""),
+            "{:?} reported {stderr:?}",
+            String::from_utf8_lossy(source)
+        );
+        assert!(
+            stderr.contains(&format!(
+                "Error 97.1:  Object \"{object}\" does not understand message \"+\"."
+            )),
+            "{:?} reported {stderr:?}",
             String::from_utf8_lossy(source)
         );
     }
+    // `.environment`'s `+` answers `.nil` through `UNKNOWN`, and the oracle
+    // goes on to compare that object with `TO` (97.1 on `>`, rc 159); a loop
+    // whose control value is an object is not built here.
+    let (code, stdout, stderr) = run_source(b"do i = .environment to 5\nend\n");
+    assert_eq!(
+        (code, stdout.as_str(), stderr.as_str()),
+        (
+            120,
+            "",
+            "rexx-exec: an object a `+` answered as a DO header's initial value is not \
+             implemented (Phase 5)\n"
+        )
+    );
 }
 
 /// The header positions that read the value's **text** rather than
@@ -312,52 +321,64 @@ fn an_object_reached_through_a_stem_default_answers_as_the_object() {
         }
     }
 
-    // The control, and a gap this crate still has: a `DO` header converts
-    // through `Interp::header_number`, which asks
-    // `Interp::operator_operand_gap` and never the send, so this refuses
-    // where the oracle answers 97.1 at rc 159.
+    // A `DO` header sends its `+` through the same redirect: measured,
+    // oracle rc 159.
     let (code, stdout, stderr) = run_source(b"a. = .array\ndo i = 1 to a.\nend\n");
-    assert_eq!((code, stdout.as_str()), (120, ""), "reported {stderr:?}");
+    assert_eq!((code, stdout.as_str()), (159, ""), "reported {stderr:?}");
     assert!(
-        stderr.contains("a class object"),
-        "must name the shape it refused, got {stderr:?}"
+        stderr
+            .contains("Error 97.1:  Object \"The Array class\" does not understand message \"+\"."),
+        "reported {stderr:?}"
     );
 }
 
 /// A controlled loop's own increment adds to the control variable, and
-/// that variable is the oracle's **left** operand of the implicit `+`.
+/// that variable is the oracle's **left** operand of the implicit `+`:
+/// measured, oracle rc 159 after one pass.
 #[test]
-fn an_object_assigned_to_a_control_variable_is_loud_at_the_increment() {
+fn an_object_assigned_to_a_control_variable_is_sent_plus_at_the_increment() {
     let (code, stdout, stderr) = run_source(b"do i = 1 to 3\nsay 'iter' i\ni = .array\nend\n");
     assert_eq!(
-        (code, stdout.as_str(), stderr.as_str()),
-        (
-            120,
-            "iter 1\n",
-            "rexx-exec: a class object as a controlled DO's control variable is not \
-             implemented (Phase 5)\n"
-        )
+        (code, stdout.as_str()),
+        (159, "iter 1\n"),
+        "reported {stderr:?}"
+    );
+    assert!(
+        stderr
+            .contains("Error 97.1:  Object \"The Array class\" does not understand message \"+\"."),
+        "reported {stderr:?}"
     );
 }
 
 /// `RAISE ... ADDITIONAL` hands its value to `requestArray` -- **under a
-/// `SYNTAX` condition and nowhere else**.
+/// `SYNTAX` condition and nowhere else**. Measured, oracle: a class object
+/// has no `MAKEARRAY` and is 98.939 at rc 158, and `.environment` converts
+/// to an array whose first item fills `&1` at rc 216.
 #[test]
-fn an_object_as_a_raise_syntax_substitution_is_loud() {
-    for source in [
-        &b"raise syntax 40.1 additional (.array)\n"[..],
-        b"raise syntax 40.1 additional (.environment)\n",
+fn an_object_as_a_raise_syntax_substitution_is_array_requested() {
+    for (source, expected_code, expected_in_stderr) in [
+        (
+            &b"raise syntax 40.1 additional (.array)\n"[..],
+            158,
+            "Error 98.939:  Additional information for SYNTAX errors must be a \
+             single-dimensional array of values.",
+        ),
+        (
+            b"raise syntax 40.1 additional (.environment)\n",
+            216,
+            "External routine \"INPUTOUTPUTSTREAM\" failed.",
+        ),
     ] {
         let (code, stdout, stderr) = run_source(source);
         assert_eq!(
             (code, stdout.as_str()),
-            (120, ""),
+            (expected_code, ""),
             "{:?} reported {stderr:?}",
             String::from_utf8_lossy(source)
         );
         assert!(
-            stderr.contains("a RAISE ADDITIONAL value"),
-            "{:?} must name its position, got {stderr:?}",
+            stderr.contains(expected_in_stderr),
+            "{:?} reported {stderr:?}",
             String::from_utf8_lossy(source)
         );
     }

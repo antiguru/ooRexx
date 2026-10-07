@@ -1,0 +1,3 @@
+/* A class object as a DO header's TO value is sent +, which it does not
+   understand. */
+do i = 1 to .array; end
