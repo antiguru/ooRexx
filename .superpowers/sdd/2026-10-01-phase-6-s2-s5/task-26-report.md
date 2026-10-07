@@ -147,3 +147,13 @@ Every other program inside. With libc included, every program at r3 is below bas
 
 Three rounds spent; stopped for Moritz's ruling (P16). Wall clock and Step 4 not done. Final code
 head `05aac0c58`; code commits after `c484f4516`: `ba8f7c581`, `634f591a8`, `05aac0c58`.
+
+## Steps 2 and 4 (after Moritz's ruling, 2026-10-07: accept and record)
+
+Wall clock: `perf/wall/` (`wall.sh`: wallclock.sh `-r 5 -x extcall`, arms base, s1, r1, r3,
+base2), exit 0, load 0.63 at start and 1.05 at end. Recorded in `phase-6-perf.md` `## S2-S5 gate`
+`### Wall clock` and `### Verdict`. Written on r3 `05aac0c58` (the head the final gates run on),
+with r1 beside it; the lead was told so before writing.
+
+`phase-6-gate.md` gains `### Performance (Task 26)` under `## S5`; roadmap row 6 marked
+CLOSED 2026-10-07 pointing at `phase-6-gate.md`. The S5 gates subsection is the lead's.

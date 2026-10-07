@@ -1453,4 +1453,64 @@ and without `--features pinning`; clippy `--features pinning`; loom. All exit 0 
 is below base except `startup` +0.09%; `dispatch` -1.11%, `sendloop` -1.07%, `fibfunc` -1.77%,
 `fibcall` -3.51%.
 
-Wall clock not measured (over budget; Step 3).
+### Wall clock
+
+```
+bash rust/bench-programs/wallclock.sh -r 5 -x extcall -o $S/wall base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run r1=$S/bin/r1/rexx-run r3=$S/bin/r3/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+Exit 0, 5 interleaved rounds, medians in seconds; `base2` is a copy of the base binary, the
+identical-binary control. Load average 0.63 5.74 6.88 at start (03:27:22Z), 1.05 1.93 4.47 at end
+(`perf/wall/wall-load.txt`, `perf/wall/binaries.txt`).
+Recorded, not iterated on (P19). Bar: the larger of +-4% and the program's zero-work band (P10,
+P15: `decloop` +6.10%, `startup` -7.69%, `dispatch` +14.91%).
+
+| program | base s | s1 s | r1 s | r3 s | base2 s | s1 d% | r1 d% | r3 d% | base2 d% |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| alloc | 2.015 | 1.634 | 1.598 | 1.596 | 2.015 | -18.91 | -20.69 | -20.79 | +0.00 |
+| alloc4c | 0.561 | 0.568 | 0.555 | 0.554 | 0.557 | +1.25 | -1.07 | -1.25 | -0.71 |
+| arith | 1.238 | 1.315 | 1.285 | 1.254 | 1.237 | +6.22 | +3.80 | +1.29 | -0.08 |
+| assign | 1.128 | 1.133 | 1.079 | 1.073 | 1.124 | +0.44 | -4.34 | -4.88 | -0.35 |
+| compound | 0.651 | 0.641 | 0.624 | 0.620 | 0.645 | -1.54 | -4.15 | -4.76 | -0.92 |
+| decloop | 0.247 | 0.245 | 0.234 | 0.238 | 0.263 | -0.81 | -5.26 | -3.64 | +6.48 |
+| decrender | 0.443 | 0.461 | 0.435 | 0.423 | 0.447 | +4.06 | -1.81 | -4.51 | +0.90 |
+| dispatch | 1.755 | 1.879 | 1.990 | 1.850 | 1.756 | +7.07 | +13.39 | +5.41 | +0.06 |
+| dispatchclass | 1.407 | 1.510 | 1.536 | 1.451 | 1.380 | +7.32 | +9.17 | +3.13 | -1.92 |
+| emptyloop | 0.521 | 0.520 | 0.436 | 0.433 | 0.524 | -0.19 | -16.31 | -16.89 | +0.58 |
+| extcall | 0.929 | 0.899 | 1.067 | 1.076 | 0.930 | -3.23 | +14.85 | +15.82 | +0.11 |
+| fibcall | 0.795 | 0.812 | 0.788 | 0.769 | 0.788 | +2.14 | -0.88 | -3.27 | -0.88 |
+| fibfunc | 0.782 | 0.856 | 0.791 | 0.784 | 0.798 | +9.46 | +1.15 | +0.26 | +2.05 |
+| heapshape | 0.317 | 0.205 | 0.182 | 0.182 | 0.315 | -35.33 | -42.59 | -42.59 | -0.63 |
+| nop | 0.657 | 0.568 | 0.588 | 0.579 | 0.659 | -13.55 | -10.50 | -11.87 | +0.30 |
+| parse | 0.130 | 0.131 | 0.128 | 0.127 | 0.130 | +0.77 | -1.54 | -2.31 | +0.00 |
+| sayloop | 0.029 | 0.029 | 0.029 | 0.030 | 0.029 | +0.00 | +0.00 | +3.45 | +0.00 |
+| sendloop | 1.061 | 1.160 | 1.187 | 1.170 | 1.063 | +9.33 | +11.88 | +10.27 | +0.19 |
+| startup | 0.025 | 0.025 | 0.026 | 0.026 | 0.025 | +0.00 | +4.00 | +4.00 | +0.00 |
+| strings | 1.129 | 1.180 | 1.174 | 1.204 | 1.124 | +4.52 | +3.99 | +6.64 | -0.44 |
+| textnum | 0.091 | 0.097 | 0.091 | 0.093 | 0.093 | +6.59 | +0.00 | +2.20 | +2.20 |
+| varlookup | 0.780 | 0.767 | 0.708 | 0.703 | 0.779 | -1.67 | -9.23 | -9.87 | -0.13 |
+| rexxcps | 2.009 | 1.997 | 1.948 | 1.913 | 2.021 | -0.60 | -3.04 | -4.78 | +0.60 |
+
+The extension-call loop against the oracle (spec section 7): `extcall` oracle 0.530 s, r3 1.076 s,
+r1 1.067 s, base 0.929 s.
+
+Over the bar at r3: `sendloop` +10.27%, `extcall` +15.82%, `strings` +6.64%. `dispatch` +5.41% is
+inside its band. `extcall` and `strings` have instruction counts below base (-8.80%, -1.19%); the
+cause of their wall figures was not measured (P19).
+
+### Verdict
+
+Final head `05aac0c58` (r3). Instruction counts against base, libc excluded (the gate measure),
+beside the whole count with libc kept (`r3/summary.tsv`, round 1 rows):
+
+| program | r3 vs base % | with libc % | verdict |
+|---|---:|---:|---|
+| dispatch | +1.59 | -1.11 | over, accepted |
+| sendloop | +1.09 | -1.07 | over, accepted |
+| fibfunc | +3.00 | -1.77 | over (bar +2.58), accepted |
+| fibcall | +0.81 | -3.51 | inside (round 1: +1.27, over) |
+
+Every other program is inside at r3. Moritz ruled "accept and record" on 2026-10-07: Phase 6
+closes with these programs over budget and no further rounds. The ruling was taken on the round 1
+figures (`dispatch` +2.40%, `sendloop` +1.38%, `fibcall` +1.27%, `fibfunc` +3.47%); r3 is below
+them on each. Cause: `perf/diagnosis.md`.

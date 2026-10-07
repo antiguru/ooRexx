@@ -1259,3 +1259,39 @@ Probes in `criterion-10/probes/` (the S2 record's, byte for byte; `corpus_uaea.r
 Every stderr is empty and every rc 0 but t3's. Holds: u3 and u4 differ in collection timing (the GC-ordering
 ruling of 2026-09-01, `docs/superpowers/plans/2026-08-27-phase-5b.md:646`), and u5's REPLY continuation
 never runs here, an outcome the oracle produced in 2 of 30 (P39, `phase-4-exclusions.txt` row 21).
+
+### Performance (Task 26)
+
+Tables, commands, binary hashes and the rounds: `phase-6-perf.md` `## S2-S5 gate`; cause:
+`docs/superpowers/records/2026-10-01-phase-6-s2-s5/perf/diagnosis.md`. Base `1754a3b5a`, S1
+close `1a81353e3`, final head `05aac0c58` (rounds `ba8f7c581`, `634f591a8`, `05aac0c58`).
+
+Instructions, from `git archive` builds each with one `Compiling rexx-exec` line:
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 16 -o $S/cg-r3 base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run r3=$S/bin/r3/rexx-run
+```
+
+Exit 0, no SPREAD flag. Against base, libc excluded, beside the whole count with libc kept:
+
+| program | head `c484f4516` % | r3 % | r3 with libc % | verdict |
+|---|---:|---:|---:|---|
+| dispatch | +3.59 | +1.59 | -1.11 | over, accepted |
+| sendloop | +3.14 | +1.09 | -1.07 | over, accepted |
+| fibfunc | +3.92 | +3.00 | -1.77 | over (bar +2.58), accepted |
+| fibcall | +1.57 | +0.81 | -3.51 | inside |
+| dispatchclass | +1.09 | -0.35 | -1.53 | inside |
+
+Every other program is inside the budget (+1.0% beyond the noise band) at r3. The over-budget
+programs (`dispatch`, `sendloop`, `fibcall`, `fibfunc` at round 1) were accepted by Moritz's
+ruling of 2026-10-07, "accept and record"; r3 is below the round 1 figures on each.
+
+Wall clock, recorded only (P19):
+
+```
+bash rust/bench-programs/wallclock.sh -r 5 -x extcall -o $S/wall base=$S/bin/base/rexx-run s1=$S/bin/s1/rexx-run r1=$S/bin/r1/rexx-run r3=$S/bin/r3/rexx-run base2=$S/bin/base2/rexx-run
+```
+
+Load 0.63 5.74 6.88 at start, 1.05 1.93 4.47 at end. Over the bar at r3: `sendloop` +10.27%,
+`extcall` +15.82%, `strings` +6.64%; `dispatch` +5.41% is inside its 14.91% band. The
+extension-call loop: oracle 0.530 s, r3 1.076 s.

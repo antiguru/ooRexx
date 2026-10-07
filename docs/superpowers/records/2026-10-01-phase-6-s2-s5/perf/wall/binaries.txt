@@ -1,0 +1,7 @@
+# 2026-10-07T03:27:22Z rounds=5 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib load=0.63 5.74 6.88
+# base /tmp/claude-1000/p6-t26/bin/base/rexx-run 6dcfcfd92ae84897e9c0127b41852bbe1f891c32bc70b82ea9aa945023ed36cd
+# s1 /tmp/claude-1000/p6-t26/bin/s1/rexx-run a41ae66fdee043891951ca14af4f5922b996a6b30a5df44cebe33903ba6d8cc1
+# r1 /tmp/claude-1000/p6-t26/bin/r1/rexx-run 37fa51acfcc1c0ae6acc980cb00c669d9b8764d558b4573a70a74ecd19ab55fe
+# r3 /tmp/claude-1000/p6-t26/bin/r3/rexx-run 12e1aaff0928466c45402d34eddb7b493e3b5147792da5820fcd5af27a4eb78c
+# base2 /tmp/claude-1000/p6-t26/bin/base2/rexx-run 6dcfcfd92ae84897e9c0127b41852bbe1f891c32bc70b82ea9aa945023ed36cd
+# end load=1.05 1.93 4.47
