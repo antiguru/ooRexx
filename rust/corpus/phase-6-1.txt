@@ -51,3 +51,7 @@ lang/use_strict_arg_msg.rex
 lang/use_arg_msg_default.rex
 lang/use_arg_msg_method.rex
 lang/use_arg_msg_trace.rex
+
+# Task 3: .context~condition answers a copy of the condition object.
+lang/context_condition.rex
+lang/context_condition_call.rex

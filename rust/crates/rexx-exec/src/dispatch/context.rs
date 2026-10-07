@@ -318,10 +318,13 @@ fn context_condition(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     at_context(interp, receiver, |interp, depth| {
-        if frame(interp, depth)?.condition().is_some() {
-            return Err(Loud::builtin_option_object("CONDITION", b'O', "a Directory").into());
+        match frame(interp, depth)?
+            .condition()
+            .and_then(|condition| condition.object)
+        {
+            Some(object) => interp.condition_copy(object).map(Some),
+            None => Ok(Some(ObjRef::NIL)),
         }
-        Ok(Some(ObjRef::NIL))
     })
 }
 

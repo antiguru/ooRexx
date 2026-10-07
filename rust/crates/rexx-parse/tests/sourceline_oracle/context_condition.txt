@@ -1,0 +1,15 @@
+count 14
+/* .context~condition: .nil with no condition, and a copy of the condition
+   object inside a handler, a new one on each send. */
+say .context~condition
+signal on syntax
+x = 1 + 'a'
+exit
+syntax:
+c = .context~condition
+say c~class~id c~condition c~code
+c~code = 'changed'
+say condition('O')~code (c == .context~condition) .context~condition~code
+call inner
+exit
+inner: say .context~condition
