@@ -3150,7 +3150,7 @@ impl Interp {
         // send inside the body resolves as all name one field rather than
         // each taking its own copy of this function's argument.
         let arguments = self.shared_arguments(args);
-        let name: Rc<[u8]> = Rc::from(name);
+        let name = self.activity.invocation_name(name);
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             crate::CallContext {

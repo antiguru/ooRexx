@@ -12,6 +12,7 @@
 //! The state of one execution, apart from the interpreter it runs in.
 
 use std::collections::VecDeque;
+use std::rc::Rc;
 
 use rexx_core::ObjRef;
 
@@ -246,6 +247,9 @@ pub(crate) struct Activity {
     pub(crate) region_procedure_permitted: bool,
     /// The call that entered the running activation: what `USE ARG` reads.
     pub(crate) call_context: CallContext,
+    /// The name the last invocation entered under, which the next one under
+    /// the same name shares ([`Activity::invocation_name`]).
+    last_name: Option<Rc<[u8]>>,
     /// `RANDOM`'s generator state: the seed the next call will scramble, or
     /// `None` before any call has drawn one.
     pub(crate) random_seed: Option<u64>,
@@ -354,6 +358,25 @@ pub(crate) enum Spawner {
 }
 
 impl Activity {
+    /// `name` for an invocation's calling convention, shared with the last
+    /// invocation's when the bytes are the same.
+    #[inline]
+    pub(crate) fn invocation_name(&mut self, name: &[u8]) -> Rc<[u8]> {
+        match &self.last_name {
+            Some(last) if **last == *name => Rc::clone(last),
+            _ => self.new_invocation_name(name),
+        }
+    }
+
+    /// [`Activity::invocation_name`] for a name other than the last one.
+    #[cold]
+    #[inline(never)]
+    fn new_invocation_name(&mut self, name: &[u8]) -> Rc<[u8]> {
+        let shared: Rc<[u8]> = Rc::from(name);
+        self.last_name = Some(Rc::clone(&shared));
+        shared
+    }
+
     pub(crate) fn new() -> Activity {
         Activity {
             value_buffer: Vec::new(),
@@ -409,6 +432,7 @@ impl Activity {
             procedure_permitted: false,
             region_procedure_permitted: false,
             call_context: CallContext::default(),
+            last_name: None,
             random_seed: None,
             elapsed_anchor: None,
             pending_elapsed_reset: false,
@@ -523,6 +547,7 @@ impl Activity {
             // A running call's arguments and receiver are the caller's temps;
             // `CallContext::object_roots` is the parked case's other route.
             call_context: _,
+            last_name: _,
             random_seed: _,
             elapsed_anchor: _,
             pending_elapsed_reset: _,

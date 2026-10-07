@@ -978,10 +978,11 @@ impl Interp {
         let saved_line = std::mem::take(&mut self.activity.clause_line_override);
         let inherited = entered_receiver(entered, entry, self.activity.call_context.receiver);
         let arguments = self.shared_arguments(arguments);
+        let name = self.activity.invocation_name(name);
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
-                name: Rc::from(name),
+                name,
                 arguments,
                 // Read out of the caller's own convention before this
                 // replaces it, which is the only place it can be read from:
