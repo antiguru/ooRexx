@@ -1,0 +1,2801 @@
+# Review package: 3cee3e622..HEAD
+
+## Commits
+81a8c1bae Phase 6.1 gate record and report: Task 2
+4d46b76b0 Phase 6.1 Task 2: whole-group expectations past the DO refusal
+fe765db7b Phase 6.1 Task 2: DO WITH ... UNTIL beside the supplier in a witness
+9777db504 Phase 6.1 Task 2 perf round 1: the flat header clause without a closure
+5b7acef35 Phase 6.1 Task 2: DO/LOOP COUNTER, DO WITH ... OVER, DO OVER a stem
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-2-report.md      | 142 ++++++
+ docs/superpowers/plans/phase-4-exclusions.txt      |  13 +-
+ docs/superpowers/plans/phase-6-1-gate.md           |  56 +++
+ rust/corpus/lang/do_counter_ctrl.rex               |   6 +
+ rust/corpus/lang/do_counter_forever.rex            |   2 +
+ rust/corpus/lang/do_counter_over.rex               |   2 +
+ rust/corpus/lang/do_counter_rep.rex                |   2 +
+ rust/corpus/lang/do_counter_trace.rex              |  13 +
+ rust/corpus/lang/do_counter_until.rex              |   2 +
+ rust/corpus/lang/do_counter_while.rex              |   2 +
+ rust/corpus/lang/do_over_stem_one.rex              |   3 +
+ rust/corpus/lang/do_over_stem_three.rex            |   6 +
+ rust/corpus/lang/do_with_counter.rex               |   2 +
+ rust/corpus/lang/do_with_errors.rex                |  32 ++
+ rust/corpus/lang/do_with_index_only.rex            |   2 +
+ rust/corpus/lang/do_with_item_only.rex             |   2 +
+ rust/corpus/lang/do_with_over_array.rex            |   2 +
+ rust/corpus/lang/do_with_over_dir.rex              |   3 +
+ rust/corpus/lang/do_with_supplier_subclass.rex     |  18 +
+ rust/corpus/lang/do_with_trace.rex                 |   8 +
+ rust/corpus/lang/loop_counter.rex                  |   2 +
+ rust/corpus/lang/loop_label_counter.rex            |   2 +
+ rust/corpus/phase-6-1.txt                          |  22 +
+ rust/corpus/refusal-sites.tsv                      |   2 +-
+ rust/crates/rexx-exec/src/ir/compile.rs            |  14 +-
+ rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs |  13 +-
+ rust/crates/rexx-exec/src/ir/drive.rs              |  14 +-
+ rust/crates/rexx-exec/src/run.rs                   |   9 +-
+ rust/crates/rexx-exec/src/run/loops.rs             | 481 ++++++++++++++++-----
+ rust/crates/rexx-exec/src/run/tests/loops.rs       |  87 +---
+ rust/crates/rexx-exec/src/scheduler/tests.rs       |  17 +-
+ rust/crates/rexx-exec/tests/collect_stress.rs      |   7 +
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   | 102 ++---
+ .../tests/ir_recorded_cases/loop-counter-with-stem |  32 ++
+ .../tests/ir_recorded_cases/loop-refusals          |  29 --
+ rust/crates/rexx-exec/tests/owners.rs              |   4 +-
+ .../tests/sourceline_oracle/do_counter_ctrl.txt    |   7 +
+ .../tests/sourceline_oracle/do_counter_forever.txt |   3 +
+ .../tests/sourceline_oracle/do_counter_over.txt    |   3 +
+ .../tests/sourceline_oracle/do_counter_rep.txt     |   3 +
+ .../tests/sourceline_oracle/do_counter_trace.txt   |  14 +
+ .../tests/sourceline_oracle/do_counter_until.txt   |   3 +
+ .../tests/sourceline_oracle/do_counter_while.txt   |   3 +
+ .../tests/sourceline_oracle/do_over_stem_one.txt   |   4 +
+ .../tests/sourceline_oracle/do_over_stem_three.txt |   7 +
+ .../tests/sourceline_oracle/do_with_counter.txt    |   3 +
+ .../tests/sourceline_oracle/do_with_errors.txt     |  33 ++
+ .../tests/sourceline_oracle/do_with_index_only.txt |   3 +
+ .../tests/sourceline_oracle/do_with_item_only.txt  |   3 +
+ .../tests/sourceline_oracle/do_with_over_array.txt |   3 +
+ .../tests/sourceline_oracle/do_with_over_dir.txt   |   4 +
+ .../do_with_supplier_subclass.txt                  |  19 +
+ .../tests/sourceline_oracle/do_with_trace.txt      |   9 +
+ .../tests/sourceline_oracle/loop_counter.txt       |   3 +
+ .../tests/sourceline_oracle/loop_label_counter.txt |   3 +
+ 55 files changed, 962 insertions(+), 323 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md
+new file mode 100644
+index 000000000..ff06df011
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md
+@@ -0,0 +1,142 @@
++# Phase 6.1 Task 2 report: DO/LOOP COUNTER, DO WITH ... OVER, DO OVER a stem
++
++## Status
++
++DONE_WITH_CONCERNS. Behaviour matches the oracle on every witness. Instruction counts are inside
++budget. `emptyloop`'s wall clock is +4.16% to +4.42% against base, outside ±4%. Three perf rounds
++are spent, so this stops for Moritz's ruling (see Concerns 1).
++
++## Commits
++
++- `5b7acef35` behaviour: COUNTER, DO WITH, stem OVER; the refusal and its pins removed.
++- `9777db504` perf round 1: the fast flat header clause spelled out without a closure; `PassTest`.
++- `fe765db7b` witness: `DO WITH ... UNTIL` beside the supplier.
++- `4d46b76b0` whole-group expectation lines.
++- the gate-record and report commit follows these.
++
++## Implemented
++
++- **COUNTER, on every loop kind.** `loop_header_plan` puts a `HeaderRole::Counter` slot first when
++  the loop names a counter. It has no expression: `compile` emits `Op::Const "0"` and
++  `Op::LoopHeaderValue { role: Counter }`, so `DoBlock::DoBlock`'s reset and its `>=>`/`>K>` lines
++  come before any header expression is evaluated. Measured: `c = 'pre'; do counter c i = 1 to c + 2`
++  reads `C => "0"` in the TO expression. Each pass that is entered assigns the pass count
++  (`DoBlock::setCounter`, `Interp::count_pass`) after WHILE and before the body, at the body's indent.
++  A failing WHILE or advance leaves the counter where it was.
++- **The flat path's per-pass cost.** COUNTER rides `flat_loop_header_general`, the out-of-line
++  header WHILE loops already took. WHILE, UNTIL and "general" are bits of one `PassTest` byte. A loop
++  with no counter and no WHILE runs the same step code, with no counter test (Review Focus 3). The
++  nested path's `run_repeating` also handles COUNTER and WITH. No lib test or corpus program reaches
++  it: a temporary `panic!` at its entry left the lib tests and the gated corpus pair with no
++  `PROBE` panic (Concerns 3).
++- **DO WITH.** `HeaderRole::With` evaluates the target, echoes it under `WITH` (measured), and sends
++  `SUPPLIER` before FOR is evaluated, as `WithLoop::setup` does. An answer that is not a `Supplier`
++  instance raises 98.994, and a target with no SUPPLIER method raises 97.1. Each pass sends
++  `NEXT` (not on the first pass) and then `AVAILABLE`, which raises 34.906 when it is not logical.
++  Then INDEX is bound, then ITEM, and FOR is checked only after both. All four are message sends,
++  so a `Supplier` subclass sees each one. The oracle calls the base class's natives directly, and
++  the output is the same. The supplier is rooted in the target's register on the flat path, and on a
++  temps frame until then.
++- **DO OVER a stem.** The plan no longer refuses it. `over_target_array`'s `MAKEARRAY` gives the
++  tails in this crate's order (deviation 1).
++- `docs/superpowers/plans/phase-4-exclusions.txt`: deviation 1's corpus rule is now "prints
++  nothing that depends on the order". A false sentence at the old `:4088` is deleted.
++
++## Tests
++
++- Corpus, `rust/corpus/phase-6-1.txt` under Task 2: `do_counter_{ctrl,rep,forever,while,until,over,trace}`,
++  `loop_counter`, `loop_label_counter`, `do_with_{over_array,index_only,item_only,over_dir,counter,trace,supplier_subclass,errors}`,
++  `do_over_stem_{one,three}`. Each has a `sourceline_oracle` file generated by the sanctioned driver
++  from a scratch copy. `do_over_stem_three` collects the tails and sorts them. The zero-collection
++  ones are added to `collect_stress.rs`'s list.
++- `run/tests/loops.rs`: the refusal pins are replaced by
++  `do_with_binds_index_and_item_from_the_supplier`,
++  `do_counter_counts_the_passes_entered_on_a_controlled_loop` and
++  `do_over_a_stem_target_binds_its_tails` (bare and parenthesised).
++- `tests/ir_recorded_cases/loop-refusals` is renamed `loop-counter-with-stem`, with ordinary cases
++  checked against the oracle by `ir_recorded_oracle`.
++- `tests/owners.rs`: `LoopKind::With` is in scope and leaves `EXPECTED_OUT_OF_SCOPE`.
++- `scheduler/tests.rs` `:1369` and `:1393`: the refusal is now `Loud::immovable_reply`, raised by
++  `do label b / reply / end` in the UNINIT and in a method main calls. It is a Phase 6 design limit
++  (spec 2026-09-29 section 5), so Task 7 keeps it.
++- `ir/corpus_shape_tests.rs`: a Counter slot ends in `Root::Const`.
++- `corpus/refusal-sites.tsv` re-derived. Only `loop_op_off_its_node`'s path column changed
++  (`ir` to `body+ir`).
++
++## TDD evidence
++
++- RED: Task 1's binary (`/tmp/claude-1000/p61/t1/bin/r1c/rexx-run`, `12239c974`) on every new
++  witness: rc 120, stderr `rexx-exec: DO is not implemented` (`LOOP is not implemented` for the
++  two LOOP programs), empty stdout.
++- GREEN: every witness is byte-identical to the oracle on stdout, stderr and rc, and each stdout
++  was read. Oracle runs used the global wrapper from a fresh directory under `/tmp/claude-1000/p61/t2/`.
++  Example: `do_with_errors` prints the 97.1, 98.994 and 34.906 messages and then the COUNTER, WHILE
++  and UNTIL lines. `do_with_supplier_subclass` prints `avail index item 1 a next ...`.
++- The queued item's probe (`.superpowers/sdd/queued/2026-10-02-do-with-over-refusal.md`, `a2.rex`
++  plus a `DO WITH`), 5 runs each: oracle `cancelled`/`end 1 1`/rc 0 5 of 5; ours unswitched 5 of 5
++  and `REXX_SWITCH_MODE=every` 5 of 5, the same.
++
++## Per-task check
++
++- `cargo fmt --all --check`: exit 0. `cargo clippy --workspace --all-targets -- -D warnings`:
++  exit 0.
++- `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug) at `9777db504`: exit 0, with no
++  `FAILED` line in the log. At `5b7acef35`, before the shape-test fix, the only failure was
++  `corpus_shape_tests` on the Counter slot.
++- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle`:
++  exit 0 at `9777db504` (29 passed / 1 ignored; 21 passed).
++- `whole_groups` (`REXX_CORPUS_GATE=1 ... --release --test concurrency_tests whole_groups`) at
++  `fe765db7b`: the one failure was the expectation lines this task rewrites. At `4d46b76b0`, after the rewrite:
++  exit 0, 6 passed (`each_group_of_the_derived_list_in_one_run_in_both_modes ... ok`). DateTime whole,
++  MethodArgs whole and derived, and Method derived now agree with the oracle.
++
++## Performance
++
++See `docs/superpowers/plans/phase-6-1-gate.md` `## Task 2`. Callgrind against base `e6af1198b`,
++with a noise band of 0 from the pads: r1 is emptyloop -0.3229%, decloop +0.4373% and rexxcps
+++0.2741%, all inside. Wall clock: emptyloop is +4.16%, outside ±4%, and decloop and rexxcps are
++inside.
++
++## Files
++
++`rust/crates/rexx-exec/src/run/loops.rs`, `src/ir/compile.rs`, `src/ir/drive.rs`, `src/run.rs`
++(a stale comment deleted), `src/ir/corpus_shape_tests.rs`, `src/run/tests/loops.rs`,
++`src/scheduler/tests.rs`, `tests/collect_stress.rs`, `tests/owners.rs`, `tests/concurrency_tests.rs`,
++`tests/ir_recorded_cases/loop-counter-with-stem`, `rust/corpus/phase-6-1.txt`,
++`rust/corpus/refusal-sites.tsv`, `rust/corpus/lang/` (the witnesses),
++`rust/crates/rexx-parse/tests/sourceline_oracle/` (their files),
++`docs/superpowers/plans/phase-4-exclusions.txt`, `docs/superpowers/plans/phase-6-1-gate.md`.
++
++## Self-review
++
++- `instruction_owner` had no `Do` comment to change. The stale one was `run.rs`'s `exec_instruction`
++  arm ("every kind but DO WITH (the loud path)"), and it is deleted.
++- The FlatLoop byte-count comment ("328 bytes, 200 of them") became false and its count is
++  deleted.
++- `file_header_value` handles the Counter role, and `accept_header_value`'s `Counter` arm is empty
++  by design.
++- The 34.906 substitution is the AVAILABLE answer's string value, and 98.994's is the target's.
++  Both match the oracle bytes in `do_with_errors`.
++
++## Concerns
++
++1. **`emptyloop` wall clock is over ±4%** (+4.16, +4.18, +4.42 across three runs), at -0.32% in
++   instructions. `perf stat` cycles: base 1.262-1.288 G, r1 1.316-1.348 G, and Task 1's `r1c`
++   1.281-1.291 G. `perf annotate` puts the extra cycles in `loop_advance`, which retires
++   49,999,953 fewer instructions than at base. Two further rounds were measured and not kept: WITH's state out of `LoopState` (+6.5%
++   cycles) and the counter boxed in `FlatLoop` (+10%). Both read as hot-loop layout rather than
++   work. Three rounds are spent, so this needs Moritz's ruling.
++2. **Defects that DO COUNTER used to hide, now visible in whole groups** (each measured alone on
++   both engines, with the oracle passing):
++   - TRACE_TraceObject `TEST_VARIABLE`: no trace object has a VARIABLE entry.
++   - `TEST_CALLER_STACK_FRAME_REPLY_START`: no CALLERSTACKFRAME THREAD entry.
++   - `TEST_TRACEOBJECT_COLLECTOR`: fewer collected trace lines.
++   - TRACE `TEST_TRACE_LABEL_WITH_FORWARD`: 10 trace lines against 12 across FORWARD/REPLY.
++   - Method `TEST_NEW*`/`TEST_NEWFILE*`: Method NEW shapes.
++
++   These are TraceObject, REPLY-trace and Method NEW work, not loops.
++3. **`run_repeating` is unreached** by the lib tests and the corpus: every repeating loop goes flat,
++   and the only `Fallback` is a labelled simple block, which returns before it. COUNTER and WITH are
++   threaded through it so it stays right. Deleting it is a separate decision.
++4. The queued item `2026-10-02-do-with-over-refusal` is resolved by this task. I did not close the
++   queue file, which is the controller's to do.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 4094cf615..0005f42b6 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -848,25 +848,24 @@ DEVIATIONS -- permanent, chosen
+      insertion order, not ascending, not descending, not byte order. It is
+      CompoundVariableTable's tree shape, and reproducing it means reproducing
+      the tree, which is the entire cost the hash map exists to avoid.
+ 
+      Justified by measurement rather than by appeal to ANSI leaving the order
+      implementation-defined: DO OVER on a stem appears zero times in ooTest,
+      zero times in CoreClasses.orx and StreamClasses.orx, and a handful of
+      times in samples/windows/ under oodialog/ and ole/, of which at least two
+      print in iteration order. All are Windows-only samples that no gate runs.
+ 
+-     Consequence, and it is a rule rather than an observation: NO CORPUS
+-     PROGRAM MAY CONTAIN DO OVER ON A STEM. Such a program could never pass,
+-     because the oracle's order is deterministic and ours is a different
+-     deterministic order. DO OVER on a string or a number is fine -- each
+-     iterates once, yielding itself.
++     Consequence, and it is a rule rather than an observation: A CORPUS
++     PROGRAM WITH DO OVER ON A STEM PRINTS NOTHING THAT DEPENDS ON THE ORDER
++     -- a stem with one tail, or the tails collected and sorted. DO OVER on a
++     string or a number is fine -- each iterates once, yielding itself.
+ 
+   2. The EVALUATION-depth limit raises 11.1 where the oracle raises nothing.
+ 
+      Read this row carefully, because the same error number is parity on two
+      axes and a deviation on a third, and only the third belongs here.
+ 
+      PARITY, not a deviation, on the parse-side axes: nested parentheses and
+      nested calls both raise 11.1 in the oracle -- bisected at roughly 39,900
+      parens and in [34,500, 34,760] calls -- and MAX_EXPR_DEPTH raises the same
+      11.1 at 50,000 on one shared budget. Same construct, same condition, same
+@@ -4079,23 +4078,21 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
+   these objects.
+ 
+   NOT CAUSED BY PHASE 5a, established rather than assumed: a build carrying
+   the round-3 checks answers rc 216 identically, because `exec_raise` returns
+   to `exec_raise_propagate` at the top, before any option is evaluated. The
+   C++ takes the other path deliberately -- `RaiseInstruction.cpp:272-277`
+   reads the condition name off the condition object under a propagate rather
+   than from the clause. Recorded here so it is not rediscovered as a Phase 5
+   regression; closing it belongs to whichever task owns `RAISE`.
+ 
+-  WHAT THE TABLE STILL CANNOT SEE. `DO x OVER` a stem is loud for its own
+-  earlier reason and so cannot distinguish this gap from that one.
+-  `NUMERIC FORM <expr>` is loud in every build including the pinned one, so it
++  WHAT THE TABLE STILL CANNOT SEE. `NUMERIC FORM <expr>` is loud in every build including the pinned one, so it
+   is out of scope rather than agreeing. And a surface added later is not in
+   this table by construction, which is why every row names the conversion it
+   makes: a new caller of `requestArray`, of a unary operator, or of a
+   message send on an operand belongs on the refusing side, and a new caller of
+   `stringValue()` or of a text test belongs on the agreeing side.
+ 
+   `rust/crates/rexx-exec/src/eval.rs`'s `object_operand_tests` pins the
+   refusals and the agreements it can reach in-crate;
+   `rust/corpus/lang/environment_object_operands.rex`,
+   `environment_object_in_a_loop_header.rex`,
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index 8540797f8..26b306579 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -59,10 +59,66 @@ Exit 0; load average 2.59 at start, 1.47 at end.
+ 
+ | program | pad2 % | r1 % |
+ |---|---:|---:|
+ | fibcall | +0.13 | -0.13 |
+ | fibfunc | +0.51 | +0.13 |
+ | dispatch | +0.63 | -3.16 |
+ | dispatchclass | +1.71 | -2.99 |
+ | sendloop | +0.51 | -2.40 |
+ 
+ Every program inside ±4%.
++
++## Task 2
++
++Commits: `5b7acef35` (behaviour), `9777db504` (perf round 1), `fe765db7b` (witness), `4d46b76b0` (whole-group lines). `S` is
++`/tmp/claude-1000/p61/t2`; base and pads are Task 1's binaries (sha256 above, re-checked). Each
++Task 2 binary from `git archive <sha> rust interpreter`, built with
++`CARGO_TARGET_DIR=$S/target-NAME memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run`,
++one `Compiling rexx-exec` line each.
++
++| binary | source | sha256 |
++|---|---|---|
++| t2 | `5b7acef35` | `b21c6a8e7f2e201312009c1f6be339db75f1d8ab918f9bb5b4c23bdbfd18e1a3` |
++| r1 | `9777db504` | `0d08596f68c918280afca14c1d019b6ca00618ee1884b651bd8ab606b6d93d5d` |
++
++Instructions:
++
++```
++bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $S/cg-final -p "emptyloop decloop rexxcps" base=$B/base/rexx-run pad1=$B/pad1/rexx-run pad2=$B/pad2/rexx-run pad3=$B/pad3/rexx-run t2=$S/bin/t2/rexx-run r1=$S/bin/r1/rexx-run
++```
++
++(`B` is `/tmp/claude-1000/p61/t1/bin`.) Exit 0. The layout controls print `+0.0000`% on every
++program, so the band is 0 and the budget is +0.5%.
++
++| program | t2 % | r1 % | verdict |
++|---|---:|---:|---|
++| emptyloop | +18.6211 | -0.3229 | inside |
++| decloop | +3.1105 | +0.4373 | inside |
++| rexxcps | +0.4163 | +0.2741 | inside |
++
++t2 was over: the fast flat header's closure stopped being inlined into `ops_loop_steady`
++(`cgdiff.py` on `emptyloop`: `flat_loop_header::{closure#0}` +875,001,750 as a symbol of its own,
++`ops_loop_steady` +624,854,607). Round 1 spells the clause out (`enter_clause`, the advance,
++`leave_clause`), keeps WHILE/UNTIL/COUNTER as bits of one `PassTest` byte, and moves the driver's
++`LoopHeaderValue` work into one filing call.
++
++Wall clock:
++
++```
++PROGRAMS="emptyloop decloop rexxcps" bash rust/bench-programs/wallclock.sh -r 5 -o $S/wall base=$B/base/rexx-run pad2=$B/pad2/rexx-run r1=$S/bin/r1/rexx-run
++```
++
++Exit 0; load average 0.16 at start, 0.57 at end.
++
++| program | pad2 % | r1 % |
++|---|---:|---:|
++| emptyloop | -0.23 | +4.16 |
++| decloop | +0.84 | -0.84 |
++| rexxcps | -2.03 | +0.81 |
++
++**`emptyloop` is outside ±4% on wall clock.** Two more emptyloop-only runs of the same command
++gave +4.18 and +4.42. `perf stat -e cycles`, three runs each: base 1.262-1.288 G, Task 1's `r1c`
++1.281-1.291 G, Task 2's r1 1.316-1.348 G; branch misses equal (370,386 against 384,551). The cost is
++cycles at fewer instructions, and `perf annotate` puts it in `loop_advance` (20.3% of cycles at base,
++37.4% at r1, where `cgdiff.py` gives it 49,999,953 fewer instructions). Two further rounds moved it the wrong way:
++`DO WITH`'s state out of `LoopState` (+6.5% cycles) and the counter boxed in `FlatLoop` (+10%).
++Neither landed. Three rounds are spent; this stops for Moritz's ruling.
+diff --git a/rust/corpus/lang/do_counter_ctrl.rex b/rust/corpus/lang/do_counter_ctrl.rex
+new file mode 100644
+index 000000000..e08d06a1c
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_ctrl.rex
+@@ -0,0 +1,6 @@
++/* COUNTER on a controlled loop: the passes entered, not the control's end
++   value; an ITERATE still enters the next pass, and nested counters are
++   separate. */
++do counter c i = 1 to 3; end; say c i
++do counter c i = 1 to 3; if i = 2 then iterate; end; say c
++do counter o 2; do counter n 3; end; say o n; end
+diff --git a/rust/corpus/lang/do_counter_forever.rex b/rust/corpus/lang/do_counter_forever.rex
+new file mode 100644
+index 000000000..49aae0e72
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_forever.rex
+@@ -0,0 +1,2 @@
++/* COUNTER on DO FOREVER, left by LEAVE. */
++do counter c forever; if c = 2 then leave; end; say c
+diff --git a/rust/corpus/lang/do_counter_over.rex b/rust/corpus/lang/do_counter_over.rex
+new file mode 100644
+index 000000000..3c8c8d508
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_over.rex
+@@ -0,0 +1,2 @@
++/* COUNTER on DO OVER. */
++do counter c x over .array~of('a', 'b'); end; say c x
+diff --git a/rust/corpus/lang/do_counter_rep.rex b/rust/corpus/lang/do_counter_rep.rex
+new file mode 100644
+index 000000000..4db7be1fa
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_rep.rex
+@@ -0,0 +1,2 @@
++/* COUNTER on a repeat count. */
++do counter c 3; end; say c
+diff --git a/rust/corpus/lang/do_counter_trace.rex b/rust/corpus/lang/do_counter_trace.rex
+new file mode 100644
+index 000000000..5313affd8
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_trace.rex
+@@ -0,0 +1,13 @@
++/* COUNTER is reset to 0 before the header is evaluated and assigned on each
++   pass entered, traced as an assignment and a COUNTER keyword. */
++trace i
++c = 'pre'
++do counter c i = 1 to c + 2; end
++say c i
++do counter q 0; end
++say q
++n = 0
++do counter w while n < 2; n = n + 1; end
++do counter u until u > 1; end
++do counter s.1 2; end
++say s.1
+diff --git a/rust/corpus/lang/do_counter_until.rex b/rust/corpus/lang/do_counter_until.rex
+new file mode 100644
+index 000000000..c9d55bbaf
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_until.rex
+@@ -0,0 +1,2 @@
++/* COUNTER on DO UNTIL. */
++n = 0; do counter c until n = 2; n = n + 1; end; say c n
+diff --git a/rust/corpus/lang/do_counter_while.rex b/rust/corpus/lang/do_counter_while.rex
+new file mode 100644
+index 000000000..41c26d9bd
+--- /dev/null
++++ b/rust/corpus/lang/do_counter_while.rex
+@@ -0,0 +1,2 @@
++/* COUNTER is assigned after WHILE holds, so a failing test leaves it. */
++n = 0; do counter c while n < 2; n = n + 1; end; say c n
+diff --git a/rust/corpus/lang/do_over_stem_one.rex b/rust/corpus/lang/do_over_stem_one.rex
+new file mode 100644
+index 000000000..d2b52d315
+--- /dev/null
++++ b/rust/corpus/lang/do_over_stem_one.rex
+@@ -0,0 +1,3 @@
++/* DO OVER a stem with one tail. */
++s.7 = 'x'
++do t over s.; say t; end
+diff --git a/rust/corpus/lang/do_over_stem_three.rex b/rust/corpus/lang/do_over_stem_three.rex
+new file mode 100644
+index 000000000..9fb25daa4
+--- /dev/null
++++ b/rust/corpus/lang/do_over_stem_three.rex
+@@ -0,0 +1,6 @@
++/* DO OVER a stem binds its tails; sorted, because the order is licensed
++   (deviation 1). */
++s.1 = 'x'; s.2 = 'y'; s.abc = 'z'
++l = .array~new
++do t over s.; l~append(t); end
++say l~sort~makestring('L', ' ')
+diff --git a/rust/corpus/lang/do_with_counter.rex b/rust/corpus/lang/do_with_counter.rex
+new file mode 100644
+index 000000000..589361094
+--- /dev/null
++++ b/rust/corpus/lang/do_with_counter.rex
+@@ -0,0 +1,2 @@
++/* COUNTER on DO WITH. */
++do counter c with index i item v over .array~of('a', 'b'); end; say c i v
+diff --git a/rust/corpus/lang/do_with_errors.rex b/rust/corpus/lang/do_with_errors.rex
+new file mode 100644
+index 000000000..aaf9aed68
+--- /dev/null
++++ b/rust/corpus/lang/do_with_errors.rex
+@@ -0,0 +1,32 @@
++/* DO WITH's failures: no SUPPLIER method, a SUPPLIER answer that is not a
++   supplier, and an AVAILABLE that is not logical; then COUNTER, WHILE and
++   UNTIL beside the supplier. */
++signal on syntax name s1
++do with index i over 5; say i; end
++s1: say 'A' condition('o')~code condition('o')~message
++signal on syntax name s2
++do with index i over .x~new; say i; end
++s2: say 'B' condition('o')~code condition('o')~message
++signal on syntax name s3
++do with index i over .z~new; say i; end
++s3: say 'C' condition('o')~code condition('o')~message
++do counter c with item v over .directory~new; end
++say c
++q = .queue~of('p', 'q')
++do counter c with index i item v over q while c < 1; say c i v; end
++say c i v
++do counter c with index i item v over q until c > 0; say c i v; end
++say c i v
++do with index i item v over q until i > 0; say i v; end
++say i v
++::class x
++::method supplier
++  return 'nope'
++::class z
++::method supplier
++  return .w~new
++::class w subclass supplier
++::method init
++  self~init:super(.array~of('a'), .array~of(1))
++::method available
++  return 'maybe'
+diff --git a/rust/corpus/lang/do_with_index_only.rex b/rust/corpus/lang/do_with_index_only.rex
+new file mode 100644
+index 000000000..0f177786c
+--- /dev/null
++++ b/rust/corpus/lang/do_with_index_only.rex
+@@ -0,0 +1,2 @@
++/* DO WITH with INDEX alone. */
++do with index i over .array~of('a', 'b'); say i; end
+diff --git a/rust/corpus/lang/do_with_item_only.rex b/rust/corpus/lang/do_with_item_only.rex
+new file mode 100644
+index 000000000..5cee660ed
+--- /dev/null
++++ b/rust/corpus/lang/do_with_item_only.rex
+@@ -0,0 +1,2 @@
++/* DO WITH with ITEM alone. */
++do with item v over .array~of('a', 'b'); say v; end
+diff --git a/rust/corpus/lang/do_with_over_array.rex b/rust/corpus/lang/do_with_over_array.rex
+new file mode 100644
+index 000000000..7a4d08348
+--- /dev/null
++++ b/rust/corpus/lang/do_with_over_array.rex
+@@ -0,0 +1,2 @@
++/* DO WITH binds INDEX and ITEM from the supplier. */
++do with index i item v over .array~of('a', 'b'); say i v; end
+diff --git a/rust/corpus/lang/do_with_over_dir.rex b/rust/corpus/lang/do_with_over_dir.rex
+new file mode 100644
+index 000000000..07f14dd09
+--- /dev/null
++++ b/rust/corpus/lang/do_with_over_dir.rex
+@@ -0,0 +1,3 @@
++/* DO WITH over a Directory's supplier. */
++d = .directory~new; d~a = 1
++do with index i item v over d; say i v; end
+diff --git a/rust/corpus/lang/do_with_supplier_subclass.rex b/rust/corpus/lang/do_with_supplier_subclass.rex
+new file mode 100644
+index 000000000..df37a0694
+--- /dev/null
++++ b/rust/corpus/lang/do_with_supplier_subclass.rex
+@@ -0,0 +1,18 @@
++/* A Supplier subclass is stepped by message: AVAILABLE, INDEX, ITEM, NEXT. */
++do with index i item v over .y~new; say i v; end
++say 'done'
++::class y subclass supplier
++::method init
++  self~init:super(.array~of('a', 'b'), .array~of(1, 2))
++::method available
++  say 'avail'
++  return self~available:super
++::method next
++  say 'next'
++  forward class (super)
++::method item
++  say 'item'
++  forward class (super)
++::method index
++  say 'index'
++  forward class (super)
+diff --git a/rust/corpus/lang/do_with_trace.rex b/rust/corpus/lang/do_with_trace.rex
+new file mode 100644
+index 000000000..6a9561fa2
+--- /dev/null
++++ b/rust/corpus/lang/do_with_trace.rex
+@@ -0,0 +1,8 @@
++/* DO WITH traces its target under WITH and binds INDEX and ITEM before FOR
++   is consulted. */
++trace r
++do counter k with index x item y over .array~of('a') for 5; end
++say k x y
++trace i
++do with item y over .array~of('a', 'b') for 1; end
++say y
+diff --git a/rust/corpus/lang/loop_counter.rex b/rust/corpus/lang/loop_counter.rex
+new file mode 100644
+index 000000000..4bd19d8a3
+--- /dev/null
++++ b/rust/corpus/lang/loop_counter.rex
+@@ -0,0 +1,2 @@
++/* COUNTER on LOOP with a repeat count. */
++loop counter c 2; end; say c
+diff --git a/rust/corpus/lang/loop_label_counter.rex b/rust/corpus/lang/loop_label_counter.rex
+new file mode 100644
+index 000000000..b845d233c
+--- /dev/null
++++ b/rust/corpus/lang/loop_label_counter.rex
+@@ -0,0 +1,2 @@
++/* COUNTER beside LABEL, left by a named LEAVE. */
++loop label l counter c i = 1 to 5; if i = 3 then leave l; end; say c i
+diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
+index 419ec5f5c..3d1821e4c 100644
+--- a/rust/corpus/phase-6-1.txt
++++ b/rust/corpus/phase-6-1.txt
+@@ -14,10 +14,32 @@ lang/scope_random_seed.rex
+ lang/scope_random_unseeded.rex
+ lang/scope_setlocal_method.rex
+ lang/scope_setlocal_routine.rex
+ lang/scope_propagate_routine.rex
+ lang/scope_propagate_after_routine.rex
+ lang/scope_case_text_absorbed.rex
+ lang/scope_case_text_absorbed_other.rex
+ lang/scope_internal_depth.rex
+ lang/scope_debug_pause_routine.rex
+ lang/scope_case_text_debug_line.rex
++
++# Task 2: COUNTER on every loop kind, DO WITH ... OVER a supplier, and DO OVER a
++# stem's tails (sorted, or a single tail: the order is deviation 1's).
++lang/do_counter_ctrl.rex
++lang/do_counter_rep.rex
++lang/do_counter_forever.rex
++lang/do_counter_while.rex
++lang/do_counter_until.rex
++lang/loop_counter.rex
++lang/loop_label_counter.rex
++lang/do_counter_over.rex
++lang/do_counter_trace.rex
++lang/do_with_over_array.rex
++lang/do_with_index_only.rex
++lang/do_with_item_only.rex
++lang/do_with_over_dir.rex
++lang/do_with_counter.rex
++lang/do_with_trace.rex
++lang/do_with_supplier_subclass.rex
++lang/do_with_errors.rex
++lang/do_over_stem_one.rex
++lang/do_over_stem_three.rex
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index 2cc03cfbd..7df0fcb88 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -163,21 +163,21 @@ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	9
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+ Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:822	off-send-surface	-	-	-
+ Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+ Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:582	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+ Loud	library_source	body	crates/rexx-exec/src/lib.rs:622	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1504	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1666	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1191	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1103	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Loud	method_body	body	crates/rexx-exec/src/lib.rs:615	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/ir/compile.rs b/rust/crates/rexx-exec/src/ir/compile.rs
+index 57ce84cac..bf4922d33 100644
+--- a/rust/crates/rexx-exec/src/ir/compile.rs
++++ b/rust/crates/rexx-exec/src/ir/compile.rs
+@@ -19,21 +19,21 @@ use rexx_parse::{
+     Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, LoopKind, ParseSource, SymbolId,
+ };
+ 
+ use super::{
+     Calls, Chunk, ChunkTooLarge, ClausePosition, ConditionKeyword, Hints, NodePath, Op, PlanSlot,
+     SendForm,
+ };
+ use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
+ use crate::plan::Plan;
+ use crate::run::{
+-    HeaderPlan, QueueKeyword, ReturnKeyword, if_targets, loop_header_plan, loop_header_slot,
++    HeaderRole, QueueKeyword, ReturnKeyword, if_targets, loop_header_plan, loop_header_slot,
+     otherwise_range, when_targets,
+ };
+ use crate::trace::ChunkTrace;
+ 
+ mod invariants;
+ use invariants::{
+     assert_call_echoes_follow_their_op, assert_exec_regions_hold_nothing_else,
+     assert_keyword_echoes_precede_their_value, assert_literal_echoes_follow_their_load,
+     assert_operator_echoes_follow_their_op, assert_prefix_echoes_follow_their_op,
+     assert_read_echoes_follow_their_load, assert_region_ops_name_their_clause,
+@@ -272,39 +272,49 @@ pub(crate) fn compile(
+                 // whole loop, because these registers are what roots the
+                 // header's values while the loop runs: a `DO OVER`'s target
+                 // lives in `LoopState` for the construct's lifetime, and a
+                 // register released at a body clause's own boundary would be
+                 // handed out again and overwritten while it is still in use.
+                 let outer = registers.mark();
+                 // Named apart from `plan`, which this arm reads too: a slot
+                 // that compiles natively resolves its reads against it,
+                 // exactly as an assignment's value does.
+                 let header_plan = loop_header_plan(body_node);
+-                let roles = header_plan.as_ref().map_or(&[][..], HeaderPlan::roles);
++                let roles = header_plan.roles();
+                 let mut header = Vec::with_capacity(roles.len());
+                 for &role in roles {
+                     header.push((role, registers.alloc()?));
+                 }
+                 let header_top = registers.mark();
+                 let at = op_index(&ops)?;
+                 let echo = echoes(trace, instruction);
+                 // One group per header expression, and `LoopRun` inside the
+                 // region behind them: the whole loop runs inside the `DO` clause.
+                 // `close_region` below is
+                 // what fixes the region's end, from what was actually pushed.
+                 ops.push(Op::Clause {
+                     index: instruction_index(index)?,
+                     end: 0,
+                 });
+                 push_echo(&mut ops, echo, instruction_index(index)?);
+                 for (slot, &(role, dst)) in header.iter().enumerate() {
+                     let slot = instruction_index(slot)?;
++                    // The counter's reset value, filed before any header
++                    // expression is evaluated; its op echoes it.
++                    if role == HeaderRole::Counter {
++                        ops.push(Op::Const {
++                            dst,
++                            konst: consts.intern(b"0")?,
++                        });
++                        ops.push(Op::LoopHeaderValue { role, src: dst });
++                        continue;
++                    }
+                     // **Each slot decides for itself**, so a header holding one
+                     // expression outside the native set keeps native ops for
+                     // its others. A slot `loop_header_slot` has no expression
+                     // for takes the same answer as one `native_shape` declines,
+                     // and they are one arm because they are one answer: the
+                     // slot stays a whole `Op::EvalExpr`, which is what it was
+                     // before any of it compiled. `run.rs`'s own
+                     // `eval_chunk_expr` is where a slot with no expression then
+                     // ends up, and it is loud there.
+                     match loop_header_slot(body_node, slot) {
+diff --git a/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs b/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
+index 2ea608fc5..d23316ccd 100644
+--- a/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
++++ b/rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs
+@@ -371,25 +371,30 @@ fn check_body(
+         // its expectation is per slot. Each `Op::LoopHeaderValue` ends one
+         // slot's group, and a group starts where the one before it ended, or at
+         // the region's own start for the first. The last `Root` in a group is
+         // what that slot's expression must end in: neither `Op::TraceKeyword`
+         // nor `Op::LoopHeaderValue` is a `Root`, so the scan back inside a
+         // group finds the expression's own op and nothing else.
+         if let InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) = &instruction.kind {
+             let mut slot = 0u32;
+             let mut group = 0;
+             for (op_at, op) in region.iter().enumerate() {
+-                if !matches!(op, Op::LoopHeaderValue { .. }) {
++                let Op::LoopHeaderValue { role, .. } = op else {
+                     continue;
+-                }
+-                let expected =
+-                    crate::run::loop_header_slot(loop_, slot).map_or(Root::EvalExpr, root_of);
++                };
++                // A `COUNTER`'s slot has no expression and loads its reset
++                // value as a constant.
++                let expected = if *role == crate::run::HeaderRole::Counter {
++                    Root::Const
++                } else {
++                    crate::run::loop_header_slot(loop_, slot).map_or(Root::EvalExpr, root_of)
++                };
+                 let actual = region[group..op_at].iter().filter_map(Root::of).next_back();
+                 assert_eq!(
+                     actual,
+                     Some(expected),
+                     "{where_}: instruction {index} ({construct}) has a header slot {slot} \
+                      calling for {expected:?} and a compiled group ending in {actual:?}\n{}",
+                     render(&chunk)
+                 );
+                 *seen.roots.entry(expected).or_default() += 1;
+                 if expected != Root::EvalExpr {
+diff --git a/rust/crates/rexx-exec/src/ir/drive.rs b/rust/crates/rexx-exec/src/ir/drive.rs
+index d492e9a73..1c0beb50b 100644
+--- a/rust/crates/rexx-exec/src/ir/drive.rs
++++ b/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -1571,33 +1571,25 @@ macro_rules! region_ops {
+                 // comment).
+                 Op::LoopHeaderValue { role, src } => {
+                     debug_assert!(
+                         $chunk.holds_register(*src),
+                         "op reads register {src} outside the region the chunk \
+                      reserved"
+                     );
+                     let value = $registers.get(*src);
+                     let values =
+                         $header.get_or_insert_with(LoopHeaderValues::default);
+-                    if let Err(failure) =
+-                        $self.accept_header_value(*role, value, values)
+-                    {
++                    if let Err(failure) = $self.file_header_value(
++                        $code, $clause, *role, *src, value, values,
++                    ) {
+                         break $cold Err(failure);
+                     }
+-                    // Which register roots a flattened
+-                    // `DO OVER`'s snapshot, recorded here
+-                    // because this op is the only place
+-                    // that knows it -- see
+-                    // `LoopState::OverItems`.
+-                    if matches!(role, crate::run::HeaderRole::Over) {
+-                        values.over_register = Some(*src);
+-                    }
+                 }
+                 // The construct itself, from the values the ops
+                 // above filed, through `run_loop_with_header`.
+                 // `BodyEngine::Chunk` says the body's clauses
+                 // come from this chunk.
+                 Op::LoopRun { $index } => {
+                     debug_assert_names_the_clause(
+                         $code, *$index, $clause, "LoopRun",
+                     );
+                     let $index = *$index as usize;
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index dc646f1d5..ff0d8aec4 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -82,22 +82,21 @@ pub(crate) use call::{
+     subroutine_started,
+ };
+ #[cfg(test)]
+ use call::{Entered, entered_receiver};
+ 
+ // `DO`/`LOOP`: the header, each kind of repetition, and the flat-loop path the op driver takes.
+ mod loops;
+ #[cfg(test)]
+ use loops::numeric_less;
+ pub(crate) use loops::{
+-    FlatLoop, FlatStart, FlatStep, HeaderPlan, HeaderRole, LoopHeaderValues, loop_header_plan,
+-    loop_header_slot,
++    FlatLoop, FlatStart, FlatStep, HeaderRole, LoopHeaderValues, loop_header_plan, loop_header_slot,
+ };
+ 
+ /// Where control goes after one instruction (the design's "Control flow").
+ pub(crate) enum Flow {
+     Next,
+     /// Live since Task 10: `If`/`Select` each resolve to one `Goto` that
+     /// skips straight to their construct's true resume point, and
+     /// `run_bounded`'s own internal loop applies one whenever a nested
+     /// construct's target lands inside its range.
+     Goto(usize),
+@@ -936,26 +935,20 @@ impl Interp {
+                 None => {
+                     for value in values {
+                         let v = self.eval(code, value)?;
+                         self.roots.activity_mut().push_temp(v);
+                     }
+                     Ok(Flow::Next)
+                 }
+             },
+             InstructionKind::Otherwise => Ok(Flow::Next),
+ 
+-            // `DO`/`LOOP`, every kind but `DO WITH` (the loud path,
+-            // `run_loop`'s own doc comment) -- Task 11. Resolves the whole
+-            // construct itself, every iteration, exactly the discipline
+-            // `If`/`Select` already established: see `Flow::Leave`'s own
+-            // doc comment for why `Do`'s own arm never returns until the
+-            // entire loop is over, one way or another.
+             // `DO`/`LOOP`, `IF` and `SELECT` are **not** reachable here.
+             InstructionKind::Do(_)
+             | InstructionKind::Loop(_)
+             | InstructionKind::If { .. }
+             | InstructionKind::Select { .. } => Err(Loud::instruction(&instruction.kind).into()),
+ 
+             // `LEAVE`/`ITERATE`, bare or by name -- Task 11. Resolves to
+             // data, not a failure (`Flow::Leave`'s own doc comment): whether
+             // this instruction's own name matches anything is answered by
+             // whichever `Do`/`Select` (or `run_activation`'s own top level,
+diff --git a/rust/crates/rexx-exec/src/run/loops.rs b/rust/crates/rexx-exec/src/run/loops.rs
+index cf0bbffd0..407d1fd8a 100644
+--- a/rust/crates/rexx-exec/src/run/loops.rs
++++ b/rust/crates/rexx-exec/src/run/loops.rs
+@@ -9,22 +9,23 @@
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `DO`/`LOOP`: the header, each kind of repetition, and the flat-loop path the op driver takes.
+ 
+ use super::{
+     ArithError, BehaviourId, Body, BodyEngine, ClauseOutcome, ClauseValue, Code, CompareOp,
+     ConditionTrace, ControlExpr, Cow, Decoded, Expr, ExprKind, Failure, Flow, Instruction,
+     InstructionKind, Interp, Loop, LoopConditional, LoopKind, Loud, NameShape, Novalue, Number,
+     ObjRef, ProgramSource, Raised, RegFrame, SymbolId, compare_decoded, exact_small_int,
+-    raised_for_count_not_whole, raised_iterate_wrong_kind, raised_repetition_count_not_whole,
+-    raised_until_not_logical, raised_while_not_logical, shape_of, within_digits,
++    logical_value, raised_for_count_not_whole, raised_iterate_wrong_kind,
++    raised_repetition_count_not_whole, raised_until_not_logical, raised_while_not_logical,
++    shape_of, within_digits,
+ };
+ use crate::clause::DeadlineCounted;
+ 
+ /// What one pass of a `DO`/`LOOP` body just did, from `do_body_outcome`.
+ enum DoOutcome {
+     /// The body ran off its end into the `END` clause.
+     FellThrough,
+     /// An `ITERATE` naming this construct cut the pass short. The line is
+     /// that `ITERATE` clause's own -- what the loop's next re-test is
+     /// attributed to, because the oracle re-enters the loop from inside
+@@ -104,49 +105,87 @@ pub(crate) struct FlatLoop {
+     pub(crate) do_index: usize,
+     resume: usize,
+     label: Option<SymbolId>,
+     do_indent: usize,
+     loop_indent: usize,
+     do_line: usize,
+     end_line: usize,
+     header_clause: HeaderClause,
+     /// The echo site `header_clause` names when it is `Iterate`.
+     iterate_site: IterateSite,
+-    /// `Some(true)` for `UNTIL`, `Some(false)` for `WHILE`, `None` for a loop
+-    /// with neither. **The condition's own node is not held here**, because
+-    /// this outlives the borrow of `code` a reference to it would need; the
+-    /// node is read back off the `DO` instruction at the one point per pass
+-    /// that tests it, and this says whether that read is owed at all.
+-    conditional: Option<bool>,
++    /// What a pass boundary tests beyond the advance. **The condition's own
++    /// node is not held here**, because this outlives the borrow of `code` a
++    /// reference to it would need; the node is read back off the `DO`
++    /// instruction at the one point per pass that tests it.
++    test: PassTest,
++    counter: Option<LoopCounter>,
+     state: LoopState,
+ }
+ 
++/// A flat loop's per-pass tests: `UNTIL` after the body, and whether the
++/// header takes [`Interp::flat_loop_header_general`] for a `WHILE` or a
++/// `COUNTER`. The two are bits of one byte, so a loop with neither pays one
++/// test of it per pass.
++#[derive(Clone, Copy, PartialEq, Eq)]
++#[repr(u8)]
++enum PassTest {
++    Plain = 0,
++    Until = 1,
++    General = 2,
++    UntilGeneral = 3,
++}
++
++impl PassTest {
++    fn of(body: &Loop) -> PassTest {
++        match (&body.conditional, body.counter.is_some()) {
++            (Some(cond), counted) if cond.until => {
++                if counted {
++                    PassTest::UntilGeneral
++                } else {
++                    PassTest::Until
++                }
++            }
++            (Some(_), _) | (None, true) => PassTest::General,
++            (None, false) => PassTest::Plain,
++        }
++    }
++
++    fn until(self) -> bool {
++        self as u8 & 1 != 0
++    }
++
++    fn general(self) -> bool {
++        self as u8 & 2 != 0
++    }
++}
++
+ impl FlatLoop {
+     /// A `FlatLoop` naming nothing, which exists only to give
+     /// [`Interp::flat_loop_start`] a box to write a real one into when the
+     /// spare pool is empty. Every field is overwritten before anything reads
+     /// one.
+     const fn vacant() -> FlatLoop {
+         FlatLoop {
+             op_body: 0,
+             body_start: 0,
+             end_index: 0,
+             do_index: 0,
+             resume: 0,
+             label: None,
+             do_indent: 0,
+             loop_indent: 0,
+             do_line: 0,
+             end_line: 0,
+             header_clause: HeaderClause::Do,
+             iterate_site: None,
+-            conditional: None,
++            test: PassTest::Plain,
++            counter: None,
+             state: LoopState::Forever,
+         }
+     }
+ 
+     /// Which clause a header or `UNTIL` test on this pass belongs to.
+     fn header_line(&self) -> usize {
+         match self.header_clause {
+             HeaderClause::Do => self.do_line,
+             HeaderClause::End => self.end_line,
+             HeaderClause::Iterate { line } => line,
+@@ -198,30 +237,30 @@ pub(crate) enum FlatStart {
+ pub(crate) enum FlatStep {
+     /// One more pass, from this op.
+     Body(u32),
+     /// The construct is over and this is its answer.
+     Done(Flow),
+ }
+ 
+ /// What drives one repeating `DO`/`LOOP`'s own iteration, once its header
+ /// has already been evaluated and validated -- everything `LoopKind` can be
+ /// except `Simple` (a block, never repeats, and `run_loop_with_header`'s own
+-/// `Simple` arm never builds one of these at all) and `With` (the loud path).
++/// `Simple` arm never builds one of these at all).
+ enum LoopState {
+     Forever,
+     /// `DO expr`: a fixed repeat count, decremented to zero.
+     Count {
+         remaining: u64,
+     },
+-    /// `DO name OVER expr`, a **non-stem** target only (Deviation 1: a stem
+-    /// target takes the loud path in `run_loop_with_header` before one of
+-    /// these is ever built): binds `control` to each of `items` in turn.
++    /// `DO name OVER expr`: binds `control` to each of `items` in turn. A
++    /// stem target iterates its tails in this crate's order rather than the
++    /// oracle's (Deviation 1, `phase-4-exclusions.txt`).
+     OverItems {
+         control: SymbolId,
+         /// [`control_slot`], taken once when this loop was entered.
+         at: Option<usize>,
+         snapshot: ObjRef,
+         items: Vec<ObjRef>,
+         next: usize,
+         remaining: Option<u64>,
+     },
+     /// `DO i = initial TO to BY by FOR for_count`. `to`/`for_remaining` are
+@@ -247,20 +286,58 @@ enum LoopState {
+         /// decided, which is exactly the oracle's own `!first` argument to
+         /// `DoBlock::checkControl` (`ControlledDoInstruction.cpp:162`): it
+         /// selects between "read the value the header computed" and
+         /// "increment it, tracing on both sides of the addition". A `bool`
+         /// on the state rather than a flag threaded through `run_repeating`
+         /// because `loop_advance` is the only reader and the only writer,
+         /// and because it has to survive an `ITERATE`, which re-enters that
+         /// function without passing through the top of the driver's loop.
+         stepped: bool,
+     },
++    /// `DO WITH INDEX i ITEM v OVER expr`: steps the supplier the target
++    /// answered `SUPPLIER` with, `WithLoop::checkIteration`
++    /// (`instructions/DoBlockComponents.cpp`).
++    With(Box<WithState>),
++}
++
++/// A `DO WITH` loop's supplier and the names it binds.
++struct WithState {
++    index: Option<SymbolId>,
++    item: Option<SymbolId>,
++    supplier: ObjRef,
++    /// Whether the next advance is the first, which reads the supplier's
++    /// current pair rather than stepping past it.
++    first: bool,
++    remaining: Option<u64>,
++}
++
++/// A loop's `COUNTER` variable and the passes entered so far
++/// (`DoBlock::setCounter`).
++#[derive(Clone, Copy)]
++struct LoopCounter {
++    name: SymbolId,
++    /// [`control_slot`], taken once when this loop was entered.
++    at: Option<usize>,
++    shape: NameShape,
++    passes: u64,
++}
++
++impl LoopCounter {
++    fn of(code: &Code<'_>, body: &Loop) -> Option<LoopCounter> {
++        let name = body.counter?;
++        Some(LoopCounter {
++            name,
++            at: control_slot(code, name),
++            shape: shape_of(code.symbols.name(name).as_bytes()),
++            passes: 0,
++        })
++    }
+ }
+ 
+ /// A controlled loop's running control value.
+ enum ControlValue {
+     Small(i64),
+     Wide(Number),
+ }
+ 
+ impl ControlValue {
+     /// The value as a `Number`, borrowed when it already is one.
+@@ -293,170 +370,183 @@ pub(crate) enum HeaderRole {
+     By,
+     /// A controlled loop's `FOR`.
+     For,
+     /// A bare `DO expr`'s repeat count, **echoed under the `FOR` tag**
+     /// (measured: the oracle traces a bare repeat count under `FOR`, the
+     /// same as an explicit `DO ... FOR n`), and validated against 26.2 where
+     /// a `FOR` is 26.3.
+     Count,
+     /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
+     Over,
++    /// `DO WITH ... OVER expr`'s target, echoed under the `WITH` tag.
++    With,
++    /// A `COUNTER` variable's reset to `0`, ahead of every header
++    /// expression (`DoBlock::DoBlock`). Its slot has no expression.
++    Counter,
+     /// `DO name OVER expr FOR expr`'s count, **echoed under the `FOR` tag**
+     /// (measured against the oracle: `do qq over zs for 1` prints
+     /// `>K>   "FOR" => "1"`, on both `trace i` and `trace r` -- the same tag
+     /// a controlled loop's own `FOR` and a bare `DO`'s repeat count carry).
+     OverFor,
+ }
+ 
+ impl HeaderRole {
+     /// The `>K>` tag this value's own echo carries, or `None` for the one
+     /// role the oracle echoes nothing for: `Initial`, a control variable's
+     /// own starting value (its own doc has the measurement).
+     pub(crate) fn keyword(self) -> Option<&'static str> {
+         match self {
+             HeaderRole::Initial => None,
+             HeaderRole::To => Some("TO"),
+             HeaderRole::By => Some("BY"),
+             HeaderRole::For | HeaderRole::Count | HeaderRole::OverFor => Some("FOR"),
+             HeaderRole::Over => Some("OVER"),
++            HeaderRole::With => Some("WITH"),
++            HeaderRole::Counter => Some("COUNTER"),
+         }
+     }
+ 
+     /// How a loud failure names the position this value sits in.
+     pub(crate) fn value_name(self) -> &'static str {
+         match self {
+             HeaderRole::Initial => "a DO header's initial value",
+             HeaderRole::To => "a DO header's TO value",
+             HeaderRole::By => "a DO header's BY value",
+             HeaderRole::For | HeaderRole::OverFor => "a DO header's FOR value",
+             HeaderRole::Count => "a DO header's repeat count",
+             HeaderRole::Over => "a DO header's OVER target",
++            HeaderRole::With => "a DO header's WITH target",
++            HeaderRole::Counter => "a DO header's COUNTER",
+         }
+     }
+ }
+ 
+ /// The header expressions of one `DO`/`LOOP`, in **the order they are
+ /// evaluated**, which is the order they were written in
+ /// (`Controlled::order`, recorded because an expression can have side
+ /// effects).
+ pub(crate) struct HeaderPlan {
+-    roles: [HeaderRole; 4],
++    roles: [HeaderRole; 5],
+     len: usize,
+ }
+ 
+ impl HeaderPlan {
+     fn new() -> HeaderPlan {
+         HeaderPlan {
+-            roles: [HeaderRole::Initial; 4],
++            roles: [HeaderRole::Initial; 5],
+             len: 0,
+         }
+     }
+ 
+     fn push(&mut self, role: HeaderRole) {
+         debug_assert!(
+             self.len < self.roles.len(),
+-            "a DO/LOOP header has more expressions than TO, BY, FOR and one control value"
++            "a DO/LOOP header has more slots than a COUNTER, TO, BY, FOR and one control value"
+         );
+         self.roles[self.len] = role;
+         self.len += 1;
+     }
+ 
+     /// The roles in evaluation order.
+     pub(crate) fn roles(&self) -> &[HeaderRole] {
+         &self.roles[..self.len]
+     }
+ }
+ 
+-/// The header of `body`, or `None` for a `DO`/`LOOP` this crate refuses
+-/// **before evaluating anything**.
+-pub(crate) fn loop_header_plan(body: &Loop) -> Option<HeaderPlan> {
+-    if body.counter.is_some() {
+-        return None;
+-    }
++/// The header of `body`.
++pub(crate) fn loop_header_plan(body: &Loop) -> HeaderPlan {
+     let mut plan = HeaderPlan::new();
++    if body.counter.is_some() {
++        plan.push(HeaderRole::Counter);
++    }
+     match &body.kind {
+         // A block and a `FOREVER` loop each have no header expression at all.
+         LoopKind::Simple | LoopKind::Forever => {}
+         // `count_loop`'s own parser always calls `opt_expr`, which can answer
+         // `None`; nothing in this crate's tests reaches `DO` with truly
+         // nothing after it and no recognised keyword either, because
+         // `create_loop`'s own `at_end()` check catches a bare `DO` first and
+         // builds `LoopKind::Simple` instead.
+         LoopKind::Count(None) => {}
+         LoopKind::Count(Some(_)) => plan.push(HeaderRole::Count),
+         LoopKind::Controlled(ctrl) => {
+             plan.push(HeaderRole::Initial);
+             for entry in &ctrl.order {
+                 plan.push(match entry {
+                     ControlExpr::To => HeaderRole::To,
+                     ControlExpr::By => HeaderRole::By,
+                     ControlExpr::For => HeaderRole::For,
+                 });
+             }
+         }
+-        LoopKind::Over {
+-            target, for_count, ..
+-        } => {
+-            if matches!(target.kind, ExprKind::Stem(_)) {
+-                return None;
+-            }
++        LoopKind::Over { for_count, .. } => {
+             plan.push(HeaderRole::Over);
+             if for_count.is_some() {
+                 plan.push(HeaderRole::OverFor);
+             }
+         }
+-        LoopKind::With { .. } => return None,
++        LoopKind::With { for_count, .. } => {
++            plan.push(HeaderRole::With);
++            if for_count.is_some() {
++                plan.push(HeaderRole::OverFor);
++            }
++        }
+     }
+-    Some(plan)
++    plan
+ }
+ 
+ /// The expression `role` names in `kind`, or `None` when that kind has no
+ /// expression for it.
+ fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
+     match (kind, role) {
+         (LoopKind::Count(expr), HeaderRole::Count) => expr.as_ref(),
+         (LoopKind::Controlled(ctrl), HeaderRole::Initial) => Some(&ctrl.initial),
+         (LoopKind::Controlled(ctrl), HeaderRole::To) => ctrl.to.as_ref(),
+         (LoopKind::Controlled(ctrl), HeaderRole::By) => ctrl.by.as_ref(),
+         (LoopKind::Controlled(ctrl), HeaderRole::For) => ctrl.for_count.as_ref(),
+         (LoopKind::Over { target, .. }, HeaderRole::Over) => Some(target),
+         (LoopKind::Over { for_count, .. }, HeaderRole::OverFor) => for_count.as_ref(),
++        (LoopKind::With { target, .. }, HeaderRole::With) => Some(target),
++        (LoopKind::With { for_count, .. }, HeaderRole::OverFor) => for_count.as_ref(),
+         _ => None,
+     }
+ }
+ 
+ /// The expression of `body`'s header at `slot` -- the compiled stream's own
+ /// addressing, where a slot is a position in [`HeaderPlan::roles`].
+ pub(crate) fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
+-    let plan = loop_header_plan(body)?;
++    let plan = loop_header_plan(body);
+     let role = *plan.roles().get(slot as usize)?;
+     header_expr_for(&body.kind, role)
+ }
+ 
+ /// One `DO`/`LOOP` header's evaluated and validated values.
+ #[derive(Default)]
+ pub(crate) struct LoopHeaderValues {
+     /// A controlled loop's starting value, rounded at the digits in force,
+     /// **in the representation the header's own value was in** -- an integer
+     /// stays one, so the first pass's bound test can be the exact comparison
+     /// the interpreter makes for two integer objects.
+     initial: Option<ControlValue>,
+     to: Option<Number>,
+     by: Option<Number>,
+     /// A `FOR`'s own budget, from either a controlled loop's `FOR` or a
+     /// `DO OVER`'s.
+     for_remaining: Option<u64>,
+     /// A `DO OVER`'s target value.
+     over: Option<ObjRef>,
+-    /// The register `over` was evaluated into, `None` off the compiled engine
+-    /// and for every loop that is not a `DO OVER`. [`Interp::flat_loop_start`]
+-    /// writes the snapshot back into it; see [`LoopState::OverItems`].
++    /// The supplier a `DO WITH`'s target answered `SUPPLIER` with.
++    supplier: Option<ObjRef>,
++    /// The register `over` or the `DO WITH` target was evaluated into, `None`
++    /// off the compiled engine and for every other loop.
++    /// [`Interp::flat_loop_start`] writes the snapshot or the supplier back
++    /// into it, which roots it while the loop runs.
+     pub(crate) over_register: Option<u16>,
+     /// A bare `DO expr`'s repeat count.
+     count: Option<u64>,
+ }
+ 
+ impl Interp {
+     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
+     /// indent, for the roles the oracle echoes one for.
+     pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
+         let Some(keyword) = role.keyword() else {
+@@ -471,23 +561,43 @@ impl Interp {
+             return;
+         }
+         let text = self.string_value_text(value);
+         self.trace_keyword(
+             self.activity.clause_state.current_value_indent,
+             keyword,
+             &text,
+         );
+     }
+ 
++    /// One `Op::LoopHeaderValue`: a `COUNTER`'s reset, or `value` validated
++    /// and filed in `values` with the register `src` it came from where that
++    /// register roots the running loop's snapshot or supplier.
++    pub(crate) fn file_header_value(
++        &mut self,
++        code: &Code<'_>,
++        instruction: &Instruction,
++        role: HeaderRole,
++        src: u16,
++        value: ObjRef,
++        values: &mut LoopHeaderValues,
++    ) -> Result<(), Failure> {
++        match role {
++            HeaderRole::Counter => return self.reset_loop_counter(code, instruction, value),
++            HeaderRole::Over | HeaderRole::With => values.over_register = Some(src),
++            _ => {}
++        }
++        self.accept_header_value(role, value, values)
++    }
++
+     /// Validates one header value against whatever its role requires and files
+     /// it in `values`.
+-    pub(crate) fn accept_header_value(
++    fn accept_header_value(
+         &mut self,
+         role: HeaderRole,
+         value: ObjRef,
+         values: &mut LoopHeaderValues,
+     ) -> Result<(), Failure> {
+         match role {
+             // **The rounded value and the representation it arrived in.** The
+             // rounding is the oracle's, and for an integer inside `DIGITS` it
+             // is a no-op, so the two arms carry the same worth and differ only
+             // in what [`ControlValue::small`] may then answer.
+@@ -547,20 +657,92 @@ impl Interp {
+             // target to `requestArray`. Measured, `do e over .array` is
+             // 98.913 at rc 158 and `do e over .environment` iterates the
+             // directory's own entries, neither of which this crate answers.
+             // An array and a string both do -- see [`Interp::over_snapshot`].
+             HeaderRole::Over => {
+                 if let Some(kind) = self.over_target_gap(value) {
+                     return Err(Loud::object_position(role.value_name(), kind).into());
+                 }
+                 values.over = Some(value);
+             }
++            HeaderRole::With => values.supplier = Some(self.with_supplier(value)?),
++            // [`Interp::file_header_value`] answers this role itself.
++            HeaderRole::Counter => {}
++        }
++        Ok(())
++    }
++
++    /// `WithLoop::setup`: the supplier `value` answers `SUPPLIER` with, 98.994
++    /// when that is not a `Supplier`.
++    fn with_supplier(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
++        let caller = self.caller();
++        let answered = pinned!(
++            self,
++            crate::pinning::PinKind::LoopHeader,
++            self.send_message(value, b"SUPPLIER", None, &[], caller)
++        )?;
++        if let Some(supplier) = answered {
++            self.roots.activity_mut().push_temp(supplier);
++            let class = self.class_of_value(supplier);
++            let wanted = self.classes().lookup("Supplier");
++            if let (Some(class), Some(wanted)) = (class, wanted)
++                && self.classes().is_a(class, wanted)
++            {
++                return Ok(supplier);
++            }
++        }
++        let found = self.string_value_text(value);
++        Err(Raised::syntax(98, 994, vec![found]).into())
++    }
++
++    /// A `COUNTER`'s reset to `value` and its `>K>` line, at the `DO`/`LOOP`
++    /// clause's own indent, before any header expression runs.
++    fn reset_loop_counter(
++        &mut self,
++        code: &Code<'_>,
++        instruction: &Instruction,
++        value: ObjRef,
++    ) -> Result<(), Failure> {
++        let (InstructionKind::Do(body) | InstructionKind::Loop(body)) = &instruction.kind else {
++            return Err(Loud::loop_op_off_its_node().into());
++        };
++        let Some(counter) = LoopCounter::of(code, body) else {
++            return Err(Loud::loop_op_off_its_node().into());
++        };
++        let indent = self.activity.clause_state.current_value_indent;
++        self.bind_control(code, counter.name, indent, value, counter.at, counter.shape)?;
++        self.echo_header_value(HeaderRole::Counter, value);
++        Ok(())
++    }
++
++    /// One pass's `COUNTER` assignment and its `>K>` line, at the loop body's
++    /// indent (`DoBlock::setCounter`).
++    fn count_pass(
++        &mut self,
++        code: &Code<'_>,
++        counter: &mut LoopCounter,
++        loop_indent: usize,
++    ) -> Result<(), Failure> {
++        counter.passes += 1;
++        let value = self.counted(usize::try_from(counter.passes).unwrap_or(usize::MAX));
++        self.roots.activity_mut().push_temp(value);
++        self.bind_control(
++            code,
++            counter.name,
++            loop_indent,
++            value,
++            counter.at,
++            counter.shape,
++        )?;
++        if self.trace_mode().results {
++            let text = self.string_value_text(value);
++            self.trace_keyword(loop_indent, "COUNTER", &text);
+         }
+         Ok(())
+     }
+ 
+     /// `OverLoop::setup`'s conversion
+     /// (`instructions/DoBlockComponents.cpp:233`): the array whose items a
+     /// `DO OVER` binds in turn.
+     fn over_target_array(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+         if self.array_slots_of(value).is_some() {
+             return Ok(value);
+@@ -752,30 +934,20 @@ impl Interp {
+     pub(crate) fn run_loop_with_header(
+         &mut self,
+         code: &Code<'_>,
+         index: usize,
+         instruction: &Instruction,
+         body: &Loop,
+         source: Option<&ProgramSource>,
+         engine: BodyEngine<'_>,
+         values: LoopHeaderValues,
+     ) -> Result<Flow, Failure> {
+-        // **The refusal, here rather than at the driver's own entry.**
+-        // `loop_header_plan` answers `None` for
+-        // exactly the three forms this crate does not run, and every arm below
+-        // relies on that answer: `LoopKind::With` has no `LoopState`, and a
+-        // `COUNTER` or a stem `OVER` reaches an `expect` on a value nothing
+-        // evaluated. Measured, before this check existed: all three panicked on
+-        // the compiled stream, and no test in the workspace was red.
+-        if loop_header_plan(body).is_none() {
+-            return Err(Loud::instruction(&instruction.kind).into());
+-        }
+         let body_start = index + 1;
+         let end_index = body
+             .end
+             .expect("an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set");
+         let resume = end_index + 1;
+         let label = body.label;
+ 
+         let state = match &body.kind {
+             // A block, not a loop: exactly one pass, and `WHILE`/`UNTIL`
+             // can never be present (`create_loop`'s own parser only reaches
+@@ -912,37 +1084,60 @@ impl Interp {
+                 )?;
+                 LoopState::OverItems {
+                     control: *control,
+                     at: control_slot(code, *control),
+                     snapshot,
+                     items,
+                     next: 0,
+                     remaining: values.for_remaining,
+                 }
+             }
+-            LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
++            LoopKind::With {
++                index: with_index,
++                item,
++                ..
++            } => self.with_state(*with_index, *item, &values),
+         };
+         self.run_repeating(
+             code,
+             index,
+             instruction,
+             body_start,
+             end_index,
+             resume,
+             label,
+             body.conditional.as_ref(),
+             source,
+             state,
++            LoopCounter::of(code, body),
+             engine,
+         )
+     }
+ 
++    /// A `DO WITH`'s state, from the supplier its header filed.
++    fn with_state(
++        &self,
++        index: Option<SymbolId>,
++        item: Option<SymbolId>,
++        values: &LoopHeaderValues,
++    ) -> LoopState {
++        LoopState::With(Box::new(WithState {
++            index,
++            item,
++            supplier: values
++                .supplier
++                .expect("a DO WITH's plan always names its target"),
++            first: true,
++            remaining: values.for_remaining,
++        }))
++    }
++
+     /// Leaves `current_value_indent` at the indent a **block instruction's**
+     /// own clause **boundary** runs at: one level in when that instruction's
+     /// block is still open once the clause has finished, the clause's own
+     /// indent when it is not.
+     /// ```text
+     /// do zi = 1 to raiser()      raiser returns 1 -> 10 *-*     h:
+     /// do zi = 1 to raiser()      raiser returns 0 -> 10 *-*   h:
+     /// do while raiser() < 1      test false       -> 10 *-*   h:
+     /// do while raiser() < 1      test true        -> 12 *-*     h:
+     /// do until raiser() > 0      test true        -> 10 *-*   h:
+@@ -980,20 +1175,21 @@ impl Interp {
+         code: &Code<'_>,
+         do_index: usize,
+         do_instruction: &Instruction,
+         body_start: usize,
+         end_index: usize,
+         resume: usize,
+         label: Option<SymbolId>,
+         conditional: Option<&LoopConditional>,
+         source: Option<&ProgramSource>,
+         mut state: LoopState,
++        mut counter: Option<LoopCounter>,
+         engine: BodyEngine<'_>,
+     ) -> Result<Flow, Failure> {
+         // The loop's own two spaces of indent, added once here rather than
+         // per-check: `static_indent(&code.body.instructions, do_index)` is
+         // what a control-setup failure at `do_index` itself already
+         // reports (measured: `do i = 1 to 3 for 1/0` is unindented at top
+         // level), and `WHILE`/`UNTIL` both report two spaces *more* than
+         // that (measured: `do while 1/0` at top level is indented two).
+         // Captured from `current_value_indent` once, here, rather than
+         // recomputed: `Op::Clause`'s region already set it to exactly this
+@@ -1096,20 +1292,23 @@ impl Interp {
+                             raised_while_not_logical,
+                         ) {
+                             Ok(true) => {}
+                             Ok(false) => break 'header HeaderOutcome::Stop,
+                             Err(failure) => {
+                                 it.record_failure_at(source, do_instruction, loop_indent);
+                                 return Err(failure);
+                             }
+                         }
+                     }
++                    if let Some(counter) = counter.as_mut() {
++                        it.count_pass(code, counter, loop_indent)?;
++                    }
+                     HeaderOutcome::Continue
+                 };
+                 it.settle_block_indent(outcome.entered(), do_indent);
+                 Ok(outcome)
+             })?;
+             match header {
+                 ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
+                 ClauseOutcome::Ran(Err(failure)) => return Err(failure),
+                 ClauseOutcome::Ran(Ok(HeaderOutcome::Stop)) => return Ok(Flow::Goto(resume)),
+                 ClauseOutcome::Ran(Ok(HeaderOutcome::Continue)) => {}
+@@ -1319,27 +1518,20 @@ impl Interp {
+         source: Option<&ProgramSource>,
+         values: LoopHeaderValues,
+         op_body: u32,
+         registers: RegFrame<'_>,
+     ) -> Result<FlatStart, Failure> {
+         // A labelled block is left by a `LEAVE` naming it, which needs a
+         // frame to absorb it, so it keeps the nested path.
+         if matches!(body.kind, LoopKind::Simple) && body.label.is_none() {
+             return self.flat_block_start(code, index, instruction, source);
+         }
+-        // **`loop_header_plan` is the whole refusal**, exactly as it is for
+-        // `run_loop_with_header`: it answers `None` for a `COUNTER`, a stem
+-        // `OVER` and `DO WITH`, which this crate does not run on either
+-        // engine, and the nested path is where that becomes the loud error.
+-        if loop_header_plan(body).is_none() {
+-            return Ok(FlatStart::Fallback(values));
+-        }
+         let over_register = values.over_register;
+         let state = match &body.kind {
+             LoopKind::Forever => LoopState::Forever,
+             LoopKind::Count(_) => LoopState::Count {
+                 remaining: values.count.unwrap_or(1),
+             },
+             LoopKind::Controlled(ctrl) => LoopState::Controlled {
+                 control: ctrl.control,
+                 at: control_slot(code, ctrl.control),
+                 current: values
+@@ -1365,51 +1557,54 @@ impl Interp {
+                 )?;
+                 LoopState::OverItems {
+                     control: *control,
+                     at: control_slot(code, *control),
+                     snapshot,
+                     items,
+                     next: 0,
+                     remaining: values.for_remaining,
+                 }
+             }
+-            // A labelled block, and `DO WITH`, which `loop_header_plan`
+-            // refuses above.
+-            LoopKind::Simple | LoopKind::With { .. } => {
+-                return Ok(FlatStart::Fallback(values));
+-            }
++            LoopKind::With {
++                index: with_index,
++                item,
++                ..
++            } => self.with_state(*with_index, *item, &values),
++            // A labelled block.
++            LoopKind::Simple => return Ok(FlatStart::Fallback(values)),
+         };
+         // **The snapshot's only root once this answers `Flat`**: the driver
+         // then closes this clause and pops the temps frame `over_snapshot`
+         // pushed into, while the loop runs on. A loop header's registers are
+         // allocated in the enclosing scope and released past the whole loop
+         // (`ir/compile.rs`), and nothing reads the target again, so its
+         // register holds the snapshot instead.
+-        if let LoopState::OverItems { snapshot, .. } = &state
+-            && let Some(register) = over_register
+-        {
+-            registers.set(register, *snapshot);
++        if let Some(register) = over_register {
++            match &state {
++                LoopState::OverItems { snapshot, .. } => registers.set(register, *snapshot),
++                LoopState::With(with) => registers.set(register, with.supplier),
++                _ => {}
++            }
+         }
+         let end_index = body
+             .end
+             .expect("an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set");
+         let do_indent = self.activity.clause_state.current_value_indent;
+         let end_line = self
+             .clause_line_at(code, end_index, &code.body.instructions[end_index], source)
+             .unwrap_or(0);
+         let do_line = self
+             .clause_line_at(code, index, instruction, source)
+             .unwrap_or_else(|| self.activity.clause_state.line());
+         // **Built where it will live, not on the stack and then moved
+-        // there.** A `FlatLoop` is 328 bytes, 200 of them the `LoopState` a
+-        // controlled loop's three `Number`s live in, and the version that
+-        // built one here and assigned it into the box afterwards wrote those
++        // there.** A `FlatLoop` holds the `LoopState` a controlled loop's
++        // three `Number`s live in, and the version that built one here and assigned it into the box afterwards wrote those
+         // bytes twice per loop entry -- which for a nested loop is twice per
+         // iteration of the loop above it. Measured on `do n = 1 to N ; do j =
+         // 1 to 1 ; end ; end`: -5.871% retired instructions, with
+         // `__memmove_avx_unaligned_erms` falling from 8.41% of the program's
+         // cycles to 2.52%.
+         let counted = self.count_clause_against_deadline(false)?;
+         let mut boxed = match self.activity.flat_spares.pop() {
+             Some(spare) => spare,
+             None => Box::new(FlatLoop::vacant()),
+         };
+@@ -1419,21 +1614,22 @@ impl Interp {
+             end_index,
+             do_index: index,
+             resume: end_index + 1,
+             label: body.label,
+             do_indent,
+             loop_indent: do_indent + 2,
+             end_line,
+             do_line,
+             header_clause: HeaderClause::Do,
+             iterate_site: None,
+-            conditional: body.conditional.as_ref().map(|cond| cond.until),
++            test: PassTest::of(body),
++            counter: LoopCounter::of(code, body),
+             state,
+         };
+         let header = match self.flat_loop_header(code, source, &mut boxed, counted) {
+             Ok(header) => header,
+             Err(failure) => {
+                 self.activity.flat_spares.push(boxed);
+                 return Err(failure);
+             }
+         };
+         match header {
+@@ -1561,21 +1757,21 @@ impl Interp {
+                     self.trace_clause(line, flat.do_indent, &text);
+                 }
+             }
+         }
+         // **`UNTIL`'s own test, and its own re-echo of the `DO`/`LOOP`
+         // clause.** `run_repeating`'s own arm has the measurement: the oracle
+         // re-enters the loop instruction to make this decision as much as to
+         // test `WHILE` or advance a control variable, so the echo here is
+         // unconditional rather than sharing the top-of-loop one below -- which
+         // is why that one is not emitted at all for an `UNTIL` loop.
+-        if flat.conditional == Some(true) {
++        if flat.test.until() {
+             if echoing
+                 && let Some((line, text)) =
+                     self.clause_site(source, &code.body.instructions[flat.do_index])
+             {
+                 self.trace_clause(line, flat.do_indent, &text);
+             }
+             let counted = counted(self)?;
+             if let Some(flow) = self.flat_loop_until(code, source, flat, counted)? {
+                 return Ok(FlatStep::Done(flow));
+             }
+@@ -1700,110 +1896,122 @@ impl Interp {
+     /// The header re-test, in its own clause: `Some(flow)` is the
+     /// loop finishing, `None` is one more pass.
+     #[inline(always)]
+     fn flat_loop_header(
+         &mut self,
+         code: &Code<'_>,
+         source: Option<&ProgramSource>,
+         flat: &mut FlatLoop,
+         counted: DeadlineCounted,
+     ) -> Result<Option<Flow>, Failure> {
+-        if flat.conditional == Some(false) {
+-            return self.flat_loop_header_while(code, source, flat, counted);
++        if flat.test.general() {
++            return self.flat_loop_header_general(code, source, flat, counted);
+         }
+         let header_line = flat.header_line();
+         let do_indent = flat.do_indent;
+         let loop_indent = flat.loop_indent;
+         let resume = flat.resume;
+         let end_index = flat.end_index;
+         let blame = flat.header_clause;
+         let site = &flat.iterate_site;
+         let state = &mut flat.state;
+-        let header = self.in_counted_clause(code, header_line, counted, |it| {
+-            let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
+-                Ok(advanced) => advanced,
+-                Err(failure) => {
+-                    it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+-                    return Err(failure);
+-                }
+-            };
+-            it.settle_block_indent(advanced, do_indent);
+-            Ok(advanced)
+-        });
++        // `in_counted_clause` spelled out rather than given a closure: the
++        // closure's inlining into the driver is a codegen decision that
++        // unrelated changes to the flat path flip (+18.6% on `emptyloop`).
++        let entry = self.enter_clause(header_line, counted);
++        let ran = match self.loop_advance(code, state, do_indent, loop_indent) {
++            Ok(advanced) => {
++                self.settle_block_indent(advanced, do_indent);
++                Ok(advanced)
++            }
++            Err(failure) => {
++                self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
++                Err(failure)
++            }
++        };
++        let header = self.leave_clause(entry, code, ran);
+         let header = match header {
+             Ok(header) => header,
+             // The boundary's own failure, a requested `HALT`, is blamed as the
+             // header's is.
+             Err(failure) => {
+                 self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                 return Err(failure);
+             }
+         };
+         flat_header_outcome(header, resume)
+     }
+ 
+-    /// [`Interp::flat_loop_header`] for a loop that carries a
+-    /// `WHILE`: the same advance, then the condition, both inside the one
+-    /// clause the oracle re-enters to make this decision.
++    /// [`Interp::flat_loop_header`] for a loop that carries a `WHILE` or a
++    /// `COUNTER`: the same advance, then the condition, then the counter, all
++    /// inside the one clause the oracle re-enters to make this decision.
+     #[inline(never)]
+-    fn flat_loop_header_while(
++    fn flat_loop_header_general(
+         &mut self,
+         code: &Code<'_>,
+         source: Option<&ProgramSource>,
+         flat: &mut FlatLoop,
+         counted: DeadlineCounted,
+     ) -> Result<Option<Flow>, Failure> {
+-        let Some(cond) = loop_conditional_of(code, flat.do_index) else {
+-            return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
+-        };
++        let cond = loop_conditional_of(code, flat.do_index).filter(|cond| !cond.until);
+         let header_line = flat.header_line();
+         let do_indent = flat.do_indent;
+         let loop_indent = flat.loop_indent;
+         let resume = flat.resume;
+         let (do_index, end_index) = (flat.do_index, flat.end_index);
+         let blame = flat.header_clause;
+         let site = &flat.iterate_site;
+         let state = &mut flat.state;
++        let counter = &mut flat.counter;
+         let header = self.in_counted_clause(code, header_line, counted, |it| {
+             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
+                 Ok(advanced) => advanced,
+                 Err(failure) => {
+                     it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                     return Err(failure);
+                 }
+             };
+             if !advanced {
+                 it.settle_block_indent(false, do_indent);
+                 return Ok(false);
+             }
+-            // Overrides what stepping the `DO`/`LOOP` instruction set:
+-            // `WHILE`'s condition is evaluated here, inside that same step,
+-            // never through a `Op::Clause`'s region of its own.
+-            it.activity.clause_state.current_value_indent = loop_indent;
+-            let held = match pinned!(
+-                it,
+-                crate::pinning::PinKind::LoopHeader,
+-                it.eval_condition(
+-                    code,
+-                    &cond.condition,
+-                    ConditionTrace::Keyword(loop_indent, "WHILE"),
+-                    raised_while_not_logical,
+-                )
+-            ) {
+-                Ok(held) => held,
+-                Err(failure) => {
+-                    it.blame_while_failure(code, source, do_index, loop_indent);
+-                    return Err(failure);
++            if let Some(cond) = cond {
++                // Overrides what stepping the `DO`/`LOOP` instruction set:
++                // `WHILE`'s condition is evaluated here, inside that same step,
++                // never through a `Op::Clause`'s region of its own.
++                it.activity.clause_state.current_value_indent = loop_indent;
++                let held = match pinned!(
++                    it,
++                    crate::pinning::PinKind::LoopHeader,
++                    it.eval_condition(
++                        code,
++                        &cond.condition,
++                        ConditionTrace::Keyword(loop_indent, "WHILE"),
++                        raised_while_not_logical,
++                    )
++                ) {
++                    Ok(held) => held,
++                    Err(failure) => {
++                        it.blame_while_failure(code, source, do_index, loop_indent);
++                        return Err(failure);
++                    }
++                };
++                if !held {
++                    it.settle_block_indent(false, do_indent);
++                    return Ok(false);
+                 }
+-            };
+-            it.settle_block_indent(held, do_indent);
+-            Ok(held)
++            }
++            if let Some(counter) = counter.as_mut() {
++                it.count_pass(code, counter, loop_indent)?;
++            }
++            it.settle_block_indent(true, do_indent);
++            Ok(true)
+         });
+         let header = match header {
+             Ok(header) => header,
+             // The boundary's own failure, a requested `HALT`, is blamed as the
+             // header's is.
+             Err(failure) => {
+                 self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                 return Err(failure);
+             }
+         };
+@@ -1825,20 +2033,21 @@ impl Interp {
+     ) -> Result<bool, Failure> {
+         match state {
+             LoopState::Forever => Ok(true),
+             LoopState::Count { remaining } => {
+                 if *remaining == 0 {
+                     return Ok(false);
+                 }
+                 *remaining -= 1;
+                 Ok(true)
+             }
++            LoopState::With(with) => self.with_advance(code, with, loop_indent),
+             LoopState::OverItems {
+                 control,
+                 at,
+                 snapshot: _,
+                 items,
+                 next,
+                 remaining,
+             } => {
+                 // **The item is bound before `FOR`'s budget is consulted**,
+                 // which is `RexxInstructionDoOverFor::iterate`'s own
+@@ -2265,20 +2474,76 @@ impl Interp {
+     ) -> Result<bool, Failure> {
+         let current = current.number();
+         let within = if by.signum() < 0 {
+             !numeric_less(&current, to, digits, fuzz).map_err(Raised::from)?
+         } else {
+             !numeric_less(to, &current, digits, fuzz).map_err(Raised::from)?
+         };
+         Ok(within)
+     }
+ 
++    /// `WithLoop::checkIteration` and then the `FOR` budget: steps the
++    /// supplier past the first pass, binds `INDEX` and then `ITEM`, and
++    /// consults `FOR` only after both are bound.
++    #[inline(never)]
++    fn with_advance(
++        &mut self,
++        code: &Code<'_>,
++        with: &mut WithState,
++        loop_indent: usize,
++    ) -> Result<bool, Failure> {
++        let supplier = with.supplier;
++        if !with.first {
++            self.supplier_send(supplier, b"NEXT")?;
++        }
++        with.first = false;
++        let available = self.supplier_send(supplier, b"AVAILABLE")?;
++        let text = self.string_value_text(available);
++        if !logical_value(&text)
++            .ok_or_else(|| Failure::from(Raised::syntax(34, 906, vec![text])))?
++        {
++            return Ok(false);
++        }
++        for (name, message) in [(with.index, &b"INDEX"[..]), (with.item, &b"ITEM"[..])] {
++            if let Some(name) = name {
++                let value = self.supplier_send(supplier, message)?;
++                self.roots.activity_mut().push_temp(value);
++                self.bind_control(
++                    code,
++                    name,
++                    loop_indent,
++                    value,
++                    control_slot(code, name),
++                    shape_of(code.symbols.name(name).as_bytes()),
++                )?;
++            }
++        }
++        if let Some(remaining) = with.remaining.as_mut() {
++            if *remaining == 0 {
++                return Ok(false);
++            }
++            *remaining -= 1;
++        }
++        Ok(true)
++    }
++
++    /// `message` sent to a `DO WITH`'s supplier, `.nil` for no result.
++    fn supplier_send(&mut self, supplier: ObjRef, message: &[u8]) -> Result<ObjRef, Failure> {
++        let caller = self.caller();
++        let answered = pinned!(
++            self,
++            crate::pinning::PinKind::LoopHeader,
++            self.send_message(supplier, message, None, &[], caller)
++        )?;
++        Ok(answered.unwrap_or(ObjRef::NIL))
++    }
++
+     /// Writes `value` into `control`'s own variable, through whichever of
+     /// the three shapes (`shape_of`) its own spelling is.
+     fn bind_control(
+         &mut self,
+         code: &Code<'_>,
+         control: SymbolId,
+         indent: usize,
+         value: ObjRef,
+         at: Option<usize>,
+         shape: NameShape,
+diff --git a/rust/crates/rexx-exec/src/run/tests/loops.rs b/rust/crates/rexx-exec/src/run/tests/loops.rs
+index 1c54c6f83..6601baa8a 100644
+--- a/rust/crates/rexx-exec/src/run/tests/loops.rs
++++ b/rust/crates/rexx-exec/src/run/tests/loops.rs
+@@ -187,53 +187,34 @@ fn do_until_re_echoes_its_clause_exactly_once_per_pass_not_twice_or_zero() {
+         interp.trace,
+         b"     1 *-* n = 0\n       >>>   \"0\"\n     2 *-* do until n = 2\n     \
+           3 *-*   n = n + 1\n       >>>     \"1\"\n     4 *-* end\n     2 *-* do until n = 2\n       \
+           >K>     \"UNTIL\" => \"0\"\n     3 *-*   n = n + 1\n       >>>     \"2\"\n     4 *-* end\n     \
+           2 *-* do until n = 2\n       >K>     \"UNTIL\" => \"1\"\n     5 *-* say n\n       >>>   \"2\"\n"
+             .to_vec()
+     );
+ }
+ 
+ #[test]
+-fn do_with_takes_the_loud_path() {
++fn do_with_binds_index_and_item_from_the_supplier() {
+     let mut interp = Interp::new();
+-    let failure = run_source(&mut interp, b"do with index i over 'x'\nsay i\nend").unwrap_err();
+-    let Failure::Loud(loud) = failure else {
+-        panic!("expected Loud, got {failure:?}");
+-    };
+-    // Review finding I1: `instruction.kind` here is `InstructionKind::Do`,
+-    // which this crate implements -- `lib.rs`'s `owned_message` must not
+-    // attribute this to a phase (there is none to blame; `DO WITH` is
+-    // Phase 5's *reason*, but the message names the construct, not the
+-    // reason). Mutation-kill for deleting the `None` carve-out in
+-    // `owned_message`: this assertion is what turns that deletion into a
+-    // failure here.
+-    assert_eq!(
+-        loud.message, "DO is not implemented",
+-        "a construct 4a does implement must not be attributed to a phase; \
+-         see lib.rs's owned_message"
++    let out = say_output(
++        &mut interp,
++        b"do with index i item v over .array~of('a', 'b')\nsay i v\nend",
+     );
++    assert_eq!(out, b"1 a\n2 b\n".to_vec());
+ }
+ 
+ #[test]
+-fn do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on() {
++fn do_counter_counts_the_passes_entered_on_a_controlled_loop() {
+     let mut interp = Interp::new();
+-    let failure = run_source(&mut interp, b"do counter c i = 1 to 3\nnop\nend").unwrap_err();
+-    let Failure::Loud(loud) = failure else {
+-        panic!("expected Loud, got {failure:?}");
+-    };
+-    // Same mutation-kill as `do_with_takes_the_loud_path`, above.
+-    assert_eq!(
+-        loud.message, "DO is not implemented",
+-        "a construct 4a does implement must not be attributed to a phase; \
+-         see lib.rs's owned_message"
+-    );
++    let out = say_output(&mut interp, b"do counter c i = 1 to 3\nnop\nend\nsay c i");
++    assert_eq!(out, b"3 4\n".to_vec());
+ }
+ 
+ // ---- DO i = TO/BY/FOR (controlled), and DO OVER ----
+ 
+ #[test]
+ fn a_controlled_loop_runs_to_then_by_then_stops() {
+     let mut interp = Interp::new();
+     assert_eq!(
+         say_output(&mut interp, b"do i = 1 to 3\nsay i\nend"),
+         b"1\n2\n3\n".to_vec()
+@@ -550,64 +531,30 @@ fn a_do_over_for_echoes_the_for_keyword_the_oracle_prints() {
+             "     2 *-* zs = 'abc'\n",
+             "       >>>   \"abc\"\n",
+             "     3 *-* do qq over zs for 1\n",
+             "       >K>   \"OVER\" => \"abc\"\n",
+             "       >K>   \"FOR\" => \"1\"\n",
+             "     4 *-*   leave\n",
+         )
+     );
+ }
+ 
+-/// Deviation 1 (`phase-4-exclusions.txt`): `DO OVER` on a stem does not
+-/// reproduce the oracle's traversal order, and takes the loud path
+-/// instead -- detected from `target`'s own syntax (a bare `NAME.`
+-/// parses as `ExprKind::Stem`), never by evaluating it.
++/// A stem target binds its tails, bare or parenthesised.
+ #[test]
+-fn do_over_a_stem_target_takes_the_loud_path() {
+-    let mut interp = Interp::new();
+-    let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over a.\nsay v\nend").unwrap_err();
+-    let Failure::Loud(loud) = failure else {
+-        panic!("expected Loud, got {failure:?}");
+-    };
+-    // Same mutation-kill as `do_with_takes_the_loud_path` (above, in this
+-    // module): `DO`/`LOOP` is implemented regardless of which deviation
+-    // routed this particular clause to the loud path.
+-    assert_eq!(
+-        loud.message, "DO is not implemented",
+-        "a construct 4a does implement must not be attributed to a phase; \
+-         see lib.rs's owned_message"
+-    );
+-}
+-
+-/// A stem target wrapped in parens is **also** caught -- corrected after
+-/// review, which found this task's own comment on the `Over` arm
+-/// claimed the opposite (`over (a.)` "is not detected"). It is detected:
+-/// a single parenthesised sub-expression collapses to that
+-/// sub-expression's own `ExprKind` rather than wrapping it in
+-/// `ExprKind::List`, so `(a.)` is already `ExprKind::Stem` by the time
+-/// `loop_header_plan`'s own `matches!` check sees it, with nothing extra
+-/// needed. The safe direction either way (loud, never a silent
+-/// divergence), but the comment was wrong about which one it is.
+-#[test]
+-fn do_over_a_parenthesised_stem_target_is_also_caught() {
+-    let mut interp = Interp::new();
+-    let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over (a.)\nsay v\nend").unwrap_err();
+-    let Failure::Loud(loud) = failure else {
+-        panic!("expected Loud, got {failure:?}");
+-    };
+-    // Same mutation-kill as `do_with_takes_the_loud_path` (above, in this
+-    // module).
+-    assert_eq!(
+-        loud.message, "DO is not implemented",
+-        "a construct 4a does implement must not be attributed to a phase; \
+-         see lib.rs's owned_message"
+-    );
++fn do_over_a_stem_target_binds_its_tails() {
++    for source in [
++        &b"a.1 = 'x'\ndo v over a.\nsay v\nend"[..],
++        b"a.1 = 'x'\ndo v over (a.)\nsay v\nend",
++    ] {
++        let mut interp = Interp::new();
++        assert_eq!(say_output(&mut interp, source), b"1\n".to_vec());
++    }
+ }
+ 
+ /// F1 (branch review, Important): `initial`/`to`/`by` are rounded under
+ /// the *entry* `NUMERIC DIGITS`, once, not stored as their exact parse
+ /// -- `round_via_unary_plus`'s own doc comment has the oracle citation
+ /// and both transcripts this mirrors exactly. Masked while `DIGITS`
+ /// stays constant (every later use re-rounds to the same width, so the
+ /// exact and the rounded value render identically); this widens
+ /// `DIGITS` *inside* the loop body, after entry, so only a value
+ /// rounded at entry -- not the exact parse -- can still show `1.23` on
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests.rs b/rust/crates/rexx-exec/src/scheduler/tests.rs
+index 9f19767a1..4f3d64e78 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests.rs
+@@ -1364,49 +1364,52 @@ fn an_uninit_a_collection_readied_runs_when_its_activity_ends() {
+     assert_eq!(stdout(&outcome), "activity end\nuninit\nmain after\n");
+ }
+ 
+ /// Every refusal the `UNINIT`s at an activity's end meet is reported, in
+ /// order, not only the first.
+ #[test]
+ fn every_refusal_of_the_uninits_at_an_activitys_end_is_reported() {
+     let outcome = crate::run_program_collect_every_alloc(
+         "/tmp/scheduler.rex",
+         b"m = .w~new~start('run')\nm~wait\nsay 'main end'\n\
+-          ::class k\n::method uninit\n  say 'uninit'\n  do counter c over .array~of(1)\n  end\n\
++          ::class k\n::method uninit\n  say 'uninit'\n  do label b\n    reply\n  end\n\
+           ::class w\n::method run\n  a = .k~new\n  b = .k~new\n  drop a b\n  \
+           s = 'a' || random()\n  say 'activity end'\n"
+             .to_vec(),
+         Invocation::none().with_deadline(RUN_DEADLINE),
+     );
+-    let refusal = "rexx-exec: DO is not implemented\n";
++    let refusal =
++        "rexx-exec: a REPLY its method body runs on a nested Rust frame is not implemented\n";
+     assert_eq!(
+         stderr(&outcome).matches(refusal).count(),
+         2,
+         "{}",
+         stderr(&outcome)
+     );
+     assert_eq!(stdout(&outcome), "activity end\nuninit\nuninit\n");
+ }
+ 
+ /// A refusal in main ends the run at once, without waiting for an activity
+ /// that is still sleeping.
+ #[test]
+ fn a_refusal_in_main_does_not_wait_for_the_other_activities() {
+     let began = std::time::Instant::now();
+-    let outcome = run(
+-        ".w~new~start('nap')\nsay 'main'\ndo counter c over .array~of(1)\nend\n\
+-                       ::class w\n::method nap\n  call SysSleep 99999\n",
+-    );
++    let outcome = run(".w~new~start('nap')\nsay 'main'\nsay .k~new~m\n\
++                       ::class w\n::method nap\n  call SysSleep 99999\n\
++                       ::class k\n::method m\n  do label b\n    reply 1\n  end\n");
+     assert!(began.elapsed() < std::time::Duration::from_secs(10));
+     assert_eq!(outcome.exit_code, 120);
+     assert_eq!(stdout(&outcome), "main\n");
+-    assert_eq!(stderr(&outcome), "rexx-exec: DO is not implemented\n");
++    assert_eq!(
++        stderr(&outcome),
++        "rexx-exec: a REPLY its method body runs on a nested Rust frame is not implemented\n"
++    );
+ }
+ 
+ /// A started activity blocked in a `GUARD WHEN` nothing can make true keeps
+ /// the program's end waiting, as the oracle's does, until the run's deadline;
+ /// main alone blocked there is the wait nothing left can end (ruling P27).
+ #[test]
+ fn a_blocked_guard_when_keeps_the_programs_end_waiting() {
+     let began = std::time::Instant::now();
+     let outcome = run_with(
+         "m = .k~new~start('m')\nsay 'main done'\n\
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index 97f454a6b..5cfdd4057 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -104,37 +104,44 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+     "lang/directive_attribute_external_missing.rex",
+     "lang/directive_attribute_external_set_default.rex",
+     "lang/directive_constant_expression_needs_class.rex",
+     "lang/directive_method_attribute_external_missing.rex",
+     "lang/directive_method_external_before_duplicate.rex",
+     "lang/directive_method_external_duplicate_wins.rex",
+     "lang/directive_method_external_missing.rex",
+     "lang/directive_method_external_source_order.rex",
+     "lang/directive_options_digits_below_fuzz.rex",
+     "lang/directive_options_trace.rex",
++    "lang/do_counter_ctrl.rex",
++    "lang/do_counter_forever.rex",
++    "lang/do_counter_rep.rex",
++    "lang/do_counter_until.rex",
++    "lang/do_counter_while.rex",
+     "lang/do_loop_forms.rex",
+     "lang/exit_no_value.rex",
+     "lang/exit_with_value.rex",
+     "lang/if_else_chain.rex",
+     "lang/iterate_from_select.rex",
+     "lang/library_attribute_entry_missing.rex",
+     "lang/library_method_entry_missing.rex",
+     "lang/library_required_attribute_entry_missing.rex",
+     "lang/library_required_method_entry_missing.rex",
+     "lang/library_required_method_library_missing.rex",
+     "lang/library_required_routine_entry_missing.rex",
+     "lang/library_requires_install_order.rex",
+     "lang/library_requires_missing.rex",
+     "lang/library_routine_entry_missing.rex",
+     "lang/library_routine_external_site_twice.rex",
+     "lang/library_routine_quoted_name.rex",
+     "lang/library_routine_rexx_package_missing.rex",
++    "lang/loop_counter.rex",
++    "lang/loop_label_counter.rex",
+     "lang/message_assignment_form.rex",
+     "lang/message_instruction.rex",
+     "lang/message_send_scope_override.rex",
+     "lang/message_send_unknown_method.rex",
+     "lang/message_send_unknown_method_on_a_number.rex",
+     "lang/message_send_unknown_method_on_nil.rex",
+     "lang/mutation_controlled_order.rex",
+     "lang/no_trailing_newline.rex",
+     "lang/scope_case_text_absorbed.rex",
+     "lang/scope_case_text_absorbed_other.rex",
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 2213cca65..0108fc64f 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -2536,34 +2536,20 @@ mod group_runs {
+                 "failure, assertions 202, rc 1, last started TEST_UNINHERIT_TWO_ARGS, failing [TEST_ACTIVATE TEST_METHODS]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+             (
+                 "base/class/Class.testGroup",
+                 "rest",
+                 "every",
+                 "failure, assertions 202, rc 1, last started TEST_UNINHERIT_TWO_ARGS, failing [TEST_ACTIVATE TEST_METHODS]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+-            (
+-                "base/class/DateTime.testGroup",
+-                "whole",
+-                "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_BRUTE_FORCE, failing []",
+-                "a test outside the derived list refuses: TEST_BRUTE_FORCE, DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+-            ),
+-            (
+-                "base/class/DateTime.testGroup",
+-                "whole",
+-                "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_BRUTE_FORCE, failing []",
+-                "a test outside the derived list refuses: TEST_BRUTE_FORCE, DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+-            ),
+             (
+                 "base/class/Message.testGroup",
+                 "whole",
+                 "normal",
+                 "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
+                 "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
+             ),
+             (
+                 "base/class/Message.testGroup",
+                 "whole",
+@@ -2582,71 +2568,43 @@ mod group_runs {
+                 "base/class/Message.testGroup",
+                 "derived",
+                 "every",
+                 "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
+                 "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
+             ),
+             (
+                 "base/class/Method.testGroup",
+                 "whole",
+                 "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+-                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
++                "rexx-exec: method \"NEW\" of class \"Method\" is not implemented (Phase 9), rc 120, last started TEST_NEW_CONTEXT_FLOATINGMETHOD, failing []",
++                "a test outside the derived list refuses: TEST_NEW_CONTEXT_FLOATINGMETHOD, Method NEW (Phase 9)",
+             ),
+             (
+                 "base/class/Method.testGroup",
+                 "whole",
+                 "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+-                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
++                "rexx-exec: method \"NEW\" of class \"Method\" is not implemented (Phase 9), rc 120, last started TEST_NEW_CONTEXT_FLOATINGMETHOD, failing []",
++                "a test outside the derived list refuses: TEST_NEW_CONTEXT_FLOATINGMETHOD, Method NEW (Phase 9)",
+             ),
+             (
+                 "base/class/Method.testGroup",
+-                "derived",
++                "rest",
+                 "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+-                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
++                "error, assertions 63, rc 2, last started TEST_SOURCE, failing [TEST_NEWFILE_CONTEXT_FLOATINGMETHOD TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE TEST_NEWFILE_CONTEXT_METHOD TEST_NEWFILE_CONTEXT_METHODPUBLIC TEST_NEWFILE_CONTEXT_OMITTED TEST_NEWFILE_CONTEXT_PROGRAMSCOPE TEST_NEWFILE_CONTEXT_ROUTINE TEST_NEWFILE_CONTEXT_THISPACKAGE TEST_NEW_CONTEXT_OMITTED TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
++                "tests outside the derived list that fail alone too: Method NEW's file, array and context shapes",
+             ),
+             (
+                 "base/class/Method.testGroup",
+-                "derived",
++                "rest",
+                 "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started -, failing []",
+-                "refuses before any test starts: the group class's activate runs do counter i fn over files (Method.testGroup:75), so each test refuses alone the same way; queued 2026-10-02-do-with-over-refusal",
+-            ),
+-            (
+-                "base/class/MethodArgs.testGroup",
+-                "whole",
+-                "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+-                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+-            ),
+-            (
+-                "base/class/MethodArgs.testGroup",
+-                "whole",
+-                "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+-                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+-            ),
+-            (
+-                "base/class/MethodArgs.testGroup",
+-                "derived",
+-                "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+-                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
+-            ),
+-            (
+-                "base/class/MethodArgs.testGroup",
+-                "derived",
+-                "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_REQUEST_STRING_CLASS, failing []",
+-                "TEST_REQUEST_STRING_CLASS refuses, as alone; DO WITH or COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "error, assertions 63, rc 2, last started TEST_SOURCE, failing [TEST_NEWFILE_CONTEXT_FLOATINGMETHOD TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE TEST_NEWFILE_CONTEXT_METHOD TEST_NEWFILE_CONTEXT_METHODPUBLIC TEST_NEWFILE_CONTEXT_OMITTED TEST_NEWFILE_CONTEXT_PROGRAMSCOPE TEST_NEWFILE_CONTEXT_ROUTINE TEST_NEWFILE_CONTEXT_THISPACKAGE TEST_NEW_CONTEXT_OMITTED TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
++                "tests outside the derived list that fail alone too: Method NEW's file, array and context shapes",
+             ),
+             (
+                 "base/class/MutexSemaphore.testGroup",
+                 "whole",
+                 "every",
+                 "rexx-exec: the run exceeded its deadline, rc none, last started TEST_RELEASE_ONE_ARG, failing []",
+                 "TEST_EXCLUSION's own race: the oracle hangs in it when that schedule is forced (SysSleep 0.01 after step = 6, P46)",
+             ),
+             (
+                 "base/class/MutexSemaphore.testGroup",
+@@ -2932,85 +2890,85 @@ mod group_runs {
+                 "base/keyword/REPLY.testGroup",
+                 "derived",
+                 "every",
+                 "pass, assertions 18, rc 0, last started TEST_REPLY__CODE_RETURN, failing []",
+                 "every continuation runs before the program ends; the oracle races them with its end (P41, phase-4-exclusions.txt row 22)",
+             ),
+             (
+                 "base/keyword/TRACE.testGroup",
+                 "whole",
+                 "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_TRACE_LABEL_WITH_FORWARD, failing []",
+-                "a test outside the derived list refuses: TEST_TRACE_LABEL_WITH_FORWARD, DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "rexx-exec: test does not parse here: 21.906: Invalid data on end of clause. is not implemented (Phase 5), rc 120, last started TEST_TRACE_OPTIONAL_ADDITIONAL, failing []",
++                "a test outside the derived list refuses: TEST_TRACE_OPTIONAL_ADDITIONAL does not parse here (21.906)",
+             ),
+             (
+                 "base/keyword/TRACE.testGroup",
+                 "whole",
+                 "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_TRACE_LABEL_WITH_FORWARD, failing []",
+-                "a test outside the derived list refuses: TEST_TRACE_LABEL_WITH_FORWARD, DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "rexx-exec: test does not parse here: 21.906: Invalid data on end of clause. is not implemented (Phase 5), rc 120, last started TEST_TRACE_OPTIONAL_ADDITIONAL, failing []",
++                "a test outside the derived list refuses: TEST_TRACE_OPTIONAL_ADDITIONAL does not parse here (21.906)",
+             ),
+             (
+                 "base/keyword/TRACE.testGroup",
+                 "rest",
+                 "normal",
+-                "error, assertions 94, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
++                "error, assertions 117, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
++                "tests outside the derived list that fail alone too (whole-groups/alone.txt); TEST_TRACE_LABEL_WITH_FORWARD's FORWARD/REPLY trace lines, measured alone 2026-10-07",
+             ),
+             (
+                 "base/keyword/TRACE.testGroup",
+                 "rest",
+                 "every",
+-                "error, assertions 94, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
++                "error, assertions 117, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
++                "tests outside the derived list that fail alone too (whole-groups/alone.txt); TEST_TRACE_LABEL_WITH_FORWARD's FORWARD/REPLY trace lines, measured alone 2026-10-07",
+             ),
+             (
+                 "base/keyword/TRACE_TraceObject.testGroup",
+                 "whole",
+                 "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+-                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "rexx-exec: a message send to a method context whose scope no longer defines it is not implemented (Phase 5), rc 120, last started TEST_OBJECT_AND_SCOPE, failing []",
++                "a test outside the derived list refuses: TEST_OBJECT_AND_SCOPE, a send to a method context whose scope no longer defines it (Phase 5)",
+             ),
+             (
+                 "base/keyword/TRACE_TraceObject.testGroup",
+                 "whole",
+                 "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+-                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "rexx-exec: a message send to a method context whose scope no longer defines it is not implemented (Phase 5), rc 120, last started TEST_OBJECT_AND_SCOPE, failing []",
++                "a test outside the derived list refuses: TEST_OBJECT_AND_SCOPE, a send to a method context whose scope no longer defines it (Phase 5)",
+             ),
+             (
+                 "base/keyword/TRACE_TraceObject.testGroup",
+                 "rest",
+                 "normal",
+-                "error, assertions 14, rc 2, last started TEST_TRACEOBJECT_OPTION_INVALID, failing [TEST_CALLER_STACK_FRAME]",
+-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
++                "error, assertions 18, rc 2, last started TEST_VARIABLE, failing [TEST_CALLER_STACK_FRAME_REPLY_START TEST_VARIABLE TEST_CALLER_STACK_FRAME TEST_TRACEOBJECT_COLLECTOR]",
++                "tests that fail alone too, measured 2026-10-07: TraceObject VARIABLE, CALLERSTACKFRAME and collected trace lines",
+             ),
+             (
+                 "base/keyword/TRACE_TraceObject.testGroup",
+                 "rest",
+                 "every",
+-                "error, assertions 14, rc 2, last started TEST_TRACEOBJECT_OPTION_INVALID, failing [TEST_CALLER_STACK_FRAME]",
+-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
++                "error, assertions 18, rc 2, last started TEST_VARIABLE, failing [TEST_CALLER_STACK_FRAME_REPLY_START TEST_VARIABLE TEST_CALLER_STACK_FRAME TEST_TRACEOBJECT_COLLECTOR]",
++                "tests that fail alone too, measured 2026-10-07: TraceObject VARIABLE, CALLERSTACKFRAME and collected trace lines",
+             ),
+             (
+                 "base/keyword/TRACE_TraceObject.testGroup",
+                 "derived",
+                 "normal",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+-                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "error, assertions 2, rc 2, last started TEST_TRACEOBJECT_COLLECTOR, failing [TEST_CALLER_STACK_FRAME_REPLY_START TEST_TRACEOBJECT_COLLECTOR]",
++                "tests that fail alone too, measured 2026-10-07: TraceObject CALLERSTACKFRAME THREAD entries and collected trace lines",
+             ),
+             (
+                 "base/keyword/TRACE_TraceObject.testGroup",
+                 "derived",
+                 "every",
+-                "rexx-exec: DO is not implemented, rc 120, last started TEST_CALLER_STACK_FRAME_REPLY_START, failing []",
+-                "TEST_CALLER_STACK_FRAME_REPLY_START refuses, as alone; DO COUNTER over a collection, queued 2026-10-02-do-with-over-refusal",
++                "error, assertions 2, rc 2, last started TEST_TRACEOBJECT_COLLECTOR, failing [TEST_CALLER_STACK_FRAME_REPLY_START TEST_TRACEOBJECT_COLLECTOR]",
++                "tests that fail alone too, measured 2026-10-07: TraceObject CALLERSTACKFRAME THREAD entries and collected trace lines",
+             ),
+             (
+                 "doc/rexxref/chapter5/Section1.testGroup",
+                 "whole",
+                 "normal",
+                 "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_OBJECT_OBJECTNAMEEQUALS, failing []",
+                 "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
+             ),
+             (
+                 "doc/rexxref/chapter5/Section1.testGroup",
+diff --git a/rust/crates/rexx-exec/tests/ir_recorded_cases/loop-counter-with-stem b/rust/crates/rexx-exec/tests/ir_recorded_cases/loop-counter-with-stem
+new file mode 100644
+index 000000000..566eec0be
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/ir_recorded_cases/loop-counter-with-stem
+@@ -0,0 +1,32 @@
++# COUNTER, DO WITH and a stem OVER: a header slot with no expression, a
++# supplier, and a stem's tails.
++
++# do with
++program
++do with index i item v over .array~of('a', 'b')
++  say i v
++end
++----
++rc> 0
++out> 1 a
++out> 2 b
++
++# do counter
++program
++do counter c i = 1 to 2
++  nop
++end
++say c i
++----
++rc> 0
++out> 2 3
++
++# do over a stem target
++program
++a.1 = 1
++do qq over a.
++  say qq
++end
++----
++rc> 0
++out> 1
+diff --git a/rust/crates/rexx-exec/tests/ir_recorded_cases/loop-refusals b/rust/crates/rexx-exec/tests/ir_recorded_cases/loop-refusals
+deleted file mode 100644
+index e2cfc1be9..000000000
+--- a/rust/crates/rexx-exec/tests/ir_recorded_cases/loop-refusals
++++ /dev/null
+@@ -1,29 +0,0 @@
+-# The three DO/LOOP forms this crate refuses, on both engines.
+-
+-# do with
+-program not-oracle-bytes=do-with-refused
+-do with index i over 5
+-  nop
+-end
+-----
+-rc> 120
+-err> rexx-exec: DO is not implemented
+-
+-# do counter
+-program not-oracle-bytes=do-counter-refused
+-do counter c i = 1 to 2
+-  nop
+-end
+-----
+-rc> 120
+-err> rexx-exec: DO is not implemented
+-
+-# do over a stem target
+-program not-oracle-bytes=stem-over-refused
+-a. = 1
+-do qq over a.
+-  nop
+-end
+-----
+-rc> 120
+-err> rexx-exec: DO is not implemented
+diff --git a/rust/crates/rexx-exec/tests/owners.rs b/rust/crates/rexx-exec/tests/owners.rs
+index 44e21f12a..128a610b8 100644
+--- a/rust/crates/rexx-exec/tests/owners.rs
++++ b/rust/crates/rexx-exec/tests/owners.rs
+@@ -202,22 +202,21 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
+     ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::InScope),
+     ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::InScope),
+ });
+ 
+ tags!(loop_tag, LOOP_TAGS, LoopKind, {
+     LoopKind::Simple => ("Simple", Owner::InScope),
+     LoopKind::Forever => ("Forever", Owner::InScope),
+     LoopKind::Count(_) => ("Count", Owner::InScope),
+     LoopKind::Controlled(_) => ("Controlled", Owner::InScope),
+     LoopKind::Over { .. } => ("Over", Owner::InScope),
+-    // `DO WITH ... OVER` sends SUPPLIER, which nothing in this crate answers.
+-    LoopKind::With { .. } => ("With", Owner::Phase("Phase 5")),
++    LoopKind::With { .. } => ("With", Owner::InScope),
+ });
+ 
+ tags!(prefix_op_tag, PREFIX_OP_TAGS, PrefixOp, {
+     PrefixOp::Plus => ("Plus", Owner::InScope),
+     PrefixOp::Minus => ("Minus", Owner::InScope),
+     PrefixOp::Not => ("Not", Owner::InScope),
+ });
+ 
+ tags!(end_style_tag, END_STYLE_TAGS, rexx_parse::EndStyle, {
+     rexx_parse::EndStyle::Do => ("Do", Owner::InScope),
+@@ -315,21 +314,20 @@ impl Coverage {
+ /// device `phase-4-exclusions.txt` uses for the builtin set. Any edit to an
+ /// owner arm above that is not also made here is a test failure, which is
+ /// the point: relabelling a variant is a plan amendment, not a drive-by
+ /// `match` edit.
+ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
+     // Every arm of `CALL` and every form of `ADDRESS` is in scope, so those
+     // appear in `INSTRUCTION_TAGS` and not here. `Command` left this list
+     // when the command dispatch landed, and `Address` when its redirections
+     // did.
+     ("InstructionKind", "Options", "Phase 5"),
+-    ("LoopKind", "With", "Phase 5"),
+ ];
+ 
+ /// Every phase name the split table names, spelled exactly as it spells them.
+ /// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
+ /// split" table and its "assigned elsewhere" paragraph.
+ pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
+ 
+ /// The phases a *builtin* exclusion may name. `phase-4-exclusions.txt` gives
+ /// its remaining rows to Phase 10 and to nothing else -- a builtin owned by a
+ /// Phase 4 sub-phase would not be excluded from Phase 4, and Phase 7, which
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_ctrl.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_ctrl.txt
+new file mode 100644
+index 000000000..304ddc392
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_ctrl.txt
+@@ -0,0 +1,7 @@
++count 6
++/* COUNTER on a controlled loop: the passes entered, not the control's end
++   value; an ITERATE still enters the next pass, and nested counters are
++   separate. */
++do counter c i = 1 to 3; end; say c i
++do counter c i = 1 to 3; if i = 2 then iterate; end; say c
++do counter o 2; do counter n 3; end; say o n; end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_forever.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_forever.txt
+new file mode 100644
+index 000000000..0c8fca00b
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_forever.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER on DO FOREVER, left by LEAVE. */
++do counter c forever; if c = 2 then leave; end; say c
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_over.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_over.txt
+new file mode 100644
+index 000000000..afeaf5498
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_over.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER on DO OVER. */
++do counter c x over .array~of('a', 'b'); end; say c x
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_rep.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_rep.txt
+new file mode 100644
+index 000000000..55ba9b3f0
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_rep.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER on a repeat count. */
++do counter c 3; end; say c
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_trace.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_trace.txt
+new file mode 100644
+index 000000000..18a65def5
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_trace.txt
+@@ -0,0 +1,14 @@
++count 13
++/* COUNTER is reset to 0 before the header is evaluated and assigned on each
++   pass entered, traced as an assignment and a COUNTER keyword. */
++trace i
++c = 'pre'
++do counter c i = 1 to c + 2; end
++say c i
++do counter q 0; end
++say q
++n = 0
++do counter w while n < 2; n = n + 1; end
++do counter u until u > 1; end
++do counter s.1 2; end
++say s.1
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_until.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_until.txt
+new file mode 100644
+index 000000000..c02c2e23c
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_until.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER on DO UNTIL. */
++n = 0; do counter c until n = 2; n = n + 1; end; say c n
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_while.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_while.txt
+new file mode 100644
+index 000000000..4df082f19
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_counter_while.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER is assigned after WHILE holds, so a failing test leaves it. */
++n = 0; do counter c while n < 2; n = n + 1; end; say c n
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_stem_one.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_stem_one.txt
+new file mode 100644
+index 000000000..f94728df9
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_stem_one.txt
+@@ -0,0 +1,4 @@
++count 3
++/* DO OVER a stem with one tail. */
++s.7 = 'x'
++do t over s.; say t; end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_stem_three.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_stem_three.txt
+new file mode 100644
+index 000000000..a405a0a16
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_stem_three.txt
+@@ -0,0 +1,7 @@
++count 6
++/* DO OVER a stem binds its tails; sorted, because the order is licensed
++   (deviation 1). */
++s.1 = 'x'; s.2 = 'y'; s.abc = 'z'
++l = .array~new
++do t over s.; l~append(t); end
++say l~sort~makestring('L', ' ')
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_counter.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_counter.txt
+new file mode 100644
+index 000000000..89a9fa1d3
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_counter.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER on DO WITH. */
++do counter c with index i item v over .array~of('a', 'b'); end; say c i v
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_errors.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_errors.txt
+new file mode 100644
+index 000000000..ff387686e
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_errors.txt
+@@ -0,0 +1,33 @@
++count 32
++/* DO WITH's failures: no SUPPLIER method, a SUPPLIER answer that is not a
++   supplier, and an AVAILABLE that is not logical; then COUNTER, WHILE and
++   UNTIL beside the supplier. */
++signal on syntax name s1
++do with index i over 5; say i; end
++s1: say 'A' condition('o')~code condition('o')~message
++signal on syntax name s2
++do with index i over .x~new; say i; end
++s2: say 'B' condition('o')~code condition('o')~message
++signal on syntax name s3
++do with index i over .z~new; say i; end
++s3: say 'C' condition('o')~code condition('o')~message
++do counter c with item v over .directory~new; end
++say c
++q = .queue~of('p', 'q')
++do counter c with index i item v over q while c < 1; say c i v; end
++say c i v
++do counter c with index i item v over q until c > 0; say c i v; end
++say c i v
++do with index i item v over q until i > 0; say i v; end
++say i v
++::class x
++::method supplier
++  return 'nope'
++::class z
++::method supplier
++  return .w~new
++::class w subclass supplier
++::method init
++  self~init:super(.array~of('a'), .array~of(1))
++::method available
++  return 'maybe'
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_index_only.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_index_only.txt
+new file mode 100644
+index 000000000..9455c105f
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_index_only.txt
+@@ -0,0 +1,3 @@
++count 2
++/* DO WITH with INDEX alone. */
++do with index i over .array~of('a', 'b'); say i; end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_item_only.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_item_only.txt
+new file mode 100644
+index 000000000..6985f88d5
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_item_only.txt
+@@ -0,0 +1,3 @@
++count 2
++/* DO WITH with ITEM alone. */
++do with item v over .array~of('a', 'b'); say v; end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_over_array.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_over_array.txt
+new file mode 100644
+index 000000000..9bbf82e4f
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_over_array.txt
+@@ -0,0 +1,3 @@
++count 2
++/* DO WITH binds INDEX and ITEM from the supplier. */
++do with index i item v over .array~of('a', 'b'); say i v; end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_over_dir.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_over_dir.txt
+new file mode 100644
+index 000000000..ff3824e31
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_over_dir.txt
+@@ -0,0 +1,4 @@
++count 3
++/* DO WITH over a Directory's supplier. */
++d = .directory~new; d~a = 1
++do with index i item v over d; say i v; end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_supplier_subclass.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_supplier_subclass.txt
+new file mode 100644
+index 000000000..9f8c2e6a2
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_supplier_subclass.txt
+@@ -0,0 +1,19 @@
++count 18
++/* A Supplier subclass is stepped by message: AVAILABLE, INDEX, ITEM, NEXT. */
++do with index i item v over .y~new; say i v; end
++say 'done'
++::class y subclass supplier
++::method init
++  self~init:super(.array~of('a', 'b'), .array~of(1, 2))
++::method available
++  say 'avail'
++  return self~available:super
++::method next
++  say 'next'
++  forward class (super)
++::method item
++  say 'item'
++  forward class (super)
++::method index
++  say 'index'
++  forward class (super)
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_trace.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_trace.txt
+new file mode 100644
+index 000000000..011435771
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_trace.txt
+@@ -0,0 +1,9 @@
++count 8
++/* DO WITH traces its target under WITH and binds INDEX and ITEM before FOR
++   is consulted. */
++trace r
++do counter k with index x item y over .array~of('a') for 5; end
++say k x y
++trace i
++do with item y over .array~of('a', 'b') for 1; end
++say y
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/loop_counter.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/loop_counter.txt
+new file mode 100644
+index 000000000..2fcb7bb69
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/loop_counter.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER on LOOP with a repeat count. */
++loop counter c 2; end; say c
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/loop_label_counter.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/loop_label_counter.txt
+new file mode 100644
+index 000000000..18c4dbd44
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/loop_label_counter.txt
+@@ -0,0 +1,3 @@
++count 2
++/* COUNTER beside LABEL, left by a named LEAVE. */
++loop label l counter c i = 1 to 5; if i = 3 then leave l; end; say c i

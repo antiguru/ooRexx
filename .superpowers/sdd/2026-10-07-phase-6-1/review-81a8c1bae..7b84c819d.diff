@@ -1,0 +1,307 @@
+# Review package: 81a8c1bae..7b84c819d
+
+## Commits
+7b84c819d Phase 6.1 Task 2 fix round 1: a frame per COUNTER and DO WITH pass
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-2-report.md      | 33 ++++++++++++++++++++++
+ docs/superpowers/plans/phase-6-1-gate.md           | 16 +++++++++++
+ rust/crates/rexx-core/src/roots.rs                 |  6 ++++
+ rust/crates/rexx-exec/src/run/loops.rs             | 21 +++++++++++---
+ rust/crates/rexx-exec/src/run/tests/loops.rs       | 32 +++++++++++++++++++++
+ 5 files changed, 104 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md
+index ff06df011..05e757732 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-2-report.md
+@@ -133,10 +133,43 @@ inside.
+    - `TEST_TRACEOBJECT_COLLECTOR`: fewer collected trace lines.
+    - TRACE `TEST_TRACE_LABEL_WITH_FORWARD`: 10 trace lines against 12 across FORWARD/REPLY.
+    - Method `TEST_NEW*`/`TEST_NEWFILE*`: Method NEW shapes.
+ 
+    These are TraceObject, REPLY-trace and Method NEW work, not loops.
+ 3. **`run_repeating` is unreached** by the lib tests and the corpus: every repeating loop goes flat,
+    and the only `Fallback` is a labelled simple block, which returns before it. COUNTER and WITH are
+    threaded through it so it stays right. Deleting it is a separate decision.
+ 4. The queued item `2026-10-02-do-with-over-refusal` is resolved by this task. I did not close the
+    queue file, which is the controller's to do.
++
++## Fix round 1
++
++Findings from `task-2-review.md`.
++
++1. **I1, per-pass temporaries.** `count_pass` and `with_advance` (`run/loops.rs`) now open a frame
++   per pass, as the controlled loop does, and pop it once the counter or INDEX/ITEM variable holds
++   the value. `with_advance` also roots the AVAILABLE answer inside that frame. A `?` path leaves
++   the frame to the outer truncation.
++   - New crate test `run::tests::loops::counter_and_with_passes_do_not_accumulate_temps`. It reads
++     the temporaries stack's capacity after the run as its high-water mark, through
++     `Roots::temps_capacity`, a new accessor in `rexx-core/src/roots.rs`. Its assertions:
++     - COUNTER's mark is the same after 100 passes and after 20000, and under 1000.
++     - DO WITH over 30000 items reaches the same mark as building that collection's supplier alone.
++   - RED: with only `count_pass`'s pop removed, it fails with "COUNTER: 32768 temporaries live at
++     once after 20000 passes". With only `with_advance`'s pop removed, the DO WITH assertion fails.
++     A probe without the pop showed temps rising 3 a pass, to 60031 over 20000 passes.
++   - Peak memory, `/usr/bin/time -f %M` on release binaries, `do counter c 30000000`: before
++     255,428 kB, after 18,860 kB, oracle 20,688 kB. A COUNTER DO WITH over a 1,000,000-item array:
++     105,844 kB before and 105,676 kB after (the array dominates), oracle 227,556 kB.
++2. **Whole-group rows.** `docs/superpowers/plans/phase-6-1-gate.md` `## Task 2` now has one line
++   per newly visible failing row, each with the alone-run that shows it and its cause outside the
++   loop work. Moritz's ruling on the emptyloop wall clock is recorded there too.
++3. **M3.** `HeaderRole::OverFor`'s doc now names both `DO name OVER expr FOR expr` and
++   `DO WITH ... OVER expr FOR expr`.
++
++Commands and output, all at the fix-round tree:
++
++- `cargo fmt --all --check`: exit 0. `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`: exit 0.
++- `memcap 8G cargo test -j 4 -p rexx-exec --lib run::tests::loops`: 40 passed, 0 failed.
++- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle`:
++  exit 0, with 29 passed / 1 ignored and 21 passed.
++- `memcap 8G cargo test -j 4 -p rexx-core`: every binary `ok`, 0 failed.
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index 26b306579..940ed146e 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -115,10 +115,26 @@ Exit 0; load average 0.16 at start, 0.57 at end.
+ | decloop | +0.84 | -0.84 |
+ | rexxcps | -2.03 | +0.81 |
+ 
+ **`emptyloop` is outside ±4% on wall clock.** Two more emptyloop-only runs of the same command
+ gave +4.18 and +4.42. `perf stat -e cycles`, three runs each: base 1.262-1.288 G, Task 1's `r1c`
+ 1.281-1.291 G, Task 2's r1 1.316-1.348 G; branch misses equal (370,386 against 384,551). The cost is
+ cycles at fewer instructions, and `perf annotate` puts it in `loop_advance` (20.3% of cycles at base,
+ 37.4% at r1, where `cgdiff.py` gives it 49,999,953 fewer instructions). Two further rounds moved it the wrong way:
+ `DO WITH`'s state out of `LoopState` (+6.5% cycles) and the counter boxed in `FlatLoop` (+10%).
+ Neither landed. Three rounds are spent; this stops for Moritz's ruling.
++
++Ruling (Moritz, 2026-10-07): the `emptyloop` wall-clock overrun is accepted for now and is
++re-checked at Task 12 with a layout control.
++
++Whole-group rows that `4d46b76b0` rewrote. Each failure was visible only once DO COUNTER stopped
++refusing, and none of them is caused by the loops. Each test was run alone on both engines from an
++ooTest copy with every other `test_*` method renamed. The oracle passes every one; the column says
++what ours fails on.
++
++| group | test | ours, alone | cause |
++|---|---|---|---|
++| TRACE_TraceObject | TEST_VARIABLE | rc 1: `assertSame` 6 against 0, "number of variable related trace objects" (line 162) | no collected TraceObject has a VARIABLE entry |
++| TRACE_TraceObject | TEST_CALLER_STACK_FRAME_REPLY_START | rc 1: `assertEquals` at line 706, a count of 0 where 2 is expected | no CALLERSTACKFRAME carries a THREAD entry |
++| TRACE_TraceObject | TEST_TRACEOBJECT_COLLECTOR | rc 2: 97.1 at line 276, `.nil` does not understand STARTSWITH | the collector gathers fewer trace lines than the test produces |
++| TRACE | TEST_TRACE_LABEL_WITH_FORWARD | rc 1: `test_forwarded3.rex` traces 10 lines against 12 (line 1188) | FORWARD/REPLY `>I>`/`<I<` lines across the replied activity |
++| Method | TEST_NEWFILE_CONTEXT_FLOATINGMETHOD, TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE, TEST_NEW_CONTEXT_OMITTED, TEST_NEW_ARRAY_FROM_FILE, TEST_NEW_FILE_COMPILED | rc 2: three `assertEquals`/`assertOneOrAnother` failures and two 98.971 | Method NEW's file, array and context shapes; the whole run refuses at Method NEW (Phase 9) |
+diff --git a/rust/crates/rexx-core/src/roots.rs b/rust/crates/rexx-core/src/roots.rs
+index a0fb1f3a7..fc1817fe1 100644
+--- a/rust/crates/rexx-core/src/roots.rs
++++ b/rust/crates/rexx-core/src/roots.rs
+@@ -379,20 +379,26 @@ impl ActivityRoots {
+             "the frame block size is set before the first frame"
+         );
+         self.frames = Rc::new(FrameArena::new(size));
+     }
+ 
+     /// How many temporaries are currently rooted.
+     pub fn temps_len(&self) -> usize {
+         self.temps.len()
+     }
+ 
++    /// How many temporaries the stack has room for: at least the most it has
++    /// held at once, which a test reads after a run as its high-water mark.
++    pub fn temps_capacity(&self) -> usize {
++        self.temps.capacity()
++    }
++
+     /// Opens a segment of `initial_len` unassigned slots for the frame
+     /// numbered `serial`.
+     fn push_segment(&mut self, initial_len: usize, serial: u64) -> SlotFrame {
+         let start = self.slots.len();
+         self.slots.resize(start + initial_len, None);
+         let depth = self.segments.len();
+         self.segments.push(Segment { start, serial });
+         self.top_start = start;
+         self.refresh_fast_serial();
+         SlotFrame { depth, serial }
+diff --git a/rust/crates/rexx-exec/src/run/loops.rs b/rust/crates/rexx-exec/src/run/loops.rs
+index 407d1fd8a..831b3ecfe 100644
+--- a/rust/crates/rexx-exec/src/run/loops.rs
++++ b/rust/crates/rexx-exec/src/run/loops.rs
+@@ -375,24 +375,26 @@ pub(crate) enum HeaderRole {
+     /// same as an explicit `DO ... FOR n`), and validated against 26.2 where
+     /// a `FOR` is 26.3.
+     Count,
+     /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
+     Over,
+     /// `DO WITH ... OVER expr`'s target, echoed under the `WITH` tag.
+     With,
+     /// A `COUNTER` variable's reset to `0`, ahead of every header
+     /// expression (`DoBlock::DoBlock`). Its slot has no expression.
+     Counter,
+-    /// `DO name OVER expr FOR expr`'s count, **echoed under the `FOR` tag**
+-    /// (measured against the oracle: `do qq over zs for 1` prints
+-    /// `>K>   "FOR" => "1"`, on both `trace i` and `trace r` -- the same tag
+-    /// a controlled loop's own `FOR` and a bare `DO`'s repeat count carry).
++    /// The `FOR` count of `DO name OVER expr FOR expr` and of `DO WITH ...
++    /// OVER expr FOR expr`, **echoed under the `FOR` tag** (measured against
++    /// the oracle: `do qq over zs for 1` prints `>K>   "FOR" => "1"`, on both
++    /// `trace i` and `trace r` -- the same tag a controlled loop's own `FOR`
++    /// and a bare `DO`'s repeat count carry; `do_with_trace.rex` measures the
++    /// `DO WITH` form).
+     OverFor,
+ }
+ 
+ impl HeaderRole {
+     /// The `>K>` tag this value's own echo carries, or `None` for the one
+     /// role the oracle echoes nothing for: `Initial`, a control variable's
+     /// own starting value (its own doc has the measurement).
+     pub(crate) fn keyword(self) -> Option<&'static str> {
+         match self {
+             HeaderRole::Initial => None,
+@@ -717,33 +719,37 @@ impl Interp {
+     /// One pass's `COUNTER` assignment and its `>K>` line, at the loop body's
+     /// indent (`DoBlock::setCounter`).
+     fn count_pass(
+         &mut self,
+         code: &Code<'_>,
+         counter: &mut LoopCounter,
+         loop_indent: usize,
+     ) -> Result<(), Failure> {
+         counter.passes += 1;
+         let value = self.counted(usize::try_from(counter.passes).unwrap_or(usize::MAX));
++        // A pass's own frame: the counter variable roots `value` once it is
++        // bound, so nothing pushed here outlives the pass.
++        let pass = self.roots.activity_mut().push_frame();
+         self.roots.activity_mut().push_temp(value);
+         self.bind_control(
+             code,
+             counter.name,
+             loop_indent,
+             value,
+             counter.at,
+             counter.shape,
+         )?;
+         if self.trace_mode().results {
+             let text = self.string_value_text(value);
+             self.trace_keyword(loop_indent, "COUNTER", &text);
+         }
++        self.roots.activity_mut().pop_frame(pass);
+         Ok(())
+     }
+ 
+     /// `OverLoop::setup`'s conversion
+     /// (`instructions/DoBlockComponents.cpp:233`): the array whose items a
+     /// `DO OVER` binds in turn.
+     fn over_target_array(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+         if self.array_slots_of(value).is_some() {
+             return Ok(value);
+         }
+@@ -2485,45 +2491,52 @@ impl Interp {
+     /// supplier past the first pass, binds `INDEX` and then `ITEM`, and
+     /// consults `FOR` only after both are bound.
+     #[inline(never)]
+     fn with_advance(
+         &mut self,
+         code: &Code<'_>,
+         with: &mut WithState,
+         loop_indent: usize,
+     ) -> Result<bool, Failure> {
+         let supplier = with.supplier;
++        // A pass's own frame, as `count_pass`'s: the bound variables root
++        // INDEX and ITEM once written. The `?` paths leave it to the outer
++        // truncation.
++        let pass = self.roots.activity_mut().push_frame();
+         if !with.first {
+             self.supplier_send(supplier, b"NEXT")?;
+         }
+         with.first = false;
+         let available = self.supplier_send(supplier, b"AVAILABLE")?;
++        self.roots.activity_mut().push_temp(available);
+         let text = self.string_value_text(available);
+         if !logical_value(&text)
+             .ok_or_else(|| Failure::from(Raised::syntax(34, 906, vec![text])))?
+         {
++            self.roots.activity_mut().pop_frame(pass);
+             return Ok(false);
+         }
+         for (name, message) in [(with.index, &b"INDEX"[..]), (with.item, &b"ITEM"[..])] {
+             if let Some(name) = name {
+                 let value = self.supplier_send(supplier, message)?;
+                 self.roots.activity_mut().push_temp(value);
+                 self.bind_control(
+                     code,
+                     name,
+                     loop_indent,
+                     value,
+                     control_slot(code, name),
+                     shape_of(code.symbols.name(name).as_bytes()),
+                 )?;
+             }
+         }
++        self.roots.activity_mut().pop_frame(pass);
+         if let Some(remaining) = with.remaining.as_mut() {
+             if *remaining == 0 {
+                 return Ok(false);
+             }
+             *remaining -= 1;
+         }
+         Ok(true)
+     }
+ 
+     /// `message` sent to a `DO WITH`'s supplier, `.nil` for no result.
+diff --git a/rust/crates/rexx-exec/src/run/tests/loops.rs b/rust/crates/rexx-exec/src/run/tests/loops.rs
+index 6601baa8a..3e89788b2 100644
+--- a/rust/crates/rexx-exec/src/run/tests/loops.rs
++++ b/rust/crates/rexx-exec/src/run/tests/loops.rs
+@@ -203,20 +203,52 @@ fn do_with_binds_index_and_item_from_the_supplier() {
+     assert_eq!(out, b"1 a\n2 b\n".to_vec());
+ }
+ 
+ #[test]
+ fn do_counter_counts_the_passes_entered_on_a_controlled_loop() {
+     let mut interp = Interp::new();
+     let out = say_output(&mut interp, b"do counter c i = 1 to 3\nnop\nend\nsay c i");
+     assert_eq!(out, b"3 4\n".to_vec());
+ }
+ 
++/// A `COUNTER` or `DO WITH` pass roots nothing past its own end: the most
++/// temporaries live at once is the same for a long loop as for a short one.
++#[test]
++fn counter_and_with_passes_do_not_accumulate_temps() {
++    fn high_water(source: &str) -> usize {
++        let mut interp = Interp::new();
++        say_output(&mut interp, source.as_bytes());
++        interp.roots.activity().temps_capacity()
++    }
++    let counter = |n: usize| high_water(&format!("do counter c {n}\nend\nsay c"));
++    let long = counter(20000);
++    assert!(
++        long < 1000,
++        "COUNTER: {long} temporaries live at once after 20000 passes"
++    );
++    assert_eq!(
++        counter(100),
++        long,
++        "COUNTER: the high-water mark grows with the pass count"
++    );
++    // A dense collection's `SUPPLIER` roots two temporaries per item while it
++    // is built, so the loop over it is held to that build's own mark. At 30000
++    // items the build needs 65536 slots, and three more temporaries a pass
++    // would need 131072.
++    let build = "a = .array~new\ndo j = 1 to 30000\na[j] = j\nend\n";
++    assert_eq!(
++        high_water(&format!("{build}do with index i item v over a\nend\nsay i")),
++        high_water(&format!("{build}s = a~supplier\nsay s~index")),
++        "DO WITH over 30000 items: the loop raises the high-water mark past the supplier's own"
++    );
++}
++
+ // ---- DO i = TO/BY/FOR (controlled), and DO OVER ----
+ 
+ #[test]
+ fn a_controlled_loop_runs_to_then_by_then_stops() {
+     let mut interp = Interp::new();
+     assert_eq!(
+         say_output(&mut interp, b"do i = 1 to 3\nsay i\nend"),
+         b"1\n2\n3\n".to_vec()
+     );
+     let mut interp = Interp::new();

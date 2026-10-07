@@ -43,4 +43,15 @@ Task 1: minor (deferred): INTERPRET inside a typed debug line inherits DEBUG_PAU
 Task 1: fix round 1/5 (2 addressed, 0 open — case text across a typed debug line; Activation::cold doc; commits e77576cd0..b4d847074). Spec section 2's case-text cell corrected by the controller.
 Task 1: minor (deferred): current_case_text is never cleared at construct end ("for the construct's duration" unenforced; no reader found)
 Task 1: complete (commits e6af1198b..b4d847074, review clean)
-Task 2: dispatched (base b4d847074), implementer opus
+Task 2: dispatched (base 3cee3e622), implementer opus
+Task 2: implementer DONE_WITH_CONCERNS (5b7acef35, 9777db504 perf r1, fe765db7b, 4d46b76b0, 81a8c1bae); emptyloop wall +4.16..+4.42% (cycles up, instructions -0.32%), three rounds spent -> Moritz. run_repeating unreached by any test (for review). Queued do-with-over-refusal to close at T12.
+Task 2: Moritz ruling 2026-10-07: emptyloop wall-clock +4.2..4.4% accepted; Task 12's cumulative measurement re-checks it with a layout control.
+Task 2: review (task-2-review.md): 1 Important (COUNTER/DO WITH push a rooted temp per pass: memory grows, INDEX/ITEM values kept alive), 5 Minor, 1 ⚠️ (criterion 5 row reasons for newly visible whole-group gaps not in gate record).
+Task 2: Ruling: the ⚠️ is a real gap; the reasons go in the gate record in this fix round — criterion 5 needs them, and they are freshest now — cost if wrong: none.
+Task 2: Ruling: Minor 3 (HeaderRole::OverFor doc now false for DO WITH's FOR) joins the round — prose rule forbids false sentences — cost if wrong: none.
+Task 2: Ruling: the REPLY trace gap and the TraceObject collector gap are not 6.1 items (reproduced with no loop); queued at Task 12 — cost if wrong: Phase 9 meets them unattributed.
+Task 2: minor (deferred): run_repeating and run_loop_with_header's non-Simple arms are dead (only Fallback is a labelled simple block) and Task 2 threaded untested COUNTER/WITH code through them; delete or unreachable! — for the final review
+Task 2: minor (deferred): with_advance recomputes control_slot/shape_of per pass; cache in WithState
+Task 2: minor (deferred): overlong rewrapped comment lines (run/loops.rs FlatLoop comment; phase-4-exclusions.txt)
+Task 2: fix round 1/5 (3 addressed, 0 open — per-pass temp leak; gate-record row reasons; OverFor doc; commits 81a8c1bae..7b84c819d)
+Task 2: complete (commits 3cee3e622..7b84c819d, review clean)
