@@ -1,0 +1,182 @@
+# Review package: e77576cd0..b4d847074
+
+## Commits
+b4d847074 Phase 6.1 Task 1 fix round 1: case text across a typed debug line
+
+## Files changed
+ rust/corpus/lang/scope_case_text_debug_line.rex               |  8 ++++++++
+ rust/corpus/lang/scope_case_text_debug_line.stdin             | 11 +++++++++++
+ rust/corpus/phase-6-1.txt                                     |  1 +
+ rust/crates/rexx-exec/src/activation.rs                       |  4 ++--
+ rust/crates/rexx-exec/src/run/interpret.rs                    |  4 ++++
+ rust/crates/rexx-exec/tests/collect_stress.rs                 |  1 +
+ .../tests/sourceline_oracle/scope_case_text_debug_line.txt    |  9 +++++++++
+ 7 files changed, 36 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/rust/corpus/lang/scope_case_text_debug_line.rex b/rust/corpus/lang/scope_case_text_debug_line.rex
+new file mode 100644
+index 000000000..0b904e2ee
+--- /dev/null
++++ b/rust/corpus/lang/scope_case_text_debug_line.rex
+@@ -0,0 +1,8 @@
++/* A SELECT CASE typed at a debug pause leaves the value of the construct
++   the pause interrupted. */
++trace ?r
++select case 'a'
++  when 'a' then when 'zz' then say 'absorbed zz'
++  otherwise say 'other'
++end
++say 'done'
+diff --git a/rust/corpus/lang/scope_case_text_debug_line.stdin b/rust/corpus/lang/scope_case_text_debug_line.stdin
+new file mode 100644
+index 000000000..46570fe72
+--- /dev/null
++++ b/rust/corpus/lang/scope_case_text_debug_line.stdin
+@@ -0,0 +1,11 @@
++
++.stderr~lineout("T1")
++select case "zz"; when "zz" then nop; end
++
++
++
++
++
++
++
++
+diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
+index ff00af2c3..419ec5f5c 100644
+--- a/rust/corpus/phase-6-1.txt
++++ b/rust/corpus/phase-6-1.txt
+@@ -13,10 +13,11 @@ lang/scope_clock_internal.rex
+ lang/scope_random_seed.rex
+ lang/scope_random_unseeded.rex
+ lang/scope_setlocal_method.rex
+ lang/scope_setlocal_routine.rex
+ lang/scope_propagate_routine.rex
+ lang/scope_propagate_after_routine.rex
+ lang/scope_case_text_absorbed.rex
+ lang/scope_case_text_absorbed_other.rex
+ lang/scope_internal_depth.rex
+ lang/scope_debug_pause_routine.rex
++lang/scope_case_text_debug_line.rex
+diff --git a/rust/crates/rexx-exec/src/activation.rs b/rust/crates/rexx-exec/src/activation.rs
+index 67c2e2c6b..3c5f4415a 100644
+--- a/rust/crates/rexx-exec/src/activation.rs
++++ b/rust/crates/rexx-exec/src/activation.rs
+@@ -350,22 +350,22 @@ pub(crate) struct Activation {
+     ///
+     /// Behind an `Rc` so an internal call inherits it by refcount and a write
+     /// in the callee clones first: that is `checkIOConfigTable`'s own lazy
+     /// copy (`RexxActivation.cpp:1651`), and it is what makes the
+     /// inheritance one-way.
+     pub(crate) io_configs: Option<Rc<IoConfigs>>,
+     /// The condition traps enabled in this activation, keyed by the exact
+     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
+     /// `NOVALUE`, `USER FOO`, ...
+     pub(crate) traps: TrapMap,
+-    /// What this activation holds only once a handler, `RANDOM` or
+-    /// `SETLOCAL` has run in it, allocated on the first.
++    /// The conditions, `RANDOM` seed and `SETLOCAL` list, allocated on the
++    /// first write or inherited from the caller ([`ActivationCold::inherited`]).
+     pub(crate) cold: Option<Box<ActivationCold>>,
+     /// `DATE`/`TIME`'s clock reading, in `builtin::datetime`'s own
+     /// microseconds-since-0001-01-01 unit -- the last value this activation
+     /// ever read, or [`NO_CLOCK`] before its first one. **This is not itself
+     /// the per-clause cache** -- see [`clock_stale`] for that half -- because
+     /// `RexxActivation::getTime`'s own lazy `TIME('R')` reset
+     /// (`execution/RexxActivation.cpp:3400`-`3406`) needs the *stale* value
+     /// still readable one call after the clause that produced it stopped
+     /// being current, to anchor the reset to.
+     pub(crate) cached_clock: i64,
+diff --git a/rust/crates/rexx-exec/src/run/interpret.rs b/rust/crates/rexx-exec/src/run/interpret.rs
+index ec945c3db..afbdbb8b5 100644
+--- a/rust/crates/rexx-exec/src/run/interpret.rs
++++ b/rust/crates/rexx-exec/src/run/interpret.rs
+@@ -247,40 +247,44 @@ impl Interp {
+         }
+     }
+ 
+     /// One line typed at a pause, run as an `INTERPRET` fragment that traces
+     /// nothing. A SYNTAX condition inside it is reported under the two
+     /// `+++ Interactive trace.` lines and swallowed, and the pause goes on --
+     /// measured, `zz = 1/0` at a pause reports 42.3 and the next line still
+     /// runs.
+     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
+         let saved_pause = self.replace_debug_pause(true);
++        // A `SELECT CASE` typed at the pause opens and closes inside the
++        // line; the construct the pause interrupted keeps its own value.
++        let saved_case = self.activation().current_case_text.clone();
+         self.activity.fragment_depth += 1;
+         let (line, indent) = (
+             self.activity.clause_state.line(),
+             self.activity.clause_state.current_value_indent,
+         );
+         self.enter_fragment_level(line, indent);
+         let saved_entry = self.enter_fragment(self.activity.clause_line_override.is_some());
+         let outcome = pinned!(
+             self,
+             crate::pinning::PinKind::Interpret,
+             self.run_fragment(text)
+         );
+         let depth = self.activity.fragment_depth;
+         self.activity
+             .pending_traps
+             .retain(|pending| pending.fragment_depth != depth);
+         self.activity.fragment_depth -= 1;
+         self.leave_fragment_level();
+         self.leave_fragment(saved_entry);
+         self.replace_debug_pause(saved_pause);
++        self.activation_mut().current_case_text = saved_case;
+         match outcome {
+             Ok(_) => Ok(()),
+             Err(Failure::Raised(raised)) => {
+                 self.report_debug_error(&raised);
+                 Ok(())
+             }
+             Err(other) => Err(other),
+         }
+     }
+ 
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index 53ceb9b6b..97f454a6b 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -131,20 +131,21 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+     "lang/message_assignment_form.rex",
+     "lang/message_instruction.rex",
+     "lang/message_send_scope_override.rex",
+     "lang/message_send_unknown_method.rex",
+     "lang/message_send_unknown_method_on_a_number.rex",
+     "lang/message_send_unknown_method_on_nil.rex",
+     "lang/mutation_controlled_order.rex",
+     "lang/no_trailing_newline.rex",
+     "lang/scope_case_text_absorbed.rex",
+     "lang/scope_case_text_absorbed_other.rex",
++    "lang/scope_case_text_debug_line.rex",
+     "lang/scope_debug_pause_routine.rex",
+     "lang/select_when.rex",
+     "lang/select_when_absorption.rex",
+     "lang/select_when_bodies.rex",
+     "lang/string_caseless.rex",
+     "lang/string_compare.rex",
+     "lang/trace_debug_ignores_trace.rex",
+     "lang/trace_debug_skip.rex",
+     "lang/trace_numeric_request.rex",
+     "lang/trace_output.rex",
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_debug_line.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_debug_line.txt
+new file mode 100644
+index 000000000..c2ec55f1e
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_debug_line.txt
+@@ -0,0 +1,9 @@
++count 8
++/* A SELECT CASE typed at a debug pause leaves the value of the construct
++   the pause interrupted. */
++trace ?r
++select case 'a'
++  when 'a' then when 'zz' then say 'absorbed zz'
++  otherwise say 'other'
++end
++say 'done'

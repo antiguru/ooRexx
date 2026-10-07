@@ -45,7 +45,7 @@ oldest entry (`:1494-1500`).
 | `random_seed` | own, seeded from the activity's generator on first use (the oracle seeds at creation, `RexxActivation.cpp:174`, `:312`; lazy seeding is unobservable, since the activity seed is clock- and pid-derived) | none: walks to the nearest top-level activation | shared | moves |
 | `locals` | own list; restored at the activation's end | none: walks to the nearest top-level activation | shared | moves; restored at the continuation's end |
 | `active_condition` | none | copied; a `CALL ON` handler gets the trapped condition | shared | moves |
-| `current_case_text` | none | none | shared | moves; held inline, in the space `condition` leaves |
+| `current_case_text` | none | none | INTERPRET: shared; a typed debug line: saved and restored around it (the oracle runs it on its own block stack) | moves; held inline, in the space `condition` leaves |
 | `debug_pause` | false | false | INTERPRET: shared, false; a typed debug line: true for its duration | n/a |
 
 `size_of::<Activation>() == 512` holds (`activation.rs:497`). Adding an `i64` anchor gives 520 and an

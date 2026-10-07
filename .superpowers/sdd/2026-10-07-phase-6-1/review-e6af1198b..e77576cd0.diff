@@ -1,0 +1,3014 @@
+# Review package: e6af1198b..HEAD
+
+## Commits
+e77576cd0 Phase 6.1 gate record: Task 1 performance
+12239c974 Phase 6.1 Task 1: keep pop_activation inline on the call path
+16b67c6cc Phase 6.1 Task 1: activation-scoped clock, seed, SETLOCAL, conditions
+66b0f6854 Phase 6.1 Task 1: Activation layout for the scope move
+
+## Files changed
+ docs/superpowers/plans/phase-6-1-gate.md           |  68 +++++++
+ rust/corpus/lang/scope_case_text_absorbed.rex      |  13 ++
+ .../corpus/lang/scope_case_text_absorbed_other.rex |  13 ++
+ rust/corpus/lang/scope_clock_external.d/extr.rex   |   1 +
+ rust/corpus/lang/scope_clock_external.rex          |   7 +
+ rust/corpus/lang/scope_clock_internal.rex          |   5 +
+ rust/corpus/lang/scope_clock_routine.rex           |  10 +
+ rust/corpus/lang/scope_debug_pause_routine.rex     |  12 ++
+ rust/corpus/lang/scope_debug_pause_routine.stdin   |  17 ++
+ rust/corpus/lang/scope_internal_depth.rex          |  19 ++
+ rust/corpus/lang/scope_propagate_after_routine.rex |  15 ++
+ rust/corpus/lang/scope_propagate_routine.rex       |  16 ++
+ rust/corpus/lang/scope_random_seed.rex             |  12 ++
+ rust/corpus/lang/scope_random_unseeded.rex         |  10 +
+ rust/corpus/lang/scope_setlocal_method.rex         |   9 +
+ rust/corpus/lang/scope_setlocal_routine.rex        |   9 +
+ rust/corpus/oracle-crashes.txt                     |  22 ++
+ rust/corpus/phase-6-1.txt                          |  22 ++
+ rust/crates/rexx-exec/src/activation.rs            | 225 +++++++++++++++++----
+ rust/crates/rexx-exec/src/activity.rs              |  69 +------
+ rust/crates/rexx-exec/src/builtin/datetime.rs      |  41 ++--
+ .../crates/rexx-exec/src/builtin/datetime/tests.rs |  45 ++---
+ rust/crates/rexx-exec/src/builtin/numeric.rs       |  42 +++-
+ rust/crates/rexx-exec/src/builtin/state.rs         |   4 +-
+ rust/crates/rexx-exec/src/dispatch.rs              |   2 +-
+ rust/crates/rexx-exec/src/dispatch/context.rs      |   2 +-
+ rust/crates/rexx-exec/src/ir/drive.rs              |   5 +-
+ rust/crates/rexx-exec/src/lib.rs                   |  44 ++--
+ rust/crates/rexx-exec/src/run.rs                   |   2 +-
+ rust/crates/rexx-exec/src/run/call.rs              |  18 +-
+ rust/crates/rexx-exec/src/run/condition.rs         | 120 +++++------
+ rust/crates/rexx-exec/src/run/interpret.rs         |   2 +-
+ rust/crates/rexx-exec/src/run/select.rs            |   7 +-
+ rust/crates/rexx-exec/src/run/settings.rs          |   4 +-
+ rust/crates/rexx-exec/src/scheduler/tests.rs       | 130 ++++++++++--
+ rust/crates/rexx-exec/src/trace.rs                 |  18 +-
+ rust/crates/rexx-exec/tests/collect_stress.rs      |   4 +
+ rust/crates/rexx-exec/tests/corpus.rs              |   1 +
+ rust/crates/rexx-exec/tests/coverage.rs            |   1 +
+ rust/crates/rexx-exec/tests/ir_recorded.rs         |   1 +
+ rust/crates/rexx-exec/tests/trace_oracle.rs        |   1 +
+ .../sourceline_oracle/scope_case_text_absorbed.txt |  14 ++
+ .../scope_case_text_absorbed_other.txt             |  14 ++
+ .../sourceline_oracle/scope_clock_external.txt     |   8 +
+ .../sourceline_oracle/scope_clock_internal.txt     |   6 +
+ .../sourceline_oracle/scope_clock_routine.txt      |  11 +
+ .../scope_debug_pause_routine.txt                  |  13 ++
+ .../sourceline_oracle/scope_internal_depth.txt     |  20 ++
+ .../scope_propagate_after_routine.txt              |  16 ++
+ .../sourceline_oracle/scope_propagate_routine.txt  |  17 ++
+ .../tests/sourceline_oracle/scope_random_seed.txt  |  13 ++
+ .../sourceline_oracle/scope_random_unseeded.txt    |  11 +
+ .../sourceline_oracle/scope_setlocal_method.txt    |  10 +
+ .../sourceline_oracle/scope_setlocal_routine.txt   |  10 +
+ 54 files changed, 957 insertions(+), 274 deletions(-)
+
+## Diff
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+new file mode 100644
+index 000000000..8540797f8
+--- /dev/null
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -0,0 +1,68 @@
++# Phase 6.1 gate record
++
++Performance base: `e6af1198b` (the commit Task 1 starts from). Budget (spec section 5): a running
++total of at most +0.5% beyond the noise band on every program; wall clock within ±4%.
++
++## Task 1
++
++Commits: `66b0f6854` (layout), `16b67c6cc` (behaviour), `12239c974` (perf round 1). `S` is
++`/tmp/claude-1000/p61/t1`; each binary from `git archive <sha> rust interpreter`, built with
++`CARGO_TARGET_DIR=$S/target-NAME memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run`,
++one `Compiling rexx-exec` line each.
++
++| binary | source | sha256 |
++|---|---|---|
++| base | `e6af1198b` | `2ea19b3ea2875fada8718eaf5b89f828d5ae07587a74feaf9b34681c879c891e` |
++| pad1 | base + `layout-pad.py 8` | `f7c3a9d41e0646fc1931281a32aaf002b7a3f762a87386349508c70fe61a5aa1` |
++| pad2 | base + `layout-pad.py 48` | `c03d30015583f749cf4344438901f65af16dc34746a67ff6d9c7d9e2549cfac0` |
++| pad3 | base + `layout-pad.py 192` | `91653253d9f2c1c7ab8ca690b17460dca4ad4615a3a284401ebec17195f6e6bb` |
++| t1 | `16b67c6cc` | `6a31c6fb78068741f10d9ded837051f4c2334cbba04b4b2cb4285f835990a78b` |
++| r1 | `12239c974` | `b44aaf39eeacc09b6fe1bcacfb8235d4fb0d3db02ac51e5c000e855c18d8ec3c` |
++
++Noise band, the layout controls against base:
++
++```
++bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $S/cg-pad -p "fibcall fibfunc dispatch dispatchclass sendloop" base=$S/bin/base/rexx-run pad1=$S/bin/pad1/rexx-run pad2=$S/bin/pad2/rexx-run pad3=$S/bin/pad3/rexx-run
++```
++
++Exit 0. Every control delta on every program prints as `0.0000`% (largest absolute difference 136
++instructions, `sendloop` pad3), so the band is 0 and the budget is +0.5%.
++
++Instructions:
++
++```
++bash rust/bench-programs/callgrind.sh -r 3 -j 10 -o $S/cg-final -p "fibcall fibfunc dispatch dispatchclass sendloop" base=$S/bin/base/rexx-run t1=$S/bin/head/rexx-run r1=$S/bin/r1c/rexx-run
++```
++
++Exit 0, every spread 0.0000%.
++
++| program | t1 % | r1 % | verdict |
++|---|---:|---:|---|
++| fibcall | +0.6131 | +0.2044 | inside |
++| fibfunc | +0.5642 | +0.2717 | inside |
++| dispatch | +0.7929 | +0.0961 | inside |
++| dispatchclass | +0.8357 | +0.1013 | inside |
++| sendloop | +1.1774 | +0.1427 | inside |
++
++t1 was over on every program: `pop_activation`, inlined into its callers at base, went out of line
++(`cgdiff.py` on `sendloop`: `finish_send` -245,000,269, `pop_activation` +365,005,475). Round 1
++moved the termination restore to a cold helper, forced `pop_activation` inline and kept
++`TraceCache` at its base shape.
++
++Wall clock:
++
++```
++PROGRAMS="fibcall fibfunc dispatch dispatchclass sendloop" bash rust/bench-programs/wallclock.sh -r 5 -o $S/wall-final base=$S/bin/base/rexx-run pad2=$S/bin/pad2/rexx-run r1=$S/bin/r1c/rexx-run
++```
++
++Exit 0; load average 2.59 at start, 1.47 at end.
++
++| program | pad2 % | r1 % |
++|---|---:|---:|
++| fibcall | +0.13 | -0.13 |
++| fibfunc | +0.51 | +0.13 |
++| dispatch | +0.63 | -3.16 |
++| dispatchclass | +1.71 | -2.99 |
++| sendloop | +0.51 | -2.40 |
++
++Every program inside ±4%.
+diff --git a/rust/corpus/lang/scope_case_text_absorbed.rex b/rust/corpus/lang/scope_case_text_absorbed.rex
+new file mode 100644
+index 000000000..f4ded7a63
+--- /dev/null
++++ b/rust/corpus/lang/scope_case_text_absorbed.rex
+@@ -0,0 +1,13 @@
++/* An absorbed WHEN compares against its own SELECT CASE's value, not the
++   value of a SELECT CASE an internal call ran in between. */
++select case 'a'
++  when g() then when 'a' then say 'absorbed matched a'
++  otherwise say 'other'
++end
++say 'done'
++exit
++g:
++  select case 'zz'
++    when 'zz' then return 'a'
++    otherwise return 'y'
++  end
+diff --git a/rust/corpus/lang/scope_case_text_absorbed_other.rex b/rust/corpus/lang/scope_case_text_absorbed_other.rex
+new file mode 100644
+index 000000000..2f4329c20
+--- /dev/null
++++ b/rust/corpus/lang/scope_case_text_absorbed_other.rex
+@@ -0,0 +1,13 @@
++/* The other half of scope_case_text_absorbed.rex: the callee's value would
++   match the absorbed WHEN and its own SELECT CASE's value does not. */
++select case 'a'
++  when g() then when 'zz' then say 'absorbed matched'
++  otherwise say 'other'
++end
++say 'done'
++exit
++g:
++  select case 'zz'
++    when 'zz' then return 'a'
++    otherwise return 'y'
++  end
+diff --git a/rust/corpus/lang/scope_clock_external.d/extr.rex b/rust/corpus/lang/scope_clock_external.d/extr.rex
+new file mode 100644
+index 000000000..af61b589d
+--- /dev/null
++++ b/rust/corpus/lang/scope_clock_external.d/extr.rex
+@@ -0,0 +1 @@
++t = time('r'); return t
+diff --git a/rust/corpus/lang/scope_clock_external.rex b/rust/corpus/lang/scope_clock_external.rex
+new file mode 100644
+index 000000000..531a2cbe4
+--- /dev/null
++++ b/rust/corpus/lang/scope_clock_external.rex
+@@ -0,0 +1,7 @@
++/* An external program starts with an elapsed clock of its own, as a
++   ::ROUTINE does. */
++call time 'r'
++x = 0
++do i = 1 to 300000; x = x + 1; end
++t = extr()
++say 'external zero:' (t = 0)
+diff --git a/rust/corpus/lang/scope_clock_internal.rex b/rust/corpus/lang/scope_clock_internal.rex
+new file mode 100644
+index 000000000..e5a1dc0cb
+--- /dev/null
++++ b/rust/corpus/lang/scope_clock_internal.rex
+@@ -0,0 +1,5 @@
++/* An internal call starts from a copy of its caller's elapsed clock, and a
++   TIME('R') inside it resets the copy, not the caller's. */
++call time 'r'; call SysSleep 0.05; x = time('E'); call s
++say (time('e') >= 0.05); exit
++s: tt = time('R'); return
+diff --git a/rust/corpus/lang/scope_clock_routine.rex b/rust/corpus/lang/scope_clock_routine.rex
+new file mode 100644
+index 000000000..82251cb87
+--- /dev/null
++++ b/rust/corpus/lang/scope_clock_routine.rex
+@@ -0,0 +1,10 @@
++/* A ::ROUTINE starts with an elapsed clock of its own: its first TIME('R')
++   answers 0 whatever the caller's clock has run. */
++call time 'r'
++x = 0
++do i = 1 to 300000; x = x + 1; end
++call r
++exit
++::routine r
++t = time('r')
++say 'routine r zero:' (t = 0)
+diff --git a/rust/corpus/lang/scope_debug_pause_routine.rex b/rust/corpus/lang/scope_debug_pause_routine.rex
+new file mode 100644
+index 000000000..e59b5dba5
+--- /dev/null
++++ b/rust/corpus/lang/scope_debug_pause_routine.rex
+@@ -0,0 +1,12 @@
++/* A routine called from a line typed at a debug pause traces and pauses
++   under its own TRACE ?R; the pause belongs to the activation running the
++   typed line. */
++trace ?r
++x = 1
++say 'main'
++exit
++::routine s
++  trace ?r
++  y = 2
++  say 'in s'
++  return
+diff --git a/rust/corpus/lang/scope_debug_pause_routine.stdin b/rust/corpus/lang/scope_debug_pause_routine.stdin
+new file mode 100644
+index 000000000..926171dda
+--- /dev/null
++++ b/rust/corpus/lang/scope_debug_pause_routine.stdin
+@@ -0,0 +1,17 @@
++call s
++.stderr~lineout('T1')
++
++.stderr~lineout('T2')
++
++.stderr~lineout('T3')
++
++.stderr~lineout('T4')
++
++.stderr~lineout('T5')
++
++.stderr~lineout('T6')
++
++.stderr~lineout('T7')
++
++.stderr~lineout('T8')
++
+diff --git a/rust/corpus/lang/scope_internal_depth.rex b/rust/corpus/lang/scope_internal_depth.rex
+new file mode 100644
+index 000000000..6bdc4bbbf
+--- /dev/null
++++ b/rust/corpus/lang/scope_internal_depth.rex
+@@ -0,0 +1,19 @@
++/* RANDOM and SETLOCAL at internal-call depth 2000 act on main's activation:
++   the seeded stream continues across the calls and main's ENDLOCAL restores
++   what the deepest call saved. One restore in the process
++   (oracle-crashes.txt entry 10b). */
++say 'main' random(1,1000,5)
++call value 'P61D', 'orig', 'ENVIRONMENT'
++call down 2000
++say 'main' random(1,1000) value('P61D',,'ENVIRONMENT') endlocal() value('P61D',,'ENVIRONMENT')
++exit
++down: procedure
++  use arg n
++  if n > 0 then do
++    call down n - 1
++    if n = 1000 then say 'depth 1000' random(1,1000)
++    return
++  end
++  say 'depth 2000' random(1,1000) setlocal()
++  call value 'P61D', 'deep', 'ENVIRONMENT'
++  return
+diff --git a/rust/corpus/lang/scope_propagate_after_routine.rex b/rust/corpus/lang/scope_propagate_after_routine.rex
+new file mode 100644
+index 000000000..a35e40f17
+--- /dev/null
++++ b/rust/corpus/lang/scope_propagate_after_routine.rex
+@@ -0,0 +1,15 @@
++/* A condition a routine handled is not main's to propagate. */
++call r
++signal on syntax
++raise propagate
++say 'main: no raise'
++exit
++syntax:
++  say 'main trapped' condition('O')~code
++  exit
++::routine r
++  signal on syntax name h
++  say 1/0
++h:
++  say 'routine handled' condition('O')~code
++  return
+diff --git a/rust/corpus/lang/scope_propagate_routine.rex b/rust/corpus/lang/scope_propagate_routine.rex
+new file mode 100644
+index 000000000..f8dbe5323
+--- /dev/null
++++ b/rust/corpus/lang/scope_propagate_routine.rex
+@@ -0,0 +1,16 @@
++/* A routine called from a handler starts with no condition to propagate. */
++signal on syntax
++say 1/0
++exit
++syntax:
++  call r
++  say 'back'
++  exit
++::routine r
++  signal on syntax name inner
++  raise propagate
++  say 'no raise'
++  return
++inner:
++  say 'routine trapped' condition('O')~code
++  return
+diff --git a/rust/corpus/lang/scope_random_seed.rex b/rust/corpus/lang/scope_random_seed.rex
+new file mode 100644
+index 000000000..5c7fa6569
+--- /dev/null
++++ b/rust/corpus/lang/scope_random_seed.rex
+@@ -0,0 +1,12 @@
++/* RANDOM's seed belongs to the top-level activation: a method's and a
++   routine's seeds never reach main's stream. */
++say random(1,1000,7)
++say .t~new~m
++say random()
++call s
++say random()
++::class t
++::method m
++  return random(1,1000,11)
++::routine s
++  call random 1,1000,13
+diff --git a/rust/corpus/lang/scope_random_unseeded.rex b/rust/corpus/lang/scope_random_unseeded.rex
+new file mode 100644
+index 000000000..05a696c1c
+--- /dev/null
++++ b/rust/corpus/lang/scope_random_unseeded.rex
+@@ -0,0 +1,10 @@
++/* Each top-level activation seeds its RANDOM stream from the activity's
++   generator, so two calls of one method draw different values. */
++o = .t~new
++a = o~m
++b = o~m
++say 'differ' (a \= b)
++say 'main' (random(1,1000000) \= random(1,1000000))
++::class t
++::method m
++  return random(1,1000000)
+diff --git a/rust/corpus/lang/scope_setlocal_method.rex b/rust/corpus/lang/scope_setlocal_method.rex
+new file mode 100644
+index 000000000..ada26da70
+--- /dev/null
++++ b/rust/corpus/lang/scope_setlocal_method.rex
+@@ -0,0 +1,9 @@
++/* A method's SETLOCAL is on the method's own list, restored when the method
++   ends; main's ENDLOCAL finds its own list empty. One restore in the
++   process (oracle-crashes.txt entry 10b). */
++o = .t~new
++o~m
++say 'main endlocal' endlocal()
++::class t
++::method m
++  say 'm setlocal' setlocal()
+diff --git a/rust/corpus/lang/scope_setlocal_routine.rex b/rust/corpus/lang/scope_setlocal_routine.rex
+new file mode 100644
+index 000000000..d540601b5
+--- /dev/null
++++ b/rust/corpus/lang/scope_setlocal_routine.rex
+@@ -0,0 +1,9 @@
++/* A ::ROUTINE that ends with a SETLOCAL outstanding restores it at its end. */
++call value 'P61X', 'orig', 'ENVIRONMENT'
++call r
++say 'main sees' value('P61X',,'ENVIRONMENT')
++exit
++::routine r
++  call setlocal
++  call value 'P61X', 'routine', 'ENVIRONMENT'
++  return
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index de43eb949..f5420926b 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -614,20 +614,42 @@ which reads `((ENVENTRY *)current)->size` and `chdir(current)` off it
+ 
+ 10b is a second defect in the same function. `restoreEnvironment`
+ (`ExternalFunctions.cpp:258`-`:341`) `putenv`s pointers that live **inside the
+ saved Rexx buffer** and frees whatever `environ` entry each name resolved to;
+ its first run also copies the whole environment into `malloc`ed strings under
+ the `putflag` guard. After one restore, `environ` points into GC-managed memory,
+ and the next restore hands those pointers to `free`. Exactly one restore per
+ process survives, whatever the nesting -- which is why the paired program above
+ dies too.
+ 
++A termination restore counts. An activation ending with a `SETLOCAL` outstanding
++restores the oldest (`RexxActivation.cpp:1494-1500`), so a `::ROUTINE` that
++leaves one open spends the process's one restore on its return:
++
++    call r
++    say 'main sees' value('P61X',,'ENVIRONMENT')
++    call s
++    say 'after internal' value('P61X',,'ENVIRONMENT') endlocal()
++    exit
++    s:
++      call setlocal
++      call value 'P61X', 'internal', 'ENVIRONMENT'
++      return
++    ::routine r
++      call setlocal
++      call value 'P61X', 'routine', 'ENVIRONMENT'
++      return
++
++SIGABRT, rc 134, `free(): invalid pointer` on stderr after `main sees routine`
++on stdout, 5 of 5 runs: main's `ENDLOCAL` is the second restore. This crate
++prints `after internal internal 1`, rc 0.
++
+ The control is what makes that reading discriminating rather than merely
+ consistent: `say endlocal(); say endlocal()` with no `SETLOCAL` anywhere answers
+ `0` and `0` at rc 0 (measured, same wrapper). An absent list is safe; an emptied
+ one is not.
+ 
+ Found 2026-09-12 by the Phase 7 survey of `SETLOCAL`/`ENDLOCAL`. **No upstream
+ ticket.** The consequence for this crate is a licensed divergence: an `ENDLOCAL`
+ past the outstanding `SETLOCAL`s answers `0` here -- the answer the
+ never-created path already gives -- and no differential case may put that
+ program in front of the oracle.
+diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
+new file mode 100644
+index 000000000..ff00af2c3
+--- /dev/null
++++ b/rust/corpus/phase-6-1.txt
+@@ -0,0 +1,22 @@
++# Phase 6.1 corpus subset -- loose ends of closed phases. The union with the
++# earlier phase-*.txt files is what the harnesses read, not this file alone.
++#
++# One path per line, relative to this directory (rust/corpus/). Lines starting
++# with # are comments; blank lines are ignored.
++
++# Task 1: the elapsed clock, RANDOM's seed, SETLOCAL's list, the condition
++# RAISE PROPAGATE reads, SELECT CASE's value and the debug pause belong to an
++# activation, not to its activity.
++lang/scope_clock_routine.rex
++lang/scope_clock_external.rex
++lang/scope_clock_internal.rex
++lang/scope_random_seed.rex
++lang/scope_random_unseeded.rex
++lang/scope_setlocal_method.rex
++lang/scope_setlocal_routine.rex
++lang/scope_propagate_routine.rex
++lang/scope_propagate_after_routine.rex
++lang/scope_case_text_absorbed.rex
++lang/scope_case_text_absorbed_other.rex
++lang/scope_internal_depth.rex
++lang/scope_debug_pause_routine.rex
+diff --git a/rust/crates/rexx-exec/src/activation.rs b/rust/crates/rexx-exec/src/activation.rs
+index 5fd90db6e..67c2e2c6b 100644
+--- a/rust/crates/rexx-exec/src/activation.rs
++++ b/rust/crates/rexx-exec/src/activation.rs
+@@ -350,36 +350,39 @@ pub(crate) struct Activation {
+     ///
+     /// Behind an `Rc` so an internal call inherits it by refcount and a write
+     /// in the callee clones first: that is `checkIOConfigTable`'s own lazy
+     /// copy (`RexxActivation.cpp:1651`), and it is what makes the
+     /// inheritance one-way.
+     pub(crate) io_configs: Option<Rc<IoConfigs>>,
+     /// The condition traps enabled in this activation, keyed by the exact
+     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
+     /// `NOVALUE`, `USER FOO`, ...
+     pub(crate) traps: TrapMap,
+-    /// The condition `CONDITION()` reports in this activation, or `None`
+-    /// when no handler has been entered here. [`TrappedCondition`] carries
+-    /// the measurements for the copy-on-call, never-write-back rule it
+-    /// follows along with [`traps`].
+-    pub(crate) condition: Option<TrappedCondition>,
++    /// What this activation holds only once a handler, `RANDOM` or
++    /// `SETLOCAL` has run in it, allocated on the first.
++    pub(crate) cold: Option<Box<ActivationCold>>,
+     /// `DATE`/`TIME`'s clock reading, in `builtin::datetime`'s own
+     /// microseconds-since-0001-01-01 unit -- the last value this activation
+-    /// ever read, or `None` before its first one. **This is not itself the
+-    /// per-clause cache** -- see [`clock_stale`] for that half -- because
++    /// ever read, or [`NO_CLOCK`] before its first one. **This is not itself
++    /// the per-clause cache** -- see [`clock_stale`] for that half -- because
+     /// `RexxActivation::getTime`'s own lazy `TIME('R')` reset
+     /// (`execution/RexxActivation.cpp:3400`-`3406`) needs the *stale* value
+     /// still readable one call after the clause that produced it stopped
+-    /// being current, to anchor the reset to. Overwriting this straight to
+-    /// `None` on invalidation, an earlier version of this field's own
+-    /// shape, made that value unrecoverable by the time a reset needed it.
+-    pub(crate) cached_clock: Option<i64>,
++    /// being current, to anchor the reset to.
++    pub(crate) cached_clock: i64,
++    /// `TIME('E')`/`TIME('R')`'s anchor, `settings.elapsedTime`: the reading
++    /// elapsed time is measured from, in [`cached_clock`]'s unit, or
++    /// [`NO_CLOCK`] before this activation's first `E` or `R`.
++    pub(crate) elapsed_anchor: i64,
++    /// The innermost `SELECT CASE`'s value here, which an absorbed `WHEN`
++    /// compares against; `None` inside a plain `SELECT`.
++    pub(crate) current_case_text: Option<Vec<u8>>,
+     /// Whether [`cached_clock`] needs a fresh read before this activation's
+     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
+     /// doc names, set `true` once per instruction by `Op::Clause`'s region
+     /// on whichever activation is executing at the time, mirroring
+     /// `RexxActivation::run`'s own `settings.timeStamp.valid = false` set
+     /// right after `nextInst->execute()` returns (`RexxActivation.cpp:647`).
+     pub(crate) clock_stale: bool,
+     /// The `RexxContext` this activation's `.CONTEXT` answers, built on the
+     /// first ask and kept for the rest of the activation --
+     /// `RexxActivation::getContextObject`, which fills its own field the
+@@ -481,32 +484,36 @@ pub(crate) struct MethodIdentity {
+     /// `::method MiXeD` announces `"MIXED"` and `::method "quoted"`
+     /// announces `"QUOTED"`.
+     pub(crate) name: Rc<[u8]>,
+     /// The defining class, whose `~id` is printed unmodified -- measured,
+     /// `::class 'k'` announces `with scope "k"`.
+     pub(crate) scope: ObjRef,
+     /// The object the send was addressed to -- `SELF`.
+     pub(crate) receiver: ObjRef,
+ }
+ 
+-/// An activation's flags in one byte, which keeps [`Activation`] at 512
+-/// bytes: forwarded, `ActivationSettings::isGuarded`, and `objectScope ==
+-/// SCOPE_RESERVED`.
++/// An activation's flags in one byte: forwarded, `ActivationSettings::
++/// isGuarded`, `objectScope == SCOPE_RESERVED`, the elapsed clock's pending
++/// reset (`elapsedReset`), and `debugPause`.
+ #[derive(Clone, Copy, Default)]
+ pub(crate) struct ActivationFlags(u8);
+ 
+-const _: () = assert!(size_of::<Activation>() == 512);
++/// Every call pushes one, so the size is pinned: a field that grows it has to
++/// pay for itself on the call path (ruling R4).
++const _: () = assert!(size_of::<Activation>() == 480);
+ 
+ impl ActivationFlags {
+     const FORWARDED: u8 = 1;
+     const GUARDED: u8 = 2;
+     const RESERVED: u8 = 4;
++    const ELAPSED_RESET: u8 = 8;
++    const DEBUG_PAUSE: u8 = 16;
+ 
+     /// A method activation's flags: `guarded`, and holding its lock where
+     /// `reserved`.
+     #[inline]
+     pub(crate) fn method(guarded: bool, reserved: bool) -> ActivationFlags {
+         ActivationFlags(u8::from(guarded) << 1 | u8::from(reserved) << 2)
+     }
+ 
+     pub(crate) fn forwarded(self) -> bool {
+         self.0 & Self::FORWARDED != 0
+@@ -521,29 +528,87 @@ impl ActivationFlags {
+     }
+ 
+     pub(crate) fn reserved(self) -> bool {
+         self.0 & Self::RESERVED != 0
+     }
+ 
+     pub(crate) fn set_reserved(&mut self, reserved: bool) {
+         self.set(Self::RESERVED, reserved);
+     }
+ 
++    /// Whether a `TIME('R')`, or a clock read going backward, waits to move
++    /// the elapsed anchor at the next fresh clock read.
++    pub(crate) fn elapsed_reset(self) -> bool {
++        self.0 & Self::ELAPSED_RESET != 0
++    }
++
++    pub(crate) fn set_elapsed_reset(&mut self, reset: bool) {
++        self.set(Self::ELAPSED_RESET, reset);
++    }
++
++    /// Whether this activation is running a line typed at a debug pause:
++    /// `RexxActivation::debugPause`, which `inDebug` and `noTracing` read.
++    pub(crate) fn debug_pause(self) -> bool {
++        self.0 & Self::DEBUG_PAUSE != 0
++    }
++
++    pub(crate) fn set_debug_pause(&mut self, paused: bool) {
++        self.set(Self::DEBUG_PAUSE, paused);
++    }
++
+     fn set(&mut self, bit: u8, on: bool) {
+         if on {
+             self.0 |= bit;
+         } else {
+             self.0 &= !bit;
+         }
+     }
+ }
+ 
++/// [`Activation::cached_clock`] and [`Activation::elapsed_anchor`] before
++/// their first reading: the oracle's own `elapsedTime == 0`.
++pub(crate) const NO_CLOCK: i64 = 0;
++
++/// The part of an activation most never use, boxed off the call path.
++#[derive(Default)]
++pub(crate) struct ActivationCold {
++    /// The condition `CONDITION()` reports in this activation, or `None`
++    /// when no handler has been entered here. [`TrappedCondition`] carries
++    /// the measurements for the copy-on-call, never-write-back rule it
++    /// follows along with [`Activation::traps`].
++    pub(crate) condition: Option<TrappedCondition>,
++    /// The condition `RAISE PROPAGATE` re-raises here, `settings.conditionObj`.
++    pub(crate) active_condition: Option<Rc<crate::ActiveCondition>>,
++    /// `RANDOM`'s state for a top-level activation, `None` before its first
++    /// draw.
++    pub(crate) random_seed: Option<u64>,
++    /// What each outstanding `SETLOCAL` saved, innermost last: the directory
++    /// and the whole environment.
++    pub(crate) locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
++}
++
++impl ActivationCold {
++    /// What an internal call or `CALL ON` handler starts from: the caller's
++    /// two conditions, and neither its seed nor its `SETLOCAL` list, which
++    /// stay on the top-level activation.
++    pub(crate) fn inherited(&self) -> Option<Box<ActivationCold>> {
++        if self.condition.is_none() && self.active_condition.is_none() {
++            return None;
++        }
++        Some(Box::new(ActivationCold {
++            condition: self.condition.clone(),
++            active_condition: self.active_condition.clone(),
++            ..ActivationCold::default()
++        }))
++    }
++}
++
+ /// What a `REPLY` leaves its activation until the activation ends.
+ pub(crate) struct Replied {
+     /// What the caller resumes with.
+     pub(crate) value: Option<ObjRef>,
+     /// The activity the rest of the body moved to, once the split ran.
+     pub(crate) continuation: Option<Box<crate::scheduler::Idle>>,
+ }
+ 
+ impl Replied {
+     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+@@ -604,22 +669,24 @@ impl Activation {
+             condition_syntax: ConditionSyntax::default(),
+             // `NORMAL` and not `OFF`: the two behave identically here and a
+             // program can tell them apart, measured -- `say trace()` as the
+             // first clause of a program with no `TRACE` instruction prints
+             // `N`.
+             trace_mode: TraceMode::NORMAL,
+             debug: DebugState::default(),
+             address: AddressState::default(),
+             io_configs: None,
+             traps: TrapMap::default(),
+-            condition: None,
+-            cached_clock: None,
++            cold: None,
++            cached_clock: NO_CLOCK,
++            elapsed_anchor: NO_CLOCK,
++            current_case_text: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -660,38 +727,43 @@ impl Activation {
+             frame,
+             owns_frame: false,
+             entry: Entry::InternalCall,
+             rs: inherited.rs,
+             call_type: inherited.call_type,
+             method_identity: None,
+             exposed: Vec::new(),
+             reply: ReplyState::None,
+             replied_a_value: false,
+             replied: None,
+-            flags: ActivationFlags::default(),
++            flags: {
++                let mut flags = ActivationFlags::default();
++                flags.set_elapsed_reset(inherited.elapsed_reset);
++                flags
++            },
+             first_instruction_pending: true,
+             trace_entry: TraceEntry::Pending,
+             pc,
+             settings: inherited.settings,
+             condition_syntax: inherited.condition_syntax,
+             trace_mode: inherited.trace_mode,
+             debug: DebugState::default(),
+             address: inherited.address,
+             io_configs: inherited.io_configs,
+             traps: inherited.traps,
+-            condition: inherited.condition,
+-            // Not inherited, matching every other field this constructor
+-            // does not take from `inherited`: a fresh `RexxActivation`
+-            // constructs a fresh, invalid `RexxDateTime timeStamp`
+-            // regardless of its caller, and this is that same "start
+-            // invalid" rather than something `Inherited` should carry.
+-            cached_clock: None,
++            cold: inherited.cold,
++            // The caller's stamp, invalid: `RexxActivation`'s internal-call
++            // constructor copies the settings and sets `timeStamp.valid =
++            // false` (`RexxActivation.cpp:241`), so a reset the caller left
++            // pending anchors to the caller's last reading.
++            cached_clock: inherited.cached_clock,
++            elapsed_anchor: inherited.elapsed_anchor,
++            current_case_text: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -732,22 +804,24 @@ impl Activation {
+             first_instruction_pending: true,
+             trace_entry: TraceEntry::Pending,
+             pc: 0,
+             settings: Settings::default(),
+             condition_syntax: ConditionSyntax::default(),
+             trace_mode: TraceMode::NORMAL,
+             debug: DebugState::default(),
+             address: AddressState::default(),
+             io_configs: None,
+             traps: TrapMap::default(),
+-            condition: None,
+-            cached_clock: None,
++            cold: None,
++            cached_clock: NO_CLOCK,
++            elapsed_anchor: NO_CLOCK,
++            current_case_text: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -783,22 +857,24 @@ impl Activation {
+             first_instruction_pending: true,
+             trace_entry: TraceEntry::Pending,
+             pc: 0,
+             settings: Settings::default(),
+             condition_syntax: ConditionSyntax::default(),
+             trace_mode: TraceMode::NORMAL,
+             debug: DebugState::default(),
+             address: AddressState::default(),
+             io_configs: None,
+             traps: TrapMap::default(),
+-            condition: None,
+-            cached_clock: None,
++            cold: None,
++            cached_clock: NO_CLOCK,
++            elapsed_anchor: NO_CLOCK,
++            current_case_text: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -820,20 +896,41 @@ impl Activation {
+         }
+         self.call_name.as_deref().unwrap_or_default()
+     }
+ 
+     /// The arguments this activation was entered with, the other half of
+     /// [`Activation::invoked_as`].
+     pub(crate) fn invoked_with(&self) -> &[Option<ObjRef>] {
+         self.call_arguments.as_deref().unwrap_or_default()
+     }
+ 
++    /// The condition `CONDITION()` reports here.
++    pub(crate) fn condition(&self) -> Option<&TrappedCondition> {
++        self.cold.as_deref()?.condition.as_ref()
++    }
++
++    /// Replaces [`Activation::condition`], answering the one it held.
++    pub(crate) fn replace_condition(
++        &mut self,
++        condition: Option<TrappedCondition>,
++    ) -> Option<TrappedCondition> {
++        if condition.is_none() && self.cold.is_none() {
++            return None;
++        }
++        std::mem::replace(&mut self.cold_mut().condition, condition)
++    }
++
++    /// The cold part, allocated on the first ask.
++    pub(crate) fn cold_mut(&mut self) -> &mut ActivationCold {
++        self.cold.get_or_insert_with(Box::default)
++    }
++
+     /// Appends every `ObjRef` this activation holds to `out`.
+     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+         let Activation {
+             id: _,
+             program: _,
+             program_id: _,
+             body: _,
+             plan: _,
+             extra: _,
+             frame: _,
+@@ -854,22 +951,24 @@ impl Activation {
+             condition_syntax: _,
+             trace_mode: _,
+             address: _,
+             // Parse data behind an `Rc`: an `AddressIo` holds expressions and
+             // symbol ids, never an `ObjRef`. What a redirection *evaluates*
+             // to is a temp of the command that built it.
+             io_configs: _,
+             // Plain bookkeeping: counters and flags, no `ObjRef` among them.
+             debug: _,
+             traps: _,
+-            condition,
++            cold,
+             cached_clock: _,
++            elapsed_anchor: _,
++            current_case_text: _,
+             clock_stale: _,
+             context_object,
+             notify_message,
+             clause: _,
+             invocation: _,
+             call_name: _,
+             call_arguments,
+             streams,
+         } = self;
+         out.extend(*context_object);
+@@ -880,21 +979,21 @@ impl Activation {
+         // The trapped condition's own object, destructured rather than
+         // reached through a field: the exhaustive match above guards this
+         // struct's fields, and an `ObjRef` added to `TrappedCondition` would
+         // otherwise arrive unrooted with nothing to say so.
+         if let Some(TrappedCondition {
+             name: _,
+             code_sub: _,
+             call: _,
+             description: _,
+             object,
+-        }) = condition
++        }) = cold.as_deref().and_then(|cold| cold.condition.as_ref())
+         {
+             out.extend(*object);
+         }
+         // The table's streams. An activation is a root, and a stream only
+         // the table holds is reachable through nothing else.
+         out.extend(streams.values().copied());
+         // The convention's own values, which a moved `REPLY` continuation
+         // also roots from its `CallContext`: this activation holds a
+         // refcount clone of the same slice.
+         out.extend(
+@@ -931,21 +1030,26 @@ impl Activation {
+ pub(crate) struct Inherited {
+     pub(crate) call_type: CallType,
+     pub(crate) settings: Settings,
+     /// `.RS`, which an internal call starts from its caller's copy of.
+     pub(crate) rs: Option<i32>,
+     pub(crate) condition_syntax: ConditionSyntax,
+     pub(crate) trace_mode: TraceMode,
+     pub(crate) address: AddressState,
+     pub(crate) io_configs: Option<Rc<IoConfigs>>,
+     pub(crate) traps: TrapMap,
+-    pub(crate) condition: Option<TrappedCondition>,
++    /// The caller's `CONDITION()` and `RAISE PROPAGATE` conditions
++    /// ([`ActivationCold::inherited`]).
++    pub(crate) cold: Option<Box<ActivationCold>>,
++    pub(crate) cached_clock: i64,
++    pub(crate) elapsed_anchor: i64,
++    pub(crate) elapsed_reset: bool,
+ }
+ 
+ /// The code body a `(program, selector)` pair denotes: `None` is
+ /// `program.main`, `Some(i)` is `program.directives[i]`'s own body.
+ pub(crate) fn body_of(program: &Program, selector: Option<usize>) -> Option<&CodeBody> {
+     match selector {
+         None => Some(&program.main),
+         Some(index) => match &program.directives.get(index)?.kind {
+             DirectiveKind::Routine(routine) => routine.body.as_ref(),
+             DirectiveKind::Method(method) => method.body.as_ref(),
+@@ -1008,20 +1112,40 @@ impl Interp {
+         }
+         self.activity
+             .suspended
+             .iter_mut()
+             .rev()
+             .map(Box::as_mut)
+             .find(|frame| matches!(frame.entry, Entry::TopLevel | Entry::Method))
+             .map(|frame| &mut frame.streams)
+     }
+ 
++    /// The innermost activation that is not an internal call: the one
++    /// `RANDOM`'s seed and `SETLOCAL`'s list belong to (the oracle's
++    /// `isInternalLevelCall` delegation to `parent`).
++    pub(crate) fn top_level_activation_mut(&mut self) -> Option<&mut Activation> {
++        if self
++            .activity
++            .running
++            .as_deref()
++            .is_some_and(|frame| frame.entry != Entry::InternalCall)
++        {
++            return self.activity.running.as_deref_mut();
++        }
++        self.activity
++            .suspended
++            .iter_mut()
++            .rev()
++            .map(Box::as_mut)
++            .find(|frame| frame.entry != Entry::InternalCall)
++    }
++
+     /// The activation at `depth`, counted as [`Activity::frames`] counts: `0`
+     /// is the running one.
+     pub(crate) fn frame_at(&self, depth: usize) -> Option<&Activation> {
+         self.frames().nth(depth)
+     }
+ 
+     /// The depth of the innermost activation that is not an internal call.
+     pub(crate) fn first_non_internal_depth(&self) -> usize {
+         self.frames()
+             .position(|activation| activation.entry != Entry::InternalCall)
+@@ -1127,21 +1251,21 @@ impl Interp {
+         let boxed = match self.activity.spare_activations.pop() {
+             Some(mut spare) => {
+                 *spare = activation;
+                 spare
+             }
+             None => Box::new(activation),
+         };
+         // `trace_cache`'s own invariant: the setting travels with whichever
+         // activation is running, and this changes which one that is.
+         self.activity.trace_cache =
+-            crate::trace::TraceCache::of(boxed.trace_mode, self.activity.debug_pause);
++            crate::trace::TraceCache::of(boxed.trace_mode, boxed.flags.debug_pause());
+         // The clause the activation being suspended is stopped on, which is
+         // what its own `StackFrame` reports for as long as it stays
+         // suspended: `Activity::clause_state` is about to start describing the
+         // callee's clauses instead. Taken here rather than at each of the
+         // sites that push, for the reason `Interp::run_activation` takes the
+         // calling convention there: this is the one place every push passes.
+         let clause = ClauseSnapshot {
+             line: self.activity.clause_state.line(),
+             indent: self.activity.clause_state.current_value_indent,
+             index: self.activity.clause_state.clause_index(),
+@@ -1155,35 +1279,66 @@ impl Interp {
+     /// Keeps an ended activation's box for the next [`Interp::
+     /// push_activation`], instead of returning it to the allocator.
+     pub(crate) fn recycle_activation(&mut self, ended: Box<Activation>) {
+         if self.activity.spare_activations.len() < SPARE_ACTIVATIONS {
+             self.activity.spare_activations.push(ended);
+         }
+     }
+ 
+     /// Ends the running activation and resumes its caller, answering the
+     /// activation that ended.
++    #[inline(always)]
+     pub(crate) fn pop_activation(&mut self) -> Option<Box<Activation>> {
++        if self
++            .activity
++            .running
++            .as_deref()
++            .is_some_and(|ending| ending.cold.is_some())
++        {
++            self.end_cold();
++        }
+         let ended = self.activity.running.take()?;
+         self.activity.running = self.activity.suspended.pop();
+         // The resumed caller's setting, or `OFF` where nothing is left to
+         // resume -- which is the state `Interp::new` starts in.
+         self.activity.trace_cache = crate::trace::TraceCache::of(
+             self.activity
+                 .running
+                 .as_deref()
+                 .map_or(TraceMode::OFF, |resumed| resumed.trace_mode),
+-            self.activity.debug_pause,
++            self.debug_pause(),
+         );
+         Some(ended)
+     }
+ 
++    /// An activation ending with `SETLOCAL`s outstanding restores the oldest
++    /// (`RexxActivation.cpp:1494-1500`); one a `REPLY` moves on ends later,
++    /// on its continuation's activity.
++    #[cold]
++    #[inline(never)]
++    fn end_cold(&mut self) {
++        let Some(ending) = self.activity.running.as_deref_mut() else {
++            return;
++        };
++        if let Some(cold) = ending.cold.as_deref_mut()
++            && !cold.locals.is_empty()
++            && ending
++                .replied
++                .as_ref()
++                .is_none_or(|replied| replied.continuation.is_none())
++        {
++            let oldest = cold.locals.swap_remove(0);
++            cold.locals.clear();
++            self.restore_local_environment(oldest);
++        }
++    }
++
+     /// The `TRACE` setting in force right now: the *running* activation's.
+     pub(crate) fn trace_mode(&self) -> TraceMode {
+         // **The cache is checked here rather than trusted**, which is what
+         // closes the set of places that maintain it: any path that changes
+         // the running activation or its setting without going through one of
+         // them reddens this at the next clause, in a debug run of anything at
+         // all.
+         debug_assert_eq!(
+             self.running_activation()
+                 .map(|activation| activation.trace_mode),
+@@ -1191,21 +1346,21 @@ impl Interp {
+             "the cached TRACE setting is not the running activation's"
+         );
+         self.activity.trace_cache.mode()
+     }
+ 
+     /// Sets the running activation's `TRACE`. Only the `TRACE` instruction
+     /// and this crate's own tests call it; a callee inherits its starting
+     /// value through [`Activation::nested`] instead, never through here.
+     pub(crate) fn set_trace_mode(&mut self, mode: TraceMode) {
+         self.activation_mut().trace_mode = mode;
+-        self.activity.trace_cache = crate::trace::TraceCache::of(mode, self.activity.debug_pause);
++        self.activity.trace_cache = crate::trace::TraceCache::of(mode, self.debug_pause());
+     }
+ }
+ 
+ /// One of the condition names the language fixes, used as an index into a
+ /// [`BuiltinTraps`] slot.
+ #[derive(Clone, Copy, PartialEq, Eq)]
+ pub(crate) enum Builtin {
+     Any,
+     Error,
+     Failure,
+diff --git a/rust/crates/rexx-exec/src/activity.rs b/rust/crates/rexx-exec/src/activity.rs
+index ebd04f725..9951ca662 100644
+--- a/rust/crates/rexx-exec/src/activity.rs
++++ b/rust/crates/rexx-exec/src/activity.rs
+@@ -13,32 +13,26 @@
+ 
+ use std::collections::VecDeque;
+ use std::rc::Rc;
+ 
+ use rexx_core::ObjRef;
+ 
+ use crate::activation::Activation;
+ use crate::clause::ClauseState;
+ use crate::error::{Failure, FailureSite};
+ use crate::plan::Package;
+-use crate::{ActiveCondition, CallContext, FragmentLevel, NativeFrame, PendingTrap};
++use crate::{CallContext, FragmentLevel, NativeFrame, PendingTrap};
+ 
+ /// What each execution of the interpreter needs its own copy of.
+ pub(crate) struct Activity {
+     /// A buffer lent out for a builtin call's evaluated argument values.
+     pub(crate) value_buffer: Vec<Option<ObjRef>>,
+-    /// What each outstanding `SETLOCAL` saved, innermost last: the directory
+-    /// and the whole environment, which `ENDLOCAL` puts back. The oracle keeps
+-    /// this on the top-level activation and an internal routine's `SETLOCAL`
+-    /// therefore outlives its return (`platform/unix/ExternalFunctions.cpp`,
+-    /// and `funct.xml` says otherwise -- measured, the file is wrong).
+-    pub(crate) locals: Vec<(std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>)>,
+     /// The activation running right now, held in a field of its own rather
+     /// than at the top of [`Activity::suspended`].
+     pub(crate) running: Option<Box<Activation>>,
+     /// The `TRACE` setting of whatever [`Activity::running`] holds, kept beside
+     /// it rather than read through it.
+     pub(crate) trace_cache: crate::trace::TraceCache,
+     /// The activations that entered before [`Activity::running`], oldest
+     /// first, so `suspended.last()` is the running activation's own caller.
+     #[expect(
+         clippy::vec_box,
+@@ -108,23 +102,20 @@ pub(crate) struct Activity {
+     /// entered once per two passes is common enough -- `samples/rexxcps.rex`
+     /// enters one 140,000 times to run 280,000 passes -- that an allocation
+     /// per entry is charged against a saving per pass.
+     #[expect(
+         clippy::vec_box,
+         reason = "these are allocations handed back for reuse, so the box is what is being kept"
+     )]
+     pub(crate) flat_spares: Vec<Box<crate::run::FlatLoop>>,
+     /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
+     pub(crate) pending_traps: VecDeque<PendingTrap>,
+-    /// The condition whose handler is running, for `RAISE PROPAGATE` to
+-    /// re-raise.
+-    pub(crate) active_condition: Option<ActiveCondition>,
+     /// The object a `RAISE ... ADDITIONAL` named, held from the raise until
+     /// the condition object is built. **The raise's own value and not a
+     /// rebuild of it**: measured, `additional 'JUSTONE'` puts a `String` in
+     /// the directory and `additional (.array~new)` an empty `Array`, where
+     /// reconstructing from the substitution list gives a one-item `Array` and
+     /// nothing at all. It lives on `Activity` rather than on `Raised` because a
+     /// `Raised` travels inside a `Failure` on the Rust stack, where no
+     /// destructure can root it, and this field is covered by the exhaustive
+     /// match in `object_roots`.
+     pub(crate) pending_additional: Option<ObjRef>,
+@@ -136,33 +127,20 @@ pub(crate) struct Activity {
+     /// as [`Activity::pending_additional`] is: an object where the entry's value
+     /// is not a rendering of the command's code, `.nil` for an entry present
+     /// with no value.
+     pub(crate) pending_rc: Option<ObjRef>,
+     /// The condition object a `RAISE PROPAGATE` re-raises in its caller, from
+     /// the propagate until a trap takes it.
+     pub(crate) reraised_object: Option<ObjRef>,
+     /// How many of the levels that `RAISE PROPAGATE` leaves are still to be
+     /// left, which add no frame and no origin: the object has its frames.
+     pub(crate) reraise_leaving: usize,
+-    /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
+-    /// `case` text, or `None` inside a plain `SELECT` (or before any
+-    /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
+-    /// **absorbed** `WhenCase` needs that nothing else threads to it: a
+-    /// *listed* `WhenCase` gets `case_text` handed to it directly by
+-    /// `Select`'s own explicit arm (`run.rs`), but an absorbed one (a
+-    /// `WhenCase` reached only through ordinary `Op::Clause`'s region
+-    /// stepping, because it is itself the `THEN` consequence of a
+-    /// preceding `WHEN`/`WHEN CASE`, `ast.rs`'s own doc comment on
+-    /// `whens`) has no such hand-off -- it is stepped like any other
+-    /// instruction, with nothing carrying its enclosing `SELECT CASE`'s
+-    /// own comparison value along.
+-    pub(crate) current_case_text: Option<Vec<u8>>,
+     /// **F3's own perimeter, found by review -- and corrected twice more,
+     /// each correction found by re-verifying the previous one rather than
+     /// trusting it.** When an absorbed `WhenCase` (`run.rs`'s own doc
+     /// comment on that arm) takes its `Flow::Goto(false_target)` branch,
+     /// whatever it lands on -- `END`'s own 7.3, or (F-EX1) `OTHERWISE`'s
+     /// own marker *and its whole body*, redirected through `run_
+     /// otherwise` -- reports every indent it computes **`self` spaces
+     /// higher** than its own ordinary `static_indent` would give, for as
+     /// long as this stays non-zero.
+     pub(crate) indent_offset: usize,
+@@ -214,25 +192,20 @@ pub(crate) struct Activity {
+     /// source.
+     pub(crate) clause_line_override: Option<usize>,
+     /// How many `INTERPRET` fragments are running, counted from zero outside
+     /// any of them.
+     pub(crate) fragment_depth: usize,
+     /// Each running fragment, outermost first.
+     pub(crate) fragments: Vec<FragmentLevel>,
+     /// The index, in the innermost running fragment's body, of its clause
+     /// being stepped.
+     pub(crate) fragment_clause: usize,
+-    /// Whether a line typed at an interactive-debug pause is running.
+-    /// `RexxActivation::noTracing` includes this, so a pause's own fragment
+-    /// traces nothing and pauses nowhere. Written only through
+-    /// [`Interp::replace_debug_pause`], which keeps `trace_cache` in step.
+-    pub(crate) debug_pause: bool,
+     /// Whether a trace line is being delivered to `.TRACEOUTPUT`. A traced
+     /// clause inside that delivery writes to the buffer instead of routing
+     /// again: the oracle SIGSEGVs in the one shape that reaches this
+     /// (`corpus/oracle-crashes.txt` entry 14), and this crate must terminate.
+     pub(crate) routing_trace: bool,
+     /// Current `eval` recursion depth, and the deepest it has reached.
+     pub(crate) depth: usize,
+     pub(crate) max_depth: usize,
+     /// The depth-1 address of the chain currently being evaluated, kept aside
+     /// until that chain turns out to be the deepest one.
+@@ -246,39 +219,23 @@ pub(crate) struct Activity {
+     /// instruction executed in its activation.
+     pub(crate) procedure_permitted: bool,
+     /// What [`Activity::procedure_permitted`] held when the running
+     /// [`crate::ir::Op::Clause`] region opened, for the one op that needs it.
+     pub(crate) region_procedure_permitted: bool,
+     /// The call that entered the running activation: what `USE ARG` reads.
+     pub(crate) call_context: CallContext,
+     /// The name the last invocation entered under, which the next one under
+     /// the same name shares ([`Activity::invocation_name`]).
+     last_name: Option<Rc<[u8]>>,
+-    /// `RANDOM`'s generator state: the seed the next call will scramble, or
+-    /// `None` before any call has drawn one.
+-    pub(crate) random_seed: Option<u64>,
+-    /// `TIME('E')`/`TIME('R')`'s anchor: the clock reading (`builtin::
+-    /// datetime`'s microseconds-since-0001-01-01 unit) elapsed time is
+-    /// measured from, or `None` before any `E`/`R` call has run.
+-    /// ```text
+-    /// zz=time('E'); call burn; call sub; say 'after' time('E')   [sub does n2 = time('R')]
+-    ///   oracle:  inside 0.725271  inside-after-R 0.000004  after 0.725387
+-    ///   crate:   inside 33.889432 inside-after-R 0.000005  after 0.000013
+-    /// ```
+-    pub(crate) elapsed_anchor: Option<i64>,
+-    /// Whether a `TIME('R')` (or a clock read going backward) is waiting
+-    /// to move [`elapsed_anchor`] the next time the clock cache next
+-    /// refreshes -- `RexxActivation`'s own `elapsedReset` state flag
+-    /// (`execution/ActivationSettings.hpp:121`), consumed by
+-    /// `builtin::datetime::now_base_time`'s cache-miss path. See
+-    /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
+-    pub(crate) pending_elapsed_reset: bool,
++    /// The generator each top-level activation's `RANDOM` seed is drawn
++    /// from (`Activity::getRandomSeed`), `None` until the first is drawn.
++    pub(crate) random_source: Option<u64>,
+     /// The resolved paths whose `::REQUIRES` directives are still installing
+     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
+     pub(crate) requires_installing: Vec<Box<str>>,
+     /// How many Rust frames pin this activity between the scheduler and its
+     /// running driver (spec 2026-09-29 section 2.6).
+     pub(crate) pin_depth: u32,
+     /// The pin depth where the innermost running driver was entered.
+     pub(crate) driver_pins: u32,
+     /// The park a primitive method answered, from its answer until the
+     /// activity wakes.
+@@ -376,77 +333,71 @@ impl Activity {
+     #[inline(never)]
+     fn new_invocation_name(&mut self, name: &[u8]) -> Rc<[u8]> {
+         let shared: Rc<[u8]> = Rc::from(name);
+         self.last_name = Some(Rc::clone(&shared));
+         shared
+     }
+ 
+     pub(crate) fn new() -> Activity {
+         Activity {
+             value_buffer: Vec::new(),
+-            locals: Vec::new(),
+             running: None,
+             suspended: Vec::new(),
+             spare_activations: Vec::new(),
+             spare_exposed: Vec::new(),
+             thread: None,
+             native_handles: Vec::new(),
+             native_spares: Vec::new(),
+             clause_state: ClauseState::new(),
+             flat_loops: Vec::new(),
+             flat_top: None,
+             flat_spares: Vec::new(),
+             frames: Vec::new(),
+             call_tails: Vec::new(),
+             parked_calls: Vec::new(),
+             parked_levels: Vec::new(),
+             replied_level: None,
+             native_tails: Vec::new(),
+             pending_traps: VecDeque::new(),
+-            active_condition: None,
+             pending_additional: None,
+             reraised_object: None,
+             reraise_leaving: 0,
+             pending_result: None,
+             pending_rc: None,
+-            current_case_text: None,
+             indent_offset: 0,
+             activation_indent: 0,
+             failure_site: None,
+             failure_sites: Vec::new(),
+             failure_frame: None,
+             failure_frames: Vec::new(),
+             failure_origin: None,
+             failure_propagated: false,
+             failure_reraised: false,
+             native_reraise: false,
+             input_dispatch: None,
+             input_dispatch_trapped: false,
+             input_dispatch_syntax: None,
+             clause_line_override: None,
+             fragment_depth: 0,
+             fragments: Vec::new(),
+             fragment_clause: 0,
+-            debug_pause: false,
+             routing_trace: false,
+             depth: 0,
+             max_depth: 0,
+             stack_entry: 0,
+             stack_first: 0,
+             stack_deepest: 0,
+             procedure_permitted: false,
+             region_procedure_permitted: false,
+             call_context: CallContext::default(),
+             last_name: None,
+-            random_seed: None,
+-            elapsed_anchor: None,
+-            pending_elapsed_reset: false,
++            random_source: None,
+             requires_installing: Vec::new(),
+             pin_depth: 0,
+             driver_pins: 0,
+             native_park: None,
+             native_call: None,
+             blocked: None,
+             resuming: false,
+             first: None,
+             root_then: None,
+             drive_floor: None,
+@@ -507,65 +458,59 @@ impl Activity {
+             // registers stay reserved in the arena.
+             call_tails: _,
+             parked_calls: _,
+             parked_levels: _,
+             // Its registers are the record's parked values.
+             replied_level: _,
+             native_tails,
+             // Overwritten at reuse, as `spare_activations` is.
+             flat_spares: _,
+             pending_traps,
+-            active_condition: _,
+             pending_additional,
+             reraised_object,
+             reraise_leaving: _,
+             pending_result,
+             pending_rc,
+-            current_case_text: _,
+             indent_offset: _,
+             activation_indent: _,
+             failure_site: _,
+             failure_sites: _,
+             failure_frame,
+             failure_frames,
+             // A package identity and a line.
+             failure_origin: _,
+             failure_propagated: _,
+             failure_reraised: _,
+             // Flags and an activation identity.
+             native_reraise: _,
+             input_dispatch: _,
+             input_dispatch_trapped: _,
+             // A condition, whose ADDITIONAL `pending_additional` roots.
+             input_dispatch_syntax: _,
+             clause_line_override: _,
+             fragment_depth: _,
+             fragments: _,
+             fragment_clause: _,
+-            debug_pause: _,
+             routing_trace: _,
+             depth: _,
+             max_depth: _,
+             stack_entry: _,
+             stack_first: _,
+             stack_deepest: _,
+             procedure_permitted: _,
+             region_procedure_permitted: _,
+             // A running call's arguments and receiver are the caller's temps;
+             // `CallContext::object_roots` is the parked case's other route.
+             call_context: _,
+             last_name: _,
+-            random_seed: _,
+-            elapsed_anchor: _,
+-            pending_elapsed_reset: _,
++            random_source: _,
+             requires_installing: _,
+-            locals: _,
+             pin_depth: _,
+             driver_pins: _,
+             native_park,
+             native_call,
+             // Bytes and a return code only.
+             blocked: _,
+             resuming: _,
+             first,
+             root_then,
+             drive_floor: _,
+@@ -686,14 +631,14 @@ impl Activity {
+             }
+         }
+         // The trapped condition's object, which a `CALL ON` handler's
+         // activation and every callee that inherits its `CONDITION()` hold
+         // once the queue has handed it over.
+         out.extend(
+             running
+                 .iter()
+                 .map(std::ops::Deref::deref)
+                 .chain(suspended.iter().map(Box::as_ref))
+-                .filter_map(|activation| activation.condition.as_ref()?.object),
++                .filter_map(|activation| activation.condition()?.object),
+         );
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/builtin/datetime.rs b/rust/crates/rexx-exec/src/builtin/datetime.rs
+index 87703bad1..c36016abd 100644
+--- a/rust/crates/rexx-exec/src/builtin/datetime.rs
++++ b/rust/crates/rexx-exec/src/builtin/datetime.rs
+@@ -22,20 +22,21 @@
+ //! time('E') immediately      0.000023   so that R did reset
+ //! ```
+ 
+ use chrono::{Offset, TimeZone};
+ 
+ use rexx_core::ObjRef;
+ use rexx_num::Number;
+ 
+ use super::{Args, optional_string};
+ use crate::Interp;
++use crate::activation::NO_CLOCK;
+ use crate::error::{Failure, Raised};
+ 
+ // ---- the calendar, ported from `RexxDateTime` ----
+ 
+ /// Days in a `years`-year span of the proleptic Gregorian calendar, counting
+ /// from year 0 -- `RexxDateTime.hpp`'s `BASE_DAYS` macro. `years` is always a
+ /// multiple of 4, 100 or 400 at every call site below, but the formula does
+ /// not require that.
+ const fn base_days(years: i64) -> i64 {
+     years * 365 + years / 4 - years / 100 + years / 400
+@@ -761,35 +762,32 @@ fn real_clock_base_time() -> i64 {
+         .duration_since(std::time::UNIX_EPOCH)
+         .unwrap_or_default();
+     UNIX_BASE_TIME + since_epoch.as_micros() as i64
+ }
+ 
+ /// The clock reading in force for the clause the *currently executing
+ /// activation* is stepping -- cached on that activation, and read fresh
+ /// only once [`Activation::clock_stale`] says so. See its own doc for why
+ /// the cache lives on the activation rather than on `Interp`.
+ fn now_base_time(interp: &mut Interp) -> i64 {
+-    if !interp.activation().clock_stale {
+-        return interp
+-            .activation()
+-            .cached_clock
+-            .expect("a clock that is not stale was read at least once");
++    let activation = interp.activation_mut();
++    if !activation.clock_stale {
++        return activation.cached_clock;
+     }
+-    if interp.activity.pending_elapsed_reset {
+-        if let Some(stale) = interp.activation().cached_clock {
+-            interp.activity.elapsed_anchor = Some(stale);
++    if activation.flags.elapsed_reset() {
++        if activation.cached_clock != NO_CLOCK {
++            activation.elapsed_anchor = activation.cached_clock;
+         }
+-        interp.activity.pending_elapsed_reset = false;
++        activation.flags.set_elapsed_reset(false);
+     }
+     let micros = real_clock_base_time();
+-    let activation = interp.activation_mut();
+-    activation.cached_clock = Some(micros);
++    activation.cached_clock = micros;
+     activation.clock_stale = false;
+     micros
+ }
+ 
+ /// Microseconds the host's local zone is ahead of UTC at `utc_micros`,
+ /// which is [`UNIX_BASE_TIME`]-based like every other reading here.
+ ///
+ /// `.File`'s timestamps read through this too: a file's stamp is encoded at
+ /// the offset in force **at that stamp**, not at the offset in force now.
+ /// The civil fields one base time names, for a caller outside this module
+@@ -847,40 +845,43 @@ fn now(interp: &mut Interp) -> Timestamp {
+     // A real wall-clock reading is always within `0..=MAX_BASE_TIME` (the
+     // year 1 to 9999 range this crate's own calendar covers), so this
+     // always succeeds; the fallback is an inert cleared timestamp for the
+     // one host whose own clock is set outside that range.
+     let _ = timestamp.set_base_time(utc + offset);
+     timestamp.time_zone_offset = offset;
+     timestamp
+ }
+ 
+ /// `TIME('E')`/`TIME('R')`'s own reading: elapsed microseconds, formatted,
+-/// since [`Activity::elapsed_anchor`] -- lazily anchored to `reading` on the
+-/// very first call. A reset (`reset` set, or the clock read backward) does
+-/// **not** move the anchor here -- it only arms [`Interp::
+-/// pending_elapsed_reset`], which [`now_base_time`]'s own cache-miss path
+-/// is what actually consumes, matching the oracle's own lazy order.
++/// since the running activation's elapsed anchor -- lazily anchored to
++/// `reading` on its first call. A reset (`reset` set, or the clock read
++/// backward) does **not** move the anchor here -- it only sets the
++/// activation's elapsed-reset flag, which [`now_base_time`]'s own cache-miss
++/// path consumes, matching the oracle's own lazy order.
+ fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
+-    let anchor = *interp.activity.elapsed_anchor.get_or_insert(reading);
+-    let threshold = reading - anchor;
++    let activation = interp.activation_mut();
++    if activation.elapsed_anchor == NO_CLOCK {
++        activation.elapsed_anchor = reading;
++    }
++    let threshold = reading - activation.elapsed_anchor;
+     let text = match threshold {
+         negative if negative < 0 => {
+-            interp.activity.pending_elapsed_reset = true;
++            activation.flags.set_elapsed_reset(true);
+             b"0".to_vec()
+         }
+         0 => b"0".to_vec(),
+         positive => {
+             format!("{}.{:06}", positive / MICROSECONDS, positive % MICROSECONDS).into_bytes()
+         }
+     };
+     if reset {
+-        interp.activity.pending_elapsed_reset = true;
++        activation.flags.set_elapsed_reset(true);
+     }
+     text
+ }
+ 
+ // ---- option validation ----
+ 
+ /// `DATE`'s output-style letters, exactly as its own 40.904 message spells
+ /// them (`Error_Incorrect_call_list`'s `"BDEFILMNOSTUW"` literal,
+ /// `expression/BuiltinFunctions.cpp`).
+ const DATE_OPTIONS1: &str = "BDEFILMNOSTUW";
+diff --git a/rust/crates/rexx-exec/src/builtin/datetime/tests.rs b/rust/crates/rexx-exec/src/builtin/datetime/tests.rs
+index 22d1ffb41..e50485d43 100644
+--- a/rust/crates/rexx-exec/src/builtin/datetime/tests.rs
++++ b/rust/crates/rexx-exec/src/builtin/datetime/tests.rs
+@@ -99,24 +99,23 @@ fn parse_numbers<const N: usize>(stdout: &str) -> [f64; N] {
+         .map(|word| word.parse().unwrap_or_else(|e| panic!("{word:?}: {e}")))
+         .collect();
+     parsed
+         .try_into()
+         .unwrap_or_else(|v: Vec<f64>| panic!("expected {N} numbers, got {v:?} from {stdout:?}"))
+ }
+ 
+ /// The first `TIME('R')` a program runs answers `0`; a later one answers
+ /// elapsed time **since the last reset**, not since the first call.
+ /// Driven through real burns and real clause boundaries rather than a
+-/// fabricated `Activity::elapsed_anchor` -- a raw `dispatch` call with no
+-/// clause boundary in between never marks the clock cache stale, so a
+-/// reset's own *lazy* application (`Activity::elapsed_anchor`'s own doc)
+-/// would never be exercised by that shape, only assumed.
++/// fabricated elapsed anchor -- a raw `dispatch` call with no clause
++/// boundary in between never marks the clock cache stale, so a reset's own
++/// *lazy* application would never be exercised by that shape, only assumed.
+ #[test]
+ fn time_r_resets_relative_to_the_last_reset_not_program_start() {
+     let stdout = output(
+         b"r1 = time('R')\ncall burn\ne1 = time('E')\ncall burn\nr2 = time('R')\ne2 = time('E')\nsay r1 e1 r2 e2\nexit\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+     );
+     let [r1, e1, r2, e2] = parse_numbers(&stdout);
+     // The very first elapsed-time call in the whole program is always
+     // exactly `0`.
+     assert_eq!(r1, 0.0);
+     // e1 measures since r1's own reset -- the first burn's own
+@@ -172,52 +171,32 @@ fn time_e_does_not_reset_the_anchor_time_r_does() {
+     // ratio of two wall-clock spans. With the anchor unmoved `e3`
+     // covers both burns and exceeds `e2` because time only moves
+     // forward; if `E` reset it, `e3` would measure the *small* burn
+     // alone and fall far below `e2`. An earlier form asserted
+     // `e3 > e2 * 1.5` over two equal burns, which is the same claim
+     // only while the two are scheduled alike: it failed three times
+     // under load, once at `e2 = 0.161732, e3 = 0.230071`.
+     assert!(e3 > e2, "e2 = {e2}, e3 = {e3}");
+ }
+ 
+-/// The real divergence `Activity::elapsed_anchor`'s own doc names: a
+-/// callee's own `TIME('R')` resets the *caller's* elapsed-time anchor
+-/// too, once the callee returns, because both read and write the one
+-/// field this crate shares between them where the oracle's own
+-/// per-activation copy dies with the callee's frame. Declared rather
+-/// than silent -- this is the shape that shows it, not a value: the
+-/// caller's own reading after `call sub` returns is close to `0`
+-/// rather than close to the caller's own accumulated elapsed time.
++/// A callee's own `TIME('R')` resets its copy of the elapsed clock and
++/// leaves the caller's running: oracle `0.001349 0.000003 0.001359`, the
++/// caller's reading after the call at least the callee's reading before its
++/// reset.
+ #[test]
+-fn a_callees_own_time_r_leaks_into_the_caller_after_it_returns() {
+-    // The callee reads `E` both before and after its own `R`, matching
+-    // the transcript this pins exactly -- without that follow-up read
+-    // *inside* the callee, the reset stays pending across the `CALL`
+-    // boundary and is instead consumed later against whichever
+-    // activation happens to be on top when the next real clock read
+-    // occurs, which does not reliably reproduce the leak. Measured:
+-    // dropping the callee's own second `E` here changes `after` from
+-    // "near zero" back to "comparable to the burn", because the
+-    // pending reset then gets consumed against the *caller's* own
+-    // stale reading (which predates the callee entirely) rather than
+-    // the callee's own recent one.
++fn a_callees_own_time_r_stays_in_the_callee() {
+     let stdout = output(
+-        b"zz = time('E')\ncall burn\ncall sub\nsay time('E')\nexit\nsub:\n  n1 = time('E')\n  n2 = time('R')\n  n3 = time('E')\n  return\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
++        b"zz = time('E')\ncall burn\ncall sub\nsay n1 n3 time('E')\nexit\nsub:\n  n1 = time('E')\n  n2 = time('R')\n  n3 = time('E')\n  return\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+     );
+-    let [after]: [f64; 1] = parse_numbers(&stdout);
+-    // If the callee's reset had stayed inside its own frame (the
+-    // oracle's own behaviour, measured directly: `inside 0.001751` /
+-    // `after 0.001814`, the two comparable), `after` would still
+-    // reflect elapsed time since the very first `time('E')`,
+-    // comparable to the burn's own duration. It does not here: the
+-    // callee's reset is visible to the caller.
+-    assert!(after < 0.05, "after = {after}, expected the leak (near 0)");
++    let [before_reset, after_reset, after]: [f64; 3] = parse_numbers(&stdout);
++    assert!(after_reset < before_reset, "{stdout}");
++    assert!(after >= before_reset, "{stdout}");
+ }
+ 
+ // ---- DATE's option letters: the deterministic conversion form ----
+ 
+ /// Every one of `DATE`'s thirteen output letters, converted from one
+ /// fixed input -- `DATE.testGroup`'s own `test_standard` transcript,
+ /// unabridged.
+ #[test]
+ fn date_every_output_letter_from_a_fixed_standard_input() {
+     for (probe, expected) in [
+diff --git a/rust/crates/rexx-exec/src/builtin/numeric.rs b/rust/crates/rexx-exec/src/builtin/numeric.rs
+index 493ebdc47..0df4e2186 100644
+--- a/rust/crates/rexx-exec/src/builtin/numeric.rs
++++ b/rust/crates/rexx-exec/src/builtin/numeric.rs
+@@ -551,36 +551,60 @@ pub(crate) fn random(
+     // decimal digits and is never re-rendered under a later `DIGITS` or
+     // `FORM`. Measured: `numeric digits 3 ; say random(12345,12345)` is
+     // `12345`, where a value carrying the D15 pair would render `1.23E+4` --
+     // and `say random(12345,12345) + 0` at the same setting *is* `1.23E+4`,
+     // because that is the addition's own result rather than this one.
+     Ok(interp.text_built(low.to_string().into_bytes()))
+ }
+ 
+ /// `RexxActivation::getRandomSeed`: install a supplied seed, then advance the
+ /// stream once and answer the new state.
++/// The state is the nearest top-level activation's, seeded on its first
++/// unseeded draw from the activity's generator.
+ fn next_seed(interp: &mut Interp, seed: Option<i64>) -> u64 {
+-    if let Some(seed) = seed {
++    let held = match seed {
+         // "flipping all of the bits gives us a better spread", then thirteen
+         // scrambles, then the unconditional fourteenth below.
+-        let mut state = !(seed as u64);
+-        for _ in 0..13 {
+-            state = randomize(state);
++        Some(seed) => {
++            let mut state = !(seed as u64);
++            for _ in 0..13 {
++                state = randomize(state);
++            }
++            Some(state)
+         }
+-        interp.activity.random_seed = Some(state);
++        None => interp
++            .top_level_activation_mut()
++            .and_then(|activation| activation.cold.as_deref()?.random_seed),
++    };
++    let state = randomize(held.unwrap_or_else(|| activation_seed(interp)));
++    if let Some(activation) = interp.top_level_activation_mut() {
++        activation.cold_mut().random_seed = Some(state);
+     }
+-    let state = interp.activity.random_seed.get_or_insert_with(initial_seed);
+-    *state = randomize(*state);
+-    *state
++    state
+ }
+ 
+-/// The starting state for a program that never supplies a seed.
++/// `Activity::getRandomSeed`: a new activation's seed, advancing the
++/// activity's generator once. A splitmix64 step, so successive activations'
++/// streams are not shifted copies of one another.
++fn activation_seed(interp: &mut Interp) -> u64 {
++    let source = interp
++        .activity
++        .random_source
++        .get_or_insert_with(initial_seed);
++    *source = source.wrapping_add(0x9E37_79B9_7F4A_7C15);
++    let mut mixed = *source;
++    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
++    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
++    mixed ^ (mixed >> 31)
++}
++
++/// The generator's starting state.
+ fn initial_seed() -> u64 {
+     let nanos = std::time::SystemTime::now()
+         .duration_since(std::time::UNIX_EPOCH)
+         .map_or(0, |elapsed| elapsed.subsec_nanos());
+     u64::from(nanos) << 32 ^ u64::from(std::process::id())
+ }
+ 
+ /// The bit reversal `RexxActivation::random` does before taking the modulus:
+ /// the seed's bits, most significant first.
+ fn reverse_bits(seed: u64) -> u64 {
+diff --git a/rust/crates/rexx-exec/src/builtin/state.rs b/rust/crates/rexx-exec/src/builtin/state.rs
+index 558405041..85d23420c 100644
+--- a/rust/crates/rexx-exec/src/builtin/state.rs
++++ b/rust/crates/rexx-exec/src/builtin/state.rs
+@@ -313,39 +313,39 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
+ pub(crate) fn condition(
+     interp: &mut Interp,
+     name: &[u8],
+     args: Args<'_>,
+ ) -> Result<ObjRef, Failure> {
+     const VALID: &str = "ACDEIORS";
+     let style = option_letter(interp, name, args, 1, VALID)?.unwrap_or(b'I');
+     // Resolved before the option is answered, because two of the options
+     // have a distinct answer when there is no condition at all and the rest
+     // share one.
+-    let active: Option<TrappedCondition> = interp.activation().condition.clone();
++    let active: Option<TrappedCondition> = interp.activation().condition().cloned();
+     match (style, &active) {
+         // `.NIL` with nothing active, and not the null string the letters
+         // below answer -- measured, `say condition('O')` and `condition('A')`
+         // in a program that has trapped nothing both print `The NIL object`
+         // where `condition('C')` prints nothing at all.
+         (b'A', active) => {
+             let additional = active
+                 .as_ref()
+                 .and_then(|condition| condition.object)
+                 .and_then(|object| interp.condition_entry(object, b"ADDITIONAL"));
+             Ok(additional.unwrap_or(ObjRef::NIL))
+         }
+         (b'O', active) => match active.as_ref().and_then(|condition| condition.object) {
+             Some(object) => interp.condition_copy(object),
+             None => Ok(ObjRef::NIL),
+         },
+         (b'R', _) => {
+-            interp.activation_mut().condition = None;
++            interp.activation_mut().replace_condition(None);
+             Ok(interp.text(b""))
+         }
+         (b'C' | b'D' | b'E' | b'I' | b'S', None) => Ok(interp.text(b"")),
+         (b'C', Some(condition)) => {
+             let name = condition.name.to_vec();
+             Ok(interp.text_built(name))
+         }
+         (b'D', Some(condition)) => match (&condition.description, &condition.name[..]) {
+             (Some(description), _) => {
+                 let description = description.clone();
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index f644cb4b8..69caa5e2b 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -3321,21 +3321,21 @@ impl Interp {
+             TraceEntry::Spent
+         };
+         activation.first_instruction_pending = false;
+         self.guards_go_live(Some(&activation));
+         let transfer = self.transfer_on_reply(&mut activation);
+         let resumed = &mut continuation.activity;
+         if let crate::guards::Transfer::Again(wait) = transfer {
+             resumed.guard_waits.push(wait);
+         }
+         resumed.trace_cache =
+-            crate::trace::TraceCache::of(activation.trace_mode, resumed.debug_pause);
++            crate::trace::TraceCache::of(activation.trace_mode, activation.flags.debug_pause());
+         resumed.running = Some(activation);
+         resumed.call_context = context;
+         resumed.call_tails.push(crate::run::CallTail::method(
+             crate::CallContext::default(),
+             self.save_clause_state(),
+             0,
+             0,
+             None,
+         ));
+         resumed.first = Some(crate::scheduler::First::Reply);
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index 2183b5258..64e8c2f29 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -311,21 +311,21 @@ fn context_rs(
+ 
+ /// `RexxContext::getCondition`: a **copy** of the condition object the
+ /// activation is handling, and `.nil` when it is handling none.
+ fn context_condition(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     at_context(interp, receiver, |interp, depth| {
+-        if frame(interp, depth)?.condition.is_some() {
++        if frame(interp, depth)?.condition().is_some() {
+             return Err(Loud::builtin_option_object("CONDITION", b'O', "a Directory").into());
+         }
+         Ok(Some(ObjRef::NIL))
+     })
+ }
+ 
+ /// `RexxContext::getPackage`: the package of the program **the receiver's own
+ /// activation** belongs to (`ContextClass.cpp:160`).
+ fn context_package(
+     interp: &mut Interp,
+diff --git a/rust/crates/rexx-exec/src/ir/drive.rs b/rust/crates/rexx-exec/src/ir/drive.rs
+index eb2a896d6..d492e9a73 100644
+--- a/rust/crates/rexx-exec/src/ir/drive.rs
++++ b/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -1767,21 +1767,21 @@ macro_rules! open_clause {
+         // **The analysis, checked at the clause it answered for.**
+         // A `Known` answer is a claim that this clause always runs
+         // under exactly that setting, and the claim is what a
+         // compile-time emission decision rests on; a missing
+         // control-flow edge shows up here as a mismatch rather
+         // than as a program that silently stops tracing.
+         // `debug_pause` is excluded because
+         // [`Interp::traced_mode`] answers `OFF` under it by
+         // design, which is not the program's own setting.
+         #[cfg(debug_assertions)]
+-        if !$self.activity.debug_pause
++        if !$self.debug_pause()
+             && let Some(crate::ir::trace_flow::Setting::Known(claimed)) = $chunk.setting_at($index)
+         {
+             debug_assert_eq!(
+                 claimed, sink,
+                 "the trace analysis answered {claimed:?} for instruction {}, and \
+          the setting in force when it ran is not that one",
+                 $index
+             );
+         }
+         $stale = $chunk.trace().clause_echoes() != sink.clause_echoes();
+@@ -2974,23 +2974,20 @@ impl Interp {
+                 .activity
+                 .pending_traps
+                 .iter()
+                 .any(|pending| pending.activation == self.activation().id),
+             "a trap queued for a replying activation outlived its clause"
+         );
+         continuation.clause_state = self.save_clause_state().into_state();
+         continuation.activation_indent = self.activity.activation_indent;
+         continuation.indent_offset = self.activity.indent_offset;
+         continuation.clause_line_override = self.activity.clause_line_override;
+-        continuation.elapsed_anchor = self.activity.elapsed_anchor;
+-        continuation.pending_elapsed_reset = self.activity.pending_elapsed_reset;
+-        continuation.random_seed = self.activity.random_seed;
+         if let Some(replied) = self.activation_mut().replied.as_mut() {
+             replied.continuation = Some(idle);
+         }
+         self.activity.splits_owed -= 1;
+         Ok(())
+     }
+ 
+     /// Parks the level [`Interp::split_level`] moved, its registers now in
+     /// this activity's arena, for the continuation's first slice to resume.
+     #[cold]
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 102d57e4c..3a7ab6ea5 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -2533,46 +2533,64 @@ impl Interp {
+         self.out.extend_from_slice(bytes);
+     }
+ 
+     /// [`Interp::write_out`] for the other descriptor: the trace sink, which
+     /// becomes `Outcome::stderr`. `.STDERR`'s writes land here, so they
+     /// interleave with trace output and never with `SAY`'s.
+     pub(crate) fn write_err(&mut self, bytes: &[u8]) {
+         self.trace.extend_from_slice(bytes);
+     }
+ 
+-    /// `SETLOCAL`: saves the directory and the whole environment, and answers
++    /// `SETLOCAL`: saves the directory and the whole environment on the
++    /// nearest top-level activation's list (`pushEnvironment`), and answers
+     /// whether it saved one.
+     pub(crate) fn push_local_environment(&mut self) -> bool {
+-        self.activity
+-            .locals
+-            .push((self.cwd.clone(), self.env.clone()));
+-        true
++        let saved = (self.cwd.clone(), self.env.clone());
++        match self.top_level_activation_mut() {
++            Some(activation) => {
++                activation.cold_mut().locals.push(saved);
++                true
++            }
++            None => false,
++        }
+     }
+ 
+-    /// `ENDLOCAL`: restores the innermost saved pair, answering whether there
+-    /// was one. **A restore puts back the names it saved and removes nothing
+-    /// added since** -- measured on the oracle, and `restoreEnvironment` only
+-    /// re-`putenv`s what it holds.
++    /// `ENDLOCAL`: restores the innermost pair the nearest top-level
++    /// activation saved, answering whether there was one.
+     pub(crate) fn pop_local_environment(&mut self) -> bool {
+-        let Some((cwd, saved)) = self.activity.locals.pop() else {
+-            return false;
+-        };
++        let saved = self
++            .top_level_activation_mut()
++            .and_then(|activation| activation.cold.as_deref_mut()?.locals.pop());
++        match saved {
++            Some(saved) => {
++                self.restore_local_environment(saved);
++                true
++            }
++            None => false,
++        }
++    }
++
++    /// Puts back one saved `SETLOCAL` pair. **A restore puts back the names
++    /// it saved and removes nothing added since** -- measured on the oracle,
++    /// and `restoreEnvironment` only re-`putenv`s what it holds.
++    pub(crate) fn restore_local_environment(
++        &mut self,
++        (cwd, saved): (std::path::PathBuf, Vec<(Vec<u8>, Vec<u8>)>),
++    ) {
+         self.cwd = cwd;
+         for (name, value) in saved {
+             let at = self.env.iter().position(|(held, _)| *held == name);
+             match at {
+                 Some(at) => self.env[at].1 = value,
+                 None => self.env.push((name, value)),
+             }
+         }
+-        true
+     }
+ 
+     /// `RXTRACE=ON` in the interpreter's own environment, which starts every
+     /// top-level program under `TRACE ?R` -- `setExternalTrace` is
+     /// `setTraceResults` plus the debug flag
+     /// (`execution/TraceSetting.hpp`'s own definition).
+     ///
+     /// Caseless, and only that word: `SysInterpreterInstance::initialize`
+     /// compares against `ON` with `strCaselessCompare`, so any other value
+     /// leaves tracing alone.
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index 61a87bf30..dc646f1d5 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -890,21 +890,21 @@ impl Interp {
+                     ConditionTrace::Result(self.activity.clause_state.current_value_indent),
+                     raised_when_not_logical,
+                 )?;
+                 Ok(Flow::Next)
+             }
+             // `SELECT CASE`'s own absorbed form.
+             InstructionKind::WhenCase {
+                 values,
+                 false_target,
+                 ..
+-            } => match self.activity.current_case_text.clone() {
++            } => match self.activation().current_case_text.clone() {
+                 Some(case_text) => {
+                     let indent = self.activity.clause_state.current_value_indent;
+                     if self.test_case_when(code, values, &case_text, indent)? {
+                         Ok(Flow::Next)
+                     } else {
+                         // **Corrected after a second re-verification found
+                         // the first version of this line wrong under
+                         // nesting.** `current_value_indent.saturating_sub
+                         // (2)` (this line's own first attempt) gave the
+                         // right answer at the top level by coincidence
+diff --git a/rust/crates/rexx-exec/src/run/call.rs b/rust/crates/rexx-exec/src/run/call.rs
+index 477c54771..cd2cd85d6 100644
+--- a/rust/crates/rexx-exec/src/run/call.rs
++++ b/rust/crates/rexx-exec/src/run/call.rs
+@@ -881,43 +881,55 @@ impl Interp {
+                 let traps = caller.traps.clone();
+                 // Both halves of the pair, not just the current one:
+                 // measured, a callee's own bare `ADDRESS` swaps to the
+                 // *caller's* alternate. `Activation::address`' own doc
+                 // comment has the transcript.
+                 let address = caller.address.clone();
+                 let caller_io_configs = caller.io_configs.clone();
+                 // Same one-way rule again: an internal call sees the caller's
+                 // `CONDITION()` answers and a reset inside the callee dies
+                 // with it. `TrappedCondition`'s own doc comment has the
+-                // four-line transcript.
+-                let condition = caller.condition.clone();
++                // four-line transcript. `RAISE PROPAGATE`'s condition and the
++                // elapsed clock are copied the same way.
++                let cold = caller
++                    .cold
++                    .as_deref()
++                    .and_then(crate::activation::ActivationCold::inherited);
++                let (cached_clock, elapsed_anchor, elapsed_reset) = (
++                    caller.cached_clock,
++                    caller.elapsed_anchor,
++                    caller.flags.elapsed_reset(),
++                );
+                 let mut callee = Activation::nested(
+                     callee_id,
+                     program,
+                     program_id,
+                     selector,
+                     plan,
+                     frame,
+                     target,
+                     Inherited {
+                         call_type: caller_call_type,
+                         rs: caller_rs,
+                         settings,
+                         condition_syntax,
+                         trace_mode,
+                         address,
+                         // The refcount, not the table: a write in the callee
+                         // clones first, which is how the oracle keeps the
+                         // inheritance one-way (`checkIOConfigTable`).
+                         io_configs: caller_io_configs,
+                         traps,
+-                        condition,
++                        cold,
++                        cached_clock,
++                        elapsed_anchor,
++                        elapsed_reset,
+                     },
+                 );
+                 callee.extra = extra;
+                 callee.exposed = exposed;
+                 self.push_activation(callee);
+             }
+             // **A pool of its own, and not one of the five inheritances**
+             // -- `Activation::routine` is where that is stated and
+             // `Activation::nested`'s own doc carries the six probes. The
+             // plan is the routine body's own, cached under its own
+diff --git a/rust/crates/rexx-exec/src/run/condition.rs b/rust/crates/rexx-exec/src/run/condition.rs
+index c43a4e45d..5ed2b2ce7 100644
+--- a/rust/crates/rexx-exec/src/run/condition.rs
++++ b/rust/crates/rexx-exec/src/run/condition.rs
+@@ -354,59 +354,58 @@ impl Interp {
+         }
+         self.activity.failure_frame = None;
+         let origin = self.activity.failure_origin.take();
+         let propagated = std::mem::take(&mut self.activity.failure_propagated);
+         let reraised = std::mem::take(&mut self.activity.failure_reraised);
+         self.set_sigl(self.activity.clause_state.line());
+         if let Some(rc) = &raised.rc {
+             let value = self.text(rc);
+             self.assign_by_name(b"RC", value);
+         }
+-        // What `CONDITION()` reports for the rest of this activation.
+-        // Written here and not onto `active_condition` below, because the
+-        // two have different lifetimes: this one dies with the activation
+-        // (`TrappedCondition`), while `active_condition` is the interpreter's
+-        // one slot for `RAISE PROPAGATE`.
++        // What `CONDITION()` reports for the rest of this activation, kept
++        // apart from `active_condition` below, which carries the echo sites
++        // `RAISE PROPAGATE` puts back.
+         // Built here, on the raising clause, because everything in it is a
+         // raise-time fact: `POSITION` is the innermost level's line and
+         // `STACKFRAMES` the levels left above the stack as it stands now.
+         let unwound = crate::condition::Unwound {
+             sites: &sites,
+             frames,
+             origin,
+             propagated,
+             reraised,
+         };
+         let object = match self.activity.reraised_object.take() {
+             Some(object) => self.trap_reraised_condition_object(object, unwound.origin)?,
+             None => self.build_trapped_condition_object(&raised, &unwound)?,
+         };
+         self.attach_condition(object);
+-        self.activation_mut().condition = Some(TrappedCondition {
+-            name: raised.condition.as_bytes().into(),
+-            // Only a `SYNTAX` condition has a `CODE` item at all
+-            // (`Activity::createExceptionObject` is the one place it is put
+-            // in), so the name and not `reportable()` is the test: measured,
+-            // a trapped `HALT` reports `E` as the null string, and `HALT` is
+-            // the one non-`SYNTAX` condition this crate numbers.
+-            code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
+-            call: false,
+-            description: raised.description.clone(),
+-            object: Some(object),
+-        });
++        self.activation_mut()
++            .replace_condition(Some(TrappedCondition {
++                name: raised.condition.as_bytes().into(),
++                // Only a `SYNTAX` condition has a `CODE` item at all
++                // (`Activity::createExceptionObject` is the one place it is put
++                // in), so the name and not `reportable()` is the test: measured,
++                // a trapped `HALT` reports `E` as the null string, and `HALT` is
++                // the one non-`SYNTAX` condition this crate numbers.
++                code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
++                call: false,
++                description: raised.description.clone(),
++                object: Some(object),
++            }));
+         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
+         // propagate` for what is and is not measured about it.
+-        self.activity.active_condition = Some(ActiveCondition {
++        self.activation_mut().cold_mut().active_condition = Some(Rc::new(ActiveCondition {
+             raised: *raised,
+             site,
+             sites,
+-        });
++        }));
+         // **The failed clause's own boundary, and the one place it can
+         // happen** (fix round 3). `Op::Clause`'s region ends a *completing*
+         // clause; a clause that raised has not completed, and at that moment
+         // nothing yet knows whether it will be trapped here or unwind the
+         // activation. This is the point where that is decided in favour of
+         // "trapped here, execution continues", so it is the point where a
+         // `CALL ON` handler queued by the same clause is owed its run.
+         if let Some(exit) = self.deliver_pending_traps(code)? {
+             return Ok(Flow::Exit(exit.value()));
+         }
+@@ -496,26 +495,31 @@ impl Interp {
+         // set this back to `None` when the handler returned, which is right
+         // only when nothing was active before -- and one clause can queue a
+         // `CALL ON` condition *and* raise a `SIGNAL ON`-trapped one, so a
+         // `SIGNAL` handler can be running when a `CALL` handler is delivered
+         // inside it. Measured: `zq = sub() + 1/0` under both traps, with the
+         // `SIGNAL` handler ending in `raise propagate`, is the original 42.3
+         // at rc 214 on the oracle; clearing to `None` gave 98.918 at rc 158,
+         // and never clearing at all gave silence at rc 0. Restoring gives the
+         // oracle's answer in all three measured shapes, the "nothing was
+         // active, restore `None`" one included.
+-        let enclosing = self.activity.active_condition.take();
+-        self.activity.active_condition = Some(ActiveCondition {
+-            raised,
+-            site: None,
+-            sites: Vec::new(),
+-        });
++        // Set here for the handler's activation to inherit
++        // (`RexxActivation.cpp:3340`), and put back once it returns.
++        let enclosing = self
++            .activation_mut()
++            .cold_mut()
++            .active_condition
++            .replace(Rc::new(ActiveCondition {
++                raised,
++                site: None,
++                sites: Vec::new(),
++            }));
+         let key: Box<[u8]> = pending.condition.clone();
+         // The entry the trap was found under, `ANY` where the condition has
+         // none: the trap instruction's own condition is what the oracle
+         // delays (`CallInstruction.cpp:603`, `:632`).
+         let delayed: Box<[u8]> = match self
+             .trap_frame()
+             .is_some_and(|frame| frame.traps.get(&key).is_some())
+         {
+             true => key.clone(),
+             false => b"ANY".as_slice().into(),
+@@ -528,40 +532,42 @@ impl Interp {
+         // OFF`, and that is false -- the handler's table is a copy, so its
+         // `CALL OFF` never reached this one to be undone.
+         if let Some(trap) = self.activation_mut().traps.get_mut(&delayed) {
+             trap.delayed = true;
+         }
+         // What `CONDITION()` answers inside the handler. Set on *this*
+         // activation and restored afterwards, because the handler inherits
+         // its copy at call time and the caller must be left as it was --
+         // measured, `condition()` back in the caller after a `CALL ON`
+         // handler returns is the null string.
+-        let enclosing_condition = self.activation_mut().condition.replace(TrappedCondition {
+-            name: key.clone(),
+-            // No condition reaching here has a `CODE`, and both halves of
+-            // that are measured. A `CALL ON` trap cannot name `SYNTAX`
+-            // directly -- `call on syntax` is a 25.1 translation error --
+-            // and `CALL ON ANY`, the one spelling that could smuggle it in,
+-            // does not catch a `SYNTAX` condition either: `call on any name
+-            // uh` with `say 1/0` is the ordinary fatal 42.3 at rc 214 on
+-            // both interpreters. `TrapHandler::canHandle` is the C++ side of
+-            // the same rule.
+-            code_sub: None,
+-            call: true,
+-            description: pending.description.clone(),
+-            // Carried from the queue rather than built here. By delivery the
+-            // raising clause has finished and its routine may have returned,
+-            // so `POSITION` and `STACKFRAMES` no longer exist to be read --
+-            // measured, `POSITION` is 7 for a command inside a routine, not
+-            // the caller's own `call` line.
+-            object: pending.object,
+-        });
++        let enclosing_condition = self
++            .activation_mut()
++            .replace_condition(Some(TrappedCondition {
++                name: key.clone(),
++                // No condition reaching here has a `CODE`, and both halves of
++                // that are measured. A `CALL ON` trap cannot name `SYNTAX`
++                // directly -- `call on syntax` is a 25.1 translation error --
++                // and `CALL ON ANY`, the one spelling that could smuggle it in,
++                // does not catch a `SYNTAX` condition either: `call on any name
++                // uh` with `say 1/0` is the ordinary fatal 42.3 at rc 214 on
++                // both interpreters. `TrapHandler::canHandle` is the C++ side of
++                // the same rule.
++                code_sub: None,
++                call: true,
++                description: pending.description.clone(),
++                // Carried from the queue rather than built here. By delivery the
++                // raising clause has finished and its routine may have returned,
++                // so `POSITION` and `STACKFRAMES` no longer exist to be read --
++                // measured, `POSITION` is 7 for a command inside a routine, not
++                // the caller's own `call` line.
++                object: pending.object,
++            }));
+         let queued_before = self.activity.pending_traps.len();
+         // `CallType::Subroutine` because a `CALL ON` handler is a `CALL`, and
+         // that reaches `PARSE SOURCE` when the trap's name resolves to a
+         // `::ROUTINE` rather than to a label. Measured: a trapped `USER`
+         // condition whose handler is a `::routine` running `parse source`
+         // answers `SUBROUTINE`, where the same handler written as a label
+         // answers whatever the trapping activation answers.
+         // **`CallEntry::Trap`, which is the one thing about a handler's own
+         // activation that differs from an internal `CALL`'s**: the oracle's
+         // `internalCallTrap` passes `OREF_NULL` where `internalCall` passes
+@@ -578,44 +584,38 @@ impl Interp {
+                 CallType::Subroutine,
+                 CallEntry::Trap,
+             )
+         );
+         // A trap queued by the handler that just ran is not one the
+         // interrupted clause owes, and `in_clause`'s tripwire has to be able
+         // to tell the two apart -- see the field's own doc comment.
+         for pending in self.activity.pending_traps.iter_mut().skip(queued_before) {
+             pending.queued_during_delivery = true;
+         }
+-        self.activation_mut().condition = enclosing_condition;
++        self.activation_mut().replace_condition(enclosing_condition);
+         // `trapUndelay`. The `if let` mirrors the C++ testing the handler
+         // for null before enabling it; nothing a Rexx program can do
+         // removes the entry between here and the delay above, so the arm is
+         // structural rather than a case anything reaches.
+         if let Some(trap) = self.activation_mut().traps.get_mut(&delayed) {
+             trap.delayed = false;
+         }
+         match ended {
+             // The handler returned; execution resumes at the clause after
+             // the one that finished.
+             Ok(Ended::Returned(_)) => {
+-                self.activity.active_condition = enclosing;
++                self.activation_mut().cold_mut().active_condition = enclosing;
+                 Ok(None)
+             }
+-            // The handler failed rather than returned. **Reachable but
+-            // unobservable, kept deliberately** (fix round 3). The
+-            // re-review's panic probe found four programs that take this
+-            // arm and no test that does, and established why nothing can see
+-            // it: every path that goes on to read `active_condition` passes
+-            // through `offer_to_trap` first, which overwrites the field
+-            // wholesale. So this line changes no output while that holds.
++            // The handler failed rather than returned.
+             Err(failure) => {
+-                self.activity.active_condition = enclosing;
++                self.activation_mut().cold_mut().active_condition = enclosing;
+                 Err(failure)
+             }
+             // `EXIT` inside the handler ends the program, exactly as it does
+             // inside any other called routine. Nothing will read
+             // `active_condition` again, so it is left as it is.
+             Ok(exited @ Ended::Exited(_)) => Ok(HandlerExit::from_ended(exited)),
+         }
+     }
+ 
+     /// The trap the activation at `depth` has enabled, or `None` past the
+@@ -978,21 +978,26 @@ impl Interp {
+                 };
+                 raised.delivery.search = if exits { Search::Top } else { Search::Here };
+                 Err(raised.into())
+             }
+             None => Ok(finish(result)),
+         }
+     }
+ 
+     /// `RAISE PROPAGATE`: re-raise the condition whose handler is running.
+     fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
+-        let Some(active) = &self.activity.active_condition else {
++        let Some(active) = self
++            .activation()
++            .cold
++            .as_deref()
++            .and_then(|cold| cold.active_condition.clone())
++        else {
+             return Err(Raised::syntax(98, 918, Vec::new()).into());
+         };
+         if !active.raised.reportable() {
+             return Ok(Flow::Exit(None));
+         }
+         let mut raised = active.raised.clone();
+         raised.delivery.search = Search::Nobody;
+         raised.delivery.positionless = true;
+         // The original condition's echo stack, put back exactly as it stood
+         // when the trap cleared it. `record_failure_at` is first-wins, so
+@@ -1012,22 +1017,21 @@ impl Interp {
+         let top = self.first_non_internal_depth();
+         if self.frame_at(top + 1).is_some() {
+             raised.delivery.search = if top == 0 {
+                 Search::Caller
+             } else {
+                 Search::AboveTop
+             };
+             raised.delivery.positionless = false;
+             raised.position = 0;
+             self.reraise_failure_levels();
+-            self.activity.reraised_object =
+-                self.activation().condition.as_ref().and_then(|c| c.object);
++            self.activity.reraised_object = self.activation().condition().and_then(|c| c.object);
+             self.activity.reraise_leaving = top + 1;
+         }
+         Err(raised.into())
+     }
+ 
+     /// Resolves a `SIGNAL`/`SIGNAL VALUE` target against the running
+     /// *activation's* own body -- not `code.body`, which differs inside an
+     /// `INTERPRET` fragment (whose own `labels` is always empty, a label in
+     /// interpreted text being 47.1). Mirrors `Interp::resolve_call`'s
+     /// identical fix for `CALL` (`run.rs:2153-2154` in
+diff --git a/rust/crates/rexx-exec/src/run/interpret.rs b/rust/crates/rexx-exec/src/run/interpret.rs
+index 633e7d45a..ec945c3db 100644
+--- a/rust/crates/rexx-exec/src/run/interpret.rs
++++ b/rust/crates/rexx-exec/src/run/interpret.rs
+@@ -193,21 +193,21 @@ impl Interp {
+     }
+ 
+     /// `doDebugPause` (`RexxActivation.cpp:4199`-`4283`), after a clause the
+     /// setting in force traced. Answers whether the clause is to run again,
+     /// which is what `=` asks for.
+     ///
+     /// The prompt is printed once per activation, and a line that is neither
+     /// empty nor `=` runs as an `INTERPRET` fragment; the pause ends when the
+     /// fragment ended debug or changed a setting from inside it.
+     pub(crate) fn debug_pause_after_clause(&mut self) -> Result<bool, Failure> {
+-        if self.activity.debug_pause {
++        if self.debug_pause() {
+             return Ok(false);
+         }
+         if self.activation().debug.bypass {
+             self.activation_mut().debug.bypass = false;
+             return Ok(false);
+         }
+         let skip = self.activation().debug.skip;
+         if skip > 0 {
+             let left = skip - 1;
+             self.activation_mut().debug.skip = left;
+diff --git a/rust/crates/rexx-exec/src/run/select.rs b/rust/crates/rexx-exec/src/run/select.rs
+index 19494fdfd..f5ce546ca 100644
+--- a/rust/crates/rexx-exec/src/run/select.rs
++++ b/rust/crates/rexx-exec/src/run/select.rs
+@@ -42,26 +42,25 @@ impl Interp {
+         // been evaluated and its `>K>` traced, and a `CALL ON` handler
+         // delivered at that boundary is based on whatever the counter reads
+         // then. Measured: the handler `h:` of a `select case raiser()` at top
+         // level echoes at `12 *-*     h:` on the oracle, where the `SELECT`
+         // clause itself echoes unindented.
+         self.settle_block_indent(true, indent);
+         Ok(value)
+     }
+ 
+     /// Hands a `SELECT` its case text: the value its `WHEN CASE`s compare
+-    /// against, and `Activity::current_case_text` for the **absorbed** ones that
+-    /// have no other way to reach it (`lib.rs`'s own doc comment on the
+-    /// field).
++    /// against, and the activation's `current_case_text` for the **absorbed**
++    /// ones that have no other way to reach it.
+     pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
+         let text = value.map(|value| self.to_text(value).to_vec());
+-        self.activity.current_case_text = text.clone();
++        self.activation_mut().current_case_text = text.clone();
+         text
+     }
+ 
+     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
+     pub(crate) fn scan_when(
+         &mut self,
+         code: &Code<'_>,
+         when_instruction: &Instruction,
+         case_text: Option<&[u8]>,
+     ) -> Result<bool, Failure> {
+diff --git a/rust/crates/rexx-exec/src/run/settings.rs b/rust/crates/rexx-exec/src/run/settings.rs
+index 284fcd1ef..111ca583b 100644
+--- a/rust/crates/rexx-exec/src/run/settings.rs
++++ b/rust/crates/rexx-exec/src/run/settings.rs
+@@ -20,21 +20,21 @@ use super::{
+ /// The longest `ADDRESS` environment name accepted, beyond which the
+ /// instruction raises 29.1.
+ const MAX_ADDRESS_NAME_LENGTH: usize = 250;
+ 
+ impl Interp {
+     /// `debugSkip`: how many further pauses to skip, from a numeric `TRACE`
+     /// typed at one. A negative count also suppresses the echo -- measured,
+     /// `trace 2` traces the two clauses it skips the pause for and
+     /// `trace -2` traces neither.
+     fn set_debug_skip(&mut self, count: i64) -> Result<(), Failure> {
+-        if !self.activity.debug_pause {
++        if !self.debug_pause() {
+             return Err(raised_numeric_trace_interactive_only().into());
+         }
+         self.activation_mut().debug.skip = count.abs();
+         if count < 0 {
+             // **Through `set_trace_mode`, which keeps the cache
+             // `Interp::trace_mode` reads.** Writing the activation's field
+             // directly left the cache holding the un-suppressed setting, and
+             // only the accessor's own `debug_assert` would have said so.
+             let current = self.trace_mode();
+             self.activation_mut().debug.saved = Some(current);
+@@ -55,21 +55,21 @@ impl Interp {
+     /// **A `TRACE` instruction is ignored while interactive debug is on**,
+     /// and traced like any other clause: measured, a program that reaches
+     /// `trace ?` and then `trace off` under `?R` still answers `?R` from
+     /// `TRACE()` and keeps tracing. The builtin has no such guard, which is
+     /// why it lives here rather than in `set_trace_mode`.
+     fn apply_trace_request(&mut self, request: &crate::trace::TraceRequest) {
+         // **`inDebug()` is `isDebug() && !debugPause`**, so the same
+         // instruction the program cannot use is what a line typed at the
+         // pause uses to end debug -- measured, `trace off` at a prompt ends
+         // the session and the pause with it.
+-        if self.trace_mode().debug && !self.activity.debug_pause {
++        if self.trace_mode().debug && !self.debug_pause() {
+             return;
+         }
+         let merged = crate::trace::applied(self.trace_mode(), request);
+         self.set_trace_mode(merged);
+     }
+ 
+     /// `NUMERIC DIGITS`/`FUZZ`/`FORM`, in every spelling the parser produces
+     /// (`NumericSetting`, `rexx-parse`'s own `instruction.rs::numeric`).
+     pub(super) fn exec_trace(&mut self, code: &Code<'_>, setting: &Trace) -> Result<(), Failure> {
+         match setting {
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests.rs b/rust/crates/rexx-exec/src/scheduler/tests.rs
+index 80be7fe54..9f19767a1 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests.rs
+@@ -1044,48 +1044,134 @@ fn a_context_follows_its_activation_to_a_reply_continuation() {
+     in_modes(&pending, false, "18 before 2 1 1\n");
+     let waiting = format!(
+         "o = .k~new\ngate = .message~new(o, 'open')\nc = o~r(gate)\n\
+          do while o~waiting == 0\n  call SysSleep 0.01\nend\n\
+          say c~line c~variables~y c~thread (c~invocation == o~inv)\n\
+          gate~send\n{REPLIER}"
+     );
+     in_modes(&waiting, true, "24 after 2 1\n");
+ }
+ 
+-/// A `REPLY` continuation keeps the elapsed clock and `RANDOM` seed its
+-/// method set before the `REPLY`, and a reset the `REPLY` clause made; the
+-/// draws are the oracle's.
++/// A `REPLY` continuation keeps its method's own `RANDOM` seed, and main's
++/// stream is main's own: oracle 5 of 5 runs `main 214`, `m 457`, `got 1`,
++/// `cont 100`, `main 807`.
+ #[test]
+-fn a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed() {
+-    let program = |before_reply: &str, reply: &str, rest: &str| {
+-        format!(
+-            "o = .k~new\nsay o~m\n\
+-             do while o~rest == ''\n  call SysSleep 0.01\nend\nsay o~rest\n\
+-             ::class k\n::attribute rest get unguarded\n\
+-             ::method m\n  expose rest\n  rest = ''\n  t = time('E')\n  \
+-             x = random(1, 100000, 7)\n{before_reply}  reply {reply}\n  \
+-             call SysSleep 0.01\n  rest = {rest} random(1, 100000) random(1, 100000)\n"
+-        )
+-    };
++fn a_reply_continuation_keeps_its_methods_seed_and_main_keeps_its_own() {
+     in_modes(
+-        &program("", "x", "(time('E') > 0)"),
++        "say 'main' random(1,1000,3)\no = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\n\
++         say 'main' random(1,1000)\n\
++         ::class t\n::method m\n  say 'm' random(1,1000,11)\n  reply 1\n  \
++         say 'cont' random(1,1000)\n",
+         true,
+-        "54876\n1 72518 13736\n",
++        "main 214\nm 457\ngot 1\ncont 100\nmain 807\n",
+     );
++}
++
++/// A `REPLY` continuation keeps the elapsed clock its method reset before
++/// the `REPLY`, and main's clock is main's own: oracle 5 of 5 runs
++/// `got 1`, `cont 1 1`, `main 1`.
++#[test]
++fn a_reply_continuation_keeps_its_methods_elapsed_clock() {
+     in_modes(
+-        &program(
+-            "  call SysSleep 0.2\n",
+-            "x (time('R') > 0.1)",
+-            "(time('E') < 0.1)",
+-        ),
++        "o = .t~new\nx = time('e')\ncall SysSleep 0.1\nsay 'got' o~m\ncall SysSleep 0.3\n\
++         say 'main' (time('e') >= 0.4)\n\
++         ::class t\n::method m\n  call SysSleep 0.1\n  call time 'r'\n  reply 1\n  \
++         call SysSleep 0.02\n  e = time('e')\n  say 'cont' (e > 0) (e < 0.1)\n",
+         true,
+-        "54876 1\n1 72518 13736\n",
++        "got 1\ncont 1 1\nmain 1\n",
++    );
++}
++
++/// A method starts with an elapsed clock of its own, which its `REPLY`
++/// continuation keeps: oracle 5 of 5 runs `m before zero 1`, `main got 7`,
++/// `main elapsed 1`, `m after 1 1`, `m after below main 1`.
++#[test]
++fn a_method_starts_its_own_elapsed_clock_across_a_reply() {
++    in_modes(
++        "call time 'r'\ncall SysSleep 0.05\no = .t~new\nsay 'main got' o~m\n\
++         e = time('e')\nsay 'main elapsed' (e >= 0.05)\ncall SysSleep 0.3\n\
++         say 'm after below main' (o~after < time('e'))\n\
++         ::class t\n::attribute after get unguarded\n::method m\n  expose after\n  \
++         after = 99\n  say 'm before zero' (time('e') = 0)\n  reply 7\n  \
++         call SysSleep 0.01\n  after = time('e')\n  say 'm after' (after > 0) (after < 0.2)\n",
++        true,
++        "m before zero 1\nmain got 7\nmain elapsed 1\nm after 1 1\nm after below main 1\n",
++    );
++}
++
++/// A method's `SETLOCAL` list moves with its `REPLY` continuation, and main's
++/// `ENDLOCAL` finds main's own list empty: oracle 5 of 5 runs `got 1`,
++/// `cont endlocal 1`, `main endlocal 0`. One restore in the process
++/// (`oracle-crashes.txt` entry 10b).
++#[test]
++fn a_reply_continuation_keeps_its_methods_setlocal_list() {
++    in_modes(
++        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main endlocal' endlocal()\n\
++         ::class t\n::method m\n  call setlocal\n  call value 'P6X', 'yes', 'ENVIRONMENT'\n  \
++         reply 1\n  say 'cont endlocal' endlocal()\n",
++        true,
++        "got 1\ncont endlocal 1\nmain endlocal 0\n",
++    );
++}
++
++/// The condition a method's `SIGNAL ON` handler took moves with the `REPLY`
++/// the handler makes, so `RAISE PROPAGATE` in the continuation re-raises it:
++/// oracle 5 of 5 runs report 42.3 at rc 0 after `got 1`, `cont propagates`,
++/// `main done`.
++#[test]
++fn a_reply_continuation_propagates_its_methods_condition() {
++    let outcome = run(
++        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main done'\n\
++         ::class t\n::method m\n  signal on syntax\n  x = 1/0\n  return 0\n\
++         syntax:\n  reply 1\n  say 'cont propagates'\n  raise propagate\n",
++    );
++    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
++    assert_eq!(stdout(&outcome), "got 1\ncont propagates\nmain done\n");
++    let reports = stderr(&outcome);
++    assert!(reports.contains("Error 42.3:"), "{reports}");
++    assert!(!reports.contains("98.918"), "{reports}");
++}
++
++/// A `REPLY` inside a `CALL ON` handler is the handler's, not the method's:
++/// oracle 5 of 5 runs 91.999 at rc 165 with nothing on stdout.
++#[test]
++fn a_reply_in_a_call_on_handler_does_not_reply_for_the_method() {
++    let outcome = run(
++        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main done'\n\
++         ::class t\n::method m\n  call on user foo name h\n  raise user foo\n  \
++         say 'cont after handler'\n  signal on any name trapped\n  raise propagate\n  \
++         say 'cont no propagate'\n  return\n\
++         h:\n  reply 1\n  say 'handler continues'\n  return\n\
++         trapped:\n  say 'cont trapped' condition('C')\n  return\n",
++    );
++    assert_eq!(outcome.exit_code, 165, "{}", stderr(&outcome));
++    assert_eq!(stdout(&outcome), "");
++    assert!(
++        stderr(&outcome).contains("Error 91.999:"),
++        "{}",
++        stderr(&outcome)
++    );
++}
++
++/// A `SELECT CASE` value travels with the activation a `REPLY` moves, and
++/// an internal call's own `SELECT CASE` in the continuation does not reach
++/// it: oracle 5 of 5 runs `got 1`, `cont other`, `main done`.
++#[test]
++fn a_reply_continuation_keeps_its_select_case_value() {
++    in_modes(
++        "o = .t~new\nsay 'got' o~m\ncall SysSleep 0.2\nsay 'main done'\n\
++         ::class t\n::method m\n  select case 'a'\n    when 'a' then do\n      reply 1\n      \
++         select case 'b'\n        when g() then when 'zz' then say 'cont absorbed zz'\n        \
++         otherwise say 'cont other'\n      end\n    end\n    otherwise nop\n  end\n  return\n\
++         g:\n  select case 'zz'\n    when 'zz' then return 'b'\n    otherwise return 'y'\n  end\n",
++        true,
++        "got 1\ncont other\nmain done\n",
+     );
+ }
+ 
+ /// One store wakes every activity parked in a `GUARD WHEN` on the variable.
+ #[test]
+ fn a_store_wakes_every_guard_when_waiter() {
+     in_modes(
+         "o = .k~new\na = o~start('w', 'a')\nb = o~start('w', 'b')\ncall SysSleep 0.2\n\
+          o~set\nsay a~result b~result\n\
+          ::class k\n::method init\n  expose v\n  v = 0\n\
+diff --git a/rust/crates/rexx-exec/src/trace.rs b/rust/crates/rexx-exec/src/trace.rs
+index ff131c2f4..e602b4ffd 100644
+--- a/rust/crates/rexx-exec/src/trace.rs
++++ b/rust/crates/rexx-exec/src/trace.rs
+@@ -46,38 +46,50 @@ impl Interp {
+     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
+         let answer = self.activity.trace_cache.chunk();
+         debug_assert_eq!(
+             answer,
+             ChunkTrace::of(self.traced_mode()),
+             "the cached ChunkTrace is not the one the setting in force packs down to"
+         );
+         answer
+     }
+ 
+-    /// Sets [`Activity::debug_pause`], answering the value it replaces.
++    /// Sets the running activation's debug-pause flag, answering the value it
++    /// replaces.
+     pub(crate) fn replace_debug_pause(&mut self, paused: bool) -> bool {
+         self.activity.trace_cache = TraceCache::of(self.activity.trace_cache.mode(), paused);
+-        std::mem::replace(&mut self.activity.debug_pause, paused)
++        let flags = &mut self.activation_mut().flags;
++        let was = flags.debug_pause();
++        flags.set_debug_pause(paused);
++        was
++    }
++
++    /// Whether the running activation is running a line typed at a debug
++    /// pause.
++    #[inline(always)]
++    pub(crate) fn debug_pause(&self) -> bool {
++        self.running_activation()
++            .is_some_and(|activation| activation.flags.debug_pause())
+     }
+ 
+     /// The setting the trace sink obeys, which is [`TraceMode::OFF`] while a
+     /// line typed at an interactive-debug pause runs.
+     ///
+     /// **`RexxActivation::noTracing` includes `debugPause`**, and answering
+     /// an off setting here reaches every gate at once: nothing echoes, a
+     /// chunk compiled during the pause carries no trace op, and one compiled
+     /// earlier is stale and falls back to the run-time gate. The program's
+     /// own setting -- what `TRACE()` answers and what a `TRACE` instruction
+     /// merges into -- is [`Interp::trace_mode`] and is untouched.
+     #[inline(always)]
+     pub(crate) fn traced_mode(&self) -> TraceMode {
+-        if self.activity.debug_pause {
++        if self.debug_pause() {
+             return TraceMode::OFF;
+         }
+         self.trace_mode()
+     }
+ 
+     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
+     /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
+     /// `WHEN`/`OTHERWISE` header (see `run/loops.rs`'s own doc comments on those
+     /// call sites for why a `DO`/`LOOP` needs a second echo and nothing else
+     /// built so far does). A label cannot appear at any of them -- one
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index 809452413..53ceb9b6b 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -52,20 +52,21 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
+ /// The subset files this harness reads, in union order.
+ const SUBSET_FILES: &[&str] = &[
+     "phase-4a.txt",
+     "phase-4b.txt",
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
++    "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
+ ];
+ 
+ /// The directory one corpus program runs in: its own, under the target
+ /// directory, named by the program's corpus path with `/` spelled `__`. That
+ /// spelling collapses the path to a single component, so no entry can name a
+ /// directory outside this root.
+ fn run_directory(rel_path: &str) -> PathBuf {
+@@ -128,20 +129,23 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+     "lang/library_routine_quoted_name.rex",
+     "lang/library_routine_rexx_package_missing.rex",
+     "lang/message_assignment_form.rex",
+     "lang/message_instruction.rex",
+     "lang/message_send_scope_override.rex",
+     "lang/message_send_unknown_method.rex",
+     "lang/message_send_unknown_method_on_a_number.rex",
+     "lang/message_send_unknown_method_on_nil.rex",
+     "lang/mutation_controlled_order.rex",
+     "lang/no_trailing_newline.rex",
++    "lang/scope_case_text_absorbed.rex",
++    "lang/scope_case_text_absorbed_other.rex",
++    "lang/scope_debug_pause_routine.rex",
+     "lang/select_when.rex",
+     "lang/select_when_absorption.rex",
+     "lang/select_when_bodies.rex",
+     "lang/string_caseless.rex",
+     "lang/string_compare.rex",
+     "lang/trace_debug_ignores_trace.rex",
+     "lang/trace_debug_skip.rex",
+     "lang/trace_numeric_request.rex",
+     "lang/trace_output.rex",
+     "lang/trace_results.rex",
+diff --git a/rust/crates/rexx-exec/tests/corpus.rs b/rust/crates/rexx-exec/tests/corpus.rs
+index 3e4b82c64..a42f37895 100644
+--- a/rust/crates/rexx-exec/tests/corpus.rs
++++ b/rust/crates/rexx-exec/tests/corpus.rs
+@@ -572,20 +572,21 @@ fn emit_uncaptured(text: &str) {
+ /// oracle and the memory limit are handled.
+ const SUBSET_FILES: &[&str] = &[
+     "phase-4a.txt",
+     "phase-4b.txt",
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
++    "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
+ ];
+ 
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+     let entries =
+         fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+diff --git a/rust/crates/rexx-exec/tests/coverage.rs b/rust/crates/rexx-exec/tests/coverage.rs
+index 6a09aad42..3d3ec2410 100644
+--- a/rust/crates/rexx-exec/tests/coverage.rs
++++ b/rust/crates/rexx-exec/tests/coverage.rs
+@@ -495,20 +495,21 @@ fn corpus_dir() -> PathBuf {
+ /// The subset files the union-coverage run reads, in union order.
+ const SUBSET_FILES: &[&str] = &[
+     "phase-4a.txt",
+     "phase-4b.txt",
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
++    "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
+ ];
+ 
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = corpus_dir();
+     let entries =
+         fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+diff --git a/rust/crates/rexx-exec/tests/ir_recorded.rs b/rust/crates/rexx-exec/tests/ir_recorded.rs
+index 911c84f07..a7123f8cc 100644
+--- a/rust/crates/rexx-exec/tests/ir_recorded.rs
++++ b/rust/crates/rexx-exec/tests/ir_recorded.rs
+@@ -816,20 +816,21 @@ const CORPUS_POPULATION: &str = "corpus";
+ /// The subset files the corpus population reads, in union order.
+ const SUBSET_FILES: &[&str] = &[
+     "phase-4a.txt",
+     "phase-4b.txt",
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
++    "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
+ ];
+ 
+ fn corpus_dir() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")
+ }
+ 
+ fn ootest_dir(suite: &str) -> PathBuf {
+diff --git a/rust/crates/rexx-exec/tests/trace_oracle.rs b/rust/crates/rexx-exec/tests/trace_oracle.rs
+index 9a5e70310..31ad21beb 100644
+--- a/rust/crates/rexx-exec/tests/trace_oracle.rs
++++ b/rust/crates/rexx-exec/tests/trace_oracle.rs
+@@ -455,20 +455,21 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
+ /// The phase subset files this file reads, in union order.
+ const SUBSET_FILES: &[&str] = &[
+     "phase-4a.txt",
+     "phase-4b.txt",
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
++    "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
+ ];
+ 
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+     let entries =
+         std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_absorbed.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_absorbed.txt
+new file mode 100644
+index 000000000..cd1fe5ce0
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_absorbed.txt
+@@ -0,0 +1,14 @@
++count 13
++/* An absorbed WHEN compares against its own SELECT CASE's value, not the
++   value of a SELECT CASE an internal call ran in between. */
++select case 'a'
++  when g() then when 'a' then say 'absorbed matched a'
++  otherwise say 'other'
++end
++say 'done'
++exit
++g:
++  select case 'zz'
++    when 'zz' then return 'a'
++    otherwise return 'y'
++  end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_absorbed_other.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_absorbed_other.txt
+new file mode 100644
+index 000000000..efe87c245
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_case_text_absorbed_other.txt
+@@ -0,0 +1,14 @@
++count 13
++/* The other half of scope_case_text_absorbed.rex: the callee's value would
++   match the absorbed WHEN and its own SELECT CASE's value does not. */
++select case 'a'
++  when g() then when 'zz' then say 'absorbed matched'
++  otherwise say 'other'
++end
++say 'done'
++exit
++g:
++  select case 'zz'
++    when 'zz' then return 'a'
++    otherwise return 'y'
++  end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_external.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_external.txt
+new file mode 100644
+index 000000000..4f5274431
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_external.txt
+@@ -0,0 +1,8 @@
++count 7
++/* An external program starts with an elapsed clock of its own, as a
++   ::ROUTINE does. */
++call time 'r'
++x = 0
++do i = 1 to 300000; x = x + 1; end
++t = extr()
++say 'external zero:' (t = 0)
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_internal.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_internal.txt
+new file mode 100644
+index 000000000..cff582c89
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_internal.txt
+@@ -0,0 +1,6 @@
++count 5
++/* An internal call starts from a copy of its caller's elapsed clock, and a
++   TIME('R') inside it resets the copy, not the caller's. */
++call time 'r'; call SysSleep 0.05; x = time('E'); call s
++say (time('e') >= 0.05); exit
++s: tt = time('R'); return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_routine.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_routine.txt
+new file mode 100644
+index 000000000..71ef32728
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_clock_routine.txt
+@@ -0,0 +1,11 @@
++count 10
++/* A ::ROUTINE starts with an elapsed clock of its own: its first TIME('R')
++   answers 0 whatever the caller's clock has run. */
++call time 'r'
++x = 0
++do i = 1 to 300000; x = x + 1; end
++call r
++exit
++::routine r
++t = time('r')
++say 'routine r zero:' (t = 0)
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_debug_pause_routine.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_debug_pause_routine.txt
+new file mode 100644
+index 000000000..7370b1004
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_debug_pause_routine.txt
+@@ -0,0 +1,13 @@
++count 12
++/* A routine called from a line typed at a debug pause traces and pauses
++   under its own TRACE ?R; the pause belongs to the activation running the
++   typed line. */
++trace ?r
++x = 1
++say 'main'
++exit
++::routine s
++  trace ?r
++  y = 2
++  say 'in s'
++  return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_internal_depth.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_internal_depth.txt
+new file mode 100644
+index 000000000..b41d3a204
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_internal_depth.txt
+@@ -0,0 +1,20 @@
++count 19
++/* RANDOM and SETLOCAL at internal-call depth 2000 act on main's activation:
++   the seeded stream continues across the calls and main's ENDLOCAL restores
++   what the deepest call saved. One restore in the process
++   (oracle-crashes.txt entry 10b). */
++say 'main' random(1,1000,5)
++call value 'P61D', 'orig', 'ENVIRONMENT'
++call down 2000
++say 'main' random(1,1000) value('P61D',,'ENVIRONMENT') endlocal() value('P61D',,'ENVIRONMENT')
++exit
++down: procedure
++  use arg n
++  if n > 0 then do
++    call down n - 1
++    if n = 1000 then say 'depth 1000' random(1,1000)
++    return
++  end
++  say 'depth 2000' random(1,1000) setlocal()
++  call value 'P61D', 'deep', 'ENVIRONMENT'
++  return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_propagate_after_routine.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_propagate_after_routine.txt
+new file mode 100644
+index 000000000..de4764851
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_propagate_after_routine.txt
+@@ -0,0 +1,16 @@
++count 15
++/* A condition a routine handled is not main's to propagate. */
++call r
++signal on syntax
++raise propagate
++say 'main: no raise'
++exit
++syntax:
++  say 'main trapped' condition('O')~code
++  exit
++::routine r
++  signal on syntax name h
++  say 1/0
++h:
++  say 'routine handled' condition('O')~code
++  return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_propagate_routine.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_propagate_routine.txt
+new file mode 100644
+index 000000000..167312fdb
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_propagate_routine.txt
+@@ -0,0 +1,17 @@
++count 16
++/* A routine called from a handler starts with no condition to propagate. */
++signal on syntax
++say 1/0
++exit
++syntax:
++  call r
++  say 'back'
++  exit
++::routine r
++  signal on syntax name inner
++  raise propagate
++  say 'no raise'
++  return
++inner:
++  say 'routine trapped' condition('O')~code
++  return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_random_seed.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_random_seed.txt
+new file mode 100644
+index 000000000..a412e1d60
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_random_seed.txt
+@@ -0,0 +1,13 @@
++count 12
++/* RANDOM's seed belongs to the top-level activation: a method's and a
++   routine's seeds never reach main's stream. */
++say random(1,1000,7)
++say .t~new~m
++say random()
++call s
++say random()
++::class t
++::method m
++  return random(1,1000,11)
++::routine s
++  call random 1,1000,13
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_random_unseeded.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_random_unseeded.txt
+new file mode 100644
+index 000000000..deb621331
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_random_unseeded.txt
+@@ -0,0 +1,11 @@
++count 10
++/* Each top-level activation seeds its RANDOM stream from the activity's
++   generator, so two calls of one method draw different values. */
++o = .t~new
++a = o~m
++b = o~m
++say 'differ' (a \= b)
++say 'main' (random(1,1000000) \= random(1,1000000))
++::class t
++::method m
++  return random(1,1000000)
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_setlocal_method.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_setlocal_method.txt
+new file mode 100644
+index 000000000..7d2e9df4e
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_setlocal_method.txt
+@@ -0,0 +1,10 @@
++count 9
++/* A method's SETLOCAL is on the method's own list, restored when the method
++   ends; main's ENDLOCAL finds its own list empty. One restore in the
++   process (oracle-crashes.txt entry 10b). */
++o = .t~new
++o~m
++say 'main endlocal' endlocal()
++::class t
++::method m
++  say 'm setlocal' setlocal()
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/scope_setlocal_routine.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_setlocal_routine.txt
+new file mode 100644
+index 000000000..8eaf6ce48
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/scope_setlocal_routine.txt
+@@ -0,0 +1,10 @@
++count 9
++/* A ::ROUTINE that ends with a SETLOCAL outstanding restores it at its end. */
++call value 'P61X', 'orig', 'ENVIRONMENT'
++call r
++say 'main sees' value('P61X',,'ENVIRONMENT')
++exit
++::routine r
++  call setlocal
++  call value 'P61X', 'routine', 'ENVIRONMENT'
++  return
