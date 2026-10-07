@@ -1,0 +1,784 @@
+diff --git i/rust/crates/rexx-core/src/body.rs w/rust/crates/rexx-core/src/body.rs
+index c2d875af6..1c38720dc 100644
+--- i/rust/crates/rexx-core/src/body.rs
++++ w/rust/crates/rexx-core/src/body.rs
+@@ -179,6 +179,8 @@ pub enum NativeState {
+     /// extension writes through the address `BufferData` handed it for as long
+     /// as the object lives, so the storage is never resized.
+     Data(AlignedBytes),
++    /// PROTOTYPE: a String subclass instance's bytes.
++    Text(Box<[u8]>),
+ }
+ 
+ /// One 16-byte unit of [`AlignedBytes`], aligned as `malloc` aligns on
+@@ -255,7 +257,7 @@ impl NativeState {
+     pub fn buffer(&self) -> Option<&BufferState> {
+         match self {
+             NativeState::Buffer(state) => Some(state),
+-            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
++            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -263,7 +265,7 @@ impl NativeState {
+     pub fn buffer_mut(&mut self) -> Option<&mut BufferState> {
+         match self {
+             NativeState::Buffer(state) => Some(state),
+-            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
++            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -271,7 +273,7 @@ impl NativeState {
+     pub fn stream(&self) -> Option<&StreamState> {
+         match self {
+             NativeState::Stream(state) => Some(state),
+-            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
++            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -280,7 +282,7 @@ impl NativeState {
+     pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
+         match self {
+             NativeState::Stream(state) => Some(state),
+-            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
++            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -291,7 +293,7 @@ impl NativeState {
+     pub fn pointer(&self) -> Option<*mut std::ffi::c_void> {
+         match self {
+             NativeState::Pointer(address) => Some(*address),
+-            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Data(_) => None,
++            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Data(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -299,7 +301,7 @@ impl NativeState {
+     pub fn data(&self) -> Option<&AlignedBytes> {
+         match self {
+             NativeState::Data(bytes) => Some(bytes),
+-            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
++            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -308,7 +310,7 @@ impl NativeState {
+     pub fn data_address(&mut self) -> Option<*mut std::ffi::c_void> {
+         match self {
+             NativeState::Data(bytes) => Some(bytes.as_mut_ptr().cast()),
+-            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
++            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Text(_) => None,
+         }
+     }
+ 
+@@ -320,10 +322,18 @@ impl NativeState {
+     ///
+     /// Matched over the variants rather than asked of one of them, so that a
+     /// state added here has to decide.
++    pub fn text(&self) -> Option<&[u8]> {
++        match self {
++            NativeState::Text(bytes) => Some(bytes),
++            _ => None,
++        }
++    }
++
+     pub fn renders_its_own_string_value(&self) -> bool {
+         match self {
+             NativeState::Buffer(_) | NativeState::Pointer(_) => true,
+             NativeState::Stream(_) | NativeState::Data(_) => false,
++            NativeState::Text(_) => true,
+         }
+     }
+ }
+diff --git i/rust/crates/rexx-exec/src/dispatch.rs w/rust/crates/rexx-exec/src/dispatch.rs
+index f644cb4b8..e757de628 100644
+--- i/rust/crates/rexx-exec/src/dispatch.rs
++++ w/rust/crates/rexx-exec/src/dispatch.rs
+@@ -1218,12 +1218,12 @@ pub(crate) struct ObjectModel {
+     /// resolves to it.
+     rexx_info: ObjRef,
+     /// The class `~start` and `~startWith` answer an instance of.
+-    message: ObjRef,
++    pub(crate) message: ObjRef,
+     /// The class a `>name` term answers an instance of.
+     variable_reference: ObjRef,
+     /// The class a `Body::Stem` answers, whether a bare stem read produced it
+     /// or `.Stem~new` did.
+-    stem: ObjRef,
++    pub(crate) stem: ObjRef,
+     /// The scope [`construct::WEAK_REFERENT`] is bound in, so that a subclass's instance
+     /// keeps its referent where `WeakReference~value` looks for it.
+     weak_reference: ObjRef,
+diff --git i/rust/crates/rexx-exec/src/dispatch/class_protocol.rs w/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+index 662fab3e3..0c2b195b9 100644
+--- i/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
++++ w/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+@@ -302,6 +302,16 @@ pub(super) fn compile_method_source(
+     name: &[u8],
+     source: ObjRef,
+     position: &'static str,
++) -> Result<ObjRef, Failure> {
++    compile_method_source_as(interp, name, source, position, None)
++}
++
++pub(super) fn compile_method_source_as(
++    interp: &mut Interp,
++    name: &[u8],
++    source: ObjRef,
++    position: &'static str,
++    class: Option<ObjRef>,
+ ) -> Result<ObjRef, Failure> {
+     let lines = method_source_lines(interp, source, position)?;
+     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+@@ -316,7 +326,10 @@ pub(super) fn compile_method_source(
+         });
+     }
+     let method_class = interp.method_class();
+-    let object = interp.native_instance(method_class);
++    let object = match class {
++        Some(class) => new_instance(interp, class)?,
++        None => interp.native_instance(method_class),
++    };
+     // Every `Method` object this crate builds carries an annotation table, so
+     // that `~annotations` and `~annotation` answer from the object rather
+     // than from a way back to a directive. A compiled method has no directive
+@@ -337,6 +350,16 @@ pub(super) fn compile_routine_source(
+     name: &[u8],
+     source: ObjRef,
+     position: &'static str,
++) -> Result<ObjRef, Failure> {
++    compile_routine_source_as(interp, name, source, position, None)
++}
++
++pub(super) fn compile_routine_source_as(
++    interp: &mut Interp,
++    name: &[u8],
++    source: ObjRef,
++    position: &'static str,
++    class: Option<ObjRef>,
+ ) -> Result<ObjRef, Failure> {
+     let lines = method_source_lines(interp, source, position)?;
+     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+@@ -353,7 +376,10 @@ pub(super) fn compile_routine_source(
+         });
+     }
+     let routine_class = interp.routine_class();
+-    let object = interp.native_instance(routine_class);
++    let object = match class {
++        Some(class) => new_instance(interp, class)?,
++        None => interp.native_instance(routine_class),
++    };
+     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
+     interp.compiled_methods += 1;
+     interp.attach_annotations(object, site);
+diff --git i/rust/crates/rexx-exec/src/dispatch/construct.rs w/rust/crates/rexx-exec/src/dispatch/construct.rs
+index befb2d956..894fde05e 100644
+--- i/rust/crates/rexx-exec/src/dispatch/construct.rs
++++ w/rust/crates/rexx-exec/src/dispatch/construct.rs
+@@ -137,10 +137,11 @@ pub(super) fn native_message_new(
+             _ => args[3..].to_vec(),
+         },
+     };
+-    if class != interp.object_model().message {
+-        return Err(unbuilt_new(interp, class));
+-    }
+-    let object = interp.native_instance(class);
++    let object = if class != interp.object_model().message {
++        new_instance(interp, class)?
++    } else {
++        interp.native_instance(class)
++    };
+     let target = args[0].expect("checked above");
+     interp.set_native_entry(object, MESSAGE_TARGET, target);
+     let name = interp.text(&name);
+@@ -168,16 +169,23 @@ pub(super) fn native_executable_new(
+     let Some(source) = args.get(1).copied().flatten() else {
+         return Err(Raised::missing_named_argument("source").into());
+     };
+-    let routine = class == interp.routine_class();
+-    if args.len() > 2 || !(routine || class == interp.method_class()) {
++    let routine_class = interp.routine_class();
++    let routine = interp.classes().is_a(class, routine_class);
++    let base = class == interp.routine_class() || class == interp.method_class();
++    if args.len() > 2 {
+         return Err(unbuilt_new(interp, class));
+     }
+     let name = interp.to_text(name).to_vec();
++    let as_class = (!base).then_some(class);
+     let object = if routine {
+-        compile_routine_source(interp, &name, source, "source")?
++        super::class_protocol::compile_routine_source_as(interp, &name, source, "source", as_class)?
+     } else {
+-        compile_method_source(interp, &name, source, "source")?
++        super::class_protocol::compile_method_source_as(interp, &name, source, "source", as_class)?
+     };
++    if !base {
++        let caller = interp.caller();
++        interp.send_message(object, b"INIT", None, &[], caller)?;
++    }
+     Ok(Some(object))
+ }
+ 
+@@ -388,7 +396,12 @@ pub(super) fn native_string_new(
+     };
+     let text = required_string_argument(interp, value, 1)?;
+     if class != interp.object_model().string {
+-        return Err(unbuilt_new(interp, class));
++        let bytes: Box<[u8]> = interp.to_text(text).to_vec().into();
++        let object = new_instance(interp, class)?;
++        if let Some(rexx_core::Object { body: Body::Instance { native, .. }, .. }) = interp.heap.get_mut(object) {
++            *native = Some(Box::new(rexx_core::NativeState::Text(bytes)));
++        }
++        return super::begin_init(interp, object, &args[1..]);
+     }
+     let bytes = interp.to_text(text).to_vec();
+     let object = interp.text_built(bytes);
+@@ -412,9 +425,7 @@ pub(super) fn native_stem_new(
+         }
+         None => Vec::new(),
+     };
+-    if class != interp.object_model().stem {
+-        return Err(unbuilt_new(interp, class));
+-    }
++    let subclass = class != interp.object_model().stem;
+     let object = interp.alloc_with(
+         rexx_core::BehaviourId::STEM,
+         Body::Stem {
+@@ -425,6 +436,14 @@ pub(super) fn native_stem_new(
+         },
+     );
+     interp.roots.activity_mut().push_temp(object);
++    let object = if subclass {
++        let scope = interp.object_model().stem;
++        let outer = new_instance(interp, class)?;
++        interp.set_pool_variable(outer, scope, b"STEM", object);
++        outer
++    } else {
++        object
++    };
+     let rest = args.get(1..).unwrap_or_default();
+     super::begin_init(interp, object, rest)
+ }
+diff --git i/rust/crates/rexx-exec/src/dispatch/hash/stem.rs w/rust/crates/rexx-exec/src/dispatch/hash/stem.rs
+index bc951e2fe..88eb15869 100644
+--- i/rust/crates/rexx-exec/src/dispatch/hash/stem.rs
++++ w/rust/crates/rexx-exec/src/dispatch/hash/stem.rs
+@@ -79,6 +79,7 @@ fn native_stem_at(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"[]"));
+     }
+@@ -94,6 +95,7 @@ fn native_stem_put(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"[]="));
+     }
+@@ -349,6 +351,7 @@ fn native_stem_all_indexes(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"ALLINDEXES"));
+     }
+@@ -371,6 +374,7 @@ fn native_stem_all_items(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"ALLITEMS"));
+     }
+@@ -439,6 +443,7 @@ fn native_stem_to_directory(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"TODIRECTORY"));
+     }
+@@ -464,6 +469,7 @@ fn native_stem_unknown(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"UNKNOWN"));
+     }
+@@ -499,6 +505,7 @@ fn native_stem_supplier(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"SUPPLIER"));
+     }
+@@ -525,6 +532,7 @@ fn native_stem_items(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"ITEMS"));
+     }
+@@ -538,6 +546,7 @@ fn native_stem_is_empty(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"ISEMPTY"));
+     }
+@@ -567,6 +576,7 @@ fn native_stem_has_index(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"HASINDEX"));
+     }
+@@ -593,6 +603,7 @@ fn native_stem_has_item(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"HASITEM"));
+     }
+@@ -614,6 +625,7 @@ fn native_stem_index(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"INDEX"));
+     }
+@@ -650,6 +662,7 @@ fn native_stem_remove(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"REMOVE"));
+     }
+@@ -679,6 +692,7 @@ fn native_stem_remove_item(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"REMOVEITEM"));
+     }
+@@ -701,6 +715,7 @@ fn native_stem_empty(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_stem_store(interp, receiver);
+     if !is_stem(interp, receiver) {
+         return Err(stem_refusal(interp, receiver, b"EMPTY"));
+     }
+@@ -764,3 +779,11 @@ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod
+     ),
+     ("Stem", "UNKNOWN", Arity::Fixed(2), native_stem_unknown),
+ ];
++
++pub(in crate::dispatch) fn proto_stem_store(interp: &mut Interp, receiver: ObjRef) -> ObjRef {
++    let scope = interp.object_model().stem;
++    match interp.heap.get(receiver).map(|o| &o.body) {
++        Some(Body::Instance { pools, .. }) => pools.get(scope, b"STEM").unwrap_or(receiver),
++        _ => receiver,
++    }
++}
+diff --git i/rust/crates/rexx-exec/src/dispatch/string.rs w/rust/crates/rexx-exec/src/dispatch/string.rs
+index 934ee9fa2..0ba5364b3 100644
+--- i/rust/crates/rexx-exec/src/dispatch/string.rs
++++ w/rust/crates/rexx-exec/src/dispatch/string.rs
+@@ -868,6 +868,7 @@ fn native_string_op_plus(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::Plus)
+ }
+ 
+@@ -878,6 +879,7 @@ fn native_string_op_subtract(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::Subtract)
+ }
+ 
+@@ -888,6 +890,7 @@ fn native_string_op_multiply(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::Multiply)
+ }
+ 
+@@ -898,6 +901,7 @@ fn native_string_op_power(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::Power)
+ }
+ 
+@@ -908,6 +912,7 @@ fn native_string_op_divide(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::Divide)
+ }
+ 
+@@ -918,6 +923,7 @@ fn native_string_op_intdiv(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::IntDiv)
+ }
+ 
+@@ -928,6 +934,7 @@ fn native_string_op_remainder(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_arithmetic_operator(interp, receiver, args, Operator::Remainder)
+ }
+ 
+@@ -938,6 +945,7 @@ fn native_string_op_abuttal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::Abuttal)
+ }
+ 
+@@ -948,6 +956,7 @@ fn native_string_op_concatenate(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::Concatenate)
+ }
+ 
+@@ -958,6 +967,7 @@ fn native_string_op_blank(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::Blank)
+ }
+ 
+@@ -968,6 +978,7 @@ fn native_string_op_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::Equal)
+ }
+ 
+@@ -978,6 +989,7 @@ fn native_string_op_backslash_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::BackslashEqual)
+ }
+ 
+@@ -988,6 +1000,7 @@ fn native_string_op_less_greater(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::LessThanGreaterThan)
+ }
+ 
+@@ -998,6 +1011,7 @@ fn native_string_op_greater_less(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::GreaterThanLessThan)
+ }
+ 
+@@ -1008,6 +1022,7 @@ fn native_string_op_greater(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::GreaterThan)
+ }
+ 
+@@ -1018,6 +1033,7 @@ fn native_string_op_less(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::LessThan)
+ }
+ 
+@@ -1028,6 +1044,7 @@ fn native_string_op_greater_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::GreaterThanEqual)
+ }
+ 
+@@ -1038,6 +1055,7 @@ fn native_string_op_backslash_less(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::BackslashLessThan)
+ }
+ 
+@@ -1048,6 +1066,7 @@ fn native_string_op_less_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::LessThanEqual)
+ }
+ 
+@@ -1058,6 +1077,7 @@ fn native_string_op_backslash_greater(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::BackslashGreaterThan)
+ }
+ 
+@@ -1068,6 +1088,7 @@ fn native_string_op_strict_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictEqual)
+ }
+ 
+@@ -1078,6 +1099,7 @@ fn native_string_op_strict_backslash_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictBackslashEqual)
+ }
+ 
+@@ -1088,6 +1110,7 @@ fn native_string_op_strict_greater(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictGreaterThan)
+ }
+ 
+@@ -1098,6 +1121,7 @@ fn native_string_op_strict_less(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictLessThan)
+ }
+ 
+@@ -1108,6 +1132,7 @@ fn native_string_op_strict_greater_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictGreaterThanEqual)
+ }
+ 
+@@ -1118,6 +1143,7 @@ fn native_string_op_strict_backslash_less(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictBackslashLessThan)
+ }
+ 
+@@ -1128,6 +1154,7 @@ fn native_string_op_strict_less_equal(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictLessThanEqual)
+ }
+ 
+@@ -1138,6 +1165,7 @@ fn native_string_op_strict_backslash_greater(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::StrictBackslashGreaterThan)
+ }
+ 
+@@ -1148,6 +1176,7 @@ fn native_string_op_and(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::And)
+ }
+ 
+@@ -1158,6 +1187,7 @@ fn native_string_op_or(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::Or)
+ }
+ 
+@@ -1168,6 +1198,7 @@ fn native_string_op_xor(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     string_binary_operator(interp, receiver, args, Operator::Xor)
+ }
+ 
+@@ -1230,6 +1261,7 @@ fn native_string_op_not(
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     Ok(Some(
+         interp.apply_prefix(rexx_parse::PrefixOp::Not, receiver)?,
+     ))
+@@ -1242,6 +1274,7 @@ fn native_string_op_choice(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     let on_true = args
+         .first()
+         .copied()
+@@ -1462,6 +1495,7 @@ fn string_d2x_d2c(
+     args: &[Option<ObjRef>],
+     character: bool,
+ ) -> Result<Option<ObjRef>, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     let numeric = interp.to_number(receiver).is_ok();
+     let text = interp.to_text(receiver).to_vec();
+     let value =
+@@ -1552,6 +1586,7 @@ fn numeric_receiver(
+     receiver: ObjRef,
+     method: &[u8],
+ ) -> Result<rexx_num::Number, Failure> {
++    let receiver = proto_base_text(interp, receiver);
+     match interp.to_number(receiver) {
+         Ok(number) => Ok(number),
+         Err(_) => {
+@@ -1867,11 +1902,18 @@ pub(super) fn native_string_sign(
+ /// `RexxString::makeString` (`classes/StringClass.hpp`), which
+ /// `Object~request("STRING")` is what finds.
+ pub(super) fn native_string_make_string(
+-    _interp: &mut Interp,
++    interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
++    let copied = match interp.heap.get(receiver).map(|o| &o.body) {
++        Some(Body::Instance { native: Some(state), .. }) => state.text().map(|t| t.to_vec()),
++        _ => None,
++    };
++    if let Some(bytes) = copied {
++        return Ok(Some(interp.text_built(bytes)));
++    }
+     Ok(Some(receiver))
+ }
+ 
+@@ -2368,3 +2410,14 @@ mod tests {
+         }
+     }
+ }
++
++pub(super) fn proto_base_text(interp: &mut Interp, receiver: ObjRef) -> ObjRef {
++    let copied = match interp.heap.get(receiver).map(|o| &o.body) {
++        Some(Body::Instance { native: Some(state), .. }) => state.text().map(|t| t.to_vec()),
++        _ => None,
++    };
++    match copied {
++        Some(bytes) => interp.text_built(bytes),
++        None => receiver,
++    }
++}
+diff --git i/rust/crates/rexx-exec/src/environment.rs w/rust/crates/rexx-exec/src/environment.rs
+index 8e5cae8aa..9563cc77f 100644
+--- i/rust/crates/rexx-exec/src/environment.rs
++++ w/rust/crates/rexx-exec/src/environment.rs
+@@ -1222,6 +1222,16 @@ impl Interp {
+ 
+     /// One entry of a string-keyed table, by the key the caller holds.
+     pub(crate) fn native_entry(&mut self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
++        let message = self.object_model().message;
++        if let Body::Instance { class, .. } = &self.heap.get(object)?.body {
++            let class = *class;
++            if self.classes().is_a(class, message) {
++                return match &self.heap.get(object)?.body {
++                    Body::Instance { pools, .. } => pools.get(message, index),
++                    _ => None,
++                };
++            }
++        }
+         match &self.heap.get(object)?.body {
+             Body::Native(native) => native.entry(index),
+             Body::Instance { .. } => {
+@@ -1239,6 +1249,14 @@ impl Interp {
+     /// Stores one entry on a `Body::Native`, and does nothing for a receiver
+     /// that is not one.
+     pub(crate) fn set_native_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
++        let message = self.object_model().message;
++        if let Some(rexx_core::Object { body: Body::Instance { class, .. }, .. }) = self.heap.get(object) {
++            let class = *class;
++            if self.classes().is_a(class, message) {
++                self.set_pool_variable(object, message, index, value);
++            }
++            return;
++        }
+         if let Some(held) = self.heap.get_mut(object)
+             && let Body::Native(native) = &mut held.body
+         {
+diff --git i/rust/crates/rexx-exec/src/value.rs w/rust/crates/rexx-exec/src/value.rs
+index 2e389581b..312f17be3 100644
+--- i/rust/crates/rexx-exec/src/value.rs
++++ w/rust/crates/rexx-exec/src/value.rs
+@@ -332,6 +332,7 @@ impl Interp {
+                 name,
+                 ..
+             } => match (state.buffer(), state.pointer()) {
++                _ if state.text().is_some() => state.text().unwrap().len(),
+                 (Some(buffer), _) => buffer.bytes.len(),
+                 (_, Some(address)) => rexx_core::pointer_to_string(address).len(),
+                 _ => match name {
+@@ -596,6 +597,7 @@ impl Interp {
+                 name,
+                 ..
+             } => match (state.buffer(), state.pointer()) {
++                _ if state.text().is_some() => Cow::Borrowed(state.text().unwrap()),
+                 (Some(buffer), _) => Cow::Borrowed(&buffer.bytes[..]),
+                 // `PointerClass::stringValue`
+                 // (`classes/PointerClass.cpp:152`), held nowhere, which is
+@@ -665,7 +667,7 @@ impl Interp {
+             Body::Instance {
+                 native: Some(state),
+                 ..
+-            } => state.buffer().map(|buffer| &buffer.bytes[..]),
++            } => state.text().or_else(|| state.buffer().map(|buffer| &buffer.bytes[..])),
+             // The same cause for an instance nothing has named: `to_text`
+             // derives those bytes from the class id and stores them nowhere.
+             Body::Instance { name, .. } => name.as_deref(),
