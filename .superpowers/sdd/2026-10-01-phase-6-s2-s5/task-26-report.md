@@ -85,3 +85,14 @@ separable without extra builds. The variable-heavy programs (`assign`, `compound
 ## Commits
 
 See the commit carrying this report and `perf/`.
+
+## Overlap with the background gates (amendment: `-j 4` while gates run)
+
+The amendment arrived after the runs. The gate status file
+(`bg/c484f4516/status.txt`) had no `finished` line during any of them; its last line is
+`load G4 10.90 9.96 5.38 ... 2026-10-07T02:08:39+02:00`.
+- Builds of base, s1, head (three release builds, `memcap 8G`): before about 02:09, overlapping G3/G4.
+- Main callgrind run: `-j 16`, first output 02:10:28, `cg-exit.txt` written 02:22:57, overlapping G4.
+- `cgpath` and `cgenv` checks: `-j 4`, until 02:26:46.
+Callgrind counts do not depend on `-j`. G4's wall-clock tests ran beside a `-j 16` callgrind load and
+may need a re-run if any of them failed.
