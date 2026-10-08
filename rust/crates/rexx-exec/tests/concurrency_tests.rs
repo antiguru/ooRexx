@@ -2044,10 +2044,10 @@ mod group_runs {
         "base/bif/TIME.testGroup TEST_11",
     ];
 
-    /// The rows refused in both modes whose trace output, on stderr, comes
-    /// from a `REPLY` continuation and its sender: the lines interleave
-    /// differently and the refused run ends after a different number. Allowed
-    /// only while both runs end in the same `rexx-exec: ` refusal.
+    /// The rows whose trace output, on stderr, comes from a `REPLY`
+    /// continuation and its sender, so the lines interleave differently by
+    /// mode. Allowed while both runs end in the same `rexx-exec: ` refusal, or
+    /// end alike with the same stderr lines in another order.
     const TRACE_INTERLEAVES: &[&str] =
         &["base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR"];
 
@@ -2163,13 +2163,24 @@ mod group_runs {
                 .find(|line| line.starts_with("rexx-exec: "))
                 .map(str::to_string)
         };
+        let sorted_lines = |run: &Run| {
+            let mut lines: Vec<String> = String::from_utf8_lossy(&run.stderr)
+                .lines()
+                .map(str::to_string)
+                .collect();
+            lines.sort();
+            lines
+        };
         if normal.status == every.status
             && masked(&normal.stdout) == masked(&every.stdout)
-            && refusal(normal).is_some()
-            && refusal(normal) == refusal(every)
             && TRACE_INTERLEAVES.contains(&row)
         {
-            return ("trace lines on stderr differ".to_string(), true);
+            if refusal(normal).is_some() && refusal(normal) == refusal(every) {
+                return ("trace lines on stderr differ".to_string(), true);
+            }
+            if sorted_lines(normal) == sorted_lines(every) {
+                return ("trace lines on stderr in another order".to_string(), true);
+            }
         }
         (
             format!(

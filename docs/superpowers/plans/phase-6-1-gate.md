@@ -164,3 +164,20 @@ content) is 37 passed, 1 failed: `the_s2_rows_of_the_derived_list_in_both_modes`
 TEST_TRACEOBJECT_COLLECTOR differing between the modes (rc 2 both, 2 assertions against the oracle's
 583). It fails identically, three runs at HEAD and one at `1d308cb9d` (the base tree from `git
 archive`, its own target directory), so it predates this task.
+
+### Task 3 fix round 1
+
+`the_s2_rows_of_the_derived_list_in_both_modes`, TRACE_TraceObject TEST_TRACEOBJECT_COLLECTOR,
+bisected with each commit's tree from `git archive` in one target directory, a `Compiling rexx-exec`
+line each: passes at `3cee3e622` (the row "refused: DO is not implemented", allowed by
+`TRACE_INTERLEAVES`) and fails at `5b7acef35` (Task 2's DO COUNTER). Not a regression: the removed
+DO refusal lets the test run, and both modes end in the same 97.1 at rc 2 with the same stdout (its
+timestamps masked) while the REPLY continuation's trace lines reach stderr in another order. The
+row's allowance in `concurrency_tests.rs` now also covers that case (same status, same masked stdout,
+the same stderr lines in another order).
+
+Instructions, not a gate (no measurement is owed at Task 3): `callgrind.sh -r 1` against `652826b54`,
+`9172b7085`'s binary: emptyloop +0.6443%, decloop +0.5483%, rexxcps -0.0424%, fibcall -0.2137%,
+spread 0. The emptyloop delta is 2 instructions a pass in `loop_advance`, whose fast path the change
+does not touch (the new `LoopState` variant and its arms are out of line); left for Task 5's
+measurement with a layout control.

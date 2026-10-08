@@ -1142,3 +1142,45 @@ SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper: stdout `before`, nothin
 (`platform/unix/SysRexxUtil.cpp:878`), and an omitted `OPTIONAL_CSTRING` is a null pointer. The
 oracle's unnamed form is `SysCreateMutexSem('')`. Measured 2026-10-03 by Phase 6 S2-S5 Task 13.
 This crate creates an unnamed semaphore for both. No upstream ticket.
+
+## 28. FORWARD ARGUMENTS over an instance whose `MAKEARRAY` answers a List
+
+    say .t~new~go(.w~new)
+    ::class t
+    ::method go
+    forward message 'M' arguments (arg(1))
+    ::method m
+    return arg()
+    ::class w
+    ::method makearray
+    return .list~of(1, 2)
+
+SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr. The same
+program with a `MAKEARRAY` answering a string raises 98.946 on both sides. Measured 2026-10-08 by
+Phase 6.1 Task 3's fix round. This crate raises 98.946 (`requestArray` answered no array). No
+upstream ticket.
+
+## 29. GUARD WHEN on a compound tail set by another method
+
+    o = .t~new
+    m = o~start('waitit')
+    do until o~ready == 1; end
+    o~setab
+    say m~result
+    ::class t
+    ::attribute ready get
+    ::method setab
+    expose a.
+    a.b = 1
+    ::method waitit
+    expose a. ready
+    ready = 1
+    guard on when a.b = 1
+    return 'woke' a.b
+
+An indefinite block: 5 runs of 5 under the standard wrapper are killed at the timeout (rc 137),
+nothing printed; the waiter is never woken by the tail's assignment. A simple exposed variable in
+the same shape wakes. Measured 2026-10-08 by Phase 6.1 Task 3's fix round; its review measured the
+same block, 5 runs of 5 each, with the tail set through a generated `::ATTRIBUTE "A.B"` and through
+a stem `[]=`. The shape of entry 7. This crate wakes the waiter and prints `woke 1`. No upstream
+ticket.

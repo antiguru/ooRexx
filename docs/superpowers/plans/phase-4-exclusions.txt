@@ -3252,6 +3252,24 @@ above.
   prose around the drain, which owns no behaviour, so recording it was that
   task's whole disposition.
 
+  A CONDITION CALL ON CANNOT TRAP, RAISED WITH RETURN INTO A CALLER, REACHES
+  THE CALLER'S CALL ON ANY HERE AND NOT ON THE ORACLE. Measured 2026-10-08,
+  three descriptors, rc 0 on both sides:
+
+     call on any name h
+     call sub
+     say 'back'
+     exit
+     sub: raise novalue return
+     h: say 'D=['condition('D')']' condition('C'); return
+
+  The oracle prints `back`; this crate runs the handler first, `D=[] NOVALUE`
+  then `back`. `raise lostdigits return` in place of NOVALUE is the same
+  divergence (`h LOSTDIGITS`). A NOVALUE from a variable read, and a RAISE
+  NOVALUE in the trapping activation itself, agree. The NOVALUE form refused
+  until Phase 6.1 Task 3 answered CONDITION('D') for it; the LOSTDIGITS form
+  diverged before. NOT FIXED, and nobody is assigned.
+
   A USER CONDITION RAISED IN A ::ROUTINE REACHES THE CALLER'S TRAP ON THE
   ORACLE AND NOT HERE, WHEN THE RAISE HAS NO TAIL OR AN `EXIT` TAIL. Both
   engines agree with each other and diverge from the oracle on STDOUT ONLY:
