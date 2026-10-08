@@ -1030,7 +1030,8 @@ impl Interp {
 
     /// Drops what [`Interp::hold_object_control`] held for `flat`, once its
     /// loop is over.
-    #[inline(always)]
+    #[cold]
+    #[inline(never)]
     pub(crate) fn release_loop_objects(&mut self, flat: &FlatLoop) {
         if self.activity.loop_objects.is_empty() {
             return;
