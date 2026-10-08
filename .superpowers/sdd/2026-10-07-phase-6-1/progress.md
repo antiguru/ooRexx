@@ -120,3 +120,5 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 5 re-review (task-5-rereview.md): I1, I2, M1-M4 addressed; one new Minor (seal_package_level inserted under blame_directive_in doc) fixed by controller in the next commit.
 - Task 12 queue add: CALL whole now passes TEST_4 but the rest run failed it (deleted CALL whole rows may flake; cause unrecorded); prologue stackframes known gap also covers nested/newFile intermediate frames (row headline only).
 - Task 5: complete (59eb57f37..this commit).
+- Task 5a dispatched: t5a-impl (opus), BASE 37d874a36.
+- Task 5a implementer DONE: 8e52e14ca, 5f5b80b3d, 0d18b0045, 38e1dbbbb, d9794b41f. 300 KB loop peak 1.19 GB -> 52 MB (oracle 13 MB). Perf vs 37d874a36: rexxcps +0.20%, strings +0.10%, alloc +0.04%, alloc4c -0.41%. Concerns: bimodal wall on 1 KB loop; only text bodies counted; Outcome::peak_body_bytes public. Review t5a-review dispatched.
