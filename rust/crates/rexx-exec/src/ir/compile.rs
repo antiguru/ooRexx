@@ -492,7 +492,7 @@ pub(crate) fn compile(
                     });
                 }
                 // Closed here, so that `SelectCaseText` below is past the
-                // region's end -- setting the case text is the construct's
+                // region's end -- setting the case value is the construct's
                 // business rather than the header clause's, and its own doc
                 // comment has why.
                 close_region(&mut ops, at)?;
@@ -585,12 +585,11 @@ pub(crate) fn compile(
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 // **Only a plain `WHEN`'s condition promotes.** A `WhenCase`
-                // holds a list of values compared against the enclosing
-                // `SELECT CASE`'s own text through `Interp::test_case_when`,
-                // which is not a condition at all: it traces two `>>>` lines
-                // per value and raises nothing for a value that is not
-                // `0`/`1`. So it stays on `Op::WhenTest`, which is the op that
-                // does that whole job, and so does a `When` whose condition
+                // holds a list of values the enclosing `SELECT CASE`'s value
+                // is sent `==` with through `Interp::test_case_when`, which is
+                // not a condition at all: it traces two `>>>` lines per value.
+                // So it stays on `Op::WhenTest`, which is the op that does
+                // that whole job, and so does a `When` whose condition
                 // `native_shape` declines.
                 let jump = match &instruction.kind {
                     InstructionKind::When { condition, .. }

@@ -131,7 +131,7 @@ pub(crate) enum Op {
         path: NodePath,
         src: u16,
     },
-    /// Hands the `SELECT` at `index` the text an **absorbed** `WHEN CASE`
+    /// Hands the `SELECT` at `index` the value an **absorbed** `WHEN CASE`
     /// compares against, from register `case`, or clears it for a plain
     /// `SELECT` that has no `CASE` expression at all.
     SelectCaseText { index: u32, case: Option<u16> },

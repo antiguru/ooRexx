@@ -670,13 +670,8 @@ impl Interp {
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op.spelling(), kind).into());
                 }
-                let text = self.to_text(value).to_vec();
-                let flipped = match logical_value(&text) {
-                    Some(true) => b"0",
-                    Some(false) => b"1",
-                    None => return Err(Raised::not_logical(&text).into()),
-                };
-                self.text(flipped)
+                let holds = self.truth(value, Raised::not_logical)?;
+                logical(!holds)
             }
         };
         Ok(result)
@@ -1162,11 +1157,8 @@ impl Interp {
         if let Some(kind) = self.operator_operand_gap(left_value) {
             return Err(Loud::operator_operand(op.spelling(), kind).into());
         }
-        let left_text = self.to_text(left_value).to_vec();
-        let left_bool = logical_value(&left_text).ok_or_else(|| Raised::not_logical(&left_text))?;
-        let right_text = self.to_text(right_value).to_vec();
-        let right_bool =
-            logical_value(&right_text).ok_or_else(|| Raised::not_logical(&right_text))?;
+        let left_bool = self.truth(left_value, Raised::not_logical)?;
+        let right_bool = self.truth(right_value, Raised::not_logical)?;
 
         let holds = match op {
             Operator::And => left_bool && right_bool,
@@ -1352,8 +1344,7 @@ impl Interp {
             self.roots.activity_mut().push_temp(value);
             let text = self.to_text(value).to_vec();
             self.trace_result(indent, &text);
-            let item_holds =
-                logical_value(&text).ok_or_else(|| Raised::logical_list_element(&text))?;
+            let item_holds = self.truth(value, Raised::logical_list_element)?;
             if !item_holds {
                 holds = false;
                 break;
@@ -1429,15 +1420,73 @@ pub(crate) fn saturate_digits(digits: u64) -> u32 {
 
 /// A logical value is *exactly* the one-byte string `0` or `1` -- text, not
 /// numeric, no coercion (D15's "Expression evaluation"; measured, `' 1 '`,
-/// `'01'`, `'1.0'` and `''` are each not logical, error 34). Shared by
-/// prefix `\`, `&`/`|`/`&&` and `ExprKind::Logical`'s per-element check,
-/// which differ only in *which* sub-number they raise on `None`, never in
-/// what counts as logical.
-pub(crate) fn logical_value(text: &[u8]) -> Option<bool> {
+/// `'01'`, `'1.0'` and `''` are each not logical, error 34).
+fn logical_value(text: &[u8]) -> Option<bool> {
     match text {
         b"0" => Some(false),
         b"1" => Some(true),
         _ => None,
+    }
+}
+
+/// [`Interp::truth`]'s answer for the handles a logical value arrives in
+/// without a conversion: the constants a comparison answers with, and the
+/// small integers `0` and `1`. `None` for every other value, which only the
+/// full judgment may decide.
+#[inline(always)]
+pub(crate) fn truth_without_conversion(value: ObjRef) -> Option<bool> {
+    if value == LOGICAL_TRUE {
+        return Some(true);
+    }
+    if value == LOGICAL_FALSE {
+        return Some(false);
+    }
+    match value.decode() {
+        Decoded::SmallInt(1) => Some(true),
+        Decoded::SmallInt(0) => Some(false),
+        _ => None,
+    }
+}
+
+impl Interp {
+    /// Whether `value` is logically true: `RexxInternalObject::truthValue`
+    /// (`classes/ObjectClass.cpp:523`), the one judgment every keyword,
+    /// operator and method that takes a logical value makes. The value's
+    /// string by the required-string protocol (a user object is sent
+    /// `STRING`, an array joins its items) must be exactly `0` or `1`;
+    /// anything else is `raise`'s Error 34, which is the one thing a caller
+    /// chooses.
+    #[inline]
+    pub(crate) fn truth(
+        &mut self,
+        value: ObjRef,
+        raise: fn(&[u8]) -> Raised,
+    ) -> Result<bool, Failure> {
+        match truth_without_conversion(value) {
+            Some(holds) => Ok(holds),
+            None => self.truth_of_string_value(value, raise),
+        }
+    }
+
+    #[inline(never)]
+    fn truth_of_string_value(
+        &mut self,
+        value: ObjRef,
+        raise: fn(&[u8]) -> Raised,
+    ) -> Result<bool, Failure> {
+        let frame = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(value);
+        let string = self.required_string_value(value)?;
+        let text = self.to_text(string);
+        let holds = match logical_value(&text) {
+            Some(holds) => holds,
+            None => {
+                let text = text.into_owned();
+                return Err(raise(&text).into());
+            }
+        };
+        self.roots.activity_mut().pop_frame(frame);
+        Ok(holds)
     }
 }
 

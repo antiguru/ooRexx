@@ -1,0 +1,335 @@
+# '1' in each of its forms is true
+truth
+'1'
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '1' in each of its forms is true
+truth
+1
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '1' in each of its forms is true
+truth
+0+1
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '1' in each of its forms is true
+truth
+'1'||''
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '1' in each of its forms is true
+truth
+left('12',1)
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '1' in each of its forms is true
+truth
+1~string
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '1' in each of its forms is true
+truth
+.true~copy
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# an array is its items joined by line ends
+truth
+.array~of(1)
+----
+if: true
+when: true
+while: true
+until: true
+not: 97.1
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# '0' is false
+truth
+'0'
+----
+if: false
+when: false
+while: false
+until: false
+not: false
+and: false
+list: false
+case: false
+do-to: false
+do-by: false
+array-hasitem: false
+array-index: false
+list-hasitem: false
+list-index: false
+table-hasitem: false
+table-index: false
+
+# '0' is false
+truth
+.array~of(0)
+----
+if: false
+when: false
+while: false
+until: false
+not: 97.1
+and: false
+list: false
+case: false
+do-to: false
+do-by: false
+array-hasitem: false
+array-index: false
+list-hasitem: false
+list-index: false
+table-hasitem: false
+table-index: false
+
+# anything else is an Error 34
+truth
+'banana'
+----
+if: 34.1
+when: 34.2
+while: 34.3
+until: 34.4
+not: 34.901
+and: 34.901
+list: 34.6
+case: 34.905
+do-to: 34.901
+do-by: 34.901
+array-hasitem: 34.901
+array-index: 34.901
+list-hasitem: 34.901
+list-index: 34.901
+table-hasitem: 34.901
+table-index: 34.901
+
+# anything else is an Error 34
+truth
+' 1'
+----
+if: 34.1
+when: 34.2
+while: 34.3
+until: 34.4
+not: 34.901
+and: 34.901
+list: 34.6
+case: 34.905
+do-to: 34.901
+do-by: 34.901
+array-hasitem: 34.901
+array-index: 34.901
+list-hasitem: 34.901
+list-index: 34.901
+table-hasitem: 34.901
+table-index: 34.901
+
+# anything else is an Error 34
+truth
+.array~of(1,2)
+----
+if: 34.1
+when: 34.2
+while: 34.3
+until: 34.4
+not: 97.1
+and: 34.901
+list: 34.6
+case: 34.905
+do-to: 34.901
+do-by: 34.901
+array-hasitem: 34.901
+array-index: 34.901
+list-hasitem: 34.901
+list-index: 34.901
+table-hasitem: 34.901
+table-index: 34.901
+
+# a user object is judged by what its STRING answers
+truth
+.s1~new
+----
+if: true
+when: true
+while: true
+until: true
+not: 97.1
+and: true
+list: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# a user object is judged by what its STRING answers
+truth
+.s0~new
+----
+if: false
+when: false
+while: false
+until: false
+not: 97.1
+and: false
+list: false
+case: false
+do-to: false
+do-by: false
+array-hasitem: false
+array-index: false
+list-hasitem: false
+list-index: false
+table-hasitem: false
+table-index: false
+
+# a user object is judged by what its STRING answers
+truth
+.sd~new
+----
+if: 34.1
+when: 34.2
+while: 34.3
+until: 34.4
+not: 97.1
+and: 34.901
+list: 34.6
+case: 34.905
+do-to: 34.901
+do-by: 34.901
+array-hasitem: 34.901
+array-index: 34.901
+list-hasitem: 34.901
+list-index: 34.901
+table-hasitem: 34.901
+table-index: 34.901

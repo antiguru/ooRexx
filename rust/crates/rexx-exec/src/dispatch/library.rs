@@ -1494,8 +1494,9 @@ impl Host for Interp {
             });
         }
         let text = self.native_string_conversion(object)?;
-        let bytes = self.to_text(text);
-        Ok(crate::eval::logical_value(&bytes).ok_or(text))
+        // A string is its own string value, so the only failure is its not
+        // being logical, which the boundary reports with `text`.
+        Ok(self.truth(text, Raised::not_logical).map_err(|_| text))
     }
 
     fn array_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {

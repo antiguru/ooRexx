@@ -16,7 +16,7 @@ use super::{
     ConditionTrace, ControlExpr, Cow, Decoded, Expr, ExprKind, Failure, Flow, Instruction,
     InstructionKind, Interp, Loop, LoopConditional, LoopKind, Loud, NameShape, Novalue, Number,
     ObjRef, ProgramSource, Raised, RegFrame, SymbolId, compare_decoded, exact_small_int,
-    logical_value, raised_for_count_not_whole, raised_iterate_wrong_kind,
+    raised_available_not_logical, raised_for_count_not_whole, raised_iterate_wrong_kind,
     raised_repetition_count_not_whole, raised_until_not_logical, raised_while_not_logical,
     shape_of, within_digits,
 };
@@ -960,7 +960,7 @@ impl Interp {
         let descending = if role == HeaderRole::By {
             let zero = self.counted(0);
             let below = self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
-            self.loop_truth(below)?
+            self.truth(below, Raised::not_logical)?
         } else {
             false
         };
@@ -2715,21 +2715,6 @@ impl Interp {
         }))
     }
 
-    /// A message-driven loop's comparison answer as a logical value, the way
-    /// WHILE and UNTIL take theirs: its text exactly `1` or `0`, and 34.901
-    /// otherwise (Deviation 25).
-    fn loop_truth(&mut self, answer: ObjRef) -> Result<bool, Failure> {
-        if answer == crate::eval::LOGICAL_TRUE {
-            return Ok(true);
-        }
-        if answer == crate::eval::LOGICAL_FALSE {
-            return Ok(false);
-        }
-        self.roots.activity_mut().push_temp(answer);
-        let text = self.to_text(answer).into_owned();
-        logical_value(&text).ok_or_else(|| Raised::not_logical(&text).into())
-    }
-
     /// One pass of an [`ObjectControl`] loop, `DoBlock::checkControl`: at a
     /// re-test `+` is sent to `previous` with `BY` and the answer traced; the
     /// value is bound as it is, then sent the `TO` comparison, and the loop
@@ -2768,7 +2753,7 @@ impl Interp {
                 rexx_parse::Operator::GreaterThan
             };
             let past = self.apply_binary(compare, value, to)?;
-            if self.loop_truth(past)? {
+            if self.truth(past, Raised::not_logical)? {
                 return Ok(false);
             }
         }
@@ -2836,10 +2821,7 @@ impl Interp {
         with.first = false;
         let available = self.supplier_send(supplier, b"AVAILABLE")?;
         self.roots.activity_mut().push_temp(available);
-        let text = self.string_value_text(available);
-        if !logical_value(&text)
-            .ok_or_else(|| Failure::from(Raised::syntax(34, 906, vec![text])))?
-        {
+        if !self.truth(available, raised_available_not_logical)? {
             self.roots.activity_mut().pop_frame(pass);
             return Ok(false);
         }

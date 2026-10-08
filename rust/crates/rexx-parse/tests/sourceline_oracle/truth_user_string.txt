@@ -1,0 +1,21 @@
+count 20
+/* A value is judged by its string value: a user object by what its STRING
+   method answers, an array by its items joined. IF, WHEN, WHILE, UNTIL, a
+   comma list, & and | each judge alike. */
+call t .s1~new
+call t .s0~new
+call t .array~of(1)
+call t .array~of(0)
+exit
+t: use arg v
+if v then say 'if T'; else say 'if F'
+select; when v then say 'when T'; otherwise say 'when F'; end
+n = 0; do while v; n = n + 1; leave; end; say 'while' n
+n = 0; do until v; n = n + 1; if n = 2 then leave; end; say 'until' n
+if 1, v then say 'list T'; else say 'list F'
+say 'and' (1 & v) 'or' (0 | v)
+return
+::class s1
+::method string; return 1
+::class s0
+::method string; return 0

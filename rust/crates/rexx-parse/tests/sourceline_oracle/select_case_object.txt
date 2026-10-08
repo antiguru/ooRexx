@@ -1,0 +1,27 @@
+count 26
+/* SELECT CASE sends == to the case value with each WHEN CASE value and
+   judges the answer's truth. */
+trace r
+select case 3
+  when 1, 2+1 then say 'a'
+  otherwise say 'b'
+end
+c = .c~new
+select case c
+  when 'x', 'y' then say 'x'
+  when c then say 'self'
+  otherwise say 'none'
+end
+trace o
+select case .c~new
+  when 'z' then say 'z'
+  otherwise say 'otherwise'
+end
+exit
+::class c
+::method '=='
+  use arg other
+  if other == 'y' then return .s1~new
+  return 0
+::class s1
+::method string; return 1

@@ -119,12 +119,10 @@ impl Interp {
             return Err(Raised::no_result(message).into());
         };
         self.roots.activity_mut().push_temp(answer);
-        let text = self.required_string_value(answer)?;
-        let text = self.to_text(text).into_owned();
-        match crate::eval::logical_value(&text) {
-            Some(true) => Ok(Some(directory)),
-            Some(false) => Ok(None),
-            None => Err(Raised::authorization_not_logical(&text).into()),
+        if self.truth(answer, Raised::authorization_not_logical)? {
+            Ok(Some(directory))
+        } else {
+            Ok(None)
         }
     }
 

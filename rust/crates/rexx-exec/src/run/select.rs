@@ -48,13 +48,10 @@ impl Interp {
         Ok(value)
     }
 
-    /// Hands a `SELECT` its case text: the value its `WHEN CASE`s compare
-    /// against, and the activation's `current_case_text` for the **absorbed**
-    /// ones that have no other way to reach it.
-    pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
-        let text = value.map(|value| self.to_text(value).to_vec());
-        self.activation_mut().current_case_text = text.clone();
-        text
+    /// Hands the activation the `SELECT CASE` value its **absorbed** `WHEN
+    /// CASE`s compare against, which have no other way to reach it.
+    pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) {
+        self.activation_mut().current_case = value;
     }
 
     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
@@ -62,7 +59,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         when_instruction: &Instruction,
-        case_text: Option<&[u8]>,
+        case: Option<ObjRef>,
     ) -> Result<bool, Failure> {
         // The clause unit set this to this `WHEN`'s own printed indent on the
         // way in, which is what its condition's `>>>` lines trace at.
@@ -74,8 +71,8 @@ impl Interp {
                 ConditionTrace::Result(indent),
                 raised_when_not_logical,
             ),
-            InstructionKind::WhenCase { values, .. } => match case_text {
-                Some(case_text) => self.test_case_when(code, values, case_text, indent),
+            InstructionKind::WhenCase { values, .. } => match case {
+                Some(case) => self.test_case_when(code, values, case, indent),
                 // A listed `WhenCase` with no `case` expression: a plain
                 // `SELECT` with no `CASE` at all, which the parser should
                 // never produce for a `WhenCase` node (only `SELECT CASE`

@@ -1,0 +1,20 @@
+/* hasItem and index judge an item's == answer as a truth value. */
+call t .s1~new
+call t .s0~new
+call t .array~of(1)
+call t .array~of(0)
+exit
+t: use arg answer
+a = .array~of(.c~new(answer))
+l = .list~of(.c~new(answer))
+t = .table~new; t['k'] = .c~new(answer)
+w = .c~new(answer)
+say a~hasItem(w) a~index(w) l~hasItem(w) l~index(w) t~hasItem(w) t~index(w)
+return
+::class c
+::method init; expose answer; use arg answer
+::method '=='; expose answer; return answer
+::class s1
+::method string; return 1
+::class s0
+::method string; return 0

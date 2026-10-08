@@ -443,6 +443,34 @@ fn prefix_not_flips_a_logical_value() {
     assert_eq!(eval_text(&mut interp, b"say \\0"), b"1");
 }
 
+/// Every handle `truth_without_conversion` answers for is judged the same
+/// by the string-value path it skips.
+#[test]
+fn the_unconverted_truth_agrees_with_the_string_value() {
+    let mut interp = Interp::new();
+    let values = [
+        LOGICAL_TRUE,
+        LOGICAL_FALSE,
+        ObjRef::small_int(0).expect("tagged"),
+        ObjRef::small_int(1).expect("tagged"),
+        ObjRef::small_int(2).expect("tagged"),
+        ObjRef::inline_text(b"01").expect("inline"),
+    ];
+    let mut answered = 0;
+    for value in values {
+        let judged = interp
+            .truth_of_string_value(value, Raised::not_logical)
+            .ok();
+        if let Some(quick) = truth_without_conversion(value) {
+            assert_eq!(Some(quick), judged, "{value:?}");
+            answered += 1;
+        } else {
+            assert_eq!(judged, None, "{value:?}");
+        }
+    }
+    assert_eq!(answered, 4);
+}
+
 #[test]
 fn prefix_not_on_a_non_logical_value_raises_34_901() {
     // say \'abc' -> Error 34.901

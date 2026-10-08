@@ -27,7 +27,6 @@ use super::{
 use crate::builtin::convert;
 use crate::builtin::numeric;
 use crate::error::Raised;
-use crate::eval::logical_value;
 use rexx_parse::Operator;
 
 /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
@@ -1252,8 +1251,7 @@ fn native_string_op_choice(
         .copied()
         .flatten()
         .ok_or_else(|| Raised::missing_named_argument("false value"))?;
-    let text = interp.to_text(receiver).to_vec();
-    let holds = logical_value(&text).ok_or_else(|| Raised::not_logical(&text))?;
+    let holds = interp.truth(receiver, Raised::not_logical)?;
     Ok(Some(if holds { on_true } else { on_false }))
 }
 

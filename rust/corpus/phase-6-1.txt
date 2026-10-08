@@ -171,3 +171,13 @@ lang/directory_entry_replace_while_running.rex
 lang/directory_entry_replace_then_allocates.rex
 lang/directory_unknown_unset_while_running.rex
 lang/setmethod_unset_identity_after_collection.rex
+
+# Task 4a: one truth judgment. A value is judged by its string value (a user
+# STRING, an array's items joined); SELECT CASE sends == to the case value;
+# hasItem and index judge an item's == answer; DO WITH judges AVAILABLE alike.
+lang/truth_user_string.rex
+lang/select_case_object.rex
+lang/select_case_not_logical.rex
+lang/collection_equal_answer.rex
+lang/collection_equal_not_logical.rex
+lang/do_with_available_string.rex

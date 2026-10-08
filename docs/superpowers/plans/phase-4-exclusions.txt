@@ -1794,8 +1794,7 @@ DEVIATIONS -- permanent, chosen
      (instructions/DoBlockComponents.cpp:173). WHILE and UNTIL in the same
      file (:277-321, UNTIL's truthValue call at :321) take the answer's
      truthValue, and Rexx's logical values are the strings 0 and 1, so the identity test is an oracle defect. This
-     crate's DO test judges an answer as the crate's WHILE does; neither
-     sends a user STRING method (a crate-wide gap, queued separately).
+     crate's DO test judges an answer as the crate's WHILE does.
      Text exactly `1`
      ends the loop (or means a negative step), exactly `0` goes on, and
      anything else raises 34.901, `Error_Logical_value_method` ("Logical

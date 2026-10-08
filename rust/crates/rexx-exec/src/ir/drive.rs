@@ -14,7 +14,7 @@
 
 use std::rc::Rc;
 
-use rexx_core::{Decoded, FrameId, ObjRef, ParkedFrame, RegFrame};
+use rexx_core::{FrameId, ObjRef, ParkedFrame, RegFrame};
 use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, Program, ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, ConditionKeyword, Op, SendForm};
@@ -1474,17 +1474,7 @@ macro_rules! region_ops {
                     // `IF`/`WHEN` tests once, and its value is
                     // already rooted in the register it came
                     // from.
-                    let quick = if value == crate::eval::LOGICAL_TRUE {
-                        Some(true)
-                    } else if value == crate::eval::LOGICAL_FALSE {
-                        Some(false)
-                    } else {
-                        match value.decode() {
-                            rexx_core::Decoded::SmallInt(1) => Some(true),
-                            rexx_core::Decoded::SmallInt(0) => Some(false),
-                            _ => None,
-                        }
-                    };
+                    let quick = crate::eval::truth_without_conversion(value);
                     let holds = match quick {
                         Some(holds) if !$self.trace_mode().results => holds,
                         _ => match $self.condition_value(
@@ -1519,15 +1509,14 @@ macro_rules! region_ops {
                         "op writes register {dst} outside the region the chunk \
                      reserved"
                     );
-                    let case_text = match case {
+                    let case = match case {
                         Some(register) => {
                             debug_assert!(
                                 $chunk.holds_register(*register),
                                 "op reads register {register} outside the region \
                              the chunk reserved"
                             );
-                            let value = $registers.get(*register);
-                            Some($self.to_text(value).to_vec())
+                            Some($registers.get(*register))
                         }
                         None => None,
                     };
@@ -1537,7 +1526,7 @@ macro_rules! region_ops {
                     let holds = match $self.scan_when(
                         $code,
                         $clause,
-                        case_text.as_deref(),
+                        case,
                     ) {
                         Ok(holds) => holds,
                         Err(failure) => break $cold Err(failure),
@@ -3569,7 +3558,7 @@ impl Interp {
                             pc = *target;
                             continue 'ops;
                         }
-                        // Handing an absorbed `WHEN CASE` the text it compares against
+                        // Handing an absorbed `WHEN CASE` the value it compares against
                         // (`Op::SelectCaseText`'s own doc has why it is here rather
                         // than inside the header's clause region), and opening a frame
                         // over a branch. None of the three runs a clause or produces a
@@ -3921,21 +3910,10 @@ impl Interp {
 
     /// Whether register `reg` holds the Rexx logical value `1`.
     fn register_holds(&self, registers: RegFrame<'_>, reg: u16) -> Result<bool, Failure> {
-        let value = registers.get(reg);
-        // The two handles a logical arrives in, compared as integers: the
-        // constant a comparison answers with, and the small int
-        // `Op::WhenTest` writes back for everything else.
-        if value == crate::eval::LOGICAL_TRUE {
-            return Ok(true);
-        }
-        if value == crate::eval::LOGICAL_FALSE {
-            return Ok(false);
-        }
-        match value.decode() {
-            Decoded::SmallInt(1) => Ok(true),
-            Decoded::SmallInt(0) => Ok(false),
-            _ => Err(Loud::register_not_logical().into()),
-        }
+        // A register this reads was written with a logical constant or the
+        // small int `Op::WhenTest` stores, so no conversion is owed.
+        crate::eval::truth_without_conversion(registers.get(reg))
+            .ok_or_else(|| Loud::register_not_logical().into())
     }
 }
 

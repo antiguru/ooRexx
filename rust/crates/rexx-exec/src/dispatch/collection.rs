@@ -203,7 +203,9 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
     array
 }
 
-/// Whether the collection holds `wanted`, comparing it against `element`.
+/// Whether the collection holds `wanted`, comparing it against `element`; a
+/// non-logical `==` answer is 34.901 (`RexxInternalObject::isEqual`,
+/// `classes/ObjectClass.cpp:193`).
 pub(super) fn same_item(
     interp: &mut Interp,
     wanted: ObjRef,
@@ -211,8 +213,7 @@ pub(super) fn same_item(
 ) -> Result<bool, Failure> {
     let (left, right) = (wanted, element);
     let answer = interp.apply_binary(Operator::StrictEqual, left, right)?;
-    let text = interp.to_text(answer);
-    Ok(crate::eval::logical_value(&text).unwrap_or(false))
+    interp.truth(answer, Raised::not_logical)
 }
 
 /// The one item argument a collection method takes, which is required.

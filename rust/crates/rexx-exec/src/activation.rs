@@ -375,7 +375,7 @@ pub(crate) struct Activation {
     pub(crate) elapsed_anchor: i64,
     /// The innermost `SELECT CASE`'s value here, which an absorbed `WHEN`
     /// compares against; `None` inside a plain `SELECT`.
-    pub(crate) current_case_text: Option<Vec<u8>>,
+    pub(crate) current_case: Option<ObjRef>,
     /// Whether [`cached_clock`] needs a fresh read before this activation's
     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
     /// doc names, set `true` once per instruction by `Op::Clause`'s region
@@ -499,7 +499,7 @@ pub(crate) struct ActivationFlags(u8);
 
 /// Every call pushes one, so the size is pinned: a field that grows it has to
 /// pay for itself on the call path (ruling R4).
-const _: () = assert!(size_of::<Activation>() == 480);
+const _: () = assert!(size_of::<Activation>() == 472);
 
 impl ActivationFlags {
     const FORWARDED: u8 = 1;
@@ -698,7 +698,7 @@ impl Activation {
             cold: None,
             cached_clock: NO_CLOCK,
             elapsed_anchor: NO_CLOCK,
-            current_case_text: None,
+            current_case: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -775,7 +775,7 @@ impl Activation {
             // pending anchors to the caller's last reading.
             cached_clock: inherited.cached_clock,
             elapsed_anchor: inherited.elapsed_anchor,
-            current_case_text: None,
+            current_case: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -833,7 +833,7 @@ impl Activation {
             cold: None,
             cached_clock: NO_CLOCK,
             elapsed_anchor: NO_CLOCK,
-            current_case_text: None,
+            current_case: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -886,7 +886,7 @@ impl Activation {
             cold: None,
             cached_clock: NO_CLOCK,
             elapsed_anchor: NO_CLOCK,
-            current_case_text: None,
+            current_case: None,
             clock_stale: true,
             context_object: None,
             notify_message: None,
@@ -980,7 +980,7 @@ impl Activation {
             cold,
             cached_clock: _,
             elapsed_anchor: _,
-            current_case_text: _,
+            current_case,
             clock_stale: _,
             context_object,
             notify_message,
@@ -991,6 +991,7 @@ impl Activation {
             streams,
         } = self;
         out.extend(*context_object);
+        out.extend(*current_case);
         out.extend(*notify_message);
         if let Some(replied) = replied {
             replied.object_roots(out);

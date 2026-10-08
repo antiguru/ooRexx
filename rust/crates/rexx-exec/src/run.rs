@@ -18,7 +18,6 @@ use crate::activation::{
 use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
-use crate::eval::logical_value;
 use crate::ir::{BodyEngine, NodePath};
 use crate::plan::{BodyKey, Package};
 use crate::scheduler::ExecOutcome;
@@ -49,11 +48,12 @@ pub(crate) use indent::{all_indents, static_indent};
 // The `Raised` constructors for the conditions the instruction loop raises.
 mod raised;
 use raised::{
-    raise_syntax_condition, raised_digit_led, raised_dot_led, raised_for_count_not_whole,
-    raised_guard_not_logical, raised_iterate_no_loop, raised_iterate_no_match,
-    raised_iterate_wrong_kind, raised_leave_no_loop, raised_leave_no_match,
-    raised_naming_the_operand, raised_repetition_count_not_whole, raised_select_no_when,
-    raised_symbol_expected, raised_until_not_logical, raised_while_not_logical,
+    raise_syntax_condition, raised_available_not_logical, raised_digit_led, raised_dot_led,
+    raised_for_count_not_whole, raised_guard_not_logical, raised_iterate_no_loop,
+    raised_iterate_no_match, raised_iterate_wrong_kind, raised_leave_no_loop,
+    raised_leave_no_match, raised_naming_the_operand, raised_repetition_count_not_whole,
+    raised_select_no_when, raised_symbol_expected, raised_until_not_logical,
+    raised_when_case_not_logical, raised_while_not_logical,
 };
 pub(crate) use raised::{
     raised_for_code, raised_from_settings, raised_if_not_logical, raised_when_not_logical,
@@ -895,10 +895,10 @@ impl Interp {
                 values,
                 false_target,
                 ..
-            } => match self.activation().current_case_text.clone() {
-                Some(case_text) => {
+            } => match self.activation().current_case {
+                Some(case) => {
                     let indent = self.activity.clause_state.current_value_indent;
-                    if self.test_case_when(code, values, &case_text, indent)? {
+                    if self.test_case_when(code, values, case, indent)? {
                         Ok(Flow::Next)
                     } else {
                         // **Corrected after a second re-verification found
@@ -3652,14 +3652,7 @@ impl Interp {
         // truncation, as `pop_frame`'s own doc describes.
         let frame = self.roots.activity_mut().push_frame();
         self.roots.activity_mut().push_temp(value);
-        // **The owned copy is taken only when a line will print it.** Both
-        // formatters below return at once unless `results` is on, and the copy
-        // exists only because `to_text` borrows `self` while they need it
-        // mutably -- so off that path the borrow is enough and the answer is
-        // decided from it directly. Measured with `heaptrack` on
-        // `samples/rexxcps.rex`: this was the largest single allocation site
-        // in the interpreter, one copy per condition evaluated.
-        let decided = if self.trace_mode().results {
+        if self.trace_mode().results {
             let text = self.to_text(value).to_vec();
             match trace {
                 // `IF`/plain `WHEN`'s own `>>>` (`IfInstruction.cpp:140`, and
@@ -3681,59 +3674,27 @@ impl Interp {
                     self.trace_keyword(indent, keyword, &text);
                 }
             }
-            Self::condition_holds(checked, &text, raise)
-        } else {
-            // **Off the tracing path the bytes need not be moved anywhere.**
-            // `to_text` would copy them into the interpreter's scratch slot
-            // and hand back a borrow of it; for a value that carries its own
-            // bytes that copy buys nothing. A condition's value is one byte --
-            // `0` or `1` -- far more often than it is anything else, and one
-            // byte always rides in the handle.
-            match value.decode() {
-                Decoded::Text(inline) => Self::condition_holds(checked, &inline, raise),
-                // `to_text` renders these two as `"0"` and `"1"`, which both
-                // arms of `condition_holds` then read as this same answer.
-                // Every other integer falls to the arm below, so the failure
-                // it raises still names the value as the oracle spells it.
-                Decoded::SmallInt(number) if number == 0 || number == 1 => Ok(number == 1),
-                _ => {
-                    let text = self.to_text(value);
-                    Self::condition_holds(checked, &text, raise)
-                }
-            }
-        };
-        // After the rendering above is out of scope, so the borrow it may hold
-        // on `self` has ended. The decision itself touches neither `self` nor
-        // the roots, so making it before this pop rather than after changes no
-        // answer and no lifetime.
+        }
+        // A comma list answers a logical constant of its own, its elements
+        // having been judged one by one.
+        debug_assert!(
+            !checked || crate::eval::truth_without_conversion(value).is_some(),
+            "a checked condition answered something other than a logical constant"
+        );
+        let decided = self.truth(value, raise);
         self.roots.activity_mut().pop_frame(frame);
         decided
     }
 
-    /// Whether a condition's rendered text holds, and the failure when it is
-    /// neither `0` nor `1`.
-    fn condition_holds(
-        checked: bool,
-        text: &[u8],
-        raise: fn(&[u8]) -> Raised,
-    ) -> Result<bool, Failure> {
-        if checked {
-            Ok(text == b"1")
-        } else {
-            logical_value(text).ok_or_else(|| raise(text).into())
-        }
-    }
-
-    /// Whether any of a `WHEN CASE`'s `values` compares `==` (byte-for-byte,
-    /// no padding, no numeric awareness) equal to the `SELECT CASE`'s own
-    /// `case_text`, matching on the first that does (an OR of `==`, the
-    /// opposite of a plain `WHEN`'s comma list, which is an AND checked for
-    /// `0`/`1` -- `ast.rs`'s own doc comment on `WhenCase`).
+    /// Whether the `SELECT CASE` value `case` answers true to `==` with any
+    /// of a `WHEN CASE`'s `values`, matching on the first that does
+    /// (`RexxInstructionCaseWhen::execute`, `WhenCaseInstruction.cpp:157`:
+    /// the case value is the receiver, and a non-logical answer is 34.905).
     fn test_case_when(
         &mut self,
         code: &Code<'_>,
         values: &[Expr],
-        case_text: &[u8],
+        case: ObjRef,
         indent: usize,
     ) -> Result<bool, Failure> {
         for value in values {
@@ -3741,9 +3702,11 @@ impl Interp {
             self.roots.activity_mut().push_temp(value);
             let text = self.to_text(value).to_vec();
             self.trace_result(indent, &text);
-            let matched = text == case_text;
-            self.trace_result(indent, if matched { b"1" } else { b"0" });
-            if matched {
+            let answer = self.apply_binary(rexx_parse::Operator::StrictEqual, case, value)?;
+            self.roots.activity_mut().push_temp(answer);
+            let text = self.to_text(answer).to_vec();
+            self.trace_result(indent, &text);
+            if self.truth(answer, raised_when_case_not_logical)? {
                 return Ok(true);
             }
         }

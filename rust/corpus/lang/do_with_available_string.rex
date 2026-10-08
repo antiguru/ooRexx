@@ -1,0 +1,24 @@
+/* DO WITH judges a supplier's AVAILABLE answer by its string value. */
+do with item v over .sup~new(.s1~new)
+  say 'item' v
+  leave
+end
+do with item v over .sup~new(.array~of(1))
+  say 'item' v
+  leave
+end
+do with item v over .sup~new(.array~of(0))
+  say 'never' v
+end
+say 'done'
+exit
+::class sup subclass supplier
+::method init
+  expose answer
+  use arg answer
+  self~init:super(.array~of('a'), .array~of(1))
+::method available
+  expose answer
+  return answer
+::class s1
+::method string; return 1

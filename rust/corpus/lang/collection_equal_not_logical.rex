@@ -1,0 +1,6 @@
+/* An item's == answer that is not 0 or 1 is Error 34.901. */
+l = .list~of(.c~new)
+say l~hasItem(.c~new)
+exit
+::class c
+::method '=='; return .array~of(1, 2)
