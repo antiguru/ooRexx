@@ -1,0 +1,11 @@
+count 10
+/* setMethod with a ::CONSTANT's Method object answers the constant. */
+o = .t~new
+say o~go(.u~method('C'))
+::class t
+::method go
+use arg m
+self~setMethod('cc', m)
+return self~cc
+::class u
+::constant c 5

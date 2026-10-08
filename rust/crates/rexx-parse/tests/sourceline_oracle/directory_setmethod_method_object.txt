@@ -1,0 +1,8 @@
+count 7
+/* Directory~setMethod with a ::METHOD's Method object. */
+d = .directory~new
+d~setMethod('x', .u~method('M'))
+say d~x
+::class u
+::method m
+  return 'um' self~class~id

@@ -1,0 +1,11 @@
+count 10
+/* A method define compiled from source text runs, and so does one define
+ * installs from a ::METHOD's Method object. */
+c = .object~subclass('K')
+c~define('M', 'return 7')
+say c~new~m
+c~define('N', .u~method('M'))
+say c~new~n
+::class u
+::method m
+return 'um'

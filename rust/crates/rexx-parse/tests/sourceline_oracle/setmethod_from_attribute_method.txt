@@ -1,0 +1,12 @@
+count 11
+/* setMethod with an ::ATTRIBUTE getter reads the variable in the .nil scope's
+ * pool, where it is unset. */
+o = .t~new
+say o~go(.u~method('A'))
+::class t
+::method go
+use arg m
+self~setMethod('aa', m)
+return self~aa
+::class u
+::attribute a

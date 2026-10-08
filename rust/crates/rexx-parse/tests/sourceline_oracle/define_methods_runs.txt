@@ -1,0 +1,13 @@
+count 12
+/* defineMethods from source and from a Method object runs both; a define
+ * after the instance was made is not seen by it. */
+c = .object~subclass('K')
+c~defineMethods(.directory~of(('A', 'return "a"'), ('B', .u~method('B'))))
+o = c~new
+say o~a o~b
+say c~method('A')~source[1]
+c~define('C', .u~method('B'))
+say o~c c~method('C')~scope~id .u~method('B')~scope~id
+::class u
+::method b
+  return 'ub' self~class~id

@@ -1,0 +1,15 @@
+count 14
+/* setMethod's copy of a PRIVATE method stays private. */
+o = .t~new
+say o~go
+signal on syntax
+say o~pp
+exit
+syntax: say 'syntax' condition('o')~code
+::class t
+::method go
+  self~setMethod('pp', .u~method('P'))
+  return self~pp
+::class u
+::method p private
+  return 'priv'

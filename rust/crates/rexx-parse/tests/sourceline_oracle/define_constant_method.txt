@@ -1,0 +1,7 @@
+count 6
+/* define with a ::CONSTANT's Method object. */
+c = .object~subclass('K')
+c~define('CC', .u~method('C'))
+say c~new~cc
+::class u
+::constant c 5

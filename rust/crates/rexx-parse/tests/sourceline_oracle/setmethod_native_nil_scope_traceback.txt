@@ -1,0 +1,8 @@
+count 7
+/* A primitive setMethod installed under the .nil scope is blamed
+ * `with scope ".NIL"`. */
+say .t~new~go
+::class t
+::method go
+  self~setMethod('hm', .object~method('HASMETHOD'))
+  return self~hm

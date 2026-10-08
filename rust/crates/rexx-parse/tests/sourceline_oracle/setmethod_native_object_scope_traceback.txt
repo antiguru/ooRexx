@@ -1,0 +1,8 @@
+count 7
+/* A primitive setMethod installed under OBJECT scope is blamed with the
+ * receiver's class. */
+say .t~new~go
+::class t
+::method go
+  self~setMethod('hm', .object~method('HASMETHOD'), 'OBJECT')
+  return self~hm
