@@ -110,3 +110,47 @@ resolution, which the pad shows identically.
 4. The debug-pause leak fix touches Task 6's area (one line, with its test).
 5. `ParseError::byte` now moves to the echoed clause's start when a grammar error is resolved;
    `parse-errors.tsv`'s line check still passes on every row.
+
+## Fix round 1
+
+Commits `eb3775477` (behaviour, witnesses, exclusions, M1-M4), `496977456` (`collect_stress`
+zero-collection list).
+
+- I1. A package whose directives fail to install closes its own level with a `ROUTINE` frame
+  named for the package (`install.rs` `seal_package_level`, called from `install_executable`
+  and from `run_loaded` for `CallType::Requires`), so the native loader's `Compiled method` line
+  and the calling clause record. A `::REQUIRES` prologue that raises captures its frame and seals
+  its level too (`lib.rs` `run_main`, `own_level`); its frame is `ROUTINE` named for its package
+  (`dispatch/context.rs` `read_snapshot`), and its clauses trace from the margin as a called
+  program's do (measured against the oracle under `trace r` from an indented `DO` and from an
+  internal routine). The runtime shape, wrong at base, agrees too.
+  Witnesses: `parse_error_nested_requires.rex` (Routine~newFile, Method~newFile, Package~new,
+  loadPackage; each with a nested file that does not parse and one whose prologue raises; trapped;
+  traceback and `STACKFRAMES`), `parse_error_nested_requires_{rnf,mnf,pkg,lp}.rex` (untrapped, one
+  per loader), `package_new_prologue_raise.rex` (the exclusions family row's own probe, untrapped).
+  All identical to the oracle on the three descriptors, read.
+  Exclusions: the agreement row names the nested shapes it now covers; the family row "THE
+  TRACEBACK OF A RAISE INSIDE .Package~new OR loadPackage" is marked CLOSED with its measurement
+  (untrapped identical, trapped traceback and `STACKFRAMES` agree); a new KNOWN GAP records that a
+  prologue's live `.context~stackframes` lacks the loading levels (the program's frame during its
+  `::requires`, `METHOD NEW` under `Package~new`), measured. Also seen, not changed: a prologue run
+  under `trace r` prints no `>I>`/`<I<` lines here where the oracle prints them.
+- M1: `token.rs` states the bound: an echo ending past `u32::MAX` is cut there, one starting past
+  it is empty.
+- M2: `Raised::parse_failure` `debug_assert!`s the span is inside the source and echoes nothing
+  otherwise; no invented text.
+- M3: `Interp::parse_file` (`run.rs`) serves the external call, `::REQUIRES` and `newFile`.
+- M4: the gate record's band sentence states both pad deltas.
+- `collect_stress`: the programs whose `::REQUIRES` chain fails now build the failing package's
+  frame and collect under the stress mode; dropped from the zero-collection list, outputs
+  unchanged under it.
+
+Perf (`lib.rs`/`install.rs` changed): the callgrind command of the gate record with `fr1`
+(`eb3775477`, sha256 `58f637e8...a24`) added: startup +0.2641%, parse +0.6089% against
+`base61`, the same as r1 to 0.001%.
+
+Checks at `496977456`: `cargo fmt --all --check` 0; clippy (at `eb3775477`) 0;
+`memcap 8G cargo test -j 4 --workspace --no-fail-fast` 0; `REXX_CORPUS_GATE=1` corpus and
+`ir_recorded_oracle` 0 (29 passed, 1 ignored; 21 passed). At `eb3775477` the workspace run was
+101 on `collect_stress` alone, fixed by `496977456`. `refusal_sites` 0 without a refresh.
+whole_groups not run (I2 stays open).

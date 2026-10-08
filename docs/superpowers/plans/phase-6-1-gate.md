@@ -531,3 +531,7 @@ shows the same step.
 concurrency_tests whole_groups`, at `7824d57df`): OOM-killed at the 8G cap, peak 8.0G, about nine
 minutes in, before the table was written. Not re-run at a higher cap; its expectation lines are
 unchanged.
+
+Fix round 1 (`eb3775477`, binary `fr1`, sha256
+`58f637e888af95cf4d891cc66d387e46cade4677a3632a80e1bbe3cea9595a24`), the same callgrind command
+with `fr1=$S/bin/fr1/rexx-run` added, exit 0: startup +0.2641%, parse +0.6089% against `base61`.
