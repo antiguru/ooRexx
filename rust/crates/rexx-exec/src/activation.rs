@@ -587,6 +587,9 @@ pub(crate) struct ActivationCold {
     /// Where a name this activation meets for the first time binds after a
     /// method's `USE LOCAL`, or `None` without one.
     pub(crate) auto_expose: Option<AutoExpose>,
+    /// The `Method` object `Object~run` ran this activation for, which no
+    /// dictionary entry names.
+    pub(crate) executable: Option<ObjRef>,
 }
 
 /// A `USE LOCAL` method's object pool and the names it keeps local
@@ -1010,6 +1013,7 @@ impl Activation {
         {
             out.extend([*owner, *scope]);
         }
+        out.extend(cold.as_deref().and_then(|cold| cold.executable));
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.
         out.extend(streams.values().copied());

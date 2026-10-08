@@ -1,0 +1,5 @@
+/* enhanced with a primitive's Method object on an instance of its own type. */
+c = .array~subclass('K')
+o = c~enhanced(.directory~of(('CNT', .array~method('ITEMS'))))
+o~append(1)
+say o~cnt

@@ -1,0 +1,22 @@
+/* The position each taker of a method source names in 93.961 and 93.974. */
+signal on syntax name s1
+m = .method~new('m', .object~new)
+s1: say condition('o')~code condition('o')~message
+signal on syntax name s2
+.object~subclass('k')~define('m', .object~new)
+s2: say condition('o')~code condition('o')~message
+signal on syntax name s3
+.object~enhanced(.directory~of(('M', .object~new)))
+s3: say condition('o')~code condition('o')~message
+signal on syntax name s4
+.object~subclass('k', .class, .directory~of(('M', .object~new)))
+s4: say condition('o')~code condition('o')~message
+signal on syntax name s5
+d = .directory~new; d~setMethod('m', .object~new)
+s5: say condition('o')~code condition('o')~message
+signal on syntax name s6
+.object~subclass('k')~defineMethods(.directory~of(('M', .object~new)))
+s6: say condition('o')~code condition('o')~message
+signal on syntax name s7
+.package~new('p', .object~new)
+s7: say condition('o')~code condition('o')~message

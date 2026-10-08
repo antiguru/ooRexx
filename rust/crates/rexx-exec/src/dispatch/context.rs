@@ -418,12 +418,23 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
         activation.body,
         &activation.method_identity,
     ) {
-        (Entry::Method, _, Some(identity)) => {
-            let scope = identity.scope;
-            let name = identity.name.to_vec();
-            interp.method_executable(scope, &name)
+        (Entry::Method, Some(directive), Some(identity)) => {
+            if let Some(executable) = activation.cold.as_deref().and_then(|cold| cold.executable) {
+                return Ok(executable);
+            }
+            let (scope, name, receiver) =
+                (identity.scope, identity.name.to_vec(), identity.receiver);
+            let body = crate::InstalledMethodBody { program, directive };
+            Ok(interp.running_method_executable(scope, &name, receiver, body))
         }
         (Entry::Routine, Some(directive), _) => {
+            // A routine built from source text is in no package table, and
+            // is its own executable: measured, oracle rc 0,
+            // `.routine~new('r', 'return .context~executable~class~id')~call`
+            // answers `Routine`.
+            if let Some(object) = routine_object_running(interp, program, directive) {
+                return Ok(object);
+            }
             let name = routine_entry_name(interp, program, directive)?;
             let table = interp
                 .package_string_table(program, crate::environment::PackageTable::Routines)
@@ -437,6 +448,17 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
         }
         _ => Ok(interp.program_routine_object(program)),
     }
+}
+
+/// A live `Routine` object whose `~call` enters `directive` of `program`.
+fn routine_object_running(interp: &Interp, program: ProgramId, directive: usize) -> Option<ObjRef> {
+    interp
+        .executable_sources
+        .iter()
+        .find(|(object, record)| {
+            record.routine == Some((program, directive)) && interp.heap.get(**object).is_some()
+        })
+        .map(|(object, _)| *object)
 }
 
 /// The `.ROUTINES` key one `::ROUTINE` directive is filed under: its declared
@@ -761,7 +783,7 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
         native.arguments.clone(),
     );
     let (kind, target, trace_text) = if method {
-        let scope = interp.classes().id_string(scope).to_string();
+        let scope = interp.scope_id(scope);
         (
             &b"METHOD"[..],
             receiver,

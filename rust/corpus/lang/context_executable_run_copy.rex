@@ -1,0 +1,9 @@
+/* run's newScope answers the object itself while it has no scope and a copy
+ * once it has one. */
+m = .method~new('x', 'return .context~executable')
+say .t~new~go(m) == m
+say .t~new~go(m) == m
+::class t
+::method go
+  use arg m
+  return self~run(m)

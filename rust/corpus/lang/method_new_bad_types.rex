@@ -1,0 +1,10 @@
+/* A number is a one-line source and an empty array an empty one; a Routine
+ * from an object that converts to neither is 93.961. */
+signal on syntax
+m = .method~new('m', 5)
+say m~source~items
+m = .method~new('m', .array~new)
+say m~source~items
+m = .routine~new('r', .object~new)
+exit
+syntax: say rc condition('O')~code

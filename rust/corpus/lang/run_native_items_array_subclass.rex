@@ -1,0 +1,5 @@
+/* run with a primitive's Method object on an instance of its own type. */
+say .a~of(1, 2, 3)~go
+::class a subclass array
+::method go
+return self~run(.array~method('ITEMS'))

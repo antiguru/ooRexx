@@ -195,7 +195,7 @@ use libraries::Libraries;
 
 // What a program's directives say before any of them is installed.
 mod directives;
-use directives::{accessor_setter_name, accessor_variable, delegate_variable, method_body_gap};
+use directives::{accessor_setter_name, accessor_variable, delegate_variable};
 
 // Variable storage and reads: a slot's own storage, what an `EXPOSE` bound it
 // to, and the scope pools.
@@ -591,20 +591,16 @@ impl Loud {
         }
     }
 
-    /// A `SETMETHOD` or `UNSETMETHOD` whose receiver has no dictionary of
-    /// its own here.
+    /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
+    /// nor a class object, the two kinds that hold methods of their own here.
+    /// No program reaches it: the routes tried are `SETMETHOD` sent to an
+    /// `Array`, a `String` and a `Directory` (private, 97.2 on both engines),
+    /// a `define` or `inherit` on `.Object` and `.String` (98.985), and a
+    /// borrowed `Object` `SETMETHOD` row a `Directory`'s own method sends to
+    /// that `Directory` (88.901, the entry method arrives with no arguments).
     fn object_method(what: &str) -> Loud {
         Loud {
-            message: owned_message(what, Some("Phase 5")),
-        }
-    }
-
-    /// A message that resolved to a `::METHOD` or `::ATTRIBUTE` directive
-    /// whose body this crate cannot run -- see [`method_body_gap`], which
-    /// enumerates the cases and supplies `what`.
-    fn method_body(what: &str) -> Loud {
-        Loud {
-            message: owned_message(what, Some("Phase 5")),
+            message: owned_message(what, None),
         }
     }
 
@@ -637,11 +633,14 @@ impl Loud {
         }
     }
 
-    /// `EXPOSE` in a method whose receiver is neither a class object nor an
-    /// instance.
+    /// `EXPOSE`, or a generated accessor, in a method whose receiver is
+    /// neither an instance nor a class object, the two kinds that hold
+    /// variable pools here. No program reaches it, by the routes
+    /// [`Loud::object_method`] names: a method body runs on such a receiver
+    /// only through a dictionary no program can add to.
     fn expose_receiver() -> Loud {
         Loud {
-            message: owned_message("EXPOSE on an object with no variable pool", Some("Phase 5")),
+            message: owned_message("EXPOSE on an object with no variable pool", None),
         }
     }
 
@@ -936,9 +935,9 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         InstructionKind::Message { .. } => None,
         // `EXPOSE` binds its names to the receiving object's scope pool.
         // `None` in the same sense `Message` above is: the variant executes,
-        // and the sub-case with no code here, a receiver that is not a class
-        // object, fails loudly through `Loud::expose_receiver` rather than
-        // answering.
+        // and the sub-case with no code here, a receiver that is neither an
+        // instance nor a class object, fails loudly through
+        // `Loud::expose_receiver` rather than answering.
         InstructionKind::Expose { .. } => None,
         // `GUARD` reserves and releases the receiver's scope and waits for
         // its `WHEN`, and `REPLY` hands its value to the sender and moves the
@@ -1241,8 +1240,8 @@ struct Interp {
     /// (D33). `None` until a `.NAME` is resolved, for the reason
     /// [`Interp::object_model`] is: building it forces the native class set.
     environment: Option<environment::EnvironmentModel>,
-    /// The arena object holding each class object's own variable pools, by
-    /// class identity.
+    /// The arena object holding each class object's own variable pools and
+    /// its `setMethod` methods, by class identity.
     class_variables: FxHashMap<ObjRef, ObjRef>,
     /// The classes each program's own `::CLASS` directives installed, keyed by
     /// the uppercased name -- `PackageClass`'s installed-class table, which
@@ -1327,12 +1326,12 @@ struct Interp {
     /// keeps the per-object dictionary off a send's path in a program that
     /// never sends `SETMETHOD` -- see `Interp::own_method_entry`.
     object_methods: bool,
-    /// Which directive is the body of a `Method` object this crate handed
-    /// out through `.METHODS` or compiled from source text.
-    table_method_bodies: NameMap<ObjRef, InstalledMethodBody>,
+    /// The `Method` object standing for each method identity one was built
+    /// for, which is what `.context~executable` answers from a method no
+    /// class dictionary reaches by its name.
+    executable_objects: FxHashMap<MethodId, ObjRef>,
     /// What each `Method` and `Routine` object this crate has handed out
-    /// reports on -- see [`ExecutableSource`], which carries why this is not
-    /// [`Interp::table_method_bodies`] with more rows in it.
+    /// reports on and runs -- see [`ExecutableRecord`].
     executable_sources: FxHashMap<ObjRef, ExecutableRecord>,
     /// For a stem some other stem's `EXPOSE` made tails of, a weak reference
     /// to each such stem. The stems are not roots through this.
@@ -1592,10 +1591,11 @@ impl MergedRoutine {
 pub(crate) struct ExecutableRecord {
     /// What the seven flags, `~source` and `~package` report on.
     pub(crate) source: ExecutableSource,
-    /// The dictionary entry this object *is*, which is what makes
-    /// `Method~setPrivate` change how a send resolves. `None` for an object
-    /// no class has taken -- a `.METHODS` entry, or one compiled from source
-    /// text.
+    /// The method identity this object runs under: the dictionary entry it
+    /// *is* where a class holds it, which is what makes `Method~setPrivate`
+    /// change how a send resolves, and one minted for it otherwise.
+    /// `setMethod`, `run`, `enhanced` and `define` install this identity.
+    /// `None` for a `Routine`.
     pub(crate) installed: Option<MethodId>,
     /// The `::ROUTINE` directive `Routine~call` enters, which is not always
     /// the directive [`ExecutableRecord::source`] names: a `Routine`
@@ -1986,7 +1986,7 @@ impl Interp {
             method_bodies: NameMap::default(),
             compiled_method_names: FxHashMap::default(),
             object_methods: false,
-            table_method_bodies: NameMap::default(),
+            executable_objects: FxHashMap::default(),
             executable_sources: FxHashMap::default(),
             stem_exposers: FxHashMap::default(),
             method_flag_writes: FxHashMap::default(),
@@ -2317,7 +2317,59 @@ impl Interp {
         {
             return Ok(None);
         }
+        self.run_main(program, program_id, call_type, address, caller_settings)
+    }
 
+    /// `Routine~call` on the `Routine` object standing for a program's own
+    /// main section, which runs that section again as a subroutine over
+    /// `arguments` -- measured, oracle rc 0, its `PARSE SOURCE` answers
+    /// `SUBROUTINE` and the caller's variables are untouched.
+    pub(crate) fn call_program_main(
+        &mut self,
+        program_id: ProgramId,
+        arguments: Vec<Option<ObjRef>>,
+        name: &[u8],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let probe = 0u8;
+        if self.activation_depth() >= crate::run::MAX_ACTIVATION_DEPTH
+            || self.stack_exhausted(&raw const probe)
+        {
+            return Err(Raised::insufficient_stack().into());
+        }
+        let program = Rc::clone(&self.programs[program_id.0]);
+        let address = self.activation().address.clone();
+        let settings = self.activation().settings.clone();
+        let saved = std::mem::replace(
+            &mut self.activity.call_context,
+            CallContext {
+                name: Rc::from(name),
+                arguments: Rc::from(arguments),
+                receiver: None,
+            },
+        );
+        let outcome = self.run_main(
+            program,
+            program_id,
+            CallType::Subroutine,
+            Some(address),
+            Some(settings),
+        );
+        self.activity.call_context = saved;
+        outcome
+    }
+
+    /// [`Interp::run_loaded`] past the install: one activation over the main
+    /// body, run to its end.
+    fn run_main(
+        &mut self,
+        program: Rc<Program>,
+        program_id: ProgramId,
+        call_type: CallType,
+        address: Option<crate::activation::AddressState>,
+        caller_settings: Option<Settings>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let called = matches!(call_type, CallType::Subroutine | CallType::Function);
+        let nested = self.running_activation().is_some();
         // Note what does *not* happen here: the plan is looked up through
         // `&program.main`, a borrow of the local `Rc`, while `self` is
         // borrowed mutably by `plan_for`. Reaching the same body through
@@ -2699,9 +2751,12 @@ impl Interp {
             library_programs: _,
             compiled_method_names: _,
             object_methods: _,
+            // A lookup index holding objects it does not keep: a swept one
+            // reads as absent, because the generation bump makes the handle
+            // name nothing.
+            executable_objects: _,
             // Keyed by an object and holding none: a swept key is a lookup
             // miss, because the generation bump makes the handle unequal.
-            table_method_bodies: _,
             executable_sources: _,
             stem_exposers,
             method_flag_writes: _,

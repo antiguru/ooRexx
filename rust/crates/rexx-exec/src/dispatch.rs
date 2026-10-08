@@ -167,15 +167,15 @@ use method_arguments::{
 // `Class`'s own methods: its readers, the mutators, the class factory.
 mod class_protocol;
 use class_protocol::{
-    begin_init, class_argument, class_receiver, compile_method_source, compile_routine_source,
-    is_enhanced_instance, method_name_argument, method_source_lines, native_annotation,
-    native_annotations, native_base_class, native_class_copy, native_class_default_name,
-    native_class_inherit, native_define, native_define_class_method, native_define_methods,
-    native_delete, native_enhanced, native_id, native_inherit_instance_methods,
-    native_is_subclass_of, native_metaclass, native_method, native_mixin_class_factory, native_new,
-    native_new_class, native_package, native_package_add_class, native_package_add_public_class,
-    native_scope, native_subclass, native_superclass, native_superclasses, native_uninherit,
-    new_instance,
+    SourceTaker, begin_init, class_argument, class_receiver, compile_method_source,
+    compile_routine_source, is_enhanced_instance, method_name_argument, method_source_lines,
+    native_annotation, native_annotations, native_base_class, native_class_copy,
+    native_class_default_name, native_class_inherit, native_define, native_define_class_method,
+    native_define_methods, native_delete, native_enhanced, native_id,
+    native_inherit_instance_methods, native_is_subclass_of, native_metaclass, native_method,
+    native_mixin_class_factory, native_new, native_new_class, native_package,
+    native_package_add_class, native_package_add_public_class, native_scope, native_subclass,
+    native_superclass, native_superclasses, native_uninherit, new_instance, scoped_method,
 };
 
 // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
@@ -201,7 +201,7 @@ use object_protocol::{
     native_object_concat_blank, native_object_different, native_object_identical,
     native_object_name, native_object_name_set, native_request, native_run, native_send,
     native_send_with, native_set_method, native_start, native_start_with, native_string,
-    native_unset_method, operator_argument, run_method_body, string_hash,
+    native_unset_method, operator_argument, run_method, string_hash,
 };
 
 // The required-string protocol and the string conversion behind it.
@@ -365,7 +365,7 @@ impl Interp {
             blame.receiver,
             blame.args.clone(),
         );
-        let scope_name = self.classes().id_string(scope).to_string();
+        let scope_name = self.scope_id(scope);
         let trace_text = Raised::compiled_method_line(&name, &scope_name);
         let frame =
             context::build_native_level_frame(self, true, &name, receiver, &args, &trace_text);
@@ -1098,9 +1098,16 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Routine", "NEWFILE", Arity::Fixed(2), native_new_file),
     // The classes whose `newRexx` is the refusal and nothing else, because
     // their instances come only from native code (`utilityclasses.xml:429`,
-    // `:6910`).
+    // `:6910`) or from the `>name` operator
+    // (`classes/VariableReference.cpp:97`, `memory/Setup.cpp:1294`).
     ("Buffer", "NEW", Arity::Counted, native_unsupported_new),
     ("Pointer", "NEW", Arity::Counted, native_unsupported_new),
+    (
+        "VariableReference",
+        "NEW",
+        Arity::Counted,
+        native_unsupported_new,
+    ),
 ];
 
 /// The two methods `Setup.cpp` puts on `.Class` for the image build and
@@ -1706,8 +1713,14 @@ impl Interp {
     }
 
     /// `~id` for a class object -- the name it was declared with, case
-    /// unmodified.
+    /// unmodified -- and `.NIL` for the `.nil` scope a method `setMethod` or
+    /// `run` installed carries, which is how the oracle's `>I>` line and
+    /// traceback name it: measured, oracle rc 0, `>I> Method "HM" with scope
+    /// ".NIL"`.
     pub(crate) fn class_id_text(&self, class: ObjRef) -> &str {
+        if class == ObjRef::NIL {
+            return ".NIL";
+        }
         self.object_model
             .as_ref()
             .expect("a class handle can only have come from the object model")
@@ -2013,7 +2026,9 @@ impl Interp {
         if start_scope.is_none()
             && let Some(entry) = self.own_method_entry(receiver, name)
         {
-            return Some(entry.map(|ObjectMethod { method, scope }| Resolution { scope, method }));
+            return Some(
+                entry.map(|ObjectMethod { method, scope, .. }| Resolution { scope, method }),
+            );
         }
         None
     }
@@ -2064,6 +2079,19 @@ impl Interp {
         }
         match &self.heap.get(receiver)?.body {
             Body::Instance { own: Some(own), .. } => own.get(name),
+            Body::Class { .. } => self.class_own_entry(receiver, name),
+            _ => None,
+        }
+    }
+
+    /// [`Interp::own_method_entry`] for a class object, whose own methods
+    /// sit on the object holding its variable pools ([`Interp::pool_owner`]).
+    #[cold]
+    #[inline(never)]
+    fn class_own_entry(&self, class: ObjRef, name: &[u8]) -> Option<Option<ObjectMethod>> {
+        let owner = self.class_variables.get(&class)?;
+        match &self.heap.get(*owner)?.body {
+            Body::Instance { own: Some(own), .. } => own.get(name),
             _ => None,
         }
     }
@@ -2077,17 +2105,21 @@ impl Interp {
         name: &[u8],
         write: ObjectMethodWrite,
     ) -> Result<(), Failure> {
-        match self.receiver_kind(receiver) {
-            Ok(Primitive::Instance { .. }) => {}
+        let holder = match self.receiver_kind(receiver) {
+            Ok(Primitive::Instance { .. }) => receiver,
+            // Measured, oracle rc 0: a class method's `self~setMethod('m2',
+            // 'return 42')` then `.K~m2` answers `42`, and `unsetMethod`
+            // from one answers.
+            Ok(Primitive::Class(_)) => self.pool_owner(receiver)?,
             Ok(_) => return Err(Loud::object_method("a receiver with no scope of its own").into()),
             Err(kind) => return Err(Loud::receiver_class(kind).into()),
-        }
+        };
         let Some(Object {
             body: Body::Instance { own, .. },
             ..
-        }) = self.heap.get_mut(receiver)
+        }) = self.heap.get_mut(holder)
         else {
-            unreachable!("an instance receiver is Body::Instance")
+            unreachable!("an instance receiver and a class's pool owner are Body::Instance")
         };
         match write {
             ObjectMethodWrite::Remove => {
@@ -2159,7 +2191,7 @@ impl Interp {
     /// reports what a send it is not making would have failed with.
     fn lookup_for_refusal(&mut self, receiver: ObjRef, name: &[u8]) -> Option<String> {
         let resolution = self.lookup(receiver, name, None)?;
-        Some(self.classes().id_string(resolution.scope).to_string())
+        Some(self.scope_id(resolution.scope))
     }
 
     /// The access scope and protection of a resolved method, for the methods
@@ -2266,6 +2298,50 @@ impl Interp {
         }
     }
 
+    /// Mints a method identity that runs what `template` runs, with its
+    /// access scope and guard: the identity a copy `MethodClass::newScope`
+    /// makes is installed under, so the copy's own flags stay its own.
+    pub(crate) fn copy_method_identity(&mut self, template: MethodId) -> MethodId {
+        let method = self.classes().mint_method_id();
+        let natives = &mut self.object_model().natives;
+        if let Some(entry) = natives.get(template.0 as usize).copied().flatten() {
+            put_native(natives, method, entry);
+        }
+        if let Some(body) = self.method_bodies.get(&template).copied() {
+            self.method_bodies.insert(method, body);
+        }
+        if let Some(generated) = self.generated_methods.get(&template).copied() {
+            self.generated_methods.insert(method, generated);
+        }
+        if let Some(entry) = self.native_externals.get(&template).copied() {
+            self.native_externals.insert(method, entry);
+        }
+        if let Some(binding) = self.library_externals.get(&template).cloned() {
+            self.library_externals.insert(method, binding);
+        }
+        if let Some(program) = self.external_packages.get(&template).copied() {
+            self.external_packages.insert(method, program);
+        }
+        if let Some(code) = self.defined_library_codes.get(&template).copied() {
+            self.defined_library_codes.insert(method, code);
+        }
+        if self.guarded_externals.contains(&template) {
+            self.guarded_externals.insert(method);
+        }
+        if let Some(row) = self.special_method_row(template).copied() {
+            *self.special_method_row_mut(method) = Some(row);
+        }
+        method
+    }
+
+    /// A method scope's `~id`, [`Interp::class_id_text`]'s rendering:
+    /// measured, oracle rc 163, a primitive `setMethod` or `run` installed
+    /// under the `.nil` scope is `Compiled method "HM" with scope ".NIL"`.
+    pub(crate) fn scope_id(&mut self, scope: ObjRef) -> String {
+        self.object_model();
+        self.class_id_text(scope).to_string()
+    }
+
     /// `isOfClassType(Class, value)`: whether the value is a class object.
     pub(crate) fn is_class_object(&self, value: ObjRef) -> bool {
         matches!(self.receiver_kind(value), Ok(Primitive::Class(_)))
@@ -2329,7 +2405,7 @@ impl Interp {
         // The scope's `~id` is rendered only where it is printed -- a
         // successful send has no use for it, and every send would otherwise
         // pay for the copy.
-        let scope = self.classes().id_string(resolution.scope).to_string();
+        let scope = self.scope_id(resolution.scope);
         Err(Loud::native_method(name, &scope).into())
     }
 
@@ -2417,7 +2493,7 @@ impl Interp {
                         return Ok(Started::Entered);
                     }
                     Err(failure) => {
-                        let scope = self.classes().id_string(resolution.scope).to_string();
+                        let scope = self.scope_id(resolution.scope);
                         self.blame_native_method(name, &scope, receiver, args);
                         Err(failure)
                     }
@@ -2637,7 +2713,7 @@ impl Interp {
                     Err(failure) => Err(failure),
                 };
                 if outcome.is_err() {
-                    let scope = self.classes().id_string(resolution.scope).to_string();
+                    let scope = self.scope_id(resolution.scope);
                     let method = resolution.method;
                     let reraised = std::mem::take(&mut self.activity.native_reraise);
                     self.blame_external_method(name, &scope, method, receiver, args, reraised);
@@ -2681,7 +2757,7 @@ impl Interp {
             Arity::Fixed(_) | Arity::Counted => run(self),
         };
         if let Err(failure) = &outcome {
-            let scope = self.classes().id_string(resolution.scope).to_string();
+            let scope = self.scope_id(resolution.scope);
             let method = resolution.method;
             let reraised = failure.reraised_by_native_call();
             self.blame_external_method(name, &scope, method, receiver, args, reraised);
@@ -2814,7 +2890,7 @@ impl Interp {
             if sent.is_err()
                 && let Some(blame) = blame
             {
-                let scope = self.classes().id_string(blame.scope).to_string();
+                let scope = self.scope_id(blame.scope);
                 self.blame_native_method(&blame.name, &scope, blame.receiver, &blame.args);
             }
         }
@@ -2862,7 +2938,7 @@ impl Interp {
             if sent.is_err()
                 && let Some(blame) = tail.blame
             {
-                let scope = self.classes().id_string(blame.scope).to_string();
+                let scope = self.scope_id(blame.scope);
                 self.blame_native_method(&blame.name, &scope, blame.receiver, &blame.args);
             }
         }
@@ -3074,17 +3150,13 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<(), Failure> {
         let program = Rc::clone(&self.programs[installed.program.0]);
-        // Both reads are `get`, not an index: an `InstalledMethodBody` can
-        // only have come from `Interp::record_method_body` and so always
-        // names a real directive, but this crate's rule for an internal
+        // Both reads are `get`, not an index: an `InstalledMethodBody`
+        // always names a real directive with a body, but this crate's rule for an internal
         // inconsistency is a loud refusal rather than a panic, and
         // `body_of`'s own `?` already follows it.
         let Some(directive) = program.directives.get(installed.directive) else {
             return Err(Loud::missing_body().into());
         };
-        if let Some(gap) = crate::method_body_gap(&directive.kind) {
-            return Err(gap.into());
-        }
         let Some(body) = body_of(&program, Some(installed.directive)) else {
             return Err(Loud::missing_body().into());
         };

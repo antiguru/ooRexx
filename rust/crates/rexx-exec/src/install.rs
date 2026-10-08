@@ -1494,13 +1494,7 @@ impl Interp {
                  for {}, so one of them is lost",
                 String::from_utf8_lossy(&name)
             );
-            let library = self.library_binding(external.as_ref(), &name);
-            let body = match (generated, native, library) {
-                (Some(kind), _, _) => InstallBody::Generated(kind),
-                (None, Some(entry), _) => InstallBody::Native(entry),
-                (None, None, Some(binding)) => InstallBody::Library(binding),
-                (None, None, None) => InstallBody::Written,
-            };
+            let body = self.install_body(external.as_ref(), &name, generated);
             self.install_one_method(
                 program,
                 directive,
@@ -1531,17 +1525,7 @@ impl Interp {
         // name two different procedures.
         let external = dispatch::native::attribute_external(attribute);
         for (name, generated) in attribute_dictionary_keys(attribute) {
-            let library = self.library_binding(external.as_ref(), &name);
-            let body = match (
-                generated,
-                dispatch::native::bound_entry(external.as_ref(), &name),
-                library,
-            ) {
-                (Some(kind), _, _) => InstallBody::Generated(kind),
-                (None, Some(entry), _) => InstallBody::Native(entry),
-                (None, None, Some(binding)) => InstallBody::Library(binding),
-                (None, None, None) => InstallBody::Written,
-            };
+            let body = self.install_body(external.as_ref(), &name, generated);
             // Both accessors of a `Both`-style attribute carry the
             // directive's own access scope, which is the oracle's own shape:
             // `attributeDirective` builds the getter and the setter and calls
@@ -1692,7 +1676,7 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
-        self.table_method_bodies.insert(
+        let method = self.mint_unattached_body(
             object,
             InstalledMethodBody {
                 program: program_id,
@@ -1705,10 +1689,87 @@ impl Interp {
                 source: ExecutableSource::Main {
                     program: program_id,
                 },
-                installed: None,
+                installed: Some(method),
                 routine: None,
             },
         );
+    }
+
+    /// Mints the identity a `Method` object no class dictionary holds runs
+    /// under, with `body` as what it runs, and files `object` as the one
+    /// standing for it.
+    fn mint_unattached_body(&mut self, object: ObjRef, body: InstalledMethodBody) -> MethodId {
+        let method = self.classes().mint_method_id();
+        self.method_bodies.insert(method, body);
+        self.executable_objects.insert(method, object);
+        method
+    }
+
+    /// The identity one `.METHODS` entry runs under, minted with its body
+    /// recorded as [`Interp::install_method`], [`Interp::install_attribute`]
+    /// and [`Interp::install_constant`] record a class's: `name` is the
+    /// entry's key, which picks the half of an accessor pair.
+    pub(crate) fn unattached_method_id(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        name: &[u8],
+    ) -> MethodId {
+        let source = Rc::clone(&self.programs[program.0]);
+        let (body, access, protection) = match &source.directives[directive].kind {
+            DirectiveKind::Method(method) => {
+                let external = dispatch::native::method_external(method);
+                let generated = method_dictionary_keys(method)
+                    .into_iter()
+                    .find(|(key, _)| key.as_slice() == name)
+                    .and_then(|(_, generated)| generated);
+                let body = self.install_body(external.as_ref(), name, generated);
+                (body, method.access, method.protection)
+            }
+            DirectiveKind::Attribute(attribute) => {
+                let external = dispatch::native::attribute_external(attribute);
+                let generated = attribute_dictionary_keys(attribute)
+                    .into_iter()
+                    .find(|(key, _)| key.as_slice() == name)
+                    .and_then(|(_, generated)| generated);
+                let body = self.install_body(external.as_ref(), name, generated);
+                (body, attribute.access, attribute.protection)
+            }
+            // Only a literal `::CONSTANT` can precede the first `::CLASS`.
+            _ => {
+                if !self.constant_values.contains_key(&(program, directive)) {
+                    self.record_literal_constants(program, &source, &[directive]);
+                }
+                (
+                    InstallBody::Generated(GeneratedKind::Constant),
+                    Access::Default,
+                    Protection::default(),
+                )
+            }
+        };
+        let method = self.classes().mint_method_id();
+        self.record_method_body(method, program, directive, body);
+        self.record_access_scope(method, program, access, protection);
+        method
+    }
+
+    /// What one dictionary key of a `::METHOD` or `::ATTRIBUTE` runs: the
+    /// accessor the directive generates, the entry point or library procedure
+    /// its `EXTERNAL` binds, or else its written body.
+    fn install_body(
+        &mut self,
+        external: Option<&dispatch::native::MethodExternal>,
+        name: &[u8],
+        generated: Option<GeneratedKind>,
+    ) -> InstallBody {
+        let native = dispatch::native::bound_entry(external, name);
+        let library = self.library_binding(external, name);
+        match (generated, native, library) {
+            (Some(kind), _, _) => InstallBody::Generated(kind),
+            (None, Some(entry), _) => InstallBody::Native(entry),
+            (None, None, Some(binding)) => InstallBody::Library(binding),
+            (None, None, None) => InstallBody::Written,
+        }
     }
 
     /// [`Interp::record_compiled_body`] for a `Routine`: the same program of
@@ -1860,23 +1921,23 @@ impl Interp {
         let site = environment::Annotated::Compiled(self.compiled_methods);
         self.compiled_methods += 1;
         self.attach_annotations(object, site);
-        self.executable_sources.insert(
-            object,
-            ExecutableRecord {
-                source: ExecutableSource::Main { program: id },
-                installed: None,
-                routine: routine.then_some((id, body)),
-            },
-        );
-        if !routine {
-            self.table_method_bodies.insert(
+        let installed = (!routine).then(|| {
+            self.mint_unattached_body(
                 object,
                 InstalledMethodBody {
                     program: id,
                     directive: body,
                 },
-            );
-        }
+            )
+        });
+        self.executable_sources.insert(
+            object,
+            ExecutableRecord {
+                source: ExecutableSource::Main { program: id },
+                installed,
+                routine: routine.then_some((id, body)),
+            },
+        );
         Ok(object)
     }
 
@@ -1897,14 +1958,32 @@ impl Interp {
     /// Records a `Method` or `Routine` object a `loadExternal*` send answered
     /// over a library procedure, whose package is `code`'s.
     pub(crate) fn record_loaded_executable(&mut self, object: ObjRef, code: usize) {
+        let installed =
+            (!self.library_code_key(code).routine).then(|| self.bind_loaded_method(object, code));
         self.executable_sources.insert(
             object,
             ExecutableRecord {
                 source: ExecutableSource::Loaded { code },
-                installed: None,
+                installed,
                 routine: None,
             },
         );
+    }
+
+    /// [`Interp::record_native_executable`] for a `loadExternalMethod`
+    /// answer over a `LIBRARY REXX` entry point, which runs that entry.
+    pub(crate) fn record_rexx_external_method(
+        &mut self,
+        object: ObjRef,
+        entry: &'static dispatch::native::NativeExternal,
+    ) {
+        self.record_native_executable(object);
+        let method = self.classes().mint_method_id();
+        self.native_externals.insert(method, entry);
+        self.executable_objects.insert(method, object);
+        if let Some(record) = self.executable_sources.get_mut(&object) {
+            record.installed = Some(method);
+        }
     }
 
     /// What the `Method` object for one installed method reports on: the

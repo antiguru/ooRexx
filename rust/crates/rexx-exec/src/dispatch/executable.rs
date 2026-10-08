@@ -577,9 +577,7 @@ fn begin_routine(
     name: &[u8],
 ) -> Result<NativeStarted, Failure> {
     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
-        return Err(
-            Loud::method_from_source("a routine whose body this crate does not hold").into(),
-        );
+        return Err(Loud::receiver_class("a routine object this crate did not build").into());
     };
     // A library routine runs under its own table spelling, which is the
     // name `RoutineClass::callRexx` passes
@@ -618,9 +616,12 @@ fn begin_routine(
             });
     }
     let Some((program, directive)) = record.routine else {
-        return Err(
-            Loud::method_from_source("a routine whose body this crate does not hold").into(),
-        );
+        let crate::ExecutableSource::Main { program } = record.source else {
+            return Err(Loud::receiver_class("a routine object this crate did not build").into());
+        };
+        return interp
+            .call_program_main(program, values, name)
+            .map(NativeStarted::Ran);
     };
     interp.begin_installed_routine(program, directive, &values, name)
 }

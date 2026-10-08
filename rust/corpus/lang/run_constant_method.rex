@@ -1,0 +1,8 @@
+/* run with a ::CONSTANT's Method object answers the constant. */
+say .t~new~go(.u~method('C'))
+::class t
+::method go
+use arg m
+return self~run(m)
+::class u
+::constant c 5

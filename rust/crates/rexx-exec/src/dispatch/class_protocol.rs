@@ -244,16 +244,47 @@ fn rexx_defined_lock(interp: &mut Interp, class: ObjRef) -> Result<(), Failure> 
     Ok(())
 }
 
-/// The physical lines a method source is compiled from, or the refusal for
-/// a value this crate cannot read as one -- `processExecutableSource`
+/// Who asks [`method_source_lines`] for a source, which decides what a value
+/// that is neither a string nor an array raises.
+#[derive(Copy, Clone)]
+pub(super) enum SourceTaker {
+    /// `processNewExecutableArgs` and `PackageClass::newRexx`, which take
+    /// those two alone: 93.961 (`execution/BaseExecutable.cpp:244`,
+    /// `classes/PackageClass.cpp:224`).
+    Executable,
+    /// `MethodClass::newMethodObject`, which takes a `Method` object too:
+    /// 93.974 (`classes/MethodClass.cpp:468`).
+    Method,
+    /// `PackageClass::loadPackage`, whose `arrayArgument` is 88.913
+    /// (`classes/PackageClass.cpp:1855`).
+    Package,
+}
+
+/// The physical lines a method source is compiled from, or the raise for a
+/// value that is not one -- `processExecutableSource`
 /// (`execution/BaseExecutable.cpp:169`).
 pub(super) fn method_source_lines(
     interp: &mut Interp,
     source: ObjRef,
     position: &'static str,
+    taker: SourceTaker,
 ) -> Result<Vec<Vec<u8>>, Failure> {
-    if let Ok(Primitive::Array) = interp.receiver_kind(source) {
-        let slots = interp.array_slots_of(source).unwrap_or_default();
+    if is_source_line(interp, source) {
+        return Ok(vec![interp.to_text(source).to_vec()]);
+    }
+    // `requestArray`, then `makeString` for a value that is not a primitive.
+    // Measured, oracle rc 0: `.method~new('m', x)` takes `.environment` as
+    // its index array, a `List` or `Queue` of lines, a stem's tails, and an
+    // instance whose `MAKEARRAY` or `MAKESTRING` answers the lines.
+    let array = if interp.array_slots_of(source).is_some() {
+        Some(source)
+    } else {
+        let converted = interp.request_array_value(source)?;
+        converted.filter(|array| interp.array_slots_of(*array).is_some())
+    };
+    if let Some(array) = array {
+        interp.roots.activity_mut().push_temp(array);
+        let slots = interp.array_slots_of(array).unwrap_or_default();
         let last_item = slots
             .iter()
             .rposition(Option::is_some)
@@ -268,10 +299,22 @@ pub(super) fn method_source_lines(
         }
         return Ok(lines);
     }
-    if is_source_line(interp, source) {
-        return Ok(vec![interp.to_text(source).to_vec()]);
+    // `arrayArgument` has no `makeString` step.
+    if !matches!(taker, SourceTaker::Package) && !interp.is_base_class(source) {
+        let wanted = interp.text(b"STRING");
+        interp.roots.activity_mut().push_temp(wanted);
+        let caller = interp.caller();
+        let answered = interp.send_message(source, b"REQUEST", None, &[Some(wanted)], caller)?;
+        if let Some(line) = answered.filter(|line| is_source_line(interp, *line)) {
+            return Ok(vec![interp.to_text(line).to_vec()]);
+        }
     }
-    Err(Loud::method_from_source("a method source that is neither a string nor an array").into())
+    Err(match taker {
+        SourceTaker::Executable => Raised::source_not_string_or_array(position),
+        SourceTaker::Method => Raised::not_a_method_or_source(position),
+        SourceTaker::Package => Raised::argument_not_single_dimensional(position),
+    }
+    .into())
 }
 
 /// Whether one value is a source line -- the C++'s `isString(source)` for
@@ -302,8 +345,9 @@ pub(super) fn compile_method_source(
     name: &[u8],
     source: ObjRef,
     position: &'static str,
+    taker: SourceTaker,
 ) -> Result<ObjRef, Failure> {
-    let lines = method_source_lines(interp, source, position)?;
+    let lines = method_source_lines(interp, source, position, taker)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed =
         rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
@@ -338,7 +382,7 @@ pub(super) fn compile_routine_source(
     source: ObjRef,
     position: &'static str,
 ) -> Result<ObjRef, Failure> {
-    let lines = method_source_lines(interp, source, position)?;
+    let lines = method_source_lines(interp, source, position, SourceTaker::Executable)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed =
         rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
@@ -359,6 +403,20 @@ pub(super) fn compile_routine_source(
     interp.attach_annotations(object, site);
     interp.record_compiled_routine(object, name, parsed);
     Ok(object)
+}
+
+/// [`Interp::scoped_method`], or the refusal for a `Method` object this
+/// crate did not build.
+pub(super) fn scoped_method(
+    interp: &mut Interp,
+    method: ObjRef,
+    scope: ObjRef,
+) -> Result<(ObjRef, rexx_core::MethodId), Failure> {
+    interp.scoped_method(method, scope).ok_or_else(|| {
+        Failure::from(Loud::receiver_class(
+            "a method object this crate did not build",
+        ))
+    })
 }
 
 /// The `method name` argument `~define`, `~delete` and `~method` share:
@@ -415,7 +473,7 @@ pub(super) fn native_define(
             let source = if interp.receiver_kind(source) == Ok(Primitive::Method) {
                 source
             } else {
-                compile_method_source(interp, &written, source, "method")?
+                compile_method_source(interp, &written, source, "method", SourceTaker::Method)?
             };
             interp
                 .define_method_object(class, &name, source)
@@ -469,7 +527,7 @@ pub(super) fn native_define_methods(
             // `createMethodDictionary` builds the object under
             // `supplier->index()->requestString()` and keys the dictionary
             // under its upcase (`classes/ClassClass.cpp:1255`-`:1258`).
-            compile_method_source(interp, &name, value, "method source")?
+            compile_method_source(interp, &name, value, "method source", SourceTaker::Method)?
         };
         entries.push((name, Some(value)));
     }
@@ -766,21 +824,19 @@ fn install_enhancing_class_methods(
 ) -> Result<(), Failure> {
     for name in names {
         let value = interp.native_entry(enhancing, name).unwrap_or(ObjRef::NIL);
-        if interp.receiver_kind(value) != Ok(Primitive::Method) {
-            // **Read as source before declining it**, so that a source the
-            // oracle refuses is refused here the same way rather than
-            // reaching the loud arm below: measured, oracle rc 163, a
-            // literal array `('return 1', , 'nop')` in this table is
-            // `93.952 Method argument method source is an array and does
-            // not contain all string values.`
-            method_source_lines(interp, value, "method source")?;
-            return Err(Loud::method_from_source("a class method built from source text").into());
-        }
+        let value = if interp.receiver_kind(value) == Ok(Primitive::Method) {
+            value
+        } else {
+            // Measured, oracle rc 163: a literal array `('return 1', ,
+            // 'nop')` in this table is `93.952 Method argument method source
+            // is an array and does not contain all string values.`
+            compile_method_source(interp, name, value, "method source", SourceTaker::Method)?
+        };
         interp
             .define_class_method_object(class, name, value)
             .ok_or_else(|| {
-                Failure::from(Loud::method_from_source(
-                    "a class method whose body this crate does not hold",
+                Failure::from(Loud::receiver_class(
+                    "a method object this crate did not build",
                 ))
             })?;
     }
@@ -1109,22 +1165,18 @@ fn install_enhancing_object_methods(
         let source = if interp.receiver_kind(value) == Ok(Primitive::Method) {
             value
         } else {
-            compile_method_source(interp, name, value, "method source")?
+            compile_method_source(interp, name, value, "method source", SourceTaker::Method)?
         };
-        let Some(body) = interp.table_method_bodies.get(&source).copied() else {
-            return Err(Loud::method_from_source(
-                "an enhancing method whose body this crate does not hold",
-            )
-            .into());
-        };
-        let method = interp.classes().mint_method_id();
-        interp.method_bodies.insert(method, body);
+        // `createMethodDictionary`'s `newMethodObject`, which takes a copy of
+        // a method object some class already holds (`ClassClass.cpp:1265`).
+        let (executable, method) = scoped_method(interp, source, ObjRef::NIL)?;
         interp.write_object_method(
             object,
             name,
             ObjectMethodWrite::Enhance(ObjectMethod {
                 method,
                 scope: ObjRef::NIL,
+                executable,
             }),
         )?;
     }

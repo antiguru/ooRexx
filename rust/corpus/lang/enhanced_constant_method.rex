@@ -1,0 +1,5 @@
+/* enhanced with a ::CONSTANT's Method object answers the constant. */
+o = .object~enhanced(.directory~of(('CC', .u~method('C'))))
+say o~cc
+::class u
+::constant c 5

@@ -1072,6 +1072,18 @@ impl Raised {
         Raised::syntax(93, 952, vec![position.as_bytes().to_vec()])
     }
 
+    /// 93.961: a source that is neither a string nor an array, where only
+    /// those two are taken -- `Method~new`, `Routine~new`, `Package~new`.
+    pub(crate) fn source_not_string_or_array(position: &str) -> Raised {
+        Raised::syntax(93, 961, vec![position.as_bytes().to_vec()])
+    }
+
+    /// 93.974: a method that is neither a string, an array nor a `Method`
+    /// object -- `newMethodObject`'s refusal (`classes/MethodClass.cpp:468`).
+    pub(crate) fn not_a_method_or_source(position: &str) -> Raised {
+        Raised::syntax(93, 974, vec![position.as_bytes().to_vec()])
+    }
+
     /// 93.902: a message send passed more arguments than the method takes.
     /// `arity` is the count the method **declares**, not the count that
     /// arrived -- measured, `'abc'~length(1)` reports `0 expected` and

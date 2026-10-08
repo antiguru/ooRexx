@@ -1,0 +1,6 @@
+/* setMethod from a class method under OBJECT scope, exposing a variable. */
+say .k~go
+::class k
+::method go class
+  self~setMethod('m2', 'expose v; v = 5; return 42 v', 'OBJECT')
+  return self~m2

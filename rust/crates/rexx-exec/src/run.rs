@@ -3122,7 +3122,7 @@ impl Interp {
             .map(|identity| (identity.name.to_vec(), identity.scope));
         let text = match identity {
             Some((name, scope)) => {
-                let scope = self.classes().id_string(scope).to_string();
+                let scope = self.scope_id(scope);
                 Raised::sourceless_method_line(&name, &scope, crate::LIBRARY_PACKAGE_NAME)
             }
             // The library's own prologue, which is a program rather than a

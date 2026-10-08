@@ -1001,7 +1001,7 @@ fn resume_library_method(interp: &mut Interp, receiver: ObjRef) -> Result<Option
     drop(call);
     let outcome = interp.end_library_method(answered, pending, receiver, scope, packaged);
     if outcome.is_err() {
-        let scope_name = interp.classes().id_string(scope).to_string();
+        let scope_name = interp.scope_id(scope);
         let reraised = std::mem::take(&mut interp.activity.native_reraise);
         interp.blame_external_method(&name, &scope_name, method, receiver, &args, reraised);
     }

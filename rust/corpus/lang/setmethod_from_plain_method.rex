@@ -1,0 +1,11 @@
+/* setMethod and run with a ::METHOD's Method object run its body. */
+o = .t~new
+say o~go(.u~method('M'))
+::class t
+::method go
+use arg m
+self~setMethod('mm', m)
+return self~mm self~run(m)
+::class u
+::method m
+return 'um'

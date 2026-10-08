@@ -162,6 +162,9 @@ impl Interp {
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
         self.executable_sources.insert(object, record);
+        if let Some(method) = record.installed {
+            self.executable_objects.entry(method).or_insert(object);
+        }
         let held = self.heap.get_mut(object).expect("just allocated");
         let Body::Native(native) = &mut held.body else {
             unreachable!("allocated as Body::Native by native_instance")
@@ -203,6 +206,100 @@ impl Interp {
             )
             .into()),
         }
+    }
+
+    /// What `RexxContext~executable` answers from a method activation
+    /// running `body` for a send to `receiver` under `name` at `scope`: the
+    /// `Method` object the send ran, which is not always one a class
+    /// dictionary reaches by that name. Measured, oracle rc 0, each answers
+    /// `Method`: a body `setMethod` or `enhanced` installed, one `run` ran,
+    /// and one whose class `define` took the name back from while it ran.
+    pub(crate) fn running_method_executable(
+        &mut self,
+        scope: ObjRef,
+        name: &[u8],
+        receiver: ObjRef,
+        body: crate::InstalledMethodBody,
+    ) -> ObjRef {
+        let runs = |interp: &Self, method: rexx_classes::MethodId| {
+            interp.method_bodies.get(&method).is_some_and(|found| {
+                found.program == body.program && found.directive == body.directive
+            })
+        };
+        if let Some(Some(entry)) = self.own_method_entry(receiver, name)
+            && entry.scope == scope
+            && runs(self, entry.method)
+        {
+            return entry.executable;
+        }
+        if self.heap.is_class(scope)
+            && let Some(rexx_classes::MethodSlot::Defined { scope, method }) = self
+                .classes()
+                .own_instance_slot(scope, &String::from_utf8_lossy(name))
+            && runs(self, method)
+        {
+            let record = crate::ExecutableRecord {
+                source: self.installed_executable_source(method),
+                installed: Some(method),
+                routine: None,
+            };
+            return self.method_object(scope, name, scope, record);
+        }
+        // A `run`'s activation carries its own object, so what is left is a
+        // directive's body a class no longer reaches by this name: the
+        // object standing for its identity, the first minted where a copy
+        // shares the body.
+        let standing = self
+            .executable_objects
+            .iter()
+            .filter(|(method, object)| runs(self, **method) && self.heap.get(**object).is_some())
+            .min_by_key(|(method, _)| method.0)
+            .map(|(_, object)| *object);
+        if let Some(object) = standing {
+            return object;
+        }
+        let method = self
+            .method_bodies
+            .keys()
+            .copied()
+            .filter(|method| runs(self, *method))
+            .min_by_key(|method| method.0);
+        let method_class = self.method_class();
+        let object = self.native_instance(method_class);
+        let source = match method {
+            Some(method) => self.installed_executable_source(method),
+            None => crate::ExecutableSource::Directive {
+                program: body.program,
+                directive: body.directive,
+            },
+        };
+        self.executable_sources.insert(
+            object,
+            crate::ExecutableRecord {
+                source,
+                installed: method,
+                routine: None,
+            },
+        );
+        if let Some(method) = method {
+            self.executable_objects.insert(method, object);
+        }
+        let held = self.heap.get_mut(object).expect("just allocated");
+        let Body::Native(native) = &mut held.body else {
+            unreachable!("allocated as Body::Native by native_instance")
+        };
+        native.set_scope(scope);
+        let class_side = match self.programs[body.program.0]
+            .directives
+            .get(body.directive)
+            .map(|directive| &directive.kind)
+        {
+            Some(rexx_parse::DirectiveKind::Method(method)) => method.class_method,
+            Some(rexx_parse::DirectiveKind::Attribute(attribute)) => attribute.class_method,
+            _ => false,
+        };
+        self.attach_annotations(object, Annotated::Member(scope, class_side, name.into()));
+        object
     }
 
     /// The one `Routine` object standing for `program`'s own main section --
@@ -278,57 +375,71 @@ impl Interp {
         name: &[u8],
         source: ObjRef,
     ) -> Option<()> {
-        let object = self.method_new_scope(source, class)?;
-        let method = self.classes().mint_method_id();
-        self.bind_loaded_method(method, object);
+        let (object, method) = self.scoped_method(source, class)?;
         self.classes()
             .define_instance_method(class, &String::from_utf8_lossy(name), method);
         self.hold_method_object(class, name, object);
         Some(())
     }
 
-    /// Makes `method` run the library procedure `object` is, where `object` is
-    /// a `loadExternalMethod` answer, and do nothing otherwise.
-    fn bind_loaded_method(&mut self, method: rexx_classes::MethodId, object: ObjRef) {
-        let Some(crate::ExecutableRecord {
-            source: crate::ExecutableSource::Loaded { code },
-            ..
-        }) = self.executable_sources.get(&object).copied()
-        else {
-            return;
-        };
-        let key = self.library_code_key(code).clone();
-        if key.routine {
-            return;
+    /// [`Interp::method_new_scope`] with the method identity its answer runs
+    /// under, which is what `setMethod`, `run`, `enhanced` and `define`
+    /// install: the object's own where `newScope` answers the object itself,
+    /// and one [`Interp::copy_method_identity`] mints for a copy. `None`
+    /// for an object this crate did not build, since every one it builds
+    /// carries an identity.
+    pub(crate) fn scoped_method(
+        &mut self,
+        method: ObjRef,
+        scope: ObjRef,
+    ) -> Option<(ObjRef, rexx_classes::MethodId)> {
+        let template = self.executable_sources.get(&method)?.installed?;
+        let object = self.method_new_scope(method, scope)?;
+        if object == method {
+            return Some((object, template));
         }
-        let Some(library) = self.libraries.get(&key.library).map(std::rc::Rc::clone) else {
-            return;
-        };
-        self.library_externals.insert(
-            method,
-            crate::LibraryBinding {
-                method: library.method_index(&key.procedure),
-                library,
-            },
-        );
+        let copy = self.copy_method_identity(template);
+        if let Some(record) = self.executable_sources.get_mut(&object) {
+            record.installed = Some(copy);
+        }
+        self.executable_objects.insert(copy, object);
+        Some((object, copy))
+    }
+
+    /// Mints the identity a `loadExternalMethod` answer over a library
+    /// procedure runs under, binding it to that procedure.
+    pub(crate) fn bind_loaded_method(
+        &mut self,
+        object: ObjRef,
+        code: usize,
+    ) -> rexx_classes::MethodId {
+        let method = self.classes().mint_method_id();
+        let key = self.library_code_key(code).clone();
+        if let Some(library) = self.libraries.get(&key.library).map(std::rc::Rc::clone) {
+            self.library_externals.insert(
+                method,
+                crate::LibraryBinding {
+                    method: library.method_index(&key.procedure),
+                    library,
+                },
+            );
+        }
         self.defined_library_codes.insert(method, code);
+        self.executable_objects.insert(method, object);
+        method
     }
 
     /// `defineClassMethod`: the same shape as [`Interp::define_method_object`]
-    /// on the class side, plus the row that makes the installed method
-    /// runnable.
+    /// on the class side.
     pub(crate) fn define_class_method_object(
         &mut self,
         class: ObjRef,
         name: &[u8],
         source: ObjRef,
     ) -> Option<()> {
-        let body = self.table_method_bodies.get(&source).copied()?;
-        let object = self.method_new_scope(source, class)?;
-        let method = self.classes().mint_method_id();
+        let (object, method) = self.scoped_method(source, class)?;
         self.classes()
             .define_class_method(class, &String::from_utf8_lossy(name), method);
-        self.method_bodies.insert(method, body);
         self.hold_method_object(class, name, object);
         Some(())
     }
@@ -348,12 +459,10 @@ impl Interp {
                 installed.push((name_text, None));
                 continue;
             };
-            let object = self.method_new_scope(source, class)?;
+            let (object, _) = self.scoped_method(source, class)?;
             self.roots.activity_mut().push_temp(object);
-            let object = self.method_new_scope(object, class)?;
+            let (object, method) = self.scoped_method(object, class)?;
             self.roots.activity_mut().push_temp(object);
-            let method = self.classes().mint_method_id();
-            self.bind_loaded_method(method, object);
             installed.push((name_text, Some(method)));
             objects.push((name.clone(), object));
         }

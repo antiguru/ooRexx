@@ -19,9 +19,9 @@ use super::{
     Behaviour, BehaviourId, Body, Cleared, DEFAULTNAME, Failure, Interp, Loud, MESSAGE_ARGUMENTS,
     MESSAGE_CONDITION, MESSAGE_NAME, MESSAGE_PARTIES, MESSAGE_RESULT, MESSAGE_SCOPE,
     MESSAGE_TARGET, NativeStarted, OBJECTNAME, ObjRef, ObjectMethod, ObjectMethodWrite, Operator,
-    Primitive, Raised, Resolution, Started, Then, UNNAMED_METHOD, class_argument,
+    Primitive, Raised, Resolution, SourceTaker, Started, Then, UNNAMED_METHOD, class_argument,
     compile_method_source, is_enhanced_instance, method_name_argument, pointer_address,
-    request_array, required_string_argument, required_string_named_argument,
+    request_array, required_string_argument, required_string_named_argument, scoped_method,
     unconverted_array_argument,
 };
 
@@ -477,22 +477,37 @@ pub(super) fn native_set_method(
     let source = match args.get(1).copied().flatten() {
         None => None,
         Some(source) if interp.receiver_kind(source) == Ok(Primitive::Method) => Some(source),
-        Some(source) => Some(compile_method_source(interp, &name, source, "method")?),
+        Some(source) => Some(compile_method_source(
+            interp,
+            &name,
+            source,
+            "method",
+            SourceTaker::Method,
+        )?),
+    };
+    // `newMethodObject(msgname, methobj, TheNilObject)` ahead of the checks,
+    // then `defineInstanceMethod`'s own `newScope(targetScope)`
+    // (`classes/ObjectClass.cpp:1847`, `:2302`): measured, oracle rc 0, the
+    // method's `.context~executable` is not the object `setMethod` was given.
+    let source = match source {
+        None => None,
+        Some(object) => {
+            let (floated, _) = scoped_method(interp, object, ObjRef::NIL)?;
+            interp.roots.activity_mut().push_temp(floated);
+            Some(floated)
+        }
     };
     let scope = set_method_scope(interp, receiver, args)?;
     check_restricted_method(interp, receiver, b"SETMETHOD")?;
     let entry = match source {
         None => None,
-        Some(object) => {
-            let Some(body) = interp.table_method_bodies.get(&object).copied() else {
-                return Err(Loud::method_from_source(
-                    "a one-off method whose body this crate does not hold",
-                )
-                .into());
-            };
-            let method = interp.classes().mint_method_id();
-            interp.method_bodies.insert(method, body);
-            Some(ObjectMethod { method, scope })
+        Some(floated) => {
+            let (executable, method) = scoped_method(interp, floated, scope)?;
+            Some(ObjectMethod {
+                method,
+                scope,
+                executable,
+            })
         }
     };
     interp.write_object_method(receiver, &name, ObjectMethodWrite::Set(entry))?;
@@ -528,7 +543,7 @@ fn set_method_scope(
     if text.eq_ignore_ascii_case(b"OBJECT") {
         return interp
             .class_of_value(receiver)
-            .ok_or_else(|| Loud::object_method("a receiver with no class of its own").into());
+            .ok_or_else(|| Loud::receiver_class("a value with no class of its own").into());
     }
     if text.eq_ignore_ascii_case(b"FLOAT") {
         return Ok(ObjRef::NIL);
@@ -696,37 +711,39 @@ pub(super) fn native_run(
     let Some(Some(source)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("method").into());
     };
-    let body = run_method_body(interp, source)?;
+    let (executable, method) = run_method(interp, source)?;
+    interp.roots.activity_mut().push_temp(executable);
     let values = run_arguments(interp, args)?;
     check_restricted_method(interp, receiver, b"RUN")?;
-    let method = interp.classes().mint_method_id();
-    interp.method_bodies.insert(method, body);
     let resolution = Resolution {
         scope: ObjRef::NIL,
         method,
     };
-    interp.invoke(resolution, receiver, UNNAMED_METHOD, &values)
+    let started = interp.begin_invoke(resolution, None, receiver, UNNAMED_METHOD, &values)?;
+    // The activation knows the object it runs for, which no dictionary entry
+    // names: measured, oracle rc 0, `.context~executable` in a method `run`
+    // ran is the object `run` was given the first time and a copy after.
+    if let Started::Entered = started
+        && interp.method_bodies.contains_key(&method)
+    {
+        interp.activation_mut().cold_mut().executable = Some(executable);
+    }
+    interp.complete_send(started)
 }
 
-/// `~run`'s first argument as a body this crate can enter --
-/// `MethodClass::newMethodObject(GlobalNames::RUN, methobj, TheNilObject,
-/// "method")` (`classes/ObjectClass.cpp:2201`).
-pub(super) fn run_method_body(
+/// The `Method` object `~run`'s first argument becomes and the identity it
+/// runs under -- `MethodClass::newMethodObject(GlobalNames::RUN, methobj,
+/// TheNilObject, "method")` (`classes/ObjectClass.cpp:2201`).
+pub(super) fn run_method(
     interp: &mut Interp,
     source: ObjRef,
-) -> Result<crate::InstalledMethodBody, Failure> {
+) -> Result<(ObjRef, rexx_core::MethodId), Failure> {
     let object = if interp.receiver_kind(source) == Ok(Primitive::Method) {
         source
     } else {
-        compile_method_source(interp, b"RUN", source, "method")?
+        compile_method_source(interp, b"RUN", source, "method", SourceTaker::Method)?
     };
-    interp
-        .table_method_bodies
-        .get(&object)
-        .copied()
-        .ok_or_else(|| {
-            Loud::method_from_source("a one-off method whose body this crate does not hold").into()
-        })
+    scoped_method(interp, object, ObjRef::NIL)
 }
 
 /// `~run`'s `Individual`/`Array` option and the arguments behind it

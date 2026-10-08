@@ -1816,21 +1816,3 @@ fn a_native_tails_objects_are_rooted_only_while_it_is_parked() {
         );
     }
 }
-
-/// `.context~executable` in a method an object holds with a `.nil` scope
-/// is refused rather than looked up in a class it has none of; the oracle
-/// answers the floating method.
-#[test]
-fn a_float_scoped_methods_executable_is_refused() {
-    let (code, stdout, stderr) = run_source(
-        "t = .test~new\nt~put('m1', .methods~fm, 'float')\nt~m1\n\
-         ::method fm\n  say .context~executable~scope\n\
-         ::class test\n::method put\n  use arg name, meth, scope\n  \
-         self~setMethod(name, meth, scope)\n",
-    );
-    assert_eq!((code, stdout.as_str()), (120, ""));
-    assert!(
-        stderr.contains("a method context whose scope no longer defines it"),
-        "{stderr}"
-    );
-}

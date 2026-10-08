@@ -427,32 +427,6 @@ pub(super) fn annotation_target<'a>(
     }
 }
 
-/// Why a resolved method's directive cannot be entered, or `None` when it
-/// can -- the gate `Interp::begin_method` (`dispatch.rs`) takes before
-/// it pushes anything.
-pub(super) fn method_body_gap(kind: &DirectiveKind) -> Option<Loud> {
-    match kind {
-        DirectiveKind::Method(method) => {
-            if method.body.is_none() {
-                Some(Loud::method_body("a ::METHOD with no body of its own"))
-            } else {
-                None
-            }
-        }
-        DirectiveKind::Attribute(attribute) => {
-            if attribute.body.is_none() {
-                Some(Loud::method_body("a ::ATTRIBUTE with no body of its own"))
-            } else {
-                None
-            }
-        }
-        other => Some(Loud::method_body(&format!(
-            "a method installed by ::{}",
-            other.keyword()
-        ))),
-    }
-}
-
 /// The dictionary key of a generated setter: the getter's key with `=`
 /// appended.
 pub(crate) fn accessor_setter_name(upper: &[u8]) -> Vec<u8> {

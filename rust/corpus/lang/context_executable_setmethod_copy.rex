@@ -1,0 +1,10 @@
+/* setMethod installs a copy: newMethodObject's newScope sets the scope, and
+ * defineInstanceMethod's copies the now-scoped object. */
+m = .method~new('x', 'return .context~executable')
+o = .t~new
+say o~go(m) == m
+::class t
+::method go
+  use arg m
+  self~setMethod('x', m)
+  return self~x

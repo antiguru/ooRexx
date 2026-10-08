@@ -14,10 +14,10 @@
 
 use super::{
     Arity, ArrayArgument, Body, Cleared, Failure, Interp, Loud, MESSAGE_ARGUMENTS, MESSAGE_NAME,
-    MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised, array_argument,
-    class_receiver, compile_method_source, compile_routine_source, decode_message_name, hash,
-    native, native_new, new_instance, option_method_argument, optional_length_argument,
-    required_string_argument, required_string_named_argument,
+    MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised, SourceTaker,
+    array_argument, class_receiver, compile_method_source, compile_routine_source,
+    decode_message_name, hash, native, native_new, new_instance, option_method_argument,
+    optional_length_argument, required_string_argument, required_string_named_argument,
 };
 
 /// `Pointer`'s and `WeakReference`'s instance methods. Chained into
@@ -176,7 +176,7 @@ pub(super) fn native_executable_new(
     let object = if routine {
         compile_routine_source(interp, &name, source, "source")?
     } else {
-        compile_method_source(interp, &name, source, "source")?
+        compile_method_source(interp, &name, source, "source", SourceTaker::Executable)?
     };
     Ok(Some(object))
 }
@@ -270,10 +270,7 @@ pub(super) fn native_load_external(
     // `library REXX file_separator` and `LiBrArY REXX file_separator` each
     // answer a `Method`, while `LIBRARY rexx file_separator` and
     // `LIBRARY Rexx file_separator` answer `.nil`.
-    let rexx = library == b"REXX";
-    // The procedure the shared code is keyed by, as [`crate::LibraryCodeKey`]
-    // documents, or `None` where nothing answers the name.
-    let procedure = if rexx {
+    if library == b"REXX" {
         // The `REXX` package's routine table is `rexx_routines[]` and not
         // this registry (`runtime/InternalPackage.cpp:230`).
         if routine {
@@ -284,38 +281,39 @@ pub(super) fn native_load_external(
             interp.record_rexx_routine_object(object, row);
             return Ok(Some(object));
         }
-        native::entry_point(&entry).map(|_| entry.clone())
-    } else {
-        // **Neither a library that is not there nor a procedure it does not
-        // export raises**: measured, oracle rc 0, `.Method~loadExternalMethod('x',
-        // 'LIBRARY zorkolib RegExp_Parse')` and the same naming `rxregexp
-        // NoSuchEntry` both answer `The NIL object`, and
-        // `.Routine~loadExternalRoutine` answers it for the same two.
-        match interp.resolve_library(&library) {
-            crate::LibraryLoad::Loaded(loaded) => {
-                if routine {
-                    loaded.routine(&entry).map(|row| row.name.clone())
-                } else {
-                    loaded.method(&entry).map(|_| entry.clone())
-                }
+        let Some(external) = native::entry_point(&entry) else {
+            return Ok(Some(ObjRef::NIL));
+        };
+        let object = interp.native_instance(class);
+        interp.record_rexx_external_method(object, external);
+        return Ok(Some(object));
+    }
+    // The procedure the shared code is keyed by, as [`crate::LibraryCodeKey`]
+    // documents, or `None` where nothing answers the name.
+    // **Neither a library that is not there nor a procedure it does not
+    // export raises**: measured, oracle rc 0, `.Method~loadExternalMethod('x',
+    // 'LIBRARY zorkolib RegExp_Parse')` and the same naming `rxregexp
+    // NoSuchEntry` both answer `The NIL object`, and
+    // `.Routine~loadExternalRoutine` answers it for the same two.
+    let procedure = match interp.resolve_library(&library) {
+        crate::LibraryLoad::Loaded(loaded) => {
+            if routine {
+                loaded.routine(&entry).map(|row| row.name.clone())
+            } else {
+                loaded.method(&entry).map(|_| entry.clone())
             }
-            crate::LibraryLoad::Missing => None,
-            // Measured, oracle rc 158: 98.982 on the first ask, as
-            // `Package~loadLibrary` raises it.
-            crate::LibraryLoad::Version => {
-                return Err(Raised::library_version(&library).into());
-            }
-            crate::LibraryLoad::Raised(failure) => return Err(failure),
         }
+        crate::LibraryLoad::Missing => None,
+        // Measured, oracle rc 158: 98.982 on the first ask, as
+        // `Package~loadLibrary` raises it.
+        crate::LibraryLoad::Version => {
+            return Err(Raised::library_version(&library).into());
+        }
+        crate::LibraryLoad::Raised(failure) => return Err(failure),
     };
     let Some(procedure) = procedure else {
         return Ok(Some(ObjRef::NIL));
     };
-    if rexx {
-        let object = interp.native_instance(class);
-        interp.record_native_executable(object);
-        return Ok(Some(object));
-    }
     let code = interp.library_code(crate::LibraryCodeKey {
         library,
         procedure,

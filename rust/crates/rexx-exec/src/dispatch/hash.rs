@@ -1931,9 +1931,7 @@ fn native_directory_set_method(
     let unknown = is_unknown_name(interp, name);
     match args.get(1).copied().flatten() {
         Some(source) => {
-            let body = super::run_method_body(interp, source)?;
-            let method = interp.classes().mint_method_id();
-            interp.method_bodies.insert(method, body);
+            let (_, method) = super::run_method(interp, source)?;
             let stored = interp.counted(method.0 as usize);
             if unknown {
                 set_unknown_method(interp, receiver, Some(stored));

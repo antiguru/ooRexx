@@ -311,15 +311,14 @@ pub(crate) enum PackageTable {
 /// What one entry of a package table holds.
 enum TableValue {
     /// A `Method` or a `Routine`: the class it answers to, the annotations
-    /// it carries, and -- for a `Method` -- which directive of this package
-    /// is its body. Nothing here dispatches a `::METHOD` body through
-    /// `.METHODS`, and a message neither the class's dictionary nor
-    /// `NATIVE_METHODS` holds is 97.1 on either side.
+    /// it carries, and the directive of this package that declared it.
+    /// Nothing here dispatches a `::METHOD` body through `.METHODS`, and a
+    /// message neither the class's dictionary nor `NATIVE_METHODS` holds is
+    /// 97.1 on either side.
     Instance {
         class: &'static str,
         site: Annotated,
         declared: (ProgramId, usize),
-        runnable: bool,
         /// Whether the directive is a `::ROUTINE`, which is the body
         /// `Routine~call` enters.
         routine: bool,
@@ -1007,7 +1006,6 @@ impl Interp {
                     class: id,
                     site,
                     declared: (program, directive),
-                    runnable,
                     routine,
                 } => {
                     let installed = crate::InstalledRoutine { program, directive };
@@ -1029,18 +1027,19 @@ impl Interp {
                             .expect("every TableValue::Instance names a native class");
                         let object = self.native_instance(class);
                         self.attach_annotations(object, site);
+                        let method = (!routine).then(|| {
+                            let method = self.unattached_method_id(program, directive, &name);
+                            self.executable_objects.insert(method, object);
+                            method
+                        });
                         self.executable_sources.insert(
                             object,
                             crate::ExecutableRecord {
                                 source: crate::ExecutableSource::Directive { program, directive },
-                                installed: None,
+                                installed: method,
                                 routine: routine.then_some((program, directive)),
                             },
                         );
-                        if runnable {
-                            self.table_method_bodies
-                                .insert(object, crate::InstalledMethodBody { program, directive });
-                        }
                         if routine {
                             self.routine_objects.insert(installed, object);
                         }
@@ -1309,25 +1308,10 @@ fn package_table_entries(
     program: &rexx_parse::Program,
     kind: PackageTable,
 ) -> Vec<(Vec<u8>, TableValue)> {
-    // `runnable` is set for a written `::METHOD` alone. An `::ATTRIBUTE`
-    // and a `::CONSTANT` file generated accessors, whose bodies are
-    // `Interp::generated_methods` rather than `Interp::method_bodies`, and
-    // handing one of those to `Class~defineClassMethod` would install a row
-    // naming a body of the wrong kind. Nothing in the interpreter's own
-    // library does that -- `CoreClasses.orx:73` hands it plain `::METHOD`s --
-    // so the absence is a refusal there rather than a gap here.
-    let written_method = |name: &[u8], index: usize| TableValue::Instance {
+    let unattached_method = |name: &[u8], index: usize| TableValue::Instance {
         class: "Method",
         site: Annotated::Unattached(id, name.into()),
         declared: (id, index),
-        runnable: true,
-        routine: false,
-    };
-    let generated_method = |name: &[u8], index: usize| TableValue::Instance {
-        class: "Method",
-        site: Annotated::Unattached(id, name.into()),
-        declared: (id, index),
-        runnable: false,
         routine: false,
     };
     let mut entries = Vec::new();
@@ -1355,10 +1339,10 @@ fn package_table_entries(
                 // `addMethod` calls are at `:2418` and `:2474`.
                 if method.attribute {
                     let setter = crate::accessor_setter_name(&upper);
-                    let value = generated_method(&setter, index);
+                    let value = unattached_method(&setter, index);
                     entries.push((setter, value));
                 }
-                let value = written_method(&upper, index);
+                let value = unattached_method(&upper, index);
                 entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Attribute(attribute)
@@ -1374,17 +1358,17 @@ fn package_table_entries(
                 // set` puts `ZZ=` alone.
                 match attribute.style {
                     rexx_parse::AttributeStyle::Both => {
-                        let getter_value = generated_method(&upper, index);
-                        let setter_value = generated_method(&setter, index);
+                        let getter_value = unattached_method(&upper, index);
+                        let setter_value = unattached_method(&setter, index);
                         entries.push((upper, getter_value));
                         entries.push((setter, setter_value));
                     }
                     rexx_parse::AttributeStyle::Get => {
-                        let value = generated_method(&upper, index);
+                        let value = unattached_method(&upper, index);
                         entries.push((upper, value));
                     }
                     rexx_parse::AttributeStyle::Set => {
-                        let value = generated_method(&setter, index);
+                        let value = unattached_method(&setter, index);
                         entries.push((setter, value));
                     }
                 }
@@ -1397,7 +1381,7 @@ fn package_table_entries(
                 // (`parser/DirectiveParser.cpp:2536`). Measured,
                 // `::constant sep '/'` leaves `.methods~items` `1`.
                 let upper = constant.name.to_ascii_uppercase();
-                let value = generated_method(&upper, index);
+                let value = unattached_method(&upper, index);
                 entries.push((upper, value));
             }
             rexx_parse::DirectiveKind::Routine(routine) if kind == PackageTable::Routines => {
@@ -1412,7 +1396,6 @@ fn package_table_entries(
                         class: "Routine",
                         site: Annotated::Routine(id, index),
                         declared: (id, index),
-                        runnable: false,
                         routine: true,
                     },
                 ));

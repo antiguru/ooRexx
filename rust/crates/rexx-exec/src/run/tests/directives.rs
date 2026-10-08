@@ -254,37 +254,6 @@ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
     }
 }
 
-/// The source shapes a method compiled from source text refuses, each of
-/// which the shipped oracle takes.
-#[test]
-fn the_method_source_shapes_this_task_leaves_refuse_loudly() {
-    let cases: &[(&[u8], &str)] = &[
-        (
-            b".k~define(\"m\", .environment)\n::class k\n",
-            "a method source that is neither a string nor an array is not implemented (Phase 5)",
-        ),
-        (
-            b".methods~put('return 1', 'M')\n\
-              zk = .object~subclass(\"k\", .Class, .methods)\n\
-              ::method z\n  return 1\n",
-            "a class method built from source text is not implemented (Phase 5)",
-        ),
-    ];
-    for (source, message) in cases {
-        let outcome = routine_program(source);
-        assert_eq!(
-            outcome.exit_code,
-            crate::NOT_IMPLEMENTED_EXIT,
-            "{message}: exit code"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stderr),
-            format!("rexx-exec: {message}\n"),
-            "{message}: stderr"
-        );
-    }
-}
-
 /// Every directive form whose installation this crate **cannot** perform
 /// refuses the program before its first clause, naming the owning phase.
 #[test]

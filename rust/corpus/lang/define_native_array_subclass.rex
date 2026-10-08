@@ -1,0 +1,5 @@
+/* define with a primitive's Method object on a subclass of its own type. */
+c = .array~subclass('K')
+c~define('CNT', .array~method('ITEMS'))
+o = c~of(1, 2)
+say o~cnt

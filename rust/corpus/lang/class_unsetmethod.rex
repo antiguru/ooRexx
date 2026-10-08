@@ -1,0 +1,5 @@
+/* unsetMethod from a class method. */
+say .k~go
+::class k
+::method go class
+  self~unsetMethod('m2'); return 'ok'

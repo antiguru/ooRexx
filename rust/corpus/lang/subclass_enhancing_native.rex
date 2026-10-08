@@ -1,0 +1,3 @@
+/* A subclass's class methods from a primitive's Method object. */
+c = .object~subclass('K', .class, .directory~of(('M', .class~method('ID'))))
+say c~m

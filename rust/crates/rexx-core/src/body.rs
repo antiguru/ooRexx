@@ -761,12 +761,14 @@ impl ScopePools {
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct MethodId(pub u32);
 
-/// One method attached to a single object: the body it runs and the scope
-/// its `EXPOSE` binds in.
+/// One method attached to a single object: the body it runs, the scope its
+/// `EXPOSE` binds in, and the `Method` object it is, which the entry keeps
+/// alive as the oracle's behaviour keeps the object it holds.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ObjectMethod {
     pub method: MethodId,
     pub scope: ObjRef,
+    pub executable: ObjRef,
 }
 
 /// The methods attached to one object rather than to its class, searched
@@ -848,19 +850,20 @@ impl ObjectMethods {
     }
 
     /// Appends every object these entries reach, which is each defined
-    /// method's scope -- [`ScopePools::trace`]'s position and its reason.
+    /// method's scope and `Method` object -- [`ScopePools::trace`]'s
+    /// position and its reason.
     fn trace(&self, out: &mut Vec<ObjRef>) {
-        out.extend(
-            self.set
-                .iter()
-                .filter_map(|(_, entry)| *entry)
-                .map(|ObjectMethod { scope, .. }| scope),
-        );
-        out.extend(
-            self.enhanced
-                .iter()
-                .map(|(_, ObjectMethod { scope, .. })| *scope),
-        );
+        let entries = (self.set.iter().filter_map(|(_, entry)| *entry))
+            .chain(self.enhanced.iter().map(|(_, entry)| *entry));
+        for ObjectMethod {
+            method: _,
+            scope,
+            executable,
+        } in entries
+        {
+            out.push(scope);
+            out.push(executable);
+        }
     }
 
     fn find<'a, T>(level: &'a [(Box<[u8]>, T)], name: &[u8]) -> Option<&'a T> {

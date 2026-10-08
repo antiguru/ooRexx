@@ -283,14 +283,14 @@ fn a_library_routine_called_again_reaches_the_row_its_name_finds() {
 /// driver and waits to finish, ends main's park in place of the completion:
 /// the call is abandoned, its frame popped, and the run ends with the
 /// refusal. The empty stdout is that refusal's (P40), not a schedule the
-/// oracle takes: measured over 30 runs, the oracle prints `5` and `after`
-/// in every one, around the started activity's Error 93.974.
+/// oracle takes: measured over 5 runs, the oracle answers the entry and
+/// prints `5` and `after` in every one.
 #[test]
 fn a_failure_ending_a_native_park_abandons_the_call() {
     let run = counted(
         "o = .t~new\nm = o~start('boom')\nsay TestIntArg(5)\nsay 'after'\n\
          ::requires 'orxfunction' LIBRARY\n::class t\n::method boom\n  \
-         self~setMethod('Z', .nil, 'BOGUS')\n",
+         x = .local['STDQUE']\n",
         false,
         bounded(),
     );
@@ -298,8 +298,7 @@ fn a_failure_ending_a_native_park_abandons_the_call() {
     assert_eq!(run.stdout(), "");
     assert_eq!(
         run.stderr(),
-        "rexx-exec: a method source that is neither a string nor an array is not implemented \
-         (Phase 5)\n"
+        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
     );
     assert_eq!(run.exits, 1);
 }

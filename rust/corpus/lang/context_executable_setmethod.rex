@@ -1,0 +1,6 @@
+/* .context~executable in a method setMethod installed. */
+say .t~new~go
+::class t
+::method go
+self~setMethod('mm', .method~new('mm', 'return .context~executable~class~id'))
+return self~mm

@@ -939,7 +939,8 @@ fn load_package(
     // `~name`, and leaves `lpf` callable in the caller.
     let loaded = match args.get(1).copied().flatten() {
         Some(source) => {
-            let lines = super::method_source_lines(interp, source, "source")?;
+            let lines =
+                super::method_source_lines(interp, source, "source", super::SourceTaker::Package)?;
             interp.package_from_source(&name, &lines, None)?
         }
         None => interp.load_package(program, &name)?,
@@ -987,7 +988,12 @@ fn package_new(
         // `::REQUIRES` of the same name finds it.
         None => interp.load_package_global(&name)?,
         Some(source) => {
-            let lines = super::method_source_lines(interp, source, "source")?;
+            let lines = super::method_source_lines(
+                interp,
+                source,
+                "source",
+                super::SourceTaker::Executable,
+            )?;
             interp.package_from_source(&name, &lines, context)?
         }
     };
