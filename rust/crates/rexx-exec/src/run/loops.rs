@@ -312,31 +312,60 @@ struct ObjectControl {
     at: Option<usize>,
     shape: NameShape,
     /// The first pass's value, until that pass binds it.
-    initial: Option<ObjRef>,
-    to: Option<ObjRef>,
-    by: ObjRef,
+    initial: Option<LoopBound>,
+    to: Option<LoopBound>,
+    by: LoopBound,
     /// Whether the comparison is `<` (a negative `BY`) rather than `>`.
     descending: bool,
     for_remaining: Option<u64>,
     stepped: bool,
 }
 
-/// A controlled header's `+` answers where one of its values is an object.
+/// One value of an [`ObjectControl`] loop: a header's `+` answer, which the
+/// header's own register roots for the loop's lifetime, or a number, made
+/// into its object inside each pass that sends it.
+enum LoopBound {
+    Object(ObjRef),
+    Number(Number, u64),
+}
+
+/// A controlled header's `+` answers where one of its values is an object,
+/// and the register each was evaluated into.
 #[derive(Default)]
 pub(crate) struct ObjectHeader {
     initial: Option<ObjRef>,
     to: Option<ObjRef>,
     by: Option<ObjRef>,
     descending: bool,
+    homes: Vec<(u16, ObjRef)>,
+}
+
+impl ObjectHeader {
+    /// Records `src` as the register that roots `role`'s answer, if it has one.
+    fn home(&mut self, role: HeaderRole, src: u16) {
+        let answer = match role {
+            HeaderRole::Initial => self.initial,
+            HeaderRole::To => self.to,
+            HeaderRole::By => self.by,
+            _ => None,
+        };
+        if let Some(answer) = answer
+            && !self.homes.iter().any(|(register, _)| *register == src)
+        {
+            self.homes.push((src, answer));
+        }
+    }
 }
 
 impl FlatLoop {
     /// Appends the objects this loop's own state holds to `out`.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         if let LoopState::ObjectControlled(ctl) = &self.state {
-            out.extend(ctl.initial);
-            out.extend(ctl.to);
-            out.push(ctl.by);
+            for bound in ctl.initial.iter().chain(ctl.to.iter()).chain([&ctl.by]) {
+                if let LoopBound::Object(object) = bound {
+                    out.push(*object);
+                }
+            }
         }
     }
 }
@@ -617,7 +646,11 @@ impl Interp {
             HeaderRole::Over | HeaderRole::With => values.over_register = Some(src),
             _ => {}
         }
-        self.accept_header_value(role, value, values)
+        self.accept_header_value(role, value, values)?;
+        if let Some(objects) = values.objects.as_deref_mut() {
+            objects.home(role, src);
+        }
+        Ok(())
     }
 
     /// Validates one header value against whatever its role requires and files
@@ -966,10 +999,10 @@ impl Interp {
         Ok(())
     }
 
-    /// The loop state for a controlled header that holds an object: every
-    /// value the header converted as a number becomes that number's object.
+    /// The loop state for a controlled header that holds an object; a value
+    /// the header converted as a number stays one.
     fn object_control_state(
-        &mut self,
+        &self,
         code: &Code<'_>,
         control: SymbolId,
         values: &LoopHeaderValues,
@@ -977,19 +1010,19 @@ impl Interp {
     ) -> LoopState {
         let digits = self.activation().settings.digits();
         let initial = match (objects.initial, &values.initial) {
-            (Some(initial), _) => initial,
-            (None, Some(initial)) => self.control_number_object(initial.number().as_ref(), digits),
-            (None, None) => ObjRef::NIL,
+            (Some(initial), _) => LoopBound::Object(initial),
+            (None, Some(initial)) => LoopBound::Number(initial.number().into_owned(), digits),
+            (None, None) => LoopBound::Object(ObjRef::NIL),
         };
         let to = match (objects.to, &values.to) {
-            (Some(to), _) => Some(to),
-            (None, Some(to)) => Some(self.control_number_object(to, digits)),
+            (Some(to), _) => Some(LoopBound::Object(to)),
+            (None, Some(to)) => Some(LoopBound::Number(to.clone(), digits)),
             (None, None) => None,
         };
         let (by, descending) = match (objects.by, &values.by) {
-            (Some(by), _) => (by, objects.descending),
-            (None, Some(by)) => (self.control_number_object(by, digits), by.signum() < 0),
-            (None, None) => (self.counted(1), false),
+            (Some(by), _) => (LoopBound::Object(by), objects.descending),
+            (None, Some(by)) => (LoopBound::Number(by.clone(), digits), by.signum() < 0),
+            (None, None) => (LoopBound::Number(Number::one(), digits), false),
         };
         LoopState::ObjectControlled(Box::new(ObjectControl {
             control,
@@ -1004,12 +1037,19 @@ impl Interp {
         }))
     }
 
-    /// `number` as the object a header's `+` answers, rooted.
-    fn control_number_object(&mut self, number: &Number, digits: u64) -> ObjRef {
-        let form = self.activation().settings.form();
-        let object = self.number(number.clone(), crate::eval::saturate_digits(digits), form);
-        self.roots.activity_mut().push_temp(object);
-        object
+    /// `bound`'s object, a number's made and rooted in the current temps
+    /// frame.
+    fn loop_bound_object(&mut self, bound: &LoopBound) -> ObjRef {
+        match bound {
+            LoopBound::Object(object) => *object,
+            LoopBound::Number(number, digits) => {
+                let form = self.activation().settings.form();
+                let object =
+                    self.number(number.clone(), crate::eval::saturate_digits(*digits), form);
+                self.roots.activity_mut().push_temp(object);
+                object
+            }
+        }
     }
 
     /// [`Interp::header_number`]'s own computation for a position that
@@ -1703,6 +1743,13 @@ impl Interp {
                 LoopState::OverItems { snapshot, .. } => registers.set(register, *snapshot),
                 LoopState::With(with) => registers.set(register, with.supplier),
                 _ => {}
+            }
+        }
+        // A header's `+` answers, likewise, in the registers their values
+        // were evaluated into.
+        if let Some(objects) = values.objects {
+            for (register, answer) in objects.homes {
+                registers.set(register, answer);
             }
         }
         let end_index = body
@@ -2432,7 +2479,7 @@ impl Interp {
                     }
                 }
                 if let Some(previous) = by_message {
-                    let ctl = self.object_control_from_numbers(
+                    let ctl = object_control_from_numbers(
                         (*control, *at, shape),
                         to.as_ref(),
                         by,
@@ -2639,35 +2686,6 @@ impl Interp {
         Ok(more)
     }
 
-    /// A numeric controlled loop's state carried over once its control
-    /// variable holds an object: `TO` and `BY` as the objects their numbers
-    /// are, the direction from `BY`'s sign.
-    #[cold]
-    #[inline(never)]
-    fn object_control_from_numbers(
-        &mut self,
-        (control, at, shape): (SymbolId, Option<usize>, NameShape),
-        to: Option<&Number>,
-        by: &Number,
-        for_remaining: Option<u64>,
-        digits: u64,
-    ) -> Box<ObjectControl> {
-        let to = to.map(|to| self.control_number_object(to, digits));
-        let descending = by.signum() < 0;
-        let by = self.control_number_object(by, digits);
-        Box::new(ObjectControl {
-            control,
-            at,
-            shape,
-            initial: None,
-            to,
-            by,
-            descending,
-            for_remaining,
-            stepped: true,
-        })
-    }
-
     /// One pass of an [`ObjectControl`] loop, `DoBlock::checkControl`: at a
     /// re-test `+` is sent to `previous` with `BY` and the answer traced; the
     /// value is bound as it is, then sent the `TO` comparison, and the loop
@@ -2684,7 +2702,8 @@ impl Interp {
     ) -> Result<bool, Failure> {
         let (value, bind_indent) = match previous {
             Some(previous) => {
-                let sum = self.arith_general(rexx_parse::Operator::Plus, previous, ctl.by)?;
+                let by = self.loop_bound_object(&ctl.by);
+                let sum = self.arith_general(rexx_parse::Operator::Plus, previous, by)?;
                 self.roots.activity_mut().push_temp(sum);
                 if let Some(rendered) = self.result_text(sum) {
                     self.trace_result(loop_indent, &rendered);
@@ -2692,14 +2711,18 @@ impl Interp {
                 (sum, loop_indent)
             }
             None => {
-                let initial = ctl.initial.take().unwrap_or(ObjRef::NIL);
+                let initial = match ctl.initial.take() {
+                    Some(initial) => self.loop_bound_object(&initial),
+                    None => ObjRef::NIL,
+                };
                 self.roots.activity_mut().push_temp(initial);
                 (initial, do_indent)
             }
         };
         ctl.stepped = true;
         self.bind_control(code, ctl.control, bind_indent, value, ctl.at, ctl.shape)?;
-        if let Some(to) = ctl.to {
+        if let Some(to) = &ctl.to {
+            let to = self.loop_bound_object(to);
             let compare = if ctl.descending {
                 rexx_parse::Operator::LessThan
             } else {
@@ -2968,4 +2991,29 @@ fn is_true_object(answer: ObjRef) -> bool {
 /// clause at the body's indent, as a `WHILE` is.
 fn by_message_first_pass(blame: HeaderClause, state: &LoopState) -> bool {
     matches!(blame, HeaderClause::Do) && matches!(state, LoopState::ObjectControlled(_))
+}
+
+/// A numeric controlled loop's state carried over once its control variable
+/// holds an object: `TO` and `BY` kept as numbers, the direction from `BY`'s
+/// sign.
+#[cold]
+#[inline(never)]
+fn object_control_from_numbers(
+    (control, at, shape): (SymbolId, Option<usize>, NameShape),
+    to: Option<&Number>,
+    by: &Number,
+    for_remaining: Option<u64>,
+    digits: u64,
+) -> Box<ObjectControl> {
+    Box::new(ObjectControl {
+        control,
+        at,
+        shape,
+        initial: None,
+        to: to.map(|to| LoopBound::Number(to.clone(), digits)),
+        by: LoopBound::Number(by.clone(), digits),
+        descending: by.signum() < 0,
+        for_remaining,
+        stepped: true,
+    })
 }

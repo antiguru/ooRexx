@@ -342,6 +342,29 @@ fn a_clause_value_survives_the_handler_its_boundary_runs() {
     assert!(total_collections > 0);
 }
 
+/// A loop driven by message keeps its `TO` and `BY` across the passes after
+/// its control became an object, while each `+` and comparison allocates.
+#[test]
+fn a_message_driven_loops_to_and_by_survive_collect_on_every_allocation() {
+    let path = "lang/do_object_bounds_rooted.rex";
+    let text = std::fs::read(corpus_dir().join(path)).expect("the witness is in the corpus");
+    let stress = run_program_collect_every_alloc(
+        path,
+        text,
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        "end k10 7\ni k1\ni k3.5\ni k6.0\ni k8.5\nend k11.0\n",
+        "stderr {:?}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert!(
+        stress.collections > 0,
+        "a run that never collects cannot see a dropped root"
+    );
+}
+
 /// The command line's argument string survives every allocation the program
 /// makes.
 #[test]
