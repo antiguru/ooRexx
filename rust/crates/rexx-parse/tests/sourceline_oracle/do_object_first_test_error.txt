@@ -1,0 +1,16 @@
+count 15
+/* A loop driven by message failing at its first test, trapped and then
+   untrapped: blamed on the DO clause at the body's indent. */
+call on any name nothing
+do i = 1 to 2; say i; end
+signal on syntax name s1
+lbl: do i = .k~new(1) to 3; say 'x' i; iterate lbl; end
+exit
+s1: say 'trapped' rc condition('O')~message; say sigl
+do i = .k~new(5) to .k~new(1) ; say 'y' i; end
+exit
+nothing: return
+::class k
+::method init; expose v; use arg v
+::method '+'; expose v; if arg() = 0 then return self; use arg o; return .k~new(v + o)
+::method string; expose v; return 'k'v

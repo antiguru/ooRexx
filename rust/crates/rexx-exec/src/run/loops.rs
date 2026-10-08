@@ -865,8 +865,9 @@ impl Interp {
     /// The values a `DO OVER` binds its control variable to: the **non-empty**
     /// slots of what [`Interp::over_target_array`] converts the target into.
     fn over_snapshot(&mut self, value: ObjRef) -> Result<(ObjRef, Vec<ObjRef>), Failure> {
-        // The one collection whose order is this crate's rather than the
-        // oracle's answers from its own walk -- see
+        // The collections whose order is this crate's rather than the
+        // oracle's, a native `StringTable` or `Directory`, answer from their
+        // own walk -- see
         // [`Interp::hash_collection_indexes`] for why it is sorted and what
         // that costs. It cannot go through `MAKEARRAY` either: a
         // `Body::Native` receiver is not the store `hash.rs` owns.
@@ -908,7 +909,8 @@ impl Interp {
         Ok((snapshot, items))
     }
 
-    /// A `StringTable`'s indexes, as the values a `DO OVER` binds in turn.
+    /// A native `StringTable`'s or `Directory`'s indexes, as the values a `DO
+    /// OVER` binds in turn.
     fn hash_collection_indexes(&mut self, table: ObjRef) -> Vec<ObjRef> {
         let Some(Body::Native(native)) = self.heap.get(table).map(|object| &object.body) else {
             return Vec::new();

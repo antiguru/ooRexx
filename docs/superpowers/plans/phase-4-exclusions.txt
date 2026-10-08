@@ -1408,7 +1408,8 @@ DEVIATIONS -- permanent, chosen
      failure naming that, because a sorted comparison of two empty strings
      agrees with anything; that is Deviation 7's own guard, restated.
 
-     WHY. `Interp::hash_collection_indexes` walks a `StringTable`'s keys in
+     WHY. `Interp::hash_collection_indexes` walks a native `StringTable`'s or
+     `Directory`'s keys in
      sorted order and the oracle walks its `HashContents` bucket-ascending,
      which is the divergence `hash_collection_indexes`' own doc comment
      records and prices. Both orders are deterministic; neither reproduces the
@@ -3265,7 +3266,7 @@ above.
 
   The oracle prints `back`; this crate runs the handler first, `D=[] NOVALUE`
   then `back`. `raise lostdigits return` in place of NOVALUE is the same
-  divergence (`h LOSTDIGITS`). A NOVALUE from a variable read, and a RAISE
+  divergence (`D=[] LOSTDIGITS`). A NOVALUE from a variable read, and a RAISE
   NOVALUE in the trapping activation itself, agree. The NOVALUE form refused
   until Phase 6.1 Task 3 answered CONDITION('D') for it; the LOSTDIGITS form
   diverged before. NOT FIXED, and nobody is assigned.
