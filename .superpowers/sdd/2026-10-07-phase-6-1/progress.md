@@ -84,3 +84,4 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 12 queue add: truth tests ignore a user STRING method; WHILE blames a later-pass 34.3 on the DO line (oracle: END); a trapped error in a user `>` during the header's first comparison holds the TO object until another object loop ends (predates Task 3).
 - Task 3 minor cleanup dd76f275a (t3-minors): doc names fixed; dead object arm of run_loop_with_header made unreachable! (controller checked: sole caller drive.rs:1630 via FlatStart::Fallback, returned only for LoopKind::Simple at loops.rs:1734); report and Deviation 25 corrected. lib 1016 pass.
 - Task 3: complete (dcd1db992..dd76f275a after fix rounds 1-3; re-reviews task-3-rereview.md, -rereview2.md, -rereview3.md). Debug workspace last run at 1a46f2eb9; stage-close gates re-run it.
+- Task 4 dispatched: implementer t4-impl (opus), BASE a3c2c3c0a, brief task-4-brief.md, report task-4-report.md.
