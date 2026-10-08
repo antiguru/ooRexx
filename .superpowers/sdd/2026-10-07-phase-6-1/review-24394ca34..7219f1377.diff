@@ -1,0 +1,2563 @@
+# Review package: 24394ca34..7219f1377
+
+## Commits
+7219f1377 SDD: Phase 6.1 Task 4a report and gate record
+08876442c Phase 6.1 Task 4a: refusal-sites.tsv re-derived for the new raisers
+d27a9d441 Phase 6.1 Task 4a: one truth judgment
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-4a-report.md     |  96 ++++++
+ docs/superpowers/plans/phase-4-exclusions.txt      |   3 +-
+ docs/superpowers/plans/phase-6-1-gate.md           | 152 ++++++++++
+ rust/corpus/lang/collection_equal_answer.rex       |  20 ++
+ rust/corpus/lang/collection_equal_not_logical.rex  |   6 +
+ rust/corpus/lang/do_with_available_string.rex      |  24 ++
+ rust/corpus/lang/select_case_not_logical.rex       |   8 +
+ rust/corpus/lang/select_case_object.rex            |  26 ++
+ rust/corpus/lang/truth_user_string.rex             |  20 ++
+ rust/corpus/phase-6-1.txt                          |  10 +
+ rust/corpus/refusal-sites.tsv                      |  30 +-
+ rust/crates/rexx-exec/src/activation.rs            |  15 +-
+ rust/crates/rexx-exec/src/dispatch/collection.rs   |   7 +-
+ rust/crates/rexx-exec/src/dispatch/library.rs      |   5 +-
+ rust/crates/rexx-exec/src/dispatch/string.rs       |   4 +-
+ rust/crates/rexx-exec/src/eval.rs                  |  87 ++++--
+ rust/crates/rexx-exec/src/eval/tests.rs            |  28 ++
+ rust/crates/rexx-exec/src/ir.rs                    |   2 +-
+ rust/crates/rexx-exec/src/ir/compile.rs            |  13 +-
+ rust/crates/rexx-exec/src/ir/drive.rs              |  42 +--
+ rust/crates/rexx-exec/src/run.rs                   |  93 ++----
+ rust/crates/rexx-exec/src/run/interpret.rs         |   7 +-
+ rust/crates/rexx-exec/src/run/loops.rs             |  26 +-
+ rust/crates/rexx-exec/src/run/raised.rs            |  12 +
+ rust/crates/rexx-exec/src/run/select.rs            |  17 +-
+ rust/crates/rexx-exec/src/security.rs              |  10 +-
+ rust/crates/rexx-exec/tests/truth.rs               | 181 +++++++++++
+ rust/crates/rexx-exec/tests/truth/values           | 335 +++++++++++++++++++++
+ .../sourceline_oracle/collection_equal_answer.txt  |  21 ++
+ .../collection_equal_not_logical.txt               |   7 +
+ .../sourceline_oracle/do_with_available_string.txt |  25 ++
+ .../sourceline_oracle/select_case_not_logical.txt  |   9 +
+ .../tests/sourceline_oracle/select_case_object.txt |  27 ++
+ .../tests/sourceline_oracle/truth_user_string.txt  |  21 ++
+ 34 files changed, 1194 insertions(+), 195 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-4a-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-4a-report.md
+new file mode 100644
+index 000000000..858779ca8
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-4a-report.md
+@@ -0,0 +1,96 @@
++# Task 4a report: one truth judgment
++
++Status: DONE_WITH_CONCERNS (emptyloop +0.6478% instructions, over the +0.5% budget; see Concerns).
++
++Commits: `d27a9d441` (behaviour, witnesses, datadriven table, Deviation 25), `08876442c`
++(`refusal-sites.tsv` re-derived), and the commit carrying this report and the gate record section.
++
++## Step 1 table
++
++In `docs/superpowers/plans/phase-6-1-gate.md` `## Task 4a`: the oracle's 256 cells, this crate's at
++`d27a9d441` and at the base. At `d27a9d441` every cell outside DO TO and BY is byte-identical to the
++oracle on stdout, stderr and status (224 cells); the 26 DO TO/BY cells that differ are Deviation
++25's. Probe generator, runner and tabulator: `/tmp/claude-1000/p61/t4a/gen/{gen.py,run.sh,table.py}`.
++
++## Changes
++
++- `rust/crates/rexx-exec/src/eval.rs:1424` `logical_value` now private; `:1437`
++  `truth_without_conversion` (the logical constants and small ints 0/1); `:1460` `Interp::truth`
++  and `:1472` `truth_of_string_value` (`required_string_value`, then exactly 0 or 1, else the
++  caller's raiser). Prefix `\` `:673`, `&`/`|`/`&&` `:1160-1161`, list elements `:1347`.
++- `run.rs:3636-3687` `condition_value`: traces as before, debug-asserts a `checked` value is a
++  logical constant, judges with `truth`; `condition_holds` deleted. `run.rs:3693` `test_case_when`
++  sends `==` to the CASE value (`apply_binary(StrictEqual, case, value)`), traces the value and the
++  answer, judges with `truth` and 34.905.
++- `activation.rs:378` `current_case: Option<ObjRef>` (was the case text), rooted in
++  `object_roots`; size assertion 480 -> 472. `run/select.rs` `open_select_case`/`scan_when` take
++  the object; `run/interpret.rs` saves and roots it around a debug line; `ir/drive.rs` `WhenTest`
++  passes the register's object.
++- `run/loops.rs`: `loop_truth` deleted; BY sign `:963` and TO test `:2756` call `truth` (34.901);
++  DO WITH `AVAILABLE` `:2824` calls `truth` with 34.906 (was `string_value_text`, so an array
++  answered "an Array" and a user `STRING` was not sent).
++- `run/raised.rs:64,70` `raised_when_case_not_logical` (34.905), `raised_available_not_logical`
++  (34.906).
++- `dispatch/collection.rs:216` `same_item` raises 34.901 (was `unwrap_or(false)`).
++- `dispatch/string.rs:1254` `String~"?"`, `security.rs:122`, `dispatch/library.rs:1499` (native
++  logical: `truth` on the converted string, failure mapped to the boundary's `Err(text)`).
++- `ir/drive.rs:1477` IF/WHEN quick path and `:3915` `register_holds` use
++  `truth_without_conversion`, the fast half of the one function; `eval/tests.rs`
++  `the_unconverted_truth_agrees_with_the_string_value` checks it against the slow half.
++- Prose: `ir.rs:134`, `ir/compile.rs:495,588`, `ir/drive.rs:3561` say "value" for the case.
++  `phase-4-exclusions.txt` Deviation 25 drops the sentence saying neither the DO test nor WHILE
++  sends a user STRING.
++- Tests: `tests/truth.rs` and `tests/truth/values` (datadriven; one case per value, one line per
++  context; asserts every judging context agrees on true/false/error and each context raises one
++  sub-number). Corpus `lang/truth_user_string.rex`, `select_case_object.rex` (with `trace r`),
++  `select_case_not_logical.rex`, `collection_equal_answer.rex`, `collection_equal_not_logical.rex`,
++  `do_with_available_string.rex`, in `phase-6-1.txt`, each with a SOURCELINE expectation captured
++  by the module-comment driver from a scratch copy. Each matches the oracle on all three
++  descriptors and differs at the base; stdout read for each.
++
++## Sites routed
++
++Re-derived at `d27a9d441` with the survey's patterns plus `truth(`: every truth decision in
++`rexx-exec/src` goes through `truth` or `truth_without_conversion`. Left alone, not truth
++judgments: `semaphores.rs:272` (absent answer, per brief); `dispatch/time_support.rs:250`
++`is_cancelled` (the oracle tests identity with `.true`); `builtin/stream.rs:154` (`LINES` nonzero).
++
++## Mutation check
++
++Recorded in the gate record: `condition_value` judging `to_text` reddens the table on `.s1~new`;
++`same_item` reading `to_text == "1"` reddens it on `'banana'`. Both restored from copies.
++
++## Performance
++
++Gate record. Callgrind against `24394ca34`: rexxcps +0.1847%, emptyloop +0.6478%, decloop -0.0833%,
++dispatch +0.1943%. Wall clock, 5 interleaved runs: all inside ±4% except dispatch -8.54% under load
++2.7.
++
++## Commands run
++
++- `cargo fmt --all --check`: exit 0.
++- `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`: exit 0 (at both commits).
++- `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 101 at `d27a9d441`
++  (`refusal_sites` only), exit 0 at `08876442c`.
++- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test
++  ir_recorded_oracle`: exit 0 (29 passed 1 ignored; 21 passed).
++- `memcap 8G cargo test -j 4 -p rexx-exec --test truth`: 1 passed.
++- callgrind and wallclock commands as in the gate record, both exit 0.
++- `whole_groups`: not run; no whole-group expectation line changed.
++
++## Concerns
++
++1. **emptyloop +0.6478%**, over budget, on a program that makes no truth judgment. 2 instructions
++   a pass in `ops_loop_steady` from register allocation. Four variants (quick path written inline,
++   `Activation` padded to 480, `open_select_case` out of line, `register_holds` as a `match`) each
++   left it at exactly +0.6478%. Not a pads-controlled band. Needs a ruling: accept as codegen
++   perturbation, or more rounds.
++2. `whole_groups` was not run. Behaviour changes that could move a group's outcome: SELECT CASE now
++   sends `==` to an object CASE value, collections raise on a non-logical `==` answer, a user
++   `STRING` is sent where a logical value is required.
++3. `test_case_when` now uses `apply_binary` for string CASE values too, rather than a text fast
++   path; the oracle sends `==` there too, and the table and corpus agree, but it is a slower path
++   for SELECT CASE on strings (not in the perf programs).
++4. The first wall-clock run (`$P/wall`) used a binary I had rebuilt with a perf variant into the
++   head target directory; it is discarded and the recorded run (`$P/wall2`) uses a fresh build of
++   `d27a9d441` (`target-head2`).
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 42a3ca6fa..4a73263c0 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -1787,22 +1787,21 @@ DEVIATIONS -- permanent, chosen
+      ANSWER BY ITS TRUTH VALUE (Moritz, 2026-10-08). OWNER: none.
+ 
+      Where a controlled loop's control or BY value is an object, the oracle
+      ends the loop, or counts down, only when the comparison answers
+      TheTrueObject itself, and goes on for any other answer: `==
+      TheTrueObject` in DoBlock::checkControl
+      (interpreter/instructions/DoBlock.cpp:213) and in ControlledLoop::setup
+      (instructions/DoBlockComponents.cpp:173). WHILE and UNTIL in the same
+      file (:277-321, UNTIL's truthValue call at :321) take the answer's
+      truthValue, and Rexx's logical values are the strings 0 and 1, so the identity test is an oracle defect. This
+-     crate's DO test judges an answer as the crate's WHILE does; neither
+-     sends a user STRING method (a crate-wide gap, queued separately).
++     crate's DO test judges an answer as the crate's WHILE does.
+      Text exactly `1`
+      ends the loop (or means a negative step), exactly `0` goes on, and
+      anything else raises 34.901, `Error_Logical_value_method` ("Logical
+      value must be exactly "0" or "1"), the subcode the oracle's own
+      truthValue uses for a method's logical answer
+      (classes/IntegerClass.cpp:1432, classes/StringClass.cpp:645); no 34.x
+      names a DO header.
+ 
+      Measured 2026-10-08, three descriptors, rc 0 on both sides unless
+      stated. Passes a user `>` under `to 3 for 3` lets run:
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index a6fe574f7..ae895c77e 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -293,10 +293,162 @@ pads printed `0.0000`% on these programs, and no delta here is near the budget.
+ 
+ | program | t4 % | verdict |
+ |---|---:|---|
+ | fibcall | +0.0002 | inside |
+ | fibfunc | +0.0003 | inside |
+ | dispatch | -1.1319 | inside |
+ | dispatchclass | -1.1938 | inside |
+ | sendloop | -1.6774 | inside |
+ | rexxcps | +0.0001 | inside |
+ | emptyloop | +0.0003 | inside |
++
++## Task 4a
++
++Commits: `d27a9d441` (behaviour, witnesses, table), `08876442c` (`refusal-sites.tsv` re-derived for
++the two new raisers).
++
++### Step 1: the truth table
++
++Probe programs generated by `/tmp/claude-1000/p61/t4a/gen/gen.py` (one program per value and
++context, each from a fresh empty directory), run by `gen/run.sh` and tabulated by `gen/table.py`.
++Values: `q1` `'1'`, `i1` `1`, `sum` `0+1`, `cat` `'1'||''`, `left` `left('12',1)`, `str`
++`1~string`, `tcopy` `.true~copy`, `a1` `.array~of(1)`, `q0` `'0'`, `a0` `.array~of(0)`, `banana`,
++`sp1` `' 1'`, `a12` `.array~of(1,2)`, `s1`/`s0` an object whose `STRING` answers `1`/`0`, `sd` one
++with the default `STRING`. Contexts: IF, WHEN, WHILE, UNTIL (`T`/`F`), `\v`, `1 & v`, `if 1, v`,
++SELECT CASE on an object whose `==` answers the value, DO TO (user `>`, `n` passes of `for 3`),
++BY (user `<`; `0` passes means descending), and `hasItem`/`index` on Array, List and Table over
++items whose `==` answers it. A cell is stdout, or the error code and rc.
++
++Oracle:
++
++| value | if | when | while | until | not | and | list | case | doto | by | arr_hasItem | arr_index | lst_hasItem | lst_index | tbl_hasItem | tbl_index |
++|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
++| q1 | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| i1 | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| sum | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| cat | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| left | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| str | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| tcopy | T | T | T | T | 0 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| a1 | T | T | T | T | 97.1 rc159 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| q0 | F | F | F | F | 1 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| a0 | F | F | F | F | 97.1 rc159 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| banana | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 34.901 rc222 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 3 | 3 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++| sp1 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 34.901 rc222 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 3 | 3 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++| a12 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 3 | 3 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++| s1 | T | T | T | T | 97.1 rc159 | 1 | T | T | 3 | 3 | 1 | 1 | 1 | 0 | 1 | k |
++| s0 | F | F | F | F | 97.1 rc159 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| sd | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 3 | 3 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++
++This crate at `d27a9d441` (debug build). Every cell outside `doto` and `by` is byte-identical to
++the oracle on stdout, stderr and status (224 cells, `cmp` of the three files each); the 26 `doto`/`by`
++cells that differ are Deviation 25's (true ends the loop or counts down, a non-logical answer is
++34.901):
++
++| value | if | when | while | until | not | and | list | case | doto | by | arr_hasItem | arr_index | lst_hasItem | lst_index | tbl_hasItem | tbl_index |
++|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
++| q1 | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| i1 | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| sum | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| cat | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| left | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| str | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| tcopy | T | T | T | T | 0 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| a1 | T | T | T | T | 97.1 rc159 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| q0 | F | F | F | F | 1 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| a0 | F | F | F | F | 97.1 rc159 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| banana | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 34.901 rc222 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++| sp1 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 34.901 rc222 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++| a12 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++| s1 | T | T | T | T | 97.1 rc159 | 1 | T | T | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| s0 | F | F | F | F | 97.1 rc159 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| sd | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 34.901 rc222 | 34.6 rc222 | 34.905 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 | 34.901 rc222 |
++
++This crate at the base `24394ca34` (release), for the record of what changed: CASE answered `F`
++for every value (text compare against `'x'`); `s1`/`s0` raised 34.1-34.4/34.6 in IF, WHEN, WHILE,
++UNTIL and the list; every collection cell answered false where the oracle answers true or raises.
++
++| value | if | when | while | until | not | and | list | case | doto | by | arr_hasItem | arr_index | lst_hasItem | lst_index | tbl_hasItem | tbl_index |
++|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
++| q1 | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| i1 | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| sum | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| cat | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| left | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| str | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| tcopy | T | T | T | T | 0 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| a1 | T | T | T | T | 97.1 rc159 | 1 | T | F | 0 | 0 | 1 | 1 | 1 | 0 | 1 | k |
++| q0 | F | F | F | F | 1 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| a0 | F | F | F | F | 97.1 rc159 | 0 | F | F | 3 | 3 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| banana | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 34.901 rc222 | 34.901 rc222 | 34.6 rc222 | F | 34.901 rc222 | 34.901 rc222 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| sp1 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 34.901 rc222 | 34.901 rc222 | 34.6 rc222 | F | 34.901 rc222 | 34.901 rc222 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| a12 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 34.901 rc222 | 34.6 rc222 | F | 34.901 rc222 | 34.901 rc222 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| s1 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 1 | 34.6 rc222 | F | 34.901 rc222 | 34.901 rc222 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| s0 | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 0 | 34.6 rc222 | F | 34.901 rc222 | 34.901 rc222 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++| sd | 34.1 rc222 | 34.2 rc222 | 34.3 rc222 | 34.4 rc222 | 97.1 rc159 | 34.901 rc222 | 34.6 rc222 | F | 34.901 rc222 | 34.901 rc222 | 0 | The NIL object | 0 | The NIL object | 0 | The NIL object |
++
++### Step 4: mutation
++
++Each mutant applied to the working tree, `memcap 8G cargo test -j 4 -p rexx-exec --test truth`
++run, the file restored from a copy and `git diff --stat` checked unchanged.
++
++| mutant | result |
++|---|---|
++| `condition_value` judges `to_text(value)` instead of `truth` | red: `the contexts judge .s1~new differently` (if/when/while/until error, the rest true) |
++| `same_item` answers `to_text(answer) == "1"` | red: `the contexts judge 'banana' differently` (the six collection contexts false, the rest error) |
++
++### Performance
++
++`P` is `/tmp/claude-1000/p61/t4a`. Each tree from `git archive <sha> rust interpreter`, built with
++`CARGO_TARGET_DIR=$P/target-<name> memcap 8G cargo build --release -j 4 -p rexx-exec --bin
++rexx-run`, one `Compiling rexx-exec` line each.
++
++| binary | source | sha256 |
++|---|---|---|
++| base | `24394ca34` | `1b2ac8d64bcb519844232776df870959be1079d37222e455fc7fb3b957615577` |
++| t4a | `d27a9d441` | `6d19eb53f24b39a41f074b879f0277b36306352f6042e87f17d965fc165daa35` |
++
++```
++bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $P/cg2 -p "rexxcps emptyloop decloop dispatch" base=$P/target-base/release/rexx-run t4a=$P/target-head2/release/rexx-run
++```
++
++Exit 0, every spread 0.0000%. No layout pads.
++
++| program | t4a % | verdict |
++|---|---:|---|
++| rexxcps | +0.1847 | inside |
++| emptyloop | +0.6478 | **over** (+0.5% budget) |
++| decloop | -0.0833 | inside |
++| dispatch | +0.1943 | inside |
++
++emptyloop runs no truth judgment (`do i = 1 to n; nop; end`). The difference is 2 instructions a
++pass inside `ops_loop_steady` (measured on the same loop at `n = 200000` with `--dump-instr=yes`:
++`ChunkTrace` read twice a pass where the base reads it once, and inlined lines of `run.rs`,
++`slice/index.rs` and `vec/mod.rs` re-attributed), a register-allocation change in the driver.
++Four variants of the head tree, each measured with the same script at `-r 1`, left emptyloop at
+++0.6478% every time: the IF quick path written out inline as at the base; `Activation` padded
++back to 480 bytes; `open_select_case` `#[inline(never)]`; `register_holds` as a `match`. Stopped
++there for a ruling.
++
++```
++PROGRAMS="emptyloop decloop rexxcps dispatch" bash rust/bench-programs/wallclock.sh -r 5 -o $P/wall2 base=$P/target-base/release/rexx-run t4a=$P/target-head2/release/rexx-run
++```
++
++Exit 0; load average 2.68 at the end.
++
++| program | t4a % |
++|---|---:|
++| emptyloop | -0.23 |
++| decloop | -1.76 |
++| rexxcps | -0.92 |
++| dispatch | -8.54 |
++
++### Per-task check
++
++At `d27a9d441`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 --workspace
++--all-targets -- -D warnings` exit 0; `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
++--test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle 21
++passed); `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 101, the one failure
++`refusal_sites` (the two new raisers and moved line numbers). At `08876442c` after
++`REXX_REFUSAL_SITES_REFRESH=1`: the workspace run exit 0, and clippy re-run exit 0 (one `Checking
++rexx-exec` line). `whole_groups` not run: no whole-group
++expectation line changed.
+diff --git a/rust/corpus/lang/collection_equal_answer.rex b/rust/corpus/lang/collection_equal_answer.rex
+new file mode 100644
+index 000000000..259d2afcb
+--- /dev/null
++++ b/rust/corpus/lang/collection_equal_answer.rex
+@@ -0,0 +1,20 @@
++/* hasItem and index judge an item's == answer as a truth value. */
++call t .s1~new
++call t .s0~new
++call t .array~of(1)
++call t .array~of(0)
++exit
++t: use arg answer
++a = .array~of(.c~new(answer))
++l = .list~of(.c~new(answer))
++t = .table~new; t['k'] = .c~new(answer)
++w = .c~new(answer)
++say a~hasItem(w) a~index(w) l~hasItem(w) l~index(w) t~hasItem(w) t~index(w)
++return
++::class c
++::method init; expose answer; use arg answer
++::method '=='; expose answer; return answer
++::class s1
++::method string; return 1
++::class s0
++::method string; return 0
+diff --git a/rust/corpus/lang/collection_equal_not_logical.rex b/rust/corpus/lang/collection_equal_not_logical.rex
+new file mode 100644
+index 000000000..ed30cc48d
+--- /dev/null
++++ b/rust/corpus/lang/collection_equal_not_logical.rex
+@@ -0,0 +1,6 @@
++/* An item's == answer that is not 0 or 1 is Error 34.901. */
++l = .list~of(.c~new)
++say l~hasItem(.c~new)
++exit
++::class c
++::method '=='; return .array~of(1, 2)
+diff --git a/rust/corpus/lang/do_with_available_string.rex b/rust/corpus/lang/do_with_available_string.rex
+new file mode 100644
+index 000000000..ca8201f76
+--- /dev/null
++++ b/rust/corpus/lang/do_with_available_string.rex
+@@ -0,0 +1,24 @@
++/* DO WITH judges a supplier's AVAILABLE answer by its string value. */
++do with item v over .sup~new(.s1~new)
++  say 'item' v
++  leave
++end
++do with item v over .sup~new(.array~of(1))
++  say 'item' v
++  leave
++end
++do with item v over .sup~new(.array~of(0))
++  say 'never' v
++end
++say 'done'
++exit
++::class sup subclass supplier
++::method init
++  expose answer
++  use arg answer
++  self~init:super(.array~of('a'), .array~of(1))
++::method available
++  expose answer
++  return answer
++::class s1
++::method string; return 1
+diff --git a/rust/corpus/lang/select_case_not_logical.rex b/rust/corpus/lang/select_case_not_logical.rex
+new file mode 100644
+index 000000000..f0acea651
+--- /dev/null
++++ b/rust/corpus/lang/select_case_not_logical.rex
+@@ -0,0 +1,8 @@
++/* A SELECT CASE value's == answer that is not 0 or 1 is Error 34.905. */
++select case .c~new
++  when 'x' then say 'x'
++  otherwise say 'otherwise'
++end
++exit
++::class c
++::method '=='; return 'banana'
+diff --git a/rust/corpus/lang/select_case_object.rex b/rust/corpus/lang/select_case_object.rex
+new file mode 100644
+index 000000000..33ee7a6de
+--- /dev/null
++++ b/rust/corpus/lang/select_case_object.rex
+@@ -0,0 +1,26 @@
++/* SELECT CASE sends == to the case value with each WHEN CASE value and
++   judges the answer's truth. */
++trace r
++select case 3
++  when 1, 2+1 then say 'a'
++  otherwise say 'b'
++end
++c = .c~new
++select case c
++  when 'x', 'y' then say 'x'
++  when c then say 'self'
++  otherwise say 'none'
++end
++trace o
++select case .c~new
++  when 'z' then say 'z'
++  otherwise say 'otherwise'
++end
++exit
++::class c
++::method '=='
++  use arg other
++  if other == 'y' then return .s1~new
++  return 0
++::class s1
++::method string; return 1
+diff --git a/rust/corpus/lang/truth_user_string.rex b/rust/corpus/lang/truth_user_string.rex
+new file mode 100644
+index 000000000..aaadb9f07
+--- /dev/null
++++ b/rust/corpus/lang/truth_user_string.rex
+@@ -0,0 +1,20 @@
++/* A value is judged by its string value: a user object by what its STRING
++   method answers, an array by its items joined. IF, WHEN, WHILE, UNTIL, a
++   comma list, & and | each judge alike. */
++call t .s1~new
++call t .s0~new
++call t .array~of(1)
++call t .array~of(0)
++exit
++t: use arg v
++if v then say 'if T'; else say 'if F'
++select; when v then say 'when T'; otherwise say 'when F'; end
++n = 0; do while v; n = n + 1; leave; end; say 'while' n
++n = 0; do until v; n = n + 1; if n = 2 then leave; end; say 'until' n
++if 1, v then say 'list T'; else say 'list F'
++say 'and' (1 & v) 'or' (0 | v)
++return
++::class s1
++::method string; return 1
++::class s0
++::method string; return 0
+diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
+index 7b7eec88a..9301f5c96 100644
+--- a/rust/corpus/phase-6-1.txt
++++ b/rust/corpus/phase-6-1.txt
+@@ -164,10 +164,20 @@ lang/program_routine_call_more.rex
+ lang/program_routine_call_signal.rex
+ lang/setmethod_loaded_method.rex
+ 
+ # Task 4 fix round 2: a running method's executable is rooted by its activation.
+ lang/directory_entry_unset_while_running.rex
+ lang/directory_entry_unset_then_allocates.rex
+ lang/directory_entry_replace_while_running.rex
+ lang/directory_entry_replace_then_allocates.rex
+ lang/directory_unknown_unset_while_running.rex
+ lang/setmethod_unset_identity_after_collection.rex
++
++# Task 4a: one truth judgment. A value is judged by its string value (a user
++# STRING, an array's items joined); SELECT CASE sends == to the case value;
++# hasItem and index judge an item's == answer; DO WITH judges AVAILABLE alike.
++lang/truth_user_string.rex
++lang/select_case_object.rex
++lang/select_case_not_logical.rex
++lang/collection_equal_answer.rex
++lang/collection_equal_not_logical.rex
++lang/do_with_available_string.rex
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index 290b10545..4bb1692e7 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -238,42 +238,44 @@ Loud	object_method	send	crates/rexx-exec/src/lib.rs:601	agrees	no	no route: SETM
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+ Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:680	off-send-surface	-	-	-
+ Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:499	off-send-surface	-	-	-
+ Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:582	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+ Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:648	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+-Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:83	off-send-surface	-	-	-
++Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
++Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+-Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:114	off-send-surface	-	-	-
+-Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:181	off-send-surface	-	-	-
+-Raised	raised_from_settings	body	crates/rexx-exec/src/run/raised.rs:147	off-send-surface	-	-	-
++Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
++Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
++Raised	raised_from_settings	body	crates/rexx-exec/src/run/raised.rs:159	off-send-surface	-	-	-
+ Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run/raised.rs:47	off-send-surface	-	-	-
+ Raised	raised_if_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:37	off-send-surface	-	-	-
+ Raised	raised_invalid_trace_letter	body	crates/rexx-exec/src/trace/format.rs:505	off-send-surface	-	-	-
+-Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+-Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run/raised.rs:207	off-send-surface	-	-	-
+-Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run/raised.rs:216	off-send-surface	-	-	-
+-Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+-Raised	raised_leave_no_match	body	crates/rexx-exec/src/run/raised.rs:202	off-send-surface	-	-	-
+-Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:133	off-send-surface	-	-	-
++Raised	raised_iterate_no_loop	body	crates/rexx-exec/src/run/raised.rs:205	off-send-surface	-	-	-
++Raised	raised_iterate_no_match	body	crates/rexx-exec/src/run/raised.rs:219	off-send-surface	-	-	-
++Raised	raised_iterate_wrong_kind	body	crates/rexx-exec/src/run/raised.rs:228	off-send-surface	-	-	-
++Raised	raised_leave_no_loop	body	crates/rexx-exec/src/run/raised.rs:199	off-send-surface	-	-	-
++Raised	raised_leave_no_match	body	crates/rexx-exec/src/run/raised.rs:214	off-send-surface	-	-	-
++Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off-send-surface	-	-	-
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:493	off-send-surface	-	-	-
+-Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:175	off-send-surface	-	-	-
+-Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:67	off-send-surface	-	-	-
++Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
++Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+-Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:167	off-send-surface	-	-	-
++Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
++Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+-Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:162	off-send-surface	-	-	-
++Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+ Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:480	diverges	yes	a message send to	a. = 'dflt' then a.~length
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+ Loud	redirection	body	crates/rexx-exec/src/lib.rs:490	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+ Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:696	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/activation.rs b/rust/crates/rexx-exec/src/activation.rs
+index cde52476f..165ee871b 100644
+--- a/rust/crates/rexx-exec/src/activation.rs
++++ b/rust/crates/rexx-exec/src/activation.rs
+@@ -368,21 +368,21 @@ pub(crate) struct Activation {
+     /// (`execution/RexxActivation.cpp:3400`-`3406`) needs the *stale* value
+     /// still readable one call after the clause that produced it stopped
+     /// being current, to anchor the reset to.
+     pub(crate) cached_clock: i64,
+     /// `TIME('E')`/`TIME('R')`'s anchor, `settings.elapsedTime`: the reading
+     /// elapsed time is measured from, in [`cached_clock`]'s unit, or
+     /// [`NO_CLOCK`] before this activation's first `E` or `R`.
+     pub(crate) elapsed_anchor: i64,
+     /// The innermost `SELECT CASE`'s value here, which an absorbed `WHEN`
+     /// compares against; `None` inside a plain `SELECT`.
+-    pub(crate) current_case_text: Option<Vec<u8>>,
++    pub(crate) current_case: Option<ObjRef>,
+     /// Whether [`cached_clock`] needs a fresh read before this activation's
+     /// clause may trust it -- the per-clause half [`cached_clock`]'s own
+     /// doc names, set `true` once per instruction by `Op::Clause`'s region
+     /// on whichever activation is executing at the time, mirroring
+     /// `RexxActivation::run`'s own `settings.timeStamp.valid = false` set
+     /// right after `nextInst->execute()` returns (`RexxActivation.cpp:647`).
+     pub(crate) clock_stale: bool,
+     /// The `RexxContext` this activation's `.CONTEXT` answers, built on the
+     /// first ask and kept for the rest of the activation --
+     /// `RexxActivation::getContextObject`, which fills its own field the
+@@ -492,21 +492,21 @@ pub(crate) struct MethodIdentity {
+ }
+ 
+ /// An activation's flags in one byte: forwarded, `ActivationSettings::
+ /// isGuarded`, `objectScope == SCOPE_RESERVED`, the elapsed clock's pending
+ /// reset (`elapsedReset`), and `debugPause`.
+ #[derive(Clone, Copy, Default)]
+ pub(crate) struct ActivationFlags(u8);
+ 
+ /// Every call pushes one, so the size is pinned: a field that grows it has to
+ /// pay for itself on the call path (ruling R4).
+-const _: () = assert!(size_of::<Activation>() == 480);
++const _: () = assert!(size_of::<Activation>() == 472);
+ 
+ impl ActivationFlags {
+     const FORWARDED: u8 = 1;
+     const GUARDED: u8 = 2;
+     const RESERVED: u8 = 4;
+     const ELAPSED_RESET: u8 = 8;
+     const DEBUG_PAUSE: u8 = 16;
+ 
+     /// A method activation's flags: `guarded`, and holding its lock where
+     /// `reserved`.
+@@ -691,21 +691,21 @@ impl Activation {
+             // first clause of a program with no `TRACE` instruction prints
+             // `N`.
+             trace_mode: TraceMode::NORMAL,
+             debug: DebugState::default(),
+             address: AddressState::default(),
+             io_configs: None,
+             traps: TrapMap::default(),
+             cold: None,
+             cached_clock: NO_CLOCK,
+             elapsed_anchor: NO_CLOCK,
+-            current_case_text: None,
++            current_case: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -768,21 +768,21 @@ impl Activation {
+             address: inherited.address,
+             io_configs: inherited.io_configs,
+             traps: inherited.traps,
+             cold: inherited.cold,
+             // The caller's stamp, invalid: `RexxActivation`'s internal-call
+             // constructor copies the settings and sets `timeStamp.valid =
+             // false` (`RexxActivation.cpp:241`), so a reset the caller left
+             // pending anchors to the caller's last reading.
+             cached_clock: inherited.cached_clock,
+             elapsed_anchor: inherited.elapsed_anchor,
+-            current_case_text: None,
++            current_case: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -826,21 +826,21 @@ impl Activation {
+             settings: Settings::default(),
+             condition_syntax: ConditionSyntax::default(),
+             trace_mode: TraceMode::NORMAL,
+             debug: DebugState::default(),
+             address: AddressState::default(),
+             io_configs: None,
+             traps: TrapMap::default(),
+             cold: None,
+             cached_clock: NO_CLOCK,
+             elapsed_anchor: NO_CLOCK,
+-            current_case_text: None,
++            current_case: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -879,21 +879,21 @@ impl Activation {
+             settings: Settings::default(),
+             condition_syntax: ConditionSyntax::default(),
+             trace_mode: TraceMode::NORMAL,
+             debug: DebugState::default(),
+             address: AddressState::default(),
+             io_configs: None,
+             traps: TrapMap::default(),
+             cold: None,
+             cached_clock: NO_CLOCK,
+             elapsed_anchor: NO_CLOCK,
+-            current_case_text: None,
++            current_case: None,
+             clock_stale: true,
+             context_object: None,
+             notify_message: None,
+             clause: ClauseSnapshot::default(),
+             invocation: None,
+             call_name: None,
+             call_arguments: None,
+             streams: NameMap::default(),
+         }
+     }
+@@ -973,31 +973,32 @@ impl Activation {
+             // Parse data behind an `Rc`: an `AddressIo` holds expressions and
+             // symbol ids, never an `ObjRef`. What a redirection *evaluates*
+             // to is a temp of the command that built it.
+             io_configs: _,
+             // Plain bookkeeping: counters and flags, no `ObjRef` among them.
+             debug: _,
+             traps: _,
+             cold,
+             cached_clock: _,
+             elapsed_anchor: _,
+-            current_case_text: _,
++            current_case,
+             clock_stale: _,
+             context_object,
+             notify_message,
+             clause: _,
+             invocation: _,
+             call_name: _,
+             call_arguments,
+             streams,
+         } = self;
+         out.extend(*context_object);
++        out.extend(*current_case);
+         out.extend(*notify_message);
+         if let Some(replied) = replied {
+             replied.object_roots(out);
+         }
+         // The trapped condition's own object, destructured rather than
+         // reached through a field: the exhaustive match above guards this
+         // struct's fields, and an `ObjRef` added to `TrappedCondition` would
+         // otherwise arrive unrooted with nothing to say so.
+         if let Some(TrappedCondition {
+             name: _,
+diff --git a/rust/crates/rexx-exec/src/dispatch/collection.rs b/rust/crates/rexx-exec/src/dispatch/collection.rs
+index cc82e73c2..eba627b31 100644
+--- a/rust/crates/rexx-exec/src/dispatch/collection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/collection.rs
+@@ -196,30 +196,31 @@ pub(super) fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
+ }
+ 
+ /// An `Array` object over `slots`, holes and all -- what a `List` carrying an
+ /// entry that holds nothing answers for `allItems`.
+ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
+     let array = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+     interp.roots.activity_mut().push_temp(array);
+     array
+ }
+ 
+-/// Whether the collection holds `wanted`, comparing it against `element`.
++/// Whether the collection holds `wanted`, comparing it against `element`; a
++/// non-logical `==` answer is 34.901 (`RexxInternalObject::isEqual`,
++/// `classes/ObjectClass.cpp:193`).
+ pub(super) fn same_item(
+     interp: &mut Interp,
+     wanted: ObjRef,
+     element: ObjRef,
+ ) -> Result<bool, Failure> {
+     let (left, right) = (wanted, element);
+     let answer = interp.apply_binary(Operator::StrictEqual, left, right)?;
+-    let text = interp.to_text(answer);
+-    Ok(crate::eval::logical_value(&text).unwrap_or(false))
++    interp.truth(answer, Raised::not_logical)
+ }
+ 
+ /// The one item argument a collection method takes, which is required.
+ pub(super) fn item_argument(args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+     args.first()
+         .copied()
+         .flatten()
+         .ok_or_else(|| Raised::missing_method_argument(1).into())
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index f8cf60502..064e11f33 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -1487,22 +1487,23 @@ impl Host for Interp {
+ 
+     fn logical(&mut self, object: ObjRef) -> Result<Result<bool, ObjRef>, Condition> {
+         if let Decoded::SmallInt(number) = object.decode() {
+             return Ok(match number {
+                 0 => Ok(false),
+                 1 => Ok(true),
+                 _ => Err(object),
+             });
+         }
+         let text = self.native_string_conversion(object)?;
+-        let bytes = self.to_text(text);
+-        Ok(crate::eval::logical_value(&bytes).ok_or(text))
++        // A string is its own string value, so the only failure is its not
++        // being logical, which the boundary reports with `text`.
++        Ok(self.truth(text, Raised::not_logical).map_err(|_| text))
+     }
+ 
+     fn array_value(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
+         let converted = if self.array_slots_of(object).is_some() {
+             Some(object)
+         } else {
+             match self.request_array_value(object) {
+                 Ok(converted) => converted,
+                 Err(failure) => return Err(self.hold_native_condition(failure)),
+             }
+diff --git a/rust/crates/rexx-exec/src/dispatch/string.rs b/rust/crates/rexx-exec/src/dispatch/string.rs
+index 934ee9fa2..478db94d6 100644
+--- a/rust/crates/rexx-exec/src/dispatch/string.rs
++++ b/rust/crates/rexx-exec/src/dispatch/string.rs
+@@ -20,21 +20,20 @@ use super::{
+     match_region_arguments, match_region_over, overlay_arguments, pad_arguments, replace_at_bytes,
+     replace_at_plan, space_arguments, starts_with, strip_arguments, substr_arguments,
+     translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
+ };
+ use super::{
+     BehaviourId, Body, INIT, refuse_method_argument, usize_or_refuse, whole_method_argument,
+ };
+ use crate::builtin::convert;
+ use crate::builtin::numeric;
+ use crate::error::Raised;
+-use crate::eval::logical_value;
+ use rexx_parse::Operator;
+ 
+ /// `RexxString::posRexx` (`classes/StringClassMisc.cpp:581`).
+ fn native_string_pos(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let found = string_pos(interp, receiver, args, crate::builtin::string::find_forward)?;
+@@ -1245,22 +1244,21 @@ fn native_string_op_choice(
+     let on_true = args
+         .first()
+         .copied()
+         .flatten()
+         .ok_or_else(|| Raised::missing_named_argument("true value"))?;
+     let on_false = args
+         .get(1)
+         .copied()
+         .flatten()
+         .ok_or_else(|| Raised::missing_named_argument("false value"))?;
+-    let text = interp.to_text(receiver).to_vec();
+-    let holds = logical_value(&text).ok_or_else(|| Raised::not_logical(&text))?;
++    let holds = interp.truth(receiver, Raised::not_logical)?;
+     Ok(Some(if holds { on_true } else { on_false }))
+ }
+ 
+ /// `String~"CENTER"` and `String~"CENTRE"`, `RexxString::center`
+ /// (`classes/StringClassSub.cpp:59`).
+ fn native_string_center(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+diff --git a/rust/crates/rexx-exec/src/eval.rs b/rust/crates/rexx-exec/src/eval.rs
+index 1fe1f154d..fe852c904 100644
+--- a/rust/crates/rexx-exec/src/eval.rs
++++ b/rust/crates/rexx-exec/src/eval.rs
+@@ -663,27 +663,22 @@ impl Interp {
+             PrefixOp::Not => {
+                 // `\.array` is 97.1 on the oracle, the same message send the
+                 // dyadic operators make, and it is asked ahead of the truth
+                 // test for the reason [`Interp::logical_values_body`] states.
+                 if let Some(target) = self.operator_message_receiver(value) {
+                     return self.send_operator(op.spelling(), target, &[]);
+                 }
+                 if let Some(kind) = self.operator_operand_gap(value) {
+                     return Err(Loud::operator_operand(op.spelling(), kind).into());
+                 }
+-                let text = self.to_text(value).to_vec();
+-                let flipped = match logical_value(&text) {
+-                    Some(true) => b"0",
+-                    Some(false) => b"1",
+-                    None => return Err(Raised::not_logical(&text).into()),
+-                };
+-                self.text(flipped)
++                let holds = self.truth(value, Raised::not_logical)?;
++                logical(!holds)
+             }
+         };
+         Ok(result)
+     }
+ 
+     /// The seven arithmetic operators, sharing one operand-evaluation and
+     /// error-conversion path.
+     fn eval_arithmetic(
+         &mut self,
+         code: &Code<'_>,
+@@ -1155,25 +1150,22 @@ impl Interp {
+         // **Ahead of the truth test, not behind it.** The oracle sends
+         // `&`/`|`/`&&` to the left operand as a message -- `.array & 1` is
+         // 97.1 where this crate's own 34.901 quotes the object's rendering --
+         // so an operand this names refuses however it renders, and a
+         // rendering that is itself `0` or `1` is not an answer: measured,
+         // oracle rc 159, `o & 1` for an instance named `'1'` is
+         // `97.1 Object "1" does not understand message "&".`
+         if let Some(kind) = self.operator_operand_gap(left_value) {
+             return Err(Loud::operator_operand(op.spelling(), kind).into());
+         }
+-        let left_text = self.to_text(left_value).to_vec();
+-        let left_bool = logical_value(&left_text).ok_or_else(|| Raised::not_logical(&left_text))?;
+-        let right_text = self.to_text(right_value).to_vec();
+-        let right_bool =
+-            logical_value(&right_text).ok_or_else(|| Raised::not_logical(&right_text))?;
++        let left_bool = self.truth(left_value, Raised::not_logical)?;
++        let right_bool = self.truth(right_value, Raised::not_logical)?;
+ 
+         let holds = match op {
+             Operator::And => left_bool && right_bool,
+             Operator::Or => left_bool || right_bool,
+             Operator::Xor => left_bool != right_bool,
+             other => return Err(Loud::binary_operator(other).into()),
+         };
+ 
+         let result = logical(holds);
+         Ok(result)
+@@ -1345,22 +1337,21 @@ impl Interp {
+     /// comment).
+     fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
+         let frame = self.roots.activity_mut().push_frame();
+         let indent = self.activity.clause_state.current_value_indent;
+         let mut holds = true;
+         for item in items {
+             let value = self.eval(code, item)?;
+             self.roots.activity_mut().push_temp(value);
+             let text = self.to_text(value).to_vec();
+             self.trace_result(indent, &text);
+-            let item_holds =
+-                logical_value(&text).ok_or_else(|| Raised::logical_list_element(&text))?;
++            let item_holds = self.truth(value, Raised::logical_list_element)?;
+             if !item_holds {
+                 holds = false;
+                 break;
+             }
+         }
+ 
+         let result = logical(holds);
+         self.roots.activity_mut().pop_frame(frame);
+         Ok(result)
+     }
+@@ -1422,32 +1413,90 @@ fn small_int_arith(op: Operator, left: i64, right: i64, digits: u64) -> Option<O
+ fn small_int_power(base: i64, exponent: i64) -> Option<i64> {
+     base.checked_pow(u32::try_from(exponent).ok()?)
+ }
+ 
+ pub(crate) fn saturate_digits(digits: u64) -> u32 {
+     u32::try_from(digits).unwrap_or(u32::MAX)
+ }
+ 
+ /// A logical value is *exactly* the one-byte string `0` or `1` -- text, not
+ /// numeric, no coercion (D15's "Expression evaluation"; measured, `' 1 '`,
+-/// `'01'`, `'1.0'` and `''` are each not logical, error 34). Shared by
+-/// prefix `\`, `&`/`|`/`&&` and `ExprKind::Logical`'s per-element check,
+-/// which differ only in *which* sub-number they raise on `None`, never in
+-/// what counts as logical.
+-pub(crate) fn logical_value(text: &[u8]) -> Option<bool> {
++/// `'01'`, `'1.0'` and `''` are each not logical, error 34).
++fn logical_value(text: &[u8]) -> Option<bool> {
+     match text {
+         b"0" => Some(false),
+         b"1" => Some(true),
+         _ => None,
+     }
+ }
+ 
++/// [`Interp::truth`]'s answer for the handles a logical value arrives in
++/// without a conversion: the constants a comparison answers with, and the
++/// small integers `0` and `1`. `None` for every other value, which only the
++/// full judgment may decide.
++#[inline(always)]
++pub(crate) fn truth_without_conversion(value: ObjRef) -> Option<bool> {
++    if value == LOGICAL_TRUE {
++        return Some(true);
++    }
++    if value == LOGICAL_FALSE {
++        return Some(false);
++    }
++    match value.decode() {
++        Decoded::SmallInt(1) => Some(true),
++        Decoded::SmallInt(0) => Some(false),
++        _ => None,
++    }
++}
++
++impl Interp {
++    /// Whether `value` is logically true: `RexxInternalObject::truthValue`
++    /// (`classes/ObjectClass.cpp:523`), the one judgment every keyword,
++    /// operator and method that takes a logical value makes. The value's
++    /// string by the required-string protocol (a user object is sent
++    /// `STRING`, an array joins its items) must be exactly `0` or `1`;
++    /// anything else is `raise`'s Error 34, which is the one thing a caller
++    /// chooses.
++    #[inline]
++    pub(crate) fn truth(
++        &mut self,
++        value: ObjRef,
++        raise: fn(&[u8]) -> Raised,
++    ) -> Result<bool, Failure> {
++        match truth_without_conversion(value) {
++            Some(holds) => Ok(holds),
++            None => self.truth_of_string_value(value, raise),
++        }
++    }
++
++    #[inline(never)]
++    fn truth_of_string_value(
++        &mut self,
++        value: ObjRef,
++        raise: fn(&[u8]) -> Raised,
++    ) -> Result<bool, Failure> {
++        let frame = self.roots.activity_mut().push_frame();
++        self.roots.activity_mut().push_temp(value);
++        let string = self.required_string_value(value)?;
++        let text = self.to_text(string);
++        let holds = match logical_value(&text) {
++            Some(holds) => holds,
++            None => {
++                let text = text.into_owned();
++                return Err(raise(&text).into());
++            }
++        };
++        self.roots.activity_mut().pop_frame(frame);
++        Ok(holds)
++    }
++}
++
+ /// `Operator` -> `rexx-num`'s `CompareOp`, for the `Operator` variants
+ /// `apply_binary` dispatches to `compare_values`. **Several operators share
+ /// one `CompareOp`**: `\=`/`<>`/`><` (`BackslashEqual`/`LessThanGreaterThan`/
+ /// `GreaterThanLessThan`) all mean `NotEqual` (`compare.rs`'s own doc
+ /// comment: the interpreter's operator table repeats one method pointer for
+ /// them), and `\>`/`\<` with their strict siblings `\>>`/`\<<` invert their
+ /// positive counterpart's sense rather than getting a `CompareOp` of their
+ /// own: `\>` ("not greater than") is `LessEqual`, `\<` is `GreaterEqual`,
+ /// `\>>` is `StrictLessEqual` and `\<<` is `StrictGreaterEqual`. `\==` is
+ /// **not** among them -- it has `StrictNotEqual` to itself -- and `\=` is one
+diff --git a/rust/crates/rexx-exec/src/eval/tests.rs b/rust/crates/rexx-exec/src/eval/tests.rs
+index e0544069e..66e48095d 100644
+--- a/rust/crates/rexx-exec/src/eval/tests.rs
++++ b/rust/crates/rexx-exec/src/eval/tests.rs
+@@ -436,20 +436,48 @@ fn prefix_plus_and_minus_are_arithmetic_not_a_sign_flip() {
+     assert_eq!(eval_in_place_text(&mut interp, b"say +12345"), b"1E+4");
+ }
+ 
+ #[test]
+ fn prefix_not_flips_a_logical_value() {
+     let mut interp = Interp::new();
+     assert_eq!(eval_text(&mut interp, b"say \\1"), b"0");
+     assert_eq!(eval_text(&mut interp, b"say \\0"), b"1");
+ }
+ 
++/// Every handle `truth_without_conversion` answers for is judged the same
++/// by the string-value path it skips.
++#[test]
++fn the_unconverted_truth_agrees_with_the_string_value() {
++    let mut interp = Interp::new();
++    let values = [
++        LOGICAL_TRUE,
++        LOGICAL_FALSE,
++        ObjRef::small_int(0).expect("tagged"),
++        ObjRef::small_int(1).expect("tagged"),
++        ObjRef::small_int(2).expect("tagged"),
++        ObjRef::inline_text(b"01").expect("inline"),
++    ];
++    let mut answered = 0;
++    for value in values {
++        let judged = interp
++            .truth_of_string_value(value, Raised::not_logical)
++            .ok();
++        if let Some(quick) = truth_without_conversion(value) {
++            assert_eq!(Some(quick), judged, "{value:?}");
++            answered += 1;
++        } else {
++            assert_eq!(judged, None, "{value:?}");
++        }
++    }
++    assert_eq!(answered, 4);
++}
++
+ #[test]
+ fn prefix_not_on_a_non_logical_value_raises_34_901() {
+     // say \'abc' -> Error 34.901
+     let mut interp = Interp::new();
+     let failure = eval_source(&mut interp, b"say \\'abc'").unwrap_err();
+     let Failure::Raised(raised) = failure else {
+         panic!("expected Raised, got {failure:?}");
+     };
+     assert_eq!((raised.number, raised.sub), (34, 901));
+     assert_eq!(raised.additional, vec![b"abc".to_vec()]);
+diff --git a/rust/crates/rexx-exec/src/ir.rs b/rust/crates/rexx-exec/src/ir.rs
+index 4859da5d5..743a57cdf 100644
+--- a/rust/crates/rexx-exec/src/ir.rs
++++ b/rust/crates/rexx-exec/src/ir.rs
+@@ -124,21 +124,21 @@ pub(crate) enum Op {
+         argc: u16,
+         dst: u16,
+     },
+     /// The `>F>` line [`Op::CallExpr`] owes, for the value now in `src`.
+     TraceFunction {
+         index: u32,
+         slot: u16,
+         path: NodePath,
+         src: u16,
+     },
+-    /// Hands the `SELECT` at `index` the text an **absorbed** `WHEN CASE`
++    /// Hands the `SELECT` at `index` the value an **absorbed** `WHEN CASE`
+     /// compares against, from register `case`, or clears it for a plain
+     /// `SELECT` that has no `CASE` expression at all.
+     SelectCaseText { index: u32, case: Option<u16> },
+     /// Tests the listed `WHEN`/`WHEN CASE` at `index` and stores whether it
+     /// holds in register `dst`, as the Rexx logical value [`Op::JumpUnless`]
+     /// reads back.
+     WhenTest {
+         index: u32,
+         case: Option<u16>,
+         dst: u16,
+diff --git a/rust/crates/rexx-exec/src/ir/compile.rs b/rust/crates/rexx-exec/src/ir/compile.rs
+index bf4922d33..878f7faeb 100644
+--- a/rust/crates/rexx-exec/src/ir/compile.rs
++++ b/rust/crates/rexx-exec/src/ir/compile.rs
+@@ -485,21 +485,21 @@ pub(crate) fn compile(
+                 });
+                 push_echo(&mut ops, echo, instruction_index(index)?);
+                 if let Some(dst) = case_reg {
+                     ops.push(Op::EvalExpr {
+                         index: instruction_index(index)?,
+                         slot: 0,
+                         dst,
+                     });
+                 }
+                 // Closed here, so that `SelectCaseText` below is past the
+-                // region's end -- setting the case text is the construct's
++                // region's end -- setting the case value is the construct's
+                 // business rather than the header clause's, and its own doc
+                 // comment has why.
+                 close_region(&mut ops, at)?;
+                 ops.push(Op::SelectCaseText {
+                     index: instruction_index(index)?,
+                     case: case_reg,
+                 });
+                 // Past the whole construct, so nothing between here and the
+                 // `END` can reuse the register. A `select_end` of `len` has no
+                 // instruction to hang the release on and needs none: there is
+@@ -578,26 +578,25 @@ pub(crate) fn compile(
+                 let mark = registers.mark();
+                 let dst = registers.alloc()?;
+                 let at = op_index(&ops)?;
+                 let echo = echoes(trace, instruction);
+                 ops.push(Op::Clause {
+                     index: instruction_index(index)?,
+                     end: 0,
+                 });
+                 push_echo(&mut ops, echo, instruction_index(index)?);
+                 // **Only a plain `WHEN`'s condition promotes.** A `WhenCase`
+-                // holds a list of values compared against the enclosing
+-                // `SELECT CASE`'s own text through `Interp::test_case_when`,
+-                // which is not a condition at all: it traces two `>>>` lines
+-                // per value and raises nothing for a value that is not
+-                // `0`/`1`. So it stays on `Op::WhenTest`, which is the op that
+-                // does that whole job, and so does a `When` whose condition
++                // holds a list of values the enclosing `SELECT CASE`'s value
++                // is sent `==` with through `Interp::test_case_when`, which is
++                // not a condition at all: it traces two `>>>` lines per value.
++                // So it stays on `Op::WhenTest`, which is the op that does
++                // that whole job, and so does a `When` whose condition
+                 // `native_shape` declines.
+                 let jump = match &instruction.kind {
+                     InstructionKind::When { condition, .. }
+                         if native_shape(condition, Some(NodePath::ROOT)) =>
+                     {
+                         push_native(
+                             &mut ops,
+                             echoes_values,
+                             &mut consts,
+                             &mut registers,
+diff --git a/rust/crates/rexx-exec/src/ir/drive.rs b/rust/crates/rexx-exec/src/ir/drive.rs
+index 525022b0c..3fbbfe757 100644
+--- a/rust/crates/rexx-exec/src/ir/drive.rs
++++ b/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -7,21 +7,21 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The driver: what runs a compiled [`Chunk`] for the activation on top of
+ //! the stack.
+ 
+ use std::rc::Rc;
+ 
+-use rexx_core::{Decoded, FrameId, ObjRef, ParkedFrame, RegFrame};
++use rexx_core::{FrameId, ObjRef, ParkedFrame, RegFrame};
+ use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, Program, ProgramSource, SymbolId};
+ 
+ use super::{BodyEngine, Chunk, ConditionKeyword, Op, SendForm};
+ use crate::activation::{CallType, body_of};
+ use crate::clause::{ClauseOutcome, ClauseValue};
+ use crate::eval::{SymbolRead, call_target_name};
+ use crate::plan::Plan;
+ use crate::run::{
+     Absorbed, CallEntry, CallResolution, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues,
+     QueueKeyword, ReturnKeyword, SelectEscape, SelectResume, Started, SteppedClause, absorb,
+@@ -1467,31 +1467,21 @@ macro_rules! region_ops {
+                     // **A value that is already a logical
+                     // needs neither a frame nor the general
+                     // test.** `condition_value` opens a temps
+                     // frame and roots the value, which its own
+                     // doc explains is for `WHILE`/`UNTIL`: they
+                     // re-test once per pass inside the
+                     // enclosing `DO`'s single frame. An
+                     // `IF`/`WHEN` tests once, and its value is
+                     // already rooted in the register it came
+                     // from.
+-                    let quick = if value == crate::eval::LOGICAL_TRUE {
+-                        Some(true)
+-                    } else if value == crate::eval::LOGICAL_FALSE {
+-                        Some(false)
+-                    } else {
+-                        match value.decode() {
+-                            rexx_core::Decoded::SmallInt(1) => Some(true),
+-                            rexx_core::Decoded::SmallInt(0) => Some(false),
+-                            _ => None,
+-                        }
+-                    };
++                    let quick = crate::eval::truth_without_conversion(value);
+                     let holds = match quick {
+                         Some(holds) if !$self.trace_mode().results => holds,
+                         _ => match $self.condition_value(
+                             value,
+                             ConditionTrace::Result(indent),
+                             false,
+                             keyword.raiser(),
+                         ) {
+                             Ok(holds) => holds,
+                             Err(failure) => break $cold Err(failure),
+@@ -1512,39 +1502,38 @@ macro_rules! region_ops {
+                         Ok(false) => break $region *target,
+                         Err(failure) => break $cold Err(failure),
+                     }
+                 }
+                 Op::WhenTest { $index, case, dst } => {
+                     debug_assert!(
+                         $chunk.holds_register(*dst),
+                         "op writes register {dst} outside the region the chunk \
+                      reserved"
+                     );
+-                    let case_text = match case {
++                    let case = match case {
+                         Some(register) => {
+                             debug_assert!(
+                                 $chunk.holds_register(*register),
+                                 "op reads register {register} outside the region \
+                              the chunk reserved"
+                             );
+-                            let value = $registers.get(*register);
+-                            Some($self.to_text(value).to_vec())
++                            Some($registers.get(*register))
+                         }
+                         None => None,
+                     };
+                     debug_assert_names_the_clause(
+                         $code, *$index, $clause, "WhenTest",
+                     );
+                     let holds = match $self.scan_when(
+                         $code,
+                         $clause,
+-                        case_text.as_deref(),
++                        case,
+                     ) {
+                         Ok(holds) => holds,
+                         Err(failure) => break $cold Err(failure),
+                     };
+                     // In range unconditionally: `SMALL_INT_MAX`
+                     // is far above one. Stored as the logical
+                     // value `Op::JumpUnless` reads back, exactly
+                     // as an `IF`'s condition is.
+                     let value = ObjRef::small_int(i64::from(holds))
+                         .unwrap_or(ObjRef::NIL);
+@@ -3562,21 +3551,21 @@ impl Interp {
+                         // not checked and is not emitted: it would re-run ops inside
+                         // the range, which is a wrong answer rather than a silent one,
+                         // and checking it costs a second `op_at` on the hot path.
+                         Op::Jump { target } => {
+                             if *target > stop {
+                                 return Err(Loud::jump_out_of_range().into());
+                             }
+                             pc = *target;
+                             continue 'ops;
+                         }
+-                        // Handing an absorbed `WHEN CASE` the text it compares against
++                        // Handing an absorbed `WHEN CASE` the value it compares against
+                         // (`Op::SelectCaseText`'s own doc has why it is here rather
+                         // than inside the header's clause region), and opening a frame
+                         // over a branch. None of the three runs a clause or produces a
+                         // `Flow`, so each continues straight to the next op.
+                         Op::SelectCaseText { index, case } => {
+                             let value = case.map(|register| {
+                         debug_assert!(
+                             chunk.holds_register(register),
+                             "op reads register {register} outside the region the chunk reserved"
+                         );
+@@ -3914,35 +3903,24 @@ impl Interp {
+             start: otherwise,
+             end: otherwise_end,
+             resume: otherwise_resume(code.body.instructions.len(), parts.end),
+             op_end: op_at(chunk, otherwise_end)?,
+             branch: Branch::Otherwise,
+         })
+     }
+ 
+     /// Whether register `reg` holds the Rexx logical value `1`.
+     fn register_holds(&self, registers: RegFrame<'_>, reg: u16) -> Result<bool, Failure> {
+-        let value = registers.get(reg);
+-        // The two handles a logical arrives in, compared as integers: the
+-        // constant a comparison answers with, and the small int
+-        // `Op::WhenTest` writes back for everything else.
+-        if value == crate::eval::LOGICAL_TRUE {
+-            return Ok(true);
+-        }
+-        if value == crate::eval::LOGICAL_FALSE {
+-            return Ok(false);
+-        }
+-        match value.decode() {
+-            Decoded::SmallInt(1) => Ok(true),
+-            Decoded::SmallInt(0) => Ok(false),
+-            _ => Err(Loud::register_not_logical().into()),
+-        }
++        // A register this reads was written with a logical constant or the
++        // small int `Op::WhenTest` stores, so no conversion is owed.
++        crate::eval::truth_without_conversion(registers.get(reg))
++            .ok_or_else(|| Loud::register_not_logical().into())
+     }
+ }
+ 
+ /// Asserts, in debug, that the op naming instruction `index` from inside a
+ /// clause region names that region's own clause.
+ fn debug_assert_names_the_clause(code: &Code<'_>, index: u32, clause: &Instruction, op: &str) {
+     debug_assert_eq!(
+         code.body
+             .instructions
+             .get(index as usize)
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index 2172a75c4..653e6232d 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -11,21 +11,20 @@
+ 
+ //! The instruction loop: `Flow`, `step`, and the two functions that run it.
+ 
+ use crate::activation::{
+     Activation, AutoExpose, CallType, Entry, Inherited, InstanceVar, ReplyState, TraceEntry, Trap,
+     TrappedCondition, body_of,
+ };
+ use crate::builtin;
+ use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
+ use crate::error::{FailureSite, Raised, Search};
+-use crate::eval::logical_value;
+ use crate::ir::{BodyEngine, NodePath};
+ use crate::plan::{BodyKey, Package};
+ use crate::scheduler::ExecOutcome;
+ use crate::trace::{
+     Announced, is_whole_number, raised_invalid_trace_letter, raised_numeric_trace_interactive_only,
+ };
+ use crate::value::{exact_small_int, within_digits};
+ use crate::{
+     ActiveCondition, CallContext, Code, Failure, InstalledRoutine, Interp, Loud, Novalue,
+     PendingTrap, VarHome,
+@@ -42,25 +41,26 @@ use rexx_parse::{
+ use std::borrow::Cow;
+ use std::rc::Rc;
+ 
+ // Each clause's static nesting indent, and the printed indent built on it.
+ mod indent;
+ pub(crate) use indent::{all_indents, static_indent};
+ 
+ // The `Raised` constructors for the conditions the instruction loop raises.
+ mod raised;
+ use raised::{
+-    raise_syntax_condition, raised_digit_led, raised_dot_led, raised_for_count_not_whole,
+-    raised_guard_not_logical, raised_iterate_no_loop, raised_iterate_no_match,
+-    raised_iterate_wrong_kind, raised_leave_no_loop, raised_leave_no_match,
+-    raised_naming_the_operand, raised_repetition_count_not_whole, raised_select_no_when,
+-    raised_symbol_expected, raised_until_not_logical, raised_while_not_logical,
++    raise_syntax_condition, raised_available_not_logical, raised_digit_led, raised_dot_led,
++    raised_for_count_not_whole, raised_guard_not_logical, raised_iterate_no_loop,
++    raised_iterate_no_match, raised_iterate_wrong_kind, raised_leave_no_loop,
++    raised_leave_no_match, raised_naming_the_operand, raised_repetition_count_not_whole,
++    raised_select_no_when, raised_symbol_expected, raised_until_not_logical,
++    raised_when_case_not_logical, raised_while_not_logical,
+ };
+ pub(crate) use raised::{
+     raised_for_code, raised_from_settings, raised_if_not_logical, raised_when_not_logical,
+ };
+ 
+ // `SELECT`'s own clauses, and where `IF`, `WHEN` and `SELECT` send control.
+ mod select;
+ pub(crate) use select::{
+     Absorbed, SelectEscape, SelectResume, absorb, if_targets, otherwise_range, otherwise_resume,
+     select_escape, select_parts, when_resume, when_targets,
+@@ -888,24 +888,24 @@ impl Interp {
+                     ConditionTrace::Result(self.activity.clause_state.current_value_indent),
+                     raised_when_not_logical,
+                 )?;
+                 Ok(Flow::Next)
+             }
+             // `SELECT CASE`'s own absorbed form.
+             InstructionKind::WhenCase {
+                 values,
+                 false_target,
+                 ..
+-            } => match self.activation().current_case_text.clone() {
+-                Some(case_text) => {
++            } => match self.activation().current_case {
++                Some(case) => {
+                     let indent = self.activity.clause_state.current_value_indent;
+-                    if self.test_case_when(code, values, &case_text, indent)? {
++                    if self.test_case_when(code, values, case, indent)? {
+                         Ok(Flow::Next)
+                     } else {
+                         // **Corrected after a second re-verification found
+                         // the first version of this line wrong under
+                         // nesting.** `current_value_indent.saturating_sub
+                         // (2)` (this line's own first attempt) gave the
+                         // right answer at the top level by coincidence
+                         // (`6 - 2 = 4`) and the *wrong* one nested one `DO`
+                         // deeper (`8 - 2 = 6`, where the oracle still wants
+                         // `4`) -- measured directly (`t13_f3_nested.rex`,
+@@ -3645,28 +3645,21 @@ impl Interp {
+         // their condition once per pass inside the enclosing `DO`
+         // instruction's single frame, so the push below accumulates one
+         // `ObjRef` per pass -- and one pinned heap object per pass whenever
+         // the condition's result is one -- for the whole of the loop's run.
+         // The value is never handed back (this answers a `bool`), so a frame
+         // closed here releases it at the right time for every caller,
+         // `IF`/`WHEN` included. The `?` path below leaves the pop to the outer
+         // truncation, as `pop_frame`'s own doc describes.
+         let frame = self.roots.activity_mut().push_frame();
+         self.roots.activity_mut().push_temp(value);
+-        // **The owned copy is taken only when a line will print it.** Both
+-        // formatters below return at once unless `results` is on, and the copy
+-        // exists only because `to_text` borrows `self` while they need it
+-        // mutably -- so off that path the borrow is enough and the answer is
+-        // decided from it directly. Measured with `heaptrack` on
+-        // `samples/rexxcps.rex`: this was the largest single allocation site
+-        // in the interpreter, one copy per condition evaluated.
+-        let decided = if self.trace_mode().results {
++        if self.trace_mode().results {
+             let text = self.to_text(value).to_vec();
+             match trace {
+                 // `IF`/plain `WHEN`'s own `>>>` (`IfInstruction.cpp:140`, and
+                 // `select` / `when 1 = 1 then` measured to show the identical
+                 // shape) -- measured, `WHILE`/`UNTIL` never get this (this
+                 // task's report: `trace r` over a `DO WHILE` shows only `>K>
+                 // "WHILE" => ...`, no bare `>>>` alongside it), which is why
+                 // this is a variant a caller picks rather than something
+                 // `eval_condition` decides on its own. `SELECT CASE`'s own
+                 // `WHEN`/`WhenCase` comparison never reaches this function at
+@@ -3674,83 +3667,53 @@ impl Interp {
+                 ConditionTrace::Result(indent) => self.trace_result(indent, &text),
+                 // `WHILE`/`UNTIL`'s own `>K>` (`DoBlockComponents.cpp`'s
+                 // `traceKeywordResult(WHILE, ...)`/`(UNTIL, ...)`) -- re-fires
+                 // every pass because the oracle re-evaluates the condition every
+                 // pass too, which `run_repeating`'s own call site already does
+                 // without any change from this task.
+                 ConditionTrace::Keyword(indent, keyword) => {
+                     self.trace_keyword(indent, keyword, &text);
+                 }
+             }
+-            Self::condition_holds(checked, &text, raise)
+-        } else {
+-            // **Off the tracing path the bytes need not be moved anywhere.**
+-            // `to_text` would copy them into the interpreter's scratch slot
+-            // and hand back a borrow of it; for a value that carries its own
+-            // bytes that copy buys nothing. A condition's value is one byte --
+-            // `0` or `1` -- far more often than it is anything else, and one
+-            // byte always rides in the handle.
+-            match value.decode() {
+-                Decoded::Text(inline) => Self::condition_holds(checked, &inline, raise),
+-                // `to_text` renders these two as `"0"` and `"1"`, which both
+-                // arms of `condition_holds` then read as this same answer.
+-                // Every other integer falls to the arm below, so the failure
+-                // it raises still names the value as the oracle spells it.
+-                Decoded::SmallInt(number) if number == 0 || number == 1 => Ok(number == 1),
+-                _ => {
+-                    let text = self.to_text(value);
+-                    Self::condition_holds(checked, &text, raise)
+-                }
+-            }
+-        };
+-        // After the rendering above is out of scope, so the borrow it may hold
+-        // on `self` has ended. The decision itself touches neither `self` nor
+-        // the roots, so making it before this pop rather than after changes no
+-        // answer and no lifetime.
++        }
++        // A comma list answers a logical constant of its own, its elements
++        // having been judged one by one.
++        debug_assert!(
++            !checked || crate::eval::truth_without_conversion(value).is_some(),
++            "a checked condition answered something other than a logical constant"
++        );
++        let decided = self.truth(value, raise);
+         self.roots.activity_mut().pop_frame(frame);
+         decided
+     }
+ 
+-    /// Whether a condition's rendered text holds, and the failure when it is
+-    /// neither `0` nor `1`.
+-    fn condition_holds(
+-        checked: bool,
+-        text: &[u8],
+-        raise: fn(&[u8]) -> Raised,
+-    ) -> Result<bool, Failure> {
+-        if checked {
+-            Ok(text == b"1")
+-        } else {
+-            logical_value(text).ok_or_else(|| raise(text).into())
+-        }
+-    }
+-
+-    /// Whether any of a `WHEN CASE`'s `values` compares `==` (byte-for-byte,
+-    /// no padding, no numeric awareness) equal to the `SELECT CASE`'s own
+-    /// `case_text`, matching on the first that does (an OR of `==`, the
+-    /// opposite of a plain `WHEN`'s comma list, which is an AND checked for
+-    /// `0`/`1` -- `ast.rs`'s own doc comment on `WhenCase`).
++    /// Whether the `SELECT CASE` value `case` answers true to `==` with any
++    /// of a `WHEN CASE`'s `values`, matching on the first that does
++    /// (`RexxInstructionCaseWhen::execute`, `WhenCaseInstruction.cpp:157`:
++    /// the case value is the receiver, and a non-logical answer is 34.905).
+     fn test_case_when(
+         &mut self,
+         code: &Code<'_>,
+         values: &[Expr],
+-        case_text: &[u8],
++        case: ObjRef,
+         indent: usize,
+     ) -> Result<bool, Failure> {
+         for value in values {
+             let value = self.eval(code, value)?;
+             self.roots.activity_mut().push_temp(value);
+             let text = self.to_text(value).to_vec();
+             self.trace_result(indent, &text);
+-            let matched = text == case_text;
+-            self.trace_result(indent, if matched { b"1" } else { b"0" });
+-            if matched {
++            let answer = self.apply_binary(rexx_parse::Operator::StrictEqual, case, value)?;
++            self.roots.activity_mut().push_temp(answer);
++            let text = self.to_text(answer).to_vec();
++            self.trace_result(indent, &text);
++            if self.truth(answer, raised_when_case_not_logical)? {
+                 return Ok(true);
+             }
+         }
+         Ok(false)
+     }
+ 
+     /// `instruction`'s own clause text and the 1-based line to print it against,
+     /// or `None` when `source` is `None`.
+     pub(crate) fn clause_site(
+         &self,
+diff --git a/rust/crates/rexx-exec/src/run/interpret.rs b/rust/crates/rexx-exec/src/run/interpret.rs
+index afbdbb8b5..6a9222ed2 100644
+--- a/rust/crates/rexx-exec/src/run/interpret.rs
++++ b/rust/crates/rexx-exec/src/run/interpret.rs
+@@ -249,42 +249,45 @@ impl Interp {
+ 
+     /// One line typed at a pause, run as an `INTERPRET` fragment that traces
+     /// nothing. A SYNTAX condition inside it is reported under the two
+     /// `+++ Interactive trace.` lines and swallowed, and the pause goes on --
+     /// measured, `zz = 1/0` at a pause reports 42.3 and the next line still
+     /// runs.
+     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
+         let saved_pause = self.replace_debug_pause(true);
+         // A `SELECT CASE` typed at the pause opens and closes inside the
+         // line; the construct the pause interrupted keeps its own value.
+-        let saved_case = self.activation().current_case_text.clone();
++        let saved_case = self.activation().current_case;
++        if let Some(case) = saved_case {
++            self.roots.activity_mut().push_temp(case);
++        }
+         self.activity.fragment_depth += 1;
+         let (line, indent) = (
+             self.activity.clause_state.line(),
+             self.activity.clause_state.current_value_indent,
+         );
+         self.enter_fragment_level(line, indent);
+         let saved_entry = self.enter_fragment(self.activity.clause_line_override.is_some());
+         let outcome = pinned!(
+             self,
+             crate::pinning::PinKind::Interpret,
+             self.run_fragment(text)
+         );
+         let depth = self.activity.fragment_depth;
+         self.activity
+             .pending_traps
+             .retain(|pending| pending.fragment_depth != depth);
+         self.activity.fragment_depth -= 1;
+         self.leave_fragment_level();
+         self.leave_fragment(saved_entry);
+         self.replace_debug_pause(saved_pause);
+-        self.activation_mut().current_case_text = saved_case;
++        self.activation_mut().current_case = saved_case;
+         match outcome {
+             Ok(_) => Ok(()),
+             Err(Failure::Raised(raised)) => {
+                 self.report_debug_error(&raised);
+                 Ok(())
+             }
+             Err(other) => Err(other),
+         }
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/run/loops.rs b/rust/crates/rexx-exec/src/run/loops.rs
+index 37c01b349..1b9d8e20e 100644
+--- a/rust/crates/rexx-exec/src/run/loops.rs
++++ b/rust/crates/rexx-exec/src/run/loops.rs
+@@ -9,21 +9,21 @@
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `DO`/`LOOP`: the header, each kind of repetition, and the flat-loop path the op driver takes.
+ 
+ use super::{
+     ArithError, BehaviourId, Body, BodyEngine, ClauseOutcome, ClauseValue, Code, CompareOp,
+     ConditionTrace, ControlExpr, Cow, Decoded, Expr, ExprKind, Failure, Flow, Instruction,
+     InstructionKind, Interp, Loop, LoopConditional, LoopKind, Loud, NameShape, Novalue, Number,
+     ObjRef, ProgramSource, Raised, RegFrame, SymbolId, compare_decoded, exact_small_int,
+-    logical_value, raised_for_count_not_whole, raised_iterate_wrong_kind,
++    raised_available_not_logical, raised_for_count_not_whole, raised_iterate_wrong_kind,
+     raised_repetition_count_not_whole, raised_until_not_logical, raised_while_not_logical,
+     shape_of, within_digits,
+ };
+ use crate::clause::DeadlineCounted;
+ 
+ /// What one pass of a `DO`/`LOOP` body just did, from `do_body_outcome`.
+ enum DoOutcome {
+     /// The body ran off its end into the `END` clause.
+     FellThrough,
+     /// An `ITERATE` naming this construct cut the pass short. The line is
+@@ -953,21 +953,21 @@ impl Interp {
+         &mut self,
+         role: HeaderRole,
+         value: ObjRef,
+         values: &mut LoopHeaderValues,
+     ) -> Result<(), Failure> {
+         let answer = self.apply_prefix(rexx_parse::PrefixOp::Plus, value)?;
+         self.roots.activity_mut().push_temp(answer);
+         let descending = if role == HeaderRole::By {
+             let zero = self.counted(0);
+             let below = self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
+-            self.loop_truth(below)?
++            self.truth(below, Raised::not_logical)?
+         } else {
+             false
+         };
+         let objects = values.objects.get_or_insert_with(Box::default);
+         match role {
+             HeaderRole::Initial => objects.initial = Some(answer),
+             HeaderRole::To => objects.to = Some(answer),
+             _ => {
+                 objects.by = Some(answer);
+                 objects.descending = descending;
+@@ -2708,35 +2708,20 @@ impl Interp {
+             shape,
+             initial: None,
+             to,
+             by,
+             descending,
+             for_remaining,
+             stepped: true,
+         }))
+     }
+ 
+-    /// A message-driven loop's comparison answer as a logical value, the way
+-    /// WHILE and UNTIL take theirs: its text exactly `1` or `0`, and 34.901
+-    /// otherwise (Deviation 25).
+-    fn loop_truth(&mut self, answer: ObjRef) -> Result<bool, Failure> {
+-        if answer == crate::eval::LOGICAL_TRUE {
+-            return Ok(true);
+-        }
+-        if answer == crate::eval::LOGICAL_FALSE {
+-            return Ok(false);
+-        }
+-        self.roots.activity_mut().push_temp(answer);
+-        let text = self.to_text(answer).into_owned();
+-        logical_value(&text).ok_or_else(|| Raised::not_logical(&text).into())
+-    }
+-
+     /// One pass of an [`ObjectControl`] loop, `DoBlock::checkControl`: at a
+     /// re-test `+` is sent to `previous` with `BY` and the answer traced; the
+     /// value is bound as it is, then sent the `TO` comparison, and the loop
+     /// ends where that answers true. An object without the method is 97.1.
+     #[cold]
+     #[inline(never)]
+     fn object_control_pass(
+         &mut self,
+         code: &Code<'_>,
+         ctl: &mut ObjectControl,
+@@ -2761,21 +2746,21 @@ impl Interp {
+         };
+         ctl.stepped = true;
+         self.bind_control(code, ctl.control, bind_indent, value, ctl.at, ctl.shape)?;
+         if let Some(to) = ctl.to {
+             let compare = if ctl.descending {
+                 rexx_parse::Operator::LessThan
+             } else {
+                 rexx_parse::Operator::GreaterThan
+             };
+             let past = self.apply_binary(compare, value, to)?;
+-            if self.loop_truth(past)? {
++            if self.truth(past, Raised::not_logical)? {
+                 return Ok(false);
+             }
+         }
+         if let Some(remaining) = &mut ctl.for_remaining {
+             if *remaining == 0 {
+                 return Ok(false);
+             }
+             *remaining -= 1;
+         }
+         Ok(true)
+@@ -2829,24 +2814,21 @@ impl Interp {
+         // A pass's own frame, as `count_pass`'s: the bound variables root
+         // INDEX and ITEM once written. The `?` paths leave it to the outer
+         // truncation.
+         let pass = self.roots.activity_mut().push_frame();
+         if !with.first {
+             self.supplier_send(supplier, b"NEXT")?;
+         }
+         with.first = false;
+         let available = self.supplier_send(supplier, b"AVAILABLE")?;
+         self.roots.activity_mut().push_temp(available);
+-        let text = self.string_value_text(available);
+-        if !logical_value(&text)
+-            .ok_or_else(|| Failure::from(Raised::syntax(34, 906, vec![text])))?
+-        {
++        if !self.truth(available, raised_available_not_logical)? {
+             self.roots.activity_mut().pop_frame(pass);
+             return Ok(false);
+         }
+         for (name, message) in [(with.index, &b"INDEX"[..]), (with.item, &b"ITEM"[..])] {
+             if let Some(name) = name {
+                 let value = self.supplier_send(supplier, message)?;
+                 self.roots.activity_mut().push_temp(value);
+                 self.bind_control(
+                     code,
+                     name,
+diff --git a/rust/crates/rexx-exec/src/run/raised.rs b/rust/crates/rexx-exec/src/run/raised.rs
+index 21c181836..1dccf5c45 100644
+--- a/rust/crates/rexx-exec/src/run/raised.rs
++++ b/rust/crates/rexx-exec/src/run/raised.rs
+@@ -52,20 +52,32 @@ pub(super) fn raised_guard_not_logical(found: &[u8]) -> Raised {
+ /// `Error_Logical_value_when`, the same shape as `raised_if_not_logical`
+ /// with `WHEN`'s own sub-number -- a plain `WHEN`'s comma list is the
+ /// opposite case (`WhenCase`'s doc comment) and never reaches this raiser:
+ /// [`crate::Interp::eval_condition`] hands a list over already `checked`, and
+ /// `crate::ir::compile`'s `native_shape` declines `ExprKind::Logical`, so a
+ /// list never becomes a `crate::ir::Op::ConditionJump` either.
+ pub(crate) fn raised_when_not_logical(found: &[u8]) -> Raised {
+     Raised::syntax(34, 2, vec![found.to_vec()])
+ }
+ 
++/// 34.905: a `SELECT CASE` value's `==` answer is not exactly `0` or `1`
++/// (`Error_Logical_value_when_case`, `WhenCaseInstruction.cpp:164`).
++pub(super) fn raised_when_case_not_logical(found: &[u8]) -> Raised {
++    Raised::syntax(34, 905, vec![found.to_vec()])
++}
++
++/// 34.906: a supplier's `AVAILABLE` answer is not exactly `0` or `1`
++/// (`Error_Logical_value_supplier`, `SupplierClass.cpp:158`).
++pub(super) fn raised_available_not_logical(found: &[u8]) -> Raised {
++    Raised::syntax(34, 906, vec![found.to_vec()])
++}
++
+ /// 7.3: a `SELECT` reached its `END` with every `WHEN` false and no
+ /// `OTHERWISE`. `Error_When_expected_nootherwise`, catalogue text "All WHEN
+ /// expressions of SELECT are false; OTHERWISE expected.", no substitutions
+ /// (measured against `interpreter/messages/rexxmsg.xml`'s own `<Text>` for
+ /// major 7 sub 003, which carries no `<Sub>` tag).
+ pub(super) fn raised_select_no_when() -> Raised {
+     Raised::syntax(7, 3, Vec::new())
+ }
+ 
+ /// Converts a `rexx-num` settings failure into a `Raised`.
+diff --git a/rust/crates/rexx-exec/src/run/select.rs b/rust/crates/rexx-exec/src/run/select.rs
+index f5ce546ca..74de5e180 100644
+--- a/rust/crates/rexx-exec/src/run/select.rs
++++ b/rust/crates/rexx-exec/src/run/select.rs
+@@ -41,48 +41,45 @@ impl Interp {
+         // `RexxInstructionSelectCase::execute` does once the scrutinee has
+         // been evaluated and its `>K>` traced, and a `CALL ON` handler
+         // delivered at that boundary is based on whatever the counter reads
+         // then. Measured: the handler `h:` of a `select case raiser()` at top
+         // level echoes at `12 *-*     h:` on the oracle, where the `SELECT`
+         // clause itself echoes unindented.
+         self.settle_block_indent(true, indent);
+         Ok(value)
+     }
+ 
+-    /// Hands a `SELECT` its case text: the value its `WHEN CASE`s compare
+-    /// against, and the activation's `current_case_text` for the **absorbed**
+-    /// ones that have no other way to reach it.
+-    pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
+-        let text = value.map(|value| self.to_text(value).to_vec());
+-        self.activation_mut().current_case_text = text.clone();
+-        text
++    /// Hands the activation the `SELECT CASE` value its **absorbed** `WHEN
++    /// CASE`s compare against, which have no other way to reach it.
++    pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) {
++        self.activation_mut().current_case = value;
+     }
+ 
+     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
+     pub(crate) fn scan_when(
+         &mut self,
+         code: &Code<'_>,
+         when_instruction: &Instruction,
+-        case_text: Option<&[u8]>,
++        case: Option<ObjRef>,
+     ) -> Result<bool, Failure> {
+         // The clause unit set this to this `WHEN`'s own printed indent on the
+         // way in, which is what its condition's `>>>` lines trace at.
+         let indent = self.activity.clause_state.current_value_indent;
+         match &when_instruction.kind {
+             InstructionKind::When { condition, .. } => self.eval_condition(
+                 code,
+                 condition,
+                 ConditionTrace::Result(indent),
+                 raised_when_not_logical,
+             ),
+-            InstructionKind::WhenCase { values, .. } => match case_text {
+-                Some(case_text) => self.test_case_when(code, values, case_text, indent),
++            InstructionKind::WhenCase { values, .. } => match case {
++                Some(case) => self.test_case_when(code, values, case, indent),
+                 // A listed `WhenCase` with no `case` expression: a plain
+                 // `SELECT` with no `CASE` at all, which the parser should
+                 // never produce for a `WhenCase` node (only `SELECT CASE`
+                 // ever builds one, `ast.rs`'s own doc comment) -- F-EX3, the
+                 // same unproven parser invariant the absorbed `WhenCase` arm
+                 // already refuses to crash on, and formerly an `.expect()`
+                 // here that did. Evaluates `values` for side effects and
+                 // never matches, the identical fallback.
+                 None => {
+                     for value in values {
+diff --git a/rust/crates/rexx-exec/src/security.rs b/rust/crates/rexx-exec/src/security.rs
+index b5dc5b3f2..f31311fa2 100644
+--- a/rust/crates/rexx-exec/src/security.rs
++++ b/rust/crates/rexx-exec/src/security.rs
+@@ -112,26 +112,24 @@ impl Interp {
+         let caller = self.caller();
+         let answer = pinned!(
+             self,
+             crate::pinning::PinKind::SecurityManager,
+             self.send_message(manager, message, None, &[Some(directory)], caller)
+         )?;
+         let Some(answer) = answer else {
+             return Err(Raised::no_result(message).into());
+         };
+         self.roots.activity_mut().push_temp(answer);
+-        let text = self.required_string_value(answer)?;
+-        let text = self.to_text(text).into_owned();
+-        match crate::eval::logical_value(&text) {
+-            Some(true) => Ok(Some(directory)),
+-            Some(false) => Ok(None),
+-            None => Err(Raised::authorization_not_logical(&text).into()),
++        if self.truth(answer, Raised::authorization_not_logical)? {
++            Ok(Some(directory))
++        } else {
++            Ok(None)
+         }
+     }
+ 
+     /// The info directory one checkpoint hands its manager.
+     fn security_arguments(&mut self, entries: &[(&[u8], ObjRef)]) -> Result<ObjRef, Failure> {
+         let class = self
+             .classes()
+             .lookup("Directory")
+             .expect("Directory is a native class");
+         let directory = self.native_instance(class);
+diff --git a/rust/crates/rexx-exec/tests/truth.rs b/rust/crates/rexx-exec/tests/truth.rs
+new file mode 100644
+index 000000000..2ae24621c
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/truth.rs
+@@ -0,0 +1,181 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! One truth judgment: each case's input is a Rexx expression, fed through
++//! every context that takes a logical value. A context answers `true`,
++//! `false`, an Error 34 code, or 97.1 where the value is sent the operator as
++//! a message instead. Beside the recorded answers, every context that judges
++//! must agree on true, false or error, and each context raises one
++//! sub-number whatever the value.
++
++use std::collections::BTreeMap;
++
++use rayon::prelude::*;
++use rexx_exec::Invocation;
++
++mod watchdog;
++
++const CASES: &str = "tests/truth";
++
++/// The classes a case's expression may name.
++const CLASSES: &str = "::class s1\n::method string; return 1\n\
++                       ::class s0\n::method string; return 0\n\
++                       ::class sd\n";
++
++/// Each context's name and program, `E` standing for the expression. Every
++/// program prints `T` or `F`.
++const CONTEXTS: &[(&str, &str)] = &[
++    ("if", "v = E\nif v then say 'T'; else say 'F'\n"),
++    (
++        "when",
++        "v = E\nselect; when v then say 'T'; otherwise say 'F'; end\n",
++    ),
++    (
++        "while",
++        "v = E\nt = 'F'\ndo while v; t = 'T'; leave; end\nsay t\n",
++    ),
++    (
++        "until",
++        "v = E\nn = 0\ndo until v; n = n + 1; if n > 1 then leave; end\nsay word('T F', n)\n",
++    ),
++    ("not", "v = E\nsay translate(\\v, 'FT', '10')\n"),
++    ("and", "v = E\nsay translate(1 & v, 'TF', '10')\n"),
++    ("list", "v = E\nif 1, v then say 'T'; else say 'F'\n"),
++    (
++        "case",
++        "select case .c~new; when 'x' then say 'T'; otherwise say 'F'; end\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++    (
++        "do-to",
++        "n = 0\ndo i = .c~new to 3 for 3; n = n + 1; end\nsay translate(n, 'TF', '03')\n\
++         exit\n::class c\n::method '+'; return self\n::method '>'; return E\n",
++    ),
++    (
++        "do-by",
++        "n = 0\ndo i = .k~new to 5 by .b~new for 3; n = n + 1; end\n\
++         say translate(n, 'TF', '03')\nexit\n\
++         ::class k\n::method '+'; return self\n::method '>'; return 0\n::method '<'; return 1\n\
++         ::class b\n::method '+'; return self\n::method '<'; return E\n",
++    ),
++    (
++        "array-hasitem",
++        "k = .array~of(.c~new)\nsay translate(k~hasItem(.c~new), 'TF', '10')\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++    (
++        "array-index",
++        "k = .array~of(.c~new)\nsay translate(k~index(.c~new) \\== .nil, 'TF', '10')\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++    (
++        "list-hasitem",
++        "k = .list~of(.c~new)\nsay translate(k~hasItem(.c~new), 'TF', '10')\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++    (
++        "list-index",
++        "k = .list~of(.c~new)\nsay translate(k~index(.c~new) \\== .nil, 'TF', '10')\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++    (
++        "table-hasitem",
++        "k = .table~new; k['k'] = .c~new\nsay translate(k~hasItem(.c~new), 'TF', '10')\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++    (
++        "table-index",
++        "k = .table~new; k['k'] = .c~new\n\
++         say translate(k~index(.c~new) \\== .nil, 'TF', '10')\n\
++         exit\n::class c\n::method '=='; return E\n",
++    ),
++];
++
++/// What one context answered: `true`, `false`, or the error code.
++fn answer(context: &str, program: &str, expression: &str) -> String {
++    let mut text = program.replace('E', expression);
++    if !text.contains("exit\n") {
++        text.push_str("exit\n");
++    }
++    text.push_str(CLASSES);
++    let outcome = watchdog::run_bounded("truth.rex", text.into_bytes(), Invocation::none());
++    let stdout = String::from_utf8_lossy(&outcome.stdout);
++    let stderr = String::from_utf8_lossy(&outcome.stderr);
++    match (outcome.exit_code, stdout.trim_end()) {
++        (0, "T") => "true".to_string(),
++        (0, "F") => "false".to_string(),
++        _ => stderr
++            .lines()
++            .find_map(|line| {
++                let (code, _) = line.strip_prefix("Error ")?.split_once(':')?;
++                (code.contains('.') && !code.contains(' ')).then(|| code.to_string())
++            })
++            .unwrap_or_else(|| {
++                panic!(
++                    "{context} over {expression}: rc {} stdout {stdout:?} stderr {stderr:?}",
++                    outcome.exit_code
++                )
++            }),
++    }
++}
++
++fn class(answer: &str) -> Option<&'static str> {
++    match answer {
++        "true" => Some("true"),
++        "false" => Some("false"),
++        code if code.starts_with("34.") => Some("error"),
++        _ => None,
++    }
++}
++
++#[test]
++fn every_context_judges_a_value_alike() {
++    // Each context's error code, across every case, for the per-context check.
++    let mut raised: BTreeMap<&str, BTreeMap<String, String>> = BTreeMap::new();
++    datadriven::walk(CASES, |file| {
++        file.run(|case| {
++            assert_eq!(case.directive, "truth", "unknown directive");
++            let expression = case.input.trim_end();
++            let answers: Vec<(&str, String)> = CONTEXTS
++                .par_iter()
++                .map(|(context, program)| (*context, answer(context, program, expression)))
++                .collect();
++            let judged: Vec<(&str, &'static str)> = answers
++                .iter()
++                .filter_map(|(context, answer)| Some((*context, class(answer)?)))
++                .collect();
++            assert!(
++                judged.windows(2).all(|pair| pair[0].1 == pair[1].1),
++                "the contexts judge {expression} differently: {judged:?}"
++            );
++            for (context, answer) in &answers {
++                if answer.starts_with("34.") {
++                    raised
++                        .entry(context)
++                        .or_default()
++                        .insert(answer.clone(), expression.to_string());
++                }
++            }
++            answers
++                .iter()
++                .map(|(context, answer)| format!("{context}: {answer}\n"))
++                .collect::<String>()
++        });
++    });
++    for (context, codes) in &raised {
++        assert_eq!(
++            codes.len(),
++            1,
++            "{context} raises more than one sub-number: {codes:?}"
++        );
++    }
++    assert!(!raised.is_empty(), "no case raised");
++}
+diff --git a/rust/crates/rexx-exec/tests/truth/values b/rust/crates/rexx-exec/tests/truth/values
+new file mode 100644
+index 000000000..b2a988f71
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/truth/values
+@@ -0,0 +1,335 @@
++# '1' in each of its forms is true
++truth
++'1'
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '1' in each of its forms is true
++truth
++1
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '1' in each of its forms is true
++truth
++0+1
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '1' in each of its forms is true
++truth
++'1'||''
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '1' in each of its forms is true
++truth
++left('12',1)
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '1' in each of its forms is true
++truth
++1~string
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '1' in each of its forms is true
++truth
++.true~copy
++----
++if: true
++when: true
++while: true
++until: true
++not: true
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# an array is its items joined by line ends
++truth
++.array~of(1)
++----
++if: true
++when: true
++while: true
++until: true
++not: 97.1
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# '0' is false
++truth
++'0'
++----
++if: false
++when: false
++while: false
++until: false
++not: false
++and: false
++list: false
++case: false
++do-to: false
++do-by: false
++array-hasitem: false
++array-index: false
++list-hasitem: false
++list-index: false
++table-hasitem: false
++table-index: false
++
++# '0' is false
++truth
++.array~of(0)
++----
++if: false
++when: false
++while: false
++until: false
++not: 97.1
++and: false
++list: false
++case: false
++do-to: false
++do-by: false
++array-hasitem: false
++array-index: false
++list-hasitem: false
++list-index: false
++table-hasitem: false
++table-index: false
++
++# anything else is an Error 34
++truth
++'banana'
++----
++if: 34.1
++when: 34.2
++while: 34.3
++until: 34.4
++not: 34.901
++and: 34.901
++list: 34.6
++case: 34.905
++do-to: 34.901
++do-by: 34.901
++array-hasitem: 34.901
++array-index: 34.901
++list-hasitem: 34.901
++list-index: 34.901
++table-hasitem: 34.901
++table-index: 34.901
++
++# anything else is an Error 34
++truth
++' 1'
++----
++if: 34.1
++when: 34.2
++while: 34.3
++until: 34.4
++not: 34.901
++and: 34.901
++list: 34.6
++case: 34.905
++do-to: 34.901
++do-by: 34.901
++array-hasitem: 34.901
++array-index: 34.901
++list-hasitem: 34.901
++list-index: 34.901
++table-hasitem: 34.901
++table-index: 34.901
++
++# anything else is an Error 34
++truth
++.array~of(1,2)
++----
++if: 34.1
++when: 34.2
++while: 34.3
++until: 34.4
++not: 97.1
++and: 34.901
++list: 34.6
++case: 34.905
++do-to: 34.901
++do-by: 34.901
++array-hasitem: 34.901
++array-index: 34.901
++list-hasitem: 34.901
++list-index: 34.901
++table-hasitem: 34.901
++table-index: 34.901
++
++# a user object is judged by what its STRING answers
++truth
++.s1~new
++----
++if: true
++when: true
++while: true
++until: true
++not: 97.1
++and: true
++list: true
++case: true
++do-to: true
++do-by: true
++array-hasitem: true
++array-index: true
++list-hasitem: true
++list-index: true
++table-hasitem: true
++table-index: true
++
++# a user object is judged by what its STRING answers
++truth
++.s0~new
++----
++if: false
++when: false
++while: false
++until: false
++not: 97.1
++and: false
++list: false
++case: false
++do-to: false
++do-by: false
++array-hasitem: false
++array-index: false
++list-hasitem: false
++list-index: false
++table-hasitem: false
++table-index: false
++
++# a user object is judged by what its STRING answers
++truth
++.sd~new
++----
++if: 34.1
++when: 34.2
++while: 34.3
++until: 34.4
++not: 97.1
++and: 34.901
++list: 34.6
++case: 34.905
++do-to: 34.901
++do-by: 34.901
++array-hasitem: 34.901
++array-index: 34.901
++list-hasitem: 34.901
++list-index: 34.901
++table-hasitem: 34.901
++table-index: 34.901
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/collection_equal_answer.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/collection_equal_answer.txt
+new file mode 100644
+index 000000000..9a8701bca
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/collection_equal_answer.txt
+@@ -0,0 +1,21 @@
++count 20
++/* hasItem and index judge an item's == answer as a truth value. */
++call t .s1~new
++call t .s0~new
++call t .array~of(1)
++call t .array~of(0)
++exit
++t: use arg answer
++a = .array~of(.c~new(answer))
++l = .list~of(.c~new(answer))
++t = .table~new; t['k'] = .c~new(answer)
++w = .c~new(answer)
++say a~hasItem(w) a~index(w) l~hasItem(w) l~index(w) t~hasItem(w) t~index(w)
++return
++::class c
++::method init; expose answer; use arg answer
++::method '=='; expose answer; return answer
++::class s1
++::method string; return 1
++::class s0
++::method string; return 0
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/collection_equal_not_logical.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/collection_equal_not_logical.txt
+new file mode 100644
+index 000000000..3513c50d0
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/collection_equal_not_logical.txt
+@@ -0,0 +1,7 @@
++count 6
++/* An item's == answer that is not 0 or 1 is Error 34.901. */
++l = .list~of(.c~new)
++say l~hasItem(.c~new)
++exit
++::class c
++::method '=='; return .array~of(1, 2)
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_available_string.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_available_string.txt
+new file mode 100644
+index 000000000..aa60bd0a9
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_with_available_string.txt
+@@ -0,0 +1,25 @@
++count 24
++/* DO WITH judges a supplier's AVAILABLE answer by its string value. */
++do with item v over .sup~new(.s1~new)
++  say 'item' v
++  leave
++end
++do with item v over .sup~new(.array~of(1))
++  say 'item' v
++  leave
++end
++do with item v over .sup~new(.array~of(0))
++  say 'never' v
++end
++say 'done'
++exit
++::class sup subclass supplier
++::method init
++  expose answer
++  use arg answer
++  self~init:super(.array~of('a'), .array~of(1))
++::method available
++  expose answer
++  return answer
++::class s1
++::method string; return 1
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/select_case_not_logical.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/select_case_not_logical.txt
+new file mode 100644
+index 000000000..22580035c
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/select_case_not_logical.txt
+@@ -0,0 +1,9 @@
++count 8
++/* A SELECT CASE value's == answer that is not 0 or 1 is Error 34.905. */
++select case .c~new
++  when 'x' then say 'x'
++  otherwise say 'otherwise'
++end
++exit
++::class c
++::method '=='; return 'banana'
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/select_case_object.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/select_case_object.txt
+new file mode 100644
+index 000000000..8a56ce280
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/select_case_object.txt
+@@ -0,0 +1,27 @@
++count 26
++/* SELECT CASE sends == to the case value with each WHEN CASE value and
++   judges the answer's truth. */
++trace r
++select case 3
++  when 1, 2+1 then say 'a'
++  otherwise say 'b'
++end
++c = .c~new
++select case c
++  when 'x', 'y' then say 'x'
++  when c then say 'self'
++  otherwise say 'none'
++end
++trace o
++select case .c~new
++  when 'z' then say 'z'
++  otherwise say 'otherwise'
++end
++exit
++::class c
++::method '=='
++  use arg other
++  if other == 'y' then return .s1~new
++  return 0
++::class s1
++::method string; return 1
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/truth_user_string.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/truth_user_string.txt
+new file mode 100644
+index 000000000..ffe434bbf
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/truth_user_string.txt
+@@ -0,0 +1,21 @@
++count 20
++/* A value is judged by its string value: a user object by what its STRING
++   method answers, an array by its items joined. IF, WHEN, WHILE, UNTIL, a
++   comma list, & and | each judge alike. */
++call t .s1~new
++call t .s0~new
++call t .array~of(1)
++call t .array~of(0)
++exit
++t: use arg v
++if v then say 'if T'; else say 'if F'
++select; when v then say 'when T'; otherwise say 'when F'; end
++n = 0; do while v; n = n + 1; leave; end; say 'while' n
++n = 0; do until v; n = n + 1; if n = 2 then leave; end; say 'until' n
++if 1, v then say 'list T'; else say 'list F'
++say 'and' (1 & v) 'or' (0 | v)
++return
++::class s1
++::method string; return 1
++::class s0
++::method string; return 0

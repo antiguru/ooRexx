@@ -99,3 +99,7 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 4 re-review 2 (task-4-rereview2.md): Critical 1 and new Minors 1-3 addressed; no new breakage.
 - Task 4: complete (7d233521f..66d9eac18).
 - Task 12 queue add: rooting of other ActivationCold fields (auto_expose owner/scope) for running activations unchecked; pre-existing divergences in task-4-report.md concern 6 (enhanced object name in 97.x, compiled method package in >I>, setMethod/run code cannot see caller classes, Directory~setMethod extra UNKNOWN traceback line, .context~executable in a method internal routine).
+- Task 4a implementer DONE_WITH_CONCERNS: d27a9d441, 08876442c, 7219f1377. Step 1 table 256 cells, all outside DO TO/BY oracle-identical. Perf vs 24394ca34 callgrind: emptyloop +0.6478%, rexxcps +0.18%, decloop -0.08%, dispatch +0.19%; emptyloop wall -0.23%.
+- Ruling: accept emptyloop +0.65% Ir as a codegen shift (emptyloop makes no truth judgment; 2 Ir/pass from register allocation in ops_loop_steady; four variants left it unchanged); recheck emptyloop cumulative against the 6.1 base at close with a layout control, as the Task 2 ruling does — cost if wrong: about half a percent on loop-heavy programs, visible at close.
+- whole_groups runs at Task 5 close and must cover 4a behaviour changes (SELECT CASE sends ==, collections raise 34.901, user STRING sent).
+- Task 4a review t4a-review (opus) dispatched, package review-24394ca34..7219f1377.diff.
