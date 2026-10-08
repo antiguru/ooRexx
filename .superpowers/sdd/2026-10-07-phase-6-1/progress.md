@@ -77,3 +77,5 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Watch rule: an implementer's idle "waiting" notice is not a report; check its status/processes within ~30 min (ScheduleWakeup), never at the next user message.
 - Per-task check and whole_groups schedule: see the Pre-flight rulings. Reusable prompts: task-reviewer-common.md, re-review-common.md, global-constraints.md. Gates script p61-gates/bggates.sh (Task 12 only).
 - To queue at Task 12 (beyond plan Step 1): SIGNAL ON propagation traceback line (Task 1); REPLY trace gap and TraceObject collector gap (Task 2); upstream ticket candidate: oracle DO TO/BY identity test (memory oorexx-do-to-true-identity-bug).
+
+- Task 3 fix round 3: dcd1db992, 0c75907d3, eb9c3c7b8. Perf vs 6.1 base: emptyloop -0.96%, decloop -2.67%, rexxcps -0.49%. Scoped re-review t3-rereview3 dispatched (FIX_BASE 6a3091cc6, HEAD eb9c3c7b8), report task-3-rereview3.md.
