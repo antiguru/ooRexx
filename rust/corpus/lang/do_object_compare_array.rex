@@ -1,0 +1,13 @@
+/* A loop driven by message goes on where its comparison answers an array
+   holding 0, as WHILE and UNTIL do on the same answer. */
+n = 0
+do i = .c~new to 3 for 3; n = n + 1; end
+say 'DO' n
+x = .array~of(0)
+m = 0
+do while x; m = m + 1; if m = 2 then leave; end
+say 'WHILE' m
+exit
+::class c
+::method '+'; return self
+::method '>'; return .array~of(0)

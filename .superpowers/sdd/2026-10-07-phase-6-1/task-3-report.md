@@ -341,13 +341,11 @@ Checks at `0c75907d3`:
 
 ### Fix round 3 addendum: references, commands, rationale
 
-`945e31f33` makes `loop_truth` read the answer's string value (`string_value_text`, the counterpart
-of truthValue's `requestString`) rather than its rendering, so an array answer is reported as
-`found "an Array"`. Deviation 25 states this and adds the row. Line numbers below are at `945e31f33`;
-`rust/crates/rexx-exec/src/` is abbreviated.
+Line numbers below are at `945e31f33`; `rust/crates/rexx-exec/src/` is abbreviated. `loop_truth`
+reads its answer as `string_value_text` there; fix round 4 below changes that to `to_text`.
 
 - `run/loops.rs:2718` `loop_truth`: `LOGICAL_TRUE` gives true and `LOGICAL_FALSE` gives false.
-  Anything else is taken through `string_value_text` and `eval::logical_value`, and is exactly `1`
+  Anything else is taken through `string_value_text` (round 4: `to_text`) and `eval::logical_value`, and is exactly `1`
   or `0` or raises 34.901 (`Raised::not_logical`) with the string as the insert. `' 1'` raises.
 - It is called at `run/loops.rs:963` (BY's sign check, `accept_object_header`) and
   `run/loops.rs:2768` (the TO test, `object_control_pass`).
@@ -442,3 +440,39 @@ Commands (memcap 8G, -j 4):
 - `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
 - `cargo test -p rexx-exec --lib`: 1016 passed, 0 failed.
 - No test added: the arm is unreachable. The corpus and workspace gates were not re-run.
+
+## Fix round 4
+
+Change: `loop_truth` (`rust/crates/rexx-exec/src/run/loops.rs`) reads the answer with
+`self.to_text(answer)`, as `condition_value` does for WHILE and UNTIL, instead of
+`string_value_text`. Ruling: DO's test agrees with this crate's WHILE on every answer; the
+user-STRING gap is crate-wide and queued for Task 12.
+
+Measured at this change (probes in `/tmp/claude-1000/p61/t3r4/`, one run per engine; `d_` DO TO,
+`w2_` WHILE, `u_` UNTIL):
+
+| answer | oracle DO | crate DO | WHILE / UNTIL (both sides) |
+|---|---|---|---|
+| `.array~of(0)` | 3 passes | 3 passes | false |
+| `.array~of(1)` | 3 passes | 0 passes | true |
+| `.array~of(1, 2)` | 3 passes | 34.901, found "1\n2" | 34.3 / 34.4, found "1\n2" |
+
+Witnesses added:
+- `rust/corpus/lang/do_object_compare_array.rex` (in `phase-6-1.txt`): `.array~of(0)` as a DO TO
+  answer and as a WHILE condition, agreeing with the oracle.
+- `LICENSED_DIVERGENCES` rows `do-compare-array-one` and `do-compare-array-many`
+  (`tests/licensed_divergences.rs`), named in Deviation 25. The second traps the SYNTAX and prints
+  `rc`, so its stderr is empty.
+- Deviation 25: the `.array~of(1)  34.901, "an Array"` row and the "from its string value as
+  truthValue's requestString takes it" sentence (added by `945e31f33`) are gone, replaced by the
+  measured rows above. The loop raises 34.901 where WHILE raises 34.3 and UNTIL 34.4, because a DO
+  header has no 34.x.
+
+The addendum's "counterpart of truthValue's requestString" claim is deleted. The address-reuse
+story in Concerns was removed in the minor cleanup.
+
+Results (memcap 8G, -j 4): `cargo fmt` clean; clippy `--workspace --all-targets -- -D warnings` exit 0;
+`cargo test -p rexx-exec --lib` 1016 passed; `REXX_CORPUS_GATE=1 cargo test -p rexx-exec --test corpus
+--test ir_recorded_oracle --test licensed_divergences`: 29 passed (1 ignored), 21 passed, and
+licensed_divergences passed after the `do-compare-array-many` row's expected stdout was corrected from
+`34.901` to `34` (the row prints `rc`, which is 34; the subcode is in `condition('D')` only).

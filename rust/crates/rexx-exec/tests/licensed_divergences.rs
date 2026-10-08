@@ -75,6 +75,28 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         oracle_stdout: "pass\npass\npass\nend\n",
         crate_stdout: "end\n",
     },
+    LicensedDivergence {
+        name: "do-compare-array-one",
+        program: "do i = .c~new to 3 for 3\n  say 'pass'\nend\nsay 'end'\n\
+              ::class c\n::method '+'\n  return self\n\
+              ::method '>'\n  return .array~of(1)\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "pass\npass\npass\nend\n",
+        crate_stdout: "end\n",
+    },
+    LicensedDivergence {
+        name: "do-compare-array-many",
+        program: "signal on syntax name h\n\
+              do i = .c~new to 3 for 3\n  say 'pass'\nend\nsay 'end'\nexit\n\
+              h: say rc\nexit\n\
+              ::class c\n::method '+'\n  return self\n\
+              ::method '>'\n  return .array~of(1, 2)\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "pass\npass\npass\nend\n",
+        crate_stdout: "34\n",
+    },
 ];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,

@@ -2726,7 +2726,7 @@ impl Interp {
             return Ok(false);
         }
         self.roots.activity_mut().push_temp(answer);
-        let text = self.string_value_text(answer);
+        let text = self.to_text(answer).into_owned();
         logical_value(&text).ok_or_else(|| Raised::not_logical(&text).into())
     }
 
