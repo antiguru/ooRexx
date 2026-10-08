@@ -1,0 +1,1955 @@
+# Review package: 75c41b836..d9192ef4a
+
+## Commits
+d9192ef4a Phase 6.1 Task 3 fix round 1 report
+150611a38 Phase 6.1 Task 3 fix round 1: records, and the collector row past the DO refusal
+9172b7085 Phase 6.1 Task 3 fix round 1: message-driven loop paths out of line
+1d7b27de8 Phase 6.1 Task 3 fix round 1: loops driven by message, DO OVER a native directory
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-3-report.md      |  58 +++
+ docs/superpowers/plans/phase-4-exclusions.txt      |  29 +-
+ docs/superpowers/plans/phase-6-1-gate.md           |  17 +
+ rust/corpus/lang/do_object_control.rex             |  29 ++
+ rust/corpus/lang/do_object_control_trace.rex       |  11 +
+ rust/corpus/lang/do_over_package_local.rex         |   9 +
+ rust/corpus/oracle-crashes.txt                     |  42 ++
+ rust/corpus/phase-6-1.txt                          |   6 +
+ rust/corpus/refusal-sites.tsv                      |  65 ++-
+ rust/crates/rexx-exec/src/activity.rs              |  10 +-
+ .../rexx-exec/src/eval/object_operand_tests.rs     |  53 +--
+ rust/crates/rexx-exec/src/lib.rs                   |   9 -
+ rust/crates/rexx-exec/src/run/loops.rs             | 527 ++++++++++++++-------
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   |  25 +-
+ .../tests/sourceline_oracle/do_object_control.txt  |  30 ++
+ .../sourceline_oracle/do_object_control_trace.txt  |  12 +
+ .../sourceline_oracle/do_over_package_local.txt    |  10 +
+ 17 files changed, 683 insertions(+), 259 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-3-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-3-report.md
+index cb422c987..068053113 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-3-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-3-report.md
+@@ -167,10 +167,68 @@ programs added to its no-collection list), `state_builtin_oracle.rs`, `bif_asser
+    `concurrency_tests` file is not green. It is outside the `whole_groups` filter the brief names.
+ 3. **A silent divergence that a refusal used to hide.** `c_condition_d_raise7` (`call on any`, then
+    `raise novalue return` in a callee) was loud. It now runs: ours enters the handler, while the
+    oracle prints only `back`. This is the reflected-condition defect in scout A's section 4: CALL ON
+    ANY traps a condition that CALL cannot trap. `raise lostdigits return` already showed the same
+    divergence at base (my probe `x_any_raise_syntax`). It is not fixed here.
+ 4. Five FORWARD probes (`b_forward_args_*`, `b2_forward_args_*`) and `use arg >o~a` stop at a
+    top-level parse error, which is group c8 and not this task.
+ 5. The c3 commit's hand-edited table row (see Commits) was never checked by building that commit on
+    its own.
++
++## Fix round 1
++
++Commits: `1d7b27de8` (message-driven loops, DO OVER a native directory), `9172b7085` (those paths
++out of line), `150611a38` (records and the collector row), and this report's commit.
++
++1. **Important 1 and Concern 1: loops whose control value is an object.** These are now implemented
++   as `DoBlock::checkControl`, not refused. Once a controlled header value is an operator receiver,
++   `accept_object_header` keeps each `+` answer as it is. `BY`'s answer is sent `<` against 0 for
++   the direction. The loop then runs as `LoopState::ObjectControlled`:
++   - At each re-test, `+` with BY is sent to whatever the control holds (`arith_general`). The answer
++     is traced, then bound unchanged.
++   - The TO comparison (`>`, or `<` for a negative BY) is then sent to it. The loop ends when that
++     answers the true object. FOR is checked after the comparison, as the oracle does.
++   - A numeric loop whose control variable is given an object in the body switches to this state at
++     the increment. TO and BY become the objects for their numbers.
++   - A failure on the first test is blamed on the DO clause at the body's indent, as the oracle
++     blames it.
++
++   The FlatLoop states' objects are rooted from `Activity::object_roots`. The reviewer's
++   `do_plus_string.rex` now agrees: `'abc'` ends the loop, and `' 2 '` prints `[ 2 ]`. All four
++   loud probes from Concern 1 agree. `do i = .nil to 3` agrees as well. I corrected the exclusions
++   R12 text and table.
++2. **DO OVER `.context~package~local`** iterates the native directory's indexes (sorted, as a
++   StringTable's are). `Loud::object_position` and `HeaderRole::value_name` have no site left and are
++   deleted. `refusal-sites.tsv` is refreshed.
++3. **`the_s2_rows` bisect.** The test passes at `3cee3e622`, where the row refuses with "DO is not
++   implemented", and fails at `5b7acef35` (Task 2's COUNTER). It is a gap that the removed refusal
++   exposed, not a regression: both modes end in the same 97.1 at rc 2, with the same masked stdout and
++   the same stderr lines, but the REPLY continuation's trace lines come in a different order.
++   `TRACE_INTERLEAVES` now allows that case. The reason is in the gate record.
++4. **Records.**
++   - Exclusions: a known-gap row for `raise novalue return` / `raise lostdigits return` reaching a
++     caller's CALL ON ANY.
++   - `oracle-crashes.txt` entry 28: FORWARD ARGUMENTS over a List, SIGSEGV rc 139 in 5 of 5 runs.
++   - `oracle-crashes.txt` entry 29: GUARD WHEN on a compound tail, killed at the timeout in 5 of 5
++     runs.
++
++Witnesses: `do_object_control` (header objects, a control switching mid-loop, non-canonical
++answers, FOR, negative BY, LEAVE, ITERATE, a compound control, a control object whose `>` answers
++true, `.local`), `do_object_control_trace`, and `do_over_package_local`. On the binary before the
++fix, `do_object_control` and `do_over_package_local` refuse with rc 120. `do_object_control_trace`
++already agreed there: it checks the new path's trace and adds no new failing case. The 73 probes:
++67 agree. The six that do not are the c8 parse-error ones, `use arg >o~a`, and the two CALL ON ANY
++ones now recorded.
++
++Checks at `150611a38`:
++- `cargo fmt --check` and `clippy -D warnings`: exit 0.
++- `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0.
++- `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: exit 0 (29 passed, 1 ignored;
++  21 passed).
++- The whole gated `concurrency_tests` file in release: exit 0, 38 passed. This includes
++  `whole_groups` and `the_s2_rows_of_the_derived_list_in_both_modes`.
++
++Concern: instruction counts against `652826b54` (`callgrind.sh -r 1`, no layout control) are
++emptyloop +0.64%, decloop +0.55%, rexxcps -0.04%, fibcall -0.21%. The emptyloop delta is 2
++instructions a pass in `loop_advance`, whose fast-path source is unchanged. Moving the new paths out
++of line cut it from +0.97%. It is recorded in the gate record for Task 5's measurement.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 650fcf91c..14f22cf20 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -3245,20 +3245,38 @@ above.
+   and that document says its transcripts were taken at 56d9d1c86, so this row's
+   own evidence is that nothing between 56d9d1c86 and 9c465989a moved the shape.
+   Anything earlier is that document's measurement rather than this row's: it
+   records the shape as byte-identical before and after e74780054, which is the
+   commit before the drain, and no commit older than 9c465989a was run here.
+ 
+   NOT FIXED, AND NOBODY IS ASSIGNED. It was found by the task correcting the
+   prose around the drain, which owns no behaviour, so recording it was that
+   task's whole disposition.
+ 
++  A CONDITION CALL ON CANNOT TRAP, RAISED WITH RETURN INTO A CALLER, REACHES
++  THE CALLER'S CALL ON ANY HERE AND NOT ON THE ORACLE. Measured 2026-10-08,
++  three descriptors, rc 0 on both sides:
++
++     call on any name h
++     call sub
++     say 'back'
++     exit
++     sub: raise novalue return
++     h: say 'D=['condition('D')']' condition('C'); return
++
++  The oracle prints `back`; this crate runs the handler first, `D=[] NOVALUE`
++  then `back`. `raise lostdigits return` in place of NOVALUE is the same
++  divergence (`h LOSTDIGITS`). A NOVALUE from a variable read, and a RAISE
++  NOVALUE in the trapping activation itself, agree. The NOVALUE form refused
++  until Phase 6.1 Task 3 answered CONDITION('D') for it; the LOSTDIGITS form
++  diverged before. NOT FIXED, and nobody is assigned.
++
+   A USER CONDITION RAISED IN A ::ROUTINE REACHES THE CALLER'S TRAP ON THE
+   ORACLE AND NOT HERE, WHEN THE RAISE HAS NO TAIL OR AN `EXIT` TAIL. Both
+   engines agree with each other and diverge from the oracle on STDOUT ONLY:
+   rc 0 and empty stderr on the oracle and on both engines, so no gate that
+   partitions failures by rc or by a loud message can see it, and only a
+   differential comparison of stdout can. Measured 2026-08-16 at 72cb6d781,
+   under the standard oracle wrapper from a fresh empty directory,
+   REXX_ENGINE=tree-walker and REXX_ENGINE=ir.
+ 
+      1  say 'start'
+@@ -3836,22 +3854,22 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
+   programs this crate had been matching byte for byte. Every row below was
+   re-probed against the live oracle under the rule above, on both engines,
+   which agree on every row.
+ 
+     SURFACE                     WHAT THE ORACLE DOES WITH IT  ANSWER    ROW
+     -------------------------------------------------------------------------
+     comparison, object LEFT     compares identity             0         refuses
+     arithmetic, object LEFT     sends the operator            97.1      refuses
+     &, |, &&, object LEFT       sends the operator            97.1      refuses
+     prefix + - \                sends the operator            97.1      refuses
+-    DO OVER target              requestArray                  98.913    refuses
+     -------------------------------------------------------------------------
++    DO OVER target              requestArray                  98.913    agrees
+     DO header initial           unary + on the value          97.1      agrees
+     DO header TO                unary + on the value          97.1      agrees
+     DO header BY                unary + on the value          97.1      agrees
+     DO control variable         + at the increment            97.1      agrees
+     RAISE SYNTAX ADDITIONAL     requestArray                  98.939    agrees
+     FORWARD ARGUMENTS           requestArray                  98.946    agrees
+     any operator, object RIGHT  the left operand converts it  41.1 / 1  agrees
+     2 ** object                 whole-number conversion       26.8      agrees
+     || and abuttal and blank    stringValue() on both sides   rendering agrees
+     SAY                         stringValue()                 rendering agrees
+@@ -3879,24 +3897,25 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
+     RAISE ARRAY (x, y)          stringValue()                 40.1      agrees
+     RAISE USER ADDITIONAL       stringValue()                 rc 0      agrees
+     a message receiver          resolves the class behaviour  per meth. agrees
+     SELF and SUPER, read        stringValue()                 rendering agrees
+     a Rexx method's argument    nothing                       rendering agrees
+     a native method's argument  the method's own check        88.909    agrees
+     a method's RETURN value     nothing                       rendering agrees
+     an instance variable        nothing                       rendering agrees
+     -------------------------------------------------------------------------
+ 
+-  The DO rows send the operator, so a value whose `+` answers is a number like
+-  any other. Where `+` answers an object the oracle goes on sending to (measured,
+-  `do i = .environment to 5` is 97.1 on `>` against `.nil`), the loop refuses
+-  through `Loud::object_position`.
++  The DO rows send the operator and keep its answer as it is: once a header
++  value or the control variable holds an object, the loop sends `+` with BY and
++  the TO comparison to whatever the control holds (`DoBlock::checkControl`).
++  Measured, `do i = .environment to 5` is 97.1 on `>` against `.nil`, and a `+`
++  answering `' 2 '` binds `' 2 '`.
+ 
+   THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a
+   message receiver now, so a ::METHOD body runs, and that opens the positions
+   above that no earlier task had: a receiver, SELF and SUPER, an argument and
+   a RETURN value. Every one of them was measured rather than reasoned about --
+   `trace i` over `say .K~m(.array)` into a class method that says SELF, says
+   its argument and returns `.directory` is byte-identical on all three
+   descriptors, on both engines, `>A>` and `>M>` lines included.
+ 
+   THE ARGUMENT ROW COVERS TWO KINDS OF BODY, AND BOTH AGREE. The measurement
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index a576b9187..382c68ea0 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -157,10 +157,27 @@ None is a regression: each is a refusal this task removed, or what running past
+ | TRACE | rest | assertions 117, failing set unchanged | assertions 118 | TEST_TRACE_OPTIONS, the group's one test of a form this task changed (OPTIONS, b1): started and not failing in the dumped run, so its `assertTraceOutput` is the attributed assertion |
+ | GUARD | derived | refuses at TEST_WHEN_USE_LOCAL_NO_WAIT, USE LOCAL | agrees with the oracle | USE LOCAL runs (b2); the two `DIFFERING` rows are deleted |
+ | GUARD | outcome table | `GUARD_PASSING` without TEST_WHEN_USE_LOCAL_NO_WAIT | with it | the same; `the_outcome_table_of_the_guard_group_in_both_modes` |
+ 
+ At `61d441781`: `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --release --test
+ concurrency_tests whole_groups` exit 0, 6 passed. The whole gated `concurrency_tests` file (same tree
+ content) is 37 passed, 1 failed: `the_s2_rows_of_the_derived_list_in_both_modes`, TRACE_TraceObject
+ TEST_TRACEOBJECT_COLLECTOR differing between the modes (rc 2 both, 2 assertions against the oracle's
+ 583). It fails identically, three runs at HEAD and one at `1d308cb9d` (the base tree from `git
+ archive`, its own target directory), so it predates this task.
++
++### Task 3 fix round 1
++
++`the_s2_rows_of_the_derived_list_in_both_modes`, TRACE_TraceObject TEST_TRACEOBJECT_COLLECTOR,
++bisected with each commit's tree from `git archive` in one target directory, a `Compiling rexx-exec`
++line each: passes at `3cee3e622` (the row "refused: DO is not implemented", allowed by
++`TRACE_INTERLEAVES`) and fails at `5b7acef35` (Task 2's DO COUNTER). Not a regression: the removed
++DO refusal lets the test run, and both modes end in the same 97.1 at rc 2 with the same stdout (its
++timestamps masked) while the REPLY continuation's trace lines reach stderr in another order. The
++row's allowance in `concurrency_tests.rs` now also covers that case (same status, same masked stdout,
++the same stderr lines in another order).
++
++Instructions, not a gate (no measurement is owed at Task 3): `callgrind.sh -r 1` against `652826b54`,
++`9172b7085`'s binary: emptyloop +0.6443%, decloop +0.5483%, rexxcps -0.0424%, fibcall -0.2137%,
++spread 0. The emptyloop delta is 2 instructions a pass in `loop_advance`, whose fast path the change
++does not touch (the new `LoopState` variant and its arms are out of line); left for Task 5's
++measurement with a layout control.
+diff --git a/rust/corpus/lang/do_object_control.rex b/rust/corpus/lang/do_object_control.rex
+new file mode 100644
+index 000000000..084532ddf
+--- /dev/null
++++ b/rust/corpus/lang/do_object_control.rex
+@@ -0,0 +1,29 @@
++/* A loop whose control value is an object is driven by message: + with BY
++   at each re-test, the answer kept as it is, and the TO comparison sent to
++   it; the loop ends where that answers true. */
++call t1; call t2; call t3; call t4; call t5; call t6; call t7; call t8; call t9
++exit
++t1: signal on syntax name x1
++do i = .environment to 5; say 't1' i; end; return
++x1: say 't1' rc condition('O')~message; return
++t2: do i = 1 to 3; say 't2' i; if i = 2 then i = .s~new('abc'); end
++say 't2 end' i; return
++t3: do i = .s~new(' 2 ') to 3; say 't3 ['i']'; end; say 't3 end' i; return
++t4: do i = .s~new('2.0') to 5 by 1 for 3; say 't4' i; end; say 't4 end' i; return
++t5: do i = .s~new(9) to 1 by -2; say 't5' i; if i < 5 then leave; end
++say 't5 end' i; return
++t6: do a.k = .s~new(1) to 3; say 't6' a.k; if a.k = 2 then iterate; end
++say 't6 end' a.k; return
++t7: do i = .c~new to 3; say 't7' i; end; say 't7 end' i; return
++t8: signal on syntax name x8
++do i = 1 to 3; say 't8' i; i = .local; end; return
++x8: say 't8' rc condition('O')~message i; return
++t9: do i = .s~new('abc') to 3; say 't9' i; end; say 't9 end' i; return
++::class s
++::method init; expose v; use arg v
++::method '+'; expose v; if arg() = 0 then return v; use arg o; return v
++::class c
++::method '+'; return self
++::method '<'; return .false
++::method '>'; return .true
++::method '<='; return .true
+diff --git a/rust/corpus/lang/do_object_control_trace.rex b/rust/corpus/lang/do_object_control_trace.rex
+new file mode 100644
+index 000000000..83942465c
+--- /dev/null
++++ b/rust/corpus/lang/do_object_control_trace.rex
+@@ -0,0 +1,11 @@
++/* The trace of a loop driven by message: the control's read, the +
++   answer and the assignment at each re-test. */
++trace i
++do i = .s~new(1) to 2; nop; end
++i = 0
++do j = 1 to 2; if j = 1 then j = .s~new(5); end
++trace o
++say i j
++::class s
++::method init; expose v; use arg v
++::method '+'; expose v; if arg() = 0 then return v; use arg o; return v + o
+diff --git a/rust/corpus/lang/do_over_package_local.rex b/rust/corpus/lang/do_over_package_local.rex
+new file mode 100644
+index 000000000..8518319af
+--- /dev/null
++++ b/rust/corpus/lang/do_over_package_local.rex
+@@ -0,0 +1,9 @@
++/* DO OVER a package's local directory iterates its indexes. */
++l = .context~package~local
++n = 0
++do e over l; n = n + 1; end
++say n
++l['A'] = 1; l~b = 2
++got = ''
++do e over l; got = got e; end
++say got~word(1) < got~word(2) got~words
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index f5420926b..45e7c3422 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1135,10 +1135,52 @@ waits' current day (`a_post_wakes_every_waiter_of_a_timer`). No upstream ticket.
+ ## 27. `SysCreateMutexSem()` with no argument
+ 
+     say 'before'
+     h = SysCreateMutexSem()
+ 
+ SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper: stdout `before`, nothing on stderr. Cause:
+ `SysCreateMutexSem` tests its optional name with `strlen(name) == 0`
+ (`platform/unix/SysRexxUtil.cpp:878`), and an omitted `OPTIONAL_CSTRING` is a null pointer. The
+ oracle's unnamed form is `SysCreateMutexSem('')`. Measured 2026-10-03 by Phase 6 S2-S5 Task 13.
+ This crate creates an unnamed semaphore for both. No upstream ticket.
++
++## 28. FORWARD ARGUMENTS over an instance whose `MAKEARRAY` answers a List
++
++    say .t~new~go(.w~new)
++    ::class t
++    ::method go
++    forward message 'M' arguments (arg(1))
++    ::method m
++    return arg()
++    ::class w
++    ::method makearray
++    return .list~of(1, 2)
++
++SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr. The same
++program with a `MAKEARRAY` answering a string raises 98.946 on both sides. Measured 2026-10-08 by
++Phase 6.1 Task 3's fix round. This crate raises 98.946 (`requestArray` answered no array). No
++upstream ticket.
++
++## 29. GUARD WHEN on a compound tail set by another method
++
++    o = .t~new
++    m = o~start('waitit')
++    do until o~ready == 1; end
++    o~setab
++    say m~result
++    ::class t
++    ::attribute ready get
++    ::method setab
++    expose a.
++    a.b = 1
++    ::method waitit
++    expose a. ready
++    ready = 1
++    guard on when a.b = 1
++    return 'woke' a.b
++
++An indefinite block: 5 runs of 5 under the standard wrapper are killed at the timeout (rc 137),
++nothing printed; the waiter is never woken by the tail's assignment. A simple exposed variable in
++the same shape wakes. Measured 2026-10-08 by Phase 6.1 Task 3's fix round; its review measured the
++same block, 5 runs of 5 each, with the tail set through a generated `::ATTRIBUTE "A.B"` and through
++a stem `[]=`. The shape of entry 7. This crate wakes the waiter and prints `woke 1`. No upstream
++ticket.
+diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
+index f10f5f9b7..cce3ae0c6 100644
+--- a/rust/corpus/phase-6-1.txt
++++ b/rust/corpus/phase-6-1.txt
+@@ -76,10 +76,16 @@ lang/use_local_method_dynamic.rex
+ lang/use_local_method_guard.rex
+ 
+ # Task 3: objects as DO header values and control variables are sent the
+ # operator; FORWARD ARGUMENTS and RAISE SYNTAX ADDITIONAL take requestArray.
+ lang/do_to_class.rex
+ lang/do_header_objects.rex
+ lang/do_ctrl_class.rex
+ lang/do_ctrl_objects.rex
+ lang/forward_args_object.rex
+ lang/raise_additional_object.rex
++
++# Task 3 fix round 1: a loop whose control value is an object is driven by
++# message, and DO OVER a package's local directory.
++lang/do_object_control.rex
++lang/do_object_control_trace.rex
++lang/do_over_package_local.rex
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index be1bcee18..03b28bc51 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -81,122 +81,122 @@ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	o
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1224	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1085	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1801	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:549	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:540	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+ Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:433	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:748	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:674	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:681	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:739	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:665	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:672	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1157	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1530	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:747	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1491	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:735	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:556	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:528	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:547	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:519	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1795	off-send-surface	-	-	-
+-Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:519	off-send-surface	-	-	-
++Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:510	off-send-surface	-	-	-
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1571	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1778	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1736	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:651	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:642	off-send-surface	-	-	-
+ Loud	expression	body	crates/rexx-exec/src/lib.rs:425	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1577	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1757	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1751	off-send-surface	-	-	-
+ Raised	from	body+send	crates/rexx-exec/src/error.rs:1843	agrees	yes	syntax(error.code	signal on syntax over .Routine~new('T', 'return arg(1') -- 36.901, the code the parse error carries, so the row's answer is the source of the code rather than an M.N
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1741	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:792	off-send-surface	-	-	-
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:783	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1135	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1124	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1151	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+ Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:374	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+ Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:459	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1688	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:780	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:698	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:771	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:689	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:581	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:621	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:572	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:612	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:713	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1504	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1666	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1191	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1103	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+-Loud	method_body	body	crates/rexx-exec/src/lib.rs:614	off-send-surface	-	-	-
+-Loud	method_from_source	body+send	crates/rexx-exec/src/lib.rs:597	diverges	yes	a method source that is neither a string nor an array	self~setMethod('Z', .nil, 'BOGUS')
++Loud	method_body	body	crates/rexx-exec/src/lib.rs:605	off-send-surface	-	-	-
++Loud	method_from_source	body+send	crates/rexx-exec/src/lib.rs:588	diverges	yes	a method source that is neither a string nor an array	self~setMethod('Z', .nil, 'BOGUS')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1485	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1677	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1682	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1098	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1140	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:666	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:657	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1250	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1471	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1464	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1478	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1457	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+ Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:468	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+@@ -208,47 +208,46 @@ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1263
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1423	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1441	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1400	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1409	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1390	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1352	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1338	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1267	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1288	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1366	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:537	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:528	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1511	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1168	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1607	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1541	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1552	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1561	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1721	off-send-surface	-	-	-
+ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1711	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1695	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1118	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1178	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1594	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:605	diverges	yes	a receiver with no scope of its own	self~setMethod('ZZ', "return 'x'") inside ::method cm class, then .K~zz -- from the main body it is 98.991
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:596	diverges	yes	a receiver with no scope of its own	self~setMethod('ZZ', "return 'x'") inside ::method cm class, then .K~zz -- from the main body it is 98.991
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1808	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	object_position	body	crates/rexx-exec/src/lib.rs:511	off-send-surface	-	-	-
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:690	off-send-surface	-	-	-
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:681	off-send-surface	-	-	-
+ Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:499	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:591	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
++Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:582	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1523	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:658	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:649	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1517	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:83	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:114	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:181	off-send-surface	-	-	-
+ Raised	raised_from_settings	body	crates/rexx-exec/src/run/raised.rs:147	off-send-surface	-	-	-
+@@ -268,55 +267,55 @@ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-sen
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:167	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:162	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+ Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:480	diverges	yes	a message send to	a. = 'dflt' then a.~length
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+ Loud	redirection	body	crates/rexx-exec/src/lib.rs:490	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1584	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:706	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:697	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1746	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1768	off-send-surface	-	-	-
+-Loud	required_source	body	crates/rexx-exec/src/lib.rs:631	off-send-surface	-	-	-
++Loud	required_source	body	crates/rexx-exec/src/lib.rs:622	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1773	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:772	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:763	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1201	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1207	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:714	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:705	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:643	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:731	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:634	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1146	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_syntax	send	crates/rexx-exec/src/dispatch/class_protocol.rs:290	agrees	yes	line_of(error.byte)	signal on syntax over .Routine~new('T', .array~of('nop', 'say 1', 'if then', 'nop')) -- 35.929 at POSITION 3, the line within the source; the message keeps its placeholders (roadmap row 3)
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:731	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1079	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1173	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1601	off-send-surface	-	-	-
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:569	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:560	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+ Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:442	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:755	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1784	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1731	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1705	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/activity.rs b/rust/crates/rexx-exec/src/activity.rs
+index 9951ca662..c1c3f6d48 100644
+--- a/rust/crates/rexx-exec/src/activity.rs
++++ b/rust/crates/rexx-exec/src/activity.rs
+@@ -441,23 +441,24 @@ impl Activity {
+             // Handles for constants that are not heap objects, and the
+             // innermost native call, whose frame `native_handles` roots.
+             thread: _,
+             native_handles,
+             // A pop clears the buffers that held objects, and a push
+             // overwrites the handle fields before anything reads them, so a
+             // spare names nothing to root.
+             native_spares: _,
+             clause_state: _,
+             // The `DO OVER` snapshot sits in a register held for the loop's
+-            // lifetime, and `RootSet` reaches a register as a temp.
+-            flat_loops: _,
+-            flat_top: _,
++            // lifetime, and `RootSet` reaches a register as a temp; a loop
++            // driven by message holds its own objects.
++            flat_loops,
++            flat_top,
+             frames: _,
+             // A saved convention is the caller's, whose arguments and
+             // receiver that caller's temps and registers root; a lent argument
+             // stack holds values its caller's registers root; a parked level's
+             // registers stay reserved in the arena.
+             call_tails: _,
+             parked_calls: _,
+             parked_levels: _,
+             // Its registers are the record's parked values.
+             replied_level: _,
+@@ -531,20 +532,23 @@ impl Activity {
+             semaphore_wait: _,
+             waiting_traced: _,
+             #[cfg(feature = "pinning")]
+                 pins: _,
+             #[cfg(feature = "sharing")]
+                 sharing_tag: _,
+         } = self;
+         if let Some(exec) = guard_exec {
+             out.extend(exec.watched.iter().flat_map(|var| [var.owner, var.scope]));
+         }
++        for flat in flat_loops.iter().chain(flat_top.iter()) {
++            flat.object_roots(out);
++        }
+         if let Some(send) = guarded_send {
+             send.object_roots(out);
+         }
+         // The raise's own `ADDITIONAL`, alive between the raise and the
+         // condition object that will hold it.
+         out.extend(*pending_additional);
+         out.extend(*pending_result);
+         out.extend(*pending_rc);
+         out.extend(*reraised_object);
+         out.extend(*failure_frame);
+diff --git a/rust/crates/rexx-exec/src/eval/object_operand_tests.rs b/rust/crates/rexx-exec/src/eval/object_operand_tests.rs
+index 8e0002cf3..0142bb588 100644
+--- a/rust/crates/rexx-exec/src/eval/object_operand_tests.rs
++++ b/rust/crates/rexx-exec/src/eval/object_operand_tests.rs
+@@ -183,32 +183,28 @@ fn an_object_in_a_do_headers_numeric_position_is_sent_plus() {
+             String::from_utf8_lossy(source)
+         );
+         assert!(
+             stderr.contains(&format!(
+                 "Error 97.1:  Object \"{object}\" does not understand message \"+\"."
+             )),
+             "{:?} reported {stderr:?}",
+             String::from_utf8_lossy(source)
+         );
+     }
+-    // `.environment`'s `+` answers `.nil` through `UNKNOWN`, and the oracle
+-    // goes on to compare that object with `TO` (97.1 on `>`, rc 159); a loop
+-    // whose control value is an object is not built here.
++    // `.environment`'s `+` answers `.nil` through `UNKNOWN`, and the loop
++    // goes on by message: the first test sends `>` to it, 97.1 at rc 159.
+     let (code, stdout, stderr) = run_source(b"do i = .environment to 5\nend\n");
+-    assert_eq!(
+-        (code, stdout.as_str(), stderr.as_str()),
+-        (
+-            120,
+-            "",
+-            "rexx-exec: an object a `+` answered as a DO header's initial value is not \
+-             implemented (Phase 5)\n"
+-        )
++    assert_eq!((code, stdout.as_str()), (159, ""), "reported {stderr:?}");
++    assert!(
++        stderr
++            .contains("Error 97.1:  Object \"The NIL object\" does not understand message \">\"."),
++        "reported {stderr:?}"
+     );
+ }
+ 
+ /// The header positions that read the value's **text** rather than
+ /// converting it, which both implementations answer alike.
+ #[test]
+ fn a_header_position_that_reads_text_keeps_the_oracles_own_diagnostic() {
+     for (source, major) in [
+         (&b"do i = 1 to 5 for .array\nend\n"[..], "26.3"),
+         (b"do .array\nend\n", "26.2"),
+@@ -221,54 +217,37 @@ fn a_header_position_that_reads_text_keeps_the_oracles_own_diagnostic() {
+             "{:?} reported {stderr:?}",
+             String::from_utf8_lossy(source)
+         );
+     }
+ }
+ 
+ /// **`DO OVER` hands its target to `requestArray`**, which is neither
+ /// `stringValue()` nor an operator, so it falls outside every boundary the
+ /// two tests above draw.
+ #[test]
+-fn an_object_as_a_do_over_target_is_loud() {
+-    let cases: &[(&[u8], &str)] = &[
+-        // Measured, oracle rc 0 and `done`: a package's own local
+-        // directory, which starts empty.
+-        (
+-            b"do e over .context~package~local\nsay e\nend\nsay 'done'\n",
+-            "one of the interpreter's own objects",
+-        ),
+-    ];
++fn an_object_as_a_do_over_target_is_array_requested() {
++    // Measured, oracle rc 0 and `done`: a package's own local directory,
++    // which starts empty.
++    assert_eq!(
++        run_source(b"do e over .context~package~local\nsay e\nend\nsay 'done'\n"),
++        (0, "done\n".to_string(), String::new())
++    );
+     // A condition object is a store-backed `Directory` and converts --
+     // measured, oracle rc 0 with nothing written.
+     assert_eq!(
+         run_source(b"signal on syntax\nsay 1 + 'a'\nsyntax:\ndo e over condition('O')\nend\n"),
+         (0, String::new(), String::new())
+     );
+-    for (source, kind) in cases {
+-        let (code, stdout, stderr) = run_source(source);
+-        let expected = format!(
+-            "rexx-exec: {kind} as a DO header's OVER target is not implemented (Phase 5)\n"
+-        );
+-        assert_eq!(
+-            (code, stdout.as_str(), stderr.as_str()),
+-            (120, "", expected.as_str()),
+-            "{:?}",
+-            String::from_utf8_lossy(source)
+-        );
+-    }
+-    // **A class object is no longer one of them, and that is the point of
+-    // the pair.** It reaches `requestArray`, answers no `MAKEARRAY`, and
++    // A class object reaches `requestArray`, answers no `MAKEARRAY`, and
+     // raises the oracle's own `Error_Execution_noarray` naming itself --
+     // measured, oracle rc 158, `Unable to convert object "The Array
+-    // class" to a single-dimensional array value.` So what is left
+-    // refusing above is a `Directory` built on `NativeObject`'s map, which
+-    // has no store for `MAKEARRAY` to read.
++    // class" to a single-dimensional array value.`
+     let (code, stdout, stderr) = run_source(b"do e over .array\nsay e\nend\n");
+     assert_eq!((code, stdout.as_str()), (158, ""));
+     assert!(
+         stderr.contains(
+             "Error 98.913:  Unable to convert object \"The Array class\" to a \
+              single-dimensional array value."
+         ),
+         "a class object must raise the oracle's own noarray, got {stderr:?}"
+     );
+ 
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 2c9c18701..1c358cac2 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -498,29 +498,20 @@ impl Loud {
+     /// own (`.environment`, `.local`, `.methods`, `.context`).
+     fn operator_operand(op: &str, kind: &str) -> Loud {
+         Loud {
+             message: owned_message(
+                 &format!("the operator `{op}` applied to {kind}"),
+                 Some("Phase 5"),
+             ),
+         }
+     }
+ 
+-    /// An object in a `DO` header position the loop cannot run on: `DO
+-    /// OVER`'s target, or an object a header value's or control variable's
+-    /// `+` answered where the oracle goes on sending to it.
+-    fn object_position(position: &str, kind: &str) -> Loud {
+-        Loud {
+-            message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),
+-        }
+-    }
+-
+     /// A `.NAME` the oracle's `.environment` or `.local` answers and this
+     /// crate builds nothing for.
+     fn environment_symbol(name: &[u8], owner: &'static str) -> Loud {
+         let shown = String::from_utf8_lossy(name);
+         Loud {
+             message: owned_message(&format!("environment symbol \"{shown}\""), Some(owner)),
+         }
+     }
+ 
+     /// A directory index the oracle's own `.environment` or `.local` has an
+diff --git a/rust/crates/rexx-exec/src/run/loops.rs b/rust/crates/rexx-exec/src/run/loops.rs
+index f2503284a..e3b9b1505 100644
+--- a/rust/crates/rexx-exec/src/run/loops.rs
++++ b/rust/crates/rexx-exec/src/run/loops.rs
+@@ -290,20 +290,62 @@ enum LoopState {
+         /// on the state rather than a flag threaded through `run_repeating`
+         /// because `loop_advance` is the only reader and the only writer,
+         /// and because it has to survive an `ITERATE`, which re-enters that
+         /// function without passing through the top of the driver's loop.
+         stepped: bool,
+     },
+     /// `DO WITH INDEX i ITEM v OVER expr`: steps the supplier the target
+     /// answered `SUPPLIER` with, `WithLoop::checkIteration`
+     /// (`instructions/DoBlockComponents.cpp`).
+     With(Box<WithState>),
++    /// A controlled loop whose header value or control variable is an
++    /// object: driven by message, as `DoBlock::checkControl` drives every
++    /// controlled loop.
++    ObjectControlled(Box<ObjectControl>),
++}
++
++/// A controlled loop driven by the operator sends themselves: `+` with `BY`
++/// at the increment and the `TO` comparison on what the control holds, each
++/// answer kept as it is.
++struct ObjectControl {
++    control: SymbolId,
++    /// [`control_slot`], taken once when this loop was entered.
++    at: Option<usize>,
++    shape: NameShape,
++    /// The first pass's value, until that pass binds it.
++    initial: Option<ObjRef>,
++    to: Option<ObjRef>,
++    by: ObjRef,
++    /// Whether the comparison is `<` (a negative `BY`) rather than `>`.
++    descending: bool,
++    for_remaining: Option<u64>,
++    stepped: bool,
++}
++
++/// A controlled header's `+` answers where one of its values is an object.
++#[derive(Default)]
++pub(crate) struct ObjectHeader {
++    initial: Option<ObjRef>,
++    to: Option<ObjRef>,
++    by: Option<ObjRef>,
++    descending: bool,
++}
++
++impl FlatLoop {
++    /// Appends the objects this loop's own state holds to `out`.
++    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
++        if let LoopState::ObjectControlled(ctl) = &self.state {
++            out.extend(ctl.initial);
++            out.extend(ctl.to);
++            out.push(ctl.by);
++        }
++    }
+ }
+ 
+ /// A `DO WITH` loop's supplier and the names it binds.
+ struct WithState {
+     index: Option<SymbolId>,
+     item: Option<SymbolId>,
+     supplier: ObjRef,
+     /// Whether the next advance is the first, which reads the supplier's
+     /// current pair rather than stepping past it.
+     first: bool,
+@@ -399,34 +441,20 @@ impl HeaderRole {
+         match self {
+             HeaderRole::Initial => None,
+             HeaderRole::To => Some("TO"),
+             HeaderRole::By => Some("BY"),
+             HeaderRole::For | HeaderRole::Count | HeaderRole::OverFor => Some("FOR"),
+             HeaderRole::Over => Some("OVER"),
+             HeaderRole::With => Some("WITH"),
+             HeaderRole::Counter => Some("COUNTER"),
+         }
+     }
+-
+-    /// How a loud failure names the position this value sits in.
+-    pub(crate) fn value_name(self) -> &'static str {
+-        match self {
+-            HeaderRole::Initial => "a DO header's initial value",
+-            HeaderRole::To => "a DO header's TO value",
+-            HeaderRole::By => "a DO header's BY value",
+-            HeaderRole::For | HeaderRole::OverFor => "a DO header's FOR value",
+-            HeaderRole::Count => "a DO header's repeat count",
+-            HeaderRole::Over => "a DO header's OVER target",
+-            HeaderRole::With => "a DO header's WITH target",
+-            HeaderRole::Counter => "a DO header's COUNTER",
+-        }
+-    }
+ }
+ 
+ /// The header expressions of one `DO`/`LOOP`, in **the order they are
+ /// evaluated**, which is the order they were written in
+ /// (`Controlled::order`, recorded because an expression can have side
+ /// effects).
+ pub(crate) struct HeaderPlan {
+     roles: [HeaderRole; 5],
+     len: usize,
+ }
+@@ -538,20 +566,22 @@ pub(crate) struct LoopHeaderValues {
+     over: Option<ObjRef>,
+     /// The supplier a `DO WITH`'s target answered `SUPPLIER` with.
+     supplier: Option<ObjRef>,
+     /// The register `over` or the `DO WITH` target was evaluated into, `None`
+     /// off the compiled engine and for every other loop.
+     /// [`Interp::flat_loop_start`] writes the snapshot or the supplier back
+     /// into it, which roots it while the loop runs.
+     pub(crate) over_register: Option<u16>,
+     /// A bare `DO expr`'s repeat count.
+     count: Option<u64>,
++    /// Where a controlled header's value is an object, every `+` answer.
++    objects: Option<Box<ObjectHeader>>,
+ }
+ 
+ impl Interp {
+     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
+     /// indent, for the roles the oracle echoes one for.
+     pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
+         let Some(keyword) = role.keyword() else {
+             return;
+         };
+         // `trace_keyword` carries its own `results` gate, so this is not a second
+@@ -596,38 +626,43 @@ impl Interp {
+         &mut self,
+         role: HeaderRole,
+         value: ObjRef,
+         values: &mut LoopHeaderValues,
+     ) -> Result<(), Failure> {
+         match role {
+             // **The rounded value and the representation it arrived in.** The
+             // rounding is the oracle's, and for an integer inside `DIGITS` it
+             // is a no-op, so the two arms carry the same worth and differ only
+             // in what [`ControlValue::small`] may then answer.
++            HeaderRole::Initial | HeaderRole::To | HeaderRole::By
++                if values.objects.is_some() || self.operator_message_receiver(value).is_some() =>
++            {
++                self.accept_object_header(role, value, values)?;
++            }
+             HeaderRole::Initial => {
+                 let digits = self.activation().settings.digits();
+                 // **The `Number` is built only by the arm that keeps it.**
+                 // `ControlValue::Small` carries the `i64` the tag already
+                 // holds, so asking `header_number` first and then discarding
+                 // its answer builds a digit vector for every ordinary counted
+                 // loop and throws it away. What that call would have checked
+                 // -- an object in an operand position, a non-numeric value --
+                 // a tagged integer cannot fail.
+                 values.initial = Some(match value.decode() {
+                     Decoded::SmallInt(small) if within_digits(small, digits) => {
+                         ControlValue::Small(small)
+                     }
+-                    _ => ControlValue::Wide(self.header_number(role, value)?),
++                    _ => ControlValue::Wide(self.header_number(value)?),
+                 });
+             }
+-            HeaderRole::To => values.to = Some(self.header_number(role, value)?),
+-            HeaderRole::By => values.by = Some(self.header_number(role, value)?),
++            HeaderRole::To => values.to = Some(self.header_number(value)?),
++            HeaderRole::By => values.by = Some(self.header_number(value)?),
+             // **The rendering is built inside the failing arm**, because a
+             // count is nearly always whole and the copy only ever reaches the
+             // message: hoisting it renders and frees a string per loop header
+             // to serve a branch that is not taken.
+             // **`exprf` and `exprr` are the two `reqstr` contexts in a `DO`
+             // header, and the three numeric positions above are not.**
+             // `ForLoop::setup` and `DoWhile::setup` convert with
+             // `result->requestString()->numberString()`
+             // (`instructions/DoBlockComponents.cpp:88`) where
+             // `ControlledLoop::setup` sends `callOperatorMethod(OPERATOR_PLUS)`
+@@ -647,32 +682,23 @@ impl Interp {
+             HeaderRole::Count => {
+                 let converted = self.required_string_value(value)?;
+                 values.count = Some(match self.whole_nonneg(converted) {
+                     Some(count) => count,
+                     None => {
+                         let found = self.string_value_text(value);
+                         return Err(raised_repetition_count_not_whole(&found).into());
+                     }
+                 });
+             }
+-            // **`DO OVER` is not `stringValue()` and not an operator**, which
+-            // is why R12's other sites do not cover it: the oracle hands the
+-            // target to `requestArray`. Measured, `do e over .array` is
+-            // 98.913 at rc 158 and `do e over .environment` iterates the
+-            // directory's own entries, neither of which this crate answers.
+-            // An array and a string both do -- see [`Interp::over_snapshot`].
+-            HeaderRole::Over => {
+-                if let Some(kind) = self.over_target_gap(value) {
+-                    return Err(Loud::object_position(role.value_name(), kind).into());
+-                }
+-                values.over = Some(value);
+-            }
++            // `DO OVER` hands its target to `requestArray` -- see
++            // [`Interp::over_snapshot`].
++            HeaderRole::Over => values.over = Some(value),
+             HeaderRole::With => values.supplier = Some(self.with_supplier(value)?),
+             // [`Interp::file_header_value`] answers this role itself.
+             HeaderRole::Counter => {}
+         }
+         Ok(())
+     }
+ 
+     /// `WithLoop::setup`: the supplier `value` answers `SUPPLIER` with, 98.994
+     /// when that is not a `Supplier`.
+     fn with_supplier(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+@@ -780,41 +806,30 @@ impl Interp {
+         }
+         let wanted = self.text_built(b"ARRAY".to_vec());
+         self.roots.activity_mut().push_temp(wanted);
+         pinned!(
+             self,
+             crate::pinning::PinKind::Conversion,
+             self.send_message(value, b"REQUEST", None, &[Some(wanted)], caller)
+         )
+     }
+ 
+-    /// The one `DO OVER` target this crate still refuses: one of the
+-    /// interpreter's own directories.
+-    fn over_target_gap(&mut self, value: ObjRef) -> Option<&'static str> {
+-        if !matches!(
+-            self.heap.get(value).map(|object| &object.body),
+-            Some(Body::Native(_))
+-        ) {
+-            return None;
+-        }
+-        (self.receiver_class_id(value).as_deref() == Some("Directory"))
+-            .then_some("one of the interpreter's own objects")
+-    }
+-
+     /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
+-    /// `.resources`, or a package's `~publicClasses`.
++    /// `.resources`, or a package's `~publicClasses` -- or a `Directory` built
++    /// on the same map, a package's `~local`.
+     fn is_hash_collection(&mut self, value: ObjRef) -> bool {
+         let Some(Body::Native(native)) = self.heap.get(value).map(|object| &object.body) else {
+             return false;
+         };
+         let class = native.class();
+         class == self.object_model().iterable_collection_class()
++            || self.receiver_class_id(value).as_deref() == Some("Directory")
+     }
+ 
+     /// The values a `DO OVER` binds its control variable to: the **non-empty**
+     /// slots of what [`Interp::over_target_array`] converts the target into.
+     fn over_snapshot(&mut self, value: ObjRef) -> Result<(ObjRef, Vec<ObjRef>), Failure> {
+         // The one collection whose order is this crate's rather than the
+         // oracle's answers from its own walk -- see
+         // [`Interp::hash_collection_indexes`] for why it is sorted and what
+         // that costs. It cannot go through `MAKEARRAY` either: a
+         // `Body::Native` receiver is not the store `hash.rs` owns.
+@@ -867,21 +882,21 @@ impl Interp {
+         for key in &keys {
+             let item = self.text(key);
+             self.roots.activity_mut().push_temp(item);
+             items.push(item);
+         }
+         items
+     }
+ 
+     /// One controlled-loop header value as the `Number` the loop runs on:
+     /// numeric (41.1 if not) and rounded at the digits in force.
+-    fn header_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
++    fn header_number(&mut self, value: ObjRef) -> Result<Number, Failure> {
+         let entry_digits = self.activation().settings.digits();
+         // **A tagged integer no wider than `DIGITS` is its own rounding**, so
+         // the unary `+` below has nothing to do to it and the general path
+         // only spends: `arith_operand` builds a `Number`, the addition copies
+         // it into a zero-left fast path, rounds it, and copies it out again.
+         // Neither of the two checks the general path makes can fail here --
+         // the tag holds no object for `operator_operand_gap` to find, and an
+         // integer is numeric -- so this answers directly.
+         if let Decoded::SmallInt(small) = value.decode()
+             && within_digits(small, entry_digits)
+@@ -891,55 +906,112 @@ impl Interp {
+             // answer for every program that stays inside the tag, which is
+             // why it is asserted on every header of every program the debug
+             // gate runs rather than probed once.
+             debug_assert_eq!(
+                 Ok(&shortcut),
+                 round_via_unary_plus(&Number::from_i64(small), entry_digits).as_ref(),
+                 "a tagged integer within DIGITS {entry_digits} is not its own unary +"
+             );
+             return Ok(shortcut);
+         }
+-        if self.operator_operand_gap(value).is_some() {
+-            return self.header_object_number(role, value);
+-        }
+         let result = self.header_number_body(value, entry_digits);
+         // Blamed on any failure past the object-position check above, not
+         // only `arith_operand`'s own conversion -- the same reason
+         // `Interp::arith_general` (`eval.rs`) blames its own whole
+         // computation rather than only `Interp::arith_left_operand`'s.
+         // Measured: `numeric digits 1; s. = '9.9E999999999'; do i = s. to
+         // 5` is 42.901 with the frame, past a conversion that already
+         // succeeded -- `round_via_unary_plus`'s own range check is what
+         // raises, still inside the same forwarded unary `+`.
+         if result.is_err() {
+             self.blame_stem_forwarded_operator(b"+", value);
+         }
+         result
+     }
+ 
+-    /// A header value that is an object: `ControlledLoop::setup`'s
+-    /// `callOperatorMethod(OPERATOR_PLUS)` is a message to it, 97.1 where it
+-    /// has no `+`, and what it answers is the loop's number. A `BY` answer
+-    /// that is itself an object is sent the setup's `<` against 0 next.
++    /// A controlled header value once the header holds an object:
++    /// `ControlledLoop::setup`'s `callOperatorMethod(OPERATOR_PLUS)`, a message
++    /// to an object (97.1 where it has no `+`), whose answer is kept as it is.
++    /// `BY`'s answer is sent the setup's `<` against 0 for the direction.
+     #[cold]
+     #[inline(never)]
+-    fn header_object_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
++    fn accept_object_header(
++        &mut self,
++        role: HeaderRole,
++        value: ObjRef,
++        values: &mut LoopHeaderValues,
++    ) -> Result<(), Failure> {
+         let answer = self.apply_prefix(rexx_parse::PrefixOp::Plus, value)?;
+         self.roots.activity_mut().push_temp(answer);
+-        if self.operator_message_receiver(answer).is_none() {
+-            return self.header_number(role, answer);
+-        }
+-        if role == HeaderRole::By {
++        let descending = if role == HeaderRole::By {
+             let zero = self.counted(0);
+-            self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
++            let below = self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
++            is_true_object(below)
++        } else {
++            false
++        };
++        let objects = values.objects.get_or_insert_with(Box::default);
++        match role {
++            HeaderRole::Initial => objects.initial = Some(answer),
++            HeaderRole::To => objects.to = Some(answer),
++            _ => {
++                objects.by = Some(answer);
++                objects.descending = descending;
++            }
+         }
+-        Err(Loud::object_position(role.value_name(), "an object a `+` answered").into())
++        Ok(())
++    }
++
++    /// The loop state for a controlled header that holds an object: every
++    /// value the header converted as a number becomes that number's object.
++    fn object_control_state(
++        &mut self,
++        code: &Code<'_>,
++        control: SymbolId,
++        values: &LoopHeaderValues,
++        objects: &ObjectHeader,
++    ) -> LoopState {
++        let digits = self.activation().settings.digits();
++        let initial = match (objects.initial, &values.initial) {
++            (Some(initial), _) => initial,
++            (None, Some(initial)) => self.control_number_object(initial.number().as_ref(), digits),
++            (None, None) => ObjRef::NIL,
++        };
++        let to = match (objects.to, &values.to) {
++            (Some(to), _) => Some(to),
++            (None, Some(to)) => Some(self.control_number_object(to, digits)),
++            (None, None) => None,
++        };
++        let (by, descending) = match (objects.by, &values.by) {
++            (Some(by), _) => (by, objects.descending),
++            (None, Some(by)) => (self.control_number_object(by, digits), by.signum() < 0),
++            (None, None) => (self.counted(1), false),
++        };
++        LoopState::ObjectControlled(Box::new(ObjectControl {
++            control,
++            at: control_slot(code, control),
++            shape: shape_of(code.symbols.name(control).as_bytes()),
++            initial: Some(initial),
++            to,
++            by,
++            descending,
++            for_remaining: values.for_remaining,
++            stepped: false,
++        }))
++    }
++
++    /// `number` as the object a header's `+` answers, rooted.
++    fn control_number_object(&mut self, number: &Number, digits: u64) -> ObjRef {
++        let form = self.activation().settings.form();
++        let object = self.number(number.clone(), crate::eval::saturate_digits(digits), form);
++        self.roots.activity_mut().push_temp(object);
++        object
+     }
+ 
+     /// [`Interp::header_number`]'s own computation for a position that
+     /// reaches it (`Initial`, `To` and `By` -- see that function's own
+     /// doc), wrapped by it so every failing step is blamed once.
+     fn header_number_body(&mut self, value: ObjRef, entry_digits: u64) -> Result<Number, Failure> {
+         let operand = self.arith_operand(value)?;
+         // The header rounds through a unary `+`, so its three numeric
+         // positions carry an operand exactly as an operator's do -- measured,
+         // `do k = 1 to 123456789` and `... by 123456789` are both 98.972 at
+@@ -1067,20 +1139,24 @@ impl Interp {
+                     }
+                 };
+             }
+             LoopKind::Forever => LoopState::Forever,
+             // A bare `DO` with no expression at all runs a single pass,
+             // matching `Simple`'s own behaviour -- see `loop_header_plan`'s
+             // own note on why nothing in this crate's tests reaches it.
+             LoopKind::Count(_) => LoopState::Count {
+                 remaining: values.count.unwrap_or(1),
+             },
++            LoopKind::Controlled(ctrl) if values.objects.is_some() => {
++                let objects = values.objects.as_deref().expect("tested by the guard");
++                self.object_control_state(code, ctrl.control, &values, objects)
++            }
+             LoopKind::Controlled(ctrl) => LoopState::Controlled {
+                 control: ctrl.control,
+                 at: control_slot(code, ctrl.control),
+                 // The header's own value, in the representation the header
+                 // produced it in. The first re-test replaces it, computing its
+                 // own representation the same way.
+                 current: values
+                     .initial
+                     .expect("a controlled loop's plan always names its initial value"),
+                 to: values.to,
+@@ -1547,20 +1623,24 @@ impl Interp {
+         // frame to absorb it, so it keeps the nested path.
+         if matches!(body.kind, LoopKind::Simple) && body.label.is_none() {
+             return self.flat_block_start(code, index, instruction, source);
+         }
+         let over_register = values.over_register;
+         let state = match &body.kind {
+             LoopKind::Forever => LoopState::Forever,
+             LoopKind::Count(_) => LoopState::Count {
+                 remaining: values.count.unwrap_or(1),
+             },
++            LoopKind::Controlled(ctrl) if values.objects.is_some() => {
++                let objects = values.objects.as_deref().expect("tested by the guard");
++                self.object_control_state(code, ctrl.control, &values, objects)
++            }
+             LoopKind::Controlled(ctrl) => LoopState::Controlled {
+                 control: ctrl.control,
+                 at: control_slot(code, ctrl.control),
+                 current: values
+                     .initial
+                     .expect("a controlled loop's plan always names its initial value"),
+                 to: values.to,
+                 by: match values.by {
+                     Some(by) => by,
+                     None => Number::one(),
+@@ -1940,20 +2020,23 @@ impl Interp {
+         // `in_counted_clause` spelled out rather than given a closure: the
+         // closure's inlining into the driver is a codegen decision that
+         // unrelated changes to the flat path flip (+18.6% on `emptyloop`).
+         let entry = self.enter_clause(header_line, counted);
+         let ran = match self.loop_advance(code, state, do_indent, loop_indent) {
+             Ok(advanced) => {
+                 self.settle_block_indent(advanced, do_indent);
+                 Ok(advanced)
+             }
+             Err(failure) => {
++                if by_message_first_pass(blame, state) {
++                    self.blame_while_failure(code, source, flat.do_index, loop_indent);
++                }
+                 self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                 Err(failure)
+             }
+         };
+         let header = self.leave_clause(entry, code, ran);
+         let header = match header {
+             Ok(header) => header,
+             // The boundary's own failure, a requested `HALT`, is blamed as the
+             // header's is.
+             Err(failure) => {
+@@ -1982,20 +2065,23 @@ impl Interp {
+         let resume = flat.resume;
+         let (do_index, end_index) = (flat.do_index, flat.end_index);
+         let blame = flat.header_clause;
+         let site = &flat.iterate_site;
+         let state = &mut flat.state;
+         let counter = &mut flat.counter;
+         let header = self.in_counted_clause(code, header_line, counted, |it| {
+             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
+                 Ok(advanced) => advanced,
+                 Err(failure) => {
++                    if by_message_first_pass(blame, state) {
++                        it.blame_while_failure(code, source, do_index, loop_indent);
++                    }
+                     it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
+                     return Err(failure);
+                 }
+             };
+             if !advanced {
+                 it.settle_block_indent(false, do_indent);
+                 return Ok(false);
+             }
+             if let Some(cond) = cond {
+                 // Overrides what stepping the `DO`/`LOOP` instruction set:
+@@ -2057,20 +2143,23 @@ impl Interp {
+         match state {
+             LoopState::Forever => Ok(true),
+             LoopState::Count { remaining } => {
+                 if *remaining == 0 {
+                     return Ok(false);
+                 }
+                 *remaining -= 1;
+                 Ok(true)
+             }
+             LoopState::With(with) => self.with_advance(code, with, loop_indent),
++            LoopState::ObjectControlled(ctl) => {
++                self.object_control_advance(code, ctl, do_indent, loop_indent)
++            }
+             LoopState::OverItems {
+                 control,
+                 at,
+                 snapshot: _,
+                 items,
+                 next,
+                 remaining,
+             } => {
+                 // **The item is bound before `FOR`'s budget is consulted**,
+                 // which is `RexxInstructionDoOverFor::iterate`'s own
+@@ -2214,23 +2303,23 @@ impl Interp {
+                     && for_remaining.is_none()
+                     && let Some(slot) = *at
+                     && let Some(bound) = to.as_ref()
+                 {
+                     let mode = self.trace_mode();
+                     let fuzz = self.activation().settings.fuzz();
+                     if !mode.results && !mode.intermediates && fuzz == 0 {
+                         let frame = self.activation().frame;
+                         if let Some(previous) = self.variable(frame, slot)
+                             && matches!(previous.decode(), Decoded::Heap { .. })
++                            && self.operator_message_receiver(previous).is_none()
+                         {
+-                            let sum =
+-                                self.controlled_step_wide(previous, by, Some(bound), digits)?;
++                            let sum = self.controlled_step_wide(previous, by, digits)?;
+                             let stepped_value = ControlValue::Wide(sum);
+                             let within = Self::controlled_within_wide(
+                                 &stepped_value,
+                                 bound,
+                                 by,
+                                 digits,
+                                 fuzz,
+                             )?;
+                             let form = self.activation().settings.form();
+                             let handle = self.controlled_value_wide(&stepped_value, digits, form);
+@@ -2279,86 +2368,24 @@ impl Interp {
+                 // opens one.** The enclosing `Op::Clause`'s region belongs to
+                 // the whole `DO` instruction, so without this every root
+                 // pushed below survives until the *loop* ends rather than
+                 // until the *pass* does -- one `ObjRef` per iteration, and
+                 // each one pins whatever heap object it names. Popped after
+                 // `bind_control` has written the new value into the control
+                 // variable's own storage, which is what roots it from there
+                 // on; the `?` paths below leave it to the outer truncation,
+                 // exactly as `pop_frame`'s own doc describes.
+                 let pass = self.roots.activity_mut().push_frame();
++                let mut by_message = None;
+                 if re_tested {
+-                    // **`read`, not `read_by_name`: this is an evaluation and
+-                    // it can raise `NOVALUE`** (review round 1 re-review,
+-                    // NEW-1 -- a defect this arm shipped with, not a
+-                    // pre-existing one). The oracle's own `control->evaluate`
+-                    // is a full expression evaluation, so a body that
+-                    // `DROP`s the control variable makes the next re-test
+-                    // raise `NOVALUE` rather than read a derived name.
+-                    // Measured, `signal on novalue name nv` around
+-                    // `do ii = 1 to 3 ; drop ii ; end`: the oracle runs the
+-                    // handler and exits 0, where `read_by_name` here gave a
+-                    // spurious 41.1 at rc 215. `read_by_name` reports
+-                    // nothing to its caller and cannot express that.
+-                    let (previous, novalue, resolved) = match shape {
+-                        NameShape::Simple => {
+-                            // `read_at` with the slot `control_slot` took when
+-                            // the loop was entered, which is the same
+-                            // resolution this read made for itself on every
+-                            // pass before -- `None` still makes it, so the two
+-                            // shapes below and a control this resolution does
+-                            // not reach are unaffected.
+-                            let (value, novalue) = self.read_at(code, *control, *at);
+-                            (value, novalue, None)
+-                        }
+-                        // A bare stem never raises `NOVALUE` on read (`eval_
+-                        // node`'s own `ExprKind::Stem` arm has the citation),
+-                        // so there is no fallible read to thread through.
+-                        // The slot comes off the entry rather than from the
+-                        // loop's kept `at`, which is the same source the write
+-                        // half of this pass uses and the reason `control_slot`
+-                        // declines a stem.
+-                        NameShape::Stem => {
+-                            let at = code.compound(*control).and_then(|entry| entry.stem_at);
+-                            let name = code.symbols.name(*control).as_bytes();
+-                            (self.read_stem_at(name, at), Novalue::Set, None)
+-                        }
+-                        NameShape::Compound => {
+-                            let (stem_name, stem_at) = code.stem(*control);
+-                            let key = self.tail_key(code, *control)?;
+-                            let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
+-                            let mut resolved = stem_name.to_vec();
+-                            resolved.extend_from_slice(&key);
+-                            (value, novalue, Some(resolved))
+-                        }
+-                    };
+-                    self.novalue_check(novalue, previous)?;
+-                    self.roots.activity_mut().push_temp(previous);
+-                    // `>C>` before `>V>`, both self-gated on `intermediates`
+-                    // like every other value-bearing prefix -- `stem_get`'s
+-                    // own read announces the fully-resolved name it used
+-                    // before either of the value lines shows what is stored
+-                    // there, the same order `eval_node`'s `Compound` arm and
+-                    // its own tracing counterpart use for an ordinary read.
+-                    if let Some(resolved) = &resolved {
+-                        let name = code.symbols.name(*control).as_bytes();
+-                        self.trace_compound_name(loop_indent, name, resolved);
+-                    }
+-                    // `result_text` for the pair, not `intermediate_text`:
+-                    // `>V>` is `intermediates` and `>>>` is `results`, and
+-                    // `results` is the weaker of the two, so it renders for
+-                    // either and drops neither.
+-                    if let Some(rendered) = self.result_text(previous) {
+-                        let name = code.symbols.name(*control).as_bytes();
+-                        self.trace_variable(loop_indent, name, &rendered);
+-                        self.trace_result(loop_indent, &rendered);
+-                    }
++                    let previous =
++                        self.read_control_traced(code, *control, *at, shape, loop_indent)?;
+                     // The increment, on integers when it can be. `previous`
+                     // comes back out of the variable pool as a tagged small
+                     // integer for every ordinary counted loop, and `BY` is
+                     // whole; the guard is the same one `eval`'s own
+                     // arithmetic fast path uses, and for the same reason --
+                     // an operand too wide for `DIGITS` is rounded before the
+                     // addition, so the exact `i64` sum would be the wrong
+                     // answer.
+                     let stepped = match (&*current, previous.decode()) {
+                         (ControlValue::Small(_), Decoded::SmallInt(value))
+@@ -2373,30 +2400,53 @@ impl Interp {
+                     // **Written inside each arm rather than assigned from the
+                     // `match`'s own value**, which is layout rather than
+                     // style. A single assignment site has to write a whole
+                     // `ControlValue`, and that is as wide as the `Number` its
+                     // other arm carries, so the integer arm pays that width
+                     // to deliver a tag and an `i64`; per arm, each writes
+                     // only the bytes it has. Measured, 10 instructions a pass
+                     // -- 190,000,000 across `bench-programs/varlookup.rex`.
+                     match stepped {
+                         Some(sum) => *current = ControlValue::Small(sum),
++                        // An object in the control variable: the loop goes on
++                        // by message from here.
++                        None if self.operator_message_receiver(previous).is_some() => {
++                            by_message = Some(previous);
++                        }
+                         None => {
+-                            *current = ControlValue::Wide(self.controlled_step_wide(
+-                                previous,
+-                                by,
+-                                to.as_ref(),
+-                                digits,
+-                            )?)
++                            *current =
++                                ControlValue::Wide(self.controlled_step_wide(previous, by, digits)?)
+                         }
+                     }
+                 }
++                if let Some(previous) = by_message {
++                    let ctl = self.object_control_from_numbers(
++                        (*control, *at, shape),
++                        to.as_ref(),
++                        by,
++                        *for_remaining,
++                        digits,
++                    );
++                    *state = LoopState::ObjectControlled(ctl);
++                    let LoopState::ObjectControlled(ctl) = state else {
++                        unreachable!("the state was written on the line above");
++                    };
++                    let more = self.object_control_pass(
++                        code,
++                        ctl,
++                        Some(previous),
++                        do_indent,
++                        loop_indent,
++                    )?;
++                    self.roots.activity_mut().pop_frame(pass);
++                    return Ok(more);
++                }
+                 // The first pass takes the value the header already computed,
+                 // unincremented and with no line of its own beyond the `>=>`
+                 // below -- `checkControl`'s own `else` arm reads it with
+                 // `getValue`, whose comment says why: the initial assignment
+                 // was already traced during setup, and tracing here too
+                 // "prevents getting an extra add looking item traced".
+                 let value = if let ControlValue::Small(small) = current
+                     && let Some(handle) = exact_small_int(*small, digits)
+                 {
+                     handle
+@@ -2446,79 +2496,214 @@ impl Interp {
+                     }
+                 }
+                 if let Some(r) = for_remaining {
+                     *r -= 1;
+                 }
+                 Ok(true)
+             }
+         }
+     }
+ 
++    /// `DoBlock::checkControl`'s read of the control variable at a re-test:
++    /// an evaluation, so it can raise `NOVALUE`, traced `>C>`, `>V>` and
++    /// `>>>`, and rooted.
++    #[inline(always)]
++    fn read_control_traced(
++        &mut self,
++        code: &Code<'_>,
++        control: SymbolId,
++        at: Option<usize>,
++        shape: NameShape,
++        loop_indent: usize,
++    ) -> Result<ObjRef, Failure> {
++        // **`read`, not `read_by_name`: this is an evaluation and
++        // it can raise `NOVALUE`** (review round 1 re-review,
++        // NEW-1 -- a defect this arm shipped with, not a
++        // pre-existing one). The oracle's own `control->evaluate`
++        // is a full expression evaluation, so a body that
++        // `DROP`s the control variable makes the next re-test
++        // raise `NOVALUE` rather than read a derived name.
++        // Measured, `signal on novalue name nv` around
++        // `do ii = 1 to 3 ; drop ii ; end`: the oracle runs the
++        // handler and exits 0, where `read_by_name` here gave a
++        // spurious 41.1 at rc 215. `read_by_name` reports
++        // nothing to its caller and cannot express that.
++        let (previous, novalue, resolved) = match shape {
++            NameShape::Simple => {
++                // `read_at` with the slot `control_slot` took when
++                // the loop was entered, which is the same
++                // resolution this read made for itself on every
++                // pass before -- `None` still makes it, so the two
++                // shapes below and a control this resolution does
++                // not reach are unaffected.
++                let (value, novalue) = self.read_at(code, control, at);
++                (value, novalue, None)
++            }
++            // A bare stem never raises `NOVALUE` on read (`eval_
++            // node`'s own `ExprKind::Stem` arm has the citation),
++            // so there is no fallible read to thread through.
++            // The slot comes off the entry rather than from the
++            // loop's kept `at`, which is the same source the write
++            // half of this pass uses and the reason `control_slot`
++            // declines a stem.
++            NameShape::Stem => {
++                let at = code.compound(control).and_then(|entry| entry.stem_at);
++                let name = code.symbols.name(control).as_bytes();
++                (self.read_stem_at(name, at), Novalue::Set, None)
++            }
++            NameShape::Compound => {
++                let (stem_name, stem_at) = code.stem(control);
++                let key = self.tail_key(code, control)?;
++                let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
++                let mut resolved = stem_name.to_vec();
++                resolved.extend_from_slice(&key);
++                (value, novalue, Some(resolved))
++            }
++        };
++        self.novalue_check(novalue, previous)?;
++        self.roots.activity_mut().push_temp(previous);
++        // `>C>` before `>V>`, both self-gated on `intermediates`
++        // like every other value-bearing prefix -- `stem_get`'s
++        // own read announces the fully-resolved name it used
++        // before either of the value lines shows what is stored
++        // there, the same order `eval_node`'s `Compound` arm and
++        // its own tracing counterpart use for an ordinary read.
++        if let Some(resolved) = &resolved {
++            let name = code.symbols.name(control).as_bytes();
++            self.trace_compound_name(loop_indent, name, resolved);
++        }
++        // `result_text` for the pair, not `intermediate_text`:
++        // `>V>` is `intermediates` and `>>>` is `results`, and
++        // `results` is the weaker of the two, so it renders for
++        // either and drops neither.
++        if let Some(rendered) = self.result_text(previous) {
++            let name = code.symbols.name(control).as_bytes();
++            self.trace_variable(loop_indent, name, &rendered);
++            self.trace_result(loop_indent, &rendered);
++        }
++        Ok(previous)
++    }
++
+     /// One controlled pass's step where the control variable is not an
+     /// integer the tag holds, or the sum leaves what `DIGITS` admits.
+     #[inline(never)]
+     fn controlled_step_wide(
+         &mut self,
+         previous: ObjRef,
+         by: &Number,
+-        to: Option<&Number>,
+         digits: u64,
+     ) -> Result<Number, Failure> {
+-        // The control variable is the **left** operand of the oracle's own
+-        // implicit `+`, so an object assigned to it inside the body is 97.1
+-        // there -- measured, `do i = 1 to 3; i = .array; end` prints one
+-        // iteration and then raises.
+-        if self.operator_operand_gap(previous).is_some() {
+-            return self.controlled_step_object(previous, by, to, digits);
+-        }
+         let read = self.arith_operand(previous)?;
+         read.add(by, digits)
+             .map_err(Raised::from)
+             .map_err(Failure::from)
+     }
+ 
+-    /// `DoBlock::checkControl`'s increment of a control variable holding an
+-    /// object: `+` sent to it with `BY`, 97.1 where it has none, and what it
+-    /// answers is the next value. An answer that is itself an object is sent
+-    /// the `TO` comparison next.
++    /// [`Interp::object_control_pass`] with its own temps frame and, at a
++    /// re-test, the control variable's read.
+     #[cold]
+     #[inline(never)]
+-    fn controlled_step_object(
++    fn object_control_advance(
+         &mut self,
+-        previous: ObjRef,
+-        by: &Number,
++        code: &Code<'_>,
++        ctl: &mut ObjectControl,
++        do_indent: usize,
++        loop_indent: usize,
++    ) -> Result<bool, Failure> {
++        let pass = self.roots.activity_mut().push_frame();
++        let previous = if ctl.stepped {
++            Some(self.read_control_traced(code, ctl.control, ctl.at, ctl.shape, loop_indent)?)
++        } else {
++            None
++        };
++        let more = self.object_control_pass(code, ctl, previous, do_indent, loop_indent)?;
++        self.roots.activity_mut().pop_frame(pass);
++        Ok(more)
++    }
++
++    /// A numeric controlled loop's state carried over once its control
++    /// variable holds an object: `TO` and `BY` as the objects their numbers
++    /// are, the direction from `BY`'s sign.
++    #[cold]
++    #[inline(never)]
++    fn object_control_from_numbers(
++        &mut self,
++        (control, at, shape): (SymbolId, Option<usize>, NameShape),
+         to: Option<&Number>,
++        by: &Number,
++        for_remaining: Option<u64>,
+         digits: u64,
+-    ) -> Result<Number, Failure> {
+-        let form = self.activation().settings.form();
+-        let step = self.number(by.clone(), crate::eval::saturate_digits(digits), form);
+-        self.roots.activity_mut().push_temp(step);
+-        let answer = self.apply_binary(rexx_parse::Operator::Plus, previous, step)?;
+-        self.roots.activity_mut().push_temp(answer);
+-        if self.operator_message_receiver(answer).is_none() {
+-            return self.arith_operand(answer);
+-        }
+-        if let Some(to) = to {
+-            let bound = self.number(to.clone(), crate::eval::saturate_digits(digits), form);
+-            self.roots.activity_mut().push_temp(bound);
+-            let compare = if by.signum() < 0 {
++    ) -> Box<ObjectControl> {
++        let to = to.map(|to| self.control_number_object(to, digits));
++        let descending = by.signum() < 0;
++        let by = self.control_number_object(by, digits);
++        Box::new(ObjectControl {
++            control,
++            at,
++            shape,
++            initial: None,
++            to,
++            by,
++            descending,
++            for_remaining,
++            stepped: true,
++        })
++    }
++
++    /// One pass of an [`ObjectControl`] loop, `DoBlock::checkControl`: at a
++    /// re-test `+` is sent to `previous` with `BY` and the answer traced; the
++    /// value is bound as it is, then sent the `TO` comparison, and the loop
++    /// ends where that answers true. An object without the method is 97.1.
++    #[cold]
++    #[inline(never)]
++    fn object_control_pass(
++        &mut self,
++        code: &Code<'_>,
++        ctl: &mut ObjectControl,
++        previous: Option<ObjRef>,
++        do_indent: usize,
++        loop_indent: usize,
++    ) -> Result<bool, Failure> {
++        let (value, bind_indent) = match previous {
++            Some(previous) => {
++                let sum = self.arith_general(rexx_parse::Operator::Plus, previous, ctl.by)?;
++                self.roots.activity_mut().push_temp(sum);
++                if let Some(rendered) = self.result_text(sum) {
++                    self.trace_result(loop_indent, &rendered);
++                }
++                (sum, loop_indent)
++            }
++            None => {
++                let initial = ctl.initial.take().unwrap_or(ObjRef::NIL);
++                self.roots.activity_mut().push_temp(initial);
++                (initial, do_indent)
++            }
++        };
++        ctl.stepped = true;
++        self.bind_control(code, ctl.control, bind_indent, value, ctl.at, ctl.shape)?;
++        if let Some(to) = ctl.to {
++            let compare = if ctl.descending {
+                 rexx_parse::Operator::LessThan
+             } else {
+                 rexx_parse::Operator::GreaterThan
+             };
+-            self.apply_binary(compare, answer, bound)?;
++            if is_true_object(self.apply_binary(compare, value, to)?) {
++                return Ok(false);
++            }
+         }
+-        Err(Loud::object_position(
+-            "a controlled DO's control variable",
+-            "an object a `+` answered",
+-        )
+-        .into())
++        if let Some(remaining) = &mut ctl.for_remaining {
++            if *remaining == 0 {
++                return Ok(false);
++            }
++            *remaining -= 1;
++        }
++        Ok(true)
+     }
+ 
+     /// The handle a controlled pass binds when [`exact_small_int`] declines
+     /// the control value. Out of line for the reason
+     /// [`Interp::controlled_step_wide`] gives.
+     #[inline(never)]
+     fn controlled_value_wide(
+         &mut self,
+         current: &ControlValue,
+         digits: u64,
+@@ -2746,10 +2931,22 @@ pub(super) fn numeric_less(
+ /// constant (every later use re-rounds to the same width anyway) and wrong
+ /// the moment digits changes inside the loop body -- measured: `numeric
+ /// digits 3; do i = 1.23456 to 3; say i; numeric digits 9; end` is `1.23 /
+ /// 2.23 / 3.23` on the oracle (the header values were rounded once, at
+ /// entry, under digits 3, and stay that width even after digits widens);
+ /// this crate gave `1.23 / 2.23456 / 3.23456` before this fix (the exact
+ /// parse survived into the wider-digits passes untouched).
+ fn round_via_unary_plus(number: &Number, digits: u64) -> Result<Number, ArithError> {
+     Number::zero().add(number, digits)
+ }
++
++/// Whether a comparison's answer is the true object, `== TheTrueObject`.
++fn is_true_object(answer: ObjRef) -> bool {
++    answer == crate::eval::LOGICAL_TRUE
++}
++
++/// Whether a failed advance is a message-driven loop's first test, which the
++/// oracle makes inside the block it has just opened: blamed on the `DO`
++/// clause at the body's indent, as a `WHILE` is.
++fn by_message_first_pass(blame: HeaderClause, state: &LoopState) -> bool {
++    matches!(blame, HeaderClause::Do) && matches!(state, LoopState::ObjectControlled(_))
++}
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 5dd81e569..36943664f 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -2037,24 +2037,24 @@ mod group_runs {
+ 
+     /// The rows whose failure output prints an elapsed time, which differs
+     /// between any two runs.
+     const PRINTS_ELAPSED: &[&str] = &[
+         "base/bif/TIME.testGroup TEST_4",
+         "base/bif/TIME.testGroup TEST_5",
+         "base/bif/TIME.testGroup TEST_10",
+         "base/bif/TIME.testGroup TEST_11",
+     ];
+ 
+-    /// The rows refused in both modes whose trace output, on stderr, comes
+-    /// from a `REPLY` continuation and its sender: the lines interleave
+-    /// differently and the refused run ends after a different number. Allowed
+-    /// only while both runs end in the same `rexx-exec: ` refusal.
++    /// The rows whose trace output, on stderr, comes from a `REPLY`
++    /// continuation and its sender, so the lines interleave differently by
++    /// mode. Allowed while both runs end in the same `rexx-exec: ` refusal, or
++    /// end alike with the same stderr lines in another order.
+     const TRACE_INTERLEAVES: &[&str] =
+         &["base/keyword/TRACE_TraceObject.testGroup TEST_TRACEOBJECT_COLLECTOR"];
+ 
+     /// The rows whose outcome on this crate depends on a wall-clock boundary or
+     /// a sleep's duration, each with the lines that make it so: a failing check
+     /// on one is run again once, and only a second failure counts (ruling P48).
+     const WALL_CLOCK: &[&str] = &[
+         // STREAM.testGroup:866-876
+         "base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS",
+         // DateTime.testGroup:593-596
+@@ -2156,27 +2156,38 @@ mod group_runs {
+             if without(normal, timed) == without(every, timed) {
+                 return ("same apart from elapsed values".to_string(), true);
+             }
+         }
+         let refusal = |run: &Run| {
+             String::from_utf8_lossy(&run.stderr)
+                 .lines()
+                 .find(|line| line.starts_with("rexx-exec: "))
+                 .map(str::to_string)
+         };
++        let sorted_lines = |run: &Run| {
++            let mut lines: Vec<String> = String::from_utf8_lossy(&run.stderr)
++                .lines()
++                .map(str::to_string)
++                .collect();
++            lines.sort();
++            lines
++        };
+         if normal.status == every.status
+             && masked(&normal.stdout) == masked(&every.stdout)
+-            && refusal(normal).is_some()
+-            && refusal(normal) == refusal(every)
+             && TRACE_INTERLEAVES.contains(&row)
+         {
+-            return ("trace lines on stderr differ".to_string(), true);
++            if refusal(normal).is_some() && refusal(normal) == refusal(every) {
++                return ("trace lines on stderr differ".to_string(), true);
++            }
++            if sorted_lines(normal) == sorted_lines(every) {
++                return ("trace lines on stderr in another order".to_string(), true);
++            }
+         }
+         (
+             format!(
+                 "differs: status {:?} then {:?}",
+                 normal.status, every.status
+             ),
+             false,
+         )
+     }
+ 
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_object_control.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_object_control.txt
+new file mode 100644
+index 000000000..4fb84cf4e
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_object_control.txt
+@@ -0,0 +1,30 @@
++count 29
++/* A loop whose control value is an object is driven by message: + with BY
++   at each re-test, the answer kept as it is, and the TO comparison sent to
++   it; the loop ends where that answers true. */
++call t1; call t2; call t3; call t4; call t5; call t6; call t7; call t8; call t9
++exit
++t1: signal on syntax name x1
++do i = .environment to 5; say 't1' i; end; return
++x1: say 't1' rc condition('O')~message; return
++t2: do i = 1 to 3; say 't2' i; if i = 2 then i = .s~new('abc'); end
++say 't2 end' i; return
++t3: do i = .s~new(' 2 ') to 3; say 't3 ['i']'; end; say 't3 end' i; return
++t4: do i = .s~new('2.0') to 5 by 1 for 3; say 't4' i; end; say 't4 end' i; return
++t5: do i = .s~new(9) to 1 by -2; say 't5' i; if i < 5 then leave; end
++say 't5 end' i; return
++t6: do a.k = .s~new(1) to 3; say 't6' a.k; if a.k = 2 then iterate; end
++say 't6 end' a.k; return
++t7: do i = .c~new to 3; say 't7' i; end; say 't7 end' i; return
++t8: signal on syntax name x8
++do i = 1 to 3; say 't8' i; i = .local; end; return
++x8: say 't8' rc condition('O')~message i; return
++t9: do i = .s~new('abc') to 3; say 't9' i; end; say 't9 end' i; return
++::class s
++::method init; expose v; use arg v
++::method '+'; expose v; if arg() = 0 then return v; use arg o; return v
++::class c
++::method '+'; return self
++::method '<'; return .false
++::method '>'; return .true
++::method '<='; return .true
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_object_control_trace.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_object_control_trace.txt
+new file mode 100644
+index 000000000..9f518fb41
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_object_control_trace.txt
+@@ -0,0 +1,12 @@
++count 11
++/* The trace of a loop driven by message: the control's read, the +
++   answer and the assignment at each re-test. */
++trace i
++do i = .s~new(1) to 2; nop; end
++i = 0
++do j = 1 to 2; if j = 1 then j = .s~new(5); end
++trace o
++say i j
++::class s
++::method init; expose v; use arg v
++::method '+'; expose v; if arg() = 0 then return v; use arg o; return v + o
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_package_local.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_package_local.txt
+new file mode 100644
+index 000000000..7386fbd84
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/do_over_package_local.txt
+@@ -0,0 +1,10 @@
++count 9
++/* DO OVER a package's local directory iterates its indexes. */
++l = .context~package~local
++n = 0
++do e over l; n = n + 1; end
++say n
++l['A'] = 1; l~b = 2
++got = ''
++do e over l; got = got e; end
++say got~word(1) < got~word(2) got~words
