@@ -1,0 +1,22 @@
+count 21
+/* A loop driven by message ends where its comparison answers logical true:
+   a comparison or .true; a literal 1, a literal '1' or 0 + 1 is not. */
+call t1; call t2; call t3; call t4; call t5
+exit
+t1: do i = .c~new('lit') to 3 for 3; say 't1 pass'; end; say 't1 end'; return
+t2: do i = .c~new('str') to 3 for 3; say 't2 pass'; end; say 't2 end'; return
+t3: do i = .c~new('sum') to 3 for 3; say 't3 pass'; end; say 't3 end'; return
+t4: do i = .c~new('cmp') to 3 for 3; say 't4 pass'; end; say 't4 end'; return
+t5: do i = .c~new('tru') to 3 for 3; say 't5 pass'; end; say 't5 end'; return
+::class c
+::method init; expose k; use arg k
+::method '+'; return self
+::method '>'
+expose k
+select
+  when k = 'lit' then return 1
+  when k = 'str' then return '1'
+  when k = 'sum' then return 0 + 1
+  when k = 'cmp' then return 2 > 1
+  otherwise return .true
+end

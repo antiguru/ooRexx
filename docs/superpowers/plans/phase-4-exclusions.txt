@@ -1783,6 +1783,31 @@ DEVIATIONS -- permanent, chosen
      and a_kept_thread_context_used_by_another_activity_does_nothing, and
      scheduler::tests::callbacks::a_kept_call_context_used_from_another_threads_call_raises_98_983_there.
 
+ 25. A DO LOOP'S TO TEST AND BY'S DIRECTION TEST TAKE ANY LOGICAL TRUE
+     (Moritz, 2026-10-08). OWNER: none.
+
+     Where a controlled loop's control or BY value is an object, the oracle
+     ends the loop, or counts down, only when the comparison answers
+     TheTrueObject itself: `== TheTrueObject` in DoBlock::checkControl
+     (interpreter/instructions/DoBlock.cpp:213) and in ControlledLoop::setup
+     (instructions/DoBlockComponents.cpp:173). WHILE and UNTIL in the same
+     file (:277-316) fall back to truthValue for any other answer, and Rexx's
+     logical values are the strings 0 and 1, so the identity-only test is an
+     oracle defect. This crate takes the logical value '1', which a
+     comparison and `.true` answer, and so does a computed one-byte '1'.
+
+     Measured 2026-10-08, three descriptors, rc 0 on both sides. A user `>`
+     under `to 3 for 3` answering `'1' || ''`, `left('12', 1)`, `d2c(49)`,
+     `1~string`, `.true~copy` or `.true~string`: the oracle runs 3 passes,
+     this crate none. A BY whose `<` answers `left('12', 1)`: the oracle
+     sends `>` once and ends, this crate counts down and sends `<` five
+     times. A `>` answering a comparison or `.true` ends the loop on both
+     sides, and a literal `1`, a literal `'1'` or `0 + 1` runs 3 passes on
+     both (corpus/lang/do_object_compare_true.rex). Probes gt_one.rex,
+     gt_one2.rex and by_dir2.rex, .superpowers/sdd/2026-10-07-phase-6-1/
+     task-3-rereview.md.
+     LICENSED DIVERGENCE WITNESS: do-compare-computed-true
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -3252,18 +3277,6 @@ above.
   NOT FIXED, AND NOBODY IS ASSIGNED. It was found by the task correcting the
   prose around the drain, which owns no behaviour, so recording it was that
   task's whole disposition.
-
-  A LOOP DRIVEN BY MESSAGE ENDS WHERE ITS COMPARISON ANSWERS A COMPUTED '1'.
-  `DoBlock::checkControl` and BY's direction test (`DoBlockComponents.cpp:173`)
-  end or reverse the loop only for `TheTrueObject` itself; this crate tests
-  for the value `LOGICAL_TRUE`, the inline one-byte `'1'` a comparison
-  answers, and a computed one-byte `'1'` is the same handle. Measured
-  2026-10-08, a user `>` answering `'1' || ''`, `left('12', 1)`, `d2c(49)`,
-  `1~string`, `.true~copy` or `.true~string` under `to 3 for 3`: the oracle
-  runs 3 passes, this crate none, rc 0 both; a BY whose `<` answers
-  `left('12', 1)` counts down here. A comparison, `.true`, a literal `1` or
-  `'1'` and `0 + 1` agree. NOT FIXED: telling the true object from a computed
-  `'1'` needs a value representation this crate does not have.
 
   A CONDITION CALL ON CANNOT TRAP, RAISED WITH RETURN INTO A CALLER, REACHES
   THE CALLER'S CALL ON ANY HERE AND NOT ON THE ORACLE. Measured 2026-10-08,

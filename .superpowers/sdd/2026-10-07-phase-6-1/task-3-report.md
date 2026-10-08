@@ -257,13 +257,18 @@ and this report's commit.
      and it asserts collections > 0.
    - `012bf8ab1`'s reordering keeps this right: an object header value still reaches
      `accept_object_header`, and its answer is homed.
-2. **Important: `is_true_object`.** It is not matched. The true object a comparison answers
-   (`LOGICAL_TRUE`, the inline one-byte `'1'`) and a computed one-byte `'1'` are the same handle, so
-   telling them apart needs a value representation this crate does not have. I asked you for a ruling
-   with three options and recommended (B). In the meantime I recorded it as an exclusions known-gap
-   row with the measurements from `gt_one2.rex` and `by_dir2.rex`. `gt_one.rex` (a comparison,
-   `.true`, the literals and `0 + 1`) agrees. There is no corpus witness, because the corpus admits
-   only agreeing programs. If you rule (A), it is a separate change.
+2. **Important: `is_true_object`.** Ruled (Moritz, 2026-10-08): this crate's behaviour is right, and
+   the oracle's identity-only `== TheTrueObject` test has a defect. That test is at `DoBlock.cpp:213`
+   and `DoBlockComponents.cpp:173`. WHILE and UNTIL fall back to `truthValue` (`:277-316`), and Rexx
+   logical values are the strings 0 and 1. There is no code change.
+   - The known-gap row from `1a46f2eb9` is replaced by DEVIATIONS entry 25 (owner none), with the
+     citations and the gt_one, gt_one2 and by_dir2 measurements. Its
+     `LICENSED DIVERGENCE WITNESS: do-compare-computed-true` row in `tests/licensed_divergences.rs`
+     runs a `>` answering `left('12', 1)` on both sides: the oracle prints `pass` three times and
+     `end`, this crate prints `end`.
+   - The `is_true_object` doc now points at the deviation.
+   - The cases that agree (a comparison, `.true`, a literal `1`, `'1'`, `0 + 1`) are the corpus
+     witness `do_object_compare_true`.
 3. **Minors.**
    - The known-gap row's LOSTDIGITS output now reads `D=[] LOSTDIGITS`.
    - The `over_snapshot` and `hash_collection_indexes` comments and Deviation 8's WHY now name the
@@ -271,7 +276,8 @@ and this report's commit.
    - New witness `do_object_first_test_error`, the untrapped first-test traceback.
 
 Checks:
-- At `1a46f2eb9`: `cargo fmt --check` and `clippy -D warnings` exit 0.
+- At `1a46f2eb9`: `cargo fmt --check` and `clippy -D warnings` exit 0 (again after the Deviation 25
+  commit, with the gated corpus, `sourceline_oracle` and `licensed_divergences` passing).
 - `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0.
 - `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: exit 0.
 - At `308386167`, whose code is unchanged since: the gated release `concurrency_tests` file, run as

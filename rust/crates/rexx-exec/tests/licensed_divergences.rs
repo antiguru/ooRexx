@@ -47,23 +47,35 @@ struct LicensedDivergence {
 
 /// The DEVIATION rows whose difference from the oracle is licensed, each
 /// with the transcript its row records.
-const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[LicensedDivergence {
-    name: "driven-collection-reaches-a-new-object",
-    // Eight padding clauses, one short of the nine allocations that reach
-    // the oracle's threshold. The padding is the only thing that may sit
-    // between `~new` and `drop`: measured, one `say 'built'` either before
-    // or after it makes the oracle answer `start / built / uninit ran /
-    // after-gc` and both engines agree, three runs each, so the divergence
-    // this row records is gone.
-    program: "say 'start'\no = .K~new\nz1 = 'pad1'\nz2 = 'pad2'\nz3 = 'pad3'\n\
+const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
+    LicensedDivergence {
+        name: "driven-collection-reaches-a-new-object",
+        // Eight padding clauses, one short of the nine allocations that reach
+        // the oracle's threshold. The padding is the only thing that may sit
+        // between `~new` and `drop`: measured, one `say 'built'` either before
+        // or after it makes the oracle answer `start / built / uninit ran /
+        // after-gc` and both engines agree, three runs each, so the divergence
+        // this row records is gone.
+        program: "say 'start'\no = .K~new\nz1 = 'pad1'\nz2 = 'pad2'\nz3 = 'pad3'\n\
                   z4 = 'pad4'\nz5 = 'pad5'\nz6 = 'pad6'\nz7 = 'pad7'\nz8 = 'pad8'\n\
                   drop o\ncall gc 'force'\nsay 'after-gc'\n\n\
                   ::class k\n::method uninit\n  say 'uninit ran'\n",
-    exit_code: 0,
-    stderr: "",
-    oracle_stdout: "start\nafter-gc\nuninit ran\n",
-    crate_stdout: "start\nuninit ran\nafter-gc\n",
-}];
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "start\nafter-gc\nuninit ran\n",
+        crate_stdout: "start\nuninit ran\nafter-gc\n",
+    },
+    LicensedDivergence {
+        name: "do-compare-computed-true",
+        program: "do i = .c~new to 3 for 3\n  say 'pass'\nend\nsay 'end'\n\
+              ::class c\n::method '+'\n  return self\n\
+              ::method '>'\n  return left('12', 1)\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "pass\npass\npass\nend\n",
+        crate_stdout: "end\n",
+    },
+];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,
 /// duplicated because the two are separate integration-test binaries and

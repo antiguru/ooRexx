@@ -2983,7 +2983,8 @@ fn round_via_unary_plus(number: &Number, digits: u64) -> Result<Number, ArithErr
     Number::zero().add(number, digits)
 }
 
-/// Whether a comparison's answer is the true object, `== TheTrueObject`.
+/// Whether a comparison's answer is logical true, the one-byte `'1'`;
+/// Deviation 25 has where the oracle tests for `TheTrueObject` alone.
 fn is_true_object(answer: ObjRef) -> bool {
     answer == crate::eval::LOGICAL_TRUE
 }

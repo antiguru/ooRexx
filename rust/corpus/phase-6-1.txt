@@ -91,3 +91,4 @@ lang/do_object_control_trace.rex
 lang/do_over_package_local.rex
 lang/do_object_bounds_rooted.rex
 lang/do_object_first_test_error.rex
+lang/do_object_compare_true.rex
