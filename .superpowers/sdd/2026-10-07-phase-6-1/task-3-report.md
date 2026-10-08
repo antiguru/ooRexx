@@ -338,3 +338,79 @@ Checks at `0c75907d3`:
 - Probes: the only new differences are the Deviation 25 cases (`true1`, `gt_one`, `gt_one2`,
   `by_dir2`, `z_nonlogical`) and `ident2`'s address-reuse line.
 - The debug workspace run was not re-run this round.
+
+### Fix round 3 addendum: references, commands, rationale
+
+`945e31f33` makes `loop_truth` read the answer's string value (`string_value_text`, the counterpart
+of truthValue's `requestString`) rather than its rendering, so an array answer is reported as
+`found "an Array"`. Deviation 25 states this and adds the row. Line numbers below are at `945e31f33`;
+`rust/crates/rexx-exec/src/` is abbreviated.
+
+- `run/loops.rs:2718` `loop_truth`: `LOGICAL_TRUE` gives true and `LOGICAL_FALSE` gives false.
+  Anything else is taken through `string_value_text` and `eval::logical_value`, and is exactly `1`
+  or `0` or raises 34.901 (`Raised::not_logical`) with the string as the insert. `' 1'` raises.
+- It is called at `run/loops.rs:963` (BY's sign check, `accept_object_header`) and
+  `run/loops.rs:2768` (the TO test, `object_control_pass`).
+- `docs/superpowers/plans/phase-4-exclusions.txt:1786`, Deviation 25: the rule, its reason, 34.901
+  and why that subcode, and the measured table.
+- `tests/licensed_divergences.rs:69`: the row `do-compare-computed-true` (`return 0 + 1`).
+- `rust/corpus/lang/do_object_compare_true.rex`: the cases that agree with the oracle.
+- `run/loops.rs:981` `object_control_state` and `:2691` `object_control_from_numbers` turn the
+  numbers into objects once per loop.
+- `:1022` `hold_object_control` holds them, and `:1035` `release_loop_objects` releases them. Its
+  callers are `run/loops.rs:1789`, `:1799`, `:1860`, `:1875` and `ir/drive.rs:3714`.
+- `:339` `FlatLoop::object_key`.
+- `activity.rs:85` declares the field and `:546` roots it. `ir/drive.rs:2970` moves the entries with
+  a REPLY continuation.
+
+**Why `loop_objects` sits on `Activity`, not `Activation` or the header registers.**
+- The roots have to cover exactly the window round 2's defect came from. A pass boundary
+  (`flat_loop_step_top`) takes the loop's box out of `flat_top` and runs user code while it is out:
+  the UNTIL test, a trap delivered at the boundary clause, and the `+` and comparison sends.
+- The flat loops are on the activity, so their roots belong beside them. A REPLY continuation moves
+  `flat_loops`/`flat_top` to a new activity (`ir/drive.rs:2958-2961`), and the entries move with them
+  by key.
+- An `Activation` does not own its loops. An internal call without PROCEDURE runs further loops in
+  the caller's frame, and recursion stacks loops of different activations on one activity, so
+  per-activation storage would have to search the stack to release.
+- Header registers held the header's own answers in round 2, but a numeric loop that switches to an
+  object mid-loop has no register access in `loop_advance`. The objects it makes then had no home,
+  which is why round 2 made them afresh each pass and lost their identity.
+- One activity-level list keyed by the boxed state's address covers the header case and the switch
+  case alike. It is empty outside message-driven loops, and the empty check sits in the cold release
+  path.
+
+**Commands and results at `945e31f33`** (from `rust/`):
+- `cargo fmt --all --check`: exit 0.
+- `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`: exit 0.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --no-fail-fast -p rexx-exec --lib --test corpus
+  --test ir_recorded_oracle --test licensed_divergences`: exit 0. lib 1016 passed; corpus 29 passed
+  and 1 ignored; `ir_recorded_oracle` 21 passed; `licensed_divergences` 22 passed.
+- At `0c75907d3`, whose code differs from `945e31f33` only in `loop_truth`'s string read:
+  - `memcap 8G cargo test -j 4 -p rexx-exec --lib --test collect_stress`: 1016 and 37 passed.
+  - `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --release --test concurrency_tests
+    whole_groups`: 6 passed.
+  - The same command with `-- --skip whole_groups`: 32 passed.
+- Probes `z_arr` and `z_nonlogical` (`/tmp/claude-1000/p61/t3/probes/`) show the 34.901 cases as
+  Deviation 25 tabulates them.
+
+**Perf against the 6.1 base**, callgrind Ir. The command, from the repository root:
+
+    bash rust/bench-programs/callgrind.sh -r 3 -j 10 -o $S/cg-h3 -p "emptyloop decloop rexxcps" base=$B/base/rexx-run pad1=$B/pad1/rexx-run pad3=$B/pad3/rexx-run t3=$S/bin/h3/rexx-run
+
+`B=/tmp/claude-1000/p61/t1/bin`, `S=/tmp/claude-1000/p61/t3`. The binary is `git archive
+0c75907d3`, sha256 `f5ea13e6...`. Results, against a band of 0:
+
+| program | base Ir | t3 Ir | delta |
+|---|---:|---:|---:|
+| emptyloop | 7,786,100,369 | 7,711,200,008 | -0.9620% |
+| decloop | 2,469,011,119 | 2,403,018,557 | -2.6728% |
+| rexxcps | 17,788,421,116 | 17,700,549,564 | -0.4940% |
+
+`945e31f33` changes only `loop_truth`'s non-fast path, which none of these programs reach, and it
+was not re-measured.
+
+**Concerns.**
+- The debug workspace run was last done at `1a46f2eb9` (exit 0) and not repeated this round.
+- When the oracle reuses a freed object's address, identity probes show `same` where we show a new
+  object (`ident2`'s first line after a switch). That is not a behaviour to match.
