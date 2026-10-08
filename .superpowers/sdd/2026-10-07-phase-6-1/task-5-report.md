@@ -154,3 +154,31 @@ Checks at `496977456`: `cargo fmt --all --check` 0; clippy (at `eb3775477`) 0;
 `ir_recorded_oracle` 0 (29 passed, 1 ignored; 21 passed). At `eb3775477` the workspace run was
 101 on `collect_stress` alone, fixed by `496977456`. `refusal_sites` 0 without a refresh.
 whole_groups not run (I2 stays open).
+
+## Fix round 1, I2
+
+Commits `a945a5ae8` (the `DIFFERING` rows of `whole_groups` in `tests/concurrency_tests.rs`),
+`40e7f71b8` (gate record `## Task 5`, `### Task 5 fix round 1, I2`).
+
+- `whole_groups` at `ff982eb46` (harness change in, rows unchanged): exit 101 on the moved rows
+  only; max RSS 878 188 KB, wall 4:10. At `a945a5ae8`: exit 0, 6 passed, twice (5:14 with a
+  rebuild, 2 385 136 KB, which may be rustc's; 25:58 without one, 819 136 KB, the wall clock from
+  one MutexSemaphore oracle run that hung to its 300 s deadline). All under `memcap 8G`.
+- Rows rewritten: Class whole, Method rest, Object rest, ATTRIBUTE whole, CONSTANT whole and rest,
+  METHOD whole and rest, TRACE whole, TRACE_TraceObject whole. Rows deleted: the rest rows of Class,
+  ATTRIBUTE, CALL, TRACE and TRACE_TraceObject (their whole runs no longer refuse), and CALL and
+  GUARD whole (they agree with the oracle). No `does not parse here` text is left in the file.
+- Causes, from the group copies run under `rexx-run` built at `ec97e4190`, `4c63d5b69`,
+  `f691ac33b` and `93c7c19fe`, each under `memcap 2G`: Task 4 for Class whole (with the harness
+  change), Method rest, Object rest and TRACE_TraceObject whole; Task 5 for ATTRIBUTE, CONSTANT,
+  METHOD, CALL, GUARD and TRACE; nothing moved under Task 4a. The old Method and Object rest counts
+  (63, 247) were reproduced at `ec97e4190` to name the tests behind the new assertions.
+- No regression. Newly failing tests that never passed here before: ATTRIBUTE
+  TESTMISPLACEDCLASSMETHOD (99.937 here, 99.905 on the oracle, for `::attribute 'foo' class` with a
+  body; the same 99.937 at `ec97e4190`, so older than Phase 6.1) and TRACE_TraceObject
+  TEST_OBJECT_AND_SCOPE (collector receives 0 lines against 19, the gap Task 4's review names).
+- Per-task check at `a945a5ae8`: fmt, clippy, the workspace test and the corpus gate all exit 0.
+
+Concerns: the ATTRIBUTE 99.937/99.905 check order is a parser divergence with no owner yet. TIME,
+CALL derived and REPLY every rows are listed in `DIFFERING` and agree in both green runs; not moved
+by these tasks, left as they are.
