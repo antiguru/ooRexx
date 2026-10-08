@@ -233,3 +233,51 @@ conversion fails. Task 2's callgrind command against the 6.1 base, pads at 0: em
 decloop -2.8190%, rexxcps -0.0008%, all inside +0.5%. Wall clock, five interleaved runs: emptyloop
 +3.96%, decloop -5.88%, rexxcps -0.87%, all inside ±4%. The binary before that commit was decloop
 +1.02%, over budget. Figures and commands are in the gate record under `### Task 3 fix round 1`.
+
+## Fix round 2
+
+Commits: `308386167` (rooting), `b0b72baa4` (re-review minors), `1a46f2eb9` (true-object known gap),
+and this report's commit.
+
+1. **Critical: TO/BY rooting.** A flat loop is out of `flat_top` for the whole pass boundary, so its
+   state's objects were not roots there.
+   - A header's `+` answers are now written into the registers their header values were evaluated
+     into (`ObjectHeader::home`, set in `file_header_value`, written in `flat_loop_start`). Those
+     registers live as long as the loop, the same way the DO OVER snapshot's register does.
+   - A TO, BY or initial value that converted as a number stays a `LoopBound::Number`. Each pass that
+     sends to it makes its object as a temp in that pass. This includes the switch from a numeric
+     loop, which now builds no objects (`object_control_from_numbers`, a free function).
+   - The reviewer's `dead*.rex` probes agree with the oracle (`dead2` and `dead3` 3 of 3 runs each),
+     as do `mixed`, `mixed2`, `switch`, `trace_switch`, `label` and `four`.
+   - Witness `do_object_bounds_rooted` (a switch with a heap TO and BY and an allocating `+`/`>`,
+     and a header whose BY answer is an object).
+   - Crate test `collect_stress::a_message_driven_loops_to_and_by_survive_collect_on_every_allocation`
+     runs it under collect-on-every-allocation. RED: with `012bf8ab1`'s `loops.rs` swapped in, the
+     test fails with "a message send to a value whose object is no longer live". GREEN with the fix,
+     and it asserts collections > 0.
+   - `012bf8ab1`'s reordering keeps this right: an object header value still reaches
+     `accept_object_header`, and its answer is homed.
+2. **Important: `is_true_object`.** It is not matched. The true object a comparison answers
+   (`LOGICAL_TRUE`, the inline one-byte `'1'`) and a computed one-byte `'1'` are the same handle, so
+   telling them apart needs a value representation this crate does not have. I asked you for a ruling
+   with three options and recommended (B). In the meantime I recorded it as an exclusions known-gap
+   row with the measurements from `gt_one2.rex` and `by_dir2.rex`. `gt_one.rex` (a comparison,
+   `.true`, the literals and `0 + 1`) agrees. There is no corpus witness, because the corpus admits
+   only agreeing programs. If you rule (A), it is a separate change.
+3. **Minors.**
+   - The known-gap row's LOSTDIGITS output now reads `D=[] LOSTDIGITS`.
+   - The `over_snapshot` and `hash_collection_indexes` comments and Deviation 8's WHY now name the
+     native `Directory`.
+   - New witness `do_object_first_test_error`, the untrapped first-test traceback.
+
+Checks:
+- At `1a46f2eb9`: `cargo fmt --check` and `clippy -D warnings` exit 0.
+- `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0.
+- `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: exit 0.
+- At `308386167`, whose code is unchanged since: the gated release `concurrency_tests` file, run as
+  `whole_groups` (6 passed) and the rest (32 passed).
+- `collect_stress`: 37 passed.
+- Witnesses: all agree with the oracle. Probes: 81 of 87 agree; the six others are the same known
+  exceptions as before.
+- Instructions against the 6.1 base (`callgrind.sh -r 1`): emptyloop -0.0018%, decloop -2.38%,
+  rexxcps +0.09%, fibcall +0.17%.
