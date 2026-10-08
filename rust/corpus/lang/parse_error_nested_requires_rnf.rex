@@ -1,0 +1,3 @@
+/* Routine~newFile of a file whose ::REQUIRES does not parse, untrapped. */
+r = .routine~newFile('mid.cls')
+say 'not reached'

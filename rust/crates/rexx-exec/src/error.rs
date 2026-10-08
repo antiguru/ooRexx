@@ -1868,11 +1868,12 @@ impl Raised {
     ) -> (Raised, Vec<u8>) {
         let mut raised = Raised::from(error);
         raised.position = u32::try_from(line).unwrap_or(0);
-        let text = source.join_span(error.clause()).map_or_else(
-            || b"<clause span outside the retained source>".to_vec(),
-            Cow::into_owned,
+        let text = source.join_span(error.clause());
+        debug_assert!(
+            text.is_some(),
+            "a parse error's clause lies inside its source"
         );
-        (raised, text)
+        (raised, text.map(Cow::into_owned).unwrap_or_default())
     }
 }
 

@@ -651,13 +651,7 @@ impl Interp {
         let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::requires_file_not_found(name).into());
         };
-        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
-        let parsed = match rexx_parse::program_from(source) {
-            Ok(parsed) => Rc::new(parsed),
-            Err(rejected) => {
-                return Err(self.raise_parse_failure(&rejected, Some(resolved.as_bytes())));
-            }
-        };
+        let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
         let required = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&parsed));
         self.required_paths
@@ -1832,11 +1826,7 @@ impl Interp {
         let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::executable_file_unreadable(name).into());
         };
-        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
-        let parsed = match rexx_parse::program_from(source) {
-            Ok(parsed) => parsed,
-            Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
-        };
+        let parsed = self.parse_file(text, name)?;
         let parent = parent.or_else(|| {
             self.running_activation()
                 .map(|activation| Package::Program(activation.program_id))
@@ -1906,7 +1896,10 @@ impl Interp {
         if let Some(parent) = parent {
             self.package_parents.insert(id, parent);
         }
-        self.install_directives(id, &program)?;
+        if let Err(failure) = self.install_directives(id, &program) {
+            self.seal_package_level(&failure, id);
+            return Err(failure);
+        }
         let class = if routine {
             self.routine_class()
         } else {
@@ -2533,6 +2526,15 @@ impl Interp {
 
     /// [`Interp::blame_directive`] for a directive in the package `id`, whose
     /// report names that package's own file when a `::REQUIRES` loaded it.
+    /// Closes the level of package `id`, whose directives did not install, as
+    /// the `ROUTINE` frame the oracle shows for it, so the native method or
+    /// clause that loaded it records its own level.
+    pub(crate) fn seal_package_level(&mut self, failure: &Failure, id: ProgramId) {
+        let name = self.program_display_name(id).to_vec();
+        self.capture_site_frame(failure, b"ROUTINE", &name, &[], id);
+        self.seal_site_level();
+    }
+
     fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = directive_clause(program, directive);
         self.activity.failure_site = Some(match self.required_paths.get(&id) {

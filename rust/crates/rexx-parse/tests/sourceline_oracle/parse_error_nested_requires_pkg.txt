@@ -1,0 +1,4 @@
+count 3
+/* Package~new of a file whose ::REQUIRES does not parse, untrapped. */
+p = .package~new('mid.cls')
+say 'not reached'

@@ -1955,7 +1955,11 @@ above.
   for a program, a ::REQUIRES file, an external call, Method~newFile,
   Routine~newFile, Package~new, Method~new, Routine~new and an INTERPRET
   string (`corpus/phase-6-1.txt`'s Task 5 rows and
-  `crates/rexx-exec/tests/ir_recorded_cases/parse-errors-main`).
+  `crates/rexx-exec/tests/ir_recorded_cases/parse-errors-main`). Measured
+  2026-10-08, Task 5 fix round 1: the same, `STACKFRAMES` included, for a
+  ::REQUIRES file reached from a file Routine~newFile, Method~newFile,
+  Package~new or loadPackage loads, and for such a file whose prologue
+  raises (`parse_error_nested_requires*.rex`).
 
   A LOADED SOURCE THAT DOES NOT PARSE IS NOT THE CONDITION'S PROGRAM OR
   PACKAGE. The oracle compiles it into a package of its own before it fails,
@@ -5464,20 +5468,20 @@ possible and the citation is what was checked.
   120 with "... is not implemented (Phase 9)". OWNER: Phase 9. The Routine~new
   entries below that quote the old text are the same refusal.
 
-  THE TRACEBACK OF A RAISE INSIDE .Package~new OR loadPackage LACKS THE
-  ORACLE'S COMPILED-METHOD LINE AND THE CALLING CLAUSE (the residual
-  re-review's "loud, pre-existing, not counted" list; the fix re-review's
-  F3 neighbours). Untrapped p = .Package~new('src', 'call nosuchroutine_zz'):
-    oracle stderr: 1 *-* call nosuchroutine_zz
-                   *-* Compiled method "NEW" with scope "Package".
-                   1 *-* p = .Package~new('src', 'call nosuchroutine_zz')
-                   Error 43 running src line 1:  Routine not found.
-                   Error 43.1:  Could not find routine "NOSUCHROUTINE_ZZ".
-    this stderr:   the first line and the last two only
-  rc 213 both, stdout empty both. Every committed witness traps such a
-  raise inside a helper, so the gap does not enter the differential.
-  Predates the phase. NO OWNER: the traceback family, with the two >I>
-  items above.
+  THE TRACEBACK OF A RAISE INSIDE .Package~new OR loadPackage LACKED THE
+  ORACLE'S COMPILED-METHOD LINE AND THE CALLING CLAUSE. CLOSED: measured
+  2026-10-08 at Phase 6.1 Task 5 fix round 1, untrapped
+  `p = .Package~new('src', 'call nosuchroutine_zz')` is identical on all
+  three descriptors (`corpus/lang/package_new_prologue_raise.rex`), and
+  trapped its traceback and `STACKFRAMES` agree.
+
+  A PROLOGUE'S LIVE STACK FRAMES LACK THE LEVELS THAT LOADED IT. Measured
+  2026-10-08: `.context~stackframes` read in the prologue of `bad.cls`
+  answers `ROUTINE bad.cls 1` and then the program's frame on the oracle, and
+  `ROUTINE bad.cls 1` alone here when the program's `::requires 'bad.cls'`
+  loads it; when `.Package~new('bad.cls')` loads it, the oracle's
+  `METHOD NEW` frame is missing here. A condition raised in the prologue
+  carries every level on both. NO OWNER.
 
   AN ::ATTRIBUTE EXTERNAL WHOSE GET RESOLVES AND WHOSE SET DOES NOT binds
   the getter before refusing on the oracle (parser/DirectiveParser.cpp:1682

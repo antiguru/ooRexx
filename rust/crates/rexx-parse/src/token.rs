@@ -38,7 +38,9 @@ pub struct ParseError {
     pub byte: usize,
     /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
     /// Zero until the scanner or `parse` resolves it. A `u32` keeps the error
-    /// two words wide, which every `Result` the parser returns carries.
+    /// two words wide, which every `Result` the parser returns carries: an
+    /// echo ending past `u32::MAX` is cut there, and one starting past it is
+    /// empty.
     end: u32,
 }
 

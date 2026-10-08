@@ -194,3 +194,12 @@ lang/parse_error_external_call.rex
 lang/parse_error_newfile.rex
 lang/parse_error_package_new.rex
 lang/parse_error_method_new.rex
+
+# Task 5 fix round 1: a ::REQUIRES file that does not parse, or whose prologue
+# raises, inside a file a native method loads.
+lang/parse_error_nested_requires.rex
+lang/parse_error_nested_requires_rnf.rex
+lang/parse_error_nested_requires_mnf.rex
+lang/parse_error_nested_requires_pkg.rex
+lang/parse_error_nested_requires_lp.rex
+lang/package_new_prologue_raise.rex

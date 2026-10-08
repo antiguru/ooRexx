@@ -1,0 +1,4 @@
+/* A raise in the prologue of a package Package~new compiles from lines
+   reports the prologue's clause, the method's line and the calling clause. */
+p = .Package~new('src', 'call nosuchroutine_zz')
+say 'not reached'

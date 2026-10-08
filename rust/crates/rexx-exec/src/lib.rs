@@ -2124,13 +2124,7 @@ impl Interp {
         let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::executable_file_unreadable(resolved.as_bytes()).into());
         };
-        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
-        let parsed = match rexx_parse::program_from(source) {
-            Ok(parsed) => Rc::new(parsed),
-            Err(rejected) => {
-                return Err(self.raise_parse_failure(&rejected, Some(resolved.as_bytes())));
-            }
-        };
+        let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
         let caller = self
             .running_activation()
             .map(|activation| activation.program_id);
@@ -2284,6 +2278,8 @@ impl Interp {
                 let name = Rc::clone(&self.activity.call_context.name);
                 self.capture_site_frame(&failure, b"ROUTINE", &name, &arguments, program_id);
                 self.seal_site_level();
+            } else if call_type == CallType::Requires {
+                self.seal_package_level(&failure, program_id);
             }
             return Err(failure);
         }
@@ -2394,8 +2390,10 @@ impl Interp {
         // The caller's clause, which its `StackFrame` goes on reporting while
         // this runs and which a program this installs must not leave behind.
         let caller_clause = self.save_clause_state();
-        // A called program's clauses trace from the margin, as a routine's do.
-        let caller_levels = called.then(|| {
+        // A called program's clauses trace from the margin, as a routine's do,
+        // and so do a `::REQUIRES` prologue's.
+        let own_level = called || call_type == CallType::Requires;
+        let caller_levels = own_level.then(|| {
             (
                 std::mem::take(&mut self.activity.activation_indent),
                 std::mem::take(&mut self.activity.indent_offset),
@@ -2431,10 +2429,10 @@ impl Interp {
             self.run_activity_root()
         }
         .map(Ended::value);
+        if own_level && let Err(failure) = &exit {
+            self.capture_activation_frame(failure);
+        }
         if called {
-            if let Err(failure) = &exit {
-                self.capture_activation_frame(failure);
-            }
             self.trace_invocation_exit();
         }
         // Main's untrapped failure gives its failed sends their object while
@@ -2457,7 +2455,7 @@ impl Interp {
             self.activity.indent_offset = offset;
             self.activity.clause_line_override = line;
         }
-        if called && exit.is_err() {
+        if own_level && exit.is_err() {
             self.seal_site_level();
         }
         exit

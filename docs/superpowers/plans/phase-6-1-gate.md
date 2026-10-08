@@ -499,7 +499,7 @@ Instructions:
 bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $S/cg2 -p "startup parse" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run base=$S/bin/base/rexx-run pad48=$S/bin/pad48/rexx-run t5=$S/bin/t5/rexx-run r1=$S/bin/r1/rexx-run
 ```
 
-Exit 0. Deltas against `base61`; the pad prints the same as `base`, so the band is 0.
+Exit 0. Deltas against `base61`. pad48 against base is +0.0000% on `parse` and +0.0007% on `startup` (+0.0395 against +0.0388), so the band is about 0.
 
 | program | base % | pad48 % | t5 % | r1 % | r1 against base % |
 |---|---:|---:|---:|---:|---:|

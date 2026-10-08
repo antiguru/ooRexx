@@ -849,7 +849,9 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
         Entry::TopLevel
             if matches!(
                 activation.call_type,
-                crate::activation::CallType::Subroutine | crate::activation::CallType::Function
+                crate::activation::CallType::Subroutine
+                    | crate::activation::CallType::Function
+                    | crate::activation::CallType::Requires
             ) =>
         {
             (&b"ROUTINE"[..], None)
@@ -866,9 +868,16 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
         ),
     };
     let arguments = activation.invoked_with().to_vec();
+    // A `::REQUIRES` prologue's frame is named for its package, measured.
+    let name = match (activation.entry, activation.call_type) {
+        (Entry::TopLevel, crate::activation::CallType::Requires) => {
+            interp.program_display_name(activation.program_id).to_vec()
+        }
+        _ => activation.invoked_as().to_vec(),
+    };
     Ok(Snapshot {
         kind,
-        name: activation.invoked_as().to_vec(),
+        name,
         clause: interp.clause_of(depth),
         body: activation.body,
         program: activation.program_id,

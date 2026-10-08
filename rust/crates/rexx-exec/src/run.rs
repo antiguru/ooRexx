@@ -3254,6 +3254,18 @@ impl Interp {
         raised.into()
     }
 
+    /// `text`, a file's, parsed as a whole program, or the condition it raises
+    /// reported as `name`'s.
+    pub(crate) fn parse_file(
+        &mut self,
+        text: Vec<u8>,
+        name: &[u8],
+    ) -> Result<rexx_parse::Program, Failure> {
+        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+        rexx_parse::program_from(source)
+            .map_err(|rejected| self.raise_parse_failure(&rejected, Some(name)))
+    }
+
     /// Closes off the level that is unwinding now, so the level above it can
     /// record its own clause.
     pub(crate) fn seal_site_level(&mut self) {
