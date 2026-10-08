@@ -477,3 +477,57 @@ passed); `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 101, the on
 `REXX_REFUSAL_SITES_REFRESH=1`: the workspace run exit 0, and clippy re-run exit 0 (one `Checking
 rexx-exec` line). `whole_groups` not run: no whole-group
 expectation line changed.
+
+## Task 5
+
+Commits: `59eb57f37` (behaviour, witnesses, exclusions rows, `refusal-sites.tsv`), `bef52e1b6`
+(fixtures that do not parse renamed `.cls`), `7824d57df` (perf round 1). `S` is the session
+scratchpad's `t5/perf`; each binary from `git archive <sha> rust interpreter`, built with
+`CARGO_TARGET_DIR=$S/target-NAME memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run`,
+one `Compiling rexx-exec` line each. `base61` is Task 1's base binary (sha256 re-checked).
+
+| binary | source | sha256 |
+|---|---|---|
+| base | `f1202acc1` | `b469013d2f8b5ea278488f4a626c1a3d0f0b0c54b175026bc43d08ab17c502c6` |
+| pad48 | base + `layout-pad.py 48` | `6ece878099c80836cc55b1f986eaad6feaf05abe79352d8b253761be3f67f4ad` |
+| t5 | `59eb57f37` | `bde248b6f8330d544375b5347d3c3738d232676066149ffd6e80f7aab3ae90ef` |
+| r1 | `7824d57df` | `e13d0e9e5862d3fa2a21ac9ac70c8a067656da107fbc6a3a0e0b8ad63dcebf70` |
+
+Instructions:
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $S/cg2 -p "startup parse" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run base=$S/bin/base/rexx-run pad48=$S/bin/pad48/rexx-run t5=$S/bin/t5/rexx-run r1=$S/bin/r1/rexx-run
+```
+
+Exit 0. Deltas against `base61`; the pad prints the same as `base`, so the band is 0.
+
+| program | base % | pad48 % | t5 % | r1 % | r1 against base % |
+|---|---:|---:|---:|---:|---:|
+| startup | +0.0388 | +0.0395 | +0.5292 | +0.2646 | +0.2257 |
+| parse | +0.6004 | +0.6004 | +0.6190 | +0.6090 | +0.0085 |
+
+t5 was +0.49% on `startup` against `base`: `ParseError` grew from two words to four, and the
+scanner and `Result` lines inlined into `rexx_parse::parse` grew (`callgrind_annotate`: +94k on
+`scanner.rs`, +80k on `result.rs`). Round 1 keeps it two words (`byte` and a `u32` end). `parse`'s
+running total is over +0.5% at `base` already; Task 5 adds +0.0085%.
+
+Wall clock:
+
+```
+PROGRAMS="startup parse" bash rust/bench-programs/wallclock.sh -r 5 -o $S/wall base=$S/bin/base/rexx-run pad48=$S/bin/pad48/rexx-run r1=$S/bin/r1/rexx-run
+```
+
+Exit 0; load average 1.98 at start and end.
+
+| program | pad48 % | r1 % |
+|---|---:|---:|
+| startup | +4.17 | +4.17 |
+| parse | +0.00 | +0.78 |
+
+`startup`'s medians are 0.024 s against 0.025 s, one step of the script's resolution; the pad
+shows the same step.
+
+`whole_groups` (`REXX_CORPUS_GATE=1 memcap 8G cargo test -j 1 --release -p rexx-exec --test
+concurrency_tests whole_groups`, at `7824d57df`): OOM-killed at the 8G cap, peak 8.0G, about nine
+minutes in, before the table was written. Not re-run at a higher cap; its expectation lines are
+unchanged.
