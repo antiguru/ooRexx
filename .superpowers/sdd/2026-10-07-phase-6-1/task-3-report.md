@@ -228,7 +228,8 @@ Checks at `150611a38`:
 - The whole gated `concurrency_tests` file in release: exit 0, 38 passed. This includes
   `whole_groups` and `the_s2_rows_of_the_derived_list_in_both_modes`.
 
-Concern: instruction counts against `652826b54` (`callgrind.sh -r 1`, no layout control) are
-emptyloop +0.64%, decloop +0.55%, rexxcps -0.04%, fibcall -0.21%. The emptyloop delta is 2
-instructions a pass in `loop_advance`, whose fast-path source is unchanged. Moving the new paths out
-of line cut it from +0.97%. It is recorded in the gate record for Task 5's measurement.
+Performance (added to the round): `012bf8ab1` asks `operator_message_receiver` only after a
+conversion fails. Task 2's callgrind command against the 6.1 base, pads at 0: emptyloop -0.0019%,
+decloop -2.8190%, rexxcps -0.0008%, all inside +0.5%. Wall clock, five interleaved runs: emptyloop
++3.96%, decloop -5.88%, rexxcps -0.87%, all inside ±4%. The binary before that commit was decloop
++1.02%, over budget. Figures and commands are in the gate record under `### Task 3 fix round 1`.
