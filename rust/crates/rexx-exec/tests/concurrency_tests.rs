@@ -2461,9 +2461,9 @@ mod group_runs {
             }
         }
 
-        /// The tests the rest part also leaves out, each with its reason: each
-        /// allocates here until memory runs out, which takes the shared test
-        /// process with it.
+        /// The tests every part leaves out, on both sides, each with its reason:
+        /// each allocates here until memory runs out, which takes the shared
+        /// test process with it.
         const REST_LEFT_OUT: &[(&str, &str, &str)] = &[
             (
                 "base/class/Class.testGroup",
@@ -3208,6 +3208,9 @@ mod group_runs {
         ) -> Vec<Row> {
             let (dir, group) = split(file);
             let mut left_out = reaching_rxapi(dir, &[group]);
+            for (_, test, _) in REST_LEFT_OUT.iter().filter(|(listed, ..)| *listed == file) {
+                left_out.insert(format!("{group}.{test}"));
+            }
             if part == Part::Derived {
                 let path = super::super::worktree()
                     .join("ootest/ooRexx")
@@ -3230,13 +3233,6 @@ mod group_runs {
                 };
                 let mut refusing = Vec::new();
                 let mut last = ours;
-                if refused(&last).is_some() {
-                    for (_, test, _) in REST_LEFT_OUT.iter().filter(|(listed, ..)| *listed == file)
-                    {
-                        left_out.insert(format!("{group}.{test}"));
-                        refusing.push(format!("{test} (unbounded)"));
-                    }
-                }
                 let mut before = false;
                 while let Some(line) = refused(&last) {
                     let Some(test) = started(&last).pop() else {
