@@ -103,3 +103,8 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Ruling: accept emptyloop +0.65% Ir as a codegen shift (emptyloop makes no truth judgment; 2 Ir/pass from register allocation in ops_loop_steady; four variants left it unchanged); recheck emptyloop cumulative against the 6.1 base at close with a layout control, as the Task 2 ruling does — cost if wrong: about half a percent on loop-heavy programs, visible at close.
 - whole_groups runs at Task 5 close and must cover 4a behaviour changes (SELECT CASE sends ==, collections raise 34.901, user STRING sent).
 - Task 4a review t4a-review (opus) dispatched, package review-24394ca34..7219f1377.diff.
+- Task 4a review (task-4a-review.md): spec compliant, quality Approved; 6 Minors. Minor fix round (2, 3, 5, 6) sent to t4a-impl; controller checks the diff, no re-review unless code beyond those lands.
+- Ruling: Minor 4 (current_case keeps the CASE object alive after SELECT) left — GC timing is licensed — cost if wrong: one object retained per activation.
+- Task 12 queue add: a user STRING method answering an Array or another object (reqstr.rs; oracle judges an Array answer by its joined string; length() shares the gap); rooting harness could not detect removing truth push or condition_value push (positive control unrooting reqstr answer also stayed green) — a harness gap for the final review.
+- Task 4a minor fix round f691ac33b, f6a91a85d; gate-record table regenerated 5e59d66b3 (380 cells; only 13 DO TO and 13 BY differ, Deviation 25). Controller read the run.rs diff.
+- Task 4a: complete (d27a9d441..5e59d66b3).
