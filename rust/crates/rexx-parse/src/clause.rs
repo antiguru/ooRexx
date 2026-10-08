@@ -127,6 +127,28 @@ impl ClauseCursor {
         }
     }
 
+    /// `error` echoing the clause it was reported against: the one holding its
+    /// byte, from its first token to its terminator. A label's runs on to the
+    /// end of the clause the label starts, which is what the oracle echoes
+    /// for `lab: nop`.
+    pub(crate) fn echo(&self, error: ParseError) -> ParseError {
+        let Some(mut index) = self
+            .clauses
+            .partition_point(|clause| clause.span.start <= error.byte)
+            .checked_sub(1)
+        else {
+            return error;
+        };
+        let start = self.clauses[index].span.start;
+        while self.clauses[index].label.is_some()
+            && let Some(next) = self.clauses.get(index + 1)
+            && next.tokens.start == self.clauses[index].tokens.end + 1
+        {
+            index += 1;
+        }
+        error.echoing(start..self.clauses[index].span.end)
+    }
+
     /// The clause being parsed, without consuming it.
     pub(crate) fn peek(&self) -> Option<&Clause> {
         self.pending.as_ref().or_else(|| self.clauses.get(self.pos))

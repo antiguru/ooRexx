@@ -527,7 +527,9 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   rexxutil SysFileTree'` is 90.998 rc 166, the entry-point error, where the
   same line spelled `LIBRARY REXXUTIL` is 98.903 rc 158 -- so `librexxutil`
   opens and the library name reaches `dlopen` in the case it was written in.
-  OWNER: Phase 5 for the rest of ::REQUIRES. EXTERNAL was DELIVERED by the
+  OWNER: Phase 5 for the rest of ::REQUIRES, a required file that does not
+  parse: DELIVERED by Phase 6.1 Task 5, witnessed by
+  `corpus/lang/parse_error_requires.rex`. EXTERNAL was DELIVERED by the
   phase that loads libraries: measured 2026-09-28 at 2ae06085c, the second
   row above agrees at rc 214, and with a ::METHOD naming `LIBRARY rxmath
   RxCalcSqrt` in its place at rc 166. What does not agree is the `LIBRARY
@@ -1943,37 +1945,25 @@ showing the divergence is gone. Deleting a row because it is inconvenient is
 the failure the set assertion exists to prevent, and it applies here as much as
 above.
 
-  A CALLEE THAT DOES NOT PARSE IS A LOUD REFUSAL HERE AND THE CALLEE'S OWN
-  ERROR ON THE ORACLE. Phase 7 Task 17 Step 3 was designed and not written, and
-  until now that was recorded only in a session message -- the failure mode
-  this file exists to stop. Measured 2026-09-13, `call zbad` where `zbad.rex`
-  holds `say 'x'` then `do forever then`:
+  A SOURCE THAT DOES NOT PARSE RENDERS ITS MESSAGE'S PLACEHOLDERS LITERALLY.
+  `impl From<&ParseError> for Raised` passes no substitutions, so
+  `interpret "do forever then"` reports `found "&1"` where the oracle reports
+  `found "THEN"`. Ruling R3 (`specs/2026-10-07-phase-6-1-loose-ends.md`
+  section 6) keeps the 2026-07-28 decision not to reproduce them. Measured
+  2026-10-08, Phase 6.1 Task 5: rc, code, position and the traceback, whose
+  first line is the failing clause in the failing source at its line, agree
+  for a program, a ::REQUIRES file, an external call, Method~newFile,
+  Routine~newFile, Package~new, Method~new, Routine~new and an INTERPRET
+  string (`corpus/phase-6-1.txt`'s Task 5 rows and
+  `crates/rexx-exec/tests/ir_recorded_cases/parse-errors-main`).
 
-    oracle  rc 229       2 *-* do forever then
-                         2 *-* call zbad
-                       Error 27 running <dir>/zbad.rex line 2:  Invalid DO or
-                       LOOP syntax.
-                       Error 27.901:  Incorrect data following FOREVER keyword
-                       on the loop; found "THEN".
-
-    crate   rc 120     rexx-exec: <dir>/zbad.rex does not parse here: 27.901:
-                       Invalid DO or LOOP syntax. is not implemented (Phase 5)
-
-  NOTE THE OWNER IT NAMES. The refusal says Phase 5, so
-  `crates/rexx-exec/tests/closed_phases.rs` -- which covers Phase 7 -- does not
-  see it, and neither did Phase 7's close.
-
-  The plan's Task 17 Step 3 splits it in two and both halves are still open.
-  3a is the substitution: `impl From<&ParseError> for Raised` passes an empty
-  list, so a message with a placeholder renders it literally --
-  `interpret "do forever then"` prints `found "&1"`. Closing it means
-  `rexx-parse` carrying the offending token, which the plan sizes at at least
-  56 `(code, sub)` pairs over at least 121 pairs and up to ~230 call sites, and
-  the compiler will not find them: a field defaulting to empty leaves every
-  raiser compiling and silently unsubstituted. 3b is the attribution: the
-  callee's path and line on the major line and its clause above the caller's.
-  A top-level parse failure is the same machinery with a wider gap and is
-  driven through `rexxc` by `corpus/errors/parse-errors.tsv` instead.
+  A LOADED SOURCE THAT DOES NOT PARSE IS NOT THE CONDITION'S PROGRAM OR
+  PACKAGE. The oracle compiles it into a package of its own before it fails,
+  so `condition('O')~program` and `~package~name` name it: `x` for
+  `.package~new('x', .array~of('say ('))`, `badm.rex` for
+  `.routine~newFile('badm.rex')`. Here no package exists for it and both name
+  the calling program. Measured 2026-10-08 at Phase 6.1 Task 5; the
+  `STACKFRAMES` agree, the `COMPILE` frame naming the source.
 
   NO NATIVE ENTRY POINT CHECKS ITS REQUIRED ARGUMENT COUNT AT THE BOUNDARY.
   Each body decides for itself, so an omitted required argument answers

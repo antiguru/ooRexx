@@ -1,0 +1,25 @@
+count 24
+/* An INTERPRET string that does not parse raises SYNTAX with its clause as
+   the first traceback line, at the INTERPRET's own line. */
+do n = 1 to 8
+  call t n
+end
+say 'end'
+exit
+t: signal on syntax
+  select
+    when arg(1) = 1 then interpret "y=("
+    when arg(1) = 2 then interpret "v=1; y=(  ; z=2"
+    when arg(1) = 3 then interpret "v=1" || '0a'x || "y=(" || '0a'x || "z=2"
+    when arg(1) = 4 then interpret "do forever then"
+    when arg(1) = 5 then interpret "say 'abc"
+    when arg(1) = 6 then interpret "v = 1 +"
+    when arg(1) = 7 then interpret "if then"
+    when arg(1) = 8 then interpret "end"
+  end
+  return
+syntax:
+  o = condition('O')
+  say o~code o~position rc o~traceback~items
+  do l over o~traceback; say '  tb:' l; end
+  return

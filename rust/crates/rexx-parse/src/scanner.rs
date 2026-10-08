@@ -55,7 +55,10 @@ pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
     let mut symbols = SymbolTable::default();
     let keywords = Keywords::new(&mut symbols);
     let mut scanner = Scanner::new(source, symbols);
-    scanner.run()?;
+    if let Err(error) = scanner.run() {
+        let end = scanner.absolute();
+        return Err(error.echoing(scanner.clause_start..end));
+    }
     Ok(Scanned {
         tokens: scanner.tokens,
         symbols: scanner.symbols,
@@ -598,7 +601,11 @@ impl<'a> Scanner<'a> {
                 // Anything else cannot appear in a program. Every byte from
                 // 0x80 up lands here unless it is inside a literal or a
                 // comment, which is why `bäc = 2` is error 13.1.
-                _ => return Err(ParseError::new(13, 1, self.clause_start)),
+                _ => {
+                    let end = start + utf8_width(&self.line[self.line_offset - 1..]);
+                    let error = ParseError::new(13, 1, self.clause_start);
+                    return Err(error.echoing(self.clause_start..end));
+                }
             };
 
             return Ok(Some(Token {
@@ -927,7 +934,9 @@ impl<'a> Scanner<'a> {
             if !self.more_lines() {
                 // Without this the rest of the program would be swallowed.
                 // Measured: error 99.943, reported against the directive.
-                return Err(ParseError::new(99, 943, self.tokens[directive].span.start));
+                let start = self.tokens[directive].span.start;
+                let end = self.tokens.last().map_or(start, |eoc| eoc.span.end);
+                return Err(ParseError::new(99, 943, start).echoing(start..end));
             }
             if self.check_marker(&marker) {
                 self.next_line();
@@ -956,6 +965,18 @@ impl<'a> Scanner<'a> {
     fn check_marker(&self, marker: &[u8]) -> bool {
         marker.len() <= self.line.len() && &self.line[..marker.len()] == marker
     }
+}
+
+/// The length of the UTF-8 sequence `bytes` starts with, or 1 where it starts
+/// none: what `utf8proc_iterate` answers for the 13.1 echo
+/// (`parser/Scanner.cpp:1185`).
+fn utf8_width(bytes: &[u8]) -> usize {
+    let head = &bytes[..bytes.len().min(4)];
+    let valid = match std::str::from_utf8(head) {
+        Ok(text) => text,
+        Err(error) => std::str::from_utf8(&head[..error.valid_up_to()]).unwrap_or_default(),
+    };
+    valid.chars().next().map_or(1, char::len_utf8)
 }
 
 /// `LanguageParser::packHexLiteral`: validate a hex literal's grouping and

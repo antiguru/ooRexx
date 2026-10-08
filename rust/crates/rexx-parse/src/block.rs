@@ -341,18 +341,19 @@ impl<'a> Block<'a> {
 
     // ---- errors ----
 
-    /// The byte an error about the state of the block is reported against.
-    fn last_byte(&self) -> usize {
+    /// The instruction an error about the state of the block is reported
+    /// against.
+    fn last_instruction(&self) -> &Instruction {
         self.instructions
             .last()
             .expect("an unclosed block was itself added, so the chain is not empty")
-            .clause_span
-            .start
     }
 
     /// `blockError` (`LanguageParser.cpp:4180`): an unclosed block at the end of
-    /// the body, with one number per block kind.
-    fn block_error(&self, kind: Control) -> ParseError {
+    /// the body, with one number per block kind, echoing the last instruction.
+    /// A label echoes its whole clause, and so does a THEN the source ends
+    /// after, whose error is the one `nextClause` raises there.
+    fn block_error(&self, kind: Control, at_end: bool) -> ParseError {
         let sub = match kind {
             // `Error_Incomplete_do_do`. Measured: `do label a` / `nop` is 14.1
             // too, so a LABEL does not move it to the loop number.
@@ -379,7 +380,15 @@ impl<'a> Block<'a> {
                 unreachable!("neither First nor a branch end is an unclosed block")
             }
         };
-        ParseError::new(14, sub, self.last_byte())
+        let last = self.last_instruction();
+        let error = ParseError::new(14, sub, last.clause_span.start);
+        let whole = matches!(last.kind, InstructionKind::Label { .. })
+            || (at_end && matches!(kind, Control::IfThen | Control::WhenThen));
+        if whole {
+            error
+        } else {
+            error.echoing(last.clause_span.clone())
+        }
     }
 
     /// The misplaced-label check (`LanguageParser.cpp:1224`-`1244`).
@@ -658,7 +667,7 @@ pub(crate) fn translate_block(
             }
             let top = block.top().kind;
             if top != Control::First {
-                return Err(block.block_error(top));
+                return Err(block.block_error(top, cursor.peek().is_none()));
             }
             block.pop();
             return Ok(block.finish());

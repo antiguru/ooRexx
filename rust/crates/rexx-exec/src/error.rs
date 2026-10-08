@@ -14,7 +14,7 @@
 use crate::Loud;
 use rexx_core::ObjRef;
 use rexx_num::{ArithError, FormatError};
-use rexx_parse::{DirectiveKind, ParseError};
+use rexx_parse::{DirectiveKind, ParseError, ProgramSource};
 use std::borrow::Cow;
 
 /// Which activations may trap one raise, walking outward from the one that
@@ -1857,6 +1857,25 @@ impl From<&ParseError> for Raised {
     }
 }
 
+impl Raised {
+    /// The condition `error` raises in `source`, positioned at `line`, and the
+    /// text of the clause its traceback line echoes
+    /// (`LanguageParser::createStackFrame`).
+    pub(crate) fn parse_failure(
+        error: &ParseError,
+        source: &ProgramSource,
+        line: usize,
+    ) -> (Raised, Vec<u8>) {
+        let mut raised = Raised::from(error);
+        raised.position = u32::try_from(line).unwrap_or(0);
+        let text = source.join_span(error.clause.clone()).map_or_else(
+            || b"<clause span outside the retained source>".to_vec(),
+            Cow::into_owned,
+        );
+        (raised, text)
+    }
+}
+
 /// What a clause can produce instead of a value: a construct this crate does
 /// not implement (`Loud`), a real Rexx condition (`Raised`), an `EXIT`
 /// travelling through an expression (`Exited`), or a harness bound the run
@@ -2023,15 +2042,22 @@ impl FailureSite {
     /// line end.
     pub(crate) fn push_trace_line(&self, out: &mut Vec<u8>) {
         match self {
+            // A clause's own text keeps a line end it holds: measured, an
+            // `INTERPRET` string failing 13.1 at its `'0a'x` echoes it.
             FailureSite::Clause { line, text, indent }
             | FailureSite::Named {
                 line, text, indent, ..
-            } => crate::trace::push_clause(out, *line, *indent, text),
-            FailureSite::Rendered { text, .. } => out.extend_from_slice(text),
+            } => {
+                crate::trace::push_clause(out, *line, *indent, text);
+                out.pop();
+            }
+            FailureSite::Rendered { text, .. } => {
+                out.extend_from_slice(text);
+                while out.last() == Some(&b'\n') {
+                    out.pop();
+                }
+            }
             FailureSite::Reraised { .. } => {}
-        }
-        while out.last() == Some(&b'\n') {
-            out.pop();
         }
     }
 

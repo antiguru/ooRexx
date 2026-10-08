@@ -1,0 +1,4 @@
+/* An untrapped INTERPRET parse error reports the fragment's clause first. */
+say 'a'
+interpret "v=1; if then  ; z=2"
+say 'not reached'

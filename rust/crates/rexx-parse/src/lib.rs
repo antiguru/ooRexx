@@ -83,34 +83,50 @@ pub struct Fragment {
     pub symbols: SymbolTable,
 }
 
+/// A source that did not parse, with the error reported against it.
+#[derive(Debug)]
+pub struct Rejected {
+    pub error: ParseError,
+    pub source: ProgramSource,
+}
+
 /// Parses a whole program from `text`.
 pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
-    let source = ProgramSource::new(text, SourceKind::Program);
-    let parsed = parse(&source)?;
-    Ok(Program {
-        source,
-        main: parsed.main,
-        directives: parsed.directives,
-        symbols: parsed.symbols,
-    })
+    program_from(ProgramSource::new(text, SourceKind::Program)).map_err(|rejected| rejected.error)
 }
 
 /// Parses a program whose physical lines are given one per element.
 pub fn parse_lines(lines: &[&[u8]]) -> Result<Program, ParseError> {
-    let source = ProgramSource::from_lines(lines);
-    let parsed = parse(&source)?;
-    Ok(Program {
-        source,
-        main: parsed.main,
-        directives: parsed.directives,
-        symbols: parsed.symbols,
-    })
+    program_from(ProgramSource::from_lines(lines)).map_err(|rejected| rejected.error)
 }
 
 /// Parses the string an `INTERPRET` instruction is about to run.
 pub fn parse_interpret(text: Vec<u8>) -> Result<Fragment, ParseError> {
-    let source = ProgramSource::new(text, SourceKind::Interpret);
-    let parsed = parse(&source)?;
+    fragment_from(ProgramSource::new(text, SourceKind::Interpret))
+        .map_err(|rejected| rejected.error)
+}
+
+/// Parses `source` as a whole program, answering it back with the error when
+/// it does not parse.
+pub fn program_from(source: ProgramSource) -> Result<Program, Rejected> {
+    match parse(&source) {
+        Ok(parsed) => Ok(Program {
+            source,
+            main: parsed.main,
+            directives: parsed.directives,
+            symbols: parsed.symbols,
+        }),
+        Err(error) => Err(Rejected { error, source }),
+    }
+}
+
+/// Parses `source` as an `INTERPRET` fragment, answering it back with the
+/// error when it does not parse.
+pub fn fragment_from(source: ProgramSource) -> Result<Fragment, Rejected> {
+    let parsed = match parse(&source) {
+        Ok(parsed) => parsed,
+        Err(error) => return Err(Rejected { error, source }),
+    };
     debug_assert!(
         parsed.directives.is_empty(),
         "INTERPRET text cannot carry a directive: `parse` raises 99.914 first"
@@ -155,7 +171,23 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
     };
 
     let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens)?);
-    let main = translate_block(&ctx, &mut cursor)?;
+    match translate(&ctx, &mut cursor) {
+        Ok((main, directives)) => Ok(Parsed {
+            main,
+            directives,
+            symbols: scanned.symbols,
+        }),
+        Err(error) => Err(cursor.echo(error)),
+    }
+}
+
+/// The grammar over the clauses `cursor` holds: the main body, then the
+/// directives.
+fn translate(
+    ctx: &ParseCtx,
+    cursor: &mut ClauseCursor,
+) -> Result<(CodeBody, Vec<Directive>), ParseError> {
+    let main = translate_block(ctx, cursor)?;
 
     // `translate` raises 99.914 exactly here, once, before `nextDirective` is
     // ever called (`LanguageParser.cpp:1113`-`1120`): `INTERPRET` text may not
@@ -164,14 +196,14 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
     // `condition('o')~code` is `99.914` with message "INTERPRET data must not
     // contain directive instructions."
     if let Some(clause) = cursor.peek()
-        && source.kind() == SourceKind::Interpret
+        && ctx.source.kind() == SourceKind::Interpret
     {
         return Err(ParseError::new(99, 914, clause.span.start));
     }
 
     let mut directives = Vec::new();
     while cursor.peek().is_some() {
-        let mut directive = parse_directive(&ctx, &mut cursor)?;
+        let mut directive = parse_directive(ctx, cursor)?;
         // Only `::METHOD`/`::ATTRIBUTE`/`::ROUTINE` can carry a body, and each
         // already rejects one with its own specific error when its OWN shape
         // does not allow it (`::CONSTANT`'s body is 99.938, for one). Every
@@ -182,16 +214,11 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
         // have a body (`::CLASS`, `::OPTIONS`, `::REQUIRES`, `::ANNOTATE`,
         // `::RESOURCE`).
         if let Some(slot) = directive_body(&mut directive.kind) {
-            *slot = translate_block(&ctx, &mut cursor)?;
+            *slot = translate_block(ctx, cursor)?;
         }
         directives.push(directive);
     }
-
-    Ok(Parsed {
-        main,
-        directives,
-        symbols: scanned.symbols,
-    })
+    Ok((main, directives))
 }
 
 /// The body slot of a directive that carries one, for the assembler to fill.

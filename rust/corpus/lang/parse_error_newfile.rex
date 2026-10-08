@@ -1,0 +1,16 @@
+/* Method~newFile and Routine~newFile on a file that does not parse raise
+   SYNTAX in that file, trapped and then untrapped. */
+call try .method, 'badm.rex'
+call try .routine, 'badr.rex'
+r = .routine~newFile('badu.rex')
+say 'not reached'
+exit
+try: signal on syntax
+  m = arg(1)~newFile(arg(2))
+  say 'not reached'
+  return
+syntax:
+  o = condition('O')
+  say o~code o~position rc o~traceback~items
+  do l over o~traceback; say '  tb:' l; end
+  return

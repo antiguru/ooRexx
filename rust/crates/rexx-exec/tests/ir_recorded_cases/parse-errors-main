@@ -1,0 +1,46 @@
+# A program that does not parse: the standard error report, its failing
+# clause the one traceback line, and nothing runs.
+
+# a scanner error, before the clause it is in can be translated
+program
+say 'before'
+say 'abc
+----
+rc> 250
+err>      2 *-* say 'abc
+err> Error 6 running /nonexistent/ir-dual-case.rex line 2:  Unmatched "/*" or quote.
+err> Error 6.2:  Unmatched single quote (').
+
+# a grammar error inside a block, echoed without the block's indent
+program
+say 1
+do i = 1 to 2
+  if then
+end
+----
+rc> 221
+err>      3 *-* if then
+err> Error 35 running /nonexistent/ir-dual-case.rex line 3:  Invalid expression.
+err> Error 35.929:  Missing expression in logical expression list.
+
+# an END after a label's clause, echoed alone
+program
+say 1
+lab: nop
+  end
+----
+rc> 246
+err>      3 *-* end
+err> Error 10 running /nonexistent/ir-dual-case.rex line 3:  Unexpected or unmatched END.
+err> Error 10.1:  END has no corresponding DO, LOOP, or SELECT.
+
+# a continued clause, echoed joined
+program
+say 1
+if ,
+  then
+----
+rc> 221
+err>      2 *-* if ,  then
+err> Error 35 running /nonexistent/ir-dual-case.rex line 2:  Invalid expression.
+err> Error 35.929:  Missing expression in logical expression list.

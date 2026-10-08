@@ -585,12 +585,6 @@ impl Loud {
         }
     }
 
-    fn method_from_source(what: &str) -> Loud {
-        Loud {
-            message: owned_message(what, Some("Phase 5")),
-        }
-    }
-
     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
     /// nor a class object, the two kinds that hold methods of their own here.
     /// No program reaches it: the routes tried are `SETMETHOD` sent to an
@@ -609,16 +603,6 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("{name} does not parse here: {error}"),
-                Some("Phase 5"),
-            ),
-        }
-    }
-
-    /// A file a `::REQUIRES` found will not parse.
-    fn required_source(path: &str, error: &str) -> Loud {
-        Loud {
-            message: owned_message(
-                &format!("{path} does not parse here: {error}"),
                 Some("Phase 5"),
             ),
         }
@@ -784,12 +768,6 @@ impl Loud {
             message: owned_message("a REPLY its method body runs on a nested Rust frame", None),
         }
     }
-
-    // **There is no `Loud::parse`, and its absence is the fix.** A fragment
-    // that does not parse raises the oracle's own 27.901 at rc 229, through
-    // `impl From<&ParseError> for Raised` (`error.rs`), which `run_fragment`
-    // uses. What the *top level* can and cannot take from it is written out
-    // at `execute`'s own parse arm, below.
 }
 
 /// Names an expression form in **bounded** text, for a loud failure to quote.
@@ -2146,10 +2124,11 @@ impl Interp {
         let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::executable_file_unreadable(resolved.as_bytes()).into());
         };
-        let parsed = match parse_program(text) {
+        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+        let parsed = match rexx_parse::program_from(source) {
             Ok(parsed) => Rc::new(parsed),
-            Err(error) => {
-                return Err(Loud::required_source(&resolved, &format!("{error}")).into());
+            Err(rejected) => {
+                return Err(self.raise_parse_failure(&rejected, Some(resolved.as_bytes())));
             }
         };
         let caller = self
@@ -3201,6 +3180,33 @@ fn execute(
     execute_on(path, text, collect_every_alloc, invocation, None)
 }
 
+/// What a program that does not parse produces: the standard error report,
+/// its clause the only traceback line, and nothing else runs.
+fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome {
+    let line = rejected.error.line(&rejected.source);
+    let (raised, text) = Raised::parse_failure(&rejected.error, &rejected.source, line);
+    let sites = [FailureSite::Clause {
+        line,
+        text,
+        indent: 0,
+    }];
+    Outcome {
+        exit_code: raised.exit_code(),
+        stdout: Vec::new(),
+        stderr: raised.report(&ClauseSite {
+            path,
+            sites: &sites,
+        }),
+        stack: StackSpan::default(),
+        collections: 0,
+        chunks_refused: 0,
+        #[cfg(feature = "pinning")]
+        pinning: PinReport::default(),
+        #[cfg(feature = "sharing")]
+        sharing: SharingReport::default(),
+    }
+}
+
 /// Everything that happens on the interpreter thread: parse, run, report.
 /// `stack` is the thread's stack size, where known.
 fn execute_on(
@@ -3212,45 +3218,10 @@ fn execute_on(
 ) -> Outcome {
     let probe = 0u8;
     let base = &raw const probe as usize;
-    let program = match parse_program(text) {
+    let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+    let program = match rexx_parse::program_from(source) {
         Ok(program) => program,
-        // **A top-level parse failure stays loud, and that was checked rather
-        // than assumed either way.** The `ParseError`-to-`Raised` conversion
-        // exists and `INTERPRET` uses it
-        // (`run_fragment`). This arm can have the *mapping* -- it is one
-        // `impl From` and nothing about it is fragment-specific -- but not
-        // the *report*, and the obstacle is concrete rather than a
-        // preference: `Raised::report`'s major line names a source line, the
-        // line comes from `ParseError::line(&source)`, and `parse_program`
-        // takes `text` by value and returns only the `ParseError` on the
-        // failure path, so by the time this arm runs the `ProgramSource` that
-        // could answer has been built and dropped inside the parser. There is
-        // no way back to it from here: `rexx-parse` exposes `ProgramSource::
-        // new` and `scan`, but the composition that turns a `&ProgramSource`
-        // into a `Program` is private, so the only route is to clone the
-        // whole program text before every parse to serve a path that runs
-        // only on syntax errors. Closing it properly is a `rexx-parse`
-        // signature change -- hand the source back alongside the error, or
-        // make the `parse(&ProgramSource)` composition public -- which is
-        // outside the file list Task 2 was given, so it is written down here
-        // rather than half-done. The second gap `INTERPRET` shares is the
-        // clause echo: the failing clause never became an `Instruction`, and
-        // `ParseError` carries the clause's *start* byte with no end, so
-        // there is no span to echo at either level.
-        Err(error) => {
-            return Outcome {
-                exit_code: NOT_IMPLEMENTED_EXIT,
-                stdout: Vec::new(),
-                stderr: format!("rexx-exec: {error}\n").into_bytes(),
-                stack: StackSpan::default(),
-                collections: 0,
-                chunks_refused: 0,
-                #[cfg(feature = "pinning")]
-                pinning: PinReport::default(),
-                #[cfg(feature = "sharing")]
-                sharing: SharingReport::default(),
-            };
-        }
+        Err(rejected) => return parse_failure_outcome(path, &rejected),
     };
 
     let mut interp = Interp::new();

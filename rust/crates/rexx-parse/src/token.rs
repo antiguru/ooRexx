@@ -36,12 +36,30 @@ pub struct ParseError {
     /// the clause being translated and not the offending character. The name
     /// reads like the latter; it is not.
     pub byte: usize,
+    /// The source the error's traceback line echoes: the clause being
+    /// translated, from its first token to the last one scanned
+    /// (`LanguageParser::createStackFrame`'s `clauseLocation`). Empty until
+    /// the scanner or `parse` resolves it.
+    pub clause: Range<usize>,
 }
 
 impl ParseError {
     /// An error reported against the clause starting at `byte`.
     pub fn new(code: u16, sub: u16, byte: usize) -> Self {
-        ParseError { code, sub, byte }
+        ParseError {
+            code,
+            sub,
+            byte,
+            clause: byte..byte,
+        }
+    }
+
+    /// This error echoing `clause`, unless it already echoes one.
+    pub(crate) fn echoing(mut self, clause: Range<usize>) -> Self {
+        if self.clause.is_empty() {
+            self.clause = clause;
+        }
+        self
     }
 }
 

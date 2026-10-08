@@ -410,6 +410,7 @@ fn a_fragment_that_does_not_parse_raises_the_oracles_condition() {
         String::from_utf8(outcome.stderr).unwrap(),
         format!(
             concat!(
+                "     2 *-* do forever then\n",
                 "     2 *-* interpret \"do forever then\"\n",
                 "Error 27 running {path} line 2:  Invalid DO or LOOP syntax.\n",
                 "Error 27.901:  Incorrect data following FOREVER keyword on the loop; \
@@ -425,6 +426,37 @@ fn a_fragment_that_does_not_parse_raises_the_oracles_condition() {
         crate::Invocation::none(),
     );
     assert_eq!(outcome.exit_code, 221);
+}
+
+/// A line typed at a pause that fails, at run time or in its parse, leaves no
+/// traceback level behind for the next condition.
+#[test]
+fn a_failing_pause_line_leaves_no_traceback_level() {
+    let program = concat!(
+        "signal on syntax\n",
+        "call r\n",
+        "y = 1/0\n",
+        "exit\n",
+        "syntax: say condition('O')~traceback~items\n",
+        "  exit\n",
+        "r: trace ?r\n",
+        "  x = 1\n",
+        "  return\n",
+    );
+    let input = crate::ProgramInput::Bytes(b"zz = 1/0\nsay (\n\n\n".to_vec());
+    let outcome = run_program(
+        TEST_PATH,
+        program.as_bytes().to_vec(),
+        crate::Invocation::none().with_input(input),
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    for reached in ["Error 42.3:", "Error 35.1:"] {
+        assert!(
+            stderr.contains(&format!("+++ Interactive trace.  {reached}")),
+            "the pause did not report {reached}: {stderr}"
+        );
+    }
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1\n");
 }
 
 /// The reported span comes from one call chain, so what else the program

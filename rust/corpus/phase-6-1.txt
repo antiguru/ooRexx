@@ -181,3 +181,16 @@ lang/select_case_not_logical.rex
 lang/collection_equal_answer.rex
 lang/collection_equal_not_logical.rex
 lang/do_with_available_string.rex
+
+# Task 5: a source that does not parse raises SYNTAX with its failing clause
+# as the first traceback line: an INTERPRET string, a ::REQUIRES file, an
+# external routine's file, Method~newFile and Routine~newFile, Package~new
+# over lines, and Method~new and Routine~new.
+lang/parse_error_interpret.rex
+lang/parse_error_interpret_reply.rex
+lang/parse_error_interpret_untrapped.rex
+lang/parse_error_requires.rex
+lang/parse_error_external_call.rex
+lang/parse_error_newfile.rex
+lang/parse_error_package_new.rex
+lang/parse_error_method_new.rex

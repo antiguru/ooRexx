@@ -32,7 +32,7 @@ use rexx_core::{ObjRef, SlotFrame};
 use rexx_parse::{
     Access, AttributeDirective, ClassDirective, ClassRef, CodeBody, ConstantDirective,
     ConstantValue, Directive, DirectiveKind, Expr, GuardOption, MethodDirective, Program,
-    Protection, parse_program,
+    Protection,
 };
 use rustc_hash::FxHashMap;
 use std::collections::BTreeMap;
@@ -651,10 +651,11 @@ impl Interp {
         let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::requires_file_not_found(name).into());
         };
-        let parsed = match parse_program(text) {
+        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+        let parsed = match rexx_parse::program_from(source) {
             Ok(parsed) => Rc::new(parsed),
-            Err(error) => {
-                return Err(Loud::required_source(&resolved, &format!("{error}")).into());
+            Err(rejected) => {
+                return Err(self.raise_parse_failure(&rejected, Some(resolved.as_bytes())));
             }
         };
         let required = ProgramId(self.programs.len());
@@ -949,13 +950,11 @@ impl Interp {
         parent: Option<Package>,
     ) -> Result<ProgramId, Failure> {
         let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-        let parsed = rexx_parse::parse_lines(&borrowed).map_err(|error| {
-            Failure::from(Loud::required_source(
-                &String::from_utf8_lossy(name),
-                &format!("{error}"),
-            ))
-        })?;
-        let parsed = Rc::new(parsed);
+        let parsed =
+            match rexx_parse::program_from(rexx_parse::ProgramSource::from_lines(&borrowed)) {
+                Ok(parsed) => Rc::new(parsed),
+                Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
+            };
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&parsed));
         self.compiled_method_names.insert(id, name.into());
@@ -1833,14 +1832,10 @@ impl Interp {
         let Ok(text) = std::fs::read(&resolved) else {
             return Err(Raised::executable_file_unreadable(name).into());
         };
-        let parsed = match rexx_parse::parse_program(text) {
+        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+        let parsed = match rexx_parse::program_from(source) {
             Ok(parsed) => parsed,
-            Err(error) => {
-                return Err(Loud::method_from_source(&format!(
-                    "reporting a file that does not parse ({path}, {error})"
-                ))
-                .into());
-            }
+            Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
         };
         let parent = parent.or_else(|| {
             self.running_activation()

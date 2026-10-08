@@ -1,0 +1,6 @@
+/* REPLY in an INTERPRET string is 99.924, reported against its clause. */
+say .t~new~m
+::class t
+::method m
+  interpret "v=1; reply 5; y=2"
+  say 'after'

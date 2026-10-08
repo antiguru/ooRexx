@@ -330,14 +330,16 @@ fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
     )
 }
 
-/// The `SYNTAX` condition a source that does not parse raises, `POSITION`
-/// the line within that source (measured, oracle `1` for
+/// `lines` parsed as a program, or the `SYNTAX` condition they raise,
+/// positioned within them (measured, oracle `1` for
 /// `.Routine~new('T', 'return arg(1')` on line 2 of its caller).
-fn source_syntax(lines: &[&[u8]], error: &rexx_parse::ParseError) -> Raised {
-    let mut raised = Raised::from(error);
-    let line = rexx_parse::ProgramSource::from_lines(lines).line_of(error.byte);
-    raised.position = u32::try_from(line).unwrap_or(0);
-    raised
+fn parse_source_lines(
+    interp: &mut Interp,
+    name: &[u8],
+    lines: &[&[u8]],
+) -> Result<rexx_parse::Program, Failure> {
+    rexx_parse::program_from(rexx_parse::ProgramSource::from_lines(lines))
+        .map_err(|rejected| interp.raise_parse_failure(&rejected, Some(name)))
 }
 
 /// `MethodClass::newMethodObject`'s compiling arm
@@ -352,8 +354,7 @@ pub(super) fn compile_method_source(
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position, taker)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-    let parsed =
-        rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
+    let parsed = parse_source_lines(interp, name, &borrowed)?;
     // `generateMethod` installs them as `generateRoutine` does; see
     // [`compile_routine_source`].
     if !parsed.directives.is_empty() {
@@ -387,8 +388,7 @@ pub(super) fn compile_routine_source(
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position, SourceTaker::Executable)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-    let parsed =
-        rexx_parse::parse_lines(&borrowed).map_err(|error| source_syntax(&borrowed, &error))?;
+    let parsed = parse_source_lines(interp, name, &borrowed)?;
     // `generateRoutine` installs them into the routine's own package, whose
     // parent is the caller's: measured, oracle rc 0,
     // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`

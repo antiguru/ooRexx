@@ -12,10 +12,9 @@
 //! `INTERPRET` fragments, `DROP`, and the interactive debug pause.
 
 use super::{
-    BodyEngine, Code, Failure, Flow, Fragment, Interp, Loud, NameShape, Raised, Rc, TraceEntry,
-    VariableRef, parse_interpret, raised_iterate_no_loop, raised_iterate_no_match,
-    raised_leave_no_loop, raised_leave_no_match, shape_of, split_indirect_words,
-    validate_indirect_word,
+    BodyEngine, Code, Failure, Flow, Fragment, Interp, Loud, NameShape, Rc, TraceEntry,
+    VariableRef, raised_iterate_no_loop, raised_iterate_no_match, raised_leave_no_loop,
+    raised_leave_no_match, shape_of, split_indirect_words, validate_indirect_word,
 };
 
 impl Interp {
@@ -26,15 +25,10 @@ impl Interp {
     ///      2 *-*   interpret "leave outer"
     /// ```
     pub(super) fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
-        let fragment: Rc<Fragment> = match parse_interpret(text) {
+        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Interpret);
+        let fragment: Rc<Fragment> = match rexx_parse::fragment_from(source) {
             Ok(fragment) => Rc::new(fragment),
-            // **Step 5b: the oracle's own condition, not a loud refusal.**
-            // Measured, `interpret "do forever then"` on line 2 raises 27.901
-            // at rc 229; this used to be `Loud::parse`, `rexx-exec: INTERPRET
-            // text did not parse: ...` at rc 120. `error.rs`'s own `impl
-            // From<&ParseError> for Raised` has the transcript and states
-            // exactly what the conversion cannot carry.
-            Err(error) => return Err(Raised::from(&error).into()),
+            Err(rejected) => return Err(self.raise_parse_failure(&rejected, None)),
         };
 
         // An owned `Fragment` would do here, since nothing but this loop reads
@@ -285,6 +279,7 @@ impl Interp {
             Ok(_) => Ok(()),
             Err(Failure::Raised(raised)) => {
                 self.report_debug_error(&raised);
+                self.clear_failure_levels();
                 Ok(())
             }
             Err(other) => Err(other),

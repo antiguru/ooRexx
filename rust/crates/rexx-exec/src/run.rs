@@ -36,7 +36,7 @@ use rexx_num::{ArithError, CompareOp, Form, Number, SettingsError, compare_decod
 use rexx_parse::{
     ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Forward, Fragment, Guard,
     Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
-    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
+    Raise, SymbolId, Trace, Use, UseTarget, VariableRef,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -3195,6 +3195,63 @@ impl Interp {
         if let Some((line, text)) = site {
             self.activity.failure_site = Some(FailureSite::Clause { line, text, indent });
         }
+    }
+
+    /// The condition a source that does not parse raises, its failing clause
+    /// recorded as a level of its own (`LanguageParser::createStackFrame`).
+    /// `name` is the source's where it is not the running program: a file or
+    /// a package compiled from lines. An `INTERPRET` fragment's clause is
+    /// reported at the line of the clause running it.
+    pub(crate) fn raise_parse_failure(
+        &mut self,
+        rejected: &rexx_parse::Rejected,
+        name: Option<&[u8]>,
+    ) -> Failure {
+        let source = &rejected.source;
+        let line = match source.kind() {
+            rexx_parse::SourceKind::Interpret => self.activity.clause_state.line(),
+            rexx_parse::SourceKind::Program | rexx_parse::SourceKind::Lines => {
+                rejected.error.line(source)
+            }
+        };
+        let (raised, text) = Raised::parse_failure(&rejected.error, source, line);
+        let site = match name {
+            Some(name) => FailureSite::Named {
+                line,
+                indent: 0,
+                text,
+                name: name.to_vec(),
+            },
+            None => FailureSite::Clause {
+                line,
+                text,
+                indent: 0,
+            },
+        };
+        if self.activity.failure_frame.is_none() {
+            let mut trace_line = Vec::new();
+            site.push_trace_line(&mut trace_line);
+            let program = match name {
+                Some(name) => name.to_vec(),
+                None => self
+                    .running_program()
+                    .map(|id| self.program_display_name(id).to_vec())
+                    .unwrap_or_default(),
+            };
+            if let Ok(frame) = crate::dispatch::context::build_ended_frame(
+                self,
+                b"COMPILE",
+                &program,
+                line,
+                &[],
+                &trace_line,
+            ) {
+                self.activity.failure_frame = Some(frame);
+            }
+        }
+        self.activity.failure_site.get_or_insert(site);
+        self.seal_site_level();
+        raised.into()
     }
 
     /// Closes off the level that is unwinding now, so the level above it can
