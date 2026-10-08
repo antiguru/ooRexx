@@ -212,3 +212,24 @@ Exit 0; load average 1.51 at start, 1.28 at end.
 | rexxcps | -0.87 | -0.87 |
 
 Every program inside ±4%; emptyloop's wall clock is the one Moritz ruled on at Task 2.
+
+### Task 3 fix round 3
+
+`t3` from `git archive 0c75907d3 rust interpreter`, built as above, one `Compiling rexx-exec` line,
+sha256 `f5ea13e699bd1e7e034b44b4fe9db87825a86e0fddf561fefe058883a66536f8`.
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 10 -o $S/cg-h3 -p "emptyloop decloop rexxcps" base=$B/base/rexx-run pad1=$B/pad1/rexx-run pad3=$B/pad3/rexx-run t3=$S/bin/h3/rexx-run
+```
+
+Exit 0; the pads print `+0.0000`% on every program, so the band is 0 and the budget +0.5%.
+
+| program | t3 % | verdict |
+|---|---:|---:|
+| emptyloop | -0.9620 | inside |
+| decloop | -2.6728 | inside |
+| rexxcps | -0.4940 | inside |
+
+Perf round 1 of this fix round: `dcd1db992` measured emptyloop +0.9614% (3 instructions a pass in
+`ops_loop_steady`, where the pass boundary inlined the loop-object release); `0c75907d3` makes the
+release `#[cold] #[inline(never)]`.

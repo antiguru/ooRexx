@@ -287,3 +287,54 @@ Checks:
   exceptions as before.
 - Instructions against the 6.1 base (`callgrind.sh -r 1`): emptyloop -0.0018%, decloop -2.38%,
   rexxcps +0.09%, fibcall +0.17%.
+
+## Fix round 3
+
+Commits: `dcd1db992` (truth value; loop objects once per loop), `0c75907d3` (perf round 1), and this
+report's commit.
+
+1. **DO TO test and BY's direction test by truth value** (Moritz's refined ruling).
+   - `loop_truth` replaces the identity test, answering the way WHILE and UNTIL do: text exactly
+     `1` ends the loop or means a negative step, and `0` goes on.
+   - Anything else raises 34.901 (`Error_Logical_value_method`). That is the subcode the oracle's
+     truthValue uses for a method's logical answer (`IntegerClass.cpp:1432`, `StringClass.cpp:645`);
+     no 34.x subcode names a DO header.
+   - Deviation 25 is rewritten with the rule, its reason and the measured table:
+     - a comparison, `.true` and `abbrev(...)` end the loop on both sides;
+     - `0` and `1 = 2` go on on both sides;
+     - `0 + 1`, `1 * 1`, literal `1`/`'1'`, `left('12', 1)`, `.true~copy` and similar now end it here,
+       where the oracle runs 3 passes;
+     - `'abc'` raises 34.901 here, where the oracle runs 3 passes;
+     - BY's `<` answering `left('12', 1)` counts down here.
+   - The licensed witness `do-compare-computed-true` now uses `return 0 + 1` (oracle 3 passes, ours
+     none).
+   - `do_object_compare_true` holds the agreeing cases.
+   - The rename the brief allowed: `is_true_object` is replaced by `loop_truth`, whose doc names
+     Deviation 25.
+2. **Objects once per loop.**
+   - `ObjectControl`'s initial, TO and BY are objects again. Numbers are made into objects once,
+     when the loop starts or when its control switches to an object.
+   - They are held on `Activity::loop_objects`, keyed by the boxed state's address, for the loop's
+     life. That is what keeps them alive while a pass boundary has the loop out of `flat_top`.
+   - They are released where the loop ends, where the start or a pass boundary fails, and in
+     `unwind_frames`. They move with a REPLY continuation's loops.
+   - This replaces round 2's register homes and per-pass objects.
+   - `ident2.rex`: every line matches the oracle except the first `to same` after the switch. There
+     the oracle answers `1` because a freed object's address was reused (identityHash is an address),
+     which is not a property to match. The rest of `ident2`, and `dead*`, `reg1` and `reg2`, match.
+     The collect-stress test from round 2 still passes.
+3. **Perf.** Task 2's callgrind command against the 6.1 base, pads at 0, on the binary built from
+   `git archive 0c75907d3`: emptyloop -0.9620%, decloop -2.6728%, rexxcps -0.4940%. The first build
+   of this round, `dcd1db992`, was emptyloop +0.9614%; perf round 1 fixed it by moving the release
+   out of line. Details are in the gate record.
+
+Checks at `0c75907d3`:
+- fmt and clippy: exit 0.
+- `--lib`: 1016 passed. `collect_stress`: 37 passed.
+- At `dcd1db992`: gated corpus and `ir_recorded_oracle`, `sourceline_oracle` and gated
+  `licensed_divergences` pass.
+- Gated release `concurrency_tests`: `whole_groups` 6 passed and the rest 32 passed.
+- Witnesses: all agree with the oracle.
+- Probes: the only new differences are the Deviation 25 cases (`true1`, `gt_one`, `gt_one2`,
+  `by_dir2`, `z_nonlogical`) and `ident2`'s address-reuse line.
+- The debug workspace run was not re-run this round.
