@@ -174,3 +174,61 @@ programs added to its no-collection list), `state_builtin_oracle.rs`, `bif_asser
    top-level parse error, which is group c8 and not this task.
 5. The c3 commit's hand-edited table row (see Commits) was never checked by building that commit on
    its own.
+
+## Fix round 1
+
+Commits: `1d7b27de8` (message-driven loops, DO OVER a native directory), `9172b7085` (those paths
+out of line), `150611a38` (records and the collector row), and this report's commit.
+
+1. **Important 1 and Concern 1: loops whose control value is an object.** These are now implemented
+   as `DoBlock::checkControl`, not refused. Once a controlled header value is an operator receiver,
+   `accept_object_header` keeps each `+` answer as it is. `BY`'s answer is sent `<` against 0 for
+   the direction. The loop then runs as `LoopState::ObjectControlled`:
+   - At each re-test, `+` with BY is sent to whatever the control holds (`arith_general`). The answer
+     is traced, then bound unchanged.
+   - The TO comparison (`>`, or `<` for a negative BY) is then sent to it. The loop ends when that
+     answers the true object. FOR is checked after the comparison, as the oracle does.
+   - A numeric loop whose control variable is given an object in the body switches to this state at
+     the increment. TO and BY become the objects for their numbers.
+   - A failure on the first test is blamed on the DO clause at the body's indent, as the oracle
+     blames it.
+
+   The FlatLoop states' objects are rooted from `Activity::object_roots`. The reviewer's
+   `do_plus_string.rex` now agrees: `'abc'` ends the loop, and `' 2 '` prints `[ 2 ]`. All four
+   loud probes from Concern 1 agree. `do i = .nil to 3` agrees as well. I corrected the exclusions
+   R12 text and table.
+2. **DO OVER `.context~package~local`** iterates the native directory's indexes (sorted, as a
+   StringTable's are). `Loud::object_position` and `HeaderRole::value_name` have no site left and are
+   deleted. `refusal-sites.tsv` is refreshed.
+3. **`the_s2_rows` bisect.** The test passes at `3cee3e622`, where the row refuses with "DO is not
+   implemented", and fails at `5b7acef35` (Task 2's COUNTER). It is a gap that the removed refusal
+   exposed, not a regression: both modes end in the same 97.1 at rc 2, with the same masked stdout and
+   the same stderr lines, but the REPLY continuation's trace lines come in a different order.
+   `TRACE_INTERLEAVES` now allows that case. The reason is in the gate record.
+4. **Records.**
+   - Exclusions: a known-gap row for `raise novalue return` / `raise lostdigits return` reaching a
+     caller's CALL ON ANY.
+   - `oracle-crashes.txt` entry 28: FORWARD ARGUMENTS over a List, SIGSEGV rc 139 in 5 of 5 runs.
+   - `oracle-crashes.txt` entry 29: GUARD WHEN on a compound tail, killed at the timeout in 5 of 5
+     runs.
+
+Witnesses: `do_object_control` (header objects, a control switching mid-loop, non-canonical
+answers, FOR, negative BY, LEAVE, ITERATE, a compound control, a control object whose `>` answers
+true, `.local`), `do_object_control_trace`, and `do_over_package_local`. On the binary before the
+fix, `do_object_control` and `do_over_package_local` refuse with rc 120. `do_object_control_trace`
+already agreed there: it checks the new path's trace and adds no new failing case. The 73 probes:
+67 agree. The six that do not are the c8 parse-error ones, `use arg >o~a`, and the two CALL ON ANY
+ones now recorded.
+
+Checks at `150611a38`:
+- `cargo fmt --check` and `clippy -D warnings`: exit 0.
+- `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0.
+- `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: exit 0 (29 passed, 1 ignored;
+  21 passed).
+- The whole gated `concurrency_tests` file in release: exit 0, 38 passed. This includes
+  `whole_groups` and `the_s2_rows_of_the_derived_list_in_both_modes`.
+
+Concern: instruction counts against `652826b54` (`callgrind.sh -r 1`, no layout control) are
+emptyloop +0.64%, decloop +0.55%, rexxcps -0.04%, fibcall -0.21%. The emptyloop delta is 2
+instructions a pass in `loop_advance`, whose fast-path source is unchanged. Moving the new paths out
+of line cut it from +0.97%. It is recorded in the gate record for Task 5's measurement.
