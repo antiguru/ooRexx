@@ -1843,7 +1843,7 @@ mod group_runs {
 
     /// The GUARD group's tests that pass, `TEST_WAIT_MULTIPLE` and the other
     /// `WHEN` waits among them. The rest are refused: a translation error
-    /// inside the test's own `INTERPRET`, or `USE LOCAL` in a method.
+    /// inside the test's own `INTERPRET`.
     const GUARD_PASSING: &[&str] = &[
         "TEST_OFF",
         "TEST_ON",
@@ -1859,6 +1859,7 @@ mod group_runs {
         "TEST_WHEN_NOVALUE",
         "TEST_WHEN_SINGLE_NO_WAIT",
         "TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT",
+        "TEST_WHEN_USE_LOCAL_NO_WAIT",
     ];
 
     /// [`GUARD_PASSING`] with the shipped scheduler and with a switch at every
@@ -2645,28 +2646,28 @@ mod group_runs {
                 "base/class/RexxContext.testGroup",
                 "whole",
                 "normal",
-                "rexx-exec: CONDITION option \"O\" answers a Directory, which is not implemented, rc 120, last started TESTCONDITION01, failing []",
-                "a test outside the derived list refuses: TESTCONDITION01, CONDITION('O')",
+                "rexx-exec: method \"COPY\" of class \"RexxContext\" is not implemented (Phase 9), rc 120, last started TESTCOPY01, failing []",
+                "a test outside the derived list refuses: TESTCOPY01, RexxContext COPY (Phase 9)",
             ),
             (
                 "base/class/RexxContext.testGroup",
                 "whole",
                 "every",
-                "rexx-exec: CONDITION option \"O\" answers a Directory, which is not implemented, rc 120, last started TESTCONDITION01, failing []",
-                "a test outside the derived list refuses: TESTCONDITION01, CONDITION('O')",
+                "rexx-exec: method \"COPY\" of class \"RexxContext\" is not implemented (Phase 9), rc 120, last started TESTCOPY01, failing []",
+                "a test outside the derived list refuses: TESTCOPY01, RexxContext COPY (Phase 9)",
             ),
             (
                 "base/class/RexxContext.testGroup",
                 "rest",
                 "normal",
-                "failure, assertions 354, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                "failure, assertions 357, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
                 "base/class/RexxContext.testGroup",
                 "rest",
                 "every",
-                "failure, assertions 354, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                "failure, assertions 357, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
@@ -2836,20 +2837,6 @@ mod group_runs {
                 "every",
                 "rexx-exec: test does not parse here: 25.913: Invalid subkeyword found. is not implemented (Phase 5), rc 120, last started TEST_INVALID_OPTION_ONOFF, failing []",
                 "a test outside the derived list refuses: TEST_INVALID_OPTION_ONOFF, a syntax error the parser here does not report",
-            ),
-            (
-                "base/keyword/GUARD.testGroup",
-                "derived",
-                "normal",
-                "rexx-exec: USE LOCAL in a ::METHOD body is not implemented (Phase 5), rc 120, last started TEST_WHEN_USE_LOCAL_NO_WAIT, failing []",
-                "TEST_WHEN_USE_LOCAL_NO_WAIT refuses, as alone (USE LOCAL, Phase 5)",
-            ),
-            (
-                "base/keyword/GUARD.testGroup",
-                "derived",
-                "every",
-                "rexx-exec: USE LOCAL in a ::METHOD body is not implemented (Phase 5), rc 120, last started TEST_WHEN_USE_LOCAL_NO_WAIT, failing []",
-                "TEST_WHEN_USE_LOCAL_NO_WAIT refuses, as alone (USE LOCAL, Phase 5)",
             ),
             (
                 "base/keyword/RAISE.testGroup",
@@ -2911,14 +2898,14 @@ mod group_runs {
                 "base/keyword/TRACE.testGroup",
                 "rest",
                 "normal",
-                "error, assertions 117, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+                "error, assertions 118, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt); TEST_TRACE_LABEL_WITH_FORWARD's FORWARD/REPLY trace lines, measured alone 2026-10-07",
             ),
             (
                 "base/keyword/TRACE.testGroup",
                 "rest",
                 "every",
-                "error, assertions 117, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+                "error, assertions 118, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt); TEST_TRACE_LABEL_WITH_FORWARD's FORWARD/REPLY trace lines, measured alone 2026-10-07",
             ),
             (
