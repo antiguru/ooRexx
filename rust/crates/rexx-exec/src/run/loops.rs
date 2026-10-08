@@ -633,11 +633,6 @@ impl Interp {
             // rounding is the oracle's, and for an integer inside `DIGITS` it
             // is a no-op, so the two arms carry the same worth and differ only
             // in what [`ControlValue::small`] may then answer.
-            HeaderRole::Initial | HeaderRole::To | HeaderRole::By
-                if values.objects.is_some() || self.operator_message_receiver(value).is_some() =>
-            {
-                self.accept_object_header(role, value, values)?;
-            }
             HeaderRole::Initial => {
                 let digits = self.activation().settings.digits();
                 // **The `Number` is built only by the arm that keeps it.**
@@ -651,11 +646,20 @@ impl Interp {
                     Decoded::SmallInt(small) if within_digits(small, digits) => {
                         ControlValue::Small(small)
                     }
-                    _ => ControlValue::Wide(self.header_number(value)?),
+                    _ => match self.header_number(value)? {
+                        Some(number) => ControlValue::Wide(number),
+                        None => return self.accept_object_header(role, value, values),
+                    },
                 });
             }
-            HeaderRole::To => values.to = Some(self.header_number(value)?),
-            HeaderRole::By => values.by = Some(self.header_number(value)?),
+            // An object goes by message; the other values stay numbers, which
+            // [`Interp::object_control_state`] turns into the objects their
+            // `+` would answer.
+            HeaderRole::To | HeaderRole::By => match self.header_number(value)? {
+                Some(number) if role == HeaderRole::To => values.to = Some(number),
+                Some(number) => values.by = Some(number),
+                None => self.accept_object_header(role, value, values)?,
+            },
             // **The rendering is built inside the failing arm**, because a
             // count is nearly always whole and the copy only ever reaches the
             // message: hoisting it renders and frees a string per loop header
@@ -889,7 +893,8 @@ impl Interp {
 
     /// One controlled-loop header value as the `Number` the loop runs on:
     /// numeric (41.1 if not) and rounded at the digits in force.
-    fn header_number(&mut self, value: ObjRef) -> Result<Number, Failure> {
+    /// `None` for an operator receiver, which the header sends `+` instead.
+    fn header_number(&mut self, value: ObjRef) -> Result<Option<Number>, Failure> {
         let entry_digits = self.activation().settings.digits();
         // **A tagged integer no wider than `DIGITS` is its own rounding**, so
         // the unary `+` below has nothing to do to it and the general path
@@ -911,7 +916,7 @@ impl Interp {
                 round_via_unary_plus(&Number::from_i64(small), entry_digits).as_ref(),
                 "a tagged integer within DIGITS {entry_digits} is not its own unary +"
             );
-            return Ok(shortcut);
+            return Ok(Some(shortcut));
         }
         let result = self.header_number_body(value, entry_digits);
         // Blamed on any failure past the object-position check above, not
@@ -1010,14 +1015,26 @@ impl Interp {
     /// [`Interp::header_number`]'s own computation for a position that
     /// reaches it (`Initial`, `To` and `By` -- see that function's own
     /// doc), wrapped by it so every failing step is blamed once.
-    fn header_number_body(&mut self, value: ObjRef, entry_digits: u64) -> Result<Number, Failure> {
-        let operand = self.arith_operand(value)?;
+    fn header_number_body(
+        &mut self,
+        value: ObjRef,
+        entry_digits: u64,
+    ) -> Result<Option<Number>, Failure> {
+        // An operator receiver never converts, so it is asked for only once
+        // the conversion has failed.
+        let operand = match self.to_number(value) {
+            Ok(operand) => operand,
+            Err(_) if self.operator_message_receiver(value).is_some() => return Ok(None),
+            Err(_) => self.arith_operand(value)?,
+        };
         // The header rounds through a unary `+`, so its three numeric
         // positions carry an operand exactly as an operator's do -- measured,
         // `do k = 1 to 123456789` and `... by 123456789` are both 98.972 at
         // DIGITS 3.
         self.lostdigits_check(&operand, value)?;
-        Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
+        Ok(Some(
+            round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?,
+        ))
     }
 
     /// A `DO`/`LOOP` past its header: the construct itself, driven from the
@@ -2310,9 +2327,8 @@ impl Interp {
                         let frame = self.activation().frame;
                         if let Some(previous) = self.variable(frame, slot)
                             && matches!(previous.decode(), Decoded::Heap { .. })
-                            && self.operator_message_receiver(previous).is_none()
+                            && let Some(sum) = self.controlled_step_wide(previous, by, digits)?
                         {
-                            let sum = self.controlled_step_wide(previous, by, digits)?;
                             let stepped_value = ControlValue::Wide(sum);
                             let within = Self::controlled_within_wide(
                                 &stepped_value,
@@ -2409,13 +2425,10 @@ impl Interp {
                         Some(sum) => *current = ControlValue::Small(sum),
                         // An object in the control variable: the loop goes on
                         // by message from here.
-                        None if self.operator_message_receiver(previous).is_some() => {
-                            by_message = Some(previous);
-                        }
-                        None => {
-                            *current =
-                                ControlValue::Wide(self.controlled_step_wide(previous, by, digits)?)
-                        }
+                        None => match self.controlled_step_wide(previous, by, digits)? {
+                            Some(sum) => *current = ControlValue::Wide(sum),
+                            None => by_message = Some(previous),
+                        },
                     }
                 }
                 if let Some(previous) = by_message {
@@ -2584,16 +2597,22 @@ impl Interp {
     }
 
     /// One controlled pass's step where the control variable is not an
-    /// integer the tag holds, or the sum leaves what `DIGITS` admits.
+    /// integer the tag holds, or the sum leaves what `DIGITS` admits; `None`
+    /// where it holds an operator receiver, which goes on by message.
     #[inline(never)]
     fn controlled_step_wide(
         &mut self,
         previous: ObjRef,
         by: &Number,
         digits: u64,
-    ) -> Result<Number, Failure> {
-        let read = self.arith_operand(previous)?;
+    ) -> Result<Option<Number>, Failure> {
+        let read = match self.to_number(previous) {
+            Ok(read) => read,
+            Err(_) if self.operator_message_receiver(previous).is_some() => return Ok(None),
+            Err(_) => self.arith_operand(previous)?,
+        };
         read.add(by, digits)
+            .map(Some)
             .map_err(Raised::from)
             .map_err(Failure::from)
     }
