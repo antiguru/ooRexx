@@ -1,9 +1,9 @@
 count 16
 /* Method~newFile and Routine~newFile on a file that does not parse raise
    SYNTAX in that file, trapped and then untrapped. */
-call try .method, 'badm.rex'
-call try .routine, 'badr.rex'
-r = .routine~newFile('badu.rex')
+call try .method, 'badm.cls'
+call try .routine, 'badr.cls'
+r = .routine~newFile('badu.cls')
 say 'not reached'
 exit
 try: signal on syntax
