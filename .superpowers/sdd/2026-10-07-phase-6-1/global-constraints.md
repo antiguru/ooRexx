@@ -30,7 +30,7 @@
   set's size, no em-dashes; a false sentence is deleted. Extent claims are derived with the command
   committed. Every witness's stdout is read to confirm each path it claims prints.
 * **Shell**: no `bash -c`/`sh -c` wrappers; `rm` only with literal absolute paths, no globs (a loop that does `rm -rf $W/$n` stalls the task on a manual approval: make a fresh directory per run instead of deleting); never
-  `pkill -f`; builds under `memcap 8G` with `-j 4`.
+  `pkill -f`; builds under `memcap 8G` with `-j 4`. **Every process that runs this crate's interpreter or its tests runs under `memcap`** (8G for a test binary, 2G for a single `rexx-run` probe), including scripts that loop over programs or ooTest groups: the collector triggers on slots, so a loop of large dead strings (ooTest Class TEST_SUBCLASSES_GC and others) grows ~1 GB/s and an uncapped run OOM-killed the whole session on 2026-10-08.
 * **Per-task check**: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, plain
   `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug), and `REXX_CORPUS_GATE=1 memcap 8G
   cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle` (the witnesses need the strict
