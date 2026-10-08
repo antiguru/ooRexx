@@ -93,7 +93,17 @@ impl Interp {
         if let Some(inline) = ObjRef::inline_text(bytes) {
             return inline;
         }
-        self.text_bytes(Bytes::from_slice(bytes))
+        let value = self.text_bytes(Bytes::from_slice(bytes));
+        self.charge_text(bytes.len());
+        value
+    }
+
+    /// Charges a text body of `len` bytes if `Bytes` will not hold it inline.
+    #[inline]
+    pub(crate) fn charge_text(&mut self, len: usize) {
+        if len > INLINE_BYTES {
+            self.charge_body_bytes(len);
+        }
     }
 
     /// A source literal's value, inlined as a tagged integer when the
@@ -199,20 +209,24 @@ impl Interp {
         if let Some(inline) = ObjRef::inline_text(&bytes) {
             return inline;
         }
-        self.text_bytes(Bytes::from_vec(bytes))
+        let len = bytes.len();
+        let value = self.text_bytes(Bytes::from_vec(bytes));
+        self.charge_text(len);
+        value
     }
 
     /// The one place a `Body::Text` is built, so the `num` cache's initial
-    /// state is stated once.
+    /// state is stated once. The caller charges a body too long for `Bytes`
+    /// to hold inline ([`Interp::charge_text`]) after this returns, from the
+    /// source's length, because a read of the built `Bytes` here, or a
+    /// charge between building it and this call, measured as a copy of the
+    /// body on `rexxcps` and `strings` rather than a build in its slot.
     #[inline]
     pub(crate) fn text_bytes(&mut self, bytes: Bytes) -> ObjRef {
         debug_assert!(
             ObjRef::inline_text(&bytes).is_none(),
             "a value that fits the handle built a Bytes on the way here"
         );
-        if !bytes.is_inline() {
-            self.charge_body_bytes(bytes.as_slice().len());
-        }
         self.alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
     }
 

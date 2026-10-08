@@ -426,8 +426,9 @@ impl Interp {
         if let Some(inline) = ObjRef::inline_text(bytes) {
             return (piece, inline);
         }
-        let bytes = Bytes::from_slice(bytes);
-        (piece, self.text_bytes(bytes))
+        let value = self.text_bytes(Bytes::from_slice(bytes));
+        self.charge_text(piece.len());
+        (piece, value)
     }
 
     /// `PARSE ARG`'s string for the template at argument position `at`.

@@ -1469,6 +1469,10 @@ struct Interp {
     /// same flag and should not have to rename it away from a gate task's
     /// number.
     stress_collect: bool,
+    /// Whether the next allocation collects whatever the slot test says:
+    /// always in the stress mode, and otherwise once the body bytes charged
+    /// since the last collection reach `bytes_due`.
+    collect_due: bool,
     /// The objects a collection found unreachable and flagged for `UNINIT`,
     /// oldest first, awaiting [`Interp::run_ready_uninits`] -- oracle's
     /// `setReadyForUninit` list (`memory/RexxMemory.cpp:274`).
@@ -2025,6 +2029,7 @@ impl Interp {
             next_activation_id: 0,
             next_invocation: 0,
             stress_collect: false,
+            collect_due: false,
             uninit_ready: Vec::new(),
             processing_uninits: false,
             bootstrap_stderr: None,
@@ -2628,6 +2633,7 @@ impl Interp {
     /// nothing can un-flip it once a run has started.
     fn enable_stress_collect(&mut self) {
         self.stress_collect = true;
+        self.collect_due = true;
     }
 
     /// The one allocation entry point every value/stem constructor in this
@@ -2645,21 +2651,20 @@ impl Interp {
     /// The collection decision every allocation site makes, without the
     /// allocation.
     fn collect_if_due(&mut self) {
-        if self.stress_collect
+        if self.collect_due
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
         {
             self.collect_now();
         }
     }
 
-    /// Charges `bytes` of a body about to be allocated outside its slot, and
-    /// collects when the bytes since the last collection reach `bytes_due`.
-    /// Called before the allocation, where [`Interp::alloc_with`] may collect
-    /// anyway.
+    /// Charges `bytes` of a body allocated outside its slot. When the bytes
+    /// since the last collection reach `bytes_due`, the next allocation
+    /// collects.
+    #[inline]
     pub(crate) fn charge_body_bytes(&mut self, bytes: usize) {
-        if self.heap.charge_body_bytes(bytes) >= self.bytes_due {
-            self.collect_now();
-        }
+        let since = self.heap.charge_body_bytes(bytes);
+        self.collect_due |= since >= self.bytes_due;
     }
 
     /// Appends every `ObjRef` the interpreter must hand the collector to
@@ -2811,6 +2816,7 @@ impl Interp {
             out: _,
             trace: _,
             stress_collect: _,
+            collect_due: _,
             // The collector's own resurrection flag holds each object until
             // its finalizer clears it.
             uninit_ready: _,
@@ -2933,6 +2939,7 @@ impl Interp {
             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
         }
         self.bytes_due = COLLECT_BYTES_FLOOR.max(stats.live_bytes);
+        self.collect_due = self.stress_collect;
         #[cfg(feature = "sharing")]
         self.heap.sharing_pause(false);
     }
