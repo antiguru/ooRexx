@@ -278,3 +278,43 @@ after which `refusal_sites` passes; full rerun at `76c21a82c`: exit 0, 144 `test
 re-run (`probes/`, `x/`, `y/`, `z/`, `r/`): the only differences are the ones already recorded
 (b13 guards, concern 3's list, `.local['STDQUE']`). No perf run: `begin_invoke` and the send
 path are as at `7d233521f`; the changed code is the Directory entry path and `.context~executable`.
+
+## Fix round 2
+
+Re-review `task-4-rereview.md`: Critical 1 open (a running activation's `cold.executable` was not
+a root), New Minors 1-3. Commits: `4c63d5b69`, and the commit carrying this section.
+
+- **Critical 1.** `Activity::object_roots` (`activity.rs`, the loop that already walks every
+  running and suspended activation for its `REPLY` roots) now also hands over each activation's
+  `cold.executable`. A REPLY-continued activation is a running activation of its new activity,
+  whose own walk covers it. `run_stored_method` pushes no temp; the root is the activation, for
+  `run` and Directory entries alike.
+- **New Minor 1.** `executable_at` (`dispatch/context.rs`) keeps a method activation's first
+  `.context~executable` answer in its cold box, which the walk above roots, so later asks answer
+  the same object. `c6` now matches the oracle (`1 The NIL object ...` where `2a03b64c1` printed
+  `0`).
+- **New Minor 2.** `oracle-crashes.txt` entry 30 says the class defines no `MAKESTRING`.
+- **New Minor 3.** `method_source_shapes.rex` keeps only classes `a` and `bn`; its header says
+  "an array with no items".
+- Witnesses (all match the oracle in both engine modes; each stdout read):
+  `directory_entry_unset_while_running` (`c13`), `directory_entry_unset_then_allocates`,
+  `directory_entry_replace_while_running` (`c10`), `directory_entry_replace_then_allocates`,
+  `directory_unknown_unset_while_running` (`c17`), `setmethod_unset_identity_after_collection`
+  (`c6`). Run under `run_program_collect_every_alloc` by a scratch test (copied into tree copies
+  only, release, own target dirs): at `2a03b64c1` the five Directory programs refuse rc 120 `a
+  message send to a value whose object is no longer live` and `c6` prints `0`; at the round's tree
+  all six answer as the oracle does.
+- The re-review's probes `c1`-`c19`, `f1`-`f6`, `i1`, `i2`, `o1`, `r1`-`r3`, `s1`, `m2` all match
+  the oracle. `c5` differs only by the recorded `Compiled method "UNKNOWN"` traceback line (its
+  second half is an `UNKNOWN` entry that raises), and `m1` stops at the String-subclass `NEW`
+  refusal (spec R2).
+- Performance: the root walk runs at collection time, so `alloc`, `alloc4c` and `rexxcps` were
+  measured against `a3c2c3c0a` (base binary as in the gate record; `r2` from `git archive
+  4c63d5b69`, own target dir, one `Compiling rexx-exec` line, sha256
+  `c0d14e45d9a5b2db0d3a56a40037aa852362455b7617c66413dafdc8e3cffb10`; the delta includes Task 4a):
+  `bash rust/bench-programs/callgrind.sh -r 3 -j 6 -o $P/cg-r2 -p "alloc alloc4c rexxcps"
+  base=... r2=...`, exit 0: alloc -0.0146%, alloc4c +0.0006%, rexxcps +0.0017%, spreads 0.0000%.
+
+Commands at `4c63d5b69`: `cargo fmt --check` exit 0; clippy `-D warnings` exit 0; `memcap 8G
+cargo test -j 4 --workspace --no-fail-fast` exit 0 (144 `test result: ok`); `REXX_CORPUS_GATE=1
+... --test corpus --test ir_recorded_oracle` exit 0 (29 passed 1 ignored; 21 passed).
