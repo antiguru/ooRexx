@@ -3253,6 +3253,18 @@ above.
   prose around the drain, which owns no behaviour, so recording it was that
   task's whole disposition.
 
+  A LOOP DRIVEN BY MESSAGE ENDS WHERE ITS COMPARISON ANSWERS A COMPUTED '1'.
+  `DoBlock::checkControl` and BY's direction test (`DoBlockComponents.cpp:173`)
+  end or reverse the loop only for `TheTrueObject` itself; this crate tests
+  for the value `LOGICAL_TRUE`, the inline one-byte `'1'` a comparison
+  answers, and a computed one-byte `'1'` is the same handle. Measured
+  2026-10-08, a user `>` answering `'1' || ''`, `left('12', 1)`, `d2c(49)`,
+  `1~string`, `.true~copy` or `.true~string` under `to 3 for 3`: the oracle
+  runs 3 passes, this crate none, rc 0 both; a BY whose `<` answers
+  `left('12', 1)` counts down here. A comparison, `.true`, a literal `1` or
+  `'1'` and `0 + 1` agree. NOT FIXED: telling the true object from a computed
+  `'1'` needs a value representation this crate does not have.
+
   A CONDITION CALL ON CANNOT TRAP, RAISED WITH RETURN INTO A CALLER, REACHES
   THE CALLER'S CALL ON ANY HERE AND NOT ON THE ORACLE. Measured 2026-10-08,
   three descriptors, rc 0 on both sides:
