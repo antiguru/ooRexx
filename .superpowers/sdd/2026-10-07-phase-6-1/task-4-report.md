@@ -207,3 +207,74 @@ engine modes, for those and five more rows).
    the answer is the live object for the lowest identity running that body.
 5. `ObjectMethod` grew by one `ObjRef` (rexx-core), and the `.METHODS` table build now mints
    identities, which shifts `MethodId` numbering during the library bootstrap.
+
+## Fix round 1
+
+Review `task-4-review.md` (Critical 1, Important 1, Minor 1-7). Commits: `8ed2293bd` (behaviour,
+witnesses, records), `76c21a82c` (`refusal-sites.tsv` line drift: `source_syntax`
+`class_protocol.rs:333` to `:336`), and the commit carrying this section.
+
+- **Critical 1, Important 1.** `Directory~setMethod` (`dispatch/hash.rs:1920`) now does
+  `newMethodObject(entryname, methodobj, .nil)` as `DirectoryClass.cpp:484` does: a source is
+  compiled under the entry's (upcased) name, a Method object goes through `scoped_method` to
+  `.nil`, and the table holds that object, which keeps it alive. `run_stored_method`
+  (`hash.rs:971`) reads the object's identity and runs it through the new
+  `object_protocol.rs:733` `invoke_executable`, which `run` now shares: the activation carries
+  the object, so `.context~executable` answers it. A non-Method entry still answers itself.
+  Compiling under the entry name also fixes `Error 88 running RUN` (oracle `running GO`), which
+  report concern 3 named.
+- The rebuild in `running_method_executable` (`environment/identities.rs`) keys a scope that is
+  not a class by a fresh `Annotated::Compiled` site, where it called `Annotated::Member(.nil, ..)`
+  and `class_owns(.nil)` panicked. It also reports a synthetic directive (a body compiled from
+  source text) as `Main`, which gives the oracle's `~source`. The rebuild is still reachable
+  after the Directory fix: a method that unsets its own entry while it runs, then a forced
+  collection. Crate test `run/tests.rs:97`
+  `an_executable_rebuilt_under_the_nil_scope_answers` asserts the output and that the test-only
+  counter `executables_rebuilt` is 1. With the site forced back to `Member` the test fails with
+  the panic.
+- New witnesses (`phase-6-1.txt`; all match the oracle in both engine modes; each stdout read):
+
+  | program | from | output |
+  |---|---|---|
+  | directory_setmethod_executable_collected | review `f3` (`call gc 'force'`) | the source line |
+  | directory_setmethod_executable_scoped | review `f1` | `0 The NIL object` |
+  | setmethod_unset_while_running_executable | added (the rebuild) | `Method The NIL object <line> 1` |
+  | method_source_makestring_object | Minor 4 | `1 [an Array]`, `1 [an Object]`, `93.961` |
+  | method_source_shapes | review `e7_1`-`_12` but `_5`, `_7`, printing the source rather than running it | ten shapes |
+  | load_package_source_shapes | review `d8` | List, MAKEARRAY, 88.913, empty Directory |
+  | program_routine_call_more | review `d6` | EXIT, recursion, from a method, identity |
+  | program_routine_call_signal | review `h3` | trapped inside, reaching the caller's trap |
+  | setmethod_loaded_method (`.env` sidecar for rxregexp) | Minor 2 | `set`, then 88.901 rc 168 under `.NIL` |
+
+  At `ce8b81a99` (the HEAD before the round, built from `git archive` in its own target
+  directory), the first and third panic (rc 101, `class_owns on a handle that is not a live
+  class object`, both engine modes), as does the review's `f6` allocation-loop form; the second
+  printed `1 The U class`. The `f6` loop (200000 iterations) is not a witness, since
+  `collect_stress.rs` runs every witness collecting at each allocation; the `gc 'force'` form
+  stands for it.
+- **Minor 1.** The false clause ("and a `Directory`") in `Loud::object_method`'s doc is deleted.
+- **Minor 2.** The exclusions record at `phase-4-exclusions.txt:5574` is replaced: the setMethod
+  of a `loadExternalMethod` answer now runs on both. The one remaining difference, an extra
+  `Compiled method "UNKNOWN" with scope "Directory".` traceback line for a Directory entry method,
+  is the new record, measured on the record's own program.
+- **Minor 3.** `rust/corpus/oracle-crashes.txt` entry 30, from the review's 5-of-5 measurement
+  (not re-run, per the file's rule).
+- **Minor 4.** `class_protocol.rs:308`: any `REQUEST('STRING')` answer but `.nil` is the source
+  line as its string value. Witnessed above.
+- **Minor 5.** The gap witnesses above. `h1`/`h2` (concurrent) are not corpus programs.
+- **Minor 6.** `borrowed_run_row.rex` loses the unsent `sm` line; `load_package_object_source.rex`
+  exits before `s2:`. Both still match; SOURCELINE files regenerated.
+- **Minor 7.** The `routine_object_running` scan (`dispatch/context.rs:435`) now runs only for a
+  synthetic directive, so a `::ROUTINE`'s `.context~executable` goes to its table as before.
+- Report concern 4 understated Important 1 and is now moot: a Directory entry answers its own
+  object at once and after a collection.
+
+Commands at `76c21a82c` (Rust content of `8ed2293bd` plus the TSV):
+`cargo fmt --check` exit 0; clippy `-D warnings` exit 0; `REXX_CORPUS_GATE=1 ... --test corpus
+--test ir_recorded_oracle` exit 0 (29 passed 1 ignored; 21 passed); the plain workspace run at
+`8ed2293bd` failed one target, `refusal_sites`
+(`the_table_holds_every_constructor_the_source_defines`, the line drift), fixed by `76c21a82c`,
+after which `refusal_sites` passes; full rerun at `76c21a82c`: exit 0, 144 `test result: ok` lines, none failed. Every earlier probe
+re-run (`probes/`, `x/`, `y/`, `z/`, `r/`): the only differences are the ones already recorded
+(b13 guards, concern 3's list, `.local['STDQUE']`). No perf run: `begin_invoke` and the send
+path are as at `7d233521f`; the changed code is the Directory entry path and `.context~executable`.
