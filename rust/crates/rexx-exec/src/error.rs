@@ -1868,7 +1868,7 @@ impl Raised {
     ) -> (Raised, Vec<u8>) {
         let mut raised = Raised::from(error);
         raised.position = u32::try_from(line).unwrap_or(0);
-        let text = source.join_span(error.clause.clone()).map_or_else(
+        let text = source.join_span(error.clause()).map_or_else(
             || b"<clause span outside the retained source>".to_vec(),
             Cow::into_owned,
         );

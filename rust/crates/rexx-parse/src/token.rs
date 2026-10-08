@@ -36,11 +36,10 @@ pub struct ParseError {
     /// the clause being translated and not the offending character. The name
     /// reads like the latter; it is not.
     pub byte: usize,
-    /// The source the error's traceback line echoes: the clause being
-    /// translated, from its first token to the last one scanned
-    /// (`LanguageParser::createStackFrame`'s `clauseLocation`). Empty until
-    /// the scanner or `parse` resolves it.
-    pub clause: Range<usize>,
+    /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
+    /// Zero until the scanner or `parse` resolves it. A `u32` keeps the error
+    /// two words wide, which every `Result` the parser returns carries.
+    end: u32,
 }
 
 impl ParseError {
@@ -50,14 +49,23 @@ impl ParseError {
             code,
             sub,
             byte,
-            clause: byte..byte,
+            end: 0,
         }
     }
 
-    /// This error echoing `clause`, unless it already echoes one.
+    /// The source the error's traceback line echoes: the clause being
+    /// translated, from its first token to the last one scanned
+    /// (`LanguageParser::createStackFrame`'s `clauseLocation`).
+    pub fn clause(&self) -> Range<usize> {
+        self.byte..(self.end as usize).max(self.byte)
+    }
+
+    /// This error reported against `clause` and echoing it, unless it already
+    /// echoes one.
     pub(crate) fn echoing(mut self, clause: Range<usize>) -> Self {
-        if self.clause.is_empty() {
-            self.clause = clause;
+        if self.end == 0 {
+            self.byte = clause.start;
+            self.end = u32::try_from(clause.end).unwrap_or(u32::MAX);
         }
         self
     }
