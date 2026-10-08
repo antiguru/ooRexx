@@ -83,3 +83,9 @@ lang/do_ctrl_class.rex
 lang/do_ctrl_objects.rex
 lang/forward_args_object.rex
 lang/raise_additional_object.rex
+
+# Task 3 fix round 1: a loop whose control value is an object is driven by
+# message, and DO OVER a package's local directory.
+lang/do_object_control.rex
+lang/do_object_control_trace.rex
+lang/do_over_package_local.rex

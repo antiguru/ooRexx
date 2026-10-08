@@ -448,9 +448,10 @@ impl Activity {
             native_spares: _,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
-            // lifetime, and `RootSet` reaches a register as a temp.
-            flat_loops: _,
-            flat_top: _,
+            // lifetime, and `RootSet` reaches a register as a temp; a loop
+            // driven by message holds its own objects.
+            flat_loops,
+            flat_top,
             frames: _,
             // A saved convention is the caller's, whose arguments and
             // receiver that caller's temps and registers root; a lent argument
@@ -537,6 +538,9 @@ impl Activity {
         } = self;
         if let Some(exec) = guard_exec {
             out.extend(exec.watched.iter().flat_map(|var| [var.owner, var.scope]));
+        }
+        for flat in flat_loops.iter().chain(flat_top.iter()) {
+            flat.object_roots(out);
         }
         if let Some(send) = guarded_send {
             send.object_roots(out);

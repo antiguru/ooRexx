@@ -1,0 +1,10 @@
+count 9
+/* DO OVER a package's local directory iterates its indexes. */
+l = .context~package~local
+n = 0
+do e over l; n = n + 1; end
+say n
+l['A'] = 1; l~b = 2
+got = ''
+do e over l; got = got e; end
+say got~word(1) < got~word(2) got~words

@@ -297,6 +297,48 @@ enum LoopState {
     /// answered `SUPPLIER` with, `WithLoop::checkIteration`
     /// (`instructions/DoBlockComponents.cpp`).
     With(Box<WithState>),
+    /// A controlled loop whose header value or control variable is an
+    /// object: driven by message, as `DoBlock::checkControl` drives every
+    /// controlled loop.
+    ObjectControlled(Box<ObjectControl>),
+}
+
+/// A controlled loop driven by the operator sends themselves: `+` with `BY`
+/// at the increment and the `TO` comparison on what the control holds, each
+/// answer kept as it is.
+struct ObjectControl {
+    control: SymbolId,
+    /// [`control_slot`], taken once when this loop was entered.
+    at: Option<usize>,
+    shape: NameShape,
+    /// The first pass's value, until that pass binds it.
+    initial: Option<ObjRef>,
+    to: Option<ObjRef>,
+    by: ObjRef,
+    /// Whether the comparison is `<` (a negative `BY`) rather than `>`.
+    descending: bool,
+    for_remaining: Option<u64>,
+    stepped: bool,
+}
+
+/// A controlled header's `+` answers where one of its values is an object.
+#[derive(Default)]
+pub(crate) struct ObjectHeader {
+    initial: Option<ObjRef>,
+    to: Option<ObjRef>,
+    by: Option<ObjRef>,
+    descending: bool,
+}
+
+impl FlatLoop {
+    /// Appends the objects this loop's own state holds to `out`.
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        if let LoopState::ObjectControlled(ctl) = &self.state {
+            out.extend(ctl.initial);
+            out.extend(ctl.to);
+            out.push(ctl.by);
+        }
+    }
 }
 
 /// A `DO WITH` loop's supplier and the names it binds.
@@ -404,20 +446,6 @@ impl HeaderRole {
             HeaderRole::Over => Some("OVER"),
             HeaderRole::With => Some("WITH"),
             HeaderRole::Counter => Some("COUNTER"),
-        }
-    }
-
-    /// How a loud failure names the position this value sits in.
-    pub(crate) fn value_name(self) -> &'static str {
-        match self {
-            HeaderRole::Initial => "a DO header's initial value",
-            HeaderRole::To => "a DO header's TO value",
-            HeaderRole::By => "a DO header's BY value",
-            HeaderRole::For | HeaderRole::OverFor => "a DO header's FOR value",
-            HeaderRole::Count => "a DO header's repeat count",
-            HeaderRole::Over => "a DO header's OVER target",
-            HeaderRole::With => "a DO header's WITH target",
-            HeaderRole::Counter => "a DO header's COUNTER",
         }
     }
 }
@@ -545,6 +573,8 @@ pub(crate) struct LoopHeaderValues {
     pub(crate) over_register: Option<u16>,
     /// A bare `DO expr`'s repeat count.
     count: Option<u64>,
+    /// Where a controlled header's value is an object, every `+` answer.
+    objects: Option<Box<ObjectHeader>>,
 }
 
 impl Interp {
@@ -603,6 +633,11 @@ impl Interp {
             // rounding is the oracle's, and for an integer inside `DIGITS` it
             // is a no-op, so the two arms carry the same worth and differ only
             // in what [`ControlValue::small`] may then answer.
+            HeaderRole::Initial | HeaderRole::To | HeaderRole::By
+                if values.objects.is_some() || self.operator_message_receiver(value).is_some() =>
+            {
+                self.accept_object_header(role, value, values)?;
+            }
             HeaderRole::Initial => {
                 let digits = self.activation().settings.digits();
                 // **The `Number` is built only by the arm that keeps it.**
@@ -616,11 +651,11 @@ impl Interp {
                     Decoded::SmallInt(small) if within_digits(small, digits) => {
                         ControlValue::Small(small)
                     }
-                    _ => ControlValue::Wide(self.header_number(role, value)?),
+                    _ => ControlValue::Wide(self.header_number(value)?),
                 });
             }
-            HeaderRole::To => values.to = Some(self.header_number(role, value)?),
-            HeaderRole::By => values.by = Some(self.header_number(role, value)?),
+            HeaderRole::To => values.to = Some(self.header_number(value)?),
+            HeaderRole::By => values.by = Some(self.header_number(value)?),
             // **The rendering is built inside the failing arm**, because a
             // count is nearly always whole and the copy only ever reaches the
             // message: hoisting it renders and frees a string per loop header
@@ -654,18 +689,9 @@ impl Interp {
                     }
                 });
             }
-            // **`DO OVER` is not `stringValue()` and not an operator**, which
-            // is why R12's other sites do not cover it: the oracle hands the
-            // target to `requestArray`. Measured, `do e over .array` is
-            // 98.913 at rc 158 and `do e over .environment` iterates the
-            // directory's own entries, neither of which this crate answers.
-            // An array and a string both do -- see [`Interp::over_snapshot`].
-            HeaderRole::Over => {
-                if let Some(kind) = self.over_target_gap(value) {
-                    return Err(Loud::object_position(role.value_name(), kind).into());
-                }
-                values.over = Some(value);
-            }
+            // `DO OVER` hands its target to `requestArray` -- see
+            // [`Interp::over_snapshot`].
+            HeaderRole::Over => values.over = Some(value),
             HeaderRole::With => values.supplier = Some(self.with_supplier(value)?),
             // [`Interp::file_header_value`] answers this role itself.
             HeaderRole::Counter => {}
@@ -787,27 +813,16 @@ impl Interp {
         )
     }
 
-    /// The one `DO OVER` target this crate still refuses: one of the
-    /// interpreter's own directories.
-    fn over_target_gap(&mut self, value: ObjRef) -> Option<&'static str> {
-        if !matches!(
-            self.heap.get(value).map(|object| &object.body),
-            Some(Body::Native(_))
-        ) {
-            return None;
-        }
-        (self.receiver_class_id(value).as_deref() == Some("Directory"))
-            .then_some("one of the interpreter's own objects")
-    }
-
     /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
-    /// `.resources`, or a package's `~publicClasses`.
+    /// `.resources`, or a package's `~publicClasses` -- or a `Directory` built
+    /// on the same map, a package's `~local`.
     fn is_hash_collection(&mut self, value: ObjRef) -> bool {
         let Some(Body::Native(native)) = self.heap.get(value).map(|object| &object.body) else {
             return false;
         };
         let class = native.class();
         class == self.object_model().iterable_collection_class()
+            || self.receiver_class_id(value).as_deref() == Some("Directory")
     }
 
     /// The values a `DO OVER` binds its control variable to: the **non-empty**
@@ -874,7 +889,7 @@ impl Interp {
 
     /// One controlled-loop header value as the `Number` the loop runs on:
     /// numeric (41.1 if not) and rounded at the digits in force.
-    fn header_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
+    fn header_number(&mut self, value: ObjRef) -> Result<Number, Failure> {
         let entry_digits = self.activation().settings.digits();
         // **A tagged integer no wider than `DIGITS` is its own rounding**, so
         // the unary `+` below has nothing to do to it and the general path
@@ -898,9 +913,6 @@ impl Interp {
             );
             return Ok(shortcut);
         }
-        if self.operator_operand_gap(value).is_some() {
-            return self.header_object_number(role, value);
-        }
         let result = self.header_number_body(value, entry_digits);
         // Blamed on any failure past the object-position check above, not
         // only `arith_operand`'s own conversion -- the same reason
@@ -916,23 +928,83 @@ impl Interp {
         result
     }
 
-    /// A header value that is an object: `ControlledLoop::setup`'s
-    /// `callOperatorMethod(OPERATOR_PLUS)` is a message to it, 97.1 where it
-    /// has no `+`, and what it answers is the loop's number. A `BY` answer
-    /// that is itself an object is sent the setup's `<` against 0 next.
+    /// A controlled header value once the header holds an object:
+    /// `ControlledLoop::setup`'s `callOperatorMethod(OPERATOR_PLUS)`, a message
+    /// to an object (97.1 where it has no `+`), whose answer is kept as it is.
+    /// `BY`'s answer is sent the setup's `<` against 0 for the direction.
     #[cold]
     #[inline(never)]
-    fn header_object_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
+    fn accept_object_header(
+        &mut self,
+        role: HeaderRole,
+        value: ObjRef,
+        values: &mut LoopHeaderValues,
+    ) -> Result<(), Failure> {
         let answer = self.apply_prefix(rexx_parse::PrefixOp::Plus, value)?;
         self.roots.activity_mut().push_temp(answer);
-        if self.operator_message_receiver(answer).is_none() {
-            return self.header_number(role, answer);
-        }
-        if role == HeaderRole::By {
+        let descending = if role == HeaderRole::By {
             let zero = self.counted(0);
-            self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
+            let below = self.apply_binary(rexx_parse::Operator::LessThan, answer, zero)?;
+            is_true_object(below)
+        } else {
+            false
+        };
+        let objects = values.objects.get_or_insert_with(Box::default);
+        match role {
+            HeaderRole::Initial => objects.initial = Some(answer),
+            HeaderRole::To => objects.to = Some(answer),
+            _ => {
+                objects.by = Some(answer);
+                objects.descending = descending;
+            }
         }
-        Err(Loud::object_position(role.value_name(), "an object a `+` answered").into())
+        Ok(())
+    }
+
+    /// The loop state for a controlled header that holds an object: every
+    /// value the header converted as a number becomes that number's object.
+    fn object_control_state(
+        &mut self,
+        code: &Code<'_>,
+        control: SymbolId,
+        values: &LoopHeaderValues,
+        objects: &ObjectHeader,
+    ) -> LoopState {
+        let digits = self.activation().settings.digits();
+        let initial = match (objects.initial, &values.initial) {
+            (Some(initial), _) => initial,
+            (None, Some(initial)) => self.control_number_object(initial.number().as_ref(), digits),
+            (None, None) => ObjRef::NIL,
+        };
+        let to = match (objects.to, &values.to) {
+            (Some(to), _) => Some(to),
+            (None, Some(to)) => Some(self.control_number_object(to, digits)),
+            (None, None) => None,
+        };
+        let (by, descending) = match (objects.by, &values.by) {
+            (Some(by), _) => (by, objects.descending),
+            (None, Some(by)) => (self.control_number_object(by, digits), by.signum() < 0),
+            (None, None) => (self.counted(1), false),
+        };
+        LoopState::ObjectControlled(Box::new(ObjectControl {
+            control,
+            at: control_slot(code, control),
+            shape: shape_of(code.symbols.name(control).as_bytes()),
+            initial: Some(initial),
+            to,
+            by,
+            descending,
+            for_remaining: values.for_remaining,
+            stepped: false,
+        }))
+    }
+
+    /// `number` as the object a header's `+` answers, rooted.
+    fn control_number_object(&mut self, number: &Number, digits: u64) -> ObjRef {
+        let form = self.activation().settings.form();
+        let object = self.number(number.clone(), crate::eval::saturate_digits(digits), form);
+        self.roots.activity_mut().push_temp(object);
+        object
     }
 
     /// [`Interp::header_number`]'s own computation for a position that
@@ -1074,6 +1146,10 @@ impl Interp {
             LoopKind::Count(_) => LoopState::Count {
                 remaining: values.count.unwrap_or(1),
             },
+            LoopKind::Controlled(ctrl) if values.objects.is_some() => {
+                let objects = values.objects.as_deref().expect("tested by the guard");
+                self.object_control_state(code, ctrl.control, &values, objects)
+            }
             LoopKind::Controlled(ctrl) => LoopState::Controlled {
                 control: ctrl.control,
                 at: control_slot(code, ctrl.control),
@@ -1554,6 +1630,10 @@ impl Interp {
             LoopKind::Count(_) => LoopState::Count {
                 remaining: values.count.unwrap_or(1),
             },
+            LoopKind::Controlled(ctrl) if values.objects.is_some() => {
+                let objects = values.objects.as_deref().expect("tested by the guard");
+                self.object_control_state(code, ctrl.control, &values, objects)
+            }
             LoopKind::Controlled(ctrl) => LoopState::Controlled {
                 control: ctrl.control,
                 at: control_slot(code, ctrl.control),
@@ -1947,6 +2027,9 @@ impl Interp {
                 Ok(advanced)
             }
             Err(failure) => {
+                if by_message_first_pass(blame, state) {
+                    self.blame_while_failure(code, source, flat.do_index, loop_indent);
+                }
                 self.blame_header_failure(code, source, blame, site, end_index, loop_indent);
                 Err(failure)
             }
@@ -1989,6 +2072,9 @@ impl Interp {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
                 Err(failure) => {
+                    if by_message_first_pass(blame, state) {
+                        it.blame_while_failure(code, source, do_index, loop_indent);
+                    }
                     it.blame_header_failure(code, source, blame, site, end_index, loop_indent);
                     return Err(failure);
                 }
@@ -2064,6 +2150,23 @@ impl Interp {
                 Ok(true)
             }
             LoopState::With(with) => self.with_advance(code, with, loop_indent),
+            LoopState::ObjectControlled(ctl) => {
+                let pass = self.roots.activity_mut().push_frame();
+                let previous = if ctl.stepped {
+                    Some(self.read_control_traced(
+                        code,
+                        ctl.control,
+                        ctl.at,
+                        ctl.shape,
+                        loop_indent,
+                    )?)
+                } else {
+                    None
+                };
+                let more = self.object_control_pass(code, ctl, previous, do_indent, loop_indent)?;
+                self.roots.activity_mut().pop_frame(pass);
+                Ok(more)
+            }
             LoopState::OverItems {
                 control,
                 at,
@@ -2221,9 +2324,9 @@ impl Interp {
                         let frame = self.activation().frame;
                         if let Some(previous) = self.variable(frame, slot)
                             && matches!(previous.decode(), Decoded::Heap { .. })
+                            && self.operator_message_receiver(previous).is_none()
                         {
-                            let sum =
-                                self.controlled_step_wide(previous, by, Some(bound), digits)?;
+                            let sum = self.controlled_step_wide(previous, by, digits)?;
                             let stepped_value = ControlValue::Wide(sum);
                             let within = Self::controlled_within_wide(
                                 &stepped_value,
@@ -2286,72 +2389,10 @@ impl Interp {
                 // on; the `?` paths below leave it to the outer truncation,
                 // exactly as `pop_frame`'s own doc describes.
                 let pass = self.roots.activity_mut().push_frame();
+                let mut by_message = None;
                 if re_tested {
-                    // **`read`, not `read_by_name`: this is an evaluation and
-                    // it can raise `NOVALUE`** (review round 1 re-review,
-                    // NEW-1 -- a defect this arm shipped with, not a
-                    // pre-existing one). The oracle's own `control->evaluate`
-                    // is a full expression evaluation, so a body that
-                    // `DROP`s the control variable makes the next re-test
-                    // raise `NOVALUE` rather than read a derived name.
-                    // Measured, `signal on novalue name nv` around
-                    // `do ii = 1 to 3 ; drop ii ; end`: the oracle runs the
-                    // handler and exits 0, where `read_by_name` here gave a
-                    // spurious 41.1 at rc 215. `read_by_name` reports
-                    // nothing to its caller and cannot express that.
-                    let (previous, novalue, resolved) = match shape {
-                        NameShape::Simple => {
-                            // `read_at` with the slot `control_slot` took when
-                            // the loop was entered, which is the same
-                            // resolution this read made for itself on every
-                            // pass before -- `None` still makes it, so the two
-                            // shapes below and a control this resolution does
-                            // not reach are unaffected.
-                            let (value, novalue) = self.read_at(code, *control, *at);
-                            (value, novalue, None)
-                        }
-                        // A bare stem never raises `NOVALUE` on read (`eval_
-                        // node`'s own `ExprKind::Stem` arm has the citation),
-                        // so there is no fallible read to thread through.
-                        // The slot comes off the entry rather than from the
-                        // loop's kept `at`, which is the same source the write
-                        // half of this pass uses and the reason `control_slot`
-                        // declines a stem.
-                        NameShape::Stem => {
-                            let at = code.compound(*control).and_then(|entry| entry.stem_at);
-                            let name = code.symbols.name(*control).as_bytes();
-                            (self.read_stem_at(name, at), Novalue::Set, None)
-                        }
-                        NameShape::Compound => {
-                            let (stem_name, stem_at) = code.stem(*control);
-                            let key = self.tail_key(code, *control)?;
-                            let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
-                            let mut resolved = stem_name.to_vec();
-                            resolved.extend_from_slice(&key);
-                            (value, novalue, Some(resolved))
-                        }
-                    };
-                    self.novalue_check(novalue, previous)?;
-                    self.roots.activity_mut().push_temp(previous);
-                    // `>C>` before `>V>`, both self-gated on `intermediates`
-                    // like every other value-bearing prefix -- `stem_get`'s
-                    // own read announces the fully-resolved name it used
-                    // before either of the value lines shows what is stored
-                    // there, the same order `eval_node`'s `Compound` arm and
-                    // its own tracing counterpart use for an ordinary read.
-                    if let Some(resolved) = &resolved {
-                        let name = code.symbols.name(*control).as_bytes();
-                        self.trace_compound_name(loop_indent, name, resolved);
-                    }
-                    // `result_text` for the pair, not `intermediate_text`:
-                    // `>V>` is `intermediates` and `>>>` is `results`, and
-                    // `results` is the weaker of the two, so it renders for
-                    // either and drops neither.
-                    if let Some(rendered) = self.result_text(previous) {
-                        let name = code.symbols.name(*control).as_bytes();
-                        self.trace_variable(loop_indent, name, &rendered);
-                        self.trace_result(loop_indent, &rendered);
-                    }
+                    let previous =
+                        self.read_control_traced(code, *control, *at, shape, loop_indent)?;
                     // The increment, on integers when it can be. `previous`
                     // comes back out of the variable pool as a tagged small
                     // integer for every ordinary counted loop, and `BY` is
@@ -2380,15 +2421,45 @@ impl Interp {
                     // -- 190,000,000 across `bench-programs/varlookup.rex`.
                     match stepped {
                         Some(sum) => *current = ControlValue::Small(sum),
+                        // An object in the control variable: the loop goes on
+                        // by message from here.
+                        None if self.operator_message_receiver(previous).is_some() => {
+                            by_message = Some(previous);
+                        }
                         None => {
-                            *current = ControlValue::Wide(self.controlled_step_wide(
-                                previous,
-                                by,
-                                to.as_ref(),
-                                digits,
-                            )?)
+                            *current =
+                                ControlValue::Wide(self.controlled_step_wide(previous, by, digits)?)
                         }
                     }
+                }
+                if let Some(previous) = by_message {
+                    let to = to.as_ref().map(|to| self.control_number_object(to, digits));
+                    let descending = by.signum() < 0;
+                    let by = self.control_number_object(by, digits);
+                    let ctl = ObjectControl {
+                        control: *control,
+                        at: *at,
+                        shape,
+                        initial: None,
+                        to,
+                        by,
+                        descending,
+                        for_remaining: *for_remaining,
+                        stepped: true,
+                    };
+                    *state = LoopState::ObjectControlled(Box::new(ctl));
+                    let LoopState::ObjectControlled(ctl) = state else {
+                        unreachable!("the state was written on the line above");
+                    };
+                    let more = self.object_control_pass(
+                        code,
+                        ctl,
+                        Some(previous),
+                        do_indent,
+                        loop_indent,
+                    )?;
+                    self.roots.activity_mut().pop_frame(pass);
+                    return Ok(more);
                 }
                 // The first pass takes the value the header already computed,
                 // unincremented and with no line of its own beyond the `>=>`
@@ -2453,6 +2524,86 @@ impl Interp {
         }
     }
 
+    /// `DoBlock::checkControl`'s read of the control variable at a re-test:
+    /// an evaluation, so it can raise `NOVALUE`, traced `>C>`, `>V>` and
+    /// `>>>`, and rooted.
+    #[inline(always)]
+    fn read_control_traced(
+        &mut self,
+        code: &Code<'_>,
+        control: SymbolId,
+        at: Option<usize>,
+        shape: NameShape,
+        loop_indent: usize,
+    ) -> Result<ObjRef, Failure> {
+        // **`read`, not `read_by_name`: this is an evaluation and
+        // it can raise `NOVALUE`** (review round 1 re-review,
+        // NEW-1 -- a defect this arm shipped with, not a
+        // pre-existing one). The oracle's own `control->evaluate`
+        // is a full expression evaluation, so a body that
+        // `DROP`s the control variable makes the next re-test
+        // raise `NOVALUE` rather than read a derived name.
+        // Measured, `signal on novalue name nv` around
+        // `do ii = 1 to 3 ; drop ii ; end`: the oracle runs the
+        // handler and exits 0, where `read_by_name` here gave a
+        // spurious 41.1 at rc 215. `read_by_name` reports
+        // nothing to its caller and cannot express that.
+        let (previous, novalue, resolved) = match shape {
+            NameShape::Simple => {
+                // `read_at` with the slot `control_slot` took when
+                // the loop was entered, which is the same
+                // resolution this read made for itself on every
+                // pass before -- `None` still makes it, so the two
+                // shapes below and a control this resolution does
+                // not reach are unaffected.
+                let (value, novalue) = self.read_at(code, control, at);
+                (value, novalue, None)
+            }
+            // A bare stem never raises `NOVALUE` on read (`eval_
+            // node`'s own `ExprKind::Stem` arm has the citation),
+            // so there is no fallible read to thread through.
+            // The slot comes off the entry rather than from the
+            // loop's kept `at`, which is the same source the write
+            // half of this pass uses and the reason `control_slot`
+            // declines a stem.
+            NameShape::Stem => {
+                let at = code.compound(control).and_then(|entry| entry.stem_at);
+                let name = code.symbols.name(control).as_bytes();
+                (self.read_stem_at(name, at), Novalue::Set, None)
+            }
+            NameShape::Compound => {
+                let (stem_name, stem_at) = code.stem(control);
+                let key = self.tail_key(code, control)?;
+                let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
+                let mut resolved = stem_name.to_vec();
+                resolved.extend_from_slice(&key);
+                (value, novalue, Some(resolved))
+            }
+        };
+        self.novalue_check(novalue, previous)?;
+        self.roots.activity_mut().push_temp(previous);
+        // `>C>` before `>V>`, both self-gated on `intermediates`
+        // like every other value-bearing prefix -- `stem_get`'s
+        // own read announces the fully-resolved name it used
+        // before either of the value lines shows what is stored
+        // there, the same order `eval_node`'s `Compound` arm and
+        // its own tracing counterpart use for an ordinary read.
+        if let Some(resolved) = &resolved {
+            let name = code.symbols.name(control).as_bytes();
+            self.trace_compound_name(loop_indent, name, resolved);
+        }
+        // `result_text` for the pair, not `intermediate_text`:
+        // `>V>` is `intermediates` and `>>>` is `results`, and
+        // `results` is the weaker of the two, so it renders for
+        // either and drops neither.
+        if let Some(rendered) = self.result_text(previous) {
+            let name = code.symbols.name(control).as_bytes();
+            self.trace_variable(loop_indent, name, &rendered);
+            self.trace_result(loop_indent, &rendered);
+        }
+        Ok(previous)
+    }
+
     /// One controlled pass's step where the control variable is not an
     /// integer the tag holds, or the sum leaves what `DIGITS` admits.
     #[inline(never)]
@@ -2460,58 +2611,62 @@ impl Interp {
         &mut self,
         previous: ObjRef,
         by: &Number,
-        to: Option<&Number>,
         digits: u64,
     ) -> Result<Number, Failure> {
-        // The control variable is the **left** operand of the oracle's own
-        // implicit `+`, so an object assigned to it inside the body is 97.1
-        // there -- measured, `do i = 1 to 3; i = .array; end` prints one
-        // iteration and then raises.
-        if self.operator_operand_gap(previous).is_some() {
-            return self.controlled_step_object(previous, by, to, digits);
-        }
         let read = self.arith_operand(previous)?;
         read.add(by, digits)
             .map_err(Raised::from)
             .map_err(Failure::from)
     }
 
-    /// `DoBlock::checkControl`'s increment of a control variable holding an
-    /// object: `+` sent to it with `BY`, 97.1 where it has none, and what it
-    /// answers is the next value. An answer that is itself an object is sent
-    /// the `TO` comparison next.
+    /// One pass of an [`ObjectControl`] loop, `DoBlock::checkControl`: at a
+    /// re-test `+` is sent to `previous` with `BY` and the answer traced; the
+    /// value is bound as it is, then sent the `TO` comparison, and the loop
+    /// ends where that answers true. An object without the method is 97.1.
     #[cold]
     #[inline(never)]
-    fn controlled_step_object(
+    fn object_control_pass(
         &mut self,
-        previous: ObjRef,
-        by: &Number,
-        to: Option<&Number>,
-        digits: u64,
-    ) -> Result<Number, Failure> {
-        let form = self.activation().settings.form();
-        let step = self.number(by.clone(), crate::eval::saturate_digits(digits), form);
-        self.roots.activity_mut().push_temp(step);
-        let answer = self.apply_binary(rexx_parse::Operator::Plus, previous, step)?;
-        self.roots.activity_mut().push_temp(answer);
-        if self.operator_message_receiver(answer).is_none() {
-            return self.arith_operand(answer);
-        }
-        if let Some(to) = to {
-            let bound = self.number(to.clone(), crate::eval::saturate_digits(digits), form);
-            self.roots.activity_mut().push_temp(bound);
-            let compare = if by.signum() < 0 {
+        code: &Code<'_>,
+        ctl: &mut ObjectControl,
+        previous: Option<ObjRef>,
+        do_indent: usize,
+        loop_indent: usize,
+    ) -> Result<bool, Failure> {
+        let (value, bind_indent) = match previous {
+            Some(previous) => {
+                let sum = self.arith_general(rexx_parse::Operator::Plus, previous, ctl.by)?;
+                self.roots.activity_mut().push_temp(sum);
+                if let Some(rendered) = self.result_text(sum) {
+                    self.trace_result(loop_indent, &rendered);
+                }
+                (sum, loop_indent)
+            }
+            None => {
+                let initial = ctl.initial.take().unwrap_or(ObjRef::NIL);
+                self.roots.activity_mut().push_temp(initial);
+                (initial, do_indent)
+            }
+        };
+        ctl.stepped = true;
+        self.bind_control(code, ctl.control, bind_indent, value, ctl.at, ctl.shape)?;
+        if let Some(to) = ctl.to {
+            let compare = if ctl.descending {
                 rexx_parse::Operator::LessThan
             } else {
                 rexx_parse::Operator::GreaterThan
             };
-            self.apply_binary(compare, answer, bound)?;
+            if is_true_object(self.apply_binary(compare, value, to)?) {
+                return Ok(false);
+            }
         }
-        Err(Loud::object_position(
-            "a controlled DO's control variable",
-            "an object a `+` answered",
-        )
-        .into())
+        if let Some(remaining) = &mut ctl.for_remaining {
+            if *remaining == 0 {
+                return Ok(false);
+            }
+            *remaining -= 1;
+        }
+        Ok(true)
     }
 
     /// The handle a controlled pass binds when [`exact_small_int`] declines
@@ -2752,4 +2907,16 @@ pub(super) fn numeric_less(
 /// parse survived into the wider-digits passes untouched).
 fn round_via_unary_plus(number: &Number, digits: u64) -> Result<Number, ArithError> {
     Number::zero().add(number, digits)
+}
+
+/// Whether a comparison's answer is the true object, `== TheTrueObject`.
+fn is_true_object(answer: ObjRef) -> bool {
+    answer == crate::eval::LOGICAL_TRUE
+}
+
+/// Whether a failed advance is a message-driven loop's first test, which the
+/// oracle makes inside the block it has just opened: blamed on the `DO`
+/// clause at the body's indent, as a `WHILE` is.
+fn by_message_first_pass(blame: HeaderClause, state: &LoopState) -> bool {
+    matches!(blame, HeaderClause::Do) && matches!(state, LoopState::ObjectControlled(_))
 }

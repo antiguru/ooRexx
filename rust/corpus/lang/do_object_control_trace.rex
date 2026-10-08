@@ -1,0 +1,11 @@
+/* The trace of a loop driven by message: the control's read, the +
+   answer and the assignment at each re-test. */
+trace i
+do i = .s~new(1) to 2; nop; end
+i = 0
+do j = 1 to 2; if j = 1 then j = .s~new(5); end
+trace o
+say i j
+::class s
+::method init; expose v; use arg v
+::method '+'; expose v; if arg() = 0 then return v; use arg o; return v + o

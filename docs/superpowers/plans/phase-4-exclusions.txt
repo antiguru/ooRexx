@@ -3843,8 +3843,8 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     arithmetic, object LEFT     sends the operator            97.1      refuses
     &, |, &&, object LEFT       sends the operator            97.1      refuses
     prefix + - \                sends the operator            97.1      refuses
-    DO OVER target              requestArray                  98.913    refuses
     -------------------------------------------------------------------------
+    DO OVER target              requestArray                  98.913    agrees
     DO header initial           unary + on the value          97.1      agrees
     DO header TO                unary + on the value          97.1      agrees
     DO header BY                unary + on the value          97.1      agrees
@@ -3886,10 +3886,11 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     an instance variable        nothing                       rendering agrees
     -------------------------------------------------------------------------
 
-  The DO rows send the operator, so a value whose `+` answers is a number like
-  any other. Where `+` answers an object the oracle goes on sending to (measured,
-  `do i = .environment to 5` is 97.1 on `>` against `.nil`), the loop refuses
-  through `Loud::object_position`.
+  The DO rows send the operator and keep its answer as it is: once a header
+  value or the control variable holds an object, the loop sends `+` with BY and
+  the TO comparison to whatever the control holds (`DoBlock::checkControl`).
+  Measured, `do i = .environment to 5` is 97.1 on `>` against `.nil`, and a `+`
+  answering `' 2 '` binds `' 2 '`.
 
   THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a
   message receiver now, so a ::METHOD body runs, and that opens the positions

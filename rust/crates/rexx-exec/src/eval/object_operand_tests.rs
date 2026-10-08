@@ -190,18 +190,14 @@ fn an_object_in_a_do_headers_numeric_position_is_sent_plus() {
             String::from_utf8_lossy(source)
         );
     }
-    // `.environment`'s `+` answers `.nil` through `UNKNOWN`, and the oracle
-    // goes on to compare that object with `TO` (97.1 on `>`, rc 159); a loop
-    // whose control value is an object is not built here.
+    // `.environment`'s `+` answers `.nil` through `UNKNOWN`, and the loop
+    // goes on by message: the first test sends `>` to it, 97.1 at rc 159.
     let (code, stdout, stderr) = run_source(b"do i = .environment to 5\nend\n");
-    assert_eq!(
-        (code, stdout.as_str(), stderr.as_str()),
-        (
-            120,
-            "",
-            "rexx-exec: an object a `+` answered as a DO header's initial value is not \
-             implemented (Phase 5)\n"
-        )
+    assert_eq!((code, stdout.as_str()), (159, ""), "reported {stderr:?}");
+    assert!(
+        stderr
+            .contains("Error 97.1:  Object \"The NIL object\" does not understand message \">\"."),
+        "reported {stderr:?}"
     );
 }
 
@@ -228,40 +224,23 @@ fn a_header_position_that_reads_text_keeps_the_oracles_own_diagnostic() {
 /// `stringValue()` nor an operator, so it falls outside every boundary the
 /// two tests above draw.
 #[test]
-fn an_object_as_a_do_over_target_is_loud() {
-    let cases: &[(&[u8], &str)] = &[
-        // Measured, oracle rc 0 and `done`: a package's own local
-        // directory, which starts empty.
-        (
-            b"do e over .context~package~local\nsay e\nend\nsay 'done'\n",
-            "one of the interpreter's own objects",
-        ),
-    ];
+fn an_object_as_a_do_over_target_is_array_requested() {
+    // Measured, oracle rc 0 and `done`: a package's own local directory,
+    // which starts empty.
+    assert_eq!(
+        run_source(b"do e over .context~package~local\nsay e\nend\nsay 'done'\n"),
+        (0, "done\n".to_string(), String::new())
+    );
     // A condition object is a store-backed `Directory` and converts --
     // measured, oracle rc 0 with nothing written.
     assert_eq!(
         run_source(b"signal on syntax\nsay 1 + 'a'\nsyntax:\ndo e over condition('O')\nend\n"),
         (0, String::new(), String::new())
     );
-    for (source, kind) in cases {
-        let (code, stdout, stderr) = run_source(source);
-        let expected = format!(
-            "rexx-exec: {kind} as a DO header's OVER target is not implemented (Phase 5)\n"
-        );
-        assert_eq!(
-            (code, stdout.as_str(), stderr.as_str()),
-            (120, "", expected.as_str()),
-            "{:?}",
-            String::from_utf8_lossy(source)
-        );
-    }
-    // **A class object is no longer one of them, and that is the point of
-    // the pair.** It reaches `requestArray`, answers no `MAKEARRAY`, and
+    // A class object reaches `requestArray`, answers no `MAKEARRAY`, and
     // raises the oracle's own `Error_Execution_noarray` naming itself --
     // measured, oracle rc 158, `Unable to convert object "The Array
-    // class" to a single-dimensional array value.` So what is left
-    // refusing above is a `Directory` built on `NativeObject`'s map, which
-    // has no store for `MAKEARRAY` to read.
+    // class" to a single-dimensional array value.`
     let (code, stdout, stderr) = run_source(b"do e over .array\nsay e\nend\n");
     assert_eq!((code, stdout.as_str()), (158, ""));
     assert!(

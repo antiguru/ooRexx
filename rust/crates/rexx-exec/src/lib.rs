@@ -505,15 +505,6 @@ impl Loud {
         }
     }
 
-    /// An object in a `DO` header position the loop cannot run on: `DO
-    /// OVER`'s target, or an object a header value's or control variable's
-    /// `+` answered where the oracle goes on sending to it.
-    fn object_position(position: &str, kind: &str) -> Loud {
-        Loud {
-            message: owned_message(&format!("{kind} as {position}"), Some("Phase 5")),
-        }
-    }
-
     /// A `.NAME` the oracle's `.environment` or `.local` answers and this
     /// crate builds nothing for.
     fn environment_symbol(name: &[u8], owner: &'static str) -> Loud {

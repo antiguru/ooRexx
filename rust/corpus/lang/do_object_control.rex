@@ -1,0 +1,29 @@
+/* A loop whose control value is an object is driven by message: + with BY
+   at each re-test, the answer kept as it is, and the TO comparison sent to
+   it; the loop ends where that answers true. */
+call t1; call t2; call t3; call t4; call t5; call t6; call t7; call t8; call t9
+exit
+t1: signal on syntax name x1
+do i = .environment to 5; say 't1' i; end; return
+x1: say 't1' rc condition('O')~message; return
+t2: do i = 1 to 3; say 't2' i; if i = 2 then i = .s~new('abc'); end
+say 't2 end' i; return
+t3: do i = .s~new(' 2 ') to 3; say 't3 ['i']'; end; say 't3 end' i; return
+t4: do i = .s~new('2.0') to 5 by 1 for 3; say 't4' i; end; say 't4 end' i; return
+t5: do i = .s~new(9) to 1 by -2; say 't5' i; if i < 5 then leave; end
+say 't5 end' i; return
+t6: do a.k = .s~new(1) to 3; say 't6' a.k; if a.k = 2 then iterate; end
+say 't6 end' a.k; return
+t7: do i = .c~new to 3; say 't7' i; end; say 't7 end' i; return
+t8: signal on syntax name x8
+do i = 1 to 3; say 't8' i; i = .local; end; return
+x8: say 't8' rc condition('O')~message i; return
+t9: do i = .s~new('abc') to 3; say 't9' i; end; say 't9 end' i; return
+::class s
+::method init; expose v; use arg v
+::method '+'; expose v; if arg() = 0 then return v; use arg o; return v
+::class c
+::method '+'; return self
+::method '<'; return .false
+::method '>'; return .true
+::method '<='; return .true
