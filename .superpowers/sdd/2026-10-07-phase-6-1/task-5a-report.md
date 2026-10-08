@@ -62,8 +62,11 @@ COLLECT_BYTES_FLOOR + 2 * 300_000` and `collections >= 5`. `:1065`
 - Inversions (each run, then reverted): with the charge in `text_bytes` disabled, the large case
   fails `0 collections for 1000 x 300000 bytes`; with the charge kept but never making a
   collection due, it fails `300000000 body bytes held at once`. These two were run on `8e52e14ca`'s
-  shape (charge before the allocation, collect at once); the round 1 shape was re-inverted after
-  the `whole_groups` run, below.
+  shape (charge before the allocation, collect at once) and again on the landed shape after the
+  `whole_groups` runs: `charge_text`'s length test made false fails `0 collections for 1000 x
+  300000 bytes`; `charge_body_bytes` charging without setting `collect_due` fails `300000000 body
+  bytes held at once`. Both reverted by scripted replacement; `git status` clean in `rust/`, both
+  tests pass again.
 - `rexx-core` `heap::body_bytes_tests::a_collection_sums_the_survivors_body_bytes`: a kept
   100-byte text, a dead 200-byte one, an unreachable 300-byte one flagged for UNINIT, an inline
   one; `live_bytes` 400, peak 600, then 600 and 950 after further charges. With the resurrection
@@ -164,3 +167,40 @@ All inside the ±4% band.
   without the variable: 5 passed.
 - No collection-count pin moved: the only count pinned on purpose is the new short-string test;
   no existing test failed.
+
+## `whole_groups`
+
+```
+REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_TABLE=$P/wgN/table.tsv memcap 8G /usr/bin/time -v cargo test -j 1 --release -p rexx-exec --test concurrency_tests whole_groups
+```
+
+| run | tree | result | wall | max RSS |
+|---|---|---|---|---|
+| before (Task 5 I2 run 3) | `a945a5ae8` (BASE's code but for a doc comment) | exit 0, 6 passed | 25:58 | 819 136 KB |
+| 1 | `0d18b0045`, rebuilt (`Compiling rexx-exec`) | exit 0, 6 passed | 6:42 | 2 381 424 KB |
+| 2 | `0d18b0045`, no rebuild | exit 0, 6 passed | 4:10 | 915 712 KB |
+
+Run 1's figure includes rustc, as I2's run 2 did (2 385 136 KB). Run 2 against I2's run 3 is the
+like-for-like pair: +96 MB for the whole cargo process tree, one run each, not attributed. The
+harness leaves TEST_SUBCLASSES_GC out of every part since Task 5's I2, so these runs do not reach
+the loop this task bounds. Between runs 1 and 2 our cells differ only on REPLY (which of the
+oracle's racing outcomes ours matched); the oracle's outcome distributions differ on STREAM,
+RexxContext and REPLY.
+
+## Concerns
+
+1. **`loop999` wall clock is bimodal**: 7 of 10 runs 1.13 to 1.24 s against base's 1.04 to 1.07 s,
+   3 runs 1.02 to 1.03 s; instructions +0.53% (N = 100 000), minor faults fewer. The byte floor
+   makes 1000-byte strings collect about every 33 000 allocations where the slot test waited for
+   65 536 slots. Not diagnosed. A larger floor trades it back for memory.
+2. **Only text bodies are counted.** Arrays, stems, directories, buffers and `Num` text grow after
+   creation and are not charged; a loop of large dead arrays still collects on slots alone.
+   `finish_string` (native API) rewrites a charged body in place at the charged length.
+3. **`Outcome::peak_body_bytes` is a new public field**, where the brief says no outward
+   interface; it is how the crate test reads the heap's counter, beside `Outcome::collections`.
+   Four literal `Outcome` constructors in `tests/` gained it.
+4. **The mark loop pays about 0.1%** on strings and rexxcps (`Body::held_bytes` per marked
+   object). Summing at the sweep would cost per dead object instead, which at a slot-triggered
+   collection is at least as many.
+5. TEST_SUBCLASSES_GC still never ends (D59 keeps the class), so the harness's exclusion stays;
+   this task bounds its memory, not its run time. Not run through the group here.

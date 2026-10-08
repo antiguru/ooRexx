@@ -666,3 +666,12 @@ At `0d18b0045`: `cargo fmt`; `memcap 8G cargo clippy -j 4 --workspace --all-targ
 warnings` clean; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0 (3066 passed, 4
 ignored; `collect_stress` 37 passed); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
 --test corpus --test ir_recorded_oracle` exit 0 (50 passed, 1 ignored).
+
+### `whole_groups`
+
+`REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_TABLE=$P/wgN/table.tsv memcap 8G /usr/bin/time -v cargo test
+-j 1 --release -p rexx-exec --test concurrency_tests whole_groups` at `0d18b0045`: run 1 (rebuilt)
+exit 0, 6 passed, 6:42, max RSS 2 381 424 KB (rustc included); run 2 (no rebuild) exit 0, 6
+passed, 4:10, max RSS 915 712 KB, against 819 136 KB for Task 5 I2's run 3 at `a945a5ae8`. The
+harness leaves TEST_SUBCLASSES_GC out of every part, so neither run reaches the loop this task
+bounds. Our cells differ between runs 1 and 2 only on REPLY (racing oracle outcomes).
