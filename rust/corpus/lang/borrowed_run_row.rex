@@ -3,7 +3,6 @@ o = .t~new
 say o~go
 ::class t
 ::method go
-  self~setMethod('sm', .object~method('SETMETHOD'))
   self~setMethod('rn', .object~method('RUN'))
   return self~rn(.u~method('A'))
 ::class u

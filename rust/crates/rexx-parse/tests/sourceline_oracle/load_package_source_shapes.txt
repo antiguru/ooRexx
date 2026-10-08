@@ -1,0 +1,22 @@
+count 21
+/* loadPackage over a List, a MAKEARRAY object, a MAKESTRING object (88.913)
+ * and an empty Directory. */
+call t 'p1', .list~of('say "from list"')
+call t 'p2', .ma~new
+call t 'p3', .ms~new
+call t 'p4', .directory~new
+exit
+t: procedure
+  use arg n, src
+  signal on syntax
+  .context~package~loadPackage(n, src)
+  say 'loaded' n
+  return
+syntax: say 'err' condition('o')~code condition('o')~message
+  return
+::class ma
+::method makearray
+  return .array~of('say "from makearray"')
+::class ms
+::method makestring
+  return 'say "from makestring"'

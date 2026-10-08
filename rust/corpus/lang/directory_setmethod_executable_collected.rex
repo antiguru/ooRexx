@@ -1,0 +1,6 @@
+/* Directory~setMethod's table holds the Method object it compiled, so
+ * .context~executable answers it after a forced collection. */
+d = .directory~new
+d~setMethod('x', 'return .context~executable~source[1]')
+call gc 'force'
+say d~x

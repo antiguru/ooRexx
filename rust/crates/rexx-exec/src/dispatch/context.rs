@@ -428,11 +428,15 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             Ok(interp.running_method_executable(scope, &name, receiver, body))
         }
         (Entry::Routine, Some(directive), _) => {
-            // A routine built from source text is in no package table, and
-            // is its own executable: measured, oracle rc 0,
-            // `.routine~new('r', 'return .context~executable~class~id')~call`
+            // A routine built from source text is a synthetic directive in no
+            // package table, and is its own executable: measured, oracle rc
+            // 0, `.routine~new('r', 'return .context~executable~class~id')~call`
             // answers `Routine`.
-            if let Some(object) = routine_object_running(interp, program, directive) {
+            let synthetic = interp.programs[program.0]
+                .directives
+                .get(directive)
+                .is_some_and(|declared| declared.clause_span.is_empty());
+            if synthetic && let Some(object) = routine_object_running(interp, program, directive) {
                 return Ok(object);
             }
             let name = routine_entry_name(interp, program, directive)?;

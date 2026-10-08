@@ -1184,3 +1184,16 @@ the same shape wakes. Measured 2026-10-08 by Phase 6.1 Task 3's fix round; its r
 same block, 5 runs of 5 each, with the tail set through a generated `::ATTRIBUTE "A.B"` and through
 a stem `[]=`. The shape of entry 7. This crate wakes the waiter and prints `woke 1`. No upstream
 ticket.
+
+## 30. A method source whose `MAKEARRAY` answers a string
+
+    m = .method~new('m', .ba~new)
+    ::class ba
+    ::method makearray
+    return 'return "not an array"'
+
+SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper (`Method~new`'s `processExecutableSource`
+takes the answer of `requestArray` as an array). Measured 2026-10-08 by the review of Phase 6.1
+Task 4 (its probe `e7_5`, which wraps the same `Method~new` in a trapping procedure). This crate
+raises 93.961 (`requestArray` answered no array, and the instance's `MAKESTRING` answers nothing).
+No upstream ticket.

@@ -305,8 +305,11 @@ pub(super) fn method_source_lines(
         interp.roots.activity_mut().push_temp(wanted);
         let caller = interp.caller();
         let answered = interp.send_message(source, b"REQUEST", None, &[Some(wanted)], caller)?;
-        if let Some(line) = answered.filter(|line| is_source_line(interp, *line)) {
-            return Ok(vec![interp.to_text(line).to_vec()]);
+        // Any answer but `.nil` is the line, as its string value: measured,
+        // oracle rc 0, a `MAKESTRING` answering an `Array` compiles the line
+        // `an Array`.
+        if let Some(line) = answered.filter(|line| *line != ObjRef::NIL) {
+            return Ok(vec![interp.string_value_text(line)]);
         }
     }
     Err(match taker {

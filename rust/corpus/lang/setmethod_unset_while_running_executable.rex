@@ -1,0 +1,7 @@
+/* A method whose own entry is taken back while it runs, its Method objects
+ * swept, answers .context~executable with the .nil scope and its source. */
+say .t~new~go
+::class t
+::method go
+  self~setMethod('x', 'self~unsetMethod("X"); call gc "force"; e = .context~executable; return e~class~id e~scope e~source[1] e~source~items')
+  return self~x

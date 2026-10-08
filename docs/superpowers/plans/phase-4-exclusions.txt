@@ -5571,20 +5571,17 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   tables as live lookup tables are the package model's, which no open phase
   names.
 
-  Directory~setMethod AND self~setMethod OF A loadExternalMethod ANSWER
-  REFUSE, naming Phase 5, at the setMethod send.
+  A METHOD Directory~setMethod INSTALLED CARRIES AN EXTRA TRACEBACK LINE when
+  it raises, sent as an entry of the directory:
     m = .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Pos')
     d = .Directory~new; d~setMethod('POS', m); say 'set'; say d~pos()
     oracle: set, then rc 168, *-* Compiled method "POS" with scope ".NIL". /
-            5 *-* say d~pos() /
-            Error 88 running <dir>/main.rex line 5:  Invalid argument. /
-            Error 88.901:  Missing argument; argument 1 is required.
-            (the program's say d~pos() is its fifth line)
-    this:   stdout empty, rc 120, rexx-exec: a one-off method whose body this
-            crate does not hold is not implemented (Phase 5)
-  The same for self~setMethod inside a method (installed / rc 168 against
-  rc 120). Loud. NO OWNER: Phase 5 is closed, and the ruling that gave its
-  Directory debt to Phase 8 named the L2 blocker's methods, not setMethod.
+            2 *-* say d~pos() / Error 88 ... / Error 88.901
+    this:   the same, with *-* Compiled method "UNKNOWN" with scope
+            "Directory". between the first two traceback lines
+  The same line appears for a body compiled from source text. Measured by
+  Phase 6.1 Task 4's fix round 1. NO OWNER: traceback rendering of a
+  directory's entry methods, which no open phase names.
 
   A CONDITION OBJECT'S TRACEBACK LACKS THE Compiled routine LINE for a
   native routine that raised, internal and library routines alike:

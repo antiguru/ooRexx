@@ -89,6 +89,27 @@ fn say_output_with_directives(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
     std::mem::take(&mut interp.out)
 }
 
+/// A method whose own entry is taken back while it runs, and whose `Method`
+/// objects a forced collection then sweeps, gets a `.context~executable`
+/// rebuilt under the `.nil` scope it ran in. The rebuild keyed that object's
+/// annotation table by `.nil` as if it were a class, and panicked.
+#[test]
+fn an_executable_rebuilt_under_the_nil_scope_answers() {
+    let mut interp = Interp::new();
+    let out = say_output_with_directives(
+        &mut interp,
+        b"say .t~new~go\n::class t\n::method go\n  \
+          self~setMethod('x', 'self~unsetMethod(\"X\"); call gc \"force\"; \
+          e = .context~executable; return e~class~id e~scope e~source~items')\n  \
+          return self~x\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "Method The NIL object 1\n");
+    assert_eq!(
+        interp.executables_rebuilt, 1,
+        "the rebuild path did not run"
+    );
+}
+
 /// `run_source`'s second half, split out so `run_source_traced` can put a
 /// `TRACE` setting on the activation between the push and the run.
 fn run_activated(interp: &mut Interp, _program: &Program) -> Result<Option<ObjRef>, Failure> {

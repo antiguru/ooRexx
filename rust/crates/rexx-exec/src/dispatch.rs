@@ -190,18 +190,18 @@ use construct::{
 // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
 mod object_protocol;
 use object_protocol::{
-    ArrayArgument, array_argument, decode_message_name, hash_value, native_class, native_copy,
-    native_default_name, native_has_method, native_hash_code, native_identity_hash, native_is_a,
-    native_is_nil, native_message_arguments, native_message_completed,
-    native_message_error_condition, native_message_halt, native_message_has_error,
-    native_message_has_result, native_message_message_complete, native_message_name,
-    native_message_notify, native_message_reply, native_message_reply_with, native_message_result,
-    native_message_send, native_message_send_with, native_message_start, native_message_start_with,
-    native_message_target, native_message_wait, native_no_op, native_object_concat,
-    native_object_concat_blank, native_object_different, native_object_identical,
-    native_object_name, native_object_name_set, native_request, native_run, native_send,
-    native_send_with, native_set_method, native_start, native_start_with, native_string,
-    native_unset_method, operator_argument, run_method, string_hash,
+    ArrayArgument, array_argument, decode_message_name, hash_value, invoke_executable,
+    native_class, native_copy, native_default_name, native_has_method, native_hash_code,
+    native_identity_hash, native_is_a, native_is_nil, native_message_arguments,
+    native_message_completed, native_message_error_condition, native_message_halt,
+    native_message_has_error, native_message_has_result, native_message_message_complete,
+    native_message_name, native_message_notify, native_message_reply, native_message_reply_with,
+    native_message_result, native_message_send, native_message_send_with, native_message_start,
+    native_message_start_with, native_message_target, native_message_wait, native_no_op,
+    native_object_concat, native_object_concat_blank, native_object_different,
+    native_object_identical, native_object_name, native_object_name_set, native_request,
+    native_run, native_send, native_send_with, native_set_method, native_start, native_start_with,
+    native_string, native_unset_method, operator_argument, string_hash,
 };
 
 // The required-string protocol and the string conversion behind it.

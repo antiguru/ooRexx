@@ -715,14 +715,34 @@ pub(super) fn native_run(
     interp.roots.activity_mut().push_temp(executable);
     let values = run_arguments(interp, args)?;
     check_restricted_method(interp, receiver, b"RUN")?;
+    // Measured, oracle rc 0: `.context~executable` in a method `run` ran is
+    // the object `run` was given the first time and a copy after.
+    invoke_executable(
+        interp,
+        method,
+        executable,
+        receiver,
+        UNNAMED_METHOD,
+        &values,
+    )
+}
+
+/// Runs `method` on `receiver` under the `.nil` scope as the send of `name`,
+/// where no dictionary entry names the `Method` object `executable` it runs
+/// for: the activation carries that object for `.context~executable`.
+pub(super) fn invoke_executable(
+    interp: &mut Interp,
+    method: rexx_core::MethodId,
+    executable: ObjRef,
+    receiver: ObjRef,
+    name: &[u8],
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
     let resolution = Resolution {
         scope: ObjRef::NIL,
         method,
     };
-    let started = interp.begin_invoke(resolution, None, receiver, UNNAMED_METHOD, &values)?;
-    // The activation knows the object it runs for, which no dictionary entry
-    // names: measured, oracle rc 0, `.context~executable` in a method `run`
-    // ran is the object `run` was given the first time and a copy after.
+    let started = interp.begin_invoke(resolution, None, receiver, name, args)?;
     if let Started::Entered = started
         && interp.method_bodies.contains_key(&method)
     {
@@ -734,7 +754,7 @@ pub(super) fn native_run(
 /// The `Method` object `~run`'s first argument becomes and the identity it
 /// runs under -- `MethodClass::newMethodObject(GlobalNames::RUN, methobj,
 /// TheNilObject, "method")` (`classes/ObjectClass.cpp:2201`).
-pub(super) fn run_method(
+fn run_method(
     interp: &mut Interp,
     source: ObjRef,
 ) -> Result<(ObjRef, rexx_core::MethodId), Failure> {

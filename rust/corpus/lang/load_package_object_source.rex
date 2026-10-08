@@ -6,4 +6,5 @@ s1: say condition('o')~code condition('o')~message
 signal on syntax name s2
 .context~package~loadPackage('nm2', 'say 1')
 say 'ok2'
+exit
 s2: say condition('o')~code condition('o')~message

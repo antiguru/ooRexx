@@ -594,7 +594,7 @@ impl Loud {
     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
     /// nor a class object, the two kinds that hold methods of their own here.
     /// No program reaches it: the routes tried are `SETMETHOD` sent to an
-    /// `Array`, a `String` and a `Directory` (private, 97.2 on both engines),
+    /// `Array` and a `String` (private, 97.2 on both engines),
     /// a `define` or `inherit` on `.Object` and `.String` (98.985), and a
     /// borrowed `Object` `SETMETHOD` row a `Directory`'s own method sends to
     /// that `Directory` (88.901, the entry method arrives with no arguments).
@@ -1397,6 +1397,11 @@ struct Interp {
     /// test reads to see that a held one is not asked for again.
     #[cfg(test)]
     library_open_attempts: usize,
+    /// How many `Method` objects `.context~executable` has built because no
+    /// live one stood for the running body, which is what a test reads to
+    /// see that it reached that path.
+    #[cfg(test)]
+    executables_rebuilt: usize,
     /// A file a pool thread appends `end` to, then panics, at the end of a
     /// native call, while it holds the baton by a lend.
     #[cfg(test)]
@@ -1999,6 +2004,8 @@ impl Interp {
             libraries: Libraries::new(),
             #[cfg(test)]
             library_open_attempts: 0,
+            #[cfg(test)]
+            executables_rebuilt: 0,
             #[cfg(test)]
             panic_at_call_end: PANIC_AT_CALL_END.with(|path| path.borrow().clone()),
             #[cfg(test)]
@@ -2770,6 +2777,8 @@ impl Interp {
             libraries: _,
             #[cfg(test)]
                 library_open_attempts: _,
+            #[cfg(test)]
+                executables_rebuilt: _,
             #[cfg(test)]
                 panic_at_call_end: _,
             #[cfg(test)]

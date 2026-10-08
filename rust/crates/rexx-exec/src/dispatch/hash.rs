@@ -978,17 +978,17 @@ fn run_stored_method(
     // An entry holding an object rather than a method answers that object:
     // `.environment`'s `LOCAL`, which `Setup.cpp:1781` installs as a method
     // running `ActivityManager::getLocalRexx`.
-    let Decoded::SmallInt(id) = stored.decode() else {
+    let Some(method) = interp
+        .executable_sources
+        .get(&stored)
+        .and_then(|record| record.installed)
+    else {
         return Ok(stored);
-    };
-    let resolution = super::Resolution {
-        scope: ObjRef::NIL,
-        method: rexx_core::MethodId(id as u32),
     };
     Ok(pinned!(
         interp,
         crate::pinning::PinKind::native(name),
-        interp.invoke(resolution, receiver, name, args)
+        super::invoke_executable(interp, method, stored, receiver, name, args)
     )?
     .unwrap_or(ObjRef::NIL))
 }
@@ -1930,9 +1930,25 @@ fn native_directory_set_method(
     interp.roots.activity_mut().push_temp(name);
     let unknown = is_unknown_name(interp, name);
     match args.get(1).copied().flatten() {
+        // `newMethodObject(entryname, methodobj, TheNilObject, "method")`
+        // (`classes/DirectoryClass.cpp:484`): the table holds the Method
+        // object, compiled under the entry's name, which is what
+        // `.context~executable` answers when the entry runs.
         Some(source) => {
-            let (_, method) = super::run_method(interp, source)?;
-            let stored = interp.counted(method.0 as usize);
+            let object = if interp.receiver_kind(source) == Ok(super::Primitive::Method) {
+                source
+            } else {
+                let compiled = interp.to_text(name).to_vec();
+                super::compile_method_source(
+                    interp,
+                    &compiled,
+                    source,
+                    "method",
+                    super::SourceTaker::Method,
+                )?
+            };
+            let (stored, _) = super::scoped_method(interp, object, ObjRef::NIL)?;
+            interp.roots.activity_mut().push_temp(stored);
             if unknown {
                 set_unknown_method(interp, receiver, Some(stored));
             } else {

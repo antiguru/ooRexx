@@ -1,0 +1,21 @@
+/* The program's own Routine: EXIT inside the re-run, recursion, a call from
+ * a method, and .context~executable inside the re-run. */
+if arg(1) = 'e' then exit 'exited-from-inner-call'
+if arg(1) = 'n' then return (.context~executable == arg(2)) 'nested-depth'
+if arg(1) = 'd' then do
+  if arg(2) > 0 then return arg(2) .context~executable~call('d', arg(2) - 1)
+  return 'bottom'
+end
+if arg(1) <> '' then return 'other' arg(1)
+r = .context~executable
+say r~call('e')
+say 'after'
+say r~call('n', r)
+say r~call('d', 4)
+say .t~new~go(r)
+v = 'kept'
+say r~callWith(.array~of('z')) v
+::class t
+::method go
+  use arg r
+  return r~call('from-method') r~call('n', r)

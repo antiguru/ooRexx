@@ -266,7 +266,16 @@ impl Interp {
             .min_by_key(|method| method.0);
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
+        // A body compiled from source text is a synthetic directive, whose
+        // object reports on the whole of its program.
+        let synthetic = self.programs[body.program.0]
+            .directives
+            .get(body.directive)
+            .is_some_and(|directive| directive.clause_span.is_empty());
         let source = match method {
+            _ if synthetic => crate::ExecutableSource::Main {
+                program: body.program,
+            },
             Some(method) => self.installed_executable_source(method),
             None => crate::ExecutableSource::Directive {
                 program: body.program,
@@ -289,16 +298,29 @@ impl Interp {
             unreachable!("allocated as Body::Native by native_instance")
         };
         native.set_scope(scope);
-        let class_side = match self.programs[body.program.0]
-            .directives
-            .get(body.directive)
-            .map(|directive| &directive.kind)
-        {
-            Some(rexx_parse::DirectiveKind::Method(method)) => method.class_method,
-            Some(rexx_parse::DirectiveKind::Attribute(attribute)) => attribute.class_method,
-            _ => false,
+        // A class's own member, or else a table of its own: a `.nil` scope
+        // names no class to key one by.
+        let site = if self.heap.is_class(scope) {
+            let class_side = match self.programs[body.program.0]
+                .directives
+                .get(body.directive)
+                .map(|directive| &directive.kind)
+            {
+                Some(rexx_parse::DirectiveKind::Method(method)) => method.class_method,
+                Some(rexx_parse::DirectiveKind::Attribute(attribute)) => attribute.class_method,
+                _ => false,
+            };
+            Annotated::Member(scope, class_side, name.into())
+        } else {
+            let site = Annotated::Compiled(self.compiled_methods);
+            self.compiled_methods += 1;
+            site
         };
-        self.attach_annotations(object, Annotated::Member(scope, class_side, name.into()));
+        self.attach_annotations(object, site);
+        #[cfg(test)]
+        {
+            self.executables_rebuilt += 1;
+        }
         object
     }
 

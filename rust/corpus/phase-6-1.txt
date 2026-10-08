@@ -151,3 +151,15 @@ lang/class_unsetmethod.rex
 lang/class_setmethod_hasmethod.rex
 lang/variable_reference_new.rex
 lang/variable_reference_subclass_new.rex
+
+# Task 4 fix round 1: Directory~setMethod's Method object, a rebuilt executable,
+# MAKESTRING's string value, source shapes, and the program's own Routine.
+lang/directory_setmethod_executable_collected.rex
+lang/directory_setmethod_executable_scoped.rex
+lang/setmethod_unset_while_running_executable.rex
+lang/method_source_makestring_object.rex
+lang/method_source_shapes.rex
+lang/load_package_source_shapes.rex
+lang/program_routine_call_more.rex
+lang/program_routine_call_signal.rex
+lang/setmethod_loaded_method.rex
