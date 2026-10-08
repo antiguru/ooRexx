@@ -52,6 +52,9 @@ impl BehaviourHandle {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct NotNumeric;
 
+/// The bytes one `Body::Array` slot holds.
+pub const SLOT_BYTES: usize = size_of::<Option<ObjRef>>();
+
 /// The payload of a heap object.
 #[derive(Clone, Debug)]
 pub enum Body {
@@ -618,15 +621,18 @@ impl std::ops::DerefMut for BufferBytes {
 
 impl BufferState {
     /// `MutableBuffer::ensureCapacity`: room for `added` more bytes, taking
-    /// the larger of what is needed and twice the capacity.
-    pub fn ensure_capacity(&mut self, added: usize) -> Result<(), TryReserveError> {
+    /// the larger of what is needed and twice the capacity. Answers how far
+    /// the capacity grew.
+    pub fn ensure_capacity(&mut self, added: usize) -> Result<usize, TryReserveError> {
         let needed = self.bytes.len().saturating_add(added);
         if needed > self.capacity {
             let capacity = needed.max(self.capacity.saturating_mul(2));
             self.bytes.try_reserve_exact(capacity - self.bytes.len())?;
+            let grown = capacity - self.capacity;
             self.capacity = capacity;
+            return Ok(grown);
         }
-        Ok(())
+        Ok(0)
     }
 
     /// The bytes' address, writable up to the capacity answered with it.
@@ -648,8 +654,10 @@ impl BufferState {
 
     /// `MutableBuffer::setBufferSize`: zero empties the contents and takes
     /// the capacity back to `default_size`; any other size becomes the
-    /// capacity and truncates contents longer than it.
-    pub fn set_buffer_size(&mut self, size: usize) -> Result<(), TryReserveError> {
+    /// capacity and truncates contents longer than it. Answers how far the
+    /// capacity grew.
+    pub fn set_buffer_size(&mut self, size: usize) -> Result<usize, TryReserveError> {
+        let before = self.capacity;
         if size == 0 {
             self.bytes.clear();
             if self.capacity > self.default_size {
@@ -665,7 +673,7 @@ impl BufferState {
             }
             self.capacity = size;
         }
-        Ok(())
+        Ok(self.capacity.saturating_sub(before))
     }
 }
 
@@ -1017,10 +1025,19 @@ impl Body {
     }
 
     /// The bytes this body holds in an allocation of its own: a `Text`'s
-    /// bytes when they do not fit inline, and nothing for every other body.
+    /// bytes when they do not fit inline, an `Array`'s slot capacity, and a
+    /// `MutableBuffer`'s capacity. Nothing for every other body.
     pub fn held_bytes(&self) -> usize {
         match self {
             Body::Text { bytes, .. } if !bytes.is_inline() => bytes.as_slice().len(),
+            Body::Array { slots, .. } => slots.capacity() * SLOT_BYTES,
+            Body::Instance {
+                native: Some(native),
+                ..
+            } => match &**native {
+                NativeState::Buffer(state) => state.capacity,
+                _ => 0,
+            },
             _ => 0,
         }
     }

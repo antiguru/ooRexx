@@ -276,7 +276,8 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
             // C++ tests it before the past-the-end arm.
             let dimensions: Option<Box<[usize]>> =
                 (index == 1 && slots.is_empty()).then(|| Box::from([0].as_slice()));
-            let object = interp.alloc_with(BehaviourId::ARRAY, Body::Array { slots, dimensions });
+            let object =
+                interp.alloc_charged(BehaviourId::ARRAY, Body::Array { slots, dimensions });
             // The array's only root: nothing else names it between here and
             // the caller storing it.
             interp.roots.activity_mut().push_temp(object);

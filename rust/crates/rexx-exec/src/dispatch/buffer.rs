@@ -375,6 +375,7 @@ pub(super) fn native_mutable_buffer_new(
         capacity,
         default_size,
     })));
+    interp.charge_growth(capacity);
     let kept = args.len().saturating_sub(2);
     let rest: Vec<Option<ObjRef>> = args.iter().take(kept).copied().collect();
     super::begin_init(interp, object, &rest)
@@ -508,11 +509,12 @@ fn native_mutable_buffer_append(
         let mut piece = interp.take_result_buffer();
         piece.extend_from_slice(&interp.to_text(argument));
         let state = buffer_state_mut(interp, receiver, b"APPEND")?;
-        state
+        let grown = state
             .ensure_capacity(piece.len())
             .map_err(|_| Failure::from(Raised::system_resources()))?;
         state.bytes.extend_from_slice(&piece);
         interp.give_result_buffer(piece);
+        interp.charge_growth(grown);
     }
     Ok(Some(receiver))
 }
@@ -564,9 +566,10 @@ fn native_mutable_buffer_setbuffersize(
 ) -> Result<Option<ObjRef>, Failure> {
     let size = required_length_argument(interp, args, 0)?;
     let state = buffer_state_mut(interp, receiver, b"SETBUFFERSIZE")?;
-    state
+    let grown = state
         .set_buffer_size(size)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -582,9 +585,10 @@ fn native_mutable_buffer_settext(
     let new = string_method_argument(interp, args, 0)?;
     let state = buffer_state_mut(interp, receiver, b"SETTEXT")?;
     state.bytes.clear();
-    buffer_capacity(state, new.len())?;
+    let grown = buffer_capacity(state, new.len())?;
     state.bytes.extend_from_slice(&new);
     interp.give_result_buffer(new);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -1029,7 +1033,7 @@ pub(super) fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Resul
         interp.roots.activity_mut().push_temp(value);
         slots.push(Some(value));
     }
-    let object = interp.alloc_with(
+    let object = interp.alloc_charged(
         BehaviourId::ARRAY,
         Body::Array {
             dimensions: None,
@@ -1472,8 +1476,9 @@ fn replace_buffer_contents(state: &mut BufferState, built: &[u8]) {
     state.bytes.extend_from_slice(built);
 }
 
-/// [`BufferState::ensure_capacity`]'s refusal, the oracle's 5.1.
-fn buffer_capacity(state: &mut BufferState, added: usize) -> Result<(), Failure> {
+/// [`BufferState::ensure_capacity`]'s refusal, the oracle's 5.1; answers how
+/// far the capacity grew, for the caller to charge.
+fn buffer_capacity(state: &mut BufferState, added: usize) -> Result<usize, Failure> {
     state
         .ensure_capacity(added)
         .map_err(|_| Failure::from(Raised::system_resources()))
@@ -1631,10 +1636,11 @@ fn native_mutable_buffer_insert(
     let state = buffer_state_mut(interp, receiver, b"INSERT")?;
     let insert_length = length.unwrap_or(new.len());
     let added = insert_length.saturating_add(begin.saturating_sub(state.bytes.len()));
-    buffer_capacity(state, added)?;
+    let grown = buffer_capacity(state, added)?;
     crate::builtin::string::insert_bytes(&mut out, &state.bytes, &new, begin, length, pad)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -1652,10 +1658,11 @@ fn native_mutable_buffer_overlay(
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, b"OVERLAY")?;
     let overlay_length = length.unwrap_or(new.len());
-    buffer_capacity(state, begin.saturating_add(overlay_length))?;
+    let grown = buffer_capacity(state, begin.saturating_add(overlay_length))?;
     crate::builtin::string::overlay_bytes(&mut out, &state.bytes, &new, begin, length, pad)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -1676,12 +1683,13 @@ fn buffer_replace_at(
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, name)?;
     let (replaced, final_length) = replace_at_plan(state.bytes.len(), begin, length, new.len());
-    buffer_capacity(state, final_length)?;
+    let grown = buffer_capacity(state, final_length)?;
     out.try_reserve(final_length)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
     replace_at_bytes(&mut out, &state.bytes, &new, begin, replaced, pad)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -1717,17 +1725,19 @@ fn native_mutable_buffer_changestr(
     let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, b"CHANGESTR")?;
+    let mut grown = 0;
     if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
         let matches = crate::builtin::string::count_occurrences(&state.bytes, &needle, limit);
         if matches > 0 {
             let growth = matches.saturating_mul(replacement.len() - needle.len());
             let result_length = state.bytes.len().saturating_add(growth);
-            buffer_capacity(state, result_length)?;
+            grown = buffer_capacity(state, result_length)?;
         }
     }
     crate::builtin::string::changestr_bytes(&mut out, &state.bytes, &needle, &replacement, limit)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -1746,13 +1756,14 @@ fn native_mutable_buffer_caselesschangestr(
     let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
     let state = buffer_state_mut(interp, receiver, b"CASELESSCHANGESTR")?;
+    let mut grown = 0;
     if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
         let matches =
             crate::builtin::string::caseless_count_occurrences(&state.bytes, &needle, limit);
         if matches > 0 {
             let growth = matches.saturating_mul(replacement.len() - needle.len());
             let result_length = state.bytes.len().saturating_add(growth);
-            buffer_capacity(state, result_length)?;
+            grown = buffer_capacity(state, result_length)?;
         }
     }
     crate::builtin::string::caseless_changestr_bytes(
@@ -1764,6 +1775,7 @@ fn native_mutable_buffer_caselesschangestr(
     )?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 
@@ -1855,9 +1867,10 @@ fn native_mutable_buffer_space(
     let gaps = crate::builtin::word::word_count(&state.bytes).saturating_sub(1);
     let growth = gaps.saturating_mul(gap.saturating_sub(1));
     state.bytes.truncate(out.len() - growth);
-    buffer_capacity(state, growth)?;
+    let grown = buffer_capacity(state, growth)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
+    interp.charge_growth(grown);
     Ok(Some(receiver))
 }
 

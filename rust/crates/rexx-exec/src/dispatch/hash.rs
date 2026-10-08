@@ -254,9 +254,9 @@ fn counted(value: ObjRef) -> Option<usize> {
 fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usize) -> Store {
     let total = buckets * 2;
     let scope = hash_scope(interp);
-    let indexes = interp.alloc_with(BehaviourId::ARRAY, Body::array(vec![None; total]));
+    let indexes = interp.alloc_charged(BehaviourId::ARRAY, Body::array(vec![None; total]));
     interp.roots.activity_mut().push_temp(indexes);
-    let items = interp.alloc_with(BehaviourId::ARRAY, Body::array(vec![None; total]));
+    let items = interp.alloc_charged(BehaviourId::ARRAY, Body::array(vec![None; total]));
     interp.roots.activity_mut().push_temp(items);
     // `initializeFreeChain` (`classes/support/HashContents.cpp:145`): every
     // bucket slot ends its own chain, and the overflow slots are chained
@@ -270,7 +270,7 @@ fn install_store(interp: &mut Interp, receiver: ObjRef, half: Half, buckets: usi
         };
         links.push(Some(interp.counted(link)));
     }
-    let next = interp.alloc_with(BehaviourId::ARRAY, Body::array(links));
+    let next = interp.alloc_charged(BehaviourId::ARRAY, Body::array(links));
     interp.roots.activity_mut().push_temp(next);
     let buckets_value = interp.counted(buckets);
     let free_value = interp.counted(buckets);

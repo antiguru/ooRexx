@@ -178,7 +178,7 @@ pub(super) fn list(
         slots.push(Some(held));
     }
     Ok(Some(
-        interp.alloc_with(BehaviourId::ARRAY, Body::array(slots)),
+        interp.alloc_charged(BehaviourId::ARRAY, Body::array(slots)),
     ))
 }
 
@@ -515,7 +515,7 @@ pub(super) fn list_roots(
 ) -> Result<Option<ObjRef>, Failure> {
     let root = interp.text(b"/");
     interp.roots.activity_mut().push_temp(root);
-    Ok(Some(interp.alloc_with(
+    Ok(Some(interp.alloc_charged(
         BehaviourId::ARRAY,
         Body::array(vec![Some(root)]),
     )))

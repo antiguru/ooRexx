@@ -802,7 +802,7 @@ impl Interp {
             slots.push(Some(text));
             self.command_words[at] = word;
         }
-        let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        let arguments = self.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
         self.roots.activity_mut().push_temp(arguments);
         if self
             .set_directory_entry(EnvScope::Local, b"SYSCARGS", arguments)
@@ -1089,7 +1089,7 @@ impl Interp {
             self.roots.activity_mut().push_temp(*item);
         }
         let slots: Vec<Option<ObjRef>> = items.into_iter().map(Some).collect();
-        let array = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        let array = self.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
         self.roots.activity_mut().pop_frame(frame);
         self.roots.activity_mut().push_temp(array);
         array
@@ -1112,7 +1112,7 @@ impl Interp {
             self.roots.activity_mut().push_temp(text);
             slots.push(Some(text));
         }
-        let array = self.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        let array = self.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
         self.roots.activity_mut().push_temp(array);
         array
     }

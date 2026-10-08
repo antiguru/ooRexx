@@ -506,7 +506,7 @@ fn context_stack_frames(
             interp.roots.activity_mut().push_temp(object);
             slots.push(Some(object));
         }
-        let array = interp.alloc_with(
+        let array = interp.alloc_charged(
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
@@ -918,7 +918,7 @@ fn trace_line_text(interp: &Interp, snapshot: &Snapshot) -> Vec<u8> {
 
 /// A fresh `Array` over `slots`, an omitted position left empty.
 fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
-    let array = interp.alloc_with(
+    let array = interp.alloc_charged(
         BehaviourId::ARRAY,
         Body::Array {
             dimensions: None,

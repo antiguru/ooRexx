@@ -69,7 +69,7 @@ pub(super) fn list_state(
     }
     let mut built = Vec::with_capacity(3);
     for name in [LIST_ITEMS, LIST_HANDLES, LIST_FREE] {
-        let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
+        let store = interp.alloc_charged(BehaviourId::ARRAY, Body::array(Vec::new()));
         interp.roots.activity_mut().push_temp(store);
         interp.set_pool_variable(receiver, scope, name, store);
         built.push(store);

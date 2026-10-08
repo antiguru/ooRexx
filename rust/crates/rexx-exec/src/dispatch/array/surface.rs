@@ -514,7 +514,7 @@ fn same_class_array(
     receiver: ObjRef,
     slots: Vec<Option<ObjRef>>,
 ) -> Result<ObjRef, Failure> {
-    let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+    let store = interp.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
     interp.roots.activity_mut().push_temp(store);
     if interp.array_slots(receiver).is_some() {
         return Ok(store);

@@ -660,7 +660,8 @@ impl Interp {
             self.roots.activity_mut().push_temp(item);
             slots.push(Some(item));
         }
-        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
+        let array =
+            self.alloc_charged(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
         self.roots.activity_mut().pop_frame(frame);
         self.roots.activity_mut().push_temp(array);
         array

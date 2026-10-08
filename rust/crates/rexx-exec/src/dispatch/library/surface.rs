@@ -39,7 +39,7 @@ impl Surface for Interp {
     }
 
     fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef {
-        self.alloc_with(
+        self.alloc_charged(
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
@@ -237,14 +237,16 @@ impl Surface for Interp {
             Ok(()) => capacity,
             Err(_) => 0,
         };
-        self.native_state_instance(
+        let buffer = self.native_state_instance(
             "MutableBuffer",
             NativeState::Buffer(BufferState {
                 bytes: bytes.into(),
                 capacity,
                 default_size: capacity,
             }),
-        )
+        );
+        self.charge_growth(capacity);
+        buffer
     }
 
     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
@@ -267,11 +269,14 @@ impl Surface for Interp {
         let state = self.lent_buffer(buffer)?;
         // `MutableBuffer::setCapacity` (`:292`), which asks `ensureCapacity`
         // for the difference over the capacity and not over the length.
+        let mut grown = 0;
         if capacity > state.capacity {
             let added = capacity - state.capacity;
-            let _ = state.ensure_capacity(added);
+            grown = state.ensure_capacity(added).unwrap_or(0);
         }
-        Some(state.writable().0.cast())
+        let address = state.writable().0.cast();
+        self.charge_growth(grown);
+        Some(address)
     }
 
     fn object_cself(&mut self, object: ObjRef, scope: Option<ObjRef>) -> Option<POINTER> {

@@ -630,7 +630,7 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     if let Body::Stem { exposed, .. } = &mut body {
         *exposed = None;
     }
-    let copy = interp.alloc_with(behaviour, body);
+    let copy = interp.alloc_charged(behaviour, body);
     interp.roots.activity_mut().push_temp(copy);
     duplicate_collection_stores(interp, copy);
     if interp.is_message(copy) {
@@ -649,7 +649,7 @@ fn reset_copied_message(interp: &mut Interp, copy: ObjRef) {
     interp.remove_native_entry(copy, MESSAGE_CONDITION);
     if let Some(parties) = interp.native_entry(copy, MESSAGE_PARTIES) {
         let slots = interp.array_slots_of(parties).unwrap_or_default();
-        let parties = interp.alloc_with(
+        let parties = interp.alloc_charged(
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
@@ -693,7 +693,7 @@ fn duplicate_collection_stores(interp: &mut Interp, copy: ObjRef) {
         let Some(slots) = interp.array_slots_of(held) else {
             continue;
         };
-        let fresh = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+        let fresh = interp.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
         interp.roots.activity_mut().push_temp(fresh);
         interp.set_pool_variable(copy, scope, entry, fresh);
     }
@@ -1223,7 +1223,7 @@ pub(super) fn native_message_notify(
     let parties = match interp.native_entry(receiver, MESSAGE_PARTIES) {
         Some(parties) => parties,
         None => {
-            let parties = interp.alloc_with(
+            let parties = interp.alloc_charged(
                 BehaviourId::ARRAY,
                 Body::Array {
                     dimensions: None,

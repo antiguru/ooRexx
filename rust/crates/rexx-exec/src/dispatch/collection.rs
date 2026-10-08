@@ -106,7 +106,7 @@ pub(super) fn store_of(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, 
     if !holds_array_store(interp, receiver) {
         return Err(Loud::receiver_class("a value that is not an array").into());
     }
-    let store = interp.alloc_with(BehaviourId::ARRAY, Body::array(Vec::new()));
+    let store = interp.alloc_charged(BehaviourId::ARRAY, Body::array(Vec::new()));
     interp.roots.activity_mut().push_temp(store);
     interp.set_pool_variable(receiver, scope, QUEUE_ITEMS, store);
     Ok(store)
@@ -187,7 +187,7 @@ pub(super) fn subscript_object(
         coordinates[axis] = Some(interp.counted(rest % extent + 1));
         rest /= extent;
     }
-    interp.alloc_with(BehaviourId::ARRAY, Body::array(coordinates))
+    interp.alloc_charged(BehaviourId::ARRAY, Body::array(coordinates))
 }
 
 /// An `Array` object over `items`.
@@ -198,7 +198,7 @@ pub(super) fn array_of(interp: &mut Interp, items: Vec<ObjRef>) -> ObjRef {
 /// An `Array` object over `slots`, holes and all -- what a `List` carrying an
 /// entry that holds nothing answers for `allItems`.
 fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
-    let array = interp.alloc_with(BehaviourId::ARRAY, Body::array(slots));
+    let array = interp.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
     interp.roots.activity_mut().push_temp(array);
     array
 }
@@ -348,14 +348,17 @@ pub(super) fn array_splice_slot(
 ) -> Result<(), Failure> {
     interp.bump_route_generation();
     let receiver = store_of(interp, receiver)?;
-    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+    let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             let at = at.min(slots.len());
+            let before = slots.capacity();
             slots.insert(at, item);
-            Ok(())
+            slots.capacity() - before
         }
-        _ => Err(Loud::receiver_class("a value that is not an array").into()),
-    }
+        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+    };
+    interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+    Ok(())
 }
 
 /// Writes one slot of the store without shifting anything.
@@ -387,13 +390,16 @@ pub(super) fn array_grow(
     length: usize,
 ) -> Result<(), Failure> {
     let receiver = store_of(interp, receiver)?;
-    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+    let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
+            let before = slots.capacity();
             slots.resize(length, None);
-            Ok(())
+            slots.capacity().saturating_sub(before)
         }
-        _ => Err(Loud::receiver_class("a value that is not an array").into()),
-    }
+        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+    };
+    interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+    Ok(())
 }
 /// `Queue~of(item, ...)` and `List~of(item, ...)`: a new collection of the
 /// receiver's own class holding the arguments.

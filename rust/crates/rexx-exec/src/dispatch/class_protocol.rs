@@ -128,7 +128,7 @@ pub(super) fn native_superclasses(
     // (`rexx_core::CLASS_SLOT_BASE`), so the allocation below cannot collect
     // one of them out from under this array.
     Ok(Some(
-        interp.alloc_with(BehaviourId::ARRAY, Body::array(items)),
+        interp.alloc_charged(BehaviourId::ARRAY, Body::array(items)),
     ))
 }
 

@@ -318,7 +318,8 @@ pub struct Outcome {
     pub stack: StackSpan,
     /// How many times `Heap::collect` ran during this program.
     pub collections: u64,
-    /// `Heap::peak_body_bytes` at the end of the run.
+    /// `Heap::peak_body_bytes` at the end of the run, for this crate's tests.
+    #[cfg(test)]
     pub peak_body_bytes: usize,
     /// How many times the run declined to compile a body because it does not
     /// fit the compiled stream's index widths. Such a body raises
@@ -1460,14 +1461,10 @@ struct Interp {
     /// The trace sink, which becomes `Outcome::stderr`.
     trace: Vec<u8>,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
-    /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
-    /// after every allocation instead of never. Off by default, and the off
-    /// path is untouched by this field's existence -- `alloc_with` reads it
-    /// once, in an `if`, and does nothing else differently; nothing upstream
-    /// of that one check changed at all. Named for what it does rather than
-    /// for the criterion, since a later, permanent collector would want the
-    /// same flag and should not have to rename it away from a gate task's
-    /// number.
+    /// criterion 4): when true, [`Interp::alloc_with`] collects before every
+    /// allocation. Off by default. The allocation path reads `collect_due`,
+    /// which this keeps true: [`Interp::enable_stress_collect`] sets both and
+    /// `collect_now` resets `collect_due` to this.
     stress_collect: bool,
     /// Whether the next allocation collects whatever the slot test says:
     /// always in the stress mode, and otherwise once the body bytes charged
@@ -1500,11 +1497,12 @@ struct Interp {
     /// line -- measured, `sayloop` at 1.40x -- and both halves of that are
     /// hash lookups, so the decision is cached rather than either half.
     output_route: Option<(u64, Option<ObjRef>)>,
-    /// The arena size at which [`Interp::alloc_with`] collects, and half of
-    /// this crate's trigger policy. The other half is `Heap::will_grow`.
+    /// The arena size at or past which [`Interp::alloc_with`] collects when
+    /// the arena must grow (`Heap::will_grow`): the slot half of the trigger
+    /// policy. The byte half is `bytes_due`.
     collect_at: usize,
     /// The body bytes charged since the last collection at which
-    /// [`Interp::charge_body_bytes`] collects: the larger of
+    /// [`Interp::charge_body_bytes`] makes a collection due: the larger of
     /// `COLLECT_BYTES_FLOOR` and the bytes the last collection found live.
     bytes_due: usize,
     /// The in-process external data queue (I15): every line
@@ -2667,6 +2665,27 @@ impl Interp {
         self.collect_due |= since >= self.bytes_due;
     }
 
+    /// [`Interp::charge_body_bytes`] for a body that may have grown by
+    /// nothing.
+    pub(crate) fn charge_growth(&mut self, bytes: usize) {
+        if bytes > 0 {
+            self.charge_body_bytes(bytes);
+        }
+    }
+
+    /// [`Interp::alloc_with`] for a body built whole elsewhere, an array's or
+    /// a copy's, charging what it holds outside its slot.
+    pub(crate) fn alloc_charged(
+        &mut self,
+        behaviour: rexx_core::BehaviourId,
+        body: rexx_core::Body,
+    ) -> ObjRef {
+        let held = body.held_bytes();
+        let object = self.alloc_with(behaviour, body);
+        self.charge_growth(held);
+        object
+    }
+
     /// Appends every `ObjRef` the interpreter must hand the collector to
     /// `out`, and names every field that does not need to be handed over.
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
@@ -3228,6 +3247,7 @@ fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome
         }),
         stack: StackSpan::default(),
         collections: 0,
+        #[cfg(test)]
         peak_body_bytes: 0,
         chunks_refused: 0,
         #[cfg(feature = "pinning")]
@@ -3441,6 +3461,7 @@ fn execute_on(
         stderr: std::mem::take(&mut interp.trace),
         stack,
         collections,
+        #[cfg(test)]
         peak_body_bytes: interp.heap.peak_body_bytes(),
         chunks_refused,
         #[cfg(feature = "pinning")]

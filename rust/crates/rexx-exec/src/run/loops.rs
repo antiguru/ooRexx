@@ -863,7 +863,7 @@ impl Interp {
         };
         // Every item is already reachable here, which is what `alloc_with`
         // collecting before it allocates asks of this site.
-        let snapshot = self.alloc_with(
+        let snapshot = self.alloc_charged(
             BehaviourId::ARRAY,
             Body::array(items.iter().copied().map(Some).collect()),
         );

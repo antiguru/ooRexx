@@ -31,7 +31,8 @@ pub use behaviour::BehaviourTable;
 pub use body::{
     AlignedBytes, BehaviourHandle, BehaviourId, Body, BufferBytes, BufferState, MethodId,
     NativeObject, NativeState, NotNumeric, Object, ObjectMethod, ObjectMethods, OpenFile, OpenMode,
-    ScopePools, StandardStream, StreamState, StreamStatus, VarRef, VarRefHome, pointer_to_string,
+    SLOT_BYTES, ScopePools, StandardStream, StreamState, StreamStatus, VarRef, VarRefHome,
+    pointer_to_string,
 };
 pub use bytes::{Bytes, INLINE_BYTES};
 pub use frame::{FrameArena, FrameBlock, ParkedFrame, RegFrame};

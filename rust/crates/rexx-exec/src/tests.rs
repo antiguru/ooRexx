@@ -1038,33 +1038,91 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     }
 }
 
-/// A loop of large dead strings collects on the bytes its bodies hold, not
-/// only on the arena's slot count: each value is one slot, so the slot test
-/// alone lets a thousand 300 000-byte strings pile up uncollected.
-#[test]
-fn large_dead_strings_are_collected_on_their_bytes() {
-    const STRING: usize = 300_000;
-    let program = b"do i = 1 to 1000; x = copies('abc', 100000); end\n";
+/// Runs `program`, a loop leaving `passes` dead values of about `value`
+/// bytes each, and asserts that it collected on their bytes: at most the
+/// floor and four values held at once (one may be live throughout), and
+/// several collections.
+fn assert_collected_on_bytes(program: &[u8], value: usize, passes: usize) {
     let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert!(
-        outcome.peak_body_bytes <= crate::COLLECT_BYTES_FLOOR + 2 * STRING,
+        outcome.peak_body_bytes <= crate::COLLECT_BYTES_FLOOR + 4 * value,
         "{} body bytes held at once",
         outcome.peak_body_bytes
     );
     assert!(
         outcome.collections >= 5,
-        "{} collections for 1000 x {STRING} bytes",
+        "{} collections for {passes} x {value} bytes",
         outcome.collections
     );
 }
 
-/// Strings short enough to hold no body bytes leave the cadence to the slot
-/// test alone: six collections, as before bytes were counted.
+/// A loop of large dead strings collects on the bytes its bodies hold, not
+/// only on the arena's slot count: each value is one slot, so the slot test
+/// alone lets a thousand 300 000-byte strings pile up uncollected.
+#[test]
+fn large_dead_strings_are_collected_on_their_bytes() {
+    assert_collected_on_bytes(
+        b"do i = 1 to 1000; x = copies('abc', 100000); end\n",
+        300_000,
+        1000,
+    );
+}
+
+/// `~copy` builds its text body by cloning, not through `Interp::text`.
+#[test]
+fn copied_strings_are_collected_on_their_bytes() {
+    assert_collected_on_bytes(
+        b"y = copies('abc', 100000); do i = 1 to 1000; x = y~copy; end\n",
+        300_000,
+        1000,
+    );
+}
+
+/// An array is charged its slots when it is made.
+#[test]
+fn sized_arrays_are_collected_on_their_bytes() {
+    assert_collected_on_bytes(
+        b"do i = 1 to 200; a = .array~new(100000); a[100000] = i; end\n",
+        100_000 * rexx_core::SLOT_BYTES,
+        200,
+    );
+}
+
+/// An array is charged each growth of its slots, not only its first size.
+#[test]
+fn grown_arrays_are_collected_on_their_bytes() {
+    assert_collected_on_bytes(
+        b"do i = 1 to 200; a = .array~new; a[100000] = i; end\n",
+        100_000 * rexx_core::SLOT_BYTES,
+        200,
+    );
+}
+
+/// A `MutableBuffer` is charged its capacity when made and each growth of it.
+#[test]
+fn grown_buffers_are_collected_on_their_bytes() {
+    assert_collected_on_bytes(
+        b"s = copies('abc', 33334)\n\
+          do i = 1 to 1000; b = .mutableBuffer~new; b~append(s); b~append(s); b~append(s); end\n",
+        400_000,
+        1000,
+    );
+}
+
+/// Strings `Bytes` holds inline are not charged, so a loop of them leaves the
+/// cadence to the slot test alone: six collections, as before bytes were
+/// counted. The body bytes held stay the bootstrap's (about 15 KB); charging
+/// these strings holds about 1.5 MB between collections.
 #[test]
 fn short_strings_keep_the_slot_cadence() {
     let program = b"do i = 1 to 200000; x = copies('abcd', 5) || i; end\n";
     let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(outcome.collections, 6);
+    assert!(
+        outcome.peak_body_bytes < 1 << 18,
+        "{} body bytes held at once",
+        outcome.peak_body_bytes
+    );
 }

@@ -101,7 +101,6 @@ pub fn abandoned(path: &str, after: Duration) -> Outcome {
         stderr: format!("rexx-watchdog: {path} was abandoned after {after:?}\n").into_bytes(),
         stack: StackSpan::default(),
         collections: 0,
-        peak_body_bytes: 0,
         chunks_refused: 0,
         #[cfg(feature = "pinning")]
         pinning: rexx_exec::PinReport::default(),

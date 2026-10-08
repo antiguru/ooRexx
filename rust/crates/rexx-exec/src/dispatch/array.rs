@@ -325,18 +325,21 @@ fn position_index(
 /// `size` slots, the added ones empty.
 fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<(), Failure> {
     let receiver = collection_store(interp, receiver);
-    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+    let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
+            let before = slots.capacity();
             if let Some(extra) = size.checked_sub(slots.len()) {
                 slots
                     .try_reserve_exact(extra)
                     .map_err(|_| Failure::from(Raised::system_resources()))?;
             }
             slots.resize(size, None);
-            Ok(())
+            slots.capacity().saturating_sub(before)
         }
-        _ => Err(Loud::receiver_class("a value that is not an array").into()),
-    }
+        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+    };
+    interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+    Ok(())
 }
 
 /// `ArrayClass::extendMulti` (`classes/ArrayClass.cpp:2434`): grow the
@@ -543,7 +546,7 @@ pub(super) fn native_array_new(
 /// `body` as an object of `class`: a bare `Body::Array` for `.Array` itself,
 /// and an instance carrying it as a store for any subclass.
 fn array_of_class(interp: &mut Interp, class: ObjRef, body: Body) -> Result<ObjRef, Failure> {
-    let store = interp.alloc_with(BehaviourId::ARRAY, body);
+    let store = interp.alloc_charged(BehaviourId::ARRAY, body);
     if class == interp.object_model().array {
         interp.roots.activity_mut().push_temp(store);
         return Ok(store);

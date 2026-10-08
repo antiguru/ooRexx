@@ -3579,7 +3579,7 @@ impl Interp {
         // or fewer leaves the subset green, because `Interp::text` inlines it
         // and nothing allocates between the array and the send.
         let frame = self.roots.activity_mut().push_frame();
-        let arguments = self.alloc_with(BehaviourId::ARRAY, Body::array(args.to_vec()));
+        let arguments = self.alloc_charged(BehaviourId::ARRAY, Body::array(args.to_vec()));
         self.roots.activity_mut().push_temp(arguments);
         let missed = self.text(name);
         self.roots.activity_mut().push_temp(missed);

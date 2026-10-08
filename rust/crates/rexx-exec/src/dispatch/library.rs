@@ -1586,7 +1586,7 @@ impl Host for Interp {
             return list;
         }
         let slots = frame.arguments.clone();
-        let list = self.alloc_with(
+        let list = self.alloc_charged(
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,

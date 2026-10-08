@@ -530,7 +530,7 @@ impl Interp {
             }
             slots.push(Some(value));
         }
-        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, Body::array(slots));
+        let array = self.alloc_charged(rexx_core::BehaviourId::ARRAY, Body::array(slots));
         if let Some(rendered) = self.result_text(array) {
             self.trace_result(indent, &rendered);
         }

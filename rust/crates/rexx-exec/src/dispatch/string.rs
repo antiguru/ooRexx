@@ -1971,7 +1971,7 @@ pub(super) fn native_string_makearray(
         dimensions: None,
         slots,
     };
-    let object = interp.alloc_with(BehaviourId::ARRAY, body);
+    let object = interp.alloc_charged(BehaviourId::ARRAY, body);
     interp.roots.activity_mut().push_temp(object);
     let caller = interp.caller();
     interp.send_message(object, INIT, None, &[], caller)?;

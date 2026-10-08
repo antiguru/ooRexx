@@ -2402,7 +2402,8 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         let slots = self.activity.value_buffer.split_off(mark);
-        let array = self.alloc_with(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
+        let array =
+            self.alloc_charged(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
         registers.set(dst, array);
         if let Some(rendered) = self.result_text(array) {
             let indent = self.activity.clause_state.current_value_indent;

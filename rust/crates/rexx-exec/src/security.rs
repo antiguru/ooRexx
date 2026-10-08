@@ -155,7 +155,7 @@ impl Interp {
     /// and all -- `new_array(count, arguments)`, which copies the argument
     /// list as it stands.
     pub(crate) fn security_arguments_array(&mut self, args: &[Option<ObjRef>]) -> ObjRef {
-        let array = self.alloc_with(BehaviourId::ARRAY, Body::array(args.to_vec()));
+        let array = self.alloc_charged(BehaviourId::ARRAY, Body::array(args.to_vec()));
         self.roots.activity_mut().push_temp(array);
         array
     }
