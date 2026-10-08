@@ -94,3 +94,46 @@ dispatch +0.1943%. Wall clock, 5 interleaved runs: all inside ±4% except dispat
 4. The first wall-clock run (`$P/wall`) used a binary I had rebuilt with a perf variant into the
    head target directory; it is discarded and the recorded run (`$P/wall2`) uses a fresh build of
    `d27a9d441` (`target-head2`).
+
+## Fix round 1
+
+Commit `f691ac33b`. Review: `task-4a-review.md`; Minors 1 and 4 left as ruled.
+
+- **Minor 2.** The probe tooling is committed at
+  `.superpowers/sdd/2026-10-07-phase-6-1/task-4a-truth-table/` (`gen.py`, `run.sh`, `table.py`,
+  `compare.sh`, `sites.sh`). Re-derived at `f691ac33b` (debug build) with
+  ```
+  T=.superpowers/sdd/2026-10-07-phase-6-1/task-4a-truth-table; R=/tmp/claude-1000/p61/t4a/fr1c
+  python3 -I $T/gen.py $R/probes
+  bash $T/run.sh oracle $R/probes $R/oracle
+  bash $T/run.sh crate $R/probes $R/crate rust/target/debug/rexx-run
+  bash $T/compare.sh $R/oracle $R/crate
+  ```
+  which printed `380` cells, then `13 by` and `13 doto`: every cell outside DO TO and BY is
+  identical on stdout, stderr and status, now over 20 values (the four logical constants below
+  added) and 19 contexts (three comparison conditions added). The site claim is now scoped to
+  `bash $T/sites.sh f691ac33b`: of the lines it prints, every truth decision goes through
+  `truth` or `truth_without_conversion`, and `dispatch/time_support.rs:250` (identity with `.true`
+  in the oracle) and `semaphores.rs:272` (an absent answer) are not truth judgments.
+  The probes' BY program changed: the control's `<`/`>` answered the literals `1`/`0`, which the
+  oracle's identity test never takes, so the oracle column could not show a descending loop. They
+  now answer `1 = 1`/`1 = 0`. The oracle's BY cells now end (`0`) for `2 > 1` and `.true`, as its
+  DO TO cells do; the base-round table in the gate record has the old BY column.
+- **Minor 3.** `tests/truth/values` gains `2 > 1`, `.true`, `1 = 2` and `.false` (the logical
+  constants), and `tests/truth.rs` the contexts `if-compare`, `when-compare` and `while-compare`
+  (`o = 1` over a user `=` answering the value). Mutant at `ir/drive.rs:1477`:
+  `let quick = if value == LOGICAL_FALSE { Some(true) } else { truth_without_conversion(value) }`.
+  `cargo test -p rexx-exec --test truth` red: "the contexts judge 1 = 2 differently", with `if`,
+  `when`, `if-compare` and `when-compare` true (and `until` through its own `if n > 1`) where every
+  other context is false. So IF and WHEN rows reach the quick path directly; WHILE takes
+  `condition_value`. Restored from a copy, `cmp` clean.
+- **Minor 5.** `run.rs` `trace_value_result` copies a value's rendering only when
+  `traced_mode().results` is on; `test_case_when` uses it for the WHEN value and the `==` answer.
+- **Minor 6.** Deviation 25: "String value exactly `1`".
+
+Checks at `f691ac33b`: `cargo fmt --all --check` exit 0; clippy exit 0; `memcap 8G cargo test -j 4
+--workspace --no-fail-fast` exit 0; `REXX_CORPUS_GATE=1 ... --test corpus --test
+ir_recorded_oracle` exit 0 (29 passed 1 ignored; 21 passed). Callgrind, binary from `git archive
+f691ac33b` (one `Compiling rexx-exec`, sha256 `f7d49599...a966`):
+`bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $P/cg3 -p "rexxcps emptyloop" base=$P/target-base/release/rexx-run fr1=$P/target-head3/release/rexx-run`,
+exit 0: rexxcps +0.1847%, emptyloop +0.6478% (unchanged from round 0; the ruled codegen shift).
