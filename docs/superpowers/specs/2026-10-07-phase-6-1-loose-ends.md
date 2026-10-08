@@ -216,6 +216,7 @@ Moritz, 2026-10-07, on the open items the spec reviews left (R5-R8 after the fin
 | R6 | A program's own failed check under R1 | Red where no committed oracle outcome has it; then decided case by case. |
 | R7 | D6 with no branch-free design | Pay the ~0.5%: correct debug pauses are worth it. A branch-free design is still tried first. |
 | R8 | Criterion 1's reach | The row's: census classes (b) and (c). |
+| R9 | One truth judgment (Moritz, 2026-10-08, from the truthiness survey) | Added to 6.1 as Task 4a: every site that turns a value into true or false goes through one function judging as the oracle's `truthValue` does (identity fast path, `requestString`, exactly `0` or `1`, else Error 34 with the caller's sub-number); SELECT CASE and collection `==` answers included; fast paths checked against it; Deviation 25 stays for DO TO and BY only. |
 
 Settled from the reviews: FIFO with seeded one-event order; inline pool; `fail=wait:K` ships, sim
 only; seeded clock origin; trace and replay in 6.1, shrinker queued; seeds by rule; b13's
@@ -229,6 +230,7 @@ layout).
 | T1 Activation scope | D1, its witnesses, P89's lines removed; perf at close. |
 | T2 Loop and argument refusals | c1, c2, c3, c4, c5, c6, b1, b2, b10. |
 | T3 Method objects | b4, b5, b6, b7, b8, b14, VariableReference `NEW`. |
+| T3a Truth | R9: one truth function, every site routed through it, the agreement table; perf at close. |
 | T4 Parse errors | c8, b3, the INTERPRET traceback line (D5, R3); perf at close. |
 | T5 Debug | D6, with `dbgcall`; perf at close. |
 | T6 Labels | D3 and the GUARD relabels; b18; the disposition test and table; `closed_phases` with Phase 5, the widened scan (pruning `"Phase 5"` from the `PHASES`, `SPLIT_TABLE_PHASES` vocabularies and `owners.rs`'s count assertion), the `Literals` rows, NC-h and NC-i. |
