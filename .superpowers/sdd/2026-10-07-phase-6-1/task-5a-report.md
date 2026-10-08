@@ -204,3 +204,132 @@ RexxContext and REPLY.
    collection is at least as many.
 5. TEST_SUBCLASSES_GC still never ends (D59 keeps the class), so the harness's exclusion stays;
    this task bounds its memory, not its run time. Not run through the group here.
+
+## Fix round 1
+
+Review: `task-5a-review.md`. Code commit `d0a3d5db3`. `P` as above.
+
+### Changes
+
+- **Important 1, `~copy`.** `copy_object` allocates through the new `Interp::alloc_charged`, which
+  takes `Body::held_bytes` before the move and charges it after the allocation. It covers every
+  body kind the copy can clone.
+- **Ruling: arrays and buffers count.** `Body::held_bytes` adds an `Array`'s slot capacity
+  (`SLOT_BYTES` = `size_of::<Option<ObjRef>>()` each) and a `MutableBuffer`'s `capacity`; the mark
+  loops sum them as before. Every `BehaviourId::ARRAY` allocation goes through `alloc_charged`
+  (a regex replace of `alloc_with(BehaviourId::ARRAY,`; 31 sites, the same list
+  `grep -rn "BehaviourId::ARRAY" rexx-exec/src` gives minus `object_protocol.rs:610`, which is
+  the copy's behaviour choice). Growth charges the capacity delta where the capacity changes:
+  `array_grow`, `array_splice_slot`, `array_resize` (slot capacity before and after);
+  `BufferState::ensure_capacity` and `set_buffer_size` now answer the growth, charged by
+  `append`, `setBufferSize`, `setText` and the six mutators that call `buffer_capacity`, and by
+  the native API's `set_mutable_buffer_capacity`. Buffer creation (`MutableBuffer~new`, the native
+  API's `new_mutable_buffer`) charges its capacity. Stems are not charged (the review found
+  stem+DROP bounded).
+- **Minors.** `stress_collect`, `collect_at` and `bytes_due` docs restated. `Outcome::peak_body_bytes`
+  is `#[cfg(test)]`, and the four integration-test `Outcome` literals no longer name it. The
+  short-string test also asserts `peak_body_bytes < 256 KiB`; with `charge_text`'s inline
+  exemption removed it fails at 1 513 074 (normal: about 15 KB). `refusal-sites.tsv` re-derived
+  (line numbers only; every removed row pairs with an added one once the line is stripped).
+
+### Tests
+
+`assert_collected_on_bytes` (peak at most the floor plus four values, at least 5 collections)
+runs five loops: 300 KB strings, `~copy` of a 300 KB string, `.array~new(100000)` with
+`a[100000] = i`, `.array~new` grown by `a[100000] = i`, and a MutableBuffer grown by three 100 KB
+appends. Against `19e3b9d34` (an archive with this `tests.rs`, `SLOT_BYTES` written as 16, own
+target directory, `Compiling rexx-exec` present) the four new loops fail with `0 collections for
+...` and the string loop and short-string test pass. At `d0a3d5db3`: peaks 33.9 to 35.2 MB, 8 to
+11 collections.
+
+Peak RSS, one run each, the same commands as the first table:
+
+| program | base | fr1 (`d0a3d5db3`) | oracle |
+|---|---:|---:|---:|
+| `y~copy` of 300 KB, 3000 passes | 898 520 KB | 52 352 KB | 13 848 KB |
+| `.array~new(100000)`, 1000 passes | 1 582 256 KB | 54 884 KB | 22 156 KB |
+| MutableBuffer, three 100 KB appends, 3000 passes | 911 376 KB | 44 388 KB | 15 448 KB |
+
+### Per-task check
+
+At `d0a3d5db3`: `cargo fmt`, `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`
+clean; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0, 3070 passed, 0 failed,
+4 ignored (`collect_stress` 37 passed); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
+--test corpus --test ir_recorded_oracle` exit 0, 50 passed, 1 ignored.
+
+### Performance
+
+Binaries rebuilt (`git archive`, own target directory, one `Compiling rexx-exec` each): `b2`
+`37d874a36` sha256 `c9a451e632c9e6d64c924da7760287eefaf8798d6effb75816227228da8ae733`; `fr1`
+`d0a3d5db3` sha256 `d2ac10ff755a3a5ece5e6b45a9c6ab3627eea2ec6caecd851e66ff45b5e05496`; `p2` = b2 +
+`layout-pad.py 48`.
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $P/cg-fr1 -p "alloc alloc4c strings rexxcps emptyloop" base=$P/target-b2/release/rexx-run fr1=$P/target-fr1/release/rexx-run
+```
+
+Exit 0, spreads 0.0000%: alloc +0.1905, alloc4c -0.3756, strings +0.1356, rexxcps +0.2383,
+emptyloop +0.0000. All inside +0.5%. `array_fill20` is not a bench program, so it is in the
+diagnosis below rather than in callgrind.
+
+### Diagnosis of the wall-clock cost (one round)
+
+This machine (AMD Ryzen AI MAX+ 395) counts two events per run, so each `perf stat` run is
+`cycles` plus one more. Every run was pinned (`taskset -c 4`) under `memcap 2G`, from a fresh
+`mktemp -d` directory. Scripts: `$P/tools/pstat.sh`, `$P/tools/pcyc.sh`.
+
+**`loop999`.** Cycles in G, 8 interleaved runs each, sorted (`$P/pcyc-loop999.txt`):
+
+| binary | cycles | instructions |
+|---|---|---|
+| b2 | 3.08 3.08 3.10 3.10 3.10 3.11 3.12 3.13 | 14.449 G |
+| fr1 | 2.69 2.69 3.21 3.65 3.77 3.83 3.85 4.36 | 14.401 G |
+| fr1, `COLLECT_BYTES_FLOOR` = 2^60 (byte trigger off, base's collection cadence) | 2.98 3.15 3.42 3.75 3.76 3.81 3.88 3.96 | 14.464 G |
+| fr1, floor 64 MiB | 2.86 2.87 2.96 3.10 3.75 3.80 4.04 4.04 | 14.464 G |
+
+- **It is not the extra collections.** With the byte trigger switched off, the binary collects on
+  base's cadence and still has the same slow mode. `collect_now` takes 2.2 M cycles in both a fast
+  and a slow run.
+- **Where the cycles go.** `perf record -e cycles` on six fr1 runs: a 3.03 G run against a 4.07 G
+  run differ by +806 M in `builtin::string::copies_bytes` (442 M to 1 248 M) and +240 M in libc
+  `memmove`. Allocation, GC and the driver each differ by under 60 M.
+- **Counter shape.** Frontend-idle cycles (`stalled-cycles-frontend`) are 0.50 G on base and 1.13
+  to 1.22 G in fr1's slow runs (0.55 G in its fast run). L1 icache misses are lower on fr1 (2.6 M
+  against 3.8 M), and branch misses are not higher.
+- **It moves with data addresses.** Padding the environment by 0 to 3584 bytes moves the
+  interpreter's heap layout, since the environment is copied at startup. That moves fr1 between
+  2.70 and 3.66 G while base stays at 3.04 to 3.14 G. A same-binary bimodality that moves with the
+  environment points at data placement, not code alignment. The likely mechanism is aliasing
+  between `copies_bytes`' 3-byte source and its destination as the heap layout shifts with the
+  grown `Interp` and `Heap` structs. Not measured further; that is the guess.
+- **The loop's own shape is the lever.** `copies_bytes` extends the output one 3-byte piece at a
+  time (333 times per value here). In a scratch-only build of fr1, filling by doubling
+  (`extend_from_slice` once, then `extend_from_within`) takes `loop999` to 1.26 to 1.32 G cycles
+  and 4.07 G instructions, unimodal, against base's 3.1 G and 14.4 G. Not landed: it is outside
+  this task. It would remove this program's sensitivity, and is worth a task of its own.
+
+**`array_fill20`** (`do i = 1 to 20; a = .array~new; do j = 1 to 10000; a~append(j); end; end`),
+5 interleaved runs (`$P/pcyc-af20.txt`):
+
+| binary | cycles G | instructions |
+|---|---|---|
+| b2 | 3.01 3.02 3.04 3.05 3.11 | 18.010 G |
+| p2 | 3.00 3.01 3.02 3.03 3.06 | 18.010 G |
+| rev, my build of `d9794b41f` (the reviewer's HEAD) | 3.01 3.01 3.03 3.03 3.05 | 18.010 G |
+| fr1 | 2.98 2.98 2.99 3.00 3.01 | 18.011 G |
+
+The reviewer's +35% on `d9794b41f` does not reproduce on my build of the same commit. Both trees
+came from `git archive` but were built under different directories, and source paths are embedded
+in the binary. So the regression belongs to one build's code placement, not to the source. That
+fits the review's own finding that `occupied` moved from 0 to 32 mod 64. I did not try aligning
+`occupied`: no build I have shows the slow mode to test against.
+
+### Concerns after this round
+
+1. The `loop999` slow mode remains in fr1 (median about 3.7 G cycles against 3.1 G). Its cost is in
+   `copies_bytes`' per-piece loop and moves with heap placement, not with collections. The fix that
+   removes it (doubling copy) is out of this task's scope.
+2. `array_splice_slot` and `array_grow` compare the slot capacity before and after on every call.
+   That is one subtraction per insert or append, not a branch into the collector.
+3. Arrays charge on every allocation, argument arrays included (16 bytes per slot). For an
+   argument-heavy program this moves the byte trigger only after 32 MiB of slots.

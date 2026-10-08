@@ -675,3 +675,36 @@ exit 0, 6 passed, 6:42, max RSS 2 381 424 KB (rustc included); run 2 (no rebuild
 passed, 4:10, max RSS 915 712 KB, against 819 136 KB for Task 5 I2's run 3 at `a945a5ae8`. The
 harness leaves TEST_SUBCLASSES_GC out of every part, so neither run reaches the loop this task
 bounds. Our cells differ between runs 1 and 2 only on REPLY (racing oracle outcomes).
+
+### `loop999`'s cost
+
+`loop999` (`do i = 1 to 1000000; x = copies('abc', 333) || i; end`), 10 interleaved wall runs at
+`0d18b0045`: base 1.04 to 1.07 s; t5a 1.02 to 1.03 s in 3 runs and 1.13 to 1.24 s in 7.
+Instructions are flat (callgrind at N = 100 000: +0.53%; `perf stat` 14.45 G against 14.40 G at
+N = 1 000 000).
+
+### Fix round 1
+
+Code `d0a3d5db3`: `~copy`, arrays (creation and slot growth) and MutableBuffers (creation and
+capacity growth) are charged; `Outcome::peak_body_bytes` is `#[cfg(test)]`. Per-task check exit 0
+(3070 passed, 4 ignored; corpus gate 50 passed, 1 ignored).
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $P/cg-fr1 -p "alloc alloc4c strings rexxcps emptyloop" base=$P/target-b2/release/rexx-run fr1=$P/target-fr1/release/rexx-run
+```
+
+`b2` = `37d874a36` (sha256 `c9a451e632c9e6d64c924da7760287eefaf8798d6effb75816227228da8ae733`),
+`fr1` = `d0a3d5db3` (sha256 `d2ac10ff755a3a5ece5e6b45a9c6ab3627eea2ec6caecd851e66ff45b5e05496`).
+Exit 0, spreads 0.0000%: alloc +0.1905, alloc4c -0.3756, strings +0.1356, rexxcps +0.2383,
+emptyloop +0.0000; all inside.
+
+Peak RSS, one run each (base / fr1 / oracle, KB): `y~copy` of 300 KB x 3000 898 520 / 52 352 /
+13 848; `.array~new(100000)` x 1000 1 582 256 / 54 884 / 22 156; MutableBuffer with three 100 KB
+appends x 3000 911 376 / 44 388 / 15 448.
+
+Wall-clock diagnosis (report, Fix round 1): `loop999`'s slow mode survives with the byte trigger
+switched off (`COLLECT_BYTES_FLOOR` = 2^60: cycles 2.98 to 3.96 G against base 3.08 to 3.13 G,
+instructions flat), so it is not the collections. The extra cycles are in `copies_bytes` and
+`memmove`, and they move with the environment's size (heap placement). `array_fill20` shows no
+regression on my build of `d9794b41f` (3.01 to 3.05 G against base 3.01 to 3.11 G), so the review's
++35% is one build's code placement.
