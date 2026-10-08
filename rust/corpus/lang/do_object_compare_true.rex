@@ -1,21 +1,21 @@
-/* A loop driven by message ends where its comparison answers logical true:
-   a comparison or .true; a literal 1, a literal '1' or 0 + 1 is not. */
-call t1; call t2; call t3; call t4; call t5
+/* A loop driven by message ends where its comparison answers true and goes
+   on where it answers false: a comparison, .true, a builtin's logical
+   answer; 0 and 1 = 2 go on. */
+call t 'cmp'; call t 'tru'; call t 'abbr'; call t 'zero'; call t 'false'
 exit
-t1: do i = .c~new('lit') to 3 for 3; say 't1 pass'; end; say 't1 end'; return
-t2: do i = .c~new('str') to 3 for 3; say 't2 pass'; end; say 't2 end'; return
-t3: do i = .c~new('sum') to 3 for 3; say 't3 pass'; end; say 't3 end'; return
-t4: do i = .c~new('cmp') to 3 for 3; say 't4 pass'; end; say 't4 end'; return
-t5: do i = .c~new('tru') to 3 for 3; say 't5 pass'; end; say 't5 end'; return
+t: use arg kind; n = 0
+do i = .c~new(kind) to 3 for 3; n = n + 1; end
+say kind n
+return
 ::class c
 ::method init; expose k; use arg k
 ::method '+'; return self
 ::method '>'
 expose k
 select
-  when k = 'lit' then return 1
-  when k = 'str' then return '1'
-  when k = 'sum' then return 0 + 1
   when k = 'cmp' then return 2 > 1
-  otherwise return .true
+  when k = 'tru' then return .true
+  when k = 'abbr' then return abbrev('abc', 'a')
+  when k = 'zero' then return 0
+  otherwise return 1 = 2
 end

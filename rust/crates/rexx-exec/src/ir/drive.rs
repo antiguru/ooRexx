@@ -2959,6 +2959,17 @@ impl Interp {
             continuation.flat_loops = self.activity.flat_loops.split_off(outer);
             let enclosing = self.activity.flat_loops.pop();
             continuation.flat_top = std::mem::replace(&mut self.activity.flat_top, enclosing);
+            let moved: Vec<usize> = (continuation.flat_loops.iter())
+                .chain(continuation.flat_top.iter())
+                .filter_map(|flat| flat.object_key())
+                .collect();
+            if !moved.is_empty() {
+                let (going, staying) = std::mem::take(&mut self.activity.loop_objects)
+                    .into_iter()
+                    .partition(|(key, _)| moved.contains(key));
+                continuation.loop_objects = going;
+                self.activity.loop_objects = staying;
+            }
         }
         // A trap the `REPLY` clause queued was delivered at that clause's end.
         debug_assert!(
@@ -3700,6 +3711,7 @@ impl Interp {
                 // `None` is a pass boundary having taken it out and then
                 // raised, which loses one box to the allocator and no state.
                 if let Some(flat) = self.activity.flat_top.take() {
+                    self.release_loop_objects(&flat);
                     self.activity.flat_spares.push(flat);
                 }
                 // Uncovering the loop enclosing it is the same line

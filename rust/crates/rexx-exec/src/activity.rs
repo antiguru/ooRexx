@@ -80,6 +80,9 @@ pub(crate) struct Activity {
     /// The innermost open flat loop, held apart from the stack of
     /// the ones enclosing it.
     pub(crate) flat_top: Option<Box<crate::run::FlatLoop>>,
+    /// The objects each open loop driven by message sends to, keyed by its
+    /// state (`LoopState::object_key`).
+    pub(crate) loop_objects: Vec<(usize, ObjRef)>,
     /// The constructs the op driver has open, innermost last, across
     /// every level of it at once.
     pub(crate) frames: Vec<crate::ir::drive::Frame>,
@@ -350,6 +353,7 @@ impl Activity {
             clause_state: ClauseState::new(),
             flat_loops: Vec::new(),
             flat_top: None,
+            loop_objects: Vec::new(),
             flat_spares: Vec::new(),
             frames: Vec::new(),
             call_tails: Vec::new(),
@@ -448,10 +452,10 @@ impl Activity {
             native_spares: _,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
-            // lifetime, and `RootSet` reaches a register as a temp; a loop
-            // driven by message holds its own objects.
-            flat_loops,
-            flat_top,
+            // lifetime, and `RootSet` reaches a register as a temp.
+            flat_loops: _,
+            flat_top: _,
+            loop_objects,
             frames: _,
             // A saved convention is the caller's, whose arguments and
             // receiver that caller's temps and registers root; a lent argument
@@ -539,9 +543,7 @@ impl Activity {
         if let Some(exec) = guard_exec {
             out.extend(exec.watched.iter().flat_map(|var| [var.owner, var.scope]));
         }
-        for flat in flat_loops.iter().chain(flat_top.iter()) {
-            flat.object_roots(out);
-        }
+        out.extend(loop_objects.iter().map(|(_, object)| *object));
         if let Some(send) = guarded_send {
             send.object_roots(out);
         }

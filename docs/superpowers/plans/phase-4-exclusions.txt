@@ -1783,29 +1783,42 @@ DEVIATIONS -- permanent, chosen
      and a_kept_thread_context_used_by_another_activity_does_nothing, and
      scheduler::tests::callbacks::a_kept_call_context_used_from_another_threads_call_raises_98_983_there.
 
- 25. A DO LOOP'S TO TEST AND BY'S DIRECTION TEST TAKE ANY LOGICAL TRUE
-     (Moritz, 2026-10-08). OWNER: none.
+ 25. A DO LOOP'S TO TEST AND BY'S DIRECTION TEST JUDGE A USER OPERATOR'S
+     ANSWER BY ITS TRUTH VALUE (Moritz, 2026-10-08). OWNER: none.
 
      Where a controlled loop's control or BY value is an object, the oracle
      ends the loop, or counts down, only when the comparison answers
-     TheTrueObject itself: `== TheTrueObject` in DoBlock::checkControl
+     TheTrueObject itself, and goes on for any other answer: `==
+     TheTrueObject` in DoBlock::checkControl
      (interpreter/instructions/DoBlock.cpp:213) and in ControlledLoop::setup
      (instructions/DoBlockComponents.cpp:173). WHILE and UNTIL in the same
-     file (:277-316) fall back to truthValue for any other answer, and Rexx's
-     logical values are the strings 0 and 1, so the identity-only test is an
-     oracle defect. This crate takes the logical value '1', which a
-     comparison and `.true` answer, and so does a computed one-byte '1'.
+     file (:277-316) take the answer's truthValue, and Rexx's logical values
+     are the strings 0 and 1, so the identity test is an oracle defect. This
+     crate takes the answer's truth value as WHILE does: text exactly `1`
+     ends the loop (or means a negative step), exactly `0` goes on, and
+     anything else raises 34.901, `Error_Logical_value_method` ("Logical
+     value must be exactly "0" or "1"), the subcode the oracle's own
+     truthValue uses for a method's logical answer
+     (classes/IntegerClass.cpp:1432, classes/StringClass.cpp:645); no 34.x
+     names a DO header.
 
-     Measured 2026-10-08, three descriptors, rc 0 on both sides. A user `>`
-     under `to 3 for 3` answering `'1' || ''`, `left('12', 1)`, `d2c(49)`,
-     `1~string`, `.true~copy` or `.true~string`: the oracle runs 3 passes,
-     this crate none. A BY whose `<` answers `left('12', 1)`: the oracle
-     sends `>` once and ends, this crate counts down and sends `<` five
-     times. A `>` answering a comparison or `.true` ends the loop on both
-     sides, and a literal `1`, a literal `'1'` or `0 + 1` runs 3 passes on
-     both (corpus/lang/do_object_compare_true.rex). Probes gt_one.rex,
-     gt_one2.rex and by_dir2.rex, .superpowers/sdd/2026-10-07-phase-6-1/
-     task-3-rereview.md.
+     Measured 2026-10-08, three descriptors, rc 0 on both sides unless
+     stated. Passes a user `>` under `to 3 for 3` lets run:
+
+       answer                                   oracle   this crate
+       2 > 1, .true                             0        0
+       abbrev('abc', 'a')                       0        0
+       0 + 1, 1 * 1, literal 1, literal '1'     3        0
+       left('12', 1), '1' || '', d2c(49)        3        0
+       1~string, .true~copy, .true~string       3        0
+       0, 1 = 2                                 3        3
+       'abc'                                    3        34.901 raised
+
+     A BY whose `<` answers `left('12', 1)`: the oracle sends `>` once and
+     ends; this crate counts down, sending `<` five times. Probes true1.rex
+     (.superpowers/sdd/2026-10-07-phase-6-1/task-3-rereview2.md), gt_one.rex,
+     gt_one2.rex and by_dir2.rex (task-3-rereview.md). The agreeing rows are
+     corpus/lang/do_object_compare_true.rex.
      LICENSED DIVERGENCE WITNESS: do-compare-computed-true
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate

@@ -69,7 +69,7 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         name: "do-compare-computed-true",
         program: "do i = .c~new to 3 for 3\n  say 'pass'\nend\nsay 'end'\n\
               ::class c\n::method '+'\n  return self\n\
-              ::method '>'\n  return left('12', 1)\n",
+              ::method '>'\n  return 0 + 1\n",
         exit_code: 0,
         stderr: "",
         oracle_stdout: "pass\npass\npass\nend\n",
