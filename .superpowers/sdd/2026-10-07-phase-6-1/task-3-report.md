@@ -319,9 +319,9 @@ report's commit.
    - They are released where the loop ends, where the start or a pass boundary fails, and in
      `unwind_frames`. They move with a REPLY continuation's loops.
    - This replaces round 2's register homes and per-pass objects.
-   - `ident2.rex`: every line matches the oracle except the first `to same` after the switch. There
-     the oracle answers `1` because a freed object's address was reused (identityHash is an address),
-     which is not a property to match. The rest of `ident2`, and `dead*`, `reg1` and `reg2`, match.
+   - `ident2.rex`: every line matches the oracle except the first `to same` after the switch. The
+     reviewer's finding: `ident2` compared 15-digit identity hashes with `=`, which is numeric at
+     DIGITS 9; with `==` it matches the oracle. The rest of `ident2`, and `dead*`, `reg1` and `reg2`, match.
      The collect-stress test from round 2 still passes.
 3. **Perf.** Task 2's callgrind command against the 6.1 base, pads at 0, on the binary built from
    `git archive 0c75907d3`: emptyloop -0.9620%, decloop -2.6728%, rexxcps -0.4940%. The first build
@@ -336,7 +336,7 @@ Checks at `0c75907d3`:
 - Gated release `concurrency_tests`: `whole_groups` 6 passed and the rest 32 passed.
 - Witnesses: all agree with the oracle.
 - Probes: the only new differences are the Deviation 25 cases (`true1`, `gt_one`, `gt_one2`,
-  `by_dir2`, `z_nonlogical`) and `ident2`'s address-reuse line.
+  `by_dir2`, `z_nonlogical`) and `ident2`'s `=` comparison line.
 - The debug workspace run was not re-run this round.
 
 ### Fix round 3 addendum: references, commands, rationale
@@ -412,5 +412,33 @@ was not re-measured.
 
 **Concerns.**
 - The debug workspace run was last done at `1a46f2eb9` (exit 0) and not repeated this round.
-- When the oracle reuses a freed object's address, identity probes show `same` where we show a new
-  object (`ident2`'s first line after a switch). That is not a behaviour to match.
+
+## Minor cleanup
+
+Changes:
+- `rust/crates/rexx-exec/src/activity.rs:84` and `rust/crates/rexx-exec/src/run/loops.rs:347`: the doc
+  references name `FlatLoop::object_key`.
+- `rust/crates/rexx-exec/src/run/loops.rs:1204-1209`: the object-controlled arm of
+  `run_loop_with_header` is now `unreachable!`, with a comment giving the reason. No release was added.
+- This report: the false `ident2` address-reuse sentences are replaced by the reviewer's finding
+  (`=` on 15-digit identity hashes is numeric at DIGITS 9; `==` matches the oracle), and the
+  matching Concerns entry is deleted.
+- `docs/superpowers/plans/phase-4-exclusions.txt` Deviation 25: the WHILE/UNTIL citation is
+  `:277-321` and names UNTIL's `truthValue` call at `:321` (checked in
+  `interpreter/instructions/DoBlockComponents.cpp`: `checkUntil` returns it at line 321). The
+  "as WHILE does" sentence now says the DO test judges an answer as the crate's WHILE does and that
+  neither sends a user STRING method (a crate-wide gap, queued separately).
+
+Reachability evidence (by reading the callers, no probe):
+- `run_loop_with_header` has one caller, `ir/drive.rs:1630` in `Op::LoopRun`, reached only after
+  `flat_loop_start` answers `FlatStart::Fallback`.
+- `Fallback` is returned at one site, `run/loops.rs:1731`, for `LoopKind::Simple`. Every other kind
+  returns `Flat`, `Ended`, `Block` or an error before it. So the only kind that reaches
+  `run_loop_with_header` is `Simple`, and a `Controlled` kind with `values.objects` set cannot.
+- The `object_control_state` call in `flat_loop_start` (the live one) is untouched.
+
+Commands (memcap 8G, -j 4):
+- `cargo fmt`: clean.
+- `cargo clippy --workspace --all-targets -- -D warnings`: exit 0.
+- `cargo test -p rexx-exec --lib`: 1016 passed, 0 failed.
+- No test added: the arm is unreachable. The corpus and workspace gates were not re-run.

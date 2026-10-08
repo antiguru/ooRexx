@@ -344,7 +344,7 @@ impl FlatLoop {
     }
 }
 
-/// [`LoopState::object_key`] for the boxed state itself.
+/// [`FlatLoop::object_key`] for the boxed state itself.
 fn object_key(ctl: &ObjectControl) -> usize {
     std::ptr::from_ref(ctl) as usize
 }
@@ -1201,9 +1201,12 @@ impl Interp {
             LoopKind::Count(_) => LoopState::Count {
                 remaining: values.count.unwrap_or(1),
             },
-            LoopKind::Controlled(ctrl) if values.objects.is_some() => {
-                let objects = values.objects.as_deref().expect("tested by the guard");
-                self.object_control_state(code, ctrl.control, &values, objects)
+            // `flat_loop_start` answers every kind but a labelled block itself,
+            // and this function is reached only from its `Fallback`, so a loop
+            // driven by message sends never gets here to be held and left
+            // unreleased.
+            LoopKind::Controlled(_) if values.objects.is_some() => {
+                unreachable!("only a labelled block falls back to the nested path")
             }
             LoopKind::Controlled(ctrl) => LoopState::Controlled {
                 control: ctrl.control,

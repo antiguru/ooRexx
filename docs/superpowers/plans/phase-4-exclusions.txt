@@ -1792,10 +1792,11 @@ DEVIATIONS -- permanent, chosen
      TheTrueObject` in DoBlock::checkControl
      (interpreter/instructions/DoBlock.cpp:213) and in ControlledLoop::setup
      (instructions/DoBlockComponents.cpp:173). WHILE and UNTIL in the same
-     file (:277-316) take the answer's truthValue, and Rexx's logical values
-     are the strings 0 and 1, so the identity test is an oracle defect. This
-     crate takes the answer's truth value as WHILE does, from its string
-     value as truthValue's requestString takes it: text exactly `1`
+     file (:277-321, UNTIL's truthValue call at :321) take the answer's
+     truthValue, and Rexx's logical values are the strings 0 and 1, so the identity test is an oracle defect. This
+     crate's DO test judges an answer as the crate's WHILE does; neither
+     sends a user STRING method (a crate-wide gap, queued separately).
+     Text exactly `1`
      ends the loop (or means a negative step), exactly `0` goes on, and
      anything else raises 34.901, `Error_Logical_value_method` ("Logical
      value must be exactly "0" or "1"), the subcode the oracle's own

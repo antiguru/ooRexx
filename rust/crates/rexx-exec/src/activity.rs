@@ -81,7 +81,7 @@ pub(crate) struct Activity {
     /// the ones enclosing it.
     pub(crate) flat_top: Option<Box<crate::run::FlatLoop>>,
     /// The objects each open loop driven by message sends to, keyed by its
-    /// state (`LoopState::object_key`).
+    /// state (`FlatLoop::object_key`).
     pub(crate) loop_objects: Vec<(usize, ObjRef)>,
     /// The constructs the op driver has open, innermost last, across
     /// every level of it at once.
