@@ -1,3 +1,103 @@
+# a comparison's answer and .true/.false are the logical constants, which the
+# IR's own condition test takes without a conversion
+truth
+2 > 1
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+if-compare: true
+when-compare: true
+while-compare: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# a comparison's answer and .true/.false are the logical constants, which the
+# IR's own condition test takes without a conversion
+truth
+.true
+----
+if: true
+when: true
+while: true
+until: true
+not: true
+and: true
+list: true
+if-compare: true
+when-compare: true
+while-compare: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
+# a comparison's answer and .true/.false are the logical constants, which the
+# IR's own condition test takes without a conversion
+truth
+1 = 2
+----
+if: false
+when: false
+while: false
+until: false
+not: false
+and: false
+list: false
+if-compare: false
+when-compare: false
+while-compare: false
+case: false
+do-to: false
+do-by: false
+array-hasitem: false
+array-index: false
+list-hasitem: false
+list-index: false
+table-hasitem: false
+table-index: false
+
+# a comparison's answer and .true/.false are the logical constants, which the
+# IR's own condition test takes without a conversion
+truth
+.false
+----
+if: false
+when: false
+while: false
+until: false
+not: false
+and: false
+list: false
+if-compare: false
+when-compare: false
+while-compare: false
+case: false
+do-to: false
+do-by: false
+array-hasitem: false
+array-index: false
+list-hasitem: false
+list-index: false
+table-hasitem: false
+table-index: false
+
 # '1' in each of its forms is true
 truth
 '1'
@@ -9,6 +109,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -30,6 +133,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -51,6 +157,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -72,6 +181,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -93,6 +205,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -114,6 +229,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -135,6 +253,9 @@ until: true
 not: true
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -156,6 +277,9 @@ until: true
 not: 97.1
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -177,6 +301,9 @@ until: false
 not: false
 and: false
 list: false
+if-compare: false
+when-compare: false
+while-compare: false
 case: false
 do-to: false
 do-by: false
@@ -198,6 +325,9 @@ until: false
 not: 97.1
 and: false
 list: false
+if-compare: false
+when-compare: false
+while-compare: false
 case: false
 do-to: false
 do-by: false
@@ -219,6 +349,9 @@ until: 34.4
 not: 34.901
 and: 34.901
 list: 34.6
+if-compare: 34.1
+when-compare: 34.2
+while-compare: 34.3
 case: 34.905
 do-to: 34.901
 do-by: 34.901
@@ -240,6 +373,9 @@ until: 34.4
 not: 34.901
 and: 34.901
 list: 34.6
+if-compare: 34.1
+when-compare: 34.2
+while-compare: 34.3
 case: 34.905
 do-to: 34.901
 do-by: 34.901
@@ -261,6 +397,9 @@ until: 34.4
 not: 97.1
 and: 34.901
 list: 34.6
+if-compare: 34.1
+when-compare: 34.2
+while-compare: 34.3
 case: 34.905
 do-to: 34.901
 do-by: 34.901
@@ -282,6 +421,9 @@ until: true
 not: 97.1
 and: true
 list: true
+if-compare: true
+when-compare: true
+while-compare: true
 case: true
 do-to: true
 do-by: true
@@ -303,6 +445,9 @@ until: false
 not: 97.1
 and: false
 list: false
+if-compare: false
+when-compare: false
+while-compare: false
 case: false
 do-to: false
 do-by: false
@@ -324,6 +469,9 @@ until: 34.4
 not: 97.1
 and: 34.901
 list: 34.6
+if-compare: 34.1
+when-compare: 34.2
+while-compare: 34.3
 case: 34.905
 do-to: 34.901
 do-by: 34.901

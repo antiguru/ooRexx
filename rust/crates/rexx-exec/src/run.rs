@@ -3700,17 +3700,24 @@ impl Interp {
         for value in values {
             let value = self.eval(code, value)?;
             self.roots.activity_mut().push_temp(value);
-            let text = self.to_text(value).to_vec();
-            self.trace_result(indent, &text);
+            self.trace_value_result(indent, value);
             let answer = self.apply_binary(rexx_parse::Operator::StrictEqual, case, value)?;
             self.roots.activity_mut().push_temp(answer);
-            let text = self.to_text(answer).to_vec();
-            self.trace_result(indent, &text);
+            self.trace_value_result(indent, answer);
             if self.truth(answer, raised_when_case_not_logical)? {
                 return Ok(true);
             }
         }
         Ok(false)
+    }
+
+    /// [`Interp::trace_result`] for `value`'s rendering, copied only when the
+    /// line prints.
+    fn trace_value_result(&mut self, indent: usize, value: ObjRef) {
+        if self.traced_mode().results {
+            let text = self.to_text(value).to_vec();
+            self.trace_result(indent, &text);
+        }
     }
 
     /// `instruction`'s own clause text and the 1-based line to print it against,

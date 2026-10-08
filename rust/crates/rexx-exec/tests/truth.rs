@@ -49,6 +49,23 @@ const CONTEXTS: &[(&str, &str)] = &[
     ("not", "v = E\nsay translate(\\v, 'FT', '10')\n"),
     ("and", "v = E\nsay translate(1 & v, 'TF', '10')\n"),
     ("list", "v = E\nif 1, v then say 'T'; else say 'F'\n"),
+    // A comparison is a condition the IR tests in its own op, whose answer
+    // is a logical constant more often than not.
+    (
+        "if-compare",
+        "o = .o~new\nif o = 1 then say 'T'; else say 'F'\n\
+         exit\n::class o\n::method '='; return E\n",
+    ),
+    (
+        "when-compare",
+        "o = .o~new\nselect; when o = 1 then say 'T'; otherwise say 'F'; end\n\
+         exit\n::class o\n::method '='; return E\n",
+    ),
+    (
+        "while-compare",
+        "o = .o~new\nt = 'F'\ndo while o = 1; t = 'T'; leave; end\nsay t\n\
+         exit\n::class o\n::method '='; return E\n",
+    ),
     (
         "case",
         "select case .c~new; when 'x' then say 'T'; otherwise say 'F'; end\n\
@@ -63,7 +80,7 @@ const CONTEXTS: &[(&str, &str)] = &[
         "do-by",
         "n = 0\ndo i = .k~new to 5 by .b~new for 3; n = n + 1; end\n\
          say translate(n, 'TF', '03')\nexit\n\
-         ::class k\n::method '+'; return self\n::method '>'; return 0\n::method '<'; return 1\n\
+         ::class k\n::method '+'; return self\n::method '>'; return 1 = 0\n::method '<'; return 1 = 1\n\
          ::class b\n::method '+'; return self\n::method '<'; return E\n",
     ),
     (
