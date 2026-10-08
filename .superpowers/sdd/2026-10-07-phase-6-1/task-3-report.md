@@ -1,0 +1,176 @@
+# Phase 6.1 Task 3 report: USE ARG targets, `.context~condition`, `CONDITION('D')`, stem attributes, OPTIONS, USE LOCAL, objects in DO/FORWARD/RAISE
+
+## Status
+
+DONE_WITH_CONCERNS. Every group's witnesses match the oracle on all three descriptors, and they all
+refuse (rc 120) on the base binary. The per-task check and `whole_groups` pass. One constructor the
+brief lists, `Loud::object_position`, is kept (Concerns 1). A gated concurrency test fails, and it
+fails the same way at base (Concerns 2).
+
+## Commits
+
+- `f763836ce` c2: USE ARG into a message or bracket term.
+- `8f080d2fa` c3: `.context~condition` answers a copy of the condition.
+- `de455d5dc` c4: `CONDITION('D')` for a NOVALUE with no description. `Loud::builtin_option_object` deleted.
+- `f51f1c93c` c5/c6: `::ATTRIBUTE` and `DELEGATE` on a stem or compound name. `Loud::accessor_variable` and `Loud::delegate_variable` deleted.
+- `2b7babfee` rustfmt over c5's `variables.rs` helper, which `f51f1c93c` committed unformatted.
+- `4605eb332` b1: OPTIONS.
+- `1f054f1c5` b2: USE LOCAL as a method's first instruction. `Loud::use_local_in_a_method` deleted.
+- `652826b54` b10: objects in DO headers and control variables, FORWARD ARGUMENTS, RAISE ADDITIONAL.
+- `61d441781` whole-group expectation lines, `GUARD_PASSING`, gate record `## Task 3`.
+- this report and the gate record's closing lines follow in one commit.
+
+The `refusal-sites.tsv` row for `builtin_option_object` in `8f080d2fa` was edited by hand, for the
+state between c3 and c4: `body`, `off-send-surface`, `-`, which is what the refresh at
+`tests/refusal_sites.rs:472-493` writes for a row off the send surface. `de455d5dc` deletes the row
+with a refresh. Every other commit's table comes from `REXX_REFUSAL_SITES_REFRESH=1`.
+
+## Evidence method
+
+Oracle runs used the wrapper from the global constraints. Each program ran from a fresh empty
+directory, and stdout, stderr and status were compared separately (`/tmp/claude-1000/p61/t3/wit.sh`,
+`run.sh`). RED is the release binary built from `1d308cb9d` (`/tmp/claude-1000/p61/t3/bin/base/rexx-run`,
+sha256 `b98c5fb111fbc135dffbd84604585e47334f7dd864192536055e78b667c9986b`). GREEN is the release
+binary at `652826b54`. All 25 witnesses: RED rc 120 against the oracle, GREEN identical on all three
+descriptors (`/tmp/claude-1000/p61/t3/red.txt`, `green.txt`). Probes, scout A's plus mine: 61 of 73
+agree on GREEN. The 12 that do not are listed under Concerns 3 to 5. I read each witness's oracle
+stdout to check that every path its comment names prints.
+
+## Per group
+
+**c2 USE ARG into a message or bracket term.** `bind_use_target` (`run.rs`) traces the argument's
+`>>>` and then sends a `Message` target through `assign_expr_target`'s message arm, the one PARSE
+uses. That arm is `RexxExpressionMessage::assign`: it traces the term's own arguments and the
+assignment. `drop` does nothing for a message term (`ExpressionBaseVariable.hpp:65`), so an omitted
+argument without a default leaves the term unchanged. USE STRICT ARG still raises.
+Witnesses: `use_arg_msg`, `use_arg_bracket`, `use_strict_arg_msg` (ends in 40.5, rc 216),
+`use_arg_msg_default`, `use_arg_msg_method`, `use_arg_msg_trace` (`trace r`, `trace i`, defaults).
+
+**c3 `.context~condition`.** Answers `condition_copy` of the frame's condition object, and `.nil`
+when there is none. Witnesses: `context_condition` (`.nil` outside a handler, a new copy on each
+send, an internal call inherits it) and `context_condition_call` (CALL ON ERROR).
+
+**c4 `CONDITION('D')`.** Answers `''` for `(None, NOVALUE)`. Witness: `condition_d_raise_novalue`
+(no DESCRIPTION, a DESCRIPTION, and a variable read).
+
+**c5/c6 stem and compound accessors and delegates.** `Interp::pool_value` and `set_pool_value`
+(`variables.rs`) implement `RexxVariableBase::getValue` and `set` on a variable dictionary. A stem is
+the pool's stem, created empty on first use. A compound is one tail of that stem, and the tail is
+everything after the first period, taken literally: `getRetriever` builds the name with
+`buildCompoundVariable(name, true)` (`LanguageParser.cpp:2524`). I measured this before
+implementing it: `o~a.i = ...` writes tail `I` even when the pool's `I` holds `'B'`. An unset tail
+answers the stem's default, or else the stem's own name with the tail appended
+(`stem_object_compound`). The setter on a stem wraps a non-stem value as a new stem's default.
+Witnesses: `attr_compound`, `attr_stem`, `delegate_compound` (ends in 97.1, rc 159), and
+`delegate_stem`. The two `dispatch/tests.rs` pins now run, with the oracle's `5` and `a.b`.
+
+**b1 OPTIONS.** Evaluates the expression, converts it with `required_string_value`, traces `>>>`, and
+does nothing else (`RexxInstructionOptions::execute`). Other changes:
+- `instruction_owner` no longer gives `Options` an owner.
+- `owners.rs` has `Options` as `InScope`, so `EXPECTED_OUT_OF_SCOPE` is empty and the Phase 5 count
+  is 0.
+- `loud.rs` has no instruction witnesses. `Category::Instruction` carries the
+  `#[expect(dead_code)]` that `Category::Expr` already had.
+- `spike.rs`'s two tests now use `.local['STDQUE']` (a Phase 10 refusal) as their loud example.
+- The OPTIONS row in `dispatch/tests.rs` is deleted.
+- The exclusions known-gap row for OPTIONS is deleted.
+
+Witnesses: `options` and `options_expr` (MAKESTRING traced under `trace r`).
+
+**b2 USE LOCAL.** `Interp::use_local` implements `RexxActivation::autoExpose`. The listed names and
+`SELF`, `SUPER`, `RC`, `SIGL` and `RESULT` stay local. Every other simple or stem name the plan or
+`extra` holds is bound to the receiver's pool, through the same exposure list EXPOSE uses. That list
+is also what GUARD WHEN watches. A name first met later is bound when `slot_of` creates its extra
+slot (`plan.rs`), using `ActivationCold::auto_expose`. Internal calls inherit it and PROCEDURE
+clears it. `Activation` is still 512 bytes. Witnesses: `use_local_method`,
+`use_local_method_expose`, `use_local_method_dynamic` (VALUE, INTERPRET, a stem tail, an internal
+call, PROCEDURE) and `use_local_method_guard`.
+
+**b10 objects in DO, FORWARD ARGUMENTS and RAISE ADDITIONAL.**
+- A DO header's initial, TO or BY object is sent unary `+` through `apply_prefix`, giving 97.1 where
+  the object has no `+`. If `+` answers a non-object, the loop runs on that answer. If BY's `+`
+  answers an object, that object is sent `<` against 0.
+- A control variable holding an object is sent `+` with BY at the increment. If it answers an object,
+  that object is sent the TO comparison (`>`, or `<` when BY is negative).
+- If the oracle would go on with an object (an object initial or TO answer, or an object control
+  value that answers the comparison or has no TO), the loop still refuses through
+  `Loud::object_position`.
+- FORWARD ARGUMENTS on an instance, a native object or a weak reference, and RAISE SYNTAX ADDITIONAL
+  on an object, both go through `request_array_value`. That function is renamed from
+  `request_array_for_over` and implements `requestArray`. No array, or a multi-dimensional one,
+  raises 98.946 for FORWARD and 98.939 for RAISE (`Raised::syntax_additional`, new). The condition
+  object carries the converted array. RAISE traces `>K>` before converting, as the oracle does.
+- The pins in `object_operand_tests.rs` now assert the oracle's bytes. The R12 table in the
+  exclusions file moves these rows to "agrees".
+
+Witnesses: `do_to_class`, `do_header_objects`, `do_ctrl_class` (the oracle's `*-*   end`
+traceback), `do_ctrl_objects` (including `trace r` with a negative BY), `forward_args_object`, and
+`raise_additional_object` (through a `::routine`'s `RAISE ... RETURN`; RAISE without RETURN is
+handled as EXIT and is not trapped in the caller).
+
+## Files
+
+`rust/crates/rexx-exec/src/`: `run.rs`, `run/loops.rs`, `run/condition.rs`, `plan.rs`, `activation.rs`,
+`variables.rs`, `stem.rs`, `redirect.rs`, `dispatch.rs`, `dispatch/context.rs`, `dispatch/library.rs`,
+`dispatch/tests.rs`, `builtin/state.rs`, `error.rs`, `lib.rs`, `eval/object_operand_tests.rs`.
+`rust/crates/rexx-exec/tests/`: `owners.rs`, `loud.rs`, `spike.rs`, `collect_stress.rs` (three
+programs added to its no-collection list), `state_builtin_oracle.rs`, `bif_assertions.rs`,
+`keyword_assertions.rs`, `concurrency_tests.rs`. Also `rust/corpus/phase-6-1.txt`,
+`rust/corpus/refusal-sites.tsv`, the 25 `rust/corpus/lang/` witnesses and their
+`rexx-parse/tests/sourceline_oracle/` files, `docs/superpowers/plans/phase-4-exclusions.txt`, and
+`docs/superpowers/plans/phase-6-1-gate.md`.
+
+## Checks
+
+- `cargo fmt --all --check`: exit 0. `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D
+  warnings`: exit 0 at `652826b54`. `61d441781` changes only `concurrency_tests.rs` and the gate
+  record, and passes `cargo fmt --check`.
+- At `652826b54` (`/tmp/claude-1000/p61/t3/gate/status.txt`):
+  - `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0.
+  - `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test
+    ir_recorded_oracle`: exit 0.
+  - `whole_groups`: exit 101, on the expectation rows that `61d441781` rewrites.
+- At `61d441781`: `whole_groups` exit 0, 6 passed (`whole2.log`).
+- The full gated `concurrency_tests` file: 37 passed, 1 failed (Concerns 2).
+- The row-by-row reasons for the whole-group changes are in the gate record. In summary: RexxContext
+  whole now refuses at TESTCOPY01 (Phase 9); RexxContext rest gains 3 assertions; TRACE rest gains 1
+  (TEST_TRACE_OPTIONS); the GUARD derived rows agree with the oracle; TEST_WHEN_USE_LOCAL_NO_WAIT
+  joins `GUARD_PASSING`.
+
+## Self-review
+
+- Comments that the changes made false are deleted or cut: `instruction_owner`'s notes on Use, Raise
+  and Forward; the matching notes in `owners.rs`; `object_position`'s doc; the `parse_loud` notes in
+  the bif and keyword assertion files; `state_builtin_oracle.rs`'s note on `DECLARED_GAPS`; the
+  `GUARD_PASSING` doc.
+- Rooting: each new send's answer is pushed as a temp before the next send.
+  `single_dimension_request` roots the converted array. The USE LOCAL owner and scope are in
+  `object_roots`.
+- No hot path changed. The new DO code is behind the existing object checks, in `#[cold]`
+  functions. `slot_of`'s new branch runs only when an extra slot is created.
+
+## Concerns
+
+1. **`Loud::object_position` is kept.** The brief lists it for deletion, but two sites still use it.
+   - DO OVER's directory refusal (`loops.rs:665`). Scout A filed this as b11, a GUARD. It is
+     reachable: `object_operand_tests::an_object_as_a_do_over_target_is_loud`, `do e over
+     .context~package~local`, oracle rc 0.
+   - The object-answer cases in the DO header and control variable. Four probes stay loud where the
+     oracle answers: `do i = .environment to 5` and `do i = .local to 3` (oracle 97.1 on `>`), `do
+     i = 1 to .local` (the oracle runs the loop with a string comparison against `.nil`), and a
+     control variable set to `.local` with no TO (the body runs once more with `.nil`). Supporting
+     them needs a loop whose control value is an object.
+2. **`the_s2_rows_of_the_derived_list_in_both_modes` fails.** TRACE_TraceObject
+   TEST_TRACEOBJECT_COLLECTOR differs between the two scheduler modes. It fails the same way on the
+   base tree `1d308cb9d`, built from `git archive` in its own target directory with the
+   repository's `ootest`/`extensions` linked in. So it is not caused by this task, but the gated
+   `concurrency_tests` file is not green. It is outside the `whole_groups` filter the brief names.
+3. **A silent divergence that a refusal used to hide.** `c_condition_d_raise7` (`call on any`, then
+   `raise novalue return` in a callee) was loud. It now runs: ours enters the handler, while the
+   oracle prints only `back`. This is the reflected-condition defect in scout A's section 4: CALL ON
+   ANY traps a condition that CALL cannot trap. `raise lostdigits return` already showed the same
+   divergence at base (my probe `x_any_raise_syntax`). It is not fixed here.
+4. Five FORWARD probes (`b_forward_args_*`, `b2_forward_args_*`) and `use arg >o~a` stop at a
+   top-level parse error, which is group c8 and not this task.
+5. The c3 commit's hand-edited table row (see Commits) was never checked by building that commit on
+   its own.
