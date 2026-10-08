@@ -600,3 +600,69 @@ Per-task check at `a945a5ae8`: `cargo fmt --all --check` exit 0; `memcap 8G carg
 --workspace --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace
 --no-fail-fast` exit 0; `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus
 --test ir_recorded_oracle` exit 0 (29 passed, 1 ignored; 21 passed).
+
+## Task 5a
+
+Commits: `8e52e14ca` (byte-counting trigger and its tests), `5f5b80b3d` (perf round 1: charge after
+the allocation, collect on the next), `0d18b0045` (`refusal-sites.tsv` re-derived, line numbers
+only). Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-5a-report.md`. `P` is
+`/tmp/claude-1000/p61/t5a`.
+
+### Peak memory
+
+`loopN` is `do i = 1 to N; x = copies('abc', 100000); end` (300 000-byte strings); `loop999` is
+`do i = 1 to 1000000; x = copies('abc', 333) || i; end`. Ours: `memcap 2G /usr/bin/time -f "%M %e
+%x" timeout -k 5 120 $BIN FILE`, `REXX_SWITCH_MODE=every` for the every cells. Oracle: `( ulimit -v
+1048576; LD_LIBRARY_PATH=$ORACLE/lib /usr/bin/time ... timeout -k 5 20 rexx FILE )` from an empty
+directory. 5 runs per cell, median max RSS in KB, all exit 0 except where stated.
+
+| program | base normal | base every | t5a normal | t5a every | oracle |
+|---|---:|---:|---:|---:|---:|
+| loop4000 | 1 191 136 | 1 191 392 | 52 404 | 52 308 | 13 380 |
+| loop20000 | OOM at 2G (1 run) | not run | 51 932 | 52 184 | 13 016 |
+| loop999 | 90 064 | 89 684 | 55 364 | 55 452 | 20 580 |
+
+Collection counts are not compared with the oracle (licensed divergence).
+
+### Performance
+
+| binary | source | sha256 |
+|---|---|---|
+| base | `37d874a36` | `66a67962b9e8e4053f88d73167a8762d0b5df585081d210c5dd5227028d5a305` |
+| pad48 | base + `layout-pad.py 48` | `e5737b82031b9de2c323c2c3767bb3745c15d27f228fc1a48f676ff2eea4bdf3` |
+| t5a | `0d18b0045` | `0736d76c9d03230ca55835d52a52686cfa8b5a90e8022cbb4f600165ca91053a` |
+
+Each from `git archive <sha> rust interpreter`, every file touched, `CARGO_TARGET_DIR=$P/target-NAME
+memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run`, one `Compiling rexx-exec` line
+each.
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $P/cg-final -p "alloc alloc4c strings rexxcps emptyloop" base=$P/target-base/release/rexx-run pad48=$P/target-pad48/release/rexx-run t5a=$P/target-final/release/rexx-run
+```
+
+Exit 0, every spread 0.0000%, pad48 +0.0000% on every program.
+
+| program | t5a % | verdict |
+|---|---:|---|
+| alloc | +0.0434 | inside |
+| alloc4c | -0.4070 | inside |
+| strings | +0.1016 | inside |
+| rexxcps | +0.2035 | inside |
+| emptyloop | +0.0000 | inside |
+
+`8e52e14ca` alone was +0.80% on strings and +0.89% on rexxcps (the charge read the built `Bytes`,
+which then was copied into its slot); round 1's variants are in the report.
+
+```
+PROGRAMS="alloc alloc4c strings rexxcps emptyloop" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $P/wall base=$P/target-base/release/rexx-run pad48=$P/target-pad48/release/rexx-run t5a=$P/target-final/release/rexx-run
+```
+
+Exit 0; load average 0.74 at start, 1.02 at end. pad48 / t5a %: alloc +0.37 / -0.75, alloc4c
++2.15 / +3.76, strings -1.56 / +0.35, rexxcps -0.41 / +1.17, emptyloop +0.67 / -2.23.
+
+### Per-task check
+
+At `0d18b0045`: `cargo fmt`; `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D
+warnings` clean; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0 (3066 passed, 4
+ignored; `collect_stress` 37 passed); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
+--test corpus --test ir_recorded_oracle` exit 0 (50 passed, 1 ignored).
