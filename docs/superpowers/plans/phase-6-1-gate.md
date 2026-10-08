@@ -233,3 +233,70 @@ Exit 0; the pads print `+0.0000`% on every program, so the band is 0 and the bud
 Perf round 1 of this fix round: `dcd1db992` measured emptyloop +0.9614% (3 instructions a pass in
 `ops_loop_steady`, where the pass boundary inlined the loop-object release); `0c75907d3` makes the
 release `#[cold] #[inline(never)]`.
+
+## Task 4
+
+Commits: `7d233521f` (behaviour), `899db70ac` (SOURCELINE expectations). Per-task check at
+`899db70ac`: `cargo fmt` clean; `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D
+warnings` exit 0; `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test
+ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle 21 passed); `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0.
+At `7d233521f` alone that run was red on `rexx-parse --test sourceline_oracle` (no expectations
+for the new witnesses, and none for Task 3's `do_object_compare_array`); `899db70ac` adds them.
+
+### Step 3: the three `define` probes
+
+`b6_define_array_subclass_with_primitive`, `b10_define_constant_method` and
+`b10_define_attr_method` answer the oracle's `2`, `5` and `A` after b5 (`define` installs the
+identity the Method object runs under), so nothing goes under row 9. They are the corpus programs
+`define_native_array_subclass.rex`, `define_constant_method.rex` and `define_attribute_method.rex`.
+
+### Step 3: a borrowed native row on a receiver of the wrong type (Task 7's DEVIATION evidence)
+
+With b5, `run` hands a primitive's own row to an instance of another class, and the row reaches a
+`receiver_class` guard. Probe texts, scout A's (`/tmp/claude-1000/p61/sa/probes/<name>/p.rex`), each
+`say .t~new~go(X)` over `::class t` / `::method go` / `use arg m` / `return self~run(m)`:
+
+| probe | X | ours, default and `REXX_SWITCH_MODE=every` | oracle, 5 runs |
+|---|---|---|---|
+| `b2_run_list_items_on_inst` | `.list~method('ITEMS')` | rc 120 `a message send to a value that is not a list is not implemented (Phase 5)` | SIGSEGV rc 139, 5 of 5 |
+| `b2_run_routine_call_on_inst` | `.routine~method('CALL')` | rc 120 `a message send to a routine object this crate did not build is not implemented (Phase 5)` | SIGSEGV rc 139, 5 of 5 |
+| `b2_run_array_items_on_inst` | `.array~method('ITEMS')` | rc 120 `a message send to a value that is not an array is not implemented (Phase 5)` | rc 0, a different number each run (`139900247187392`, `140122939563968`, `139928481144768`, `140276912463808`, `139996166725568`) |
+
+Ours, one run each: `b2_run_supplier_item_on_inst` `a value that is not a supplier`,
+`b2_run_package_name_on_inst` `a package object this crate did not build`,
+`b2_run_varref_name_on_inst` `a value that is not a variable reference`,
+`b2_run_stackframe_name_on_inst` `a stack frame this crate did not build`,
+`b2_run_queue_items_on_inst` `a value that is not an array`; each rc 120 with `(Phase 5)`, both
+engine modes identical. The routine row is the site `dispatch/executable.rs` `begin_routine` had as
+`method_from_source("a routine whose body this crate does not hold")` for a record it does not hold;
+it is now a `receiver_class` guard.
+
+### Performance
+
+Task 4 changes the send path (`begin_method` loses the `method_body_gap` read; `own_method_entry`
+gains a class-object arm behind `object_methods`), so it is measured against `a3c2c3c0a`. `P` is
+`/tmp/claude-1000/p61/t4`; each tree from `git archive <sha> rust interpreter`, every file touched,
+built with `CARGO_TARGET_DIR=$P/target-<name> memcap 8G cargo build --release -j 4 -p rexx-exec --bin
+rexx-run`, one `Compiling rexx-exec` line each.
+
+| binary | source | sha256 |
+|---|---|---|
+| base | `a3c2c3c0a` | `21d594986d032d3b440ff11b0164980fa61eea4e5e657ea06245e4f1d225331b` |
+| t4 | `7d233521f` | `be0af11d393dbfc543774e81ac02a323f7eb8208ab83fd86857c0ed153c143a5` |
+
+```
+bash rust/bench-programs/callgrind.sh -r 3 -j 8 -o $P/cg -p "fibcall fibfunc dispatch dispatchclass sendloop rexxcps emptyloop" base=$P/target-base/release/rexx-run t4=$P/target-head/release/rexx-run
+```
+
+Exit 0, every spread at most 0.0001%. No layout pads were run at this commit; the earlier tasks'
+pads printed `0.0000`% on these programs, and no delta here is near the budget.
+
+| program | t4 % | verdict |
+|---|---:|---|
+| fibcall | +0.0002 | inside |
+| fibfunc | +0.0003 | inside |
+| dispatch | -1.1319 | inside |
+| dispatchclass | -1.1938 | inside |
+| sendloop | -1.6774 | inside |
+| rexxcps | +0.0001 | inside |
+| emptyloop | +0.0003 | inside |
