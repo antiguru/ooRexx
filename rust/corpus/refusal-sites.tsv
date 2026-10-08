@@ -293,7 +293,7 @@ Loud	setup_method	send	crates/rexx-exec/src/lib.rs:630	agrees	no	no route: Setup
 Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:721	off-send-surface	-	-	-
 Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
 Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
-Raised	source_syntax	send	crates/rexx-exec/src/dispatch/class_protocol.rs:333	agrees	yes	line_of(error.byte)	signal on syntax over .Routine~new('T', .array~of('nop', 'say 1', 'if then', 'nop')) -- 35.929 at POSITION 3, the line within the source; the message keeps its placeholders (roadmap row 3)
+Raised	source_syntax	send	crates/rexx-exec/src/dispatch/class_protocol.rs:336	agrees	yes	line_of(error.byte)	signal on syntax over .Routine~new('T', .array~of('nop', 'say 1', 'if then', 'nop')) -- 35.929 at POSITION 3, the line within the source; the message keeps its placeholders (roadmap row 3)
 Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
 Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
 Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
