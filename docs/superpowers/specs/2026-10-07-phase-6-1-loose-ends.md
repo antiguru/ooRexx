@@ -217,6 +217,7 @@ Moritz, 2026-10-07, on the open items the spec reviews left (R5-R8 after the fin
 | R7 | D6 with no branch-free design | Pay the ~0.5%: correct debug pauses are worth it. A branch-free design is still tried first. |
 | R8 | Criterion 1's reach | The row's: census classes (b) and (c). |
 | R9 | One truth judgment (Moritz, 2026-10-08, from the truthiness survey) | Added to 6.1 as Task 4a: every site that turns a value into true or false goes through one function judging as the oracle's `truthValue` does (identity fast path, `requestString`, exactly `0` or `1`, else Error 34 with the caller's sub-number); SELECT CASE and collection `==` answers included; fast paths checked against it; Deviation 25 stays for DO TO and BY only. |
+| R10 | Collection trigger counts slots only (Moritz, 2026-10-08, from the whole_groups OOM diagnosis) | Added to 6.1 as Task 5a: a collection is also due on bytes allocated since the last one, so a loop of large dead strings runs in bounded memory; within the +0.5% perf budget. |
 
 Settled from the reviews: FIFO with seeded one-event order; inline pool; `fail=wait:K` ships, sim
 only; seeded clock origin; trace and replay in 6.1, shrinker queued; seeds by rule; b13's
@@ -232,6 +233,7 @@ layout).
 | T3 Method objects | b4, b5, b6, b7, b8, b14, VariableReference `NEW`. |
 | T3a Truth | R9: one truth function, every site routed through it, the agreement table; perf at close. |
 | T4 Parse errors | c8, b3, the INTERPRET traceback line (D5, R3); perf at close. |
+| T4a GC trigger | R10: byte-aware collection trigger, its test and peak-memory record; perf at close. |
 | T5 Debug | D6, with `dbgcall`; perf at close. |
 | T6 Labels | D3 and the GUARD relabels; b18; the disposition test and table; `closed_phases` with Phase 5, the widened scan (pruning `"Phase 5"` from the `PHASES`, `SPLIT_TABLE_PHASES` vocabularies and `owners.rs`'s count assertion), the `Literals` rows, NC-h and NC-i. |
 | T7 Simulation mode | D7's mode, streams, clock seam, policies, invariants, trace and replay, knobs, report; the seed cost measurement; perf at close. |
