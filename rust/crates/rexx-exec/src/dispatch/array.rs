@@ -401,17 +401,20 @@ fn array_reshape(
             grown[offset] = *item;
         }
     }
-    match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+    let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array {
             slots,
             dimensions: held,
         }) => {
+            let before = slots.capacity();
             *slots = grown;
             *held = Some(dimensions.into());
-            Ok(())
+            slots.capacity().saturating_sub(before)
         }
-        _ => Err(Loud::receiver_class("a value that is not an array").into()),
-    }
+        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+    };
+    interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+    Ok(())
 }
 
 /// `Array~at(index)` and `Array~[index]`: the item at `index`, or `.nil` for

@@ -1236,7 +1236,10 @@ pub(super) fn native_message_notify(
     };
     if let Some(Body::Array { slots, .. }) = interp.heap.get_mut(parties).map(|held| &mut held.body)
     {
+        let before = slots.capacity();
         slots.push(Some(target));
+        let grown = slots.capacity() - before;
+        interp.charge_growth(grown * rexx_core::SLOT_BYTES);
     }
     let notified = interp.message_outcomes.contains_key(&receiver)
         && !interp.unnotified_messages.contains(&receiver);

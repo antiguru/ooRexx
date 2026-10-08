@@ -1099,6 +1099,17 @@ fn grown_arrays_are_collected_on_their_bytes() {
     );
 }
 
+/// A multidimensional extend replaces the slots with a larger set, charged
+/// like any other growth.
+#[test]
+fn reshaped_arrays_are_collected_on_their_bytes() {
+    assert_collected_on_bytes(
+        b"do i = 1 to 60; a = .array~new(10, 10); a[1000, 1000] = i; end\n",
+        1000 * 1000 * rexx_core::SLOT_BYTES,
+        60,
+    );
+}
+
 /// A `MutableBuffer` is charged its capacity when made and each growth of it.
 #[test]
 fn grown_buffers_are_collected_on_their_bytes() {
