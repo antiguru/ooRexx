@@ -2524,8 +2524,6 @@ impl Interp {
         });
     }
 
-    /// [`Interp::blame_directive`] for a directive in the package `id`, whose
-    /// report names that package's own file when a `::REQUIRES` loaded it.
     /// Closes the level of package `id`, whose directives did not install, as
     /// the `ROUTINE` frame the oracle shows for it, so the native method or
     /// clause that loaded it records its own level.
@@ -2535,6 +2533,8 @@ impl Interp {
         self.seal_site_level();
     }
 
+    /// [`Interp::blame_directive`] for a directive in the package `id`, whose
+    /// report names that package's own file when a `::REQUIRES` loaded it.
     fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = directive_clause(program, directive);
         self.activity.failure_site = Some(match self.required_paths.get(&id) {
