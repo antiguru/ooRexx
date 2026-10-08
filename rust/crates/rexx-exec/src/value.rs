@@ -210,6 +210,9 @@ impl Interp {
             ObjRef::inline_text(&bytes).is_none(),
             "a value that fits the handle built a Bytes on the way here"
         );
+        if !bytes.is_inline() {
+            self.charge_body_bytes(bytes.as_slice().len());
+        }
         self.alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
     }
 

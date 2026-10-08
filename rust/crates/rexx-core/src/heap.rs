@@ -47,6 +47,8 @@ pub struct CollectStats {
     /// The class objects this collection freed, as they were before their
     /// slots' generations moved on.
     pub freed_classes: Vec<ObjRef>,
+    /// The [`Body::held_bytes`] of every object that survived.
+    pub live_bytes: usize,
 }
 
 pub struct Heap {
@@ -66,6 +68,13 @@ pub struct Heap {
     /// what it says it tested. Not reset by anything; a fresh count needs a
     /// fresh `Heap`.
     collections: u64,
+    /// Body bytes charged by [`Heap::charge_body_bytes`] since the last
+    /// collection.
+    bytes_since: usize,
+    /// The survivors' body bytes as the last collection summed them.
+    live_bytes: usize,
+    /// The most body bytes held at once as of the last collection.
+    peak_bytes: usize,
     #[cfg(feature = "sharing")]
     sharing: Sharing,
 }
@@ -115,6 +124,9 @@ impl Heap {
             immortal: Vec::new(),
             uninit: Vec::new(),
             collections: 0,
+            bytes_since: 0,
+            live_bytes: 0,
+            peak_bytes: 0,
             #[cfg(feature = "sharing")]
             sharing: Sharing::default(),
         }
@@ -128,6 +140,22 @@ impl Heap {
     /// own doc comment.
     pub fn collections_performed(&self) -> u64 {
         self.collections
+    }
+
+    /// Records `bytes` of body allocated outside the slot, and answers the
+    /// bytes charged since the last collection.
+    #[inline]
+    pub fn charge_body_bytes(&mut self, bytes: usize) -> usize {
+        self.bytes_since += bytes;
+        self.bytes_since
+    }
+
+    /// The most body bytes this heap has held at once: the bytes the last
+    /// collection found live plus everything charged since, at its largest.
+    /// An upper bound, since a body charged and dropped before a collection
+    /// still counts.
+    pub fn peak_body_bytes(&self) -> usize {
+        self.peak_bytes.max(self.live_bytes + self.bytes_since)
     }
 
     /// Marks from the roots, then sweeps everything unmarked.
@@ -150,6 +178,7 @@ impl Heap {
         // read of every slot in the table. Whether a *target* survived cannot
         // be decided here, so the decision waits for the loop to finish.
         let mut weak_marked: Vec<u32> = Vec::new();
+        let mut live_bytes = 0;
         while let Some(r) = work.pop() {
             let Some(slot) = self.resolve(r) else {
                 continue;
@@ -163,6 +192,7 @@ impl Heap {
             if matches!(object.body, Body::WeakRef(_)) {
                 weak_marked.push(slot as u32);
             }
+            live_bytes += object.body.held_bytes();
             reached.clear();
             object.body.trace(&mut reached);
             work.extend(reached.iter().copied());
@@ -239,6 +269,7 @@ impl Heap {
             let Slot::Live { object, .. } = &self.slots[slot] else {
                 unreachable!("resolve rejects free slots")
             };
+            live_bytes += object.body.held_bytes();
             reached.clear();
             object.body.trace(&mut reached);
             resurrect.extend(reached.iter().copied());
@@ -286,11 +317,15 @@ impl Heap {
                 },
             };
         }
+        self.peak_bytes = self.peak_body_bytes();
+        self.live_bytes = live_bytes;
+        self.bytes_since = 0;
         CollectStats {
             swept,
             live: self.live,
             pending_uninit,
             freed_classes,
+            live_bytes,
         }
     }
 
@@ -696,5 +731,45 @@ mod body_text_tests {
         }
         assert_eq!(heap.body_text(text), None, "a swept handle");
         assert_eq!(heap.body_text(text), the_long_way(&heap, text));
+    }
+}
+
+#[cfg(test)]
+mod body_bytes_tests {
+    use super::*;
+    use crate::RootSet;
+    use crate::bytes::Bytes;
+
+    fn text(heap: &mut Heap, len: usize) -> ObjRef {
+        heap.charge_body_bytes(len);
+        heap.alloc(Body::Text {
+            bytes: Bytes::from_slice(&vec![b'x'; len]),
+            num: None,
+        })
+    }
+
+    /// The survivors are summed from both mark loops, a resurrected
+    /// `UNINIT` object included, and an inline body holds no bytes.
+    #[test]
+    fn a_collection_sums_the_survivors_body_bytes() {
+        let mut heap = Heap::new();
+        let mut roots = RootSet::new();
+        let kept = text(&mut heap, 100);
+        let _dead = text(&mut heap, 200);
+        let finalized = text(&mut heap, 300);
+        let inline = heap.alloc(Body::Text {
+            bytes: Bytes::from_slice(b"short"),
+            num: None,
+        });
+        roots.add_global("kept", kept);
+        roots.add_global("inline", inline);
+        assert!(heap.set_uninit(finalized));
+        let stats = heap.collect(&roots);
+        assert_eq!(stats.live_bytes, 400);
+        assert_eq!(heap.peak_body_bytes(), 600);
+        heap.charge_body_bytes(50);
+        assert_eq!(heap.peak_body_bytes(), 600);
+        heap.charge_body_bytes(500);
+        assert_eq!(heap.peak_body_bytes(), 950);
     }
 }

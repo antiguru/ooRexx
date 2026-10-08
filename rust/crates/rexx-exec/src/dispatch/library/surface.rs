@@ -185,6 +185,9 @@ impl Surface for Interp {
     }
 
     fn new_raw_string(&mut self, length: usize) -> ObjRef {
+        if length > rexx_core::INLINE_BYTES {
+            self.charge_body_bytes(length);
+        }
         let string = self.alloc_with(
             BehaviourId::STRING,
             Body::Text {

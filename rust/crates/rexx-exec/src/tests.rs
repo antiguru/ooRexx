@@ -1037,3 +1037,34 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         );
     }
 }
+
+/// A loop of large dead strings collects on the bytes its bodies hold, not
+/// only on the arena's slot count: each value is one slot, so the slot test
+/// alone lets a thousand 300 000-byte strings pile up uncollected.
+#[test]
+fn large_dead_strings_are_collected_on_their_bytes() {
+    const STRING: usize = 300_000;
+    let program = b"do i = 1 to 1000; x = copies('abc', 100000); end\n";
+    let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert!(
+        outcome.peak_body_bytes <= crate::COLLECT_BYTES_FLOOR + 2 * STRING,
+        "{} body bytes held at once",
+        outcome.peak_body_bytes
+    );
+    assert!(
+        outcome.collections >= 5,
+        "{} collections for 1000 x {STRING} bytes",
+        outcome.collections
+    );
+}
+
+/// Strings short enough to hold no body bytes leave the cadence to the slot
+/// test alone: six collections, as before bytes were counted.
+#[test]
+fn short_strings_keep_the_slot_cadence() {
+    let program = b"do i = 1 to 200000; x = copies('abcd', 5) || i; end\n";
+    let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(outcome.collections, 6);
+}

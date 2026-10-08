@@ -536,6 +536,7 @@ fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
         stderr: out.stderr,
         stack: StackSpan::default(),
         collections: 0,
+        peak_body_bytes: 0,
         chunks_refused: 0,
         #[cfg(feature = "pinning")]
         pinning: rexx_exec::PinReport::default(),

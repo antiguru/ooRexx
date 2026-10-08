@@ -644,6 +644,7 @@ mod tests {
             stderr: stderr.to_vec(),
             stack: StackSpan::default(),
             collections: 0,
+            peak_body_bytes: 0,
             chunks_refused: 0,
             #[cfg(feature = "pinning")]
             pinning: rexx_exec::PinReport::default(),
@@ -698,6 +699,7 @@ mod tests {
             stderr: Vec::new(),
             stack: StackSpan::default(),
             collections: 0,
+            peak_body_bytes: 0,
             chunks_refused: 0,
             #[cfg(feature = "pinning")]
             pinning: rexx_exec::PinReport::default(),

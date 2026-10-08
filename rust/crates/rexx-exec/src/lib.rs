@@ -297,6 +297,11 @@ pub(crate) fn set_fail_native_wait() {
 /// every later growth allowance is raised to (see `Interp::collect_at`).
 const COLLECT_FLOOR: usize = 65_536;
 
+/// The body bytes allocated since a collection below which no ordinary run
+/// collects on bytes, and the floor every later byte allowance is raised to
+/// (see `Interp::bytes_due`).
+const COLLECT_BYTES_FLOOR: usize = 32 << 20;
+
 /// The globals entry [`Interp::root_exit_value`] writes. A name rather than an
 /// index because `RootSet::add_global` is keyed by name and replaces in place,
 /// which is the behaviour wanted here.
@@ -313,6 +318,8 @@ pub struct Outcome {
     pub stack: StackSpan,
     /// How many times `Heap::collect` ran during this program.
     pub collections: u64,
+    /// `Heap::peak_body_bytes` at the end of the run.
+    pub peak_body_bytes: usize,
     /// How many times the run declined to compile a body because it does not
     /// fit the compiled stream's index widths. Such a body raises
     /// [`Loud::chunk_refused`]; there is no second engine to run it.
@@ -1492,6 +1499,10 @@ struct Interp {
     /// The arena size at which [`Interp::alloc_with`] collects, and half of
     /// this crate's trigger policy. The other half is `Heap::will_grow`.
     collect_at: usize,
+    /// The body bytes charged since the last collection at which
+    /// [`Interp::charge_body_bytes`] collects: the larger of
+    /// `COLLECT_BYTES_FLOOR` and the bytes the last collection found live.
+    bytes_due: usize,
     /// The in-process external data queue (I15): every line
     /// `PUSH`/`QUEUE` has written and `PULL`/`PARSE PULL` have not yet
     /// removed. See `queue.rs`'s own module doc for the LIFO/FIFO split, and
@@ -2022,6 +2033,7 @@ impl Interp {
             store_generation: 0,
             output_route: None,
             collect_at: COLLECT_FLOOR,
+            bytes_due: COLLECT_BYTES_FLOOR,
             queue: Queue::new(),
             // Nothing to read, which is what makes it impossible for a unit
             // test to reach the harness's own standard input: only `execute`
@@ -2640,6 +2652,16 @@ impl Interp {
         }
     }
 
+    /// Charges `bytes` of a body about to be allocated outside its slot, and
+    /// collects when the bytes since the last collection reach `bytes_due`.
+    /// Called before the allocation, where [`Interp::alloc_with`] may collect
+    /// anyway.
+    pub(crate) fn charge_body_bytes(&mut self, bytes: usize) {
+        if self.heap.charge_body_bytes(bytes) >= self.bytes_due {
+            self.collect_now();
+        }
+    }
+
     /// Appends every `ObjRef` the interpreter must hand the collector to
     /// `out`, and names every field that does not need to be handed over.
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
@@ -2803,6 +2825,7 @@ impl Interp {
             // root holds; this caches the decision, not the object.
             output_route: _,
             collect_at: _,
+            bytes_due: _,
             queue: _,
             input: _,
             reqstr_armed: _,
@@ -2909,6 +2932,7 @@ impl Interp {
         if !self.stress_collect {
             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
         }
+        self.bytes_due = COLLECT_BYTES_FLOOR.max(stats.live_bytes);
         #[cfg(feature = "sharing")]
         self.heap.sharing_pause(false);
     }
@@ -3197,6 +3221,7 @@ fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome
         }),
         stack: StackSpan::default(),
         collections: 0,
+        peak_body_bytes: 0,
         chunks_refused: 0,
         #[cfg(feature = "pinning")]
         pinning: PinReport::default(),
@@ -3409,6 +3434,7 @@ fn execute_on(
         stderr: std::mem::take(&mut interp.trace),
         stack,
         collections,
+        peak_body_bytes: interp.heap.peak_body_bytes(),
         chunks_refused,
         #[cfg(feature = "pinning")]
         pinning: interp.pinning.take(&interp.activity.pins),

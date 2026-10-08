@@ -1016,6 +1016,15 @@ impl Body {
         }
     }
 
+    /// The bytes this body holds in an allocation of its own: a `Text`'s
+    /// bytes when they do not fit inline, and nothing for every other body.
+    pub fn held_bytes(&self) -> usize {
+        match self {
+            Body::Text { bytes, .. } if !bytes.is_inline() => bytes.as_slice().len(),
+            _ => 0,
+        }
+    }
+
     /// Appends every object this one can reach.
     pub fn trace(&self, out: &mut Vec<ObjRef>) {
         match self {
