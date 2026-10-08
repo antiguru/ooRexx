@@ -1,5 +1,6 @@
 /* Method~new over collections, an Array subclass, an enhanced object's
- * MAKESTRING, a sparse array, a number, and a MAKEARRAY answering .nil. */
+ * MAKESTRING, an array with no items, a number, and a MAKEARRAY answering
+ * .nil. */
 call t .directory~of(('return "D"', 'x'))
 call t .table~of((1, 'x'))
 call t .set~of('return "SET"')
@@ -19,17 +20,7 @@ t: procedure
   return
 syntax: say 'err' condition('o')~code condition('o')~message
   return
-::class t
-::method rr
-  use arg m
-  return self~run(m)
 ::class a subclass array
-::class ba
-::method makearray
-  return 'return "not an array"'
 ::class bn
 ::method makearray
   return .nil
-::class bs
-::method makestring
-  return .array~of('return 1')

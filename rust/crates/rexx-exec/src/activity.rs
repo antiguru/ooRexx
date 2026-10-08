@@ -626,7 +626,10 @@ impl Activity {
                 .chain(suspended.iter().map(Box::as_ref))
                 .filter_map(|activation| activation.context_object),
         );
-        // A `REPLY`'s value and moved continuation, until its activation ends.
+        // A `REPLY`'s value and moved continuation, until its activation ends;
+        // and the `Method` object a method no dictionary entry names runs
+        // for, which a method that took its own entry back holds nowhere
+        // else.
         for activation in running
             .iter()
             .map(std::ops::Deref::deref)
@@ -635,6 +638,7 @@ impl Activity {
             if let Some(replied) = &activation.replied {
                 replied.object_roots(out);
             }
+            out.extend(activation.cold.as_deref().and_then(|cold| cold.executable));
         }
         // The trapped condition's object, which a `CALL ON` handler's
         // activation and every callee that inherits its `CONDITION()` hold

@@ -1,0 +1,5 @@
+count 4
+/* The same with an allocation in place of the forced collection. */
+d = .directory~new
+d~setMethod('x', 'self~unsetMethod("X"); z = .array~new(3); z[1] = "abcdefghijklmnop"; return .context~executable~source[1]')
+say d~x

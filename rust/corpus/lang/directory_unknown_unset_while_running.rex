@@ -1,0 +1,4 @@
+/* A Directory's UNKNOWN entry that unsets itself while it runs. */
+d = .directory~new
+d~setMethod('UNKNOWN', 'use arg n; self~unsetMethod("UNKNOWN"); call gc "force"; return n .context~executable~source[1]')
+say d~foo

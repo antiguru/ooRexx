@@ -1,0 +1,5 @@
+/* The same with an allocation in place of the forced collection. */
+d = .directory~new
+d~setMethod('x', 'self~setMethod("X", "return 2"); z = .array~new(3); z[1] = "abcdefghijklmnop"; return "one" .context~executable~source[1]')
+say d~x
+say d~x

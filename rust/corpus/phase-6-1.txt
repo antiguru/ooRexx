@@ -163,3 +163,11 @@ lang/load_package_source_shapes.rex
 lang/program_routine_call_more.rex
 lang/program_routine_call_signal.rex
 lang/setmethod_loaded_method.rex
+
+# Task 4 fix round 2: a running method's executable is rooted by its activation.
+lang/directory_entry_unset_while_running.rex
+lang/directory_entry_unset_then_allocates.rex
+lang/directory_entry_replace_while_running.rex
+lang/directory_entry_replace_then_allocates.rex
+lang/directory_unknown_unset_while_running.rex
+lang/setmethod_unset_identity_after_collection.rex

@@ -1195,5 +1195,5 @@ ticket.
 SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper (`Method~new`'s `processExecutableSource`
 takes the answer of `requestArray` as an array). Measured 2026-10-08 by the review of Phase 6.1
 Task 4 (its probe `e7_5`, which wraps the same `Method~new` in a trapping procedure). This crate
-raises 93.961 (`requestArray` answered no array, and the instance's `MAKESTRING` answers nothing).
+raises 93.961 (`requestArray` answered no array, and the class defines no `MAKESTRING`).
 No upstream ticket.

@@ -1,0 +1,8 @@
+count 7
+/* A Directory entry that replaces itself while it runs keeps its
+ * .context~executable through a forced collection; the next send runs the
+ * replacement. */
+d = .directory~new
+d~setMethod('x', 'self~setMethod("X", "return 2"); call gc "force"; return "one" .context~executable~source[1]')
+say d~x
+say d~x

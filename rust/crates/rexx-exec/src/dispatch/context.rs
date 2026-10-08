@@ -425,7 +425,14 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             let (scope, name, receiver) =
                 (identity.scope, identity.name.to_vec(), identity.receiver);
             let body = crate::InstalledMethodBody { program, directive };
-            Ok(interp.running_method_executable(scope, &name, receiver, body))
+            let executable = interp.running_method_executable(scope, &name, receiver, body);
+            // Kept on the activation, which roots it: measured, oracle rc 0,
+            // a method that unsets its own entry answers the same object
+            // before and after a forced collection.
+            if let Some(activation) = interp.frame_at_mut(depth) {
+                activation.cold_mut().executable = Some(executable);
+            }
+            Ok(executable)
         }
         (Entry::Routine, Some(directive), _) => {
             // A routine built from source text is a synthetic directive in no

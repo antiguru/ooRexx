@@ -587,8 +587,9 @@ pub(crate) struct ActivationCold {
     /// Where a name this activation meets for the first time binds after a
     /// method's `USE LOCAL`, or `None` without one.
     pub(crate) auto_expose: Option<AutoExpose>,
-    /// The `Method` object `Object~run` ran this activation for, which no
-    /// dictionary entry names.
+    /// The `Method` object this method activation runs for, kept here
+    /// because no dictionary entry need name it: the one `Object~run` or a
+    /// `Directory` entry ran, or the first `.context~executable` answered.
     pub(crate) executable: Option<ObjRef>,
 }
 
