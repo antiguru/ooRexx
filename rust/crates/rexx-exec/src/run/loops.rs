@@ -2151,21 +2151,7 @@ impl Interp {
             }
             LoopState::With(with) => self.with_advance(code, with, loop_indent),
             LoopState::ObjectControlled(ctl) => {
-                let pass = self.roots.activity_mut().push_frame();
-                let previous = if ctl.stepped {
-                    Some(self.read_control_traced(
-                        code,
-                        ctl.control,
-                        ctl.at,
-                        ctl.shape,
-                        loop_indent,
-                    )?)
-                } else {
-                    None
-                };
-                let more = self.object_control_pass(code, ctl, previous, do_indent, loop_indent)?;
-                self.roots.activity_mut().pop_frame(pass);
-                Ok(more)
+                self.object_control_advance(code, ctl, do_indent, loop_indent)
             }
             LoopState::OverItems {
                 control,
@@ -2433,21 +2419,14 @@ impl Interp {
                     }
                 }
                 if let Some(previous) = by_message {
-                    let to = to.as_ref().map(|to| self.control_number_object(to, digits));
-                    let descending = by.signum() < 0;
-                    let by = self.control_number_object(by, digits);
-                    let ctl = ObjectControl {
-                        control: *control,
-                        at: *at,
-                        shape,
-                        initial: None,
-                        to,
+                    let ctl = self.object_control_from_numbers(
+                        (*control, *at, shape),
+                        to.as_ref(),
                         by,
-                        descending,
-                        for_remaining: *for_remaining,
-                        stepped: true,
-                    };
-                    *state = LoopState::ObjectControlled(Box::new(ctl));
+                        *for_remaining,
+                        digits,
+                    );
+                    *state = LoopState::ObjectControlled(ctl);
                     let LoopState::ObjectControlled(ctl) = state else {
                         unreachable!("the state was written on the line above");
                     };
@@ -2617,6 +2596,57 @@ impl Interp {
         read.add(by, digits)
             .map_err(Raised::from)
             .map_err(Failure::from)
+    }
+
+    /// [`Interp::object_control_pass`] with its own temps frame and, at a
+    /// re-test, the control variable's read.
+    #[cold]
+    #[inline(never)]
+    fn object_control_advance(
+        &mut self,
+        code: &Code<'_>,
+        ctl: &mut ObjectControl,
+        do_indent: usize,
+        loop_indent: usize,
+    ) -> Result<bool, Failure> {
+        let pass = self.roots.activity_mut().push_frame();
+        let previous = if ctl.stepped {
+            Some(self.read_control_traced(code, ctl.control, ctl.at, ctl.shape, loop_indent)?)
+        } else {
+            None
+        };
+        let more = self.object_control_pass(code, ctl, previous, do_indent, loop_indent)?;
+        self.roots.activity_mut().pop_frame(pass);
+        Ok(more)
+    }
+
+    /// A numeric controlled loop's state carried over once its control
+    /// variable holds an object: `TO` and `BY` as the objects their numbers
+    /// are, the direction from `BY`'s sign.
+    #[cold]
+    #[inline(never)]
+    fn object_control_from_numbers(
+        &mut self,
+        (control, at, shape): (SymbolId, Option<usize>, NameShape),
+        to: Option<&Number>,
+        by: &Number,
+        for_remaining: Option<u64>,
+        digits: u64,
+    ) -> Box<ObjectControl> {
+        let to = to.map(|to| self.control_number_object(to, digits));
+        let descending = by.signum() < 0;
+        let by = self.control_number_object(by, digits);
+        Box::new(ObjectControl {
+            control,
+            at,
+            shape,
+            initial: None,
+            to,
+            by,
+            descending,
+            for_remaining,
+            stepped: true,
+        })
     }
 
     /// One pass of an [`ObjectControl`] loop, `DoBlock::checkControl`: at a
