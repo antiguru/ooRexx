@@ -29,7 +29,7 @@
 * **Prose**: comments and docs state decisions, never a mechanism that does not exist yet, never a
   set's size, no em-dashes; a false sentence is deleted. Extent claims are derived with the command
   committed. Every witness's stdout is read to confirm each path it claims prints.
-* **Shell**: no `bash -c`/`sh -c` wrappers; `rm` only with literal absolute paths, no globs; never
+* **Shell**: no `bash -c`/`sh -c` wrappers; `rm` only with literal absolute paths, no globs (a loop that does `rm -rf $W/$n` stalls the task on a manual approval: make a fresh directory per run instead of deleting); never
   `pkill -f`; builds under `memcap 8G` with `-j 4`.
 * **Per-task check**: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, plain
   `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug), and `REXX_CORPUS_GATE=1 memcap 8G
