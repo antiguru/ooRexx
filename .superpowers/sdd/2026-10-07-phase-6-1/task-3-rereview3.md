@@ -1,7 +1,9 @@
-# Task 3 fix round 3 re-review: 6a3091cc6..eb9c3c7b8
+# Task 3 fix round 3 re-review: 6a3091cc6..43621d78e
 
-Ours: `rexx-run` built in release from `git archive eb9c3c7b8 rust interpreter`, own target dir, one
-`Compiling rexx-exec` line. Base: the same from `6a3091cc6`. Oracle: the standard wrapper. Each probe ran
+Ours: `rexx-run` built in release from `git archive 43621d78e rust interpreter` (and, first, from
+`eb9c3c7b8`), own target dir, one `Compiling rexx-exec` line each. Every probe below was re-run on the
+`43621d78e` binary; our output is unchanged from `eb9c3c7b8` on all of them except the answers that
+`945e31f33` changed (`probes2/`). Base: the same from `6a3091cc6`. Oracle: the standard wrapper. Each probe ran
 from its own empty dir through `cmp.sh`. Probes, script and outputs are under
 `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t3rr3/`
 (`probes/`, `cmp.sh`, `out/<probe>[-tag]/`).
@@ -29,7 +31,7 @@ from its own empty dir through `cmp.sh`. Probes, script and outputs are under
     On a later pass (`abc_later.rex`) it is the `END` line, the line the oracle's WHILE blames in
     `abc_while.rex`. The condition object (`cd_to.rex`) matches WHILE's (`cd_while.rex`) except code and
     message. Description is empty, ADDITIONAL is `[yes]`, position is the DO line.
-  - What is left is a narrower defect; see New Breakage 1.
+  - What is left is a different defect, which `945e31f33` made wider; see New Breakage 1.
 - **Minor 1: a TO or BY that converted as a number was a new object at every pass** -- ADDRESSED.
   - Numbers become objects once per loop: `control_number_object` is called from `object_control_state`
     (`run/loops.rs:986-1003`) and from `object_control_from_numbers` (`:2691-2713`). Each pass then sends
@@ -46,21 +48,41 @@ from its own empty dir through `cmp.sh`. Probes, script and outputs are under
 
 ### New Breakage in the Fix Diff
 
-1. **Minor: `loop_truth` does not use a user object's own string value**, so it does not judge the way
-   the oracle's WHILE does.
-   - `loop_truth` reads the answer through `to_text` (`run/loops.rs:2726`). That never sends STRING.
-   - The oracle's truthValue goes through `requestString` (`classes/ObjectClass.cpp:523-527`), which
-     does send STRING.
-   - Measured with `d_ustr1.rex` and `d_ustr0.rex`: a `>` answering an object whose `string` method
-     returns `1` or `0`. The oracle runs 3 passes. Ours raises 34.901, found `an U`. The ruling says
-     "the answer's string value" decides, which is `1` here (the loop ends) or `0` (it goes on).
-   - Deviation 25's "as WHILE does" and `loop_truth`'s doc "the way WHILE and UNTIL take theirs" are true
-     of this crate's WHILE, which has the same gap (Out-of-Scope 1). They are not true of the oracle's.
-   - The row's table has no line for this answer.
-   - The working tree has an uncommitted one-line change at `run/loops.rs:2726`, `to_text` to
-     `string_value_text`. It belongs to someone else and is not reviewed here. `string_value_text` is
-     `stringValue()` by its doc (`value.rs:376-380`), not `requestString`, so check it against
-     `d_ustr1.rex`.
+1. **Important: `loop_truth` does not take the answer's string value the way truthValue's
+   `requestString` does, and `945e31f33` made an Array answer diverge from WHILE.**
+   - `945e31f33` reads the answer with `string_value_text` (`run/loops.rs:2726`). Its doc calls it
+     `stringValue()` (`value.rs:376-380`), the default rendering. The oracle's truthValue
+     (`classes/ObjectClass.cpp:523-527`) calls `requestString` (`:1235-1260`) instead. For a primitive
+     object that is `primitiveMakeString`, which for an Array joins the items with newlines
+     (`classes/ArrayClass.cpp:1829`). For a user object it sends REQUEST('STRING').
+   - Measured at `43621d78e` (`probes2/`, `D_*` DO TO, `W_*` WHILE, `U_*` UNTIL, one run per engine):
+
+     | answer | oracle WHILE / UNTIL | our WHILE / UNTIL | our DO TO |
+     |---|---|---|---|
+     | `.array~of(1)` | true / true | true / true | 34.901, found "an Array" |
+     | `.array~of(0)` | false / false | false / false | 34.901, found "an Array" |
+     | `.array~of(1, 2)` | 34.3 / 34.4, found "1\n2" | the same | 34.901, found "an Array" |
+     | `.array~new` | 34.3 / 34.4 | the same | 34.901 |
+     | object whose `string` answers `1` | true / true | 34.3 / 34.4, "an U" | 34.901, "an U" |
+     | object whose `string` answers `0` | false / false | 34.3 / 34.4, "an U" | 34.901, "an U" |
+     | object with no STRING method | 34.3 / 34.4, "a P" | the same | 34.901, "a P" |
+     | `.list~of(1)` | 34.3 / 34.4, "a List" | the same | 34.901, "a List" |
+
+   - The Array rows are a regression from `eb9c3c7b8`, where `d_arr.rex` ended the loop on the
+     single-item array exactly as both engines' WHILE do. The ruling says the answer is "judged as
+     WHILE/UNTIL judge theirs". After `945e31f33`, our DO TO disagrees with our own WHILE on arrays.
+   - False sentences this commit added:
+     - Deviation 25: "as WHILE does, from its string value as truthValue's requestString takes it".
+     - The new row `.array~of(1)  3  34.901, "an Array"` is a correct measurement, but WHILE does not
+       give that answer, so the row records a defect as if it were the rule.
+     - The commit message: "As truthValue's requestString does, so an array answer is found as 'an
+       Array'".
+     - The report addendum: `string_value_text`, "the counterpart of truthValue's requestString".
+   - A user object whose `string` answers `1` or `0` still raises 34.901 (`D_ustr1`, `D_ustr0`). The
+     oracle's WHILE takes the value. Our WHILE has the same gap (Out-of-Scope 1).
+   - Fix shape, not checked: read the answer the way this crate's WHILE does, which agrees with the
+     oracle's for Arrays. Then let the user-object case follow whatever WHILE is fixed to. Add the
+     Array and user-STRING rows to the agreeing witness and the table.
 2. **Minor: two doc comments name `LoopState::object_key`, which does not exist.** They are
    `activity.rs:84` and `run/loops.rs:347`. The method is `FlatLoop::object_key` (`run/loops.rs:339`).
    At `:347` the name is an intra-doc link.
@@ -74,7 +96,8 @@ from its own empty dir through `cmp.sh`. Probes, script and outputs are under
    - The arm needs either a release or the `unreachable!` that minor proposes.
 4. **Minor (record): the report's account of `ident2` is false.**
    - `task-3-report.md`, Fix round 3, item 2, says the oracle answers `1` because "a freed object's
-     address was reused". The probe's `=` explains the `1`, as shown under Minor 1 above.
+     address was reused". The addendum's Concerns repeat it. The probe's `=` explains the `1`, as shown
+     under Minor 1 above.
    - Deviation 25 also cites WHILE and UNTIL as "(:277-316)" of `DoBlockComponents.cpp`. That range ends
      before UNTIL's `truthValue` call at `:321`.
 
@@ -98,7 +121,11 @@ from its own empty dir through `cmp.sh`. Probes, script and outputs are under
   `by_dir2.rex`, `gt_one.rex`, `gt_one2.rex`. Errors: `d_{yes,sp1,obj,arr,empty,ustr1,ustr0}.rex`
   against `w_*` with the same answers, `abc_later.rex`, `abc_while.rex`, `by_err.rex`, `cd_to.rex`,
   `cd_while.rex`. One run per engine each.
-- `d_arr` and `w_arr` (`.array~of(1)`) agree with each other on both engines: true.
+- At `eb9c3c7b8`, `d_arr` and `w_arr` (`.array~of(1)`) agreed with each other on both engines: true.
+  At `43621d78e`, the `probes2/` table above.
+- At `43621d78e`, these give the same stdout, stderr and rc as at `eb9c3c7b8`: every probe in the
+  truth-table and error lines, `st1`, `lk1`, `ident5`, `dead2`, `dead3`, `dead7`, `reg1`, the witness
+  and `licwit`. `rp2` ran 3 times, rc 0, with all four UNINITs.
 - Release on every exit path, crate only, by UNINIT after `call gc 'force'` (`lk1.rex`). The paths are
   normal end, LEAVE, ITERATE to an outer loop, SIGNAL out, a trapped error in the body, RETURN inside,
   nested loops with an object BY, recursion inside the body, a trapped 34.901, a trapped error in a later
@@ -137,8 +164,13 @@ from its own empty dir through `cmp.sh`. Probes, script and outputs are under
 
 ### Verdict
 
-**Fix round:** All findings addressed, no new Critical/Important breakage. Four new Minors:
-- `loop_truth` ignores a user object's STRING.
+**Fix round:** Findings remain open. Both findings under verification are addressed, but New
+Breakage 1 is Important:
+- `loop_truth` reads `stringValue`, not `requestString`. Since `945e31f33`, an Array answer raises
+  34.901 where both engines' WHILE take it as 1 or 0. That breaks the ruling, and Deviation 25, the
+  commit message and the report each state it as requestString's behaviour.
+
+Three Minors:
 - Doc comments name `LoopState::object_key`, which does not exist.
 - The dead `run_loop_with_header` arm holds loop objects without a release.
 - The report's address-reuse explanation and Deviation 25's `:277-316` citation are wrong.
