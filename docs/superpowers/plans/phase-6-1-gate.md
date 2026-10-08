@@ -535,3 +535,68 @@ unchanged.
 Fix round 1 (`eb3775477`, binary `fr1`, sha256
 `58f637e888af95cf4d891cc66d387e46cade4677a3632a80e1bbe3cea9595a24`), the same callgrind command
 with `fr1=$S/bin/fr1/rexx-run` added, exit 0: startup +0.2641%, parse +0.6089% against `base61`.
+
+### Task 5 fix round 1, I2: `whole_groups`
+
+Command, `S` the session scratchpad's `t5i2`:
+
+```
+REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_TABLE=$S/runN/table.tsv memcap 8G /usr/bin/time -v cargo test -j 1 --release -p rexx-exec --test concurrency_tests whole_groups
+```
+
+| run | tree | result | wall | max RSS |
+|---|---|---|---|---|
+| 1 | `ff982eb46` (harness change `93c7c19fe`, rows unchanged) | exit 101, 5 passed, the main test on the rows below only | 4:10 | 878 188 KB |
+| 2 | `a945a5ae8` (rows rewritten) | exit 0, 6 passed | 5:14 | 2 385 136 KB |
+| 3 | `a945a5ae8`, no rebuild | exit 0, 6 passed | 25:58 | 819 136 KB |
+
+Max RSS is `time -v`'s, the largest of cargo and everything it waited for. Run 2 rebuilt the test
+binary and has no line of its own for the test process, so its figure may be rustc's; runs 1 and 3
+built nothing. Run 3's wall clock is one oracle run of MutexSemaphore (1 of 30, both parts) that hung
+to the 300 s oracle deadline, which made this side's deadline 4 x 300 s for the every-mode run the
+row lists as exceeding it. Runs 2 and 3 give the same normal and every cells on every row but
+REPLY's, whose runs here matched a different one of the oracle's racing outcomes.
+
+Every moved row, with its cause. Each was attributed by running the harness's copy of the group
+(the same renamed-out tests, started lines marked, `-U -V 2`, normal mode, under `memcap 2G` and
+`timeout 300`) under `rexx-run` built from these trees (`git archive`, own target directory, one
+`Compiling rexx-exec` line each): `pre4` = `ec97e4190`, `t4` = `4c63d5b69`, `t4a` = `f691ac33b`,
+`t5` = `93c7c19fe`. At `t5` every copy reproduces the harness's key exactly. `t4` and `t4a` agree on
+every copy, so no row moved under Task 4a.
+
+| group | part | was | now | cause and evidence |
+|---|---|---|---|---|
+| Class | whole | refuses at TEST_CLASS_DEFINE, `define` (Phase 9) | failure, assertions 298, failing [TEST_ACTIVATE TEST_METHODS] | Task 4 runs TEST_CLASS_DEFINE (`pre4` refuses there, `t4` rc 1 with this key); the harness change leaves TEST_SUBCLASSES_GC out, without which the run allocates until the cap (`whole-groups-memory.md`). The failing pair is the old rest row's |
+| Class | rest | assertions 202 | not run; rows deleted | the whole run no longer refuses |
+| Method | rest | assertions 63 | assertions 64, failing set unchanged | Task 4: TEST_NEW_TWO_ARGS_STRING_NIL (`expectSyntax(93.961)`) refused at `pre4` (a method source that is neither a string nor an array) and runs and passes from `t4`. The old rest, re-derived at `pre4` with it left out: 63 |
+| Object | rest | assertions 247 | assertions 249, failing set unchanged | Task 4: TEST_RUN_BAD_METHOD_SOURCE and TEST_SETMETHOD_BAD_METHOD_SOURCE refused at `pre4` with the same refusal and pass from `t4`. The old rest re-derived at `pre4`: 247 |
+| ATTRIBUTE | whole | refuses at TESTABSTRACTTWICE, `does not parse here` (Phase 5) | error, assertions 276, failing [TESTDELEGATE TESTMISPLACEDCLASSMETHOD] | Task 5: the parse error is a SYNTAX condition the test traps (`t4a` refuses, `t5` this key). TESTMISPLACEDCLASSMETHOD: see below |
+| ATTRIBUTE | rest | assertions 232 | not run; rows deleted | the whole run no longer refuses |
+| CONSTANT | whole | refuses at TEST_BAD_NEGATIVE, `does not parse here` | refuses at TEST_EXPRESSION_ACTIVATE, Routine NEW (Phase 9) | Task 5 (`t4a` refuses at TEST_BAD_NEGATIVE, `t5` at TEST_EXPRESSION_ACTIVATE) |
+| CONSTANT | rest | assertions 156 | assertions 170, failing set unchanged | Task 5: the rest now leaves out TEST_EXPRESSION_ACTIVATE and TEST_EXPRESSION_SELF instead of the tests that did not parse, which now run and pass |
+| METHOD | whole | refuses at TESTABSTRACTEXTERNAL, `does not parse here` | refuses at TESTPACKAGE, StringTable ITEMS (Phase 9) | Task 5 (`t4a` and `t5`, as above) |
+| METHOD | rest | assertions 139, last started TESTSTRINGNAME | assertions 179, last started TEST_DELEGATE_TWICE, failing set unchanged | Task 5: the rest leaves out TESTPACKAGE alone |
+| CALL | whole | refuses at TEST_INVALID, `does not parse here` | agrees with the oracle; rows deleted, and the rest rows with them | Task 5 (`t4a` refuses, `t5` rc 0, 181 assertions) |
+| GUARD | whole | refuses at TEST_INVALID_OPTION_ONOFF, `does not parse here` | agrees with the oracle; rows deleted | Task 5 (`t4a` refuses, `t5` rc 0, 26 assertions) |
+| TRACE | whole | refuses at TEST_TRACE_OPTIONAL_ADDITIONAL, `does not parse here` | error, assertions 120, the old rest row's failing set | Task 5 (`t4a` refuses, `t5` this key) |
+| TRACE | rest | assertions 118 | not run; rows deleted | the whole run no longer refuses |
+| TRACE_TraceObject | whole | refuses at TEST_OBJECT_AND_SCOPE, a send to a method context whose scope no longer defines it | error, assertions 18, the old rest row's failing set and TEST_OBJECT_AND_SCOPE | Task 4 deleted the refusal (`pre4` refuses, `t4` this key). TEST_OBJECT_AND_SCOPE fails `assertEquals(arr~items, 19)` with 0: its TraceObject collector receives no lines, the gap Task 4's review names |
+| TRACE_TraceObject | rest | assertions 18 | not run; rows deleted | the whole run no longer refuses |
+
+No row is a regression: every test in a new failing set either failed in the old rest row or
+refused before the task that moved it (so it never passed here). The new failures of that second
+kind:
+
+- ATTRIBUTE TESTMISPLACEDCLASSMETHOD expects 99.905 for `::attribute 'foo' class` followed by a
+  body. The parser here reports 99.937 (attribute body without SET or GET), the oracle 99.905 (CLASS
+  without a matching `::CLASS`). Measured on a two-line program: oracle rc 157 with 99.905; `t5`
+  rc 157 with 99.937; `pre4` refuses with the same 99.937. Older than Phase 6.1.
+- TRACE_TraceObject TEST_OBJECT_AND_SCOPE: the collector gap above.
+
+Still listed and agreeing in both green runs, not moved by Tasks 4, 4a or 5: TIME whole and derived,
+CALL derived (the elapsed-clock rows) and REPLY whole and derived every.
+
+Per-task check at `a945a5ae8`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4
+--workspace --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace
+--no-fail-fast` exit 0; `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus
+--test ir_recorded_oracle` exit 0 (29 passed, 1 ignored; 21 passed).
