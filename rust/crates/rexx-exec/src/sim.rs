@@ -70,11 +70,13 @@ pub struct Knobs {
     /// waiting.
     pub fail_wait: Option<u64>,
     pub clock: ClockOrigin,
-    /// The seconds of real time a command, or a native call made while
-    /// another activity lives, may take on the baton, from 0 to
-    /// [`BLOCK_LIMIT`].
+    /// The seconds of real time a command or a native call may take on the
+    /// baton, from [`BLOCK_FLOOR`] to [`BLOCK_LIMIT`].
     pub block: f64,
 }
+
+/// The smallest `block=`: a millisecond.
+const BLOCK_FLOOR: f64 = 0.001;
 
 /// [`Knobs::block`] where `block=` does not set it.
 const BLOCK_SECONDS: f64 = 2.0;
@@ -151,9 +153,12 @@ impl SimConfig {
                 knobs.block = seconds
                     .parse()
                     .ok()
-                    .filter(|seconds: &f64| (0.0..=BLOCK_LIMIT).contains(seconds))
+                    .filter(|seconds: &f64| (BLOCK_FLOOR..=BLOCK_LIMIT).contains(seconds))
                     .ok_or_else(|| {
-                        format!("`{item}`: block is a number of seconds from 0 to {BLOCK_LIMIT}")
+                        format!(
+                            "`{item}`: block is a number of seconds from {BLOCK_FLOOR} to \
+                             {BLOCK_LIMIT}"
+                        )
                     })?;
             } else if item == "clock=midnight" {
                 knobs.clock = ClockOrigin::Midnight;
@@ -392,7 +397,7 @@ pub(crate) struct Sim {
 }
 
 /// The watch on an inline native call in the simulation mode: a thread that
-/// interrupts the interpreter's thread each `block=` the call outlasts.
+/// interrupts the interpreter's thread once, if the call outlasts `block=`.
 pub(crate) struct Watch {
     stop: std::sync::mpsc::Sender<()>,
     watcher: std::thread::JoinHandle<bool>,
@@ -592,13 +597,15 @@ impl Interp {
         let (stop, stopped) = std::sync::mpsc::channel();
         let watcher = std::thread::spawn(move || {
             crate::signal::block();
-            let mut fired = false;
-            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(bound)
-            {
+            let timed_out = matches!(
+                stopped.recv_timeout(bound),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            );
+            if timed_out {
                 target.interrupt();
-                fired = true;
+                let _ = stopped.recv();
             }
-            fired
+            timed_out
         });
         Some(Watch { stop, watcher })
     }
@@ -657,7 +664,7 @@ impl Loud {
     }
 
     /// A native call on the baton in the simulation mode that outlasted
-    /// `block=`'s real time, while another activity lived.
+    /// `block=`'s real time.
     pub(crate) fn sim_blocked_native() -> Loud {
         Loud {
             message: crate::owned_message(

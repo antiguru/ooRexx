@@ -343,6 +343,35 @@ fn a_native_call_only_another_activity_can_end_is_refused_after_its_bound() {
     );
 }
 
+/// At the smallest `block=` every quick native call returns before its watch
+/// fires, run after run: 50 calls on the baton, 20 runs alike.
+#[test]
+fn quick_native_calls_at_the_smallest_bound_run_alike() {
+    let source = "t = .t~new~start('idle')\ns = 0\ndo i = 1 to 50\n  s = s + RxCalcSqrt(i, 4)\nend\n\
+                  say s t~result\n::requires 'rxmath' LIBRARY\n::class t\n::method idle\n  \
+                  call SysSleep 1\n  return 'idle'\n";
+    let config = crate::SimConfig::parse("sim:1,block=0.001").expect("a sim spec");
+    let first = counted(
+        source,
+        false,
+        bounded().with_switch_mode(SwitchMode::Sim(config)),
+    );
+    assert_eq!(first.outcome.exit_code, 0, "{}", first.stderr());
+    assert_eq!(first.exits, 50);
+    assert!(first.stdout().ends_with(" idle\n"), "{}", first.stdout());
+    for _ in 1..20 {
+        let run = counted(
+            source,
+            false,
+            bounded().with_switch_mode(SwitchMode::Sim(config)),
+        );
+        assert_eq!(
+            (run.outcome.exit_code, run.stdout(), run.stderr()),
+            (first.outcome.exit_code, first.stdout(), first.stderr())
+        );
+    }
+}
+
 /// A guarded library method whose send waited for its guard runs once the
 /// guard is granted, from the wait's continuation, which is outside every
 /// driver: the call keeps the baton there.
