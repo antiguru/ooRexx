@@ -1,0 +1,3452 @@
+# Review package: 6860d4f80..4de3699d9
+
+## Commits
+4de3699d9 Phase 6.1 Task 7: report, gate record, queued items closed
+3b9a80364 Phase 6.1 Task 7: refusal dispositions; closed_phases polices Phase 5
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-7-report.md      | 146 ++++
+ .../queued/2026-09-28-phase-5-refusal-labels.md    |  26 +
+ .../queued/2026-09-29-closed-phases-owner-gaps.md  |  15 +
+ docs/superpowers/plans/phase-4-exclusions.txt      |  35 +
+ docs/superpowers/plans/phase-6-1-gate.md           |  17 +
+ rust/bench-control/alloc4c-101.rex                 |  10 +-
+ rust/bench-programs/alloc4c.rex                    |  10 +-
+ rust/corpus/bif-exempt.txt                         |   4 -
+ rust/corpus/oracle-crashes.txt                     |  25 +
+ rust/corpus/refusal-dispositions.tsv               |  60 ++
+ rust/corpus/refusal-sites.tsv                      |  80 ++-
+ rust/crates/rexx-exec/src/dispatch.rs              |   4 +-
+ rust/crates/rexx-exec/src/dispatch/array.rs        |   2 +-
+ .../rexx-exec/src/dispatch/class_protocol.rs       |  10 +-
+ rust/crates/rexx-exec/src/dispatch/context.rs      |  17 +-
+ rust/crates/rexx-exec/src/dispatch/hash.rs         |  14 +-
+ .../crates/rexx-exec/src/dispatch/introspection.rs |   2 +-
+ rust/crates/rexx-exec/src/dispatch/library.rs      |   8 +-
+ .../rexx-exec/src/dispatch/object_protocol.rs      |  26 +-
+ rust/crates/rexx-exec/src/environment.rs           |  32 +-
+ .../crates/rexx-exec/src/environment/identities.rs |   2 +-
+ rust/crates/rexx-exec/src/lib.rs                   | 138 ++--
+ rust/crates/rexx-exec/src/redirect.rs              |   2 +-
+ rust/crates/rexx-exec/src/run.rs                   |   2 +-
+ rust/crates/rexx-exec/src/run/settings.rs          |   5 +-
+ rust/crates/rexx-exec/tests/assertions.rs          |  31 +-
+ rust/crates/rexx-exec/tests/bif_assertions.rs      |   4 +-
+ rust/crates/rexx-exec/tests/closed_phases.rs       | 119 +++-
+ rust/crates/rexx-exec/tests/keyword_assertions.rs  |   2 +-
+ rust/crates/rexx-exec/tests/owners.rs              |  22 +-
+ .../crates/rexx-exec/tests/refusal_dispositions.rs | 768 +++++++++++++++++++++
+ 31 files changed, 1423 insertions(+), 215 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md
+new file mode 100644
+index 000000000..fb6aa9ce5
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md
+@@ -0,0 +1,146 @@
++# Phase 6.1 Task 7 report: refusal dispositions and `closed_phases`
++
++Base `6860d4f80`. Commits: `3b9a80364` (code, tables, records), and the commit carrying this
++report and the gate record.
++
++## Disposition table (`rust/corpus/refusal-dispositions.tsv`)
++
++By kind, from `awk -F'\t' '!/^#/ && NF {print $2}' rust/corpus/refusal-dispositions.tsv | sort | uniq -c`:
++
++| kind | constructors |
++|---|---|
++| GUARD | binary_operator, call_op_off_its_node, chunk_map_too_short, constant_out_of_range, conversion_raised (c7), environment_entry (b18), environment_symbol (b16, b18), expose_receiver, expression, instruction, jump_out_of_range, library_procedure_gone, library_source (b17), loop_op_off_its_node, missing_body, numeric_form_without_expression, object_method, operator_operand (b12), op_not_driven, parse_trigger_operand, register_not_logical, scheduler_inconsistency, select_op_off_its_node, setup_method (b15), signal_op_off_its_node, store_op_off_its_node, unknown_receiver (b9, b13's guard sites), unreadable_collection (b18) |
++| DEVIATION | array_index_hole (entry 6), entry_method_without_a_value (new Deviation 29), receiver_class (b13: new oracle-crashes entry 33 and new Deviation 28), stale_handle (exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED") |
++| LIMIT | chunk_refused (IR plan's `ChunkTooLarge` widths), immovable_reply (Deviation 15), inverted_wait (Deviation 14), unsatisfiable_wait (Deviation 20) |
++| REHOME | none. R2's subclass `NEW` refusals are `native_method`, which carries `Phase 9`, so no row is required; the Phase 9 row amendment is Task 12's. |
++
++b11 has no constructor left (its site was `object_position`, deleted by Task 2).
++
++## Constructors
++
++Relabelled to owner `None`: `receiver_class`, `operator_operand`, `library_source`,
++`setup_method`. Owner parameter now `Option<&'static str>`: `environment_symbol`,
++`environment_entry`, `unreadable_collection` (the `.STREAM` sites pass `None`; `owed[0]` is
++`(NIL, None)`, rendered `an entry the library bootstrap fills`; `DirectoryEntry::Owed`,
++`owed_entry_owner`, `owed_table_owner`, `unbuilt_collection_owner` carry the `Option`).
++
++Added: `unknown_receiver` (b13's `receiver_kind` `Err` pass-throughs, dead-handle and
++"no class of its own" sites, `receiver_class_id` `None` fallbacks, the four "a method object this
++crate did not build" argument sites, b9's `context.rs` routine sites, `identities.rs`'s method
++context site: 27 sites); `stale_handle` and `conversion_raised` (the shared
++`Refused::StaleHandle | Refused::Raised` struct literal split, each with its literal text, which
++is the `Display` text it built before); `numeric_form_without_expression` (the `run/settings.rs`
++struct literal). `receiver_class` keeps the 41 sites a wrong-type native row reaches: "a value
++that is not a(n) array, list, supplier, hash collection, variable reference, class object", "a
++package object, routine object, stack frame, executable this crate did not build", "a value that
++carries no annotations / no method scope". Site counts from `grep -rn 'receiver_class(\|unknown_receiver('`
++over `src/` less tests. Deleted: none. Messages are unchanged except the dropped `(Phase 5)` suffix, and the `owed[0]` placeholder
++object renders `an entry the library bootstrap fills` rather than `an entry owed by Phase 5`.
++
++The split is by probe on ours at `6860d4f80` (`/tmp/claude-1000/p61/t7/rc1`-`rc3`): borrowed
++rows on an instance reach `not a list`, `not a supplier`, `not an array` (Array, Queue ITEMS,
++Array FILL, Queue PUT), `not a hash collection` (Directory, StringTable, Table PUT), `not a class
++object` (Class ID, DEFINE), `package object this crate did not build` (Package NAME, LOCAL,
++ADDCLASS), `stack frame` (NAME, LINE), `routine object` (CALL), `executable` (Method and Routine
++SOURCE), `carries no annotations`, `carries no method scope`, `not a variable reference` (NAME,
++VALUE). `rc4`: a `~method` object's `~copy` refuses at `COPY` (Phase 9) before `define`,
++`setMethod` or `run` can take it, so the "method object this crate did not build" sites are
++guards today.
++
++## The test (`rust/crates/rexx-exec/tests/refusal_dispositions.rs`)
++
++Reads every `fn ... -> Loud` in `src/` (test modules and files excluded), takes the owner from
++the constructor's `owned_message` call (`None` or no call: no owner; `Some("Phase N")`; a
++`&'static str` parameter or a `COMPUTED_OWNERS` function: given; an `Option` parameter or any
++other function: no owner), and requires a row for each ownerless one. It fails on an unlisted
++constructor, a row with no constructor, a REHOME whose constructor does not carry its phase, a
++non-REHOME row for an owned constructor, an ownerless `Loud` struct literal outside a
++constructor, and a cited oracle-crashes entry, Deviation or `docs/`/`rust/` path that does not
++exist. `the_check_finds_each_kind_of_disagreement` runs it over a fabricated source and table and
++asserts each failure; `the_scanner_reads_each_owner_form` pins the owner forms on the real tree.
++
++Failing first, at `6860d4f80` with no table (`/tmp/claude-1000/p61/t7/step1-fail.txt`): exit 101,
++`every_ownerless_refusal_has_a_disposition` failed listing 25 ownerless constructors and the two
++ownerless struct literals (`dispatch/library.rs:857`, `run/settings.rs:358`). The first run also
++listed `directives.rs:64`, a false positive (closure parameter not recognised), fixed before the
++recorded run. Passing at `3b9a80364`: 3 passed. Negative control: the table without its
++`receiver_class` row fails with `receiver_class (crates/rexx-exec/src/lib.rs:495): no owner and no
++disposition row`.
++
++## `closed_phases`
++
++`CLOSED` is `["Phase 5", "Phase 6", "Phase 7", "Phase 8"]`; the debt paragraph is gone.
++`no_owner_table_names_a_closed_phase` scans `tests/{owners,assertions,bif_assertions,keyword_assertions}.rs`
++with the literal scan. Before the vocabulary prune and the `Literals` re-home it failed on the
++twelve `assertions.rs` rows and `bif_assertions.rs:610` (a report string naming Phase 5 and
++Phase 7). `"Phase 5"` and `"Phase 7"` are pruned from `SPLIT_TABLE_PHASES` and both `PHASES`
++vocabularies (Phase 7 is closed too and the widened scan names it); `owners.rs`'s zero counts for
++`Phase 5` and `Phase 7` tags are deleted, since the vocabulary test rejects such a tag; the
++`bif-exempt.txt` header's `Phase 5` category is deleted. Step 4: `git grep -n '"Phase 5"' --
++rust/crates` prints only `closed_phases.rs:32`, the `CLOSED` line.
++
++NC-i was already closed by `51e1d37cc` (`Owner:` in any case is read); a fully lower-case
++`owner:` row is added to its test. NC-h: a sentence now ends at a full stop followed by
++whitespace (so `6.1` and `.rex` do not end it), and a resolution word resolves only where it
++opens a sentence, a paragraph or the clause after a colon; the phase is read up to it.
++`the_row_check_reads_only_a_resolution_that_opens_a_clause` holds `EXTERNAL was DELIVERED` and
++`The other half is FIXED` open, and `: DELIVERED by Phase 6.1 Task 5` and a next-paragraph
++`FIXED` resolved. The exclusions file passes under the new rule: `no_open_exclusions_row_names_a_closed_phase` is
++green with Phase 5 in `CLOSED`, and the `::REQUIRES` row's "OWNER: Phase 5 for the rest of
++::REQUIRES" resolves at its "parse: DELIVERED by Phase 6.1 Task 5". Both queued items carry a closing section.
++
++## `Literals` rows
++
++Each `runDynamicSource` case run outside the harness inside a test-case class with the group's
++`q`, `hex`, `bin` and the framework's `runDynamicSource` (`/tmp/claude-1000/p61/t7/lit1/p.rex`):
++the oracle prints `1 1 AB AB AB AB AB A A A A A`, rc 0; ours refuses rc 120, `method "NEW" of
++class "Routine" is not implemented (Phase 9)`. `lit2`: `.routine~new(n, src)` answers and
++`.routine~new(n, src, .context~package)` refuses (`native_executable_new`, `args.len() > 2`). So
++the interpreter does not run them, and the twelve rows are re-homed to `Phase 9` with that
++reason above `EXEMPT`. In the harness itself (`lit3`) the row has no test case for `self`, and
++both engines raise 97.1 on `self~hex`.
++
++## Records
++
++- `rust/corpus/oracle-crashes.txt` entry 33 (b13's crashing rows, from scout A's measured runs
++  and Task 4's; nothing re-run to add it).
++- `phase-4-exclusions.txt` Deviation 28 (b13's non-crashing rows) and Deviation 29 (value-less
++  entry-method assignment, from the Phase 5a upstream-tickets record).
++- `rust/corpus/refusal-sites.tsv` re-derived; hand columns written for `unknown_receiver` (agrees,
++  no), `conversion_raised` (agrees, no) and `stale_handle` (recorded, yes).
++- `bench-programs/alloc4c.rex:6`, `bench-control/alloc4c-101.rex:6`: the quoted refusal is gone.
++
++## Commands and results
++
++All at `3b9a80364`, from `rust/`, each status read unpiped:
++
++- `cargo fmt --all`: no change after formatting; `memcap 8G cargo clippy -j 4 --workspace
++  --all-targets -- -D warnings`: exit 0.
++- `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug): exit 0, 3079 passed, 0 failed
++  over 146 test binaries (`/tmp/claude-1000/p61/t7/gates1/workspace.out`).
++- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test
++  ir_recorded_oracle`: exit 0; corpus 29 passed, 1 ignored; ir_recorded_oracle 21 passed.
++- `REXX_REFUSAL_SITES_REFRESH=1 cargo test -p rexx-exec --test refusal_sites -- --test-threads=1`
++  re-derived the table; `refusal_sites` then 5 passed.
++- `refusal_dispositions` 3 passed; `closed_phases` 8 passed; `owners` 6, `keyword_assertions` 7,
++  `bif_assertions` 5 passed.
++- `git grep -n '"Phase 5"' -- rust/crates`: `rust/crates/rexx-exec/tests/closed_phases.rs:32`
++  only.
++
++## Concerns
++
++1. Table ITEMS on an instance is listed in Deviation 28 as the brief asks, but ours does not
++   reach `receiver_class` there: `not_this_task` answers `method "ITEMS" of class "T" is not
++   implemented (Phase 9)`, a Phase 9 label for a wrong-type row, recorded as such in Deviation 28.
++   `Directory~SETENTRY` on an instance answers the same way.
++2. The `Literals` rows' `unblocked_by: "Phase 9"` names the interpreter half only; the harness
++   runs them outside a test case, so they also need the harness to supply `self` once Phase 9
++   lands.
++3. Phase 7 was pruned from the vocabularies as well as Phase 5, beyond the brief's wording, because
++   the widened scan names it.
++4. No performance run: the changed paths are refusal sites and the `owed` owner type
++   (`Option<Option<&str>>` on `.environment`/`.local` item reads); this task is not one the spec
++   measures.
++5. GUARD records for the d-guard constructors cite the census's reason, not probes;
++   `call_op_off_its_node` records its one known firing (a concatenated non-first argument), whose
++   repro answers `ok` at `6860d4f80`.
+diff --git a/.superpowers/sdd/queued/2026-09-28-phase-5-refusal-labels.md b/.superpowers/sdd/queued/2026-09-28-phase-5-refusal-labels.md
+new file mode 100644
+index 000000000..e89fc41e2
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-09-28-phase-5-refusal-labels.md
+@@ -0,0 +1,26 @@
++# Refusals that still name Phase 5, which is closed
++
++Phase 8's close (Task 9, ruling 1) relabelled `Loud::native_method` to Phase 9 and left the rest,
++since `rust/crates/rexx-exec/tests/closed_phases.rs` records Phase 5 as a debt deliberately absent
++from `CLOSED`. Found by, from the worktree root:
++
++    git grep -n '"Phase 5"' -- rust/crates | /bin/grep -a /src/ \
++      | /bin/grep -avE '^[^:]+:[0-9]+:[[:space:]]*//'
++
++At 14636fe6a that names, in `rust/crates/rexx-exec/src/`: `lib.rs`'s `Loud::receiver_class`,
++`operator_operand`, `object_position`, `method_from_source`, `object_method`, `method_body`,
++`library_source`, `required_source`, `setup_method`, `expose_receiver` and
++`use_local_in_a_method`; `lib.rs`'s `instruction_owner` arm for `InstructionKind::Options`;
++`environment.rs:363`'s owed entries; and `redirect.rs:644` and `run.rs:3589` (`.STREAM`).
++
++Relabelling them is one decision per owner, not a text edit: each needs the phase that owes the
++work (most are Phase 9's core conformance), the tests pinning their text (`dispatch/tests.rs`,
++`eval/object_operand_tests.rs`, `run/tests/directives.rs`, `tests/spike.rs`), the derived tables
++that record crate output (`corpus/introspection-arity.tsv` is refreshed by
++`REXX_INTROSPECTION_ARITY_REFRESH=1`), and `"Phase 5"` added to `closed_phases.rs`'s `CLOSED`.
++
++## Closed 2026-10-09 by Phase 6.1 Task 7
++
++Every constructor listed is deleted (Tasks 2-5) or has owner `None` with a row in
++`rust/corpus/refusal-dispositions.tsv`; `"Phase 5"` is in `closed_phases.rs`'s `CLOSED`, and the
++scan covers the owner tables in `tests/`.
+diff --git a/.superpowers/sdd/queued/2026-09-29-closed-phases-owner-gaps.md b/.superpowers/sdd/queued/2026-09-29-closed-phases-owner-gaps.md
+new file mode 100644
+index 000000000..180242008
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-09-29-closed-phases-owner-gaps.md
+@@ -0,0 +1,15 @@
++# Queued: two gaps in closed_phases' exclusions OWNER check
++
++From the Phase 8 final re-review (N2, scratchpad/review-final8/task-9-rereview.md):
++- NC-h: an `OWNER: Phase 8` row followed, in the same paragraph and before the next OWNER, by a
++  CLOSED/FIXED word passes, because that word is read as the row's resolution.
++- NC-i: a lower-case `Owner:` line is not read.
++Neither is reachable by any row today. Tighten the paragraph rule and case-fold the key.
++
++## Closed 2026-10-09 by Phase 6.1 Task 7
++
++NC-i was already closed by `51e1d37cc`: `OWNER`, or `Owner:` in any case, is read; Task 7 adds a
++fully lower-case `owner:` row to `the_row_check_reads_owners_in_any_case_and_no_negated_resolution`.
++NC-h: a resolution word resolves only where it opens a sentence, a paragraph or the clause after a
++colon, and a sentence ends at a full stop followed by whitespace;
++`the_row_check_reads_only_a_resolution_that_opens_a_clause` holds `EXTERNAL was DELIVERED` open.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index ef7c9535f..6617cae80 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -1862,20 +1862,55 @@ DEVIATIONS -- permanent, chosen
+      unchecked (interpreter/concurrency/Activity.cpp:3252), so a non-string
+      answer is read through another object's layout: an Array answering
+      `say 'arr'` ran as the command `AN ...` (probe dj1), and no answer at all
+      is a SIGSEGV (corpus/oracle-crashes.txt entry 31). This crate reads the
+      answer through `to_text`: the Array runs `say 'arr'`, and an object whose
+      STRING method answers a line runs its default string (`a S`, run as the
+      command `A S`) instead. The oracle's answer is a type confusion, not a specified observable.
+      Measured by Phase 6.1 Task 6's review (probes dj1, di3). Not witnessed in
+      the corpus.
+ 
++ 28. A PRIMITIVE'S NATIVE METHOD RUN ON AN OBJECT OF ANOTHER CLASS IS REFUSED
++     WHERE THE ORACLE ANSWERS AN ACCIDENT OF MEMORY (Phase 6.1 Task 7).
++     OWNER: none.
++
++     `self~run(m)` with `m` a primitive's own method object, from a method of
++     a plain `::class t`, has the native read the instance through the layout
++     of the class it was written for. Measured by Phase 6.1's scout A (probes
++     `b2_run_*_on_inst`, 5 runs each where it says so):
++
++       .array~method('ITEMS'), .queue~method('ITEMS')   rc 0, a number that
++                                                         differs every run
++       .table~method('ITEMS')                            rc 0, `0`
++       .method~method('SCOPE')                           rc 0, an empty line
++       .class~method('ID')                               rc 165, 91.999
++
++     This crate refuses each, rc 120, with `a message send to a value that
++     is not an array` (Array, Queue), `... that carries no method scope`,
++     `... that is not a class object`, and for Table with `method "ITEMS" of
++     class "T" is not implemented (Phase 9)`. The oracle's answer is a read
++     through the wrong layout, not a specified observable; where the same
++     read crashes, the shape is corpus/oracle-crashes.txt entry 33. Not
++     witnessed in the corpus.
++
++ 29. A VALUE-LESS ENTRY-METHOD ASSIGNMENT IS REFUSED (Phase 6.1 Task 7).
++     OWNER: none.
++
++     `d~"A="()` on a Directory: the oracle's `StringHashCollection::unknown`
++     stores `arguments[0]` without reading its count
++     (interpreter/classes/support/HashCollection.cpp:1015-1026), so the entry
++     holds the value of the expression evaluated before the send, rc 0
++     (docs/superpowers/records/2026-08-17-phase-5a/upstream-tickets.md, three
++     runs of three). This crate refuses, rc 120, "an entry-method
++     assignment to "A" with no value is not implemented", and the same for
++     `sendWith('A=', .array~new(1))`. Not witnessed in the corpus.
++
+ EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
+ ---------------------------------------------------------------------
+ 
+ Criterion 5 requires every out-of-scope `ExprKind` variant to name an owning
+ phase, and that owner has to be one of the phases the split table names --
+ "4b", "4c", "Phase 5" or "Phase 7", spelled exactly as the table spells them,
+ because `coverage.rs` and `loud.rs` assert the set and compare the strings.
+ The set is the design document's and stays as that document wrote it; what is
+ in force is narrower, and `owners.rs` asserts it directly -- no instruction
+ tag names Phase 7 now, and no builtin exclusion may.
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index 80e6b4ada..f630c2ace 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -747,10 +747,27 @@ PROGRAMS="rexxcps emptyloop" memcap 8G bash rust/bench-programs/wallclock.sh -r
+ 
+ Exit 0; load average 1.90 at start, 1.55 at end. nobranch / head %: rexxcps +1.44 / +0.21,
+ emptyloop -0.68 / +2.50; inside ±4%.
+ 
+ ### Per-task check
+ 
+ At `004312db8`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 8 --workspace
+ --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
+ (3073 passed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus
+ --test ir_recorded_oracle` exit 0 (50 passed, 1 ignored).
++
++## Task 7
++
++Commit `3b9a80364`. Per-task check at that commit: `cargo fmt --all` clean; `memcap 8G cargo
++clippy -j 4 --workspace --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4
++--workspace --no-fail-fast` exit 0 (3079 passed, 0 failed); `REXX_CORPUS_GATE=1 memcap 8G cargo
++test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1
++ignored; ir_recorded_oracle 21 passed). `git grep -n '"Phase 5"' -- rust/crates` prints only
++`closed_phases.rs`'s `CLOSED`.
++
++The disposition test failed first at `6860d4f80` with no table, listing 25 ownerless
++constructors and two ownerless `Loud` struct literals; it passes at `3b9a80364`, and the table
++without its `receiver_class` row fails naming that constructor. `no_owner_table_names_a_closed_phase`
++failed on the `Literals` rows and a `bif_assertions.rs` report string before they were re-homed.
++Dispositions, the `Literals` probes and the receiver split's probes are in
++`.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md`. No performance run (refusal paths and
++the `owed` owner type only).
+diff --git a/rust/bench-control/alloc4c-101.rex b/rust/bench-control/alloc4c-101.rex
+index d13fe0b4d..21e6be676 100644
+--- a/rust/bench-control/alloc4c-101.rex
++++ b/rust/bench-control/alloc4c-101.rex
+@@ -1,20 +1,16 @@
+ /* Allocation-churn dimension, restricted to the 4c surface (no message sends).
+ 
+    `alloc.rex` allocates a fresh `.array` and `.string` every iteration via
+-   `.array~of`, `.string~new`, `~size` and `~length`. Measured 2026-09-02 on
+-   both engines, this crate refuses `.array~of(1,2,3)` with `rexx-exec:
+-   method "OF" of class "Array" is not implemented (Phase 5)` and
+-   `.string~new("item")` with the same message for `"NEW"` of class
+-   `"String"`. Allocation throughput does not need the object model, so this
+-   program covers the same dimension with constructs this crate has: `||`
+-   concatenation and compound-variable creation.
++   `.array~of`, `.string~new`, `~size` and `~length`. Allocation throughput
++   does not need the object model, so this program covers the same dimension
++   with no message send: `||` concatenation and compound-variable creation.
+ 
+    What this preserves from alloc.rex: two heap-allocating operations per
+    iteration (there, one array plus one string; here, one new compound
+    variable plus one concatenated string), and an accumulator whose two
+    terms (a constant 3, standing in for the array's fixed size, and a
+    string's length) stay in tagged-small-integer range for the whole run, so
+    neither the accumulation nor the loop-bound arithmetic itself allocates --
+    exactly as alloc.rex's `a~size`/`s~length` additions do not.
+ 
+    What this does NOT preserve: alloc.rex's array and string are both
+diff --git a/rust/bench-programs/alloc4c.rex b/rust/bench-programs/alloc4c.rex
+index 7973a46cd..cbe5d887a 100644
+--- a/rust/bench-programs/alloc4c.rex
++++ b/rust/bench-programs/alloc4c.rex
+@@ -1,20 +1,16 @@
+ /* Allocation-churn dimension, restricted to the 4c surface (no message sends).
+ 
+    `alloc.rex` allocates a fresh `.array` and `.string` every iteration via
+-   `.array~of`, `.string~new`, `~size` and `~length`. Measured 2026-09-02 on
+-   both engines, this crate refuses `.array~of(1,2,3)` with `rexx-exec:
+-   method "OF" of class "Array" is not implemented (Phase 5)` and
+-   `.string~new("item")` with the same message for `"NEW"` of class
+-   `"String"`. Allocation throughput does not need the object model, so this
+-   program covers the same dimension with constructs this crate has: `||`
+-   concatenation and compound-variable creation.
++   `.array~of`, `.string~new`, `~size` and `~length`. Allocation throughput
++   does not need the object model, so this program covers the same dimension
++   with no message send: `||` concatenation and compound-variable creation.
+ 
+    What this preserves from alloc.rex: two heap-allocating operations per
+    iteration (there, one array plus one string; here, one new compound
+    variable plus one concatenated string), and an accumulator whose two
+    terms (a constant 3, standing in for the array's fixed size, and a
+    string's length) stay in tagged-small-integer range for the whole run, so
+    neither the accumulation nor the loop-bound arithmetic itself allocates --
+    exactly as alloc.rex's `a~size`/`s~length` additions do not.
+ 
+    What this does NOT preserve: alloc.rex's array and string are both
+diff --git a/rust/corpus/bif-exempt.txt b/rust/corpus/bif-exempt.txt
+index 80fd93b6e..d401b3aea 100644
+--- a/rust/corpus/bif-exempt.txt
++++ b/rust/corpus/bif-exempt.txt
+@@ -26,24 +26,20 @@
+ #   * A derived owner says what a row hits FIRST, not what would make it pass.
+ #
+ #   * A derived owner is `4c` for every builtin name rexx-exec runs nothing
+ #     for, whichever phase actually owns it: `Loud::unresolved_call` carries a
+ #     fixed "4c". No row below carries it today -- Phase 7 gave the stream
+ #     builtins a refusal that names their real owner, so the rows that were
+ #     `4c` now read `Phase 7`, and the RXQUEUE rows read `Phase 10`. A `4c` row
+ #     reappearing means a name reached `unresolved_call` again. Read the owner
+ #     off the run's own "first construct hit" breakdown, not off this file.
+ #
+-#   Phase 5  The row's own operands send a message: `XRANGE`'s hex-pair bodies
+-#       write `'41'x~c2d` and `D2C::test10` writes a method call. Needs
+-#       dispatch.
+-#
+ #   ANOMALY  Not an attribution at all: the harness's own word for "exited
+ #       non-zero and named no construct". No row carries it today. The three
+ #       that did were all BEEP, which is not a builtin function but a routine
+ #       the interpreter's internal package registers
+ #       (`interpreter/runtime/InternalPackage.cpp:199`) -- correctly absent
+ #       from `rexx_inventory::builtins::NAMES`, and so a 43.1 here until
+ #       Phase 7 gave the `REXX` package's own routines their bodies. The rows
+ #       pass and are gone from the set.
+ #
+ # THE THREE DERIVED CATEGORIES CARRY PINNED COUNTS, NOT JUST PINNED SPELLINGS.
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index cba066766..b17d73d92 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1224,10 +1224,35 @@ upstream ticket.
+     ::class o
+     ::method linein
+       trace ?a
+       nop
+       return 'say "typed"'
+ 
+ SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper: each pause in `LINEIN` reads the next
+ line by calling `LINEIN` again, so the recursion has no bottom. Measured 2026-10-09 by the review
+ of Phase 6.1 Task 6 (its probe `di6`) and again by its fix round 2. This crate recurses the same
+ way and stops at Error 11.1 (control stack full), rc 245. No upstream ticket.
++
++## 33. A primitive's native method run on an object of another class
++
++    say .t~new~go(.list~method('ITEMS'))
++    ::class t
++    ::method go
++    use arg m
++    return self~run(m)
++
++SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr, for each of
++these in place of `.list~method('ITEMS')`: `.supplier~method('ITEM')`, `.package~method('NAME')`,
++`.VariableReference~method('NAME')`, `.StackFrame~method('NAME')` and `.routine~method('CALL')`.
++The same in a subclass of `Supplier` whose `INIT` does not forward to its superclass:
++
++    s = .s~new(.array~of(1), .array~of('i'))
++    say s~item s~index
++    ::class s subclass supplier
++    ::method init
++
++SIGSEGV, rc 139, 5 runs of 5. The native method reads its receiver through the layout of the class
++it was written for. Measured 2026-10-07 by Phase 6.1's scout A (probes `b2_run_*_on_inst`,
++`b4_subclass_supplier`) and again for `List~ITEMS` and `Routine~CALL` by its Task 4. This crate
++refuses each with `Loud::receiver_class` (`a message send to a value that is not a list is not
++implemented`, and the like); the shapes that answer garbage instead of crashing are Deviation 28
++in `docs/superpowers/plans/phase-4-exclusions.txt`. No upstream ticket.
+diff --git a/rust/corpus/refusal-dispositions.tsv b/rust/corpus/refusal-dispositions.tsv
+new file mode 100644
+index 000000000..8f398c8e0
+--- /dev/null
++++ b/rust/corpus/refusal-dispositions.tsv
+@@ -0,0 +1,60 @@
++# Why no phase owes each loud refusal that names none.
++#
++# crates/rexx-exec/tests/refusal_dispositions.rs reads every `Loud` constructor in
++# crates/rexx-exec/src and requires a row here for each one that can build a message with
++# no owner; it fails on such a constructor with no row, on a row whose constructor is gone,
++# on a row for a constructor that names a phase (REHOME aside), and on a citation that does
++# not resolve.
++#
++# Columns, tab-separated: constructor, kind, phase, record.
++#
++# kind:
++#   GUARD      no program reaches it; the record names the probes that tried, or the
++#              invariant that keeps it out of reach.
++#   DEVIATION  matching the oracle is wrong; the record cites an oracle-crashes.txt entry, a
++#              numbered Deviation in docs/superpowers/plans/phase-4-exclusions.txt, or quotes
++#              an exclusions row.
++#   LIMIT      a design limit; the record cites the Deviation or design document licensing it.
++#   REHOME     a remaining phase owes it; `phase` names it, the constructor carries it, and
++#              the record quotes the roadmap row text naming the work.
++# phase is `-` for every kind but REHOME.
++#
++# Probe names: scout A's are in .superpowers/sdd/2026-10-07-phase-6-1/scout-a-report.md,
++# Appendix B; Task 4's in docs/superpowers/plans/phase-6-1-gate.md, "## Task 4"; Task 7's in
++# .superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md.
++array_index_hole	DEVIATION	-	oracle-crashes.txt entry 6 (SF 2085): the oracle dies on an array subscript that is an empty slot
++binary_operator	GUARD	-	internal inconsistency: every Operator belongs to a family of Interp::apply_binary (census class d-guard)
++call_op_off_its_node	GUARD	-	compiler invariant (census d-guard). Reached once, by a concatenation in a non-first call argument (phase-6-gate.md, Task 13 notes); that repro answers `ok` at 6860d4f80 (Task 7 probe cop/s.rex)
++chunk_map_too_short	GUARD	-	compiler invariant: a chunk maps every instruction of its body (census d-guard)
++chunk_refused	LIMIT	-	the compiled stream's index widths, docs/superpowers/plans/2026-08-09-phase-4e-ir.md (ChunkTooLarge: u16 registers, slots and arguments, u32 ops); no second engine since the tree-walker's removal
++constant_out_of_range	GUARD	-	compiler invariant: a Const op names a constant of its own chunk (census d-guard)
++conversion_raised	GUARD	-	scout A c7: c_native_raised raises the callee's condition on both engines (rc 163); both callers of Interp::refusal answer Refused::Raised before reaching it
++entry_method_without_a_value	DEVIATION	-	Deviation 29: the oracle stores its evaluation stack for a value-less NAME= send
++environment_entry	GUARD	-	scout A b18: envx_* (every .environment and .local index in its own program), env_new_activity, env_reply_activity: with no owner it is an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
++environment_symbol	GUARD	-	scout A b16 and b18: c2_stream_first_clause, c2_address_with_stream_first (.STREAM before StreamClasses.orx), envx_*, env_new_activity, env_reply_activity; only STDQUE (Phase 10) refused
++expose_receiver	GUARD	-	Task 4 report, "Kept with owner None": EXPOSE from methods of Directory, .local, .environment and a Directory subclass, a borrowed Object RUN row on an instance; all answer, oracle-identical
++expression	GUARD	-	every ExprKind evaluates (expr_owner answers None for each); each site is a match arm for a form its caller routes elsewhere (census d-guard)
++immovable_reply	LIMIT	-	Deviation 15 (spec 2026-09-29 section 5)
++instruction	GUARD	-	every InstructionKind executes (instruction_owner answers None for each); each site is a match arm for a kind its caller routes elsewhere (census d-guard)
++inverted_wait	LIMIT	-	Deviation 14 (spec 2026-09-29 section 2.6)
++jump_out_of_range	GUARD	-	compiler invariant: a jump stays inside its range (census d-guard)
++library_procedure_gone	GUARD	-	a held library is never released (refusal-sites.tsv: library_method_package_blame.rex, library_routine_package_blame.rex agree)
++library_source	GUARD	-	scout A b17: rexx-lib pins each embedded .orx by sha256, and every probe in scout A's Appendix C ran past the library bootstrap
++loop_op_off_its_node	GUARD	-	compiler invariant: a DO/LOOP op names its own loop (census d-guard)
++missing_body	GUARD	-	every body selector names a directive index the parser fills (refusal-sites.tsv: an instance reading a generated accessor agrees)
++numeric_form_without_expression	GUARD	-	parser guarantee: NUMERIC FORM VALUE with no expression is 35.917 at parse time
++object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .string~inherit (98.985), SETMETHOD to an Array or String (97.2), setMethod, unsetMethod and setMethod OBJECT from methods of Directory, .local, .environment and a Directory subclass; all answer or raise, oracle-identical
++op_not_driven	GUARD	-	driver invariant: every op the compiler emits has a driver arm (census d-guard)
++operator_operand	GUARD	-	scout A b12: spec-op.txt, every dyadic and prefix operator on nine left operands, refused none
++parse_trigger_operand	GUARD	-	parser guarantee: a PARSE trigger that needs an operand carries one (census d-guard)
++receiver_class	DEVIATION	-	oracle-crashes.txt entry 33 and Deviation 28: a primitive's native method run on an object of another class crashes the oracle or answers an accident of memory; Task 4 probes b2_run_*_on_inst, Task 7 probes rc2, rc3
++register_not_logical	GUARD	-	compiler invariant: a branch reads a register holding a logical (census d-guard)
++scheduler_inconsistency	GUARD	-	scheduler invariant (refusal-sites.tsv: guarded_getter_waits_for_reply.rex agrees)
++select_op_off_its_node	GUARD	-	compiler invariant: a SELECT op names its own SELECT (census d-guard)
++setup_method	GUARD	-	scout A b15: b_define_class_method_setup, b_inherit_instance_methods are 97.1 on both engines
++signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNAL's form (census d-guard)
++stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
++store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
++unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probes rc4 (a Method copy refuses at COPY first); the rest are handles whose object is gone or kinds receiver_kind has no arm for
++unreadable_collection	GUARD	-	scout A b18: env_supplier; with no owner it is a directory holding an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
++unsatisfiable_wait	LIMIT	-	Deviation 20 (rulings P27, P65, P77)
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index e021d28d1..a96f372c4 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -81,172 +81,174 @@ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	o
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1813	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:548	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:577	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1197	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+-Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:441	off-send-surface	-	-	-
++Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:445	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:730	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:656	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:663	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:790	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:714	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:723	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1542	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:738	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:798	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:681	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:735	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:555	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:527	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:586	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:556	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1807	off-send-surface	-	-	-
+-Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:518	off-send-surface	-	-	-
++Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:545	off-send-surface	-	-	-
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1748	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:633	off-send-surface	-	-	-
+-Loud	expression	body	crates/rexx-exec/src/lib.rs:433	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:663	off-send-surface	-	-	-
++Loud	expression	body	crates/rexx-exec/src/lib.rs:437	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1855	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1753	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:774	off-send-surface	-	-	-
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:834	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1147	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+-Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:382	off-send-surface	-	-	-
++Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:384	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+-Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:467	off-send-surface	-	-	-
++Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:471	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:762	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:680	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:822	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:580	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:610	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:610	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:642	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:704	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1516	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1678	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1248	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1115	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1694	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:648	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:706	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1262	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1476	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1469	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+-Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:476	off-send-surface	-	-	-
++Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1327	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1337	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1275	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1453	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1421	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1402	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1350	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1279	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1300	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:536	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:565	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1523	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1180	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1619	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1553	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1564	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1573	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1083	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1733	off-send-surface	-	-	-
+ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1606	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:603	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:671	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:633	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:672	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:507	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:590	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:732	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:530	off-send-surface	-	-	-
++Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:620	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:640	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:698	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -263,59 +265,61 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:493	off-send-surface	-	-	-
+ Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+ Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+-Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:488	diverges	yes	a message send to	a. = 'dflt' then a.~length
++Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:495	diverges	yes	a message send to	a. = 'dflt' then a.~length
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+-Loud	redirection	body	crates/rexx-exec/src/lib.rs:498	off-send-surface	-	-	-
++Loud	redirection	body	crates/rexx-exec/src/lib.rs:519	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:688	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:748	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1785	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:754	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:814	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1213	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1219	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:696	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:622	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:713	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:652	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:773	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:690	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:782	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:568	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+-Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:450	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:746	off-send-surface	-	-	-
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:509	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:601	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:454	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:806	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index cd9e17bab..21d045180 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -2105,21 +2105,21 @@ impl Interp {
+         name: &[u8],
+         write: ObjectMethodWrite,
+     ) -> Result<(), Failure> {
+         let holder = match self.receiver_kind(receiver) {
+             Ok(Primitive::Instance { .. }) => receiver,
+             // Measured, oracle rc 0: a class method's `self~setMethod('m2',
+             // 'return 42')` then `.K~m2` answers `42`, and `unsetMethod`
+             // from one answers.
+             Ok(Primitive::Class(_)) => self.pool_owner(receiver)?,
+             Ok(_) => return Err(Loud::object_method("a receiver with no scope of its own").into()),
+-            Err(kind) => return Err(Loud::receiver_class(kind).into()),
++            Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
+         };
+         let Some(Object {
+             body: Body::Instance { own, .. },
+             ..
+         }) = self.heap.get_mut(holder)
+         else {
+             unreachable!("an instance receiver and a class's pool owner are Body::Instance")
+         };
+         match write {
+             ObjectMethodWrite::Remove => {
+@@ -3531,21 +3531,21 @@ impl Interp {
+     pub(crate) fn begin_send(
+         &mut self,
+         receiver: ObjRef,
+         name: &[u8],
+         start_scope: Option<ObjRef>,
+         args: &[Option<ObjRef>],
+         caller: Caller,
+     ) -> Result<Started<Option<ObjRef>>, Failure> {
+         let behaviour = match self.receiver_behaviour(receiver) {
+             Ok(behaviour) => behaviour,
+-            Err(kind) => return Err(Loud::receiver_class(kind).into()),
++            Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
+         };
+         match self.resolve_in(receiver, behaviour, name, start_scope, caller) {
+             Ok(resolution) => self.begin_invoke(resolution, Some(behaviour), receiver, name, args),
+             Err(miss) => self
+                 .unknown_or_nomethod(receiver, name, args, miss)
+                 .map(Started::Ran),
+         }
+     }
+ 
+     /// **What the documented search order has left after the class chain**:
+diff --git a/rust/crates/rexx-exec/src/dispatch/array.rs b/rust/crates/rexx-exec/src/dispatch/array.rs
+index 784235994..e3607d6b4 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array.rs
+@@ -659,21 +659,21 @@ pub(super) fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef
+     }
+     let caller = interp.caller();
+     let sent = interp.send_message(value, b"MAKEARRAY", None, &[], caller)?;
+     Ok(sent.unwrap_or(value))
+ }
+ 
+ /// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
+ pub(super) fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
+     match interp.receiver_class_id(value) {
+         Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
+-        None => Loud::receiver_class("a value this phase builds no class for").into(),
++        None => Loud::unknown_receiver("a value this phase builds no class for").into(),
+     }
+ }
+ 
+ /// `Array~makeString(format, separator)` and `Array~toString(format,
+ /// separator)`: the array's items as one string -- `ArrayClass::toString`
+ /// (`classes/ArrayClass.cpp:1856`), which `MakeString` and `ToString` both
+ /// name at the same arity (`memory/Setup.cpp:733`-`:734`), which is why one
+ /// function answers both rows.
+ pub(super) fn native_array_make_string(
+     interp: &mut Interp,
+diff --git a/rust/crates/rexx-exec/src/dispatch/class_protocol.rs b/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+index 8111f9b73..8e068919b 100644
+--- a/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+@@ -29,21 +29,21 @@ pub(super) fn native_base_class(
+     let class = class_receiver(interp, receiver)?;
+     Ok(Some(interp.classes().base_class(class)))
+ }
+ 
+ /// The class object a receiver whose messages resolve against a class's
+ /// **class** behaviour is, or the refusal for one that is not a class object.
+ pub(super) fn class_receiver(interp: &Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
+     match interp.receiver_kind(receiver) {
+         Ok(Primitive::Class(class)) => Ok(class),
+         Ok(_) => Err(Loud::receiver_class("a value that is not a class object").into()),
+-        Err(kind) => Err(Loud::receiver_class(kind).into()),
++        Err(kind) => Err(Loud::unknown_receiver(kind).into()),
+     }
+ }
+ 
+ /// The argument a method that requires a class object was given --
+ /// `classArgument(other, TheClassClass, "class")`
+ /// (`runtime/MethodArguments.hpp:727`), which refuses an omitted argument
+ /// with 88.901 and a value that is not a class object with 88.914.
+ pub(super) fn class_argument(interp: &Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+     let Some(Some(argument)) = args.first().copied() else {
+         return Err(Raised::missing_named_argument("class").into());
+@@ -409,21 +409,21 @@ pub(super) fn compile_routine_source(
+ }
+ 
+ /// [`Interp::scoped_method`], or the refusal for a `Method` object this
+ /// crate did not build.
+ pub(super) fn scoped_method(
+     interp: &mut Interp,
+     method: ObjRef,
+     scope: ObjRef,
+ ) -> Result<(ObjRef, rexx_core::MethodId), Failure> {
+     interp.scoped_method(method, scope).ok_or_else(|| {
+-        Failure::from(Loud::receiver_class(
++        Failure::from(Loud::unknown_receiver(
+             "a method object this crate did not build",
+         ))
+     })
+ }
+ 
+ /// The `method name` argument `~define`, `~delete` and `~method` share:
+ /// required, string-valued, and upcased before it reaches a dictionary --
+ /// `stringArgument(method_name, "method name")->upper()`
+ /// (`classes/ClassClass.cpp:831`-`:832`, `:961`, `:987`).
+ pub(super) fn method_name_argument(
+@@ -474,21 +474,21 @@ pub(super) fn native_define(
+         }
+         Some(source) => {
+             let source = if interp.receiver_kind(source) == Ok(Primitive::Method) {
+                 source
+             } else {
+                 compile_method_source(interp, &written, source, "method", SourceTaker::Method)?
+             };
+             interp
+                 .define_method_object(class, &name, source)
+                 .ok_or_else(|| {
+-                    Failure::from(Loud::receiver_class(
++                    Failure::from(Loud::unknown_receiver(
+                         "a method object this crate did not build",
+                     ))
+                 })?;
+         }
+     }
+     Ok(None)
+ }
+ 
+ /// `Class~defineMethods(methods)`: install a whole table of instance methods
+ /// in one mutation -- `RexxClass::defineMethodsRexx`
+@@ -528,21 +528,21 @@ pub(super) fn native_define_methods(
+         } else {
+             // The entry's own index is the method's name, as stored:
+             // `createMethodDictionary` builds the object under
+             // `supplier->index()->requestString()` and keys the dictionary
+             // under its upcase (`classes/ClassClass.cpp:1255`-`:1258`).
+             compile_method_source(interp, &name, value, "method source", SourceTaker::Method)?
+         };
+         entries.push((name, Some(value)));
+     }
+     interp.define_method_table(class, &entries).ok_or_else(|| {
+-        Failure::from(Loud::receiver_class(
++        Failure::from(Loud::unknown_receiver(
+             "a method object this crate did not build",
+         ))
+     })?;
+     Ok(None)
+ }
+ 
+ /// Whether `value` is a table `~defineMethods`, `~enhanced` and `~setMethod`
+ /// can walk: one of this crate's own `Body::Native` directories, or a
+ /// `Directory` or `StringTable` a program made, which since Phase 5h Task 4
+ /// is a collection with a hash store.
+@@ -831,21 +831,21 @@ fn install_enhancing_class_methods(
+             value
+         } else {
+             // Measured, oracle rc 163: a literal array `('return 1', ,
+             // 'nop')` in this table is `93.952 Method argument method source
+             // is an array and does not contain all string values.`
+             compile_method_source(interp, name, value, "method source", SourceTaker::Method)?
+         };
+         interp
+             .define_class_method_object(class, name, value)
+             .ok_or_else(|| {
+-                Failure::from(Loud::receiver_class(
++                Failure::from(Loud::unknown_receiver(
+                     "a method object this crate did not build",
+                 ))
+             })?;
+     }
+     Ok(())
+ }
+ 
+ /// `Class~delete(name)`: take one instance method back off the receiver --
+ /// `RexxClass::deleteMethod` (`classes/ClassClass.cpp:952`).
+ pub(super) fn native_delete(
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index c96eeb328..17fffb433 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -442,25 +442,25 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
+             let synthetic = interp.programs[program.0]
+                 .directives
+                 .get(directive)
+                 .is_some_and(|declared| declared.clause_span.is_empty());
+             if synthetic && let Some(object) = routine_object_running(interp, program, directive) {
+                 return Ok(object);
+             }
+             let name = routine_entry_name(interp, program, directive)?;
+             let table = interp
+                 .package_string_table(program, crate::environment::PackageTable::Routines)
+-                .ok_or_else(|| Loud::receiver_class("a routine whose package has no table"))?;
++                .ok_or_else(|| Loud::unknown_receiver("a routine whose package has no table"))?;
+             match interp.heap.get(table).map(|held| &held.body) {
+-                Some(Body::Native(native)) => native
+-                    .entry(&name)
+-                    .ok_or_else(|| Loud::receiver_class("a routine with no package entry").into()),
++                Some(Body::Native(native)) => native.entry(&name).ok_or_else(|| {
++                    Loud::unknown_receiver("a routine with no package entry").into()
++                }),
+                 _ => Err(Loud::receiver_class("a package table this crate did not build").into()),
+             }
+         }
+         _ => Ok(interp.program_routine_object(program)),
+     }
+ }
+ 
+ /// A live `Routine` object whose `~call` enters `directive` of `program`.
+ fn routine_object_running(interp: &Interp, program: ProgramId, directive: usize) -> Option<ObjRef> {
+     interp
+@@ -472,27 +472,26 @@ fn routine_object_running(interp: &Interp, program: ProgramId, directive: usize)
+         .map(|(object, _)| *object)
+ }
+ 
+ /// The `.ROUTINES` key one `::ROUTINE` directive is filed under: its declared
+ /// name, upcased, exactly as `package_table_entries` files it.
+ fn routine_entry_name(
+     interp: &Interp,
+     program: ProgramId,
+     directive: usize,
+ ) -> Result<Vec<u8>, Failure> {
+-    let source = interp
+-        .programs
+-        .get(program.0)
+-        .ok_or_else(|| Failure::from(Loud::receiver_class("a program this crate did not load")))?;
++    let source = interp.programs.get(program.0).ok_or_else(|| {
++        Failure::from(Loud::unknown_receiver("a program this crate did not load"))
++    })?;
+     match source.directives.get(directive).map(|found| &found.kind) {
+         Some(rexx_parse::DirectiveKind::Routine(routine)) => Ok(routine.name.to_ascii_uppercase()),
+-        _ => Err(Loud::receiver_class("a routine activation with no directive").into()),
++        _ => Err(Loud::unknown_receiver("a routine activation with no directive").into()),
+     }
+ }
+ 
+ /// `RexxContext::getStackFrames`: every frame of the stack of the context's
+ /// activity, innermost first.
+ fn context_stack_frames(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash.rs b/rust/crates/rexx-exec/src/dispatch/hash.rs
+index c784ba691..7007fdf28 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -176,21 +176,21 @@ pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
+         }
+     }
+     false
+ }
+ 
+ /// The refusal a receiver another task owns gets, which is the one it got
+ /// before this file existed: the class's own name and the method's.
+ fn not_this_task(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
+     match interp.receiver_class_id(receiver) {
+         Some(id) => Loud::native_method(method, &id).into(),
+-        None => Loud::receiver_class("a value that is not a hash collection").into(),
++        None => Loud::unknown_receiver("a value that is not a hash collection").into(),
+     }
+ }
+ 
+ /// The classes whose instances get a store, named rather than derived for
+ /// [`hash_scope`]'s reason.
+ const STORE_HOLDERS: &[&str] = &[
+     "Table",
+     "IdentityTable",
+     "Set",
+     "Bag",
+@@ -1590,23 +1590,23 @@ pub(crate) fn directory_put_method_value(
+     value: ObjRef,
+ ) -> Result<(), Failure> {
+     let index = interp.text(name);
+     interp.roots.activity_mut().push_temp(index);
+     insert_in(interp, directory, METHODS, index, Some(value))
+ }
+ 
+ /// What `DirectoryClass::get` finds for a name.
+ pub(crate) enum DirectoryEntry {
+     Found(ObjRef),
+-    /// An entry the oracle holds and this crate does not build, with the
+-    /// phase owing it.
+-    Owed(&'static str),
++    /// An entry the oracle holds and this crate does not build, with its
++    /// owner.
++    Owed(Option<&'static str>),
+     Absent,
+ }
+ 
+ /// A reading of one directory's pool entries: both halves and the unknown
+ /// method, valid while no store's pool entries have been written since.
+ #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+ pub(crate) struct StoreView {
+     generation: u64,
+     contents: Store,
+     methods: Option<Store>,
+@@ -1710,23 +1710,23 @@ fn text_slot(interp: &mut Interp, store: &Store, key: Key<'_>) -> Result<Option<
+             return Ok(None);
+         };
+         if interp.to_text(held).as_ref() == key.name {
+             return Ok(Some(slot));
+         }
+         slot = link_at(interp, store, slot)?;
+     }
+     Ok(None)
+ }
+ 
+-/// The phase owing an entry `table` still holds and this crate does not
+-/// build, or `None` when it holds none.
+-pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<&'static str> {
++/// The owner of an entry `table` still holds and this crate does not build,
++/// or `None` when it holds none.
++pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<Option<&'static str>> {
+     let store = read_store(interp, table, CONTENTS).ok()??;
+     let order = walk_in(interp, &store).ok()?;
+     order.into_iter().find_map(|slot| {
+         let item = slot_at(interp, store.items, slot).ok()??;
+         interp.owed_entry_owner(item)
+     })
+ }
+ 
+ /// The `UNKNOWN` entry read, over the store rather than the environment's map.
+ pub(super) fn store_entry_read(
+diff --git a/rust/crates/rexx-exec/src/dispatch/introspection.rs b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+index 752fc26ce..af890e473 100644
+--- a/rust/crates/rexx-exec/src/dispatch/introspection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+@@ -184,21 +184,21 @@ fn instance_methods(
+ #[derive(Copy, Clone)]
+ enum Selection {
+     Behaviour(rexx_classes::BehaviourHandle),
+     ClassSide(ObjRef),
+ }
+ 
+ /// The [`Selection`] for a receiver of any kind.
+ fn receiver_selection(interp: &mut Interp, receiver: ObjRef) -> Result<Selection, Failure> {
+     let behaviour = interp
+         .receiver_behaviour(receiver)
+-        .map_err(|kind| Failure::from(super::Loud::receiver_class(kind)))?;
++        .map_err(|kind| Failure::from(super::Loud::unknown_receiver(kind)))?;
+     Ok(match behaviour {
+         Behaviour::Instance { methods, .. } => Selection::Behaviour(methods),
+         Behaviour::ClassSide(class) => Selection::ClassSide(class),
+     })
+ }
+ 
+ /// One name's scope and method in `selection`.
+ fn lookup(interp: &mut Interp, selection: Selection, name: &str) -> Option<(ObjRef, MethodId)> {
+     match selection {
+         Selection::Behaviour(handle) => interp.classes().lookup_at(handle, name),
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 49c8aeb3b..8f3f9f993 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -846,26 +846,22 @@ impl Interp {
+                         rexx_api::layout::refusal_owner(entry),
+                     ),
+                 }
+                 .into();
+             }
+             // No phase owes a stale handle: a local reference protects its
+             // object only until the call that made it ends
+             // (`NativeActivation::createLocalReference`,
+             // `interpreter/execution/NativeActivation.cpp:1179-1185`), so an
+             // extension using one past that call is outside the API.
+-            Refused::StaleHandle | Refused::Raised => {
+-                return Loud {
+-                    message: crate::owned_message(&format!("{refused}"), None),
+-                }
+-                .into();
+-            }
++            Refused::StaleHandle => return Loud::stale_handle().into(),
++            Refused::Raised => return Loud::conversion_raised().into(),
+         };
+         if !packaged {
+             raised.delivery.lineless = false;
+         }
+         raised.into()
+     }
+ }
+ 
+ /// What a registered command handler left once its frame is off the stack:
+ /// the object it returned and the condition it raised, each rooted as a temp.
+diff --git a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+index 3c878b2d0..a47971d43 100644
+--- a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+@@ -59,41 +59,41 @@ pub(super) fn native_has_method(
+     // screens for it before any method runs, so this arm is unreachable
+     // today; answering `0` from it anyway would make this the one place in
+     // the module where a gap becomes an answer, and the answer would be one
+     // the oracle contradicts.
+     // **Which dictionary is asked follows the receiver**, measured on
+     // `::class K` plus `::method m class`: `.K~hasMethod('M')` is `1` and
+     // `.K~hasMethod('LENGTH')` is `0`, so a class object is asked about its
+     // class behaviour and not about `.Class`'s instances.
+     let behaviour = match interp.receiver_behaviour(receiver) {
+         Ok(behaviour) => behaviour,
+-        Err(kind) => return Err(Loud::receiver_class(kind).into()),
++        Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
+     };
+     let classes = &interp.object_model().classes;
+     let answers = match behaviour {
+         Behaviour::Instance { methods, .. } => classes.has_method_at(methods, &name),
+         Behaviour::ClassSide(class) => classes.class_has_method(class, &name),
+     };
+     Ok(Some(interp.counted(usize::from(answers))))
+ }
+ 
+ /// `Object~defaultName`: the receiver's class id with an article in front --
+ /// `RexxObject::defaultNameRexx` (`classes/ObjectClass.cpp:2868`) over
+ /// `RexxObject::defaultName` (`:1760`).
+ pub(super) fn native_default_name(
+     interp: &mut Interp,
+     cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let Some(class) = native_class(interp, cleared, receiver, &[])? else {
+-        return Err(Loud::receiver_class("a value with no class of its own").into());
++        return Err(Loud::unknown_receiver("a value with no class of its own").into());
+     };
+     // **An enhanced object takes no article**, returning before the `a`/`an`
+     // choice -- `RexxObject::defaultName` (`classes/ObjectClass.cpp:1763`).
+     // Measured, oracle rc 0: `.Object~subclass('K')~enhanced(t)~defaultName`
+     // is `enhanced K`.
+     let enhanced = is_enhanced_instance(interp, receiver);
+     let id = interp.classes().id_string(class);
+     let name = if enhanced {
+         format!("enhanced {id}")
+     } else {
+@@ -106,21 +106,21 @@ pub(super) fn native_default_name(
+ /// messages -- `RexxObject::classObject` (`classes/ObjectClass.cpp:1814`),
+ /// whose whole body is `behaviour->getOwningClass()`.
+ pub(super) fn native_class(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let kind = match interp.receiver_kind(receiver) {
+         Ok(kind) => kind,
+-        Err(gap) => return Err(Loud::receiver_class(gap).into()),
++        Err(gap) => return Err(Loud::unknown_receiver(gap).into()),
+     };
+     let model = interp.object_model();
+     Ok(Some(match kind {
+         Primitive::String | Primitive::SmallInt => model.string,
+         Primitive::Object => model.object,
+         Primitive::Array => model.array,
+         Primitive::Package => model.package,
+         Primitive::Method => model.method,
+         Primitive::Routine => model.routine,
+         Primitive::Directory => model.directory,
+@@ -145,21 +145,21 @@ pub(super) fn native_is_a(
+     cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let other = class_argument(interp, args)?;
+     // `native_class` answers a class object for every receiver kind, so the
+     // `None` a `NativeMethod` may now answer is not one of its outcomes -- and
+     // a refusal rather than an `expect`, this crate's rule for an internal
+     // inconsistency.
+     let Some(own) = native_class(interp, cleared, receiver, &[])? else {
+-        return Err(Loud::receiver_class("a value with no class of its own").into());
++        return Err(Loud::unknown_receiver("a value with no class of its own").into());
+     };
+     let answer = interp.classes().is_a(own, other);
+     Ok(Some(interp.counted(usize::from(answer))))
+ }
+ 
+ /// `Object~identityHash`.
+ pub(super) fn native_identity_hash(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+@@ -330,21 +330,21 @@ pub(super) fn native_string(
+ /// `RexxObject::defaultName` for one nothing has named
+ /// (`classes/ObjectClass.cpp:1696`, `:1760`).
+ pub(super) fn native_object_name(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let kind = interp
+         .receiver_kind(receiver)
+-        .map_err(|kind| Failure::from(Loud::receiver_class(kind)))?;
++        .map_err(|kind| Failure::from(Loud::unknown_receiver(kind)))?;
+     let name = match kind {
+         // `defaultName` from `.String`'s own id, which no object of this kind
+         // carries a stored name for -- there is nowhere on a string to put
+         // one, which is also why `native_object_name_set` refuses it.
+         Primitive::String | Primitive::SmallInt => b"a String".to_vec(),
+         // **A set name, or the answer to a `DEFAULTNAME` send.** The oracle
+         // reads the object's own `Object`-scope variable and, for anything
+         // that is not a base class, sends rather than deriving -- so a class
+         // overriding `defaultName` decides what an unnamed instance answers,
+         // and a name set afterwards wins over it. Both measured, oracle rc 0.
+@@ -412,46 +412,50 @@ pub(super) fn native_object_name_set(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let Some(Some(argument)) = args.first().copied() else {
+         return Err(Raised::missing_method_argument(1).into());
+     };
+     let argument = required_string_argument(interp, argument, 1)?;
+     let name = interp.to_text(argument).into_owned();
+     let kind = interp
+         .receiver_kind(receiver)
+-        .map_err(|kind| Failure::from(Loud::receiver_class(kind)))?;
++        .map_err(|kind| Failure::from(Loud::unknown_receiver(kind)))?;
+     match kind {
+         Primitive::Class(class) => {
+             let name = String::from_utf8_lossy(&name).into_owned();
+             interp.classes().set_object_name(class, &name);
+         }
+         Primitive::Instance { .. } => {
+             let Some(object) = interp.heap.get_mut(receiver) else {
+-                return Err(Loud::receiver_class("a value whose object is no longer live").into());
++                return Err(
++                    Loud::unknown_receiver("a value whose object is no longer live").into(),
++                );
+             };
+             match &mut object.body {
+                 Body::Instance { name: held, .. } => *held = Some(name.as_slice().into()),
+                 other => unreachable!("an instance receiver is Body::Instance, got {other:?}"),
+             }
+         }
+         Primitive::Package
+         | Primitive::Method
+         | Primitive::Routine
+         | Primitive::Directory
+         | Primitive::StringTable(_)
+         | Primitive::Context
+         | Primitive::StackFrame
+         | Primitive::RexxInfo
+         | Primitive::Message => {
+             let Some(object) = interp.heap.get_mut(receiver) else {
+-                return Err(Loud::receiver_class("a value whose object is no longer live").into());
++                return Err(
++                    Loud::unknown_receiver("a value whose object is no longer live").into(),
++                );
+             };
+             match &mut object.body {
+                 Body::Native(native) => native.set_rendered(&name),
+                 other => {
+                     unreachable!("each of these receivers is Body::Native, got {other:?}")
+                 }
+             }
+         }
+         Primitive::String
+         | Primitive::SmallInt
+@@ -536,21 +540,21 @@ fn set_method_scope(
+     args: &[Option<ObjRef>],
+ ) -> Result<ObjRef, Failure> {
+     let Some(Some(option)) = args.get(2).copied() else {
+         return Ok(ObjRef::NIL);
+     };
+     let option = required_string_named_argument(interp, option, "scope option")?;
+     let text = interp.to_text(option).to_vec();
+     if text.eq_ignore_ascii_case(b"OBJECT") {
+         return interp
+             .class_of_value(receiver)
+-            .ok_or_else(|| Loud::receiver_class("a value with no class of its own").into());
++            .ok_or_else(|| Loud::unknown_receiver("a value with no class of its own").into());
+     }
+     if text.eq_ignore_ascii_case(b"FLOAT") {
+         return Ok(ObjRef::NIL);
+     }
+     Err(Raised::not_one_of(3, b"\"FLOAT\" or \"OBJECT\"", &text).into())
+ }
+ 
+ /// `RexxObject::checkRestrictedMethod` (`classes/ObjectClass.cpp:697`), the
+ /// fourth access check (D66): `run`, `setMethod` and `unsetMethod` may be
+ /// sent only from a method of the receiving object itself or from a class
+@@ -608,28 +612,28 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
+     let behaviour = match interp.receiver_kind(receiver) {
+         Ok(Primitive::Instance { .. } | Primitive::Message) => rexx_core::BehaviourId::OBJECT,
+         Ok(Primitive::Array) => rexx_core::BehaviourId::ARRAY,
+         Ok(Primitive::Stem) => rexx_core::BehaviourId::STEM,
+         // A value carried in its handle is its own copy (D15).
+         Ok(Primitive::String | Primitive::SmallInt) if interp.heap.get(receiver).is_none() => {
+             return Ok(receiver);
+         }
+         Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
+         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
+-        Err(kind) => return Err(Loud::receiver_class(kind).into()),
++        Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
+     };
+     // The allocation below collects first, and while the cloned body is a
+     // local the collector does not walk, every value in it is reachable from
+     // the receiver and from nowhere else.
+     interp.roots.activity_mut().push_temp(receiver);
+     let Some(source) = interp.heap.get(receiver) else {
+-        return Err(Loud::receiver_class("a value whose object is no longer live").into());
++        return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
+     };
+     let mut body = source.body.clone();
+     // `CompoundVariableTable::copyFrom` copies each tail's own value, so an
+     // exposed tail comes over as one that holds none.
+     if let Body::Stem { exposed, .. } = &mut body {
+         *exposed = None;
+     }
+     let copy = interp.alloc_charged(behaviour, body);
+     interp.roots.activity_mut().push_temp(copy);
+     duplicate_collection_stores(interp, copy);
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 6ad588c1b..08810448b 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -247,23 +247,24 @@ fn minted_local_name(name: &[u8]) -> bool {
+             | b"TRACEOUTPUT"
+             | b"SYSCARGS"
+     )
+ }
+ 
+ /// `.environment` and `.local`, and the classes the other reflection names are
+ /// built from.
+ pub(crate) struct EnvironmentModel {
+     directories: env_seam::Directories,
+     /// The item standing in for an entry the oracle's directory holds and this
+-    /// crate does not build, one per phase owing such entries. A write
+-    /// replaces one in place, which keeps the oracle's order.
+-    owed: [(ObjRef, &'static str); 2],
++    /// crate does not build, one per owner. A write replaces one in place,
++    /// which keeps the oracle's order. The owner is `None` for the entries the
++    /// library bootstrap fills, which no program reads unfilled.
++    owed: [(ObjRef, Option<&'static str>); 2],
+     /// A reading of `.local`'s pool and of `.environment`'s, in that order,
+     /// from an earlier lookup; one that is not current is read again.
+     views: [Option<hash::StoreView>; 2],
+     /// `.methods`, `.routines` and `.resources` all answer one of these.
+     string_table: ObjRef,
+     /// What `.context` answers to.
+     context: ObjRef,
+ }
+ 
+ /// What one `::ANNOTATE` directive's pairs belong to, once the object that
+@@ -352,27 +353,31 @@ impl Interp {
+             .lookup("RexxContext")
+             .expect("RexxContext is a native class");
+         let object_class = self
+             .classes()
+             .lookup("Object")
+             .expect("Object is a native class");
+ 
+         // Every object below is rooted the instant it exists and before the
+         // next allocation, which can collect.
+         let frame = self.roots.activity_mut().push_frame();
+-        let mut owed = [(ObjRef::NIL, "Phase 5"), (ObjRef::NIL, "Phase 10")];
++        let mut owed = [(ObjRef::NIL, None), (ObjRef::NIL, Some("Phase 10"))];
+         for (at, (held, owner)) in owed.iter_mut().enumerate() {
++            let rendered = match owner {
++                Some(owner) => format!("an entry owed by {owner}"),
++                None => "an entry the library bootstrap fills".to_string(),
++            };
+             *held = self.alloc_with(
+                 BehaviourId::OBJECT,
+                 Body::Native(Box::new(NativeObject::new(
+                     object_class,
+-                    format!("an entry owed by {owner}").as_bytes(),
++                    rendered.as_bytes(),
+                 ))),
+             );
+             self.roots.add_global(&format!(".owed{at}"), *held);
+         }
+         let environment = self.interpreter_directory(
+             ENVIRONMENT_ROOT,
+             ENVIRONMENT_CAPACITY,
+             b"The Environment Directory",
+         );
+         let local = self.interpreter_directory(LOCAL_ROOT, 0, b"The Local Directory");
+@@ -476,23 +481,23 @@ impl Interp {
+         }
+         directory
+     }
+ 
+     /// One entry of a directory [`Interp::build_environment`] is filling.
+     fn put_interpreter_entry(&mut self, directory: ObjRef, name: &[u8], value: ObjRef) {
+         hash::directory_put(self, directory, name, value)
+             .expect("a string-keyed store accepts a string index");
+     }
+ 
+-    /// The phase owing `item`, when it stands in for an entry the oracle's
++    /// The owner of `item`, when it stands in for an entry the oracle's
+     /// directory holds and this crate does not build.
+-    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<&'static str> {
++    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<Option<&'static str>> {
+         let model = self.environment.as_ref()?;
+         model
+             .owed
+             .iter()
+             .find(|(held, _)| *held == item)
+             .map(|(_, owner)| *owner)
+     }
+ 
+     /// `.NAME`'s value: `PackageClass::findClass`'s order, then
+     /// `RexxActivation::rexxVariable`'s reflection names, then the name's own
+@@ -1169,21 +1174,21 @@ impl Interp {
+     }
+ 
+     /// Stores `item` under `index` on a `Directory` or a `StringTable`.
+     pub(crate) fn hash_entry_write(
+         &mut self,
+         receiver: ObjRef,
+         index: &[u8],
+         item: ObjRef,
+     ) -> Result<(), Failure> {
+         let Some(object) = self.heap.get_mut(receiver) else {
+-            return Err(Loud::receiver_class("a value whose object is no longer live").into());
++            return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
+         };
+         let Body::Native(native) = &mut object.body else {
+             return Err(Loud::receiver_class("a value that is not a hash collection").into());
+         };
+         native.set_entry(index, item);
+         Ok(())
+     }
+ 
+     /// Every key a string-keyed table holds, owned and in the table's own
+     /// order -- `NativeObject`'s map for a table this crate built on one, and
+@@ -1255,24 +1260,27 @@ impl Interp {
+         }
+     }
+ 
+     /// Which of the two directories this model built `directory` is, or `None`
+     /// for any other object.
+     fn directory_scope(&mut self, directory: ObjRef) -> Option<EnvScope> {
+         let model = self.environment_model();
+         env_seam::which(&model.directories, directory)
+     }
+ 
+-    /// The phase owing an entry `object` holds and this crate does not build,
+-    /// or `None` for a collection whose entries it fills. Only `.environment`
+-    /// and `.local` hold such entries.
+-    pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
++    /// The owner of an entry `object` holds and this crate does not build, or
++    /// `None` for a collection whose entries it fills. Only `.environment` and
++    /// `.local` hold such entries.
++    pub(crate) fn unbuilt_collection_owner(
++        &mut self,
++        object: ObjRef,
++    ) -> Option<Option<&'static str>> {
+         self.directory_scope(object)?;
+         hash::owed_table_owner(self, object)
+     }
+ 
+     /// The program whose directives and installed classes a `.NAME` resolves
+     /// against -- the running activation's own.
+     pub(crate) fn running_program(&self) -> Option<ProgramId> {
+         self.running_activation().map(|frame| frame.program_id)
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index 1094ac4c7..af8b0320d 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -194,21 +194,21 @@ impl Interp {
+         };
+         match found {
+             Some(rexx_classes::MethodSlot::Defined { scope, method }) => {
+                 let record = crate::ExecutableRecord {
+                     source: self.installed_executable_source(method),
+                     installed: Some(method),
+                     routine: None,
+                 };
+                 Ok(self.method_object(scope, name, scope, record))
+             }
+-            _ => Err(crate::Loud::receiver_class(
++            _ => Err(crate::Loud::unknown_receiver(
+                 "a method context whose scope no longer defines it",
+             )
+             .into()),
+         }
+     }
+ 
+     /// What `RexxContext~executable` answers from a method activation
+     /// running `body` for a send to `receiver` under `name` at `scope`: the
+     /// `Method` object the send ran, which is not always one a class
+     /// dictionary reaches by that name. Measured, oracle rc 0, each answers
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index a756aecef..6b6c4874c 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -369,23 +369,25 @@ impl StackSpan {
+ }
+ 
+ /// A construct this crate does not implement, on its way to becoming an exit
+ /// code and a line on stderr.
+ #[derive(Debug)]
+ struct Loud {
+     message: String,
+ }
+ 
+ impl Loud {
+-    /// An instruction this crate does not execute. `keyword()` is `None` for the four
+-    /// clause shapes no keyword introduces, and their names come from the
+-    /// shape rather than from a keyword table.
++    /// An instruction handed to a site its caller routes elsewhere -- an
++    /// internal inconsistency, never a program error: every variant executes,
++    /// and [`instruction_owner`] answers `None` for each. `keyword()` is `None`
++    /// for the clause shapes no keyword introduces, and their names come from
++    /// the shape rather than from a keyword table.
+     fn instruction(kind: &InstructionKind) -> Loud {
+         let name = match kind {
+             // The four clause shapes no keyword introduces.
+             InstructionKind::Assignment { .. } => "an assignment",
+             InstructionKind::Label { .. } => "a label",
+             InstructionKind::Message { .. } => "a message send",
+             InstructionKind::Command { .. } => "a command",
+             // Everything else is named by the keyword that introduced it.
+             InstructionKind::Address { .. }
+             | InstructionKind::Arg { .. }
+@@ -422,21 +424,23 @@ impl Loud {
+             | InstructionKind::Trace { .. }
+             | InstructionKind::Use { .. }
+             | InstructionKind::When { .. }
+             | InstructionKind::WhenCase { .. } => kind.keyword().unwrap_or("an instruction"),
+         };
+         Loud {
+             message: owned_message(name, instruction_owner(kind)),
+         }
+     }
+ 
+-    /// An expression form this crate does not evaluate.
++    /// An expression form handed to a site its caller routes elsewhere -- an
++    /// internal inconsistency, never a program error: every form evaluates, and
++    /// [`expr_owner`] answers `None` for each.
+     fn expression(kind: &ExprKind) -> Loud {
+         Loud {
+             message: owned_message(&form_name(kind), expr_owner(kind)),
+         }
+     }
+ 
+     /// A binary operator that no family of `Interp::apply_binary` claims -- an
+     /// internal inconsistency, never a program error.
+     fn binary_operator(op: Operator) -> Loud {
+         Loud {
+@@ -476,108 +480,134 @@ impl Loud {
+     fn named_semaphore(name: &[u8]) -> Loud {
+         let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
+         Loud {
+             message: owned_message(
+                 &format!("routine \"{shown}\" with a named semaphore"),
+                 Some("Phase 10"),
+             ),
+         }
+     }
+ 
+-    /// A message sent to a value whose class this phase does not build, so
+-    /// there is no behaviour to resolve the name against at all.
++    /// A native method whose receiver is not of the type the method reads,
++    /// reached by running a primitive's own row on an object of another class.
++    /// The oracle reads such a receiver through the wrong layout: it crashes
++    /// (`corpus/oracle-crashes.txt` entry 33) or answers an accident of memory
++    /// (Deviation 28).
+     fn receiver_class(kind: &str) -> Loud {
+         Loud {
+-            message: owned_message(&format!("a message send to {kind}"), Some("Phase 5")),
++            message: owned_message(&format!("a message send to {kind}"), None),
++        }
++    }
++
++    /// A receiver or argument no program holds: a handle whose object is gone,
++    /// a kind `receiver_kind` has no arm for, a `Method` object or routine
++    /// context this crate did not build. Probes that tried, each answering or
++    /// refusing elsewhere: scout A's `b11_ctx_exec_*` (a routine's
++    /// `.context~executable` by every route a routine is made) and weak
++    /// reference sends (`b_weakref_*`, `b2_run_hasmethod_on_weakref`), and a
++    /// `Method` copy passed to `define`, `setMethod` and `run`, which refuses
++    /// at `COPY` first.
++    fn unknown_receiver(kind: &str) -> Loud {
++        Loud {
++            message: owned_message(&format!("a message send to {kind}"), None),
+         }
+     }
+ 
+     /// An `ADDRESS ... WITH` redirection whose target this crate accepts in
+     /// the grammar and does not yet build. `owner` is the phase that owes it,
+     /// which is not always this one: a `RexxQueue` target waits on the queues
+     /// themselves.
+     fn redirection(what: &str, owner: &'static str) -> Loud {
+         Loud {
+             message: owned_message(&format!("an ADDRESS WITH {what} redirection"), Some(owner)),
+         }
+     }
+ 
+-    /// An operator whose **left** operand is an object this phase can build
+-    /// but send no message to: a class object, or one of the interpreter's
+-    /// own (`.environment`, `.local`, `.methods`, `.context`).
++    /// An operator whose **left** operand is an object that answers no
++    /// operator message. No program reaches it: scout A's `spec-op.txt`
++    /// probes, every dyadic and prefix operator on `.array`, `.local`,
++    /// `.context`, `.methods`, an instance, an array, a variable reference, a
++    /// stem holding an array and `.stdout`, refused none.
+     fn operator_operand(op: &str, kind: &str) -> Loud {
+         Loud {
+-            message: owned_message(
+-                &format!("the operator `{op}` applied to {kind}"),
+-                Some("Phase 5"),
+-            ),
++            message: owned_message(&format!("the operator `{op}` applied to {kind}"), None),
+         }
+     }
+ 
+     /// A `.NAME` the oracle's `.environment` or `.local` answers and this
+-    /// crate builds nothing for.
+-    fn environment_symbol(name: &[u8], owner: &'static str) -> Loud {
++    /// crate builds nothing for. With no owner it is an entry the library
++    /// bootstrap fills, or `.STREAM` before `StreamClasses.orx` installs, and
++    /// no program reaches it: each `.environment` and `.local` index read in
++    /// its own program (scout A's `envx_*`), from a started activity and a
++    /// REPLY continuation (`env_new_activity`, `env_reply_activity`), and a
++    /// stream as the first clause (`c2_stream_first_clause`,
++    /// `c2_address_with_stream_first`) refused only `STDQUE`, which is Phase
++    /// 10's.
++    fn environment_symbol(name: &[u8], owner: Option<&'static str>) -> Loud {
+         let shown = String::from_utf8_lossy(name);
+         Loud {
+-            message: owned_message(&format!("environment symbol \"{shown}\""), Some(owner)),
++            message: owned_message(&format!("environment symbol \"{shown}\""), owner),
+         }
+     }
+ 
+     /// A directory index the oracle's own `.environment` or `.local` has an
+-    /// entry for and this crate builds nothing for.
+-    fn environment_entry(index: &[u8], owner: &'static str) -> Loud {
++    /// entry for and this crate builds nothing for. With no owner it is an
++    /// entry the library bootstrap fills, which no program reaches, by the
++    /// probes [`Loud::environment_symbol`] names.
++    fn environment_entry(index: &[u8], owner: Option<&'static str>) -> Loud {
+         let shown = String::from_utf8_lossy(index);
+         Loud {
+-            message: owned_message(&format!("directory entry \"{shown}\""), Some(owner)),
++            message: owned_message(&format!("directory entry \"{shown}\""), owner),
+         }
+     }
+ 
+     /// A message that **resolved** to a primitive method this crate has no
+     /// code for.
+     fn native_method(name: &[u8], scope: &str) -> Loud {
+         let shown = String::from_utf8_lossy(name);
+         Loud {
+             message: owned_message(
+                 &format!("method \"{shown}\" of class \"{scope}\""),
+                 Some("Phase 9"),
+             ),
+         }
+     }
+ 
+     /// An array subscript list whose only element is an empty slot, which the
+-    /// oracle answers by dying.
++    /// oracle answers by dying (`corpus/oracle-crashes.txt` entry 6).
+     fn array_index_hole() -> Loud {
+         Loud {
+             message: owned_message("an array subscript that is an empty slot", None),
+         }
+     }
+ 
+-    /// A `receiver~NAME=` entry-method send that carried no value argument.
++    /// A `receiver~NAME=` entry-method send that carried no value argument,
++    /// which the oracle stores whatever its evaluation stack holds for
++    /// (Deviation 29).
+     fn entry_method_without_a_value(index: &[u8]) -> Loud {
+         let shown = String::from_utf8_lossy(index);
+         Loud {
+             message: owned_message(
+                 &format!("an entry-method assignment to \"{shown}\" with no value"),
+                 None,
+             ),
+         }
+     }
+ 
+     /// A collection this crate can name but cannot read: one whose entries
+     /// the oracle has and this crate answers per name through
+-    /// [`Loud::environment_entry`] instead of building.
+-    fn unreadable_collection(owner: &'static str) -> Loud {
++    /// [`Loud::environment_entry`] instead of building. With no owner it is
++    /// one holding an entry the library bootstrap fills, which no program
++    /// reaches (`env_supplier` refused only `STDQUE`, Phase 10's).
++    fn unreadable_collection(owner: Option<&'static str>) -> Loud {
+         Loud {
+-            message: owned_message(
+-                "a directory whose entries this crate does not fill",
+-                Some(owner),
+-            ),
++            message: owned_message("a directory whose entries this crate does not fill", owner),
+         }
+     }
+ 
+     /// A library procedure that resolved when it was bound and no longer
+     /// does -- an internal inconsistency, never a program error: a held
+     /// library is never released.
+     fn library_procedure_gone() -> Loud {
+         Loud {
+             message: "a library procedure that resolved when it was bound no longer resolves"
+                 .to_string(),
+@@ -600,50 +630,78 @@ impl Loud {
+     /// a `define` or `inherit` on `.Object` and `.String` (98.985), and a
+     /// borrowed `Object` `SETMETHOD` row a `Directory`'s own method sends to
+     /// that `Directory` (88.901, the entry method arrives with no arguments).
+     fn object_method(what: &str) -> Loud {
+         Loud {
+             message: owned_message(what, None),
+         }
+     }
+ 
+     /// One of the interpreter's own embedded `.orx` sources will not parse.
++    /// No program reaches it: `rexx-lib` pins each file's sha256, and every
++    /// probe runs past the library bootstrap.
+     fn library_source(name: &str, error: &str) -> Loud {
+         Loud {
+-            message: owned_message(
+-                &format!("{name} does not parse here: {error}"),
+-                Some("Phase 5"),
+-            ),
++            message: owned_message(&format!("{name} does not parse here: {error}"), None),
+         }
+     }
+ 
+     /// One of the two methods `Setup.cpp` puts on `.Class` for the image
+     /// build and `removeSetupMethods` deletes, given something it cannot
+-    /// use.
++    /// use. No program reaches it: `b_define_class_method_setup` and
++    /// `b_inherit_instance_methods` are 97.1 on both engines.
+     fn setup_method(what: &str) -> Loud {
+         Loud {
+-            message: owned_message(what, Some("Phase 5")),
++            message: owned_message(what, None),
+         }
+     }
+ 
+     /// `EXPOSE`, or a generated accessor, in a method whose receiver is
+     /// neither an instance nor a class object, the two kinds that hold
+     /// variable pools here. No program reaches it, by the routes
+     /// [`Loud::object_method`] names: a method body runs on such a receiver
+     /// only through a dictionary no program can add to.
+     fn expose_receiver() -> Loud {
+         Loud {
+             message: owned_message("EXPOSE on an object with no variable pool", None),
+         }
+     }
+ 
+-    /// A `PARSE` template trigger that needs an operand and has none.
++    /// `NUMERIC FORM VALUE` with no expression, which the parser rejects
++    /// (35.917) -- an internal inconsistency, never a program error.
++    fn numeric_form_without_expression() -> Loud {
++        Loud {
++            message: "NUMERIC FORM VALUE with no expression".to_string(),
++        }
++    }
++
++    /// A native conversion that raised, which both callers of
++    /// `Interp::refusal` answer before reaching it. No program reaches it:
++    /// `c_native_raised` (an argument whose `STRING` raises, passed to
++    /// `RxCalcSqrt`) raises the callee's condition on both engines.
++    fn conversion_raised() -> Loud {
++        Loud {
++            message: owned_message("the interpreter raised a condition while converting", None),
++        }
++    }
++
++    /// An extension's local handle used after the call that made it ended,
++    /// which the API does not define (the exclusions row "A LOCAL HANDLE KEPT
++    /// FROM AN EARLIER CALL IS STILL REFUSED").
++    fn stale_handle() -> Loud {
++        Loud {
++            message: owned_message("the handle is no longer held by this activation", None),
++        }
++    }
++
++    /// A `PARSE` template trigger that needs an operand and has none -- a
++    /// parser guarantee, never a program error.
+     fn parse_trigger_operand() -> Loud {
+         Loud {
+             message: "a PARSE template trigger carries no position operand".to_string(),
+         }
+     }
+ 
+     /// An activation's body selector named something that is not a routine
+     /// body -- an internal inconsistency, never a program error.
+     fn missing_body() -> Loud {
+         Loud {
+@@ -652,21 +710,23 @@ impl Loud {
+     }
+ 
+     /// A chunk's instruction map is shorter than the body it was compiled
+     /// from -- an internal inconsistency, never a program error.
+     fn chunk_map_too_short() -> Loud {
+         Loud {
+             message: "a compiled chunk has no op for an instruction of its own body".to_string(),
+         }
+     }
+ 
+-    /// A body the compiler refused.
++    /// A body the compiler refused: one needing more registers, slots or call
++    /// arguments than a `u16` indexes, or more ops than a `u32` does
++    /// (`docs/superpowers/plans/2026-08-09-phase-4e-ir.md`, `ChunkTooLarge`).
+     fn chunk_refused() -> Loud {
+         Loud {
+             message: "a body does not fit the compiled stream's index widths, and there is no \
+                       longer a second engine to run it"
+                 .to_string(),
+         }
+     }
+ 
+     /// The driver reached an op it has no arm for.
+     fn op_not_driven(what: &'static str) -> Loud {
+@@ -735,49 +795,49 @@ impl Loud {
+ 
+     /// A compiled `Const` op names a constant its own chunk does not carry --
+     /// an internal inconsistency, never a program error.
+     fn constant_out_of_range() -> Loud {
+         Loud {
+             message: "a compiled Const op names no constant of its own chunk".to_string(),
+         }
+     }
+ 
+     /// A wait that nothing left to run can end. The oracle blocks for ever
+-    /// (`corpus/oracle-crashes.txt`, the unsent-message block).
++    /// (`corpus/oracle-crashes.txt`, the unsent-message block; Deviation 20).
+     fn unsatisfiable_wait() -> Loud {
+         Loud {
+             message: owned_message("a wait that nothing left to run can end", None),
+         }
+     }
+ 
+     /// A state of the activity table nothing should produce: an internal
+     /// inconsistency, never a program error.
+     fn scheduler_inconsistency(what: &'static str) -> Loud {
+         Loud {
+             message: format!("the scheduler found {what}"),
+         }
+     }
+ 
+     /// A pinned wait for `what` that only an activity pinned below it can end
+-    /// (spec 2026-09-29 section 2.6, an inverted wait).
++    /// (spec 2026-09-29 section 2.6, an inverted wait; Deviation 14).
+     fn inverted_wait(what: &str) -> Loud {
+         Loud {
+             message: owned_message(
+                 &format!("a pinned wait for {what} that only an activity pinned below it can end"),
+                 None,
+             ),
+         }
+     }
+ 
+     /// A `REPLY` with Rust frames between its method body's driver and
+     /// itself, which cannot move to a new activity (spec 2026-09-29 section
+-    /// 5).
++    /// 5; Deviation 15).
+     fn immovable_reply() -> Loud {
+         Loud {
+             message: owned_message("a REPLY its method body runs on a nested Rust frame", None),
+         }
+     }
+ }
+ 
+ /// Names an expression form in **bounded** text, for a loud failure to quote.
+ fn form_name(kind: &ExprKind) -> String {
+     let name = match kind {
+diff --git a/rust/crates/rexx-exec/src/redirect.rs b/rust/crates/rexx-exec/src/redirect.rs
+index c504d397c..1312fc8a9 100644
+--- a/rust/crates/rexx-exec/src/redirect.rs
++++ b/rust/crates/rexx-exec/src/redirect.rs
+@@ -642,21 +642,21 @@ impl Interp {
+     /// written is absent afterwards.
+     fn open_named_stream(
+         &mut self,
+         qualified: &[u8],
+         mode: &[u8],
+         reading: bool,
+     ) -> Result<ObjRef, Failure> {
+         let Some(class) = self.rexx_package_class(b"STREAM") else {
+             // Only before `StreamClasses.orx` has installed, which is the
+             // library bootstrap's own step.
+-            return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
++            return Err(Loud::environment_symbol(b".STREAM", None).into());
+         };
+         let argument = self.text(qualified);
+         self.roots.activity_mut().push_temp(argument);
+         let caller = self.caller();
+         let object = self
+             .send_message(class, b"NEW", None, &[Some(argument)], caller)?
+             .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+         self.roots.activity_mut().push_temp(object);
+         let option = self.text(mode);
+         self.roots.activity_mut().push_temp(option);
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index 3ac45acdb..3f4fea833 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -3978,21 +3978,21 @@ impl Interp {
+         // own stream object is never checked.
+         if let Some(replacement) = self.check_stream_access(&qualified)? {
+             if let Some(table) = self.stream_table_mut() {
+                 table.insert(qualified.into_boxed_slice(), replacement);
+             }
+             return Ok(replacement);
+         }
+         let Some(class) = self.rexx_package_class(b"STREAM") else {
+             // Only before `StreamClasses.orx` has installed, which is the
+             // library bootstrap's own step.
+-            return Err(Loud::environment_symbol(b".STREAM", "Phase 5").into());
++            return Err(Loud::environment_symbol(b".STREAM", None).into());
+         };
+         let argument = self.text(name);
+         self.roots.activity_mut().push_temp(argument);
+         let caller = self.caller();
+         let built = pinned!(
+             self,
+             crate::pinning::PinKind::StreamWrapper,
+             self.send_message(class, b"NEW", None, &[Some(argument)], caller)
+         )?
+         .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+diff --git a/rust/crates/rexx-exec/src/run/settings.rs b/rust/crates/rexx-exec/src/run/settings.rs
+index cb5cc9cfc..2fab39692 100644
+--- a/rust/crates/rexx-exec/src/run/settings.rs
++++ b/rust/crates/rexx-exec/src/run/settings.rs
+@@ -348,24 +348,21 @@ impl Interp {
+             }
+             NumericSetting::FormValue => {
+                 // The parser only ever produces this with an expression: an
+                 // explicit `VALUE` with none is 35.917 at parse time
+                 // (`instruction.rs::numeric`), and the implicit spelling
+                 // (`NUMERIC FORM (expr)`) only takes this branch once a token
+                 // is already known to be there. Loud rather than a panic, on
+                 // this crate's own rule against aborting on a shape the
+                 // grammar rules out but the type does not.
+                 let Some(expression) = expression else {
+-                    return Err(Loud {
+-                        message: "NUMERIC FORM VALUE with no expression".to_string(),
+-                    }
+-                    .into());
++                    return Err(Loud::numeric_form_without_expression().into());
+                 };
+                 // `set_form_str`'s own doc comment: the runtime `VALUE` path
+                 // does no uppercasing, no trimming and no abbreviation, unlike
+                 // the keyword spellings above -- measured, `numeric form
+                 // value 'engineering'` is 25.11, not accepted
+                 // case-insensitively.
+                 let value = self.eval(code, expression)?;
+                 self.roots.activity_mut().push_temp(value);
+                 let text = self.to_text(value).to_vec();
+                 // `>K>   "FORM" => "engineering"` (F2, branch review): fires
+diff --git a/rust/crates/rexx-exec/tests/assertions.rs b/rust/crates/rexx-exec/tests/assertions.rs
+index a034959fe..c197240bc 100644
+--- a/rust/crates/rexx-exec/tests/assertions.rs
++++ b/rust/crates/rexx-exec/tests/assertions.rs
+@@ -175,116 +175,123 @@ struct ExemptRow {
+     /// "Rows this harness cannot run yet" for the two `test_string_range`
+     /// rows where the two answers differ.
+     unblocked_by: &'static str,
+ }
+ 
+ /// The committed exempt set: every row this harness measured as not
+ /// passing at the time this list was written, with the sub-phase that
+ /// would actually unblock it. Generated once from a real run and hand
+ /// -verified against the source (`Literals.testGroup`), not hand-guessed --
+ /// see `task-15b-report.md` for the method.
++///
++/// Every row is a `self~runDynamicSource(...)` of the ooTest framework, which
++/// builds `.routine~new(name, code, package)` (`OOREXXUNIT.CLS`). Run outside
++/// this harness inside a test-case class, the oracle answers each row and this
++/// crate refuses the package argument with `method "NEW" of class "Routine" is
++/// not implemented (Phase 9)`. In this harness the row also has no test case
++/// for `self`, so `self~hex` is 97.1 on both engines.
+ const EXEMPT: &[ExemptRow] = &[
+     ExemptRow {
+         group: "Literals",
+         method: "test_string_range",
+         occurrence: 1,
+         expr: "all",
+         expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_string_range",
+         occurrence: 2,
+         expr: "all",
+         expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_hexadecimal",
+         occurrence: 4,
+         expr: "\"AB\"",
+         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \"42\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_hexadecimal",
+         occurrence: 5,
+         expr: "\"AB\"",
+         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || \"42\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_hexadecimal",
+         occurrence: 6,
+         expr: "\"AB\"",
+         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || tab || \"42\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_hexadecimal",
+         occurrence: 7,
+         expr: "\"AB\"",
+         expected: "self~runDynamicSource(\"return\" self~hex(\"41 \" || tab || \"42\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_hexadecimal",
+         occurrence: 8,
+         expr: "\"AB\"",
+         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \" 42\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_binary",
+         occurrence: 4,
+         expr: "\"A\"",
+         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \"0001\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_binary",
+         occurrence: 5,
+         expr: "\"A\"",
+         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || \"0001\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_binary",
+         occurrence: 6,
+         expr: "\"A\"",
+         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || tab || \"0001\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_binary",
+         occurrence: 7,
+         expr: "\"A\"",
+         expected: "self~runDynamicSource(\"return\" self~bin(\"0100 \" || tab || \"0001\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+     ExemptRow {
+         group: "Literals",
+         method: "test_binary",
+         occurrence: 8,
+         expr: "\"A\"",
+         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \" 0001\"))",
+-        unblocked_by: "Phase 5",
++        unblocked_by: "Phase 9",
+     },
+ ];
+ 
+ /// `row`'s 1-based position among every row seen so far (including `row`
+ /// itself) sharing its `group` and `method`, in the source order `rows`
+ /// already carries. `counts` is the caller's running tally, keyed by
+ /// `(group, method)`, threaded through one call per row in a single pass
+ /// rather than recomputed by re-scanning `rows` every time -- there are
+ /// 4,259 of them, and this runs once per row.
+ fn occurrence_of(
+diff --git a/rust/crates/rexx-exec/tests/bif_assertions.rs b/rust/crates/rexx-exec/tests/bif_assertions.rs
+index 9d70f0fdf..bee93864d 100644
+--- a/rust/crates/rexx-exec/tests/bif_assertions.rs
++++ b/rust/crates/rexx-exec/tests/bif_assertions.rs
+@@ -601,21 +601,21 @@ fn build_report(
+     } else {
+         writeln!(
+             w,
+             "*** REPORT MODE. Set {GATE_ENV}=1 to fail on an unaccounted row. ***"
+         )
+         .unwrap();
+     }
+     writeln!(
+         w,
+         "THIS HEADLINE IS A MEASUREMENT, NOT A THRESHOLD -- base/bif covers the whole builtin \
+-         surface, including the names D4 excludes and everything Phase 5 and Phase 7 own."
++         surface, including the names D4 excludes and the builtins later phases own."
+     )
+     .unwrap();
+     writeln!(
+         w,
+         "{} of {} value rows passing, {} of {} raise rows passing, out of {calls} assertSame calls",
+         value.0, value.1, raise.0, raise.1
+     )
+     .unwrap();
+ 
+     writeln!(w, "per group (rows passing/total):").unwrap();
+@@ -770,21 +770,21 @@ fn a_raise_row_needs_the_sub_number_too() {
+     );
+ }
+ 
+ /// The exempt file's `unblocked_by` column is in the vocabulary
+ /// `phase-4-exclusions.txt` fixes for owner strings, or is one of the four
+ /// categories [`RowOutcome::attribution`] emits for a row that neither passes
+ /// nor names a construct. Nothing else, so a typo cannot quietly become a new
+ /// category that the set-equality test then happily matches against itself.
+ #[test]
+ fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
+-    const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7", "Phase 10"];
++    const PHASES: &[&str] = &["4b", "4c", "Phase 10"];
+ 
+     // The count is the whole point of this table, not decoration on it.
+     // `ANOMALY` moved 3 -> 0 on 2026-09-12: all three were `BEEP`, and Phase 7
+     // gave the `REXX` package's internal routines their bodies, so the rows
+     // pass and the category is empty rather than swept aside.
+     //
+     // `MISMATCH` moved 0 -> 2 on 2026-09-12, and neither remedy the panic
+     // below offers fits these two. They are `STREAM::test_relative_file_exists`
+     // and `...2`, which the stream builtins made reachable. Both assert
+     // against `.ooTest.dir`, and measured, that symbol does not resolve
+diff --git a/rust/crates/rexx-exec/tests/closed_phases.rs b/rust/crates/rexx-exec/tests/closed_phases.rs
+index 5eeeac86a..a88ed84fd 100644
+--- a/rust/crates/rexx-exec/tests/closed_phases.rs
++++ b/rust/crates/rexx-exec/tests/closed_phases.rs
+@@ -14,35 +14,39 @@
+ //! A loud refusal ends with the phase that owes the work, and a program can
+ //! read it. Naming a closed phase tells a reader to wait for something that
+ //! has already happened, so a phase's close-out has to move every refusal it
+ //! leaves behind to whoever actually owes it -- and the ones it does not move
+ //! are the ones nobody looked at.
+ //!
+ //! The scan is over the crate's own sources rather than over a table,
+ //! because an owner reaches a refusal three ways: as a row in a table, as a
+ //! literal argument to a `Loud` constructor, and as a match arm. Only the
+ //! first is enumerable. A literal is read whole, so an owner inside a longer
+-//! refusal text (`"... is not implemented (Phase 8)"`) is found too, and the
+-//! exclusions file's OWNER rows are held to the same rule.
++//! refusal text (`"... is not implemented (Phase 8)"`) is found too. The
++//! owner tables in `tests/` are scanned the same way, and the exclusions
++//! file's OWNER rows are held to the same rule.
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ 
+ /// The phases whose work is finished and which this assertion covers.
+-///
+-/// **`Phase 5` is deliberately absent, and its absence is a debt rather than
+-/// a licence.** That phase closed leaving refusals that name it -- a send to
+-/// an unimplemented `Directory` method is one -- and re-homing them was never
+-/// Phase 7's task. Adding it here would redden the tree for work this phase
+-/// did not take on; the honest statement is the narrow one, and the phase
+-/// that pays that debt widens this list.
+-const CLOSED: &[&str] = &["Phase 6", "Phase 7", "Phase 8"];
++const CLOSED: &[&str] = &["Phase 5", "Phase 6", "Phase 7", "Phase 8"];
++
++/// This crate's test files holding owner tables: the instruction and
++/// expression tags, the assertion harnesses' exempt rows and the phase
++/// vocabularies their attributions are checked against.
++const OWNER_TABLES: &[&str] = &[
++    "owners.rs",
++    "assertions.rs",
++    "bif_assertions.rs",
++    "keyword_assertions.rs",
++];
+ 
+ /// Every `.rs` file under one crate's `src/`, recursively.
+ fn source_files(crate_dir: &str) -> Vec<PathBuf> {
+     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+         let entries = fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
+         for entry in entries {
+             let path = entry.expect("a readable directory entry").path();
+             if path.is_dir() {
+                 walk(&path, out);
+             } else if path.extension().is_some_and(|e| e == "rs") {
+@@ -62,21 +66,21 @@ fn source_files(crate_dir: &str) -> Vec<PathBuf> {
+         "the scan found no sources under {}, so its result would be a vacuous \
+          zero rather than a measurement",
+         src.display()
+     );
+     out
+ }
+ 
+ /// The path as it reads in a failure: the crate-relative tail.
+ fn shown(path: &Path) -> String {
+     let text = path.display().to_string();
+-    match text.rfind("/src/") {
++    match text.rfind("/src/").or_else(|| text.rfind("/tests/")) {
+         Some(at) => text[at + 1..].to_string(),
+         None => text,
+     }
+ }
+ 
+ /// Every string literal in `text`, as its starting line and its contents,
+ /// comments skipped: a comment naming a phase is prose about the code, and
+ /// the rules elsewhere govern that.
+ fn literals(text: &str) -> Vec<(usize, String)> {
+     let chars: Vec<char> = text.chars().collect();
+@@ -189,22 +193,27 @@ fn names(text: &str, phase: &str) -> bool {
+             .chars()
+             .next()
+             .is_some_and(|c| c.is_ascii_digit())
+     })
+ }
+ 
+ /// Every string literal naming a closed phase, alone (`"Phase 8"`) or
+ /// inside a longer text (`"... not implemented (Phase 8)"`), which is what a
+ /// refusal is built from.
+ fn mentions(crate_dir: &str) -> Vec<String> {
++    mentions_in(source_files(crate_dir))
++}
++
++/// [`mentions`] over `paths`.
++fn mentions_in(paths: Vec<PathBuf>) -> Vec<String> {
+     let mut found = Vec::new();
+-    for path in source_files(crate_dir) {
++    for path in paths {
+         let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+         for (line, literal) in literals(&text) {
+             for phase in CLOSED {
+                 if names(&literal, phase) {
+                     found.push(format!("{}:{line}: {phase}", shown(&path)));
+                 }
+             }
+         }
+     }
+     found
+@@ -222,29 +231,49 @@ fn no_refusal_names_a_closed_phase() {
+     ] {
+         let named = mentions(crate_dir);
+         assert!(
+             named.is_empty(),
+             "these sites name a phase that has closed, so the refusal they build \
+              tells a reader to wait for work that is already done:\n{named:#?}"
+         );
+     }
+ }
+ 
++/// The same claim over the owner tables in this crate's `tests/`, which name
++/// the phase a row or a tag waits for.
++#[test]
++fn no_owner_table_names_a_closed_phase() {
++    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
++    let paths: Vec<PathBuf> = OWNER_TABLES.iter().map(|name| tests.join(name)).collect();
++    for path in &paths {
++        assert!(path.is_file(), "{} is not a file", path.display());
++    }
++    let named = mentions_in(paths);
++    assert!(
++        named.is_empty(),
++        "these owner-table entries name a phase that has closed:\n{named:#?}"
++    );
++}
++
+ /// The words a record uses when an owner's work has been done or moved.
+ const RESOLVED: &[&str] = &["DELIVERED", "CLOSED", "RE-HOMED", "FIXED", "RESOLVED"];
+ 
+ /// Every OWNER sentence of `text` naming a closed phase with no resolution
+ /// after it, in the rest of its paragraph or in the next one, before the
+ /// next OWNER: an exclusions record keeps its owner line as history and says
+ /// beside or below it what became of the work. `OWNER`, or `Owner:` in any
+ /// case, is an owner and the phase matches in any case; `NO OWNER` is not an
+-/// owner, and a sentence ends at its first full stop.
++/// owner. A sentence ends at a full stop followed by a space, and a
++/// resolution word resolves only where it opens a sentence, a paragraph or
++/// the clause after a colon, so a word about something else in the same
++/// paragraph (`EXTERNAL was DELIVERED`) resolves nothing; the phase is read
++/// from the owner sentence up to its resolution.
+ fn open_owners(text: &str) -> Vec<String> {
+     let mut paragraphs: Vec<String> = Vec::new();
+     let mut current = Vec::new();
+     for line in text.lines().chain([""]) {
+         if line.trim().is_empty() {
+             if !current.is_empty() {
+                 paragraphs.push(current.join(" "));
+                 current.clear();
+             }
+         } else {
+@@ -257,72 +286,95 @@ fn open_owners(text: &str) -> Vec<String> {
+         let window = format!("{paragraph} {next}");
+         let upper = window.to_ascii_uppercase();
+         let owners: Vec<usize> = upper
+             .match_indices("OWNER")
+             .map(|(at, _)| at)
+             .filter(|&at| {
+                 word_at(&upper, at, "OWNER")
+                     && (window[at..].starts_with("OWNER") || upper[at + 5..].starts_with(':'))
+             })
+             .collect();
++        let opens = paragraph.len() + 1;
+         for (index, &at) in owners.iter().enumerate() {
+             if at >= paragraph.len() || upper[..at].ends_with("NO ") {
+                 continue;
+             }
+             let end = window[at..]
+-                .find('.')
+-                .map_or(window.len(), |stop| at + stop);
++                .match_indices('.')
++                .map(|(stop, _)| at + stop)
++                .find(|&stop| {
++                    window[stop + 1..]
++                        .chars()
++                        .next()
++                        .is_none_or(char::is_whitespace)
++                })
++                .unwrap_or(window.len());
+             let sentence = &window[at..end];
+             let stop = owners
+                 .get(index + 1)
+                 .copied()
+                 .unwrap_or(window.len())
+                 .max(end);
+-            let rest = &window[end..stop];
+-            let resolved = RESOLVED.iter().any(|marker| {
+-                rest.match_indices(marker)
+-                    .any(|(offset, _)| resolves(&window, end + offset, marker))
+-            });
++            let resolution = RESOLVED
++                .iter()
++                .filter_map(|marker| {
++                    window[at..stop]
++                        .match_indices(marker)
++                        .map(|(offset, _)| at + offset)
++                        .find(|&found| resolves(&window, found, marker, opens))
++                })
++                .min();
++            if resolution.is_some() {
++                continue;
++            }
+             for phase in CLOSED {
+-                if names(&upper[at..end], &phase.to_ascii_uppercase()) && !resolved {
++                if names(&upper[at..end], &phase.to_ascii_uppercase()) {
+                     found.push(sentence.to_string());
+                 }
+             }
+         }
+     }
+     found
+ }
+ 
+ /// Whether `word` stands alone at `at` in `text`.
+ fn word_at(text: &str, at: usize, word: &str) -> bool {
+     let joined = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+     text[at..].starts_with(word)
+         && !text[..at].chars().next_back().is_some_and(joined)
+         && !text[at + word.len()..].chars().next().is_some_and(joined)
+ }
+ 
+ /// Whether the resolution `word` at `at` resolves: standing alone, not
+-/// quoted in backticks, and not after `not` or `not yet`.
+-fn resolves(text: &str, at: usize, word: &str) -> bool {
++/// quoted in backticks, not after `not` or `not yet`, and opening a sentence,
++/// the paragraph starting at `opens`, or the clause after a colon.
++fn resolves(text: &str, at: usize, word: &str, opens: usize) -> bool {
+     let quoted = |c: Option<char>| c == Some('`');
+     let mut before = text[..at]
+         .split_whitespace()
+         .rev()
+         .map(str::to_ascii_lowercase);
+     let negated = matches!(
+         (before.next().as_deref(), before.next().as_deref()),
+         (Some("not"), _) | (Some("yet"), Some("not"))
+     );
++    let leads = at == opens
++        || text[..at]
++            .trim_end()
++            .chars()
++            .next_back()
++            .is_none_or(|c| c == '.' || c == ':');
+     word_at(text, at, word)
+         && !quoted(text[..at].chars().next_back())
+         && !quoted(text[at + word.len()..].chars().next())
+         && !negated
++        && leads
+ }
+ 
+ /// The same claim over the exclusions file, whose rows name their owners.
+ #[test]
+ fn no_open_exclusions_row_names_a_closed_phase() {
+     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+         .join("../../../docs/superpowers/plans/phase-4-exclusions.txt");
+     let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+     let named = open_owners(&text);
+     assert!(
+@@ -348,33 +400,50 @@ fn the_row_check_tells_an_open_owner_from_a_resolved_one() {
+ }
+ 
+ /// An owner in any case is an owner, and a resolution word that is quoted
+ /// or negated resolves nothing.
+ #[test]
+ fn the_row_check_reads_owners_in_any_case_and_no_negated_resolution() {
+     let rows = "I. OWNER: Phase 8.\n\nsee the `CLOSED` list.\n\n\
+                 J. OWNER: Phase 8.\n\nNOT DELIVERED.\n\n\
+                 K. OWNER: Phase 8.\n\nnot yet DELIVERED.\n\n\
+                 L. Owner: Phase 8.\n\nM. OWNER: phase 8.\n\n\
+-                N. Owner: phase 8.\n\nDELIVERED.\n";
++                N. Owner: phase 8.\n\nDELIVERED.\n\nP. owner: Phase 8.\n";
+     assert_eq!(
+         open_owners(rows),
+         [
+             "OWNER: Phase 8",
+             "OWNER: Phase 8",
+             "OWNER: Phase 8",
+             "Owner: Phase 8",
+-            "OWNER: phase 8"
++            "OWNER: phase 8",
++            "owner: Phase 8"
+         ]
+     );
+ }
+ 
++/// A resolution word resolves the owner only where it opens a sentence, a
++/// paragraph or a clause after a colon: one about something else, later in
++/// the same paragraph, leaves the owner open.
++#[test]
++fn the_row_check_reads_only_a_resolution_that_opens_a_clause() {
++    let rows = "Q. OWNER: Phase 8 for the rest. EXTERNAL was DELIVERED by Phase 9.\n\n\
++                R. OWNER: Phase 8 for the rest. The other half is FIXED.\n\n\
++                S. OWNER: Phase 8 for the rest: DELIVERED by Phase 6.1 Task 5.\n\n\
++                T. OWNER: Phase 8 for the rest. DELIVERED by Phase 9.\n\n\
++                U. OWNER: Phase 8\n\nFIXED by a later task.\n";
++    assert_eq!(
++        open_owners(rows),
++        ["OWNER: Phase 8 for the rest", "OWNER: Phase 8 for the rest"]
++    );
++}
++
+ /// The negative control for the scan: a phase that is still open is found by
+ /// the same walk, so an empty result above means the sites are gone and not
+ /// that the scan is looking in the wrong place.
+ #[test]
+ fn the_scan_finds_an_open_phase_it_is_not_asked_about() {
+     let mut open = 0usize;
+     for path in source_files("rexx-exec") {
+         let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+         for line in text.lines() {
+             if line.trim_start().starts_with("//") {
+diff --git a/rust/crates/rexx-exec/tests/keyword_assertions.rs b/rust/crates/rexx-exec/tests/keyword_assertions.rs
+index d1efaf962..6f6ff4cae 100644
+--- a/rust/crates/rexx-exec/tests/keyword_assertions.rs
++++ b/rust/crates/rexx-exec/tests/keyword_assertions.rs
+@@ -657,21 +657,21 @@ fn an_assertion_inside_a_loop_is_checked_on_every_pass() {
+ }
+ 
+ /// The exempt file's `unblocked_by` column is in the vocabulary
+ /// `phase-4-exclusions.txt` fixes for owner strings, is an explicit
+ /// `defect:` tag, or is one of the two categories [`RunOutcome::attribution`]
+ /// emits for a body that neither passes nor names a construct. Nothing else,
+ /// so a typo cannot quietly become a new category that the set-equality test
+ /// then happily matches against itself.
+ #[test]
+ fn every_exempt_attribution_is_a_known_phase_or_a_declared_defect() {
+-    const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
++    const PHASES: &[&str] = &["4b", "4c"];
+     const DERIVED: &[&str] = &["RAISED", "NO-ASSERTION-EXECUTED"];
+     for (key, attribution) in committed_exempt() {
+         assert!(
+             PHASES.contains(&attribution.as_str())
+                 || DERIVED.contains(&attribution.as_str())
+                 || attribution.starts_with("defect:"),
+             "{key} is attributed to {attribution:?}, which is none of {PHASES:?}, {DERIVED:?} nor \
+              a `defect:` tag"
+         );
+     }
+diff --git a/rust/crates/rexx-exec/tests/owners.rs b/rust/crates/rexx-exec/tests/owners.rs
+index 5a1be4d0f..da3e056ee 100644
+--- a/rust/crates/rexx-exec/tests/owners.rs
++++ b/rust/crates/rexx-exec/tests/owners.rs
+@@ -301,24 +301,25 @@ impl Coverage {
+ }
+ 
+ /// The out-of-scope variant set this file's `tags!` tables are allowed to
+ /// produce, as a literal rather than "whatever the tables say" -- the same
+ /// device `phase-4-exclusions.txt` uses for the builtin set. Any edit to an
+ /// owner arm above that is not also made here is a test failure, which is
+ /// the point: relabelling a variant is a plan amendment, not a drive-by
+ /// `match` edit.
+ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[];
+ 
+-/// Every phase name the split table names, spelled exactly as it spells them.
++/// The phase names the split table names, spelled exactly as it spells them,
++/// less the phases that have closed, which `closed_phases.rs` polices.
+ /// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
+ /// split" table and its "assigned elsewhere" paragraph.
+-pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
++pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c"];
+ 
+ /// The phases a *builtin* exclusion may name. `phase-4-exclusions.txt` gives
+ /// its remaining rows to Phase 10 and to nothing else -- a builtin owned by a
+ /// Phase 4 sub-phase would not be excluded from Phase 4, and Phase 7, which
+ /// held the rest, has closed and delivered them.
+ pub(crate) const EXCLUSION_PHASES: &[&str] = &["Phase 10"];
+ 
+ /// Every excluded builtin names the phase that owes it, and that phase is one
+ /// the exclusions file uses. Without this the owner is whatever the refusal's
+ /// constructor happens to hardcode -- which is how every one of them said
+@@ -442,37 +443,20 @@ fn variant_counts_match_the_audited_split() {
+             .count(),
+         0
+     );
+     assert_eq!(
+         INSTRUCTION_TAGS
+             .iter()
+             .filter(|(_, o)| *o == Owner::Phase("4c"))
+             .count(),
+         0
+     );
+-    assert_eq!(
+-        INSTRUCTION_TAGS
+-            .iter()
+-            .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
+-            .count(),
+-        0
+-    );
+-    // Zero, and asserted rather than dropped: no instruction is owed to Phase
+-    // 7 now that `ADDRESS`'s redirections are dispatched, and this is what
+-    // keeps a later task from quietly re-owing one.
+-    assert_eq!(
+-        INSTRUCTION_TAGS
+-            .iter()
+-            .filter(|(_, o)| *o == Owner::Phase("Phase 7"))
+-            .count(),
+-        0
+-    );
+ 
+     assert_eq!(EXPR_TAGS.len(), 15);
+     assert_eq!(
+         EXPR_TAGS
+             .iter()
+             .filter(|(_, o)| *o == Owner::InScope)
+             .count(),
+         15
+     );
+     assert_eq!(
+diff --git a/rust/crates/rexx-exec/tests/refusal_dispositions.rs b/rust/crates/rexx-exec/tests/refusal_dispositions.rs
+new file mode 100644
+index 000000000..9fd359f7b
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/refusal_dispositions.rs
+@@ -0,0 +1,768 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! **Every refusal that names no phase has a committed disposition.**
++//!
++//! `closed_phases.rs` holds that no refusal names a phase that has closed. A
++//! refusal that names no phase at all escapes that check, so this file reads
++//! every `Loud` constructor in `src/` and requires each one that can build a
++//! message with no owner to have a row in `corpus/refusal-dispositions.tsv`,
++//! saying why no phase owes it: GUARD (no program reaches it; the record names
++//! the probes that tried), DEVIATION (matching the oracle is wrong; the record
++//! cites an `oracle-crashes.txt` entry or an exclusions row), LIMIT (a design
++//! limit; the record cites the deviation or the design document that licenses
++//! it), or REHOME (a remaining phase owes it, and the constructor names that
++//! phase).
++//!
++//! An owner is read from the constructor's own `owned_message` call: `None`, or
++//! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N; an
++//! `Option` a caller passes in is no owner, since a caller can pass `None`; and
++//! an owner computed by a function is no owner unless [`COMPUTED_OWNERS`] names
++//! the function and the test that holds it to `Some`. A `Loud` struct literal
++//! outside a constructor must carry an owner, so an ownerless refusal always
++//! has a constructor name to key a row on.
++
++use std::collections::BTreeMap;
++use std::fs;
++use std::path::{Path, PathBuf};
++
++/// Owners computed by a function that never answers `None` where the refusal
++/// is built, with the test that holds it so.
++const COMPUTED_OWNERS: &[(&str, &str)] = &[
++    (
++        "rexx_inventory::builtins::owner_of",
++        "`unresolved_call` is built for an excluded builtin, whose owner \
++         owners.rs's every_excluded_builtin_names_a_phase_that_owes_it requires, \
++         and for `BuiltinTarget::Gap`, which builtin/tests.rs asserts no name reaches",
++    ),
++    (
++        "rexx_api::layout::refusal_owner",
++        "an unfilled slot is a refusing stub, and rexx-api's \
++         a_populated_table_refuses_exactly_the_members_it_names holds the refusing \
++         stubs to the `REFUSING_MEMBERS` rows, each of which names its phase",
++    ),
++];
++
++/// The phases a REHOME row may name: the ones still open.
++const OPEN_PHASES: &[&str] = &["Phase 9", "Phase 10", "Phase 11"];
++
++/// The four dispositions.
++const KINDS: &[&str] = &["GUARD", "DEVIATION", "LIMIT", "REHOME"];
++
++/// Whose a constructor's refusal is.
++#[derive(Clone, Debug, PartialEq, Eq)]
++enum Owner {
++    /// It can build a message with no owner.
++    None,
++    /// It always names this phase.
++    Phase(String),
++    /// It names a phase its caller passes as a `&'static str`, or one a
++    /// [`COMPUTED_OWNERS`] function answers.
++    Given,
++}
++
++/// One committed row.
++#[derive(Debug)]
++struct Row {
++    constructor: String,
++    kind: String,
++    phase: String,
++    record: String,
++}
++
++fn rust_root() -> PathBuf {
++    Path::new(env!("CARGO_MANIFEST_DIR"))
++        .parent()
++        .and_then(Path::parent)
++        .expect("the crate sits two levels below `rust/`")
++        .to_path_buf()
++}
++
++fn table_path() -> PathBuf {
++    rust_root().join("corpus/refusal-dispositions.tsv")
++}
++
++fn parse_table(text: &str) -> Vec<Row> {
++    text.lines()
++        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
++        .map(|line| {
++            let fields: Vec<&str> = line.split('\t').collect();
++            assert_eq!(
++                fields.len(),
++                4,
++                "four tab-separated fields (constructor, kind, phase, record) in {line:?}"
++            );
++            Row {
++                constructor: fields[0].to_string(),
++                kind: fields[1].to_string(),
++                phase: fields[2].to_string(),
++                record: fields[3].to_string(),
++            }
++        })
++        .collect()
++}
++
++/// Every non-test `.rs` file under `src/`, with `#[cfg(test)] mod` blocks
++/// dropped and line comments stripped, as `(line number, code)` pairs.
++fn sources() -> Vec<(String, Vec<(usize, String)>)> {
++    let mut found = Vec::new();
++    let mut pending = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
++    while let Some(directory) = pending.pop() {
++        for entry in fs::read_dir(&directory).expect("a directory this crate compiles") {
++            let path = entry.expect("a readable directory entry").path();
++            let shown = path.display().to_string();
++            if path.is_dir() {
++                if !shown.ends_with("/tests") {
++                    pending.push(path);
++                }
++            } else if shown.ends_with(".rs")
++                && !shown.ends_with("/tests.rs")
++                && !shown.ends_with("_tests.rs")
++            {
++                let text = fs::read_to_string(&path).expect("a source file this crate compiles");
++                let relative = path
++                    .strip_prefix(rust_root())
++                    .expect("a path under rust/")
++                    .display()
++                    .to_string();
++                found.push((relative, code_lines(&text)));
++            }
++        }
++    }
++    found.sort();
++    found
++}
++
++fn code_lines(text: &str) -> Vec<(usize, String)> {
++    let lines: Vec<&str> = text.lines().collect();
++    let mut out = Vec::new();
++    let mut at = 0;
++    while at < lines.len() {
++        if lines[at].starts_with("#[cfg(test)]") {
++            let mut opener = at + 1;
++            while opener < lines.len() && lines[opener].starts_with("#[") {
++                opener += 1;
++            }
++            if opener < lines.len()
++                && lines[opener].starts_with("mod ")
++                && lines[opener].trim_end().ends_with('{')
++            {
++                let mut close = opener + 1;
++                while close < lines.len() && lines[close] != "}" {
++                    close += 1;
++                }
++                at = close + 1;
++                continue;
++            }
++        }
++        let code = match lines[at].find("//") {
++            Some(cut) => &lines[at][..cut],
++            None => lines[at],
++        };
++        out.push((at + 1, code.to_string()));
++        at += 1;
++    }
++    out
++}
++
++/// A `Loud` constructor: its name, where it is, its parameter list and its
++/// body.
++struct Constructor {
++    name: String,
++    site: String,
++    params: String,
++    body: String,
++}
++
++/// Every `fn NAME(...) -> Loud` in `files`, with the body up to the closing
++/// brace at the `fn` line's indent.
++fn constructors(files: &[(String, Vec<(usize, String)>)]) -> Vec<Constructor> {
++    let mut found = Vec::new();
++    for (path, lines) in files {
++        for (index, (number, code)) in lines.iter().enumerate() {
++            let Some(at) = code.find("fn ") else {
++                continue;
++            };
++            if at > 0 && code.as_bytes()[at - 1].is_ascii_alphanumeric() {
++                continue;
++            }
++            // The signature may wrap; join lines until the body opens.
++            let mut signature = code[at + 3..].to_string();
++            let mut end = index;
++            while !signature.contains('{') && !signature.contains(';') && end + 1 < lines.len() {
++                end += 1;
++                signature.push(' ');
++                signature.push_str(lines[end].1.trim());
++            }
++            let Some(open) = signature.find('(') else {
++                continue;
++            };
++            let name = signature[..open].trim().to_string();
++            if name.is_empty() || !name.bytes().all(|b| b == b'_' || b.is_ascii_alphanumeric()) {
++                continue;
++            }
++            let Some(close) = signature.rfind(')') else {
++                continue;
++            };
++            let returns = signature[close + 1..].trim_start();
++            let Some(returns) = returns.strip_prefix("->") else {
++                continue;
++            };
++            let returns = returns.trim_start();
++            if !returns.starts_with("Loud")
++                || returns
++                    .as_bytes()
++                    .get(4)
++                    .is_some_and(|b| *b == b'_' || b.is_ascii_alphanumeric())
++            {
++                continue;
++            }
++            let indent = code.len() - code.trim_start().len();
++            let closing = format!("{}}}", " ".repeat(indent));
++            let mut stop = end + 1;
++            while stop < lines.len() && lines[stop].1.trim_end() != closing {
++                stop += 1;
++            }
++            let body = lines[index..stop.min(lines.len())]
++                .iter()
++                .map(|(_, code)| code.as_str())
++                .collect::<Vec<_>>()
++                .join("\n");
++            found.push(Constructor {
++                name,
++                site: format!("{path}:{number}"),
++                params: signature[open + 1..close].to_string(),
++                body,
++            });
++        }
++    }
++    found
++}
++
++/// The top-level arguments of the call whose `(` is at `open` in `text`.
++fn arguments(text: &str, open: usize) -> Vec<String> {
++    let bytes = text.as_bytes();
++    let mut depth = 0usize;
++    let mut quoted = false;
++    let mut current = String::new();
++    let mut out = Vec::new();
++    let mut at = open;
++    while at < bytes.len() {
++        let byte = bytes[at];
++        if quoted {
++            current.push(byte as char);
++            if byte == b'\\' {
++                if let Some(next) = bytes.get(at + 1) {
++                    current.push(*next as char);
++                }
++                at += 2;
++                continue;
++            }
++            if byte == b'"' {
++                quoted = false;
++            }
++            at += 1;
++            continue;
++        }
++        match byte {
++            b'"' => {
++                quoted = true;
++                current.push('"');
++            }
++            b'(' | b'[' | b'{' => {
++                depth += 1;
++                if depth > 1 {
++                    current.push(byte as char);
++                }
++            }
++            b')' | b']' | b'}' => {
++                depth -= 1;
++                if depth == 0 {
++                    out.push(current.trim().to_string());
++                    return out;
++                }
++                current.push(byte as char);
++            }
++            b',' if depth == 1 => {
++                out.push(current.trim().to_string());
++                current.clear();
++            }
++            _ => current.push(byte as char),
++        }
++        at += 1;
++    }
++    out
++}
++
++/// The owner a refusal built in `body` carries, given the parameters `params`
++/// its owner may come from.
++fn owner_in(body: &str, params: &str) -> Owner {
++    let Some(at) = body.find("owned_message(") else {
++        return Owner::None;
++    };
++    let args = arguments(body, at + "owned_message".len());
++    let Some(mut owner) = args.get(1).cloned() else {
++        return Owner::None;
++    };
++    owner = owner.split_whitespace().collect::<Vec<_>>().join(" ");
++    // A local binding: read through it once.
++    if owner
++        .bytes()
++        .all(|b| b == b'_' || b.is_ascii_alphanumeric())
++    {
++        let binding = format!("let {owner} = ");
++        if let Some(found) = body.find(&binding) {
++            let rest = &body[found + binding.len()..];
++            let end = rest.find(';').unwrap_or(rest.len());
++            owner = rest[..end].split_whitespace().collect::<Vec<_>>().join(" ");
++        }
++    }
++    let param = |name: &str, kind: &str| {
++        let squeezed: String = params.split_whitespace().collect();
++        let wanted = format!("{name}:{kind}");
++        squeezed.match_indices(&wanted).any(|(at, _)| {
++            !squeezed[..at]
++                .bytes()
++                .next_back()
++                .is_some_and(|b| b == b'_' || b.is_ascii_alphanumeric())
++        })
++    };
++    if owner == "None" {
++        return Owner::None;
++    }
++    if let Some(inner) = owner
++        .strip_prefix("Some(")
++        .and_then(|s| s.strip_suffix(')'))
++    {
++        if let Some(literal) = inner.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
++            return Owner::Phase(literal.to_string());
++        }
++        if param(inner, "&'staticstr") {
++            return Owner::Given;
++        }
++    }
++    if COMPUTED_OWNERS
++        .iter()
++        .any(|(function, _)| owner.starts_with(&format!("{function}(")))
++    {
++        return Owner::Given;
++    }
++    // An `Option` parameter, a function this file does not vouch for, or
++    // anything else: a caller or a branch can make it `None`.
++    Owner::None
++}
++
++/// Every `Loud { ... }` struct literal outside a constructor, as its site and
++/// the owner it carries. The parameters an owner may come from are read from
++/// the nearest enclosing signature or closure header above the literal.
++fn literals(
++    files: &[(String, Vec<(usize, String)>)],
++    constructors: &[Constructor],
++) -> Vec<(String, Owner)> {
++    let mut found = Vec::new();
++    for (path, lines) in files {
++        for (index, (number, code)) in lines.iter().enumerate() {
++            let Some(at) = code.find("Loud {") else {
++                continue;
++            };
++            if code.contains("struct Loud")
++                || code.contains("impl Loud")
++                || code.contains("-> Loud")
++            {
++                continue;
++            }
++            if at > 0 && code.as_bytes()[at - 1].is_ascii_alphanumeric() {
++                continue;
++            }
++            let site = format!("{path}:{number}");
++            let inside = constructors.iter().any(|ctor| {
++                let Some((file, line)) = ctor.site.rsplit_once(':') else {
++                    return false;
++                };
++                let line: usize = line.parse().expect("a line number");
++                let length = ctor.body.lines().count();
++                file == path && (line..line + length).contains(number)
++            });
++            if inside {
++                continue;
++            }
++            let text = lines[index..(index + 12).min(lines.len())]
++                .iter()
++                .map(|(_, code)| code.as_str())
++                .collect::<Vec<_>>()
++                .join("\n");
++            let header = lines[index.saturating_sub(15)..index]
++                .iter()
++                .map(|(_, code)| code.as_str())
++                .collect::<Vec<_>>()
++                .join(",");
++            found.push((site, owner_in(&text, &header)));
++        }
++    }
++    found
++}
++
++/// Every constructor that can build a message with no owner, and every one
++/// that names a phase, by name.
++fn owners(constructors: &[Constructor]) -> BTreeMap<String, (Owner, String)> {
++    constructors
++        .iter()
++        .map(|ctor| {
++            (
++                ctor.name.clone(),
++                (owner_in(&ctor.body, &ctor.params), ctor.site.clone()),
++            )
++        })
++        .collect()
++}
++
++/// Whether `record` cites an `oracle-crashes.txt` entry that exists, and the
++/// citations that do not.
++fn crash_citations(record: &str, crashes: &str) -> (bool, Vec<String>) {
++    citations(record, "oracle-crashes.txt entry ", |number| {
++        crashes.contains(&format!("\n## {number}. "))
++    })
++}
++
++/// Whether `record` cites a numbered deviation that exists in the
++/// exclusions file's DEVIATIONS list, and the citations that do not.
++fn deviation_citations(record: &str, exclusions: &str) -> (bool, Vec<String>) {
++    citations(record, "Deviation ", |number| {
++        exclusions.lines().any(|line| {
++            line.trim_start()
++                .strip_prefix(&format!("{number}. "))
++                .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_uppercase() || c == '`'))
++        })
++    })
++}
++
++fn citations(record: &str, marker: &str, exists: impl Fn(&str) -> bool) -> (bool, Vec<String>) {
++    let mut any = false;
++    let mut missing = Vec::new();
++    for (at, _) in record.match_indices(marker) {
++        let number: String = record[at + marker.len()..]
++            .chars()
++            .take_while(|c| c.is_ascii_alphanumeric())
++            .collect();
++        if number.is_empty() || !number.starts_with(|c: char| c.is_ascii_digit()) {
++            continue;
++        }
++        any = true;
++        if !exists(&number) {
++            missing.push(format!("{marker}{number}"));
++        }
++    }
++    (any, missing)
++}
++
++/// The repository paths `record` names (`docs/...`, `rust/...`), each with
++/// any `:line` suffix dropped, that do not exist.
++fn missing_paths(record: &str, repository: &Path) -> (bool, Vec<String>) {
++    let mut any = false;
++    let mut missing = Vec::new();
++    for word in record.split(|c: char| c.is_whitespace() || c == ',' || c == ';' || c == '`') {
++        if !(word.starts_with("docs/") || word.starts_with("rust/")) {
++            continue;
++        }
++        let path = word
++            .split(':')
++            .next()
++            .unwrap_or(word)
++            .trim_end_matches(['.', ')']);
++        any = true;
++        if !repository.join(path).exists() {
++            missing.push(path.to_string());
++        }
++    }
++    (any, missing)
++}
++
++/// Everything wrong with `rows` against the constructors `owners` derives
++/// from the source and the ownerless `literals` outside a constructor.
++fn problems(
++    owners: &BTreeMap<String, (Owner, String)>,
++    literals: &[(String, Owner)],
++    rows: &[Row],
++    documents: &Documents,
++) -> Vec<String> {
++    let mut found = Vec::new();
++    for (site, owner) in literals {
++        if *owner == Owner::None {
++            found.push(format!(
++                "{site}: a `Loud` struct literal with no owner; make it a constructor so it can \
++                 carry a disposition row"
++            ));
++        }
++    }
++    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
++    for row in rows {
++        *seen.entry(row.constructor.as_str()).or_default() += 1;
++        if !KINDS.contains(&row.kind.as_str()) {
++            found.push(format!(
++                "{}: kind {:?} is not one of {KINDS:?}",
++                row.constructor, row.kind
++            ));
++            continue;
++        }
++        let Some((owner, site)) = owners.get(&row.constructor) else {
++            found.push(format!(
++                "{}: a row with no constructor in src/",
++                row.constructor
++            ));
++            continue;
++        };
++        if row.record.trim().is_empty() || row.record == "-" {
++            found.push(format!("{}: a row with no record", row.constructor));
++        }
++        if row.kind == "REHOME" {
++            if !OPEN_PHASES.contains(&row.phase.as_str()) {
++                found.push(format!(
++                    "{}: REHOME to {:?}, which is not an open phase {OPEN_PHASES:?}",
++                    row.constructor, row.phase
++                ));
++            }
++            if *owner != Owner::Phase(row.phase.clone()) {
++                found.push(format!(
++                    "{}: REHOME to {}, but the constructor at {site} carries {owner:?}",
++                    row.constructor, row.phase
++                ));
++            }
++            let quoted: Vec<&str> = row.record.split('"').skip(1).step_by(2).collect();
++            if quoted.is_empty() || quoted.iter().any(|q| !documents.roadmap.contains(q)) {
++                found.push(format!(
++                    "{}: a REHOME record quotes the roadmap row naming the work, and every quote \
++                     is found in it",
++                    row.constructor
++                ));
++            }
++            continue;
++        }
++        if row.phase != "-" {
++            found.push(format!(
++                "{}: phase {:?} on a {} row; only REHOME names a phase",
++                row.constructor, row.phase, row.kind
++            ));
++        }
++        if *owner != Owner::None {
++            found.push(format!(
++                "{}: a {} row for a constructor at {site} that carries {owner:?}",
++                row.constructor, row.kind
++            ));
++        }
++        let (crash, bad_crash) = crash_citations(&row.record, &documents.crashes);
++        let (deviation, bad_deviation) = deviation_citations(&row.record, &documents.exclusions);
++        let (path, bad_path) = missing_paths(&row.record, &documents.repository);
++        for bad in bad_crash.iter().chain(&bad_deviation).chain(&bad_path) {
++            found.push(format!(
++                "{}: cites {bad}, which does not exist",
++                row.constructor
++            ));
++        }
++        let quoted_row = row
++            .record
++            .split('"')
++            .skip(1)
++            .step_by(2)
++            .any(|q| q.len() >= 12 && documents.exclusions.contains(q));
++        match row.kind.as_str() {
++            "DEVIATION" if !(crash || deviation || quoted_row) => found.push(format!(
++                "{}: a DEVIATION cites an oracle-crashes.txt entry, a Deviation, or quotes an \
++                 exclusions row",
++                row.constructor
++            )),
++            "LIMIT" if !(deviation || path) => found.push(format!(
++                "{}: a LIMIT cites the Deviation or the design document that licenses it",
++                row.constructor
++            )),
++            _ => {}
++        }
++    }
++    for (name, count) in seen {
++        if count > 1 {
++            found.push(format!("{name}: {count} rows"));
++        }
++    }
++    for (name, (owner, site)) in owners {
++        if *owner == Owner::None && !rows.iter().any(|row| row.constructor == *name) {
++            found.push(format!("{name} ({site}): no owner and no disposition row"));
++        }
++    }
++    found
++}
++
++/// The files a record's citations are checked against.
++struct Documents {
++    crashes: String,
++    exclusions: String,
++    roadmap: String,
++    repository: PathBuf,
++}
++
++fn documents() -> Documents {
++    let repository = rust_root()
++        .parent()
++        .expect("rust/ sits in the repository")
++        .to_path_buf();
++    let read = |path: &str| {
++        fs::read_to_string(repository.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
++    };
++    Documents {
++        crashes: read("rust/corpus/oracle-crashes.txt"),
++        exclusions: read("docs/superpowers/plans/phase-4-exclusions.txt"),
++        roadmap: read("docs/superpowers/plans/2026-07-27-rust-rewrite.md"),
++        repository,
++    }
++}
++
++/// The whole claim.
++#[test]
++fn every_ownerless_refusal_has_a_disposition() {
++    let files = sources();
++    let constructors = constructors(&files);
++    let literals = literals(&files, &constructors);
++    let owners = owners(&constructors);
++    let text = fs::read_to_string(table_path()).unwrap_or_default();
++    let found = problems(&owners, &literals, &parse_table(&text), &documents());
++    assert!(
++        found.is_empty(),
++        "corpus/refusal-dispositions.tsv and src/ disagree:\n{}",
++        found.join("\n")
++    );
++}
++
++/// The scanner finds the constructors it has to, so an empty problem list is
++/// a measurement and not a scan of nothing.
++#[test]
++fn the_scanner_reads_each_owner_form() {
++    let constructors = constructors(&sources());
++    let owners = owners(&constructors);
++    assert_eq!(
++        owners.get("native_method").map(|(owner, _)| owner),
++        Some(&Owner::Phase("Phase 9".to_string()))
++    );
++    assert_eq!(
++        owners.get("named_semaphore").map(|(owner, _)| owner),
++        Some(&Owner::Phase("Phase 10".to_string()))
++    );
++    assert_eq!(
++        owners.get("internal_routine").map(|(owner, _)| owner),
++        Some(&Owner::Given)
++    );
++    assert_eq!(
++        owners.get("deferred_send").map(|(owner, _)| owner),
++        Some(&Owner::Given),
++        "a constructor outside lib.rs is found"
++    );
++    assert_eq!(
++        owners.get("unresolved_call").map(|(owner, _)| owner),
++        Some(&Owner::Given),
++        "an owner read through a local binding"
++    );
++    assert_eq!(
++        owners.get("binary_operator").map(|(owner, _)| owner),
++        Some(&Owner::None),
++        "a message with no owned_message has no owner"
++    );
++    assert_eq!(
++        owners.get("instruction").map(|(owner, _)| owner),
++        Some(&Owner::None),
++        "an owner function this file does not vouch for"
++    );
++}
++
++/// Each way a table can be wrong is found: an ownerless constructor with no
++/// row, a row with no constructor, a REHOME whose constructor carries another
++/// phase, a disposition row for a constructor that names a phase, an ownerless
++/// struct literal, and a citation that does not resolve.
++#[test]
++fn the_check_finds_each_kind_of_disagreement() {
++    let source = "\
++impl Loud {
++    fn plain() -> Loud {
++        Loud {
++            message: \"x\".to_string(),
++        }
++    }
++    fn none(what: &str) -> Loud {
++        Loud {
++            message: owned_message(what, None),
++        }
++    }
++    fn nine() -> Loud {
++        Loud {
++            message: owned_message(\"y\", Some(\"Phase 9\")),
++        }
++    }
++    fn given(owner: &'static str) -> Loud {
++        Loud {
++            message: owned_message(\"z\", Some(owner)),
++        }
++    }
++    fn optional(owner: Option<&'static str>) -> Loud {
++        Loud {
++            message: owned_message(\"w\", owner),
++        }
++    }
++}
++fn elsewhere() -> Result<(), Failure> {
++    Err(Loud {
++        message: owned_message(\"v\", None),
++    }
++    .into())
++}
++";
++    let files = vec![("src/lib.rs".to_string(), code_lines(source))];
++    let constructors = constructors(&files);
++    let owners = owners(&constructors);
++    let literals = literals(&files, &constructors);
++    assert_eq!(owners.len(), 5);
++    assert_eq!(owners["optional"].0, Owner::None);
++    assert_eq!(owners["given"].0, Owner::Given);
++    let documents = Documents {
++        crashes: "\n## 6. An array\n".to_string(),
++        exclusions: " 20. A WAIT NOTHING LEFT TO RUN CAN END IS REFUSED\n".to_string(),
++        roadmap: "the row's text".to_string(),
++        repository: rust_root().parent().expect("the repository").to_path_buf(),
++    };
++    let table = "\
++plain\tGUARD\t-\tprobe p1
++none\tDEVIATION\t-\toracle-crashes.txt entry 6
++optional\tLIMIT\t-\tDeviation 20
++";
++    assert!(
++        problems(&owners, &[], &parse_table(table), &documents).is_empty(),
++        "{:?}",
++        problems(&owners, &[], &parse_table(table), &documents)
++    );
++    let wrong = "\
++plain\tGUARD\t-\tprobe p1
++none\tDEVIATION\t-\toracle-crashes.txt entry 7
++gone\tGUARD\t-\tprobe p2
++nine\tREHOME\tPhase 10\t\"the row's text\"
++given\tGUARD\t-\tprobe p3
++";
++    let found = problems(&owners, &literals, &parse_table(wrong), &documents);
++    let expect = [
++        "src/lib.rs:29: a `Loud` struct literal",
++        "none: cites oracle-crashes.txt entry 7",
++        "gone: a row with no constructor",
++        "nine: REHOME to Phase 10, but the constructor",
++        "given: a GUARD row for a constructor",
++        "optional (src/lib.rs:22): no owner and no disposition row",
++    ];
++    for needle in expect {
++        assert!(
++            found.iter().any(|problem| problem.starts_with(needle)),
++            "{needle:?} not among {found:#?}"
++        );
++    }
++    assert_eq!(found.len(), expect.len(), "{found:#?}");
++}

@@ -144,3 +144,5 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 12 queue add: typed untrapped RAISE USER then more typed lines (oracle stops running typed lines and tracing); method/function +++ header class; rexxcps +0.09% between Task 6 rounds 1 and 2 unexplained (in budget).
 - Task 6 last touch 072e536ac: x8 witness debug_handler_exit_at_iterate (fails without close_flat_top on a debug build), debug banner per activation unless >I> announced it (controller checked RexxActivation.cpp:4007-4029 and :4305: no isTopLevelCall guard; the deleted comment was false), Deviation 27 heading. Workspace and corpus gates pass.
 - Task 6: complete (f062f791e..072e536ac).
+- Task 7 dispatched: t7-impl (opus), BASE 6860d4f80.
+- Task 7 implementer DONE_WITH_CONCERNS: 3b9a80364, 4de3699d9. refusal_dispositions failed first (25 constructors, 2 literals), passes; closed_phases polices Phase 5; Phase 7 also pruned from vocabularies. receiver_class split into DEVIATION and unknown_receiver GUARD. Literals rows owner Phase 9. No REHOME rows. Review t7-review dispatched.
