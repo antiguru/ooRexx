@@ -498,7 +498,8 @@ fn reexecuting_a_leave_raises_outside_its_loop() {
         crate::Invocation::none().with_input(input),
     );
     let stderr = String::from_utf8_lossy(&outcome.stderr);
-    assert_eq!(stderr.matches("*-*   leave").count(), 2, "{stderr}");
+    // Its echo, the echo of the run `=` asked for, and the error report's.
+    assert_eq!(stderr.matches("*-*   leave").count(), 3, "{stderr}");
     assert!(stderr.contains("Error 28.1:"), "{stderr}");
     assert_eq!(outcome.exit_code, 228, "{stderr}");
     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "");
