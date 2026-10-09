@@ -175,3 +175,80 @@ no-branch build with it there measured emptyloop +0.6442% (`cg3`), without it +0
    debug programs now collect under the stress mode.
 6. The incidental fixes (prompt inheritance, banner before a retrace) are single-threaded; their
    crate tests assert the output, not switch points.
+
+## Fix round 1
+
+Commits `ca3a558b6` (fixes, witnesses, records) and `ac6cb27f6` (the LEAVE crate test counts the
+error report's echo). Review: `task-6-review.md`. Probes and runs under `/tmp/claude-1000/p61/t6/fr1/`.
+
+- **C1.** `run_debug_fragment` saves and restores `clause_state` around the typed line
+  (`run/interpret.rs:371`, `:398`), so a condition the paused clause queued keeps its SIGL and
+  handler indent. Every pause now precedes the boundary: the hot exit takes the cold exit under
+  interactive debug (`ir/drive.rs:1886`, `pending_traps.is_empty() && !$debugging`), so the hot
+  exit no longer calls the pause itself. The `|| self.debug_pause()` exemption in `enter_clause`
+  is gone; the tripwire now keys a waiting condition by activation **and fragment depth**
+  (`clause.rs:274`), as `deliver_pending_traps` keys a delivery. Without the depth key it fires on
+  every typed line at a pre-boundary pause, the paused clause's condition being in the enclosing
+  queue. `debug_pause_before_trap` is green on the debug gate with it.
+- **I1.** `pauses_after` answers false for `Call::Trap` (`run/interpret.rs:485`).
+- **I2, I5.** A `LEAVE` flow no longer pauses at the cold exit (`run/interpret.rs:224`). It pauses
+  in `flat_loop_step_escaped` once the loop has taken it, as ITERATE does (`ir/drive.rs:2472`). So a
+  LEAVE that reaches no loop raises 28.1/28.3 without a pause, and `=` runs the LEAVE again outside
+  the loop, raising 28.1 at rc 228. The re-run echo's indent differs from the oracle's (the KNOWN
+  GAP below), so I5's witness is the crate test `reexecuting_a_leave_raises_outside_its_loop`
+  (`src/tests.rs:492`). It fails on `2bde37127`'s code (`after 1`, rc 0).
+- **I3.**
+  - `raise_notready` queues a CALL ON condition against `trap_frame()`'s activation
+    (`run/condition.rs:130`). Under the monitor's non-continuing `FORWARD` the running activation is
+    a forwarding phantom, and delivery there looked for the label in the monitor's code (43.1).
+  - `debug_pause_in_region` delivers what the pause queued after a DO/LOOP header, which owes no
+    boundary of its own (`ir/drive.rs:2449`). The oracle runs the handler before the body's first
+    clause.
+- **I4.** Fixed by C1's restore (`current_value_indent`).
+
+Witnesses (`phase-6-1.txt`, `# Task 6 fix round 1`). Each was compared with `run.sh` against the
+oracle on the `2bde37127`-equivalent release binary (`bin-head4`) and on the fix build. Every one
+differs at the first and agrees at the second:
+
+| witness | review probe | old vs oracle |
+|---|---|---|
+| `debug_pause_sigl_notready` | tv1 | stdout |
+| `debug_pause_sigl_error` | tw1 (typed line made visible) | stdout, stderr |
+| `debug_pause_call_on` | con | stderr |
+| `debug_reexecute_call_on` | e7 | stdout, stderr |
+| `debug_leave_no_loop` | lv1 | stderr |
+| `debug_leave_unknown_label` | lv3 | stderr |
+| `debug_input_eof_call_on` | di4 | all three |
+| `debug_input_eof_call_on_loop` | eo3 | all three |
+| `debug_input_stdin_eof_call_on` | eo4 | stdout, stderr |
+| `debug_interpret_indent` | im | stderr |
+
+All earlier debug witnesses and probes still agree (`runs/w-*`, `runs/p-*`). Of the review's
+probes, only `e1` (the KNOWN GAP indent) and `dj2` (the oracle's SIGSEGV) differ.
+
+`debug_pause_sigl_notready`'s SOURCELINE expectation was captured with its own `.stdin` on the
+driver's stdin. With `/dev/null` the oracle ran the file's prolog under `.Package~new`, ran the
+handler, then died with SIGSEGV (one run, not filed).
+
+Records:
+- `rust/corpus/oracle-crashes.txt` entry 31: `.DebugInput~linein` answering no value (review's
+  `dj2`, 3 of 3).
+- `phase-4-exclusions.txt` Deviation 26: `=` at a zero-pass DO, owner none.
+- KNOWN GAP rows for the `=` echo indent after LEAVE/ITERATE, and for a labelled block DO with no
+  header pause.
+
+Perf (the hot exit changed):
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o $T/cg-fr1 -p "emptyloop rexxcps" base=$T/target-base/release/rexx-run nobranch=$T/target-nb4/release/rexx-run head4=$T/bin-head4/rexx-run fr1=$T/bin-fr1/rexx-run
+```
+Exit 0, spreads 0.0001% at most. fr1 against base: emptyloop -0.0013%, rexxcps -0.0472%. No
+nobranch control was built for fr1; the total is inside the budget either way. Wall clock
+(`wallclock.sh -r 5`, `wall-fr1`): rexxcps +0.15%, emptyloop +2.97%, inside ±4%.
+
+Checks at `ac6cb27f6`:
+- `cargo fmt --all --check` exit 0; clippy `-D warnings` exit 0.
+- `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0: 3074 passed, 0 failed, 4 ignored.
+- Strict corpus + ir_recorded_oracle at `ca3a558b6` exit 0: 29 passed 1 ignored, and 21 passed.
+  `ac6cb27f6` changes only `src/tests.rs`.
+- At `ca3a558b6` the workspace run failed the new crate test only. It counted 2 `leave` echoes
+  where the error report adds a third; fixed in `ac6cb27f6`.
