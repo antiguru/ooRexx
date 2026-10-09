@@ -1940,9 +1940,6 @@ impl Interp {
                 }
             }
         }
-        // The clock is stale after the pass boundary, as `run_repeating`'s
-        // own store says.
-        self.activation_mut().clock_stale = true;
         // **`UNTIL`'s own test, and its own re-echo of the `DO`/`LOOP`
         // clause.** `run_repeating`'s own arm has the measurement: the oracle
         // re-enters the loop instruction to make this decision as much as to
@@ -1956,6 +1953,10 @@ impl Interp {
             {
                 self.trace_clause(line, flat.do_indent, &text);
             }
+            // The clock is stale after the pass boundary, as `run_repeating`'s
+            // own store says. Only an `UNTIL` or a `WHILE` re-evaluates an
+            // expression here, so a plain loop's pass skips the store.
+            self.activation_mut().clock_stale = true;
             let counted = counted(self)?;
             if let Some(flow) = self.flat_loop_until(code, source, flat, counted)? {
                 return Ok(FlatStep::Done(flow));
@@ -2150,6 +2151,12 @@ impl Interp {
         let site = &flat.iterate_site;
         let state = &mut flat.state;
         let counter = &mut flat.counter;
+        // A pass boundary's `WHILE` reads a fresh clock (`flat_loop_step`'s
+        // `UNTIL` store). The first test belongs to the `DO` clause and
+        // shares its reading.
+        if !matches!(blame, HeaderClause::Do) {
+            self.activation_mut().clock_stale = true;
+        }
         let header = self.in_counted_clause(code, header_line, counted, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
