@@ -317,3 +317,41 @@ Per-task check at `705dfb767`:
   whole_groups`: exit 0, 15 passed, 4:08 wall. The seeded gate inside it ran 13720 runs in 126 s,
   with no red (`/tmp/claude-1000/p61/t10/gate-f1-final.txt`).
 * Debug `sim_gate::`: 9 passed, 1792 runs in 12 s.
+
+## Fix round 2
+
+Re-review: `task-10-rereview.md`, two Minors. Code commit `7c2515201`; this section in the commit
+after it. Paths under `rust/crates/rexx-exec/tests/concurrency_tests.rs`, lines at `7c2515201`.
+
+* **(a) Exact refusal match.** `early_end` accepts a refusal only where `refusal_listed` holds. A
+  group part's key must start with the refusal followed by `, rc <the run's status>,`. A program's
+  key must start with `rc <status>,` and end with `, <refusal>`. The abort line now names the status.
+  New cases in `a_run_ending_where_no_listed_outcome_ends_is_red`: Section1's listed refusal without
+  its ` (Phase 9)` suffix, at rc 120, is red; the listed refusal at rc 1 is red.
+* **(b) Further self-tests.**
+  * Program status route, in the same test: a program row whose oracle set holds rc 0 is green at
+    rc 0 and red at rc 3.
+  * Determinism red: the rerun handling is now `after_rerun`, which `run_unit` calls. The new test
+    `a_passing_rerun_is_a_determinism_red_outside_the_real_clock` covers three cases:
+    * a passing rerun on a row without `clock=real` is a `determinism` red naming the test;
+    * under `clock=real` it is not;
+    * a failing rerun keeps its own reds.
+
+Mutations, one at a time on a copy-restored file (`/tmp/claude-1000/p61/t10/bin/mut2.py`), release
+`cargo test ... sim_gate::`; each run 9 passed and 1 failed:
+
+| mutation | failing test | output |
+|---|---|---|
+| a1: `refusal_listed` back to `key.contains(line)` | `a_run_ending_where_no_listed_outcome_ends_is_red` | `left: []`, `right: [(Abort, "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented, rc 120: no oracle outcome or DIFFERING key of the part ends so")]` |
+| a2: status dropped from the match (`starts_with(", rc ")`) | same | `left: []`, `right: [(Abort, "rexx-exec: method \"OBJECTNAME=\" ... (Phase 9), rc 1: no oracle outcome or DIFFERING key of the part ends so")]` |
+| b1: status route off for programs (`!row.program() && ...`) | same | `left: []`, `right: [(Abort, "rc 3, which no oracle outcome or DIFFERING key of the part has")]` |
+| b2: `after_rerun`'s condition `false && ...` | `a_passing_rerun_is_a_determinism_red_outside_the_real_clock` | `left: []`, `right: [(Determinism, "TEST_QUERYDIR_EXISTS", "TEST_QUERYDIR_EXISTS failed, and the rerun of the same seed and mode passed")]` |
+
+Per-task check at `7c2515201`:
+* `cargo fmt --all --check` exit 0.
+* clippy (workspace, all targets, `-D warnings`) exit 0.
+* `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0: 3121 passed, 0 failed, 4 ignored.
+* `REXX_CORPUS_GATE=1` corpus 29 passed and 1 ignored; ir_recorded_oracle 21 passed.
+* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 1 --release -p rexx-exec --test concurrency_tests
+  whole_groups` exit 0: 16 passed, 5:22 wall. The seeded gate inside it ran 13720 runs in 126 s
+  with no red (`/tmp/claude-1000/p61/t10/gate-f2.txt`).
