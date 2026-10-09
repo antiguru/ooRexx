@@ -492,6 +492,7 @@ impl Loud {
     /// The oracle reads such a receiver through the wrong layout: it crashes
     /// (`corpus/oracle-crashes.txt` entry 33) or answers an accident of memory
     /// (Deviation 28).
+    #[cold]
     fn receiver_class(kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("a message send to {kind}"), None),
@@ -506,6 +507,7 @@ impl Loud {
     /// reference sends (`b_weakref_*`, `b2_run_hasmethod_on_weakref`), and a
     /// `Method` copy passed to `define`, `setMethod` and `run`, which refuses
     /// at `COPY` first.
+    #[cold]
     fn unknown_receiver(kind: &str) -> Loud {
         Loud {
             message: owned_message(&format!("a message send to {kind}"), None),
