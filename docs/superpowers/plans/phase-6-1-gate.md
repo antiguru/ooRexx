@@ -1066,3 +1066,25 @@ tests, P41/P86); MutexSemaphore single 20 and `message_notify.rex` 14 (the exemp
 At `b8bba37a2`, the command above: exit 0, 14 passed. At `902de404e` it was red on TRACE whole (both
 modes): Task 6 (`f062f791e`, then `072e536ac`) had made the `?` tests and TEST_TRACE_NUMERIC_DEBUG pass; the two keys were
 rewritten (report, "whole_groups: TRACE whole").
+
+## Task 11
+
+Mutants judged at `8910306e5`. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-11-report.md`.
+Tests: `src/scheduler/tests/mutants.rs` (M9, M10, M11, M12, in the simulation mode) and
+`tests/concurrency_tests.rs` `measured::a_slice_deferred_before_a_pinned_park_stays_with_its_activity`
+(M7, `--features pinning`). Commands: `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
+--no-fail-fast --lib scheduler::tests::mutants`, and `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4
+-p rexx-exec --features pinning --no-fail-fast --test concurrency_tests --
+measured::a_slice_deferred_before sim_gate::`.
+
+| mutant | site | verdict | judge |
+|---|---|---|---|
+| M6 | `switch_to` keeps `SLICE` | equivalent: a pending `SLICE` at `switch_to` only moves the incoming activity's first yield to one the timer could produce (scout C); green under every judge | none |
+| M7 | `switch_to` keeps `slice_deferred` | killed: deferred `[SORTWITH, SortComparator]` 1 where 2 | M7 pinning test |
+| M9 | `cancel_wait` keeps `when_parked` | killed: rc 120, a ready activity holding a park reason | `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` |
+| M10 | `cancel_wait` keeps the guard-queue entry | killed: 98.905 deadlocks, rc 120 | `a_failed_guard_lock_wait_leaves_no_place_in_the_queue` |
+| M11 | `cancel_wait` keeps the sleeper | killed: `result The NIL object after 0` | `a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait`, `the_seeded_gate` |
+| M12 | `object_roots` drops `failed_sends` | killed: 1 write to a dead handle | `a_dropped_failed_send_is_written_while_alive` |
+
+Found and fixed: `concurrency_tests` did not compile under `--features pinning` since Task 9
+(`pinning_table`, E0507).
