@@ -267,3 +267,53 @@ Not reproduced.
    and `pct` draw their points.
 4. `/tmp` ran out of inodes mid-task (my gate leaked an empty directory per run, fixed; other
    tasks' trees were the bulk).
+
+## Fix round 1
+
+Review: `task-10-review.md` (Needs fixes). Code commit `705dfb767`; this section in the commit after
+it. Line numbers at `705dfb767`, paths under `rust/crates/rexx-exec/`.
+
+* **I1, early end.** `judge` (`tests/concurrency_tests.rs:4171-4176`) calls `early_end` (`:4223`), red
+  kind `abort`, for every row not injecting failures. It reds a refusal that neither the part's
+  oracle outcomes nor its `DIFFERING` normal-mode key (`differing_keys`, `:4210`) names, every policy.
+  Except under `pct`, it also reds a group part with no ooTest summary, and a status none of them
+  has in a run naming no failing test (the origin's `pass, rc 1`). Failing tests stay with the check
+  route. A design-limit refusal whose oracle twin hangs now ends judging (`:4163`), so it is not
+  re-judged as an abort. Pinned by `a_run_ending_where_no_listed_outcome_ends_is_red` (`:4877`):
+  - a pass summary at rc 1 is red, at rc 0 is not, and under `pct` is not;
+  - an empty stdout is red;
+  - Section1's listed `OBJECTNAME=` refusal is not red;
+  - an unlisted `COPY` refusal is red in Section1 (pre and pct) and in a part with no `DIFFERING`
+    row.
+
+  With the call disabled (`if false && ...`) the test fails (`left: []`).
+  Section1 whole does not go red: its refusal is its `DIFFERING` normal key's, the known-set route the
+  review names. The release gate at `705dfb767` showed no new red, so none went to the controller.
+* **Minor 1, deadline kill.** The doc's false claim is deleted (`tests/support/group_runner.rs:536-538`
+  now says a command a sim run starts is in a group of its own, which the kill does not reach). Not
+  fixed in code: it is bounded (readers time out, a hang is already red); recorded as concern 1.
+* **Minor 2, WALL_CLOCK rerun.** In `run_unit`, a rerun that passes on a row without `clock=real`
+  (`Row::real_clock`, `:3674`) is a `determinism` red, with the failed test named. Close run: the
+  reruns were STREAM (`clock=real`) and SysSleep (rerun failed, exempt), so no such red.
+* **Minor 3, scratch.** `unit_dir` (`:4349`) is `<target tmp>/sim-gate-<profile>/<unit hash>/run`
+  (`profile`, `:3562`). The replay line prints that path (`:3761`).
+* **Minor 4, environment.** `REXX_SIM_*` variables are dropped from the program's environment, both
+  for group parts (`crate_environment`, `group_runner.rs:481`) and for programs (`:3892`). No child
+  needs them: a sim child gets `REXX_SWITCH_MODE` and `REXX_SIM_CHILD` from the command that starts it
+  (`src/command.rs`).
+* **Minor 5, stdin.** The sidecar's stdin is written from a thread of its own
+  (`group_runner.rs:590-597`).
+* **Minor 6, gate programs.** `m11_stale_sleeper.rex` and `n1_halt_ready_once.rex` say in their
+  header comment that the gate reads only the invariants, not their stdout.
+
+Per-task check at `705dfb767`:
+* `cargo fmt --all --check` exit 0.
+* `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings` exit 0.
+* `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0: 3120 passed, 0 failed, 4 ignored
+  (`/tmp/claude-1000/p61/t10/logs/ws2.txt`).
+* `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: 29 passed and 1 ignored; 21
+  passed.
+* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 1 --release -p rexx-exec --test concurrency_tests
+  whole_groups`: exit 0, 15 passed, 4:08 wall. The seeded gate inside it ran 13720 runs in 126 s,
+  with no red (`/tmp/claude-1000/p61/t10/gate-f1-final.txt`).
+* Debug `sim_gate::`: 9 passed, 1792 runs in 12 s.
