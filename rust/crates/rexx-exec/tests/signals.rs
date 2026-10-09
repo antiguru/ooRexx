@@ -571,14 +571,14 @@ fn call_on_halt_sees_an_abandoned_command() {
 fn sigint_halts_after_a_long_builtin() {
     halts(
         "builtin",
-        "do i = 1 to 30\n  v = copies('ab', 30000000)\nend\nsay 'done'\n",
+        "do i = 1 to 30\n  n = countstr('ab', copies('ab', 30000000))\nend\nsay 'done'\n",
         "",
         "INT",
         Launch::Plain,
         &Ended {
             code: Some(252),
             stdout: String::new(),
-            stderr: "     2 *-*   v = copies('ab', 30000000)\n\
+            stderr: "     2 *-*   n = countstr('ab', copies('ab', 30000000))\n\
                      Error 4 running PROGRAM line 2:  Program interrupted.\n\
                      Error 4.1:  Program interrupted with HALT condition.\n"
                 .to_string(),
@@ -826,14 +826,14 @@ fn a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_wait() {
 fn sigint_halts_after_a_long_method() {
     halts(
         "method",
-        "do i = 1 to 30\n  v = 'ab'~copies(30000000)\nend\nsay 'done'\n",
+        "do i = 1 to 30\n  n = 'ab'~copies(30000000)~countStr('ab')\nend\nsay 'done'\n",
         "",
         "INT",
         Launch::Plain,
         &Ended {
             code: Some(252),
             stdout: String::new(),
-            stderr: "     2 *-*   v = 'ab'~copies(30000000)\n\
+            stderr: "     2 *-*   n = 'ab'~copies(30000000)~countStr('ab')\n\
                      Error 4 running PROGRAM line 2:  Program interrupted.\n\
                      Error 4.1:  Program interrupted with HALT condition.\n"
                 .to_string(),
