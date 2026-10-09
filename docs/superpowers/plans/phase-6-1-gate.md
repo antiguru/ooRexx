@@ -943,3 +943,34 @@ At `60f21ad1b`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 -
 21 passed); `refusal_sites` 5 passed and `refusal_dispositions` 3 passed after
 `REXX_REFUSAL_SITES_REFRESH=1`. At `296cac74f`: fmt and clippy exit 0, the `sim::` and `uniform_1`
 lib tests 19 passed.
+
+### Fix round 1: running totals against the 6.1 base
+
+Commit `474e4bdb9`. `fix1` built as above from `git archive 474e4bdb9 rust interpreter` in
+`/tmp/claude-1000/p61/t9f1/target-head`, one `Compiling rexx-exec` line. `base61` is Task 1's base
+binary (`e6af1198b`), its sha256 matching the `## Task 1` table.
+
+| binary | source | sha256 |
+|---|---|---|
+| fix1 | `474e4bdb9` | `cbc6aa343be07ff75e914daef4e0055f7ccd6de23ac943845204d18194d472ca` |
+| base61 | `e6af1198b` | `2ea19b3ea2875fada8718eaf5b89f828d5ae07587a74feaf9b34681c879c891e` |
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 6 -o /tmp/claude-1000/p61/t9f1/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base=/tmp/claude-1000/p61/t9/perf/bin/base/rexx-run head2=/tmp/claude-1000/p61/t9/perf/bin/head2/rexx-run fix1=/tmp/claude-1000/p61/t9f1/bin/head/rexx-run base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run
+```
+
+Exit 0, every spread at most 0.0017%. Percentages are against base61 except the last column.
+
+| program | base (Tasks 1-8) % | head2 % | fix1 (running total) % | fix1 vs head2 % | verdict |
+|---|---:|---:|---:|---:|---|
+| pingmsg | -0.4541 | -0.2545 | -0.2545 | +0.0000 | inside |
+| pingguard | -0.5914 | -0.3665 | -0.3661 | +0.0004 | inside |
+| pingsem | -0.4358 | -0.2494 | -0.2485 | +0.0009 | inside |
+| alloc | -0.2804 | +0.0738 | +0.0738 | +0.0000 | inside |
+| alloc4c | -0.8796 | -0.8139 | -0.8139 | -0.0000 | inside |
+| heapshape | +1.0265 | +1.1558 | +1.1558 | -0.0000 | **over** |
+| rexxcps | +0.0230 | +0.0924 | +0.0924 | -0.0000 | inside |
+| emptyloop | -0.3191 | -0.3191 | -0.3191 | -0.0000 | inside |
+
+heapshape is +1.16% against the 6.1 base, +1.03% of it present before Task 9 (base, `6358ca7a6`).
+It is being bisected separately and goes to Moritz for a ruling; this round does not change it.
