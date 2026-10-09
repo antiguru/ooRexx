@@ -52,7 +52,7 @@
 * Work in `/home/moritz/dev/repos/ooRexx-rust-rewrite` on branch `plan/rust-rewrite`, code under `rust/`.
   Commit with `git commit -F <file>`; the message ends with the two lines
   `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>` and
-  `Claude-Session: https://claude.ai/code/session_01GGimEAe3NWM7Rh22JoLorg`. Never `git add -A`,
+  `Claude-Session: https://claude.ai/code/session_012nGsbFAkQ99rq21PTTWwUt`. Never `git add -A`,
   amend, force, reset, checkout, restore or stash; add files by name.
 * Scratch under `/tmp/claude-1000/p61/t<N>/` (never the repository); oracle probes from a fresh
   empty directory there.

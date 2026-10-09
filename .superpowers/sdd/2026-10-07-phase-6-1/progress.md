@@ -178,3 +178,9 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
   - Minor: M1 double refusals; M2 trace-path edges exit 0; M3 dead pub trace_hash; M4 exploration test asserts 2 of 3 interleavings; M5 implementer bash -c (self-reported).
   - Confirmed by running: all policies match the brief; all nine uncovered invariant checks fire (closes report concern 1); 48/48 cross-process replays exact; SysSleep failure is the test's wall-time assumption, carried to Task 10.
 - Stopped here per Moritz ("Stop after the review comes back"). On resume: fix round 1 (t9-impl if alive, else fresh agent) for I1, I2, I3 records + bisect, minors; heapshape ruling goes to Moritz.
+
+## Resume 2026-10-09 (goal: finish Phase 6.1; session 012nGsbF)
+
+- t9-impl gone with the old session. Fix round 1: fresh t9-fix1 (opus), brief W/task-9-fix1-brief.md (I1, I2, M1, M2, M3, M4, I3 record only), report W/task-9-fix1-report.md. BASE cf976c4db.
+- Parallel measurement: hs-bisect (sonnet), brief W/heapshape-bisect-brief.md, report W/heapshape-bisect.md (controller commits it). Checkpoints at each task close from base61 e6af1198b, then bisect steps over +0.2%.
+- Ruling: global-constraints Claude-Session line updated to the new session id — the attribution reminder names it — cost if wrong: cosmetic trailer only.
