@@ -130,3 +130,6 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 5a re-review 1 (task-5a-rereview.md): Important 1 and Minors addressed; new Important: array_reshape (multi-dim extend) uncharged, 957 MB in 60 passes. Fix round 2 sent to t5a-impl; controller checks the diff and re-runs the probe.
 - Task 5a fix round 2: 72287a744, 1fd487d02 (array_reshape and ~notify push charged). Re-review appended to task-5a-rereview.md: 0/0/0; reshape loop 81 MB at 300 passes (base OOM at 2G).
 - Task 5a: complete (8e52e14ca..1fd487d02).
+- Task 6 dispatched: t6-impl (opus), BASE fe4956b36.
+- Task 6 implementer DONE: f062f791e, 004312db8, 2bde37127. 15 witnesses agree. Branch-free route failed (chunk chosen once per level); R7 branch: rexxcps +0.05%, emptyloop +0.64%. Stalled 03:30-~04:20 on an rm -rf $T/$v approval (rule ignored despite brief). Review t6-review dispatched.
+- Task 12 queue add: Task 6 gaps (= after ITERATE indent, REPLY no pause, labelled block DO header pause); oracle defect = at zero-pass DO pause then END 10.1.
