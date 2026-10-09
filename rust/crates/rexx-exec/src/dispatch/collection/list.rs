@@ -123,7 +123,7 @@ fn list_position(
 /// The handle a new item takes: the last one removal freed, or a fresh one.
 fn list_next_handle(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
     let (_, handles, free) = list_state(interp, receiver)?;
-    let stack = array_slots_owned(interp, free)?;
+    let stack = array_slots(interp, free)?;
     if let Some(Some(reused)) = stack.last().copied() {
         let last = stack.len() - 1;
         array_splice(interp, free, last, None)?;
@@ -133,7 +133,7 @@ fn list_next_handle(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Fai
     // them, so the next one is the highest ever issued plus one. The highest
     // is tracked as the count of handles ever issued, which is the live ones
     // plus the freed ones.
-    let live = array_slots_owned(interp, handles)?.len();
+    let live = array_slots(interp, handles)?.len();
     Ok(interp.counted(live))
 }
 

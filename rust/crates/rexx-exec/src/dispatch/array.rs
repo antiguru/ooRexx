@@ -57,7 +57,29 @@ pub(super) fn array_slots_owned(
     interp: &Interp,
     receiver: ObjRef,
 ) -> Result<Vec<Option<ObjRef>>, Failure> {
-    Ok(array_slots(interp, receiver)?.to_vec())
+    let slots = array_slots(interp, receiver)?;
+    #[cfg(test)]
+    note_slots_copied(slots.len());
+    Ok(slots.to_vec())
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many slots [`array_slots_owned`] and `collection::occupied` have
+    /// copied on this thread.
+    static SLOTS_COPIED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Adds `count` to [`SLOTS_COPIED`].
+#[cfg(test)]
+pub(super) fn note_slots_copied(count: usize) {
+    SLOTS_COPIED.with(|copied| copied.set(copied.get() + count));
+}
+
+/// [`SLOTS_COPIED`]'s count.
+#[cfg(test)]
+pub(crate) fn slots_copied() -> usize {
+    SLOTS_COPIED.with(std::cell::Cell::get)
 }
 
 /// An array receiver's dimensions array as an owned copy, or the refusal

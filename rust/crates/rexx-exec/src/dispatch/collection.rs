@@ -36,6 +36,16 @@ pub(super) mod supplier;
 pub(super) use list::list_items;
 pub(super) use supplier::new_supplier;
 
+/// `read` over the receiver's store's slots, borrowed rather than copied.
+pub(super) fn read_slots<R>(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    read: impl FnOnce(&[Option<ObjRef>]) -> R,
+) -> Result<R, Failure> {
+    let store = store_of(interp, receiver)?;
+    Ok(read(array_slots(interp, store)?))
+}
+
 /// [`array_slots`] over the receiver's store rather than the receiver.
 pub(super) fn slots_of(
     interp: &mut Interp,
@@ -164,9 +174,12 @@ pub(super) fn ordered_pairs(
 /// `ArrayClass`'s `lastItem`: the 1-based index of the outermost occupied
 /// slot, or 0 for a collection holding nothing.
 pub(super) fn last_item(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {
-    Ok(occupied(interp, receiver)?
-        .last()
-        .map_or(0, |last| last + 1))
+    read_slots(interp, receiver, |slots| {
+        slots
+            .iter()
+            .rposition(Option::is_some)
+            .map_or(0, |last| last + 1)
+    })
 }
 
 /// The index object for the flat 0-based `offset` of an array shaped
@@ -235,11 +248,14 @@ fn pool_variable(interp: &Interp, owner: ObjRef, scope: ObjRef, name: &[u8]) -> 
 /// The 0-based offsets of `receiver`'s occupied slots.
 pub(super) fn occupied(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
     let receiver = store_of(interp, receiver)?;
-    Ok(array_slots(interp, receiver)?
+    let offsets: Vec<usize> = array_slots(interp, receiver)?
         .iter()
         .enumerate()
         .filter_map(|(offset, slot)| slot.map(|_| offset))
-        .collect())
+        .collect();
+    #[cfg(test)]
+    super::array::note_slots_copied(offsets.len());
+    Ok(offsets)
 }
 
 /// `append`'s body without the message send: writes `item` past the last
@@ -249,8 +265,13 @@ pub(super) fn append_slot(
     receiver: ObjRef,
     item: ObjRef,
 ) -> Result<usize, Failure> {
-    let at = last_item(interp, receiver)?;
-    let length = slots_of(interp, receiver)?.len();
+    let (at, length) = read_slots(interp, receiver, |slots| {
+        let at = slots
+            .iter()
+            .rposition(Option::is_some)
+            .map_or(0, |last| last + 1);
+        (at, slots.len())
+    })?;
     if at >= length {
         array_grow(interp, receiver, at + 1)?;
     }

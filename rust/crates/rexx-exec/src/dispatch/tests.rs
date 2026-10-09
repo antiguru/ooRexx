@@ -325,6 +325,52 @@ fn run_source(source: &str) -> (i32, String, String) {
     )
 }
 
+/// `Array~append`, `items`, `last` and `List~append`, and a SYNTAX unwind
+/// through deep frames (which appends each frame to its TRACEBACK and
+/// STACKFRAMES lists), copy a bounded number of slots per operation: twice
+/// the work copies about twice the slots, where copying the whole collection
+/// on each append copies about four times as many.
+#[test]
+fn appends_and_reads_copy_slots_linearly() {
+    let copied = |n: usize| {
+        let program = format!(
+            "a = .array~new\nl = .list~new\n\
+             do j = 1 to {n}\n  a~append(j)\n  l~append(j)\n  m = a~items a~last\nend\n\
+             say a~items a~last a[{n}] l~items l~lastItem\n\
+             signal on syntax name h\nsay f(0)\nexit\n\
+             h: say 'h' condition('O')~traceback~items\nexit\n\
+             ::routine f\n  use arg n\n  if n = {depth} then exit\n  return f(n + 1)\n",
+            depth = n / 4
+        );
+        std::thread::Builder::new()
+            .stack_size(crate::INTERPRETER_STACK_BYTES)
+            .spawn(move || {
+                let outcome = crate::execute_on(
+                    "/t.rex",
+                    program.into_bytes(),
+                    false,
+                    crate::Invocation::none(),
+                    Some(crate::INTERPRETER_STACK_BYTES),
+                );
+                (
+                    String::from_utf8_lossy(&outcome.stdout).into_owned(),
+                    super::array::slots_copied(),
+                )
+            })
+            .expect("the interpreter thread")
+            .join()
+            .expect("the run did not panic")
+    };
+    let (once, small) = copied(2000);
+    assert_eq!(once, "2000 2000 2000 2000 2000\nh 501\n");
+    let (twice, large) = copied(4000);
+    assert_eq!(twice, "4000 4000 4000 4000 4000\nh 1001\n");
+    assert!(
+        large * 10 < small * 25,
+        "{small} slots copied at 2000, {large} at 4000"
+    );
+}
+
 /// A primitive's native method run on an instance of a plain class refuses
 /// as a receiver of the wrong type, owner none (Deviation 28), where a
 /// `Directory` with no store keeps its own method's refusal and a

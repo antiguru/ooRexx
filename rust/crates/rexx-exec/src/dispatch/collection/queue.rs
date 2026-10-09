@@ -15,7 +15,7 @@
 use super::{
     Arity, Body, Cleared, DEFAULT_ARRAY_SIZE, Failure, IndexUse, Interp, Loud, NativeMethod,
     ObjRef, QUEUE_CAPACITY, Raised, append_slot, array_position, array_slots, array_splice,
-    array_splice_slot, item_argument, native_array_delete, pool_variable, queue_bound, slots_of,
+    array_splice_slot, item_argument, native_array_delete, pool_variable, queue_bound, read_slots,
     store_of, store_scope,
 };
 
@@ -172,7 +172,7 @@ fn native_queue_items(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let items = slots_of(interp, receiver)?.iter().flatten().count();
+    let items = read_slots(interp, receiver, |slots| slots.iter().flatten().count())?;
     Ok(Some(interp.counted(items)))
 }
 

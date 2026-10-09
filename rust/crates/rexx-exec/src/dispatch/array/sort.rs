@@ -12,7 +12,7 @@
 //! `Array`'s sort family: `sort`, `sortWith` and their stable twins, one
 //! merge sort over the Array-shaped store.
 
-use super::collection::{item_argument, slots_of, store_of};
+use super::collection::{item_argument, read_slots, store_of};
 use super::{
     Arity, Body, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised, array_slots,
     whole_comparison,
@@ -278,7 +278,7 @@ fn sort_by(
     receiver: ObjRef,
     order: &Order,
 ) -> Result<Option<ObjRef>, Failure> {
-    let before = slots_of(interp, receiver)?.iter().flatten().count();
+    let before = read_slots(interp, receiver, |slots| slots.iter().flatten().count())?;
     let items = dense_items(interp, receiver)?;
     // The whole run is held across every `COMPARE`/`COMPARETO`, each of which
     // runs Rexx that may empty the receiver -- so the items are rooted for
@@ -299,7 +299,7 @@ fn sort_by(
     // count, which is what a callback that empties or refills moves; a
     // callback that swaps one item for another is not distinguished and is
     // not measured.
-    let after = slots_of(interp, receiver)?.iter().flatten().count();
+    let after = read_slots(interp, receiver, |slots| slots.iter().flatten().count())?;
     if after == before {
         write_back(interp, receiver, sorted)?;
     }

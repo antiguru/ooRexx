@@ -16,7 +16,7 @@
 use super::collection::{
     QUEUE_ITEMS, append_slot, array_grow, array_of, array_splice, array_splice_slot, dimensions_of,
     item_argument, last_item, new_supplier, occupied, ordered_pairs, position_in, queue_bound,
-    same_item, slots_of, store_of, store_scope, subscript_object,
+    read_slots, same_item, slots_of, store_of, store_scope, subscript_object,
 };
 use super::{
     Arity, BehaviourId, Body, Cleared, Failure, IndexUse, Interp, Loud, NativeMethod, ObjRef,
@@ -73,7 +73,7 @@ fn native_array_is_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let empty = slots_of(interp, receiver)?.iter().flatten().count() == 0;
+    let empty = read_slots(interp, receiver, |slots| slots.iter().flatten().count())? == 0;
     Ok(Some(crate::eval::logical(empty)))
 }
 
@@ -85,7 +85,7 @@ fn native_array_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let length = slots_of(interp, receiver)?.len();
+    let length = read_slots(interp, receiver, <[_]>::len)?;
     for offset in 0..length {
         clear_array_slot(interp, receiver, offset)?;
     }
@@ -138,7 +138,7 @@ fn native_array_has_index(
         return Ok(Some(crate::eval::logical(false)));
     };
     let held = matches!(
-        slots_of(interp, receiver)?.get(position - 1).copied(),
+        read_slots(interp, receiver, |slots| slots.get(position - 1).copied())?,
         Some(Some(_))
     );
     Ok(Some(crate::eval::logical(held)))
@@ -155,7 +155,7 @@ fn native_array_remove(
     let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
         return Ok(Some(ObjRef::NIL));
     };
-    let held = match slots_of(interp, receiver)?.get(position - 1).copied() {
+    let held = match read_slots(interp, receiver, |slots| slots.get(position - 1).copied())? {
         Some(Some(item)) => item,
         Some(None) | None => return Ok(Some(ObjRef::NIL)),
     };
@@ -240,12 +240,13 @@ fn array_end(
     want_item: bool,
 ) -> Result<Option<ObjRef>, Failure> {
     let receiver = store_of(interp, receiver)?;
-    let offsets = occupied(interp, receiver)?;
-    let found = if take_last {
-        offsets.last().copied()
-    } else {
-        offsets.first().copied()
-    };
+    let found = read_slots(interp, receiver, |slots| {
+        if take_last {
+            slots.iter().rposition(Option::is_some)
+        } else {
+            slots.iter().position(Option::is_some)
+        }
+    })?;
     let Some(offset) = found else {
         return Ok(Some(ObjRef::NIL));
     };
@@ -401,7 +402,7 @@ fn native_array_insert(
         // Omitted: after the last OCCUPIED slot, not the end of the array.
         Some(None) | None => last_item(interp, receiver)?,
     };
-    let length = slots_of(interp, receiver)?.len();
+    let length = read_slots(interp, receiver, <[_]>::len)?;
     if at > length {
         array_grow(interp, receiver, at)?;
     }
@@ -424,7 +425,7 @@ pub(in crate::dispatch) fn native_array_delete(
     let Some(position) = position_in(interp, receiver, args, IndexUse::Get)? else {
         return Ok(Some(ObjRef::NIL));
     };
-    let held = match slots_of(interp, receiver)?.get(position - 1).copied() {
+    let held = match read_slots(interp, receiver, |slots| slots.get(position - 1).copied())? {
         Some(slot) => slot,
         None => return Ok(Some(ObjRef::NIL)),
     };
@@ -499,7 +500,7 @@ fn native_array_dimensions(
     // fixed list answered the stale `0`.
     let extents = match dimensions_of(interp, receiver)? {
         Some(shape) if shape.len() > 1 => shape,
-        _ => vec![slots_of(interp, receiver)?.len()],
+        _ => vec![read_slots(interp, receiver, <[_]>::len)?],
     };
     let items = extents
         .into_iter()
@@ -541,7 +542,7 @@ fn splice_absorbing_slack(
     // Measured: `.Array~new(4)~insert('j')` leaves size 4, where
     // `.Array~of('x','y')~insert` -- whose last slot is occupied -- leaves
     // size 3.
-    let slack = slots_of(interp, receiver)?.last() == Some(&None);
+    let slack = read_slots(interp, receiver, |slots| slots.last() == Some(&None))?;
     array_splice_slot(interp, receiver, at, item)?;
     if !slack {
         return Ok(());
