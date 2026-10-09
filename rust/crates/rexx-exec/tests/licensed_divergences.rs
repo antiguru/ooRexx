@@ -14,6 +14,11 @@
 //! both of this crate's engines, with all three descriptors asserted on every
 //! side.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::collections::BTreeSet;

@@ -13,7 +13,7 @@
 //! (`classes/EventSemaphore.cpp`, `classes/MutexSemaphore.cpp`), whose waits
 //! park the activity.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use rexx_core::{Decoded, ObjRef};
 use rexx_num::Number;
@@ -73,7 +73,7 @@ pub(super) fn native_event_wait(
         )));
     }
     park_point!(interp, crate::pinning::ParkKind::SemaphoreWait);
-    let wait = semaphore_wait(receiver, WaitKind::Event, timeout);
+    let wait = semaphore_wait(interp, receiver, WaitKind::Event, timeout);
     interp.park_native(ParkReason::Semaphore(wait), woken, receiver)
 }
 
@@ -98,7 +98,7 @@ pub(super) fn native_mutex_acquire(
         Request::Refused => false,
         Request::Wait => {
             park_point!(interp, crate::pinning::ParkKind::SemaphoreWait);
-            let wait = semaphore_wait(receiver, WaitKind::Mutex, timeout);
+            let wait = semaphore_wait(interp, receiver, WaitKind::Mutex, timeout);
             return interp.park_native(ParkReason::Semaphore(wait), woken, receiver);
         }
     };
@@ -130,11 +130,16 @@ pub(super) fn native_mutex_uninit(
 }
 
 /// A wait of `kind` on `object` for `timeout`, or for ever.
-fn semaphore_wait(object: ObjRef, kind: WaitKind, timeout: Option<Duration>) -> SemaphoreWait {
+fn semaphore_wait(
+    interp: &Interp,
+    object: ObjRef,
+    kind: WaitKind,
+    timeout: Option<Duration>,
+) -> SemaphoreWait {
     SemaphoreWait {
         key: SemaphoreKey::Object(object),
         kind,
-        deadline: timeout.map(|timeout| Instant::now() + timeout),
+        deadline: timeout.map(|timeout| interp.now() + timeout),
     }
 }
 

@@ -523,11 +523,14 @@ enum Child {
 /// Standard input is inherited unless `io` supplies one, which is the
 /// oracle's own rule -- it spawns with no file actions until an `ADDRESS ...
 /// WITH` asks for them.
+///
+/// `switch_mode`, where there is one, is the child's `REXX_SWITCH_MODE`.
 fn start(
     interp: &Interp,
     handler: &Handler,
     command: &[u8],
     io: Option<&IoContext>,
+    switch_mode: Option<String>,
 ) -> Result<Child, Failure> {
     let nothing = |rc| {
         Child::Ran(Waited {
@@ -559,6 +562,9 @@ fn start(
     builder.env_clear();
     for (name, value) in &interp.env {
         builder.env(OsStr::from_bytes(name), OsStr::from_bytes(value));
+    }
+    if let Some(mode) = switch_mode {
+        builder.env("REXX_SWITCH_MODE", mode);
     }
     builder.current_dir(interp.cwd_text());
     let input = io.and_then(IoContext::input_bytes);
@@ -704,7 +710,8 @@ impl Interp {
         {
             return Ok(Commanded::Done(outcome));
         }
-        let spawned = match start(self, &handler, command, io)? {
+        let switch_mode = self.child_switch_mode();
+        let spawned = match start(self, &handler, command, io, switch_mode)? {
             Child::Ran(spawned) => spawned,
             Child::Running { running, .. } if io.is_none() && !self.activity.resuming => {
                 match self.exit_for_block(Block { running }) {

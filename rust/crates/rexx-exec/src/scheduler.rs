@@ -303,6 +303,8 @@ pub(crate) struct Activities {
     /// The guard locks, and what each parked activity waits on.
     pub(crate) guards: crate::guards::GuardTable,
     pub(crate) semaphores: crate::semaphores::Semaphores,
+    /// The switches from one activity to another.
+    switches: u64,
 }
 
 /// The oracle's `msecInADay`: a timer's wait is whole days of this, then a
@@ -353,7 +355,13 @@ impl Activities {
             abandoned_blocks: Vec::new(),
             guards: crate::guards::GuardTable::default(),
             semaphores: crate::semaphores::Semaphores::default(),
+            switches: 0,
         }
+    }
+
+    /// The switches from one activity to another so far.
+    pub(crate) fn switches(&self) -> u64 {
+        self.switches
     }
 
     /// Puts `activity` at the back of the ready queue unless it is ready
@@ -963,6 +971,7 @@ impl Interp {
         #[cfg(feature = "sharing")]
         self.heap.share_as(self.activity.sharing_tag);
         let outgoing = std::mem::replace(&mut table.running, next);
+        table.switches += 1;
         if ended {
             table.retired.extend(idle.activity.thread.take());
             table.free.push(outgoing.0);
@@ -1011,6 +1020,11 @@ impl Interp {
     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
         pinned_park!(self, reason);
         self.park(reason);
+        if self.sim_fails_wait() {
+            pinned_unpark!(self);
+            self.cancel_wait();
+            return Some(Raised::insufficient_stack().into());
+        }
         let waited = self.run_others(true);
         pinned_unpark!(self);
         let failure = match waited {
@@ -1152,6 +1166,7 @@ impl Interp {
     ///
     /// If `cancelled` does not hold one flag per waiter.
     pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: &[bool]) {
+        let now = self.now();
         let table = &mut self.activities;
         let Some(timer) = table.timers.get_mut(&id) else {
             return;
@@ -1161,7 +1176,6 @@ impl Interp {
             cancelled.len(),
             "a timer posted with a cancel flag per waiter"
         );
-        let now = Instant::now();
         let mut moved: Vec<(u64, Instant, Instant)> = Vec::new();
         let mut woken: Vec<u64> = Vec::new();
         let mut waiting = Vec::new();
@@ -1245,6 +1259,9 @@ impl Interp {
     /// that recalls it. What follows a recall goes back to the inbox before
     /// the lend, where a loop the lendee nests can drain it.
     pub(crate) fn file_completions(&mut self, mut posted: VecDeque<Posted>) {
+        if self.sim.is_some() {
+            self.sim_screen_posts(&posted);
+        }
         while let Some(next) = posted.pop_front() {
             match next {
                 Posted::Completed(Completed {
@@ -1395,7 +1412,7 @@ impl Interp {
     /// Moves every sleeper whose deadline is due to the ready queue, in
     /// deadline order.
     fn wake_due_sleepers(&mut self) {
-        let now = Instant::now();
+        let now = self.now();
         let table = &mut self.activities;
         while let Some(Reverse((deadline, _, sleeper))) = table.sleepers.peek().copied() {
             if deadline > now {
@@ -1478,8 +1495,11 @@ impl Interp {
     /// Idles this thread with nothing left that can wake an activity but a
     /// signal's halt; the run's deadline ends it.
     fn idle_for_good(&mut self) -> Result<(), Failure> {
+        if self.sim.is_some() {
+            return Err(Loud::sim_endless_wait().into());
+        }
         while self.activities.ready.is_empty() {
-            self.idle_until(Instant::now() + TIMER_DAY)?;
+            self.idle_until(self.now() + TIMER_DAY)?;
         }
         Ok(())
     }
@@ -1945,6 +1965,11 @@ impl Interp {
         }
     }
 
+    /// The clause boundaries the switch mode has counted.
+    pub(crate) fn switch_clauses(&self) -> u64 {
+        self.switch.as_ref().map_or(0, |switch| switch.clauses)
+    }
+
     /// Whether the running activation has replied and its split has yet to
     /// run.
     pub(crate) fn split_owed(&self) -> bool {
@@ -1955,6 +1980,9 @@ impl Interp {
 
     /// Switches activities as `mode` says, and never on the timer's word.
     pub(crate) fn set_switch_mode(&mut self, mode: SwitchMode) {
+        if let SwitchMode::Sim(config) = mode {
+            self.start_sim(config);
+        }
         self.switch = Some(Switch { mode, clauses: 0 });
         self.timer.disarm();
         self.clause_countdown = 1;
@@ -1994,6 +2022,11 @@ impl Interp {
             let due = match switch.mode {
                 SwitchMode::EveryOpportunity => true,
                 SwitchMode::AtClause(clause) => switch.clauses == clause,
+                SwitchMode::Sim(_) => {
+                    let clauses = switch.clauses;
+                    self.sim_clause(clauses)?;
+                    false
+                }
             };
             if due {
                 self.timer.requests().set(SLICE);
@@ -2346,7 +2379,10 @@ pub(crate) fn take_scripted() -> Option<Scripted> {
 }
 
 mod pool;
+#[cfg(test)]
+pub(crate) use pool::threads_spawned;
 pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
 mod tests;

@@ -13,6 +13,11 @@
 //! runs through both interpreters and all three descriptors must agree,
 //! except for the declared gaps in [`DECLARED_GAPS`].
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::fs;

@@ -757,8 +757,9 @@ fn whole_number_of(text: &[u8]) -> Option<i64> {
 
 /// Wall-clock time right now, in [`Timestamp::base_time`]'s own unit --
 /// UTC, with no time zone applied (the module doc's own divergence).
-fn real_clock_base_time() -> i64 {
-    let since_epoch = std::time::SystemTime::now()
+fn real_clock_base_time(interp: &Interp) -> i64 {
+    let since_epoch = interp
+        .wall_now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
     UNIX_BASE_TIME + since_epoch.as_micros() as i64
@@ -779,7 +780,8 @@ fn now_base_time(interp: &mut Interp) -> i64 {
         }
         activation.flags.set_elapsed_reset(false);
     }
-    let micros = real_clock_base_time();
+    let micros = real_clock_base_time(interp);
+    let activation = interp.activation_mut();
     activation.cached_clock = micros;
     activation.clock_stale = false;
     micros

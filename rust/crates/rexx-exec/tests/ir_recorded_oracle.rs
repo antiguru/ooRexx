@@ -15,6 +15,11 @@
 //! program not-oracle-bytes=do-with-refused
 //! ```
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::collections::BTreeMap;

@@ -12,6 +12,11 @@
 //! `PARSE VERSION`'s string, checked against the running oracle rather than
 //! against a copy of itself.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::fs;

@@ -13,8 +13,6 @@
 //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
 
-use std::time::Instant;
-
 use rexx_core::{Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
 
@@ -186,7 +184,7 @@ pub(crate) fn sleep(
         );
     }
     park_point!(interp, crate::pinning::ParkKind::SysSleep);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
+    let deadline = interp.now() + std::time::Duration::from_secs_f64(seconds);
     let done = answer(interp, 0);
     interp.park_routine_with(
         crate::scheduler::ParkReason::Sleep { deadline },
@@ -350,7 +348,7 @@ pub(crate) fn wait_sem(
     }
     let (kind, deadline) = if timeout > 0 {
         let polls = u32::try_from(timeout.unsigned_abs().div_ceil(100)).unwrap_or(u32::MAX);
-        (WaitKind::Poll(polls - 1), Some(Instant::now() + SEM_POLL))
+        (WaitKind::Poll(polls - 1), Some(interp.now() + SEM_POLL))
     } else {
         (WaitKind::Counting, None)
     };

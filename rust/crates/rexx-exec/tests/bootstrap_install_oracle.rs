@@ -12,6 +12,11 @@
 //! The directive halves of `CoreClasses.orx` and `StreamClasses.orx`,
 //! installed and then questioned, against the oracle.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::fs;

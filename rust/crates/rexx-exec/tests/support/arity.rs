@@ -13,6 +13,10 @@
 //! list it could accept, measured against the oracle.
 
 #![allow(dead_code)]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
 
 use std::collections::HashMap;
 use std::fs;

@@ -106,9 +106,18 @@ impl Pool {
         self.stack
     }
 
+    /// Bounds the pool at `bound` threads from now on; at 0 no thread, idle
+    /// or new, is reserved.
+    pub(crate) fn set_bound(&mut self, bound: usize) {
+        self.bound = bound;
+    }
+
     /// An idle thread, or a new one, for one job; `None` where the bound is
     /// reached or the spawn fails.
     pub(crate) fn reserve(&self) -> Option<Worker> {
+        if self.bound == 0 {
+            return None;
+        }
         let mut state = lock(&self.shared.state);
         if let Some(worker) = state.idle.pop() {
             return Some(worker);
@@ -129,6 +138,8 @@ impl Pool {
             })
             .ok()?;
         let thread = spawned.thread().id();
+        #[cfg(test)]
+        SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
         state.threads.push((thread, spawned));
         Some(Worker { thread, mailbox })
     }
@@ -171,6 +182,18 @@ impl Worker {
         *lock(&self.mailbox.mail) = Some(mail);
         self.mailbox.arrived.notify_one();
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many pool threads this thread has spawned.
+    static SPAWNED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// [`SPAWNED`]'s count.
+#[cfg(test)]
+pub(crate) fn threads_spawned() -> u64 {
+    SPAWNED.with(std::cell::Cell::get)
 }
 
 /// A pool thread: runs each job it is sent, then waits idle for the next.

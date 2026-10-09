@@ -64,6 +64,7 @@ use queue::Queue;
 mod invocation;
 pub use invocation::{Invocation, ProgramInput, Sinks, SwitchMode, join_command_line};
 pub use rexx_core::FrameBlock;
+pub use sim::{ClockOrigin, Knobs, Policy, SimConfig, SimReport};
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
@@ -117,6 +118,9 @@ mod semaphores;
 
 // The live-interpreter registry, the timer thread and the inbox.
 mod timer;
+
+// The deterministic simulation mode: seed, streams and the clock seam.
+mod sim;
 
 // The signal handlers (D-U3).
 mod signal;
@@ -325,6 +329,8 @@ pub struct Outcome {
     /// fit the compiled stream's index widths. Such a body raises
     /// [`Loud::chunk_refused`]; there is no second engine to run it.
     pub chunks_refused: usize,
+    /// The simulation mode's report, for a run in it.
+    pub sim: Option<SimReport>,
     /// The would-be park points the run reached.
     #[cfg(feature = "pinning")]
     pub pinning: PinReport,
@@ -1236,6 +1242,8 @@ struct Interp {
     baton: crate::sync::Arc<crate::island::InterpBaton>,
     /// The deterministic switch mode, where a test set one.
     switch: Option<crate::scheduler::Switch>,
+    /// The simulation mode's state, where the switch mode is `Sim`.
+    sim: Option<Box<crate::sim::Sim>>,
     /// Whether the pending `SLICE` has been counted as deferred.
     slice_deferred: bool,
     /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
@@ -2007,6 +2015,7 @@ impl Interp {
             timer,
             baton,
             switch: None,
+            sim: None,
             slice_deferred: false,
             chunks: NameMap::default(),
             chunks_refused: 0,
@@ -2714,6 +2723,9 @@ impl Interp {
         if self.collect_due
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
         {
+            if self.sim_declines_collection() {
+                return;
+            }
             self.collect_now();
         }
     }
@@ -2777,6 +2789,7 @@ impl Interp {
             baton: _,
             pool: _,
             switch: _,
+            sim: _,
             slice_deferred: _,
             // A chunk's interned literals are allocated immortal.
             chunks: _,
@@ -3020,7 +3033,7 @@ impl Interp {
             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
         }
         self.bytes_due = COLLECT_BYTES_FLOOR.max(stats.live_bytes);
-        self.collect_due = self.stress_collect;
+        self.collect_due = self.stress_collect || self.sim_collects_at_random();
         #[cfg(feature = "sharing")]
         self.heap.sharing_pause(false);
     }
@@ -3312,6 +3325,7 @@ fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome
         #[cfg(test)]
         peak_body_bytes: 0,
         chunks_refused: 0,
+        sim: None,
         #[cfg(feature = "pinning")]
         pinning: PinReport::default(),
         #[cfg(feature = "sharing")]
@@ -3485,6 +3499,9 @@ fn execute_on(
     // 214, and one ending `exit 7` prints it and exits 7.
     // An activity those `UNINIT`s start is not waited for (ruling P39).
     refused.extend(interp.terminate());
+    if let Err(Failure::Loud(loud)) = interp.sim_breached() {
+        refused.push(*loud);
+    }
     for loud in refused {
         interp
             .trace
@@ -3526,6 +3543,7 @@ fn execute_on(
         #[cfg(test)]
         peak_body_bytes: interp.heap.peak_body_bytes(),
         chunks_refused,
+        sim: interp.sim_report(),
         #[cfg(feature = "pinning")]
         pinning: interp.pinning.take(&interp.activity.pins),
         #[cfg(feature = "sharing")]

@@ -19,6 +19,10 @@
 // rather than about this code. `tests/owners.rs` carries the same attribute
 // for the same reason.
 #![allow(dead_code)]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -645,6 +649,7 @@ mod tests {
             stack: StackSpan::default(),
             collections: 0,
             chunks_refused: 0,
+            sim: None,
             #[cfg(feature = "pinning")]
             pinning: rexx_exec::PinReport::default(),
             #[cfg(feature = "sharing")]
@@ -699,6 +704,7 @@ mod tests {
             stack: StackSpan::default(),
             collections: 0,
             chunks_refused: 0,
+            sim: None,
             #[cfg(feature = "pinning")]
             pinning: rexx_exec::PinReport::default(),
             #[cfg(feature = "sharing")]

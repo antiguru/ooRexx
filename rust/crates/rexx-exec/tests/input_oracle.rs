@@ -12,6 +12,11 @@
 //! Command-line arguments and a non-empty console, compared against the
 //! running oracle.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::fs;

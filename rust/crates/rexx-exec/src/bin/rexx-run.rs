@@ -58,15 +58,32 @@ fn main() -> ExitCode {
         });
 
     // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:
-    // `every`, or `at:K` for the program's K-th clause.
+    // `every`, `at:K` for the program's K-th clause, or the simulation mode,
+    // `sim` or `sim:SEED[,...]`.
     let invocation = match std::env::var("REXX_SWITCH_MODE").as_deref() {
         Ok("every") => invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
+        Ok(mode) if mode == "sim" || mode.starts_with("sim:") => {
+            match rexx_exec::SimConfig::parse(mode) {
+                Ok(config) => {
+                    if mode == "sim" {
+                        eprintln!("rexx-sim: seed={}", config.seed);
+                    }
+                    invocation.with_switch_mode(rexx_exec::SwitchMode::Sim(config))
+                }
+                Err(error) => {
+                    eprintln!("rexx-run: REXX_SWITCH_MODE: {error}");
+                    return ExitCode::from(2);
+                }
+            }
+        }
         Ok(mode) => match mode.strip_prefix("at:").map(str::parse) {
             Some(Ok(clause)) => {
                 invocation.with_switch_mode(rexx_exec::SwitchMode::AtClause(clause))
             }
             _ => {
-                eprintln!("rexx-run: REXX_SWITCH_MODE is `every` or `at:K`, not `{mode}`");
+                eprintln!(
+                    "rexx-run: REXX_SWITCH_MODE is `every`, `at:K` or `sim[:SEED,...]`, not `{mode}`"
+                );
                 return ExitCode::from(2);
             }
         },
@@ -98,6 +115,25 @@ fn main() -> ExitCode {
     let _ = std::io::stdout().write_all(&outcome.stdout);
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().write_all(&outcome.stderr);
+    if let Some(sim) = outcome.sim {
+        let trace = sim
+            .trace_hash
+            .map(|hash| format!(" trace={hash:016x}"))
+            .unwrap_or_default();
+        let profile = if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        };
+        eprintln!(
+            "rexx-sim: seed={} policy={} steps={} switches={}{trace} profile={profile} stack={}",
+            sim.seed,
+            sim.policy,
+            sim.steps,
+            sim.switches,
+            rexx_exec::INTERPRETER_STACK_BYTES
+        );
+    }
 
     // `ExitCode::from` takes a `u8`, which is the whole range a process exit
     // status carries anyway. What makes that range meaningful is

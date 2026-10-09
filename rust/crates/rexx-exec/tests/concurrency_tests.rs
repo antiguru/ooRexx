@@ -14,6 +14,11 @@
 //! `docs/superpowers/plans/phase-6-pinning.md`; with the `pinning` feature, the
 //! would-be park points each of those tests reaches.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;

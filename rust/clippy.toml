@@ -1,0 +1,9 @@
+# Every clock read in rexx-exec goes through `Interp::now` and `Interp::wall_now`
+# (`crates/rexx-exec/src/sim.rs`), which the simulation mode answers with virtual
+# time. Each other read carries an `#[allow]` with its reason.
+disallowed-methods = [
+    { path = "std::time::Instant::now", reason = "read the clock through Interp::now" },
+    { path = "std::time::SystemTime::now", reason = "read the clock through Interp::wall_now" },
+    { path = "chrono::Local::now", reason = "read the clock through Interp::wall_now" },
+    { path = "chrono::Utc::now", reason = "read the clock through Interp::wall_now" },
+]

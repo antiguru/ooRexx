@@ -168,7 +168,7 @@ fn timed_wait(
     woken: NativeResume,
 ) -> Result<NativeStarted, Failure> {
     park_point!(interp, crate::pinning::ParkKind::Timer);
-    let now = Instant::now();
+    let now = interp.now();
     let whole_days = TIMER_DAY.saturating_mul(u32::try_from(days.max(0)).unwrap_or(u32::MAX));
     let remainder = Duration::from_millis(
         u64::try_from(millis.rem_euclid(1 << 32)).expect("a remainder modulo 2^32 is positive"),
@@ -300,4 +300,5 @@ fn whole_number_argument(
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
 mod tests;

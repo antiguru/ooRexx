@@ -24,6 +24,11 @@
 //! run once, since the thread that takes a terminal's signal is the one
 //! that waits on the command (ruling P67).
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;

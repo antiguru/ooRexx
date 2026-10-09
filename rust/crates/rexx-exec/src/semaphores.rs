@@ -218,9 +218,8 @@ impl Interp {
             self.activities.semaphores.answers.insert(me, answer);
             return None;
         }
-        let expired = wait
-            .deadline
-            .is_some_and(|deadline| Instant::now() >= deadline);
+        let now = self.now();
+        let expired = wait.deadline.is_some_and(|deadline| now >= deadline);
         let answer = match (wait.kind, wait.key) {
             (WaitKind::Event, SemaphoreKey::Object(object)) => {
                 if wait.deadline.is_none() || self.event_posted(object) {

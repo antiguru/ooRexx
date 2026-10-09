@@ -586,10 +586,14 @@ fn next_seed(interp: &mut Interp, seed: Option<i64>) -> u64 {
 /// activity's generator once. A splitmix64 step, so successive activations'
 /// streams are not shifted copies of one another.
 fn activation_seed(interp: &mut Interp) -> u64 {
+    if interp.activity.random_source.is_none() {
+        interp.activity.random_source = Some(initial_seed(interp));
+    }
     let source = interp
         .activity
         .random_source
-        .get_or_insert_with(initial_seed);
+        .as_mut()
+        .expect("the generator was seeded above");
     *source = source.wrapping_add(0x9E37_79B9_7F4A_7C15);
     let mut mixed = *source;
     mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -597,9 +601,14 @@ fn activation_seed(interp: &mut Interp) -> u64 {
     mixed ^ (mixed >> 31)
 }
 
-/// The generator's starting state.
-fn initial_seed() -> u64 {
-    let nanos = std::time::SystemTime::now()
+/// The generator's starting state: the random stream's draw in the
+/// simulation mode, else the clock's nanoseconds and the process id.
+fn initial_seed(interp: &mut Interp) -> u64 {
+    if let Some(seed) = interp.sim_random_seed() {
+        return seed;
+    }
+    let nanos = interp
+        .wall_now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.subsec_nanos());
     u64::from(nanos) << 32 ^ u64::from(std::process::id())

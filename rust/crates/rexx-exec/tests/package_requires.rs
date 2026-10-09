@@ -12,6 +12,11 @@
 //! The `::REQUIRES` search, the cycle report and `::OPTIONS NOPROLOG`, each
 //! against the oracle.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::fs;

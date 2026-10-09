@@ -31,6 +31,7 @@ impl Deadline {
     pub(crate) const CLAUSES_PER_CHECK: u32 = 1024;
 
     /// A bound `limit` from now.
+    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
     pub(crate) fn starting_now(limit: Duration) -> Deadline {
         Deadline {
             at: Instant::now() + limit,
@@ -302,6 +303,7 @@ impl Interp {
     /// serves the requests pending.
     #[cold]
     #[inline(never)]
+    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
     fn countdown_reached(&mut self, yields: bool) -> Result<(), Failure> {
         if let Some(deadline) = &mut self.deadline
             && (deadline.expired || Instant::now() >= deadline.at)
@@ -319,7 +321,11 @@ impl Interp {
 
     /// Blocks this thread until `due` or a post to the inbox, whose
     /// completions it files, or fails where the run's deadline comes first.
+    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
     pub(crate) fn idle_until(&mut self, due: Instant) -> Result<(), Failure> {
+        if self.sim.is_some() {
+            return self.sim_idle_until(due);
+        }
         self.hand_over_output();
         if let Some(deadline) = &self.deadline
             && (deadline.expired || deadline.at <= due)
@@ -344,6 +350,14 @@ impl Interp {
     /// Blocks this thread until something is posted to the inbox, whose
     /// completions it files, or fails where the run's deadline comes first.
     pub(crate) fn idle_for_posts(&mut self) -> Result<(), Failure> {
+        // With a pool of bound 0 every completion is posted by this thread
+        // before it is waited for.
+        if self.sim.is_some() {
+            return Err(crate::Loud::scheduler_inconsistency(
+                "a wait for another thread's post in the simulation mode",
+            )
+            .into());
+        }
         if let Some(deadline) = &self.deadline {
             return self.idle_until(deadline.at);
         }
@@ -353,8 +367,17 @@ impl Interp {
         Ok(())
     }
 
+    /// Whether the run's deadline, which is real time in every mode, has
+    /// passed.
+    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+    pub(crate) fn deadline_passed(&self) -> bool {
+        self.deadline
+            .as_ref()
+            .is_some_and(|deadline| deadline.expired || Instant::now() >= deadline.at)
+    }
+
     /// Marks the run's deadline passed, so every later clause fails too.
-    fn expire_deadline(&mut self) -> Failure {
+    pub(crate) fn expire_deadline(&mut self) -> Failure {
         if let Some(deadline) = &mut self.deadline {
             deadline.expired = true;
         }

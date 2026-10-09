@@ -53,6 +53,8 @@ scheduler_inconsistency	GUARD	-	scheduler invariant (refusal-sites.tsv: guarded_
 select_op_off_its_node	GUARD	-	compiler invariant: a SELECT op names its own SELECT (census d-guard)
 setup_method	GUARD	-	scout A b15: b_define_class_method_setup, b_inherit_instance_methods are 97.1 on both engines
 signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNAL's form (census d-guard)
+sim_endless_wait	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: a deadlock in the simulation mode is a loud refusal; virtual time cannot end a wait only a real signal can
+sim_foreign_post	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: any inbox post other than a signal's halt is a determinism breach, refused loudly
 stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
 store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
 unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probes rc4 (a Method copy refuses at COPY first); the rest are handles whose object is gone or kinds receiver_kind has no arm for

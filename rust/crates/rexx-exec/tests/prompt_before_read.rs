@@ -19,6 +19,11 @@
 //! property of `rexx-run`'s own descriptors and is only observable by
 //! spawning it.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};

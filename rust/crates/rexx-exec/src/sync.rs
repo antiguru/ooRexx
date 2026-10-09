@@ -187,7 +187,12 @@ impl Wake {
     }
 }
 
+/// The timer thread's clock, which slices and wakes on real time.
 #[cfg(not(all(loom, test)))]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the timer thread, which the simulation mode does not arm"
+)]
 pub(crate) fn now() -> Instant {
     Instant::now()
 }
@@ -216,6 +221,7 @@ loom::lazy_static! {
 }
 
 #[cfg(all(test, not(loom)))]
+#[allow(clippy::disallowed_methods, reason = "these tests time real waits")]
 mod tests {
     use super::Wake;
     use std::time::{Duration, Instant};

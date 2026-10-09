@@ -15,6 +15,11 @@
 //! descriptors with the oracle's, 30 runs each. Every case depends on a
 //! wall-clock boundary (ruling P48), so a mismatch is run again once.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};

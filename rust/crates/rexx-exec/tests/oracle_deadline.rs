@@ -12,6 +12,11 @@
 //! A program that never finishes reddens the oracle harness at its
 //! deadline, rather than hanging it.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod support;
 
 use std::fs;

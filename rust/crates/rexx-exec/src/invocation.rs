@@ -88,12 +88,14 @@ pub struct Invocation {
 
 /// Where a test sets `SLICE` itself in place of the timer (spec 2026-09-29
 /// section 4, the deterministic switch mode).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SwitchMode {
     /// At the program's `k`-th clause, counting from 1.
     AtClause(u64),
     /// At every clause boundary.
     EveryOpportunity,
+    /// The simulation mode (spec 2026-10-07 section 4).
+    Sim(crate::SimConfig),
 }
 
 /// What an embedding that owns real descriptors hands the interpreter so that

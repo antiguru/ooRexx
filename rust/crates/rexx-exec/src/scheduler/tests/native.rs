@@ -22,6 +22,8 @@ struct Counted {
     outcome: Outcome,
     exits: u64,
     takes: u64,
+    /// The pool threads the run spawned.
+    spawned: u64,
 }
 
 impl Counted {
@@ -60,6 +62,7 @@ fn counted(source: &str, stress: bool, invocation: Invocation) -> Counted {
                 outcome,
                 exits: crate::scheduler::native_exits(),
                 takes: crate::dispatch::library::callback_takes(),
+                spawned: crate::scheduler::threads_spawned(),
             }
         })
         .expect("the interpreter thread")
@@ -246,6 +249,42 @@ fn the_timer_is_armed_for_a_call_in_flight() {
     interp.activities.in_flight = 0;
     interp.serve_requests(false).expect("no request fails");
     assert!(!interp.timer.armed_in_registry());
+}
+
+/// The timer arms no slice in the simulation mode, even with a call in
+/// flight.
+#[test]
+fn the_timer_arms_no_slice_in_the_simulation_mode() {
+    let mut interp = Interp::new();
+    let config = crate::SimConfig::parse("sim:1").expect("a sim spec");
+    interp.set_switch_mode(SwitchMode::Sim(config));
+    interp.activities.in_flight = 1;
+    interp.serve_requests(false).expect("no request fails");
+    assert!(!interp.timer.armed_in_registry());
+    interp.activities.in_flight = 0;
+}
+
+/// In the simulation mode a native call that leaves its driver runs on the
+/// baton: the pool spawns no thread, where it spawns one under the switch
+/// mode, and the program prints the same.
+#[test]
+fn a_native_call_in_the_simulation_mode_spawns_no_pool_thread() {
+    let source = "m = .t~new~start('work')\nsay TestIntArg(5)\nsay m~result\n\
+                  ::requires 'orxfunction' LIBRARY\n::class t\n::method work\n  return TestIntArg(7)\n";
+    let config = crate::SimConfig::parse("sim:1").expect("a sim spec");
+    let switched_run = counted(source, false, switched());
+    let sim_run = counted(
+        source,
+        false,
+        bounded().with_switch_mode(SwitchMode::Sim(config)),
+    );
+    for run in [&switched_run, &sim_run] {
+        assert_eq!(run.outcome.exit_code, 0, "{}", run.stderr());
+        assert_eq!(run.stdout(), "5\n7\n");
+        assert_eq!(run.exits, 2);
+    }
+    assert!(switched_run.spawned > 0);
+    assert_eq!(sim_run.spawned, 0);
 }
 
 /// A guarded library method whose send waited for its guard runs once the

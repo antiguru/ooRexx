@@ -12,6 +12,11 @@
 //! The method-body table (D76): whether each documented method **works**,
 //! where gate table C only asks whether `hasMethod` answers for it.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 mod gate_tables;
 mod support;
 mod watchdog;
@@ -537,6 +542,7 @@ fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
         stack: StackSpan::default(),
         collections: 0,
         chunks_refused: 0,
+        sim: None,
         #[cfg(feature = "pinning")]
         pinning: rexx_exec::PinReport::default(),
         #[cfg(feature = "sharing")]

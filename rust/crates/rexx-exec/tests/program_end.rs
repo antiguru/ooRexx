@@ -14,6 +14,11 @@
 //! `rexx-run`, with main's output written and without spinning. Each test
 //! kills the process once it has seen that.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "this harness times or bounds real runs"
+)]
+
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};

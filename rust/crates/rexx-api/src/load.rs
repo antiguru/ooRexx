@@ -904,6 +904,10 @@ fn buffer_handshake() -> std::sync::MutexGuard<'static, BufferHandshake> {
 
 /// Waits up to five seconds for `BUFFERCHANGED(key)`, answering whether it
 /// came, and ends `key`'s hold either way.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test native's own bound, on real time"
+)]
 fn await_buffer_changed(key: &[u8]) -> bool {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let mut handshake = buffer_handshake();

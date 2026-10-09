@@ -571,7 +571,7 @@ impl Interp {
         #[cfg(test)]
         if let Some(crate::scheduler::Scripted::Park) = crate::scheduler::take_scripted() {
             return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Sleep {
-                deadline: std::time::Instant::now(),
+                deadline: self.now(),
             }));
         }
         match &instruction.kind {

@@ -150,6 +150,11 @@ impl Heap {
         self.bytes_since
     }
 
+    /// The body bytes charged since the last collection.
+    pub fn bytes_since(&self) -> usize {
+        self.bytes_since
+    }
+
     /// The most body bytes this heap has held at once: the bytes the last
     /// collection found live plus everything charged since, at its largest.
     /// An upper bound, since a body charged and dropped before a collection
