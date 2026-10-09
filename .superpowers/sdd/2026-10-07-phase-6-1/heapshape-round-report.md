@@ -272,8 +272,8 @@ most 6,090 Ir (rexxcps).
 
 ### Concerns after this round
 
-1. The new test depends on the debug binary's address-space footprint sitting between about 0.5
-   and 1 GB under a 3.5 GB cap. A much larger footprint would fail the buffer's own reservation
-   (the test then fails on its stdout, not silently); a much smaller one would let both
-   reservations succeed and the run write 2 GB.
+1. The new test depends on the debug binary's address-space footprint staying under about 1.5 GB,
+   so that the buffer's 2 GB reservation fits a 3.5 GB cap. A larger footprint fails that
+   reservation, and the test then fails on its stdout, not silently. The two reservations together
+   need 4 GB, more than the cap, so no footprint lets both succeed.
 2. rexxcps margin and the pingsem/pingguard wall clock, as before.
