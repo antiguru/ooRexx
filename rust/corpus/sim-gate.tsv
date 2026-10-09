@@ -1,0 +1,219 @@
+# The seeded gate's parts (spec 2026-10-07 section 4, "Gate"; Phase 6.1 Task 10), read by
+# crates/rexx-exec/tests/concurrency_tests.rs, sim_gate. Tab-separated columns:
+#
+#   group        an ooTest group file below ootest/ooRexx, or a program relative to rust/
+#   part         whole, derived or rest (as whole_groups runs them), single (one test alone),
+#                or program
+#   k            the contended steps of the calibration run: seed 0 under fifo
+#   seeds        seeds in a release build
+#   debug        seeds in a debug build; 0 leaves the row out of the debug subset
+#   release_ms   the calibration run's wall time, release
+#   debug_ms     the calibration run's wall time, debug
+#   knobs        appended to every run's mode, or -; fail= rows are judged by invariants only
+#                and not compared with the oracle
+#   left_out     tests left out beside the part's own (a rest row's refusing tests), a single
+#                row's one test, or -
+#
+# Seed i of a row is splitmix(hash(group, part), i): output i of the splitmix64 stream
+# starting at FNV-1a 64 of `group:part`. Its policy is entry i mod 7 of pre:1, pre:2, pre:3,
+# pct:3, uniform:0.01, uniform:0.2, uniform:1, with k=k for pre and pct. A run's deadline is
+# its calibrated time in the build times 10, and at least 60 s. The calibration and the seed
+# counts are recorded in docs/superpowers/plans/phase-6-1-gate.md, ## Task 10.
+# STREAM runs under clock=real: TEST_QUERYDIR_EXISTS and TEST_QUERYFILE_EXISTS_NOTOPEN compare
+# .DateTime~new with the timestamp of a file just made on the real file system.
+base/bif/STREAM.testGroup	whole	0	70	0	76	81	clock=real	-
+base/bif/STREAM.testGroup	derived	0	70	14	56	56	clock=real	-
+base/bif/TIME.testGroup	whole	0	70	0	107	127	-	-
+base/bif/TIME.testGroup	derived	0	70	14	71	76	-	-
+base/class/Alarm.testGroup	whole	1035	70	0	55	61	-	-
+base/class/Alarm.testGroup	derived	1035	70	14	55	61	-	-
+base/class/Class.testGroup	whole	0	70	0	76	86	-	-
+base/class/Class.testGroup	derived	0	70	14	55	61	-	-
+base/class/DateTime.testGroup	whole	0	70	0	5007	8107	-	-
+base/class/DateTime.testGroup	derived	0	70	14	55	61	-	-
+base/class/EventSemaphore.testGroup	whole	6	70	0	50	55	-	-
+base/class/EventSemaphore.testGroup	derived	6	70	14	50	56	-	-
+base/class/Message.testGroup	whole	409	70	0	56	66	-	-
+base/class/Message.testGroup	rest	1192	70	0	61	71	-	TEST_REPLYWITH_NOT_ARRAY TEST_SENDWITH_NOT_ARRAY TEST_STARTWITH_NOT_ARRAY
+base/class/Message.testGroup	derived	409	70	14	55	61	-	-
+base/class/Method.testGroup	whole	0	70	0	61	71	-	-
+base/class/Method.testGroup	rest	0	70	0	66	71	-	TEST_NEW_CONTEXT_FLOATINGMETHOD TEST_NEW_CONTEXT_IMPORTEDPACKAGE TEST_NEW_CONTEXT_METHOD TEST_NEW_CONTEXT_METHODINHERITED TEST_NEW_CONTEXT_METHODPUBLIC TEST_NEW_CONTEXT_METHODPUBLICINHERITED TEST_NEW_CONTEXT_PROGRAMSCOPE TEST_NEW_CONTEXT_REXXPACKAGE TEST_NEW_CONTEXT_ROUTINE TEST_NEW_CONTEXT_THISPACKAGE TEST_NEW_FOUR_ARGS TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER TEST_NEW_THREE_ARGS_STRING_STRING_NULL TEST_ROUTINE_SOURCE_COMMENT TEST_ROUTINE_SOURCE_NOP TEST_ROUTINE_SOURCE_WHITESPACE
+base/class/Method.testGroup	derived	0	70	14	56	55	-	-
+base/class/MethodArgs.testGroup	whole	48479	70	0	142	167	-	-
+base/class/MethodArgs.testGroup	derived	48468	70	14	141	172	-	-
+# MutexSemaphore leaves TEST_EXCLUSION out of whole and derived and runs it alone (single):
+# its worker can wait forever on the mutex main took (ruling P46, corpus/sim-exempt.tsv).
+base/class/MutexSemaphore.testGroup	whole	0	70	0	51	55	-	TEST_EXCLUSION
+base/class/MutexSemaphore.testGroup	derived	0	70	14	50	56	-	TEST_EXCLUSION
+base/class/MutexSemaphore.testGroup	single	21	70	14	51	70	-	TEST_EXCLUSION
+base/class/Object.testGroup	whole	2	70	0	66	71	-	-
+base/class/Object.testGroup	rest	320	70	0	81	91	-	TEST_RUN_ARRAY_ARGUMENT TEST_RUN_NO_METHOD TEST_SENDWITH_NOT_ARRAY
+base/class/Object.testGroup	derived	320	70	14	66	71	-	-
+base/class/RexxContext.testGroup	whole	0	70	0	50	50	-	-
+base/class/RexxContext.testGroup	rest	7	70	0	61	66	-	TESTCOPY01
+base/class/RexxContext.testGroup	derived	7	70	14	51	56	-	-
+base/class/Ticker.testGroup	whole	5752	70	0	55	61	-	-
+base/class/Ticker.testGroup	derived	5752	70	14	55	66	-	-
+base/directives/ATTRIBUTE.testGroup	whole	0	70	0	71	76	-	-
+base/directives/ATTRIBUTE.testGroup	derived	0	70	14	56	61	-	-
+base/directives/CONSTANT.testGroup	whole	0	70	0	50	56	-	-
+base/directives/CONSTANT.testGroup	rest	0	70	0	56	61	-	TEST_EXPRESSION_ACTIVATE TEST_EXPRESSION_SELF
+base/directives/CONSTANT.testGroup	derived	0	70	14	50	55	-	-
+base/directives/METHOD.testGroup	whole	8	70	0	61	66	-	-
+base/directives/METHOD.testGroup	rest	8	70	0	66	71	-	TESTPACKAGE
+base/directives/METHOD.testGroup	derived	8	70	14	55	61	-	-
+base/keyword/CALL.testGroup	whole	0	70	0	172	187	-	-
+base/keyword/CALL.testGroup	derived	0	70	14	50	55	-	-
+base/keyword/GUARD.testGroup	whole	252	70	0	55	60	-	-
+base/keyword/GUARD.testGroup	derived	252	70	14	51	61	-	-
+base/keyword/RAISE.testGroup	whole	3	70	0	55	61	-	-
+base/keyword/RAISE.testGroup	derived	3	70	14	56	56	-	-
+base/keyword/REPLY.testGroup	whole	1218	70	0	51	55	-	-
+base/keyword/REPLY.testGroup	derived	1098	70	14	51	56	-	-
+base/keyword/TRACE.testGroup	whole	4	70	0	81	96	-	-
+base/keyword/TRACE.testGroup	derived	3	70	14	50	61	-	-
+base/keyword/TRACE_TraceObject.testGroup	whole	9	70	0	56	61	-	-
+base/keyword/TRACE_TraceObject.testGroup	derived	9	70	14	51	56	-	-
+base/rexxutil/SysSleep.testGroup	whole	19	70	0	51	56	-	-
+base/rexxutil/SysSleep.testGroup	derived	19	70	14	50	55	-	-
+base/special.variables/RESULT_RC_SIGL.testGroup	whole	49	70	0	76	81	-	-
+base/special.variables/RESULT_RC_SIGL.testGroup	derived	49	70	14	51	55	-	-
+doc/rexxref/chapter5/Section1.testGroup	whole	0	70	0	51	50	-	-
+doc/rexxref/chapter5/Section1.testGroup	rest	15	70	0	50	56	-	TEST_OBJECT_OBJECTNAMEEQUALS
+doc/rexxref/chapter5/Section1.testGroup	derived	15	70	14	50	55	-	-
+regressions/bug2003_guard_when.testGroup	whole	0	70	0	76	86	-	-
+regressions/bug2003_guard_when.testGroup	derived	0	70	14	76	81	-	-
+corpus/lang/call_condition_three_deep.rex	program	0	70	0	25	30	-	-
+corpus/lang/call_signal_out_of_callee.rex	program	0	70	0	25	25	-	-
+corpus/lang/call_trace_nested.rex	program	0	70	0	25	25	-	-
+corpus/lang/call_depth_cap_function.rex	program	0	70	0	86	91	-	-
+corpus/lang/call_depth_cap_call.rex	program	0	70	0	81	91	-	-
+corpus/lang/call_callee_allocates.rex	program	0	70	0	25	30	-	-
+corpus/lang/send_in_argument.rex	program	0	70	0	25	30	-	-
+corpus/lang/send_callee_allocates.rex	program	0	70	0	25	30	-	-
+corpus/lang/send_resumable_entries.rex	program	2	70	14	25	25	-	-
+corpus/lang/send_new_init_fails.rex	program	0	70	0	25	30	-	-
+corpus/lang/send_guarded.rex	program	0	70	0	25	30	-	-
+corpus/lang/builtin_argument_call.rex	program	0	70	0	25	25	-	-
+corpus/lang/new_init_subclasses.rex	program	0	70	0	30	25	-	-
+corpus/lang/do_block_calls.rex	program	0	70	0	25	30	-	-
+corpus/lang/started_waits_for_a_later_send.rex	program	2	70	14	25	30	-	-
+corpus/lang/started_waits_inside_a_call.rex	program	2	70	14	25	25	-	-
+corpus/lang/started_unwaited_says.rex	program	0	70	0	25	30	-	-
+corpus/lang/started_result_message.rex	program	2	70	14	25	30	-	-
+corpus/lang/started_raises.rex	program	1	70	14	25	30	-	-
+corpus/lang/message_wait_then_completed.rex	program	1	70	14	25	25	-	-
+corpus/lang/message_two_waiters.rex	program	7	70	14	25	25	-	-
+corpus/lang/message_start.rex	program	3	70	14	25	30	-	-
+corpus/lang/started_waited_in_a_replied_body.rex	program	1	70	14	25	30	-	-
+corpus/lang/started_waited_in_uninit.rex	program	1	70	14	25	25	-	-
+corpus/lang/context_thread_numbers.rex	program	3	70	14	25	30	-	-
+corpus/lang/context_thread_sequential.rex	program	0	70	0	25	25	-	-
+corpus/lang/context_thread_pool_bound.rex	program	0	70	0	25	30	-	-
+corpus/lang/context_thread_lazy.rex	program	4	70	14	25	25	-	-
+corpus/lang/message_start_error_condition.rex	program	1	70	14	25	25	-	-
+corpus/lang/message_result_reraise.rex	program	1	70	14	25	30	-	-
+corpus/lang/message_result_relayed.rex	program	2	70	14	30	30	-	-
+corpus/lang/message_accessors.rex	program	5	70	14	25	30	-	-
+corpus/lang/message_reuse.rex	program	6	70	14	25	30	-	-
+corpus/lang/message_send_error_condition.rex	program	0	70	0	25	25	-	-
+corpus/lang/started_numeric_address.rex	program	2	70	14	25	25	-	-
+corpus/lang/message_error_condition_after_main.rex	program	2	70	14	25	30	-	-
+corpus/lang/message_send_user_condition.rex	program	1	70	14	25	30	-	-
+corpus/lang/started_primitive_error_condition.rex	program	1	70	14	25	30	-	-
+corpus/lang/message_send_reentered.rex	program	0	70	0	25	30	-	-
+corpus/lang/message_primitive_send_fails_main.rex	program	1	70	14	25	30	-	-
+corpus/lang/message_send_fails_main_frames.rex	program	2	70	14	25	30	-	-
+corpus/lang/message_halt_wait.rex	program	827598	70	14	96	136	-	-
+corpus/lang/message_halt_self.rex	program	2	70	14	25	25	-	-
+corpus/lang/message_halt_untrapped.rex	program	413798	70	14	61	81	-	-
+corpus/lang/message_halt_returning.rex	program	827606	70	14	96	141	-	-
+corpus/lang/message_halt_loop_step.rex	program	3310353	70	14	329	521	-	-
+corpus/lang/message_halt_interpret.rex	program	3	70	14	25	25	-	-
+corpus/lang/pinned_busy_wait_interpret.rex	program	827589	70	14	131	217	-	-
+corpus/lang/pinned_busy_wait_handler.rex	program	827589	70	14	132	217	-	-
+corpus/lang/pinned_busy_wait_external.rex	program	827587	70	14	131	212	-	-
+corpus/lang/message_halt_pinned_target.rex	program	3724143	70	14	380	653	-	-
+corpus/lang/main_ends_in_pinned_yield.rex	program	1241383	70	14	197	324	-	-
+corpus/lang/main_fails_in_pinned_yield.rex	program	1241386	70	14	197	318	-	-
+corpus/lang/sleepers_wake_in_deadline_order.rex	program	5	70	14	25	25	-	-
+corpus/lang/sleep_parks_in_if_do_and_argument.rex	program	5	70	14	25	25	-	-
+corpus/lang/sleeper_wakes_busy_main.rex	program	827589	70	14	465	840	-	-
+corpus/lang/sleep_in_parse_template_and_when.rex	program	0	70	0	25	25	-	-
+corpus/lang/reply_then_wait.rex	program	3	70	14	25	30	-	-
+corpus/lang/reply_inside_constructs.rex	program	48	70	14	25	25	-	-
+corpus/lang/reply_continuation_error_trace.rex	program	3	70	14	25	25	-	-
+corpus/lang/reply_continuation_error_stderr.rex	program	3	70	14	25	25	-	-
+corpus/lang/reply_continuation_failed_send.rex	program	3	70	14	25	25	-	-
+corpus/lang/reply_as_the_last_clause.rex	program	0	70	0	25	25	-	-
+corpus/lang/reply_split_after_a_trap_at_the_reply.rex	program	3	70	14	25	30	-	-
+corpus/lang/reply_split_after_a_trap_takes_the_failure.rex	program	1	70	14	25	25	-	-
+corpus/lang/reply_split_after_a_trap_does_not_wait.rex	program	1	70	14	25	30	-	-
+corpus/lang/reply_as_the_last_clause_numbers_the_replier.rex	program	2	70	14	25	25	-	-
+corpus/lang/context_of_another_activity.rex	program	4	70	14	25	25	-	-
+corpus/lang/context_moved_by_reply.rex	program	3	70	14	25	30	-	-
+corpus/lang/message_reply.rex	program	11	70	14	25	25	-	-
+corpus/lang/message_notify.rex	program	12	70	14	25	25	-	-
+corpus/lang/message_notify_arguments.rex	program	0	70	0	25	25	-	-
+corpus/lang/message_notify_error.rex	program	1	70	14	25	25	-	-
+corpus/lang/message_notify_untrapped.rex	program	0	70	0	25	25	-	-
+corpus/lang/message_notify_single_slot.rex	program	1	70	14	25	25	-	-
+corpus/lang/message_notifier_fails.rex	program	0	70	0	25	30	-	-
+corpus/lang/message_notifier_fails_untrapped.rex	program	0	70	0	25	25	-	-
+corpus/lang/message_notify_error_traceback.rex	program	0	70	0	25	25	-	-
+corpus/lang/alarm_fires_after_reply.rex	program	1	70	14	25	25	-	-
+corpus/lang/ticker_cancelled_by_its_target.rex	program	1	70	14	25	30	-	-
+corpus/lang/timer_cancel_in_whole_days.rex	program	101	70	14	25	30	-	-
+corpus/lang/timer_native_arguments.rex	program	0	70	0	25	30	-	-
+corpus/lang/timer_post_wakes_every_waiter.rex	program	4	70	14	25	25	-	-
+corpus/lang/timer_post_reads_the_waiters_cancel.rex	program	19	70	14	25	25	-	-
+corpus/lang/timer_remainder_modulo_2_32.rex	program	10	70	14	25	25	-	-
+corpus/lang/trace_object_activity_fields.rex	program	4	70	14	25	30	-	-
+corpus/lang/uninit_after_every_activity.rex	program	1	70	14	25	25	-	-
+corpus/lang/trace_object_native_caller.rex	program	1	70	14	25	30	-	-
+corpus/lang/guard_serializes_started_sends.rex	program	21	70	14	25	25	-	-
+corpus/lang/reply_seen_by_a_guarded_send.rex	program	6	70	14	25	25	-	-
+corpus/lang/reply_continuation_parks_holding_the_guard.rex	program	1	70	14	25	25	-	-
+corpus/lang/reply_at_nesting_two_reserves_again.rex	program	2	70	14	25	25	-	-
+corpus/lang/guarded_getter_waits_for_reply.rex	program	1	70	14	25	25	-	-
+corpus/lang/guard_on_waits_in_an_unguarded_method.rex	program	6	70	14	25	30	-	-
+corpus/lang/guard_deadlock_two_activities.rex	program	2	70	14	25	30	-	-
+corpus/lang/message_wait_deadlock.rex	program	2	70	14	25	25	-	-
+corpus/lang/trace_object_guard_fields.rex	program	0	70	0	30	30	-	-
+corpus/lang/method_set_unguarded_is_not_reserved.rex	program	2	70	14	25	25	-	-
+corpus/lang/method_set_guarded_is_reserved.rex	program	4	70	14	25	25	-	-
+corpus/lang/guarded_empty_method_waits.rex	program	1	70	14	25	25	-	-
+corpus/lang/guard_held_before_the_first_start.rex	program	2	70	14	25	25	-	-
+corpus/lang/guard_on_lock_passes_between_activities.rex	program	4	70	14	25	25	-	-
+corpus/lang/guard_when_waits_for_a_store.rex	program	5	70	14	25	25	-	-
+corpus/lang/guard_when_stem_element_store.rex	program	2	70	14	25	25	-	-
+corpus/lang/guard_when_attribute_setter.rex	program	2	70	14	25	25	-	-
+corpus/lang/guard_when_drop_wakes.rex	program	3	70	14	25	25	-	-
+corpus/lang/guard_when_traces_each_evaluation.rex	program	4	70	14	25	25	-	-
+corpus/lang/guard_when_trace_object_waiting.rex	program	2	70	14	25	30	-	-
+corpus/lang/guard_when_replies_take_turns.rex	program	55	70	14	25	30	-	-
+corpus/lang/guard_when_posted_while_evaluating.rex	program	0	70	0	25	25	-	-
+corpus/lang/native_guard_on_when_updated.rex	program	4	70	14	25	30	-	-
+corpus/lang/native_guard_off_keeps_the_count.rex	program	2	70	14	25	25	-	-
+corpus/lang/guard_when_holds_the_lock_again.rex	program	2	70	14	25	30	-	-
+corpus/lang/guard_when_unwatches_at_its_end.rex	program	3	70	14	25	25	-	-
+corpus/lang/event_semaphore_post_reset_wait.rex	program	0	70	0	25	25	-	-
+corpus/lang/event_semaphore_post_wakes_every_waiter.rex	program	5	70	14	25	25	-	-
+corpus/lang/event_semaphore_timed_wait_ended_by_a_post.rex	program	2	70	14	25	25	-	-
+corpus/lang/event_semaphore_wait_not_a_number.rex	program	0	70	0	25	25	-	-
+corpus/lang/mutex_semaphore_nesting_and_close.rex	program	0	70	0	25	25	-	-
+corpus/lang/mutex_semaphore_released_when_its_activity_ends.rex	program	1	70	14	25	25	-	-
+corpus/lang/mutex_semaphore_end_hands_over_to_a_waiter.rex	program	2	70	14	25	25	-	-
+corpus/lang/mutex_semaphore_stays_with_the_replier.rex	program	1	70	14	25	25	-	-
+corpus/lang/mutex_semaphore_timed_acquire.rex	program	2	70	14	25	25	-	-
+corpus/lang/sys_semaphores_unnamed.rex	program	0	70	0	25	25	-	-
+corpus/lang/sys_semaphores_across_activities.rex	program	5	70	14	25	30	-	-
+corpus/lang/sys_semaphore_poll_takes_at_its_poll.rex	program	1	70	14	25	25	-	-
+corpus/lang/sys_semaphore_post_waits_for_the_next_poll.rex	program	1	70	14	25	30	-	-
+corpus/lang/sys_wait_event_sem_timeout_not_int.rex	program	0	70	0	25	25	-	-
+corpus/lang/alarm_cancel_waits_for_the_timer.rex	program	14	70	14	30	30	-	-
+corpus/lang/alarm_message_target.rex	program	1	70	14	25	30	-	-
+corpus/lang/ticker_fires_on_its_replied_activity.rex	program	27	70	14	25	30	-	-
+corpus/lang/call_argument_concatenates_a_rexx_string_method.rex	program	0	70	0	25	25	-	-
+corpus/lang/trace_debug_ignores_trace.rex	program	0	70	0	25	30	-	-
+crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex	program	1	70	14	25	25	fail=wait:1	-

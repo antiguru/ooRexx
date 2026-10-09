@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/do_block_calls.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	506480f8d720182a	rc 0, stdout 12 lines, stderr 12 lines

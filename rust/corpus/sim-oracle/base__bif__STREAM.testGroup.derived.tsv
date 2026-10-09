@@ -1,0 +1,3 @@
+# The oracle's outcomes of base/bif/STREAM.testGroup derived, 30 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+30	0	1cd0c89725d8f315	pass, assertions 10, rc 0, last started TEST_QUERYDIR_EXISTS, failing []

@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/message_primitive_send_fails_main.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	163	6454c425cc99e4d9	rc 163, stdout 1 lines, stderr 5 lines

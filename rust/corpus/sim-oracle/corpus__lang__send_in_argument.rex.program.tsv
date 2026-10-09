@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/send_in_argument.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	02397bda696637ce	rc 0, stdout 15 lines, stderr 55 lines

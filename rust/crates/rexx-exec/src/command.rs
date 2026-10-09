@@ -560,6 +560,7 @@ fn start(
     }
     if let Some(mode) = switch_mode {
         builder.env("REXX_SWITCH_MODE", mode);
+        builder.env(crate::SIM_CHILD_ENV, "1");
         // A group of its own, which a refused wait kills whole.
         std::os::unix::process::CommandExt::process_group(&mut builder, 0);
     }

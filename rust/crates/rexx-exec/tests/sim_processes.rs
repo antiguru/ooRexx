@@ -132,3 +132,48 @@ fn a_damaged_trace_is_refused_before_the_run() {
         )
     );
 }
+
+/// A child `rexx` of a run in the simulation mode runs in it and writes no
+/// `rexx-sim:` line: a program capturing the child's standard error with its
+/// output, as ooTest's `issueCmd` does, reads the child's lines only. The
+/// run's own line stays.
+#[test]
+fn a_child_writes_no_sim_line_into_output_its_parent_captures() {
+    let dir = std::env::temp_dir().join(format!("rexx-sim-child-{}", std::process::id()));
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).expect("a directory");
+    let link = bin.join("rexx");
+    if !link.exists() {
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx-run"), &link).expect("the link");
+    }
+    std::fs::write(
+        dir.join("c.rex"),
+        "say 'child' value('REXX_SWITCH_MODE',,'ENVIRONMENT')~left(4)\n",
+    )
+    .expect("the child written");
+    std::fs::write(
+        dir.join("p.rex"),
+        "o = .array~new\n\
+         address system 'rexx c.rex' with output append using (o) error append using (o)\n\
+         say o~items\ndo line over o; say line; end\n",
+    )
+    .expect("the program written");
+    let path = std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(
+        &std::env::var_os("PATH").expect("a PATH"),
+    )))
+    .expect("a PATH");
+    let ran = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(dir.join("p.rex"))
+        .current_dir(&dir)
+        .env("PATH", path)
+        .env("REXX_SWITCH_MODE", "sim:5")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("rexx-run runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&ran.stderr).into_owned();
+    assert!(ran.status.success(), "{stderr}");
+    assert_eq!(String::from_utf8_lossy(&ran.stdout), "1\nchild sim:\n");
+    assert!(stderr.starts_with("rexx-sim: seed=5 "), "{stderr}");
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+}

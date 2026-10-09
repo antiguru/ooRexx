@@ -1,0 +1,3 @@
+# The oracle's outcomes of base/class/MethodArgs.testGroup derived, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	855db420c1fcc111	pass, assertions 2232, rc 0, last started TEST_REQUEST_STRING_STRING, failing []

@@ -71,12 +71,15 @@ const TIMINGS: &[&str] = &[
 const STAMPED: &[&str] = &["[failure] ", "[error] "];
 
 /// How the crate's side schedules activities.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SwitchMode {
     /// The scheduler as it ships.
     None,
     /// A switch at every clause boundary, as `rexx_exec::SwitchMode` names it.
     EveryOpportunity,
+    /// The simulation mode, its `REXX_SWITCH_MODE` value (`sim:SEED,...`): the
+    /// run is a `rexx-run` process of its own, see [`run_crate_process`].
+    Sim(String),
 }
 
 /// One run's three descriptors.
@@ -428,8 +431,40 @@ pub fn run_crate_within(
     mode: SwitchMode,
     deadline: std::time::Duration,
 ) -> Run {
+    if let SwitchMode::Sim(config) = &mode {
+        return run_crate_sim(run, args, config, deadline).run;
+    }
     let driver = run.join("testOORexx.rex");
+    let environment = crate_environment(run);
     let text = fs::read(&driver).expect("the copied driver");
+    let mut environment = environment;
+    if mode == SwitchMode::EveryOpportunity {
+        environment.push((b"REXX_SWITCH_MODE".to_vec(), b"every".to_vec()));
+    }
+    let invocation = Invocation::with_argument(args.join(" ").into_bytes());
+    let invocation = match mode {
+        SwitchMode::None | SwitchMode::Sim(_) => invocation,
+        SwitchMode::EveryOpportunity => {
+            invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity)
+        }
+    }
+    .with_directory(run.to_path_buf())
+    .with_environment(environment)
+    .with_deadline(deadline);
+    let abandon = deadline + (watchdog::ROW_ABANDON - watchdog::ROW_DEADLINE);
+    let outcome = watchdog::run_bounded_with(&driver.to_string_lossy(), text, invocation, abandon);
+    let status = (!watchdog::did_not_finish(&outcome)).then_some(outcome.exit_code);
+    Run {
+        stdout: outcome.stdout,
+        stderr: outcome.stderr,
+        status,
+    }
+}
+
+/// The environment a run of the group copy `run` gets here: the process's
+/// own without `LD_LIBRARY_PATH`, `PATH` and `REXX_SWITCH_MODE`, then the
+/// oracle's library directory and [`interpreter_bin`] ahead of `PATH`.
+fn crate_environment(run: &Path) -> Vec<(Vec<u8>, Vec<u8>)> {
     let lib = oracle::oracle_root().join("lib");
     let bin = interpreter_bin(run);
     let path = env::join_paths(
@@ -453,26 +488,154 @@ pub fn run_crate_within(
         b"PATH".to_vec(),
         path.to_string_lossy().into_owned().into_bytes(),
     ));
-    if mode == SwitchMode::EveryOpportunity {
-        environment.push((b"REXX_SWITCH_MODE".to_vec(), b"every".to_vec()));
+    environment
+}
+
+/// [`run_crate_within`] in the simulation mode `config`, with how the
+/// process ended and how long it took.
+pub fn run_crate_sim(
+    run: &Path,
+    args: &[&str],
+    config: &str,
+    deadline: std::time::Duration,
+) -> ProcessRun {
+    let mut words = vec![run.join("testOORexx.rex").to_string_lossy().into_owned()];
+    words.extend(args.iter().map(|word| (*word).to_string()));
+    run_crate_process(
+        &words,
+        run,
+        Some(crate_environment(run)),
+        config,
+        None,
+        deadline,
+    )
+}
+
+/// How a [`run_crate_process`] ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ended {
+    /// It exited with this status.
+    Exited(i32),
+    /// It died of this signal, not one sent here.
+    Signaled(i32),
+    /// Its process group was killed at the deadline.
+    Killed,
+}
+
+/// One [`run_crate_process`]: its descriptors (status `None` unless it
+/// exited), how it ended and how long it took.
+pub struct ProcessRun {
+    pub run: Run,
+    pub ended: Ended,
+    pub took: std::time::Duration,
+}
+
+/// Runs `rexx-run` on `words` (the program, then its arguments) from `cwd`
+/// with `REXX_SWITCH_MODE` set to `mode`, in a process group of its own that
+/// is killed at `deadline`, a child it started included. `environment`
+/// replaces the process's own where given, else is inherited; `stdin` is
+/// written to its standard input, which is otherwise empty.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "this harness bounds a real process"
+)]
+pub fn run_crate_process(
+    words: &[String],
+    cwd: &Path,
+    environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
+    mode: &str,
+    stdin: Option<&[u8]>,
+    deadline: std::time::Duration,
+) -> ProcessRun {
+    use std::io::{Read as _, Write as _};
+    use std::os::unix::ffi::OsStringExt as _;
+    use std::os::unix::process::{CommandExt as _, ExitStatusExt as _};
+    use std::process::{Command, Stdio};
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
+    if let Some(environment) = environment {
+        command
+            .env_clear()
+            .envs(environment.into_iter().map(|(name, value)| {
+                (
+                    std::ffi::OsString::from_vec(name),
+                    std::ffi::OsString::from_vec(value),
+                )
+            }));
     }
-    let invocation = Invocation::with_argument(args.join(" ").into_bytes());
-    let invocation = match mode {
-        SwitchMode::None => invocation,
-        SwitchMode::EveryOpportunity => {
-            invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity)
+    command
+        .args(words)
+        .current_dir(cwd)
+        .env("REXX_SWITCH_MODE", mode)
+        .process_group(0)
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let start = std::time::Instant::now();
+    let mut child = command
+        .spawn()
+        .unwrap_or_else(|e| panic!("cannot start rexx-run on {words:?}: {e}"));
+    let group = rustix::process::Pid::from_child(&child);
+    let kill_group = || {
+        // The group may be gone already; that is the outcome wanted.
+        let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+    };
+    if let Some(bytes) = stdin {
+        let mut pipe = child.stdin.take().expect("stdin was piped");
+        // A program that stops reading early closes the pipe; what it read is
+        // the outcome.
+        let _ = pipe.write_all(bytes);
+    }
+    let reader = |mut pipe: Box<dyn std::io::Read + Send>| {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = pipe.read_to_end(&mut bytes);
+            let _ = sender.send(bytes);
+        });
+        receiver
+    };
+    let stdout = reader(Box::new(child.stdout.take().expect("stdout was piped")));
+    let stderr = reader(Box::new(child.stderr.take().expect("stderr was piped")));
+    let ended = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                break match (status.code(), status.signal()) {
+                    (Some(code), _) => Ended::Exited(code),
+                    (None, Some(signal)) => Ended::Signaled(signal),
+                    (None, None) => Ended::Signaled(0),
+                };
+            }
+            Ok(None) if start.elapsed() >= deadline => {
+                kill_group();
+                let _ = child.wait();
+                break Ended::Killed;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(5)),
+            Err(e) => panic!("cannot wait for rexx-run on {words:?}: {e}"),
         }
-    }
-    .with_directory(run.to_path_buf())
-    .with_environment(environment)
-    .with_deadline(deadline);
-    let abandon = deadline + (watchdog::ROW_ABANDON - watchdog::ROW_DEADLINE);
-    let outcome = watchdog::run_bounded_with(&driver.to_string_lossy(), text, invocation, abandon);
-    let status = (!watchdog::did_not_finish(&outcome)).then_some(outcome.exit_code);
-    Run {
-        stdout: outcome.stdout,
-        stderr: outcome.stderr,
-        status,
+    };
+    let took = start.elapsed();
+    // A child the program started and left running holds the pipes open.
+    kill_group();
+    let grace = std::time::Duration::from_secs(10);
+    let stdout = stdout.recv_timeout(grace).unwrap_or_default();
+    let stderr = stderr.recv_timeout(grace).unwrap_or_default();
+    ProcessRun {
+        run: Run {
+            stdout,
+            stderr,
+            status: match ended {
+                Ended::Exited(code) => Some(code),
+                Ended::Signaled(_) | Ended::Killed => None,
+            },
+        },
+        ended,
+        took,
     }
 }
 
@@ -688,7 +851,7 @@ pub fn run_tests(
                 if let Some(alter) = alter {
                     alter(run);
                 }
-                let ours = run_crate(run, &args, mode);
+                let ours = run_crate(run, &args, mode.clone());
                 assert!(
                     theirs.status.is_some(),
                     "the oracle did not finish {group}.{name}"

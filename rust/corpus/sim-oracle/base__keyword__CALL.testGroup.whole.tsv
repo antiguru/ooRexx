@@ -1,0 +1,3 @@
+# The oracle's outcomes of base/keyword/CALL.testGroup whole, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	d2c1a6902078d735	pass, assertions 181, rc 0, last started TEST_SYMBOL, failing []

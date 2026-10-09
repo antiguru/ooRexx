@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/sys_wait_event_sem_timeout_not_int.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	168	7d4c6e6cd26c1d9d	rc 168, stdout 0 lines, stderr 4 lines

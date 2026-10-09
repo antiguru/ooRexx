@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/guard_held_before_the_first_start.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	5e17c22f5d3d655e	rc 0, stdout 4 lines, stderr 0 lines

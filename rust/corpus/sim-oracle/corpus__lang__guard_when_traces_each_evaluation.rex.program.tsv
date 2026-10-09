@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/guard_when_traces_each_evaluation.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	b73d594e2869b7d7	rc 0, stdout 1 lines, stderr 44 lines

@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/message_result_relayed.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	214	87328bd4747e1eda	rc 214, stdout 3 lines, stderr 9 lines

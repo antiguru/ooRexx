@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/send_new_init_fails.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	214	ff74e41183083881	rc 214, stdout 2 lines, stderr 5 lines

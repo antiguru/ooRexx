@@ -144,6 +144,11 @@ const BLOCK_LIMIT: f64 = 86_400.0;
 /// (`SLICE_LENGTH`) at its measured 58 ns per clause.
 pub(crate) const FAIRNESS_FLOOR: u64 = 24_000_000 / 58;
 
+/// Set in the environment of a child a run in the simulation mode starts: the
+/// child writes no `rexx-sim:` line, since its standard error may be one the
+/// parent program reads.
+pub const SIM_CHILD_ENV: &str = "REXX_SIM_CHILD";
+
 /// Where virtual time starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClockOrigin {

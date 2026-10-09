@@ -1763,7 +1763,7 @@ mod group_runs {
             |test| WALL_CLOCK.contains(&format!("{dir}/{group}.testGroup {test}").as_str()),
             |run, test| {
                 let one = std::slice::from_ref(test);
-                let mut results = run_tests(&oracle, run, dir, group, one, mode, None);
+                let mut results = run_tests(&oracle, run, dir, group, one, mode.clone(), None);
                 results.pop().expect("one result")
             },
         );
@@ -1922,10 +1922,14 @@ mod group_runs {
                 ("timer-table", SwitchMode::None),
                 ("timer-table-switched", SwitchMode::EveryOpportunity),
             ] {
-                let results =
-                    outcome_table(name, "base/class", group, "REXX_TIMER_TABLE", mode, |_| {
-                        true
-                    });
+                let results = outcome_table(
+                    name,
+                    "base/class",
+                    group,
+                    "REXX_TIMER_TABLE",
+                    mode.clone(),
+                    |_| true,
+                );
                 let oracle = oracle::locate();
                 for row in &results {
                     let mut label = row.outcome.label().to_string();
@@ -1935,7 +1939,7 @@ mod group_runs {
                         let run = scratch(&format!("{name}-rerun"));
                         let one = std::slice::from_ref(&row.test);
                         let again = on_a_quiet_machine(|| {
-                            run_tests(&oracle, &run, "base/class", group, one, mode, None)
+                            run_tests(&oracle, &run, "base/class", group, one, mode.clone(), None)
                         });
                         fs::remove_dir_all(run.parent().expect("a parent"))
                             .expect("cannot remove the run");
@@ -3114,24 +3118,7 @@ mod group_runs {
             derived: &BTreeSet<String>,
         ) -> Vec<Row> {
             let (dir, group) = split(file);
-            let mut left_out = reaching_rxapi(dir, &[group]);
-            for (_, test, _) in REST_LEFT_OUT.iter().filter(|(listed, ..)| *listed == file) {
-                left_out.insert(format!("{group}.{test}"));
-            }
-            if part == Part::Derived {
-                let path = super::super::worktree()
-                    .join("ootest/ooRexx")
-                    .join(dir)
-                    .join(format!("{group}.testGroup"));
-                left_out.extend(
-                    super::super::units(&read_lossy(&path))
-                        .into_iter()
-                        .filter(|unit| unit.test)
-                        .map(|unit| unit.name.to_ascii_uppercase())
-                        .filter(|test| !derived.contains(test))
-                        .map(|test| format!("{group}.{test}")),
-                );
-            }
+            let mut left_out = left_out_of(file, part, derived);
             let (row, ours) = checked(oracle, run, file, part, &left_out, &[]);
             let mut rows = vec![row];
             if part == Part::Whole {
@@ -3164,6 +3151,33 @@ mod group_runs {
                 }
             }
             rows
+        }
+
+        /// The `GROUP.TEST`s every run of `file`'s `part` renames out: those
+        /// reaching rxapi, [`REST_LEFT_OUT`]'s, and for the derived part each
+        /// test `derived` (the derived list's tests of the group) does not
+        /// name.
+        fn left_out_of(file: &str, part: Part, derived: &BTreeSet<String>) -> BTreeSet<String> {
+            let (dir, group) = split(file);
+            let mut left_out = reaching_rxapi(dir, &[group]);
+            for (_, test, _) in REST_LEFT_OUT.iter().filter(|(listed, ..)| *listed == file) {
+                left_out.insert(format!("{group}.{test}"));
+            }
+            if part == Part::Derived {
+                let path = super::super::worktree()
+                    .join("ootest/ooRexx")
+                    .join(dir)
+                    .join(format!("{group}.testGroup"));
+                left_out.extend(
+                    super::super::units(&read_lossy(&path))
+                        .into_iter()
+                        .filter(|unit| unit.test)
+                        .map(|unit| unit.name.to_ascii_uppercase())
+                        .filter(|test| !derived.contains(test))
+                        .map(|test| format!("{group}.{test}")),
+                );
+            }
+            left_out
         }
 
         /// What one mode of `row` amounts to against the oracle and
@@ -3240,7 +3254,7 @@ mod group_runs {
             let mut ours = at_once(&modes, |(name, mode)| {
                 let (at, path) = copy(run, name, dir, group, left_out);
                 let args = ["-f", path.as_str(), "-U", "-V", VERBOSITY];
-                relative(run_crate_within(&at, &args, *mode, deadline), &at)
+                relative(run_crate_within(&at, &args, mode.clone(), deadline), &at)
             });
             let settled = {
                 let seen = distribution(&theirs);
@@ -3439,6 +3453,1357 @@ mod group_runs {
                 std::fs::write(path, &started).expect("cannot write the started table");
             }
             assert!(failing.is_empty(), "{failing:#?}");
+        }
+
+        /// The seeded gate (spec 2026-10-07 section 4, "Gate"): each part of
+        /// `corpus/sim-gate.tsv` in the simulation mode under the seeds its row
+        /// derives, judged by the crate's own invariants and, but under `pct`
+        /// and in the rows injecting failures, by the program's own checks
+        /// (ruling R6). An outcome no committed oracle outcome of its part has
+        /// goes to the report, never red.
+        mod sim_gate {
+            use std::collections::{BTreeMap, BTreeSet};
+            use std::fmt::Write as _;
+            use std::path::{Path, PathBuf};
+            use std::sync::Mutex;
+            use std::time::Duration;
+
+            use super::super::super::group_runner::{
+                Ended, GATE_ENV, ProcessRun, Run, VERBOSITY, gate_mode, masked, run_crate_process,
+                run_crate_sim, run_oracle_within,
+            };
+            use super::super::super::support::{oracle, sidecar};
+            use super::{
+                DIFFERING, ORACLE_DEADLINE, ORACLE_RUNS, ORACLE_RUNS_UNSETTLED, Part, WALL_CLOCK,
+                at_once, copy, failing, key, left_out_of, refusal, relative, split, started,
+            };
+
+            /// The gate's parts, relative to `rust/`.
+            const TABLE: &str = "corpus/sim-gate.tsv";
+
+            /// The reds ruled not to be defects, relative to `rust/`.
+            const EXEMPT: &str = "corpus/sim-exempt.tsv";
+
+            /// The committed oracle outcome sets, one file per part, relative
+            /// to `rust/`.
+            const ORACLE_DIR: &str = "corpus/sim-oracle";
+
+            /// The seed count of every row, in place of the table's.
+            const SEEDS_ENV: &str = "REXX_SIM_SEEDS";
+
+            /// The policy of every seed, in place of the mix; `pre:D` and
+            /// `pct:D` take the row's k.
+            const POLICY_ENV: &str = "REXX_SIM_POLICY";
+
+            /// One run, `GROUP:PART:SEED:POLICY`, in place of the gate's.
+            const ONLY_ENV: &str = "REXX_SIM_ONLY";
+
+            /// Set to `1`, the oracle sets are run and grown.
+            const REFRESH_ENV: &str = "REXX_SIM_ORACLE_REFRESH";
+
+            /// Where the run's report is written; else below the target's
+            /// temporary directory.
+            const REPORT_ENV: &str = "REXX_SIM_REPORT";
+
+            /// How many runs go at once; [`JOBS_DEFAULT`] where unset.
+            const JOBS_ENV: &str = "REXX_SIM_JOBS";
+            const JOBS_DEFAULT: usize = 8;
+
+            /// Where the calibration writes its rows; the calibration runs
+            /// only where it is set.
+            const CALIBRATION_ENV: &str = "REXX_SIM_CALIBRATION";
+
+            /// The policy of seed i is entry i mod 7.
+            const MIX: [&str; 7] = [
+                "pre:1",
+                "pre:2",
+                "pre:3",
+                "pct:3",
+                "uniform:0.01",
+                "uniform:0.2",
+                "uniform:1",
+            ];
+
+            /// A run's deadline: its part's calibrated time in this build
+            /// times [`DEADLINE_FACTOR`], and at least [`DEADLINE_FLOOR`].
+            const DEADLINE_FACTOR: u32 = 10;
+            const DEADLINE_FLOOR: Duration = Duration::from_secs(60);
+
+            /// The calibration's bound on one run.
+            const CALIBRATION_DEADLINE: Duration = Duration::from_secs(600);
+
+            /// The refusals naming a broken invariant of the scheduler.
+            const INVARIANT: &str = "rexx-exec: the scheduler found ";
+
+            /// The refusals of a determinism breach: a post from another
+            /// thread, and a replay taking a decision its trace does not hold.
+            const DETERMINISM: &[&str] = &[
+                "from another thread in the simulation mode is not implemented",
+                "rexx-exec: the replay of ",
+            ];
+
+            /// The design-limit refusals, red unless the part's oracle set
+            /// holds a run that did not end.
+            const DESIGN_LIMIT: &[&str] = &[
+                "that only an activity pinned below it can end",
+                "a REPLY its method body runs on a nested Rust frame",
+                "a wait that nothing left to run can end",
+                "a wait in the simulation mode that only a signal can end",
+                "a command in the simulation mode that waits longer than its bound",
+                "a native call in the simulation mode that runs longer than its bound",
+            ];
+
+            fn rust_root() -> PathBuf {
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+            }
+
+            /// FNV-1a 64 over `bytes`.
+            fn fnv(bytes: &[u8]) -> u64 {
+                bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+                    (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+                })
+            }
+
+            /// Output `i` (from 0) of the splitmix64 stream starting at `state`.
+            fn splitmix(state: u64, i: u64) -> u64 {
+                let mut z = state.wrapping_add((i + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+                z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+                z ^ (z >> 31)
+            }
+
+            /// Seed `i` of a part: `splitmix(hash(group, part), i)`, the hash
+            /// FNV-1a over `GROUP:PART`.
+            fn seed(group: &str, part: &str, i: u64) -> u64 {
+                splitmix(fnv(format!("{group}:{part}").as_bytes()), i)
+            }
+
+            /// `mix` with the part's `k` where the policy takes one.
+            fn with_k(mix: &str, k: u64) -> String {
+                if (mix.starts_with("pre:") || mix.starts_with("pct:")) && !mix.contains(",k=") {
+                    format!("{mix},k={}", k.max(1))
+                } else {
+                    mix.to_string()
+                }
+            }
+
+            /// One row of [`TABLE`].
+            #[derive(Clone, Debug)]
+            struct Row {
+                /// An ooTest group file below `ootest/ooRexx`, or a program
+                /// relative to `rust/`.
+                group: String,
+                /// `whole`, `derived`, `rest`, `single` (the one test `left_out`
+                /// names, alone) or `program`.
+                part: String,
+                /// The contended steps of the calibration run.
+                k: u64,
+                /// Seeds in a release build and in a debug build; 0 leaves the
+                /// row out of that build's gate.
+                release_seeds: u64,
+                debug_seeds: u64,
+                /// The calibration run's wall time in each build.
+                release_ms: u64,
+                debug_ms: u64,
+                /// Knobs appended to every run's mode.
+                knobs: Option<String>,
+                /// The tests left out beside the part's own; a single row's one
+                /// test.
+                left_out: Vec<String>,
+            }
+
+            impl Row {
+                fn program(&self) -> bool {
+                    self.part == "program"
+                }
+
+                /// Whether the row's knobs inject failures (`fail=wait:K`): its
+                /// program's own checks are not judged and its outcomes are not
+                /// compared with the oracle.
+                fn injects(&self) -> bool {
+                    self.knobs
+                        .as_deref()
+                        .is_some_and(|knobs| knobs.contains("fail="))
+                }
+
+                fn seeds(&self) -> u64 {
+                    if let Ok(count) = std::env::var(SEEDS_ENV) {
+                        return count
+                            .parse()
+                            .unwrap_or_else(|_| panic!("{SEEDS_ENV} is not a count: {count:?}"));
+                    }
+                    if cfg!(debug_assertions) {
+                        self.debug_seeds
+                    } else {
+                        self.release_seeds
+                    }
+                }
+
+                fn deadline(&self) -> Duration {
+                    let ms = if cfg!(debug_assertions) {
+                        self.debug_ms
+                    } else {
+                        self.release_ms
+                    };
+                    (Duration::from_millis(ms) * DEADLINE_FACTOR).max(DEADLINE_FLOOR)
+                }
+
+                /// The policy of seed `i`.
+                fn policy(&self, i: u64) -> String {
+                    let mix = std::env::var(POLICY_ENV).unwrap_or_else(|_| {
+                        MIX[usize::try_from(i % 7).expect("below 7")].to_string()
+                    });
+                    with_k(&mix, self.k)
+                }
+
+                fn mode(&self, seed: u64, policy: &str) -> String {
+                    let mut mode = format!("sim:{seed},{policy}");
+                    if let Some(knobs) = &self.knobs {
+                        mode.push(',');
+                        mode.push_str(knobs);
+                    }
+                    mode
+                }
+
+                fn oracle_file(&self) -> PathBuf {
+                    rust_root().join(ORACLE_DIR).join(format!(
+                        "{}.{}.tsv",
+                        self.group.replace('/', "__"),
+                        self.part
+                    ))
+                }
+            }
+
+            fn read_table() -> Vec<Row> {
+                let path = rust_root().join(TABLE);
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+                text.lines()
+                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                    .map(|line| {
+                        let cells: Vec<&str> = line.split('\t').collect();
+                        assert_eq!(cells.len(), 9, "{TABLE}: {line:?} is not nine cells");
+                        let number = |at: usize| -> u64 {
+                            cells[at]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("{TABLE}: {line:?} cell {at}"))
+                        };
+                        Row {
+                            group: cells[0].to_string(),
+                            part: cells[1].to_string(),
+                            k: number(2),
+                            release_seeds: number(3),
+                            debug_seeds: number(4),
+                            release_ms: number(5),
+                            debug_ms: number(6),
+                            knobs: (cells[7] != "-").then(|| cells[7].to_string()),
+                            left_out: if cells[8] == "-" {
+                                Vec::new()
+                            } else {
+                                cells[8].split(' ').map(str::to_string).collect()
+                            },
+                        }
+                    })
+                    .collect()
+            }
+
+            /// One run of the gate.
+            #[derive(Clone)]
+            struct Unit {
+                row: Row,
+                seed: u64,
+                policy: String,
+            }
+
+            impl Unit {
+                fn mode(&self) -> String {
+                    self.row.mode(self.seed, &self.policy)
+                }
+
+                fn name(&self) -> String {
+                    format!(
+                        "{}:{}:{}:{}",
+                        self.row.group, self.row.part, self.seed, self.policy
+                    )
+                }
+
+                /// The command that runs this unit alone.
+                fn replay(&self) -> String {
+                    let profile = if cfg!(debug_assertions) {
+                        ("", "debug")
+                    } else {
+                        (" --release", "release")
+                    };
+                    format!(
+                        "REXX_CORPUS_GATE=1 {ONLY_ENV}='{}' memcap 8G cargo test -j 4{} -p \
+                         rexx-exec --test concurrency_tests the_seeded_gate -- --nocapture \
+                         (profile={}, stack={}, REXX_SWITCH_MODE={})",
+                        self.name(),
+                        profile.0,
+                        profile.1,
+                        rexx_exec::INTERPRETER_STACK_BYTES,
+                        self.mode()
+                    )
+                }
+            }
+
+            /// The gate's units: each row's seeds, or where [`ONLY_ENV`] is
+            /// set, `GROUP` or `GROUP:PART` its rows' seeds and
+            /// `GROUP:PART:SEED:POLICY` that one run.
+            fn units(rows: &[Row]) -> Vec<Unit> {
+                let only = std::env::var(ONLY_ENV).ok();
+                let cells: Vec<&str> = only
+                    .as_deref()
+                    .map_or_else(Vec::new, |only| only.splitn(4, ':').collect());
+                let chosen = |row: &&Row| match cells[..] {
+                    [] => true,
+                    [group] => row.group == group,
+                    [group, part, ..] => row.group == group && row.part == part,
+                };
+                if let [_, _, seed, policy] = cells[..] {
+                    let row = rows
+                        .iter()
+                        .find(chosen)
+                        .unwrap_or_else(|| panic!("{ONLY_ENV}: no row {only:?}"));
+                    return vec![Unit {
+                        row: row.clone(),
+                        seed: seed
+                            .parse()
+                            .unwrap_or_else(|_| panic!("{ONLY_ENV}: {seed:?} is not a seed")),
+                        policy: policy.to_string(),
+                    }];
+                }
+                assert!(
+                    cells.len() < 3,
+                    "{ONLY_ENV} is GROUP, GROUP:PART or GROUP:PART:SEED:POLICY, not {only:?}"
+                );
+                rows.iter()
+                    .filter(chosen)
+                    .flat_map(|row| {
+                        (0..row.seeds()).map(move |i| Unit {
+                            row: row.clone(),
+                            seed: seed(&row.group, &row.part, i),
+                            policy: row.policy(i),
+                        })
+                    })
+                    .collect()
+            }
+
+            /// The derived list's tests of each group file.
+            fn derived_tests() -> BTreeMap<String, BTreeSet<String>> {
+                let (list, _) = super::super::super::derive(
+                    &super::super::super::worktree().join("ootest/ooRexx"),
+                );
+                let mut tests: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+                for row in list {
+                    tests.entry(row.group).or_default().insert(row.test);
+                }
+                tests
+            }
+
+            /// The `GROUP.TEST`s a run of `row` renames out.
+            fn left_out(
+                row: &Row,
+                derived: &BTreeMap<String, BTreeSet<String>>,
+            ) -> BTreeSet<String> {
+                let (_, group) = split(&row.group);
+                let part = match row.part.as_str() {
+                    "derived" => Part::Derived,
+                    "rest" => Part::Rest,
+                    _ => Part::Whole,
+                };
+                let mine = derived.get(&row.group).cloned().unwrap_or_default();
+                let mut left_out = left_out_of(&row.group, part, &mine);
+                if row.part != "single" {
+                    left_out.extend(row.left_out.iter().map(|test| format!("{group}.{test}")));
+                }
+                left_out
+            }
+
+            /// The driver's arguments for the group file `path`: a single
+            /// row's run names its one test.
+            fn arguments(row: &Row, path: &str) -> Vec<String> {
+                let mut args: Vec<String> = ["-f", path, "-U", "-V", VERBOSITY]
+                    .map(str::to_string)
+                    .into();
+                if row.part == "single" {
+                    args.push("-t".to_string());
+                    args.extend(row.left_out.iter().cloned());
+                }
+                args
+            }
+
+            /// What one run of a program part reads beside its text: its
+            /// path, its run directory (laid out afresh) and its sidecar.
+            fn program_run(
+                row: &Row,
+                scratch: &Path,
+            ) -> (PathBuf, PathBuf, sidecar::Sidecar, Vec<(String, String)>) {
+                let path = rust_root()
+                    .join(&row.group)
+                    .canonicalize()
+                    .unwrap_or_else(|e| panic!("{}: {e}", row.group));
+                let side = row
+                    .group
+                    .strip_prefix("corpus/")
+                    .map(|rel| sidecar::sidecar_for(&rust_root().join("corpus"), rel))
+                    .unwrap_or_default();
+                let dir = scratch.join("p");
+                let overrides = sidecar::resolved_environment(&side, &dir);
+                let cwd = sidecar::prepare_run_directory(&dir, &side);
+                (path, cwd, side, overrides)
+            }
+
+            /// One run here of `row` under `mode`, its copy below `scratch`.
+            fn run_here(
+                row: &Row,
+                derived: &BTreeMap<String, BTreeSet<String>>,
+                scratch: &Path,
+                mode: &str,
+                deadline: Duration,
+            ) -> ProcessRun {
+                if row.program() {
+                    let (path, cwd, side, overrides) = program_run(row, scratch);
+                    let mut environment: Vec<(String, String)> = std::env::vars()
+                        .filter(|(name, _)| {
+                            name != "REXX_SWITCH_MODE"
+                                && !overrides.iter().any(|(over, _)| over == name)
+                        })
+                        .collect();
+                    environment.extend(overrides);
+                    let mut environment: Vec<(Vec<u8>, Vec<u8>)> = environment
+                        .into_iter()
+                        .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
+                        .collect();
+                    environment.sort();
+                    return run_crate_process(
+                        &[path.to_string_lossy().into_owned()],
+                        &cwd,
+                        Some(environment),
+                        mode,
+                        side.stdin.as_deref(),
+                        deadline,
+                    );
+                }
+                let (dir, group) = split(&row.group);
+                let (at, path) = copy(scratch, "s00", dir, group, &left_out(row, derived));
+                let args = arguments(row, &path);
+                let args: Vec<&str> = args.iter().map(String::as_str).collect();
+                let mut ran = run_crate_sim(&at, &args, mode, deadline);
+                ran.run = relative(ran.run, &at);
+                ran
+            }
+
+            /// One oracle run of `row`, its copy below `scratch`.
+            fn run_oracle(
+                oracle: &oracle::Oracle,
+                row: &Row,
+                derived: &BTreeMap<String, BTreeSet<String>>,
+                scratch: &Path,
+            ) -> Run {
+                if row.program() {
+                    let (path, cwd, side, overrides) = program_run(row, scratch);
+                    let borrowed: Vec<(&str, &str)> = overrides
+                        .iter()
+                        .map(|(name, value)| (name.as_str(), value.as_str()))
+                        .collect();
+                    let theirs = oracle.run_in_with(&path, &cwd, &borrowed, side.stdin.as_deref());
+                    let status =
+                        (!oracle::did_not_finish(&theirs)).then(|| theirs.expect_exit_code());
+                    return Run {
+                        stdout: theirs.stdout,
+                        stderr: theirs.stderr,
+                        status,
+                    };
+                }
+                let (dir, group) = split(&row.group);
+                let (at, path) = copy(scratch, "o00", dir, group, &left_out(row, derived));
+                let args = arguments(row, &path);
+                let args: Vec<&str> = args.iter().map(String::as_str).collect();
+                relative(run_oracle_within(oracle, &at, &args, ORACLE_DEADLINE), &at)
+            }
+
+            /// `stderr` without the `rexx-sim: ` lines, a child's included.
+            fn sim_masked(stderr: &[u8]) -> Vec<u8> {
+                let text = String::from_utf8_lossy(stderr);
+                text.split_inclusive('\n')
+                    .filter(|line| !line.starts_with("rexx-sim: "))
+                    .collect::<String>()
+                    .into_bytes()
+            }
+
+            /// The run's own `rexx-sim: ` line, its last line.
+            fn sim_line(stderr: &[u8]) -> Option<String> {
+                String::from_utf8_lossy(stderr)
+                    .lines()
+                    .last()
+                    .filter(|line| line.starts_with("rexx-sim: "))
+                    .map(str::to_string)
+            }
+
+            /// The value of `name=` in a `rexx-sim: ` line.
+            fn sim_field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
+                line.split(' ')
+                    .find_map(|word| word.strip_prefix(name)?.strip_prefix('='))
+            }
+
+            /// `run` as compared: stdout masked, `rexx-sim: ` lines dropped.
+            fn compared(run: &Run) -> Run {
+                Run {
+                    stdout: masked(&run.stdout),
+                    stderr: sim_masked(&run.stderr),
+                    status: run.status,
+                }
+            }
+
+            /// The digest of a compared run's three descriptors.
+            fn digest(run: &Run) -> u64 {
+                let mut bytes = run.stdout.clone();
+                bytes.push(0xff);
+                bytes.extend_from_slice(&run.stderr);
+                bytes.push(0xff);
+                bytes.extend_from_slice(
+                    run.status
+                        .map_or_else(|| "none".to_string(), |status| status.to_string())
+                        .as_bytes(),
+                );
+                fnv(&bytes)
+            }
+
+            /// A compared run's key: [`key`]'s for a group part, its status
+            /// and line counts for a program.
+            fn outcome_key(row: &Row, run: &Run) -> String {
+                if !row.program() {
+                    return key(run);
+                }
+                let lines = |bytes: &[u8]| bytes.iter().filter(|&&b| b == b'\n').count();
+                format!(
+                    "rc {}, stdout {} lines, stderr {} lines{}",
+                    run.status
+                        .map_or_else(|| "none".to_string(), |status| status.to_string()),
+                    lines(&run.stdout),
+                    lines(&run.stderr),
+                    refusal(run)
+                        .map(|line| format!(", {line}"))
+                        .unwrap_or_default()
+                )
+            }
+
+            /// One outcome of a part's oracle set.
+            #[derive(Clone, Debug)]
+            struct Seen {
+                count: usize,
+                status: String,
+                digest: u64,
+                key: String,
+            }
+
+            fn read_oracle(row: &Row) -> Option<Vec<Seen>> {
+                let text = std::fs::read_to_string(row.oracle_file()).ok()?;
+                Some(
+                    text.lines()
+                        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                        .map(|line| {
+                            let cells: Vec<&str> = line.splitn(4, '\t').collect();
+                            let [count, status, digest, key] = cells[..] else {
+                                panic!("{}: {line:?}", row.oracle_file().display());
+                            };
+                            Seen {
+                                count: count.parse().expect("a count"),
+                                status: status.to_string(),
+                                digest: u64::from_str_radix(digest, 16).expect("a digest"),
+                                key: key.to_string(),
+                            }
+                        })
+                        .collect(),
+                )
+            }
+
+            fn write_oracle(row: &Row, seen: &[Seen]) {
+                let runs: usize = seen.iter().map(|seen| seen.count).sum();
+                let mut text = format!(
+                    "# The oracle's outcomes of {} {}, {runs} runs, written under \
+                     {REFRESH_ENV}=1.\n# count, status, digest of the compared \
+                     descriptors, key.\n",
+                    row.group, row.part
+                );
+                for one in seen {
+                    let _ = writeln!(
+                        text,
+                        "{}\t{}\t{:016x}\t{}",
+                        one.count, one.status, one.digest, one.key
+                    );
+                }
+                let path = row.oracle_file();
+                std::fs::create_dir_all(path.parent().expect("a parent"))
+                    .expect("the oracle directory");
+                std::fs::write(&path, text).expect("cannot write an oracle set");
+            }
+
+            /// The tests a key names as failing.
+            fn failing_of(key: &str) -> BTreeSet<String> {
+                key.rsplit_once("failing [")
+                    .and_then(|(_, rest)| rest.split_once(']'))
+                    .map(|(names, _)| {
+                        names
+                            .split(' ')
+                            .filter(|name| !name.is_empty())
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            }
+
+            /// What a red is.
+            #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+            enum Kind {
+                Panic,
+                Crash,
+                Hang,
+                Invariant,
+                Determinism,
+                DesignLimit,
+                Check,
+                NoReport,
+            }
+
+            impl Kind {
+                fn label(self) -> &'static str {
+                    match self {
+                        Kind::Panic => "panic",
+                        Kind::Crash => "crash",
+                        Kind::Hang => "hang",
+                        Kind::Invariant => "invariant",
+                        Kind::Determinism => "determinism",
+                        Kind::DesignLimit => "design-limit",
+                        Kind::Check => "check",
+                        Kind::NoReport => "no-report",
+                    }
+                }
+            }
+
+            /// One red: its kind, the test it is in (`-` for a program) and
+            /// the line that shows it.
+            #[derive(Clone, Debug)]
+            struct Red {
+                kind: Kind,
+                test: String,
+                line: String,
+            }
+
+            /// The reds of one run (spec section 4, "Gate"; ruling R6).
+            fn judge(row: &Row, policy: &str, ran: &ProcessRun, seen: Option<&[Seen]>) -> Vec<Red> {
+                let run = &ran.run;
+                let text = String::from_utf8_lossy(&run.stderr).into_owned();
+                let test = if row.program() {
+                    "-".to_string()
+                } else {
+                    started(run).pop().unwrap_or_else(|| "-".to_string())
+                };
+                let red = |kind, line: &str| {
+                    vec![Red {
+                        kind,
+                        test: test.clone(),
+                        line: line.to_string(),
+                    }]
+                };
+                match ran.ended {
+                    Ended::Killed => {
+                        return red(
+                            Kind::Hang,
+                            &format!("killed at the deadline, {} s", row.deadline().as_secs()),
+                        );
+                    }
+                    Ended::Signaled(signal) => {
+                        return red(Kind::Crash, &format!("ended by signal {signal}"));
+                    }
+                    Ended::Exited(_) => {}
+                }
+                if let Some(line) = text.lines().find(|line| line.contains("panicked at")) {
+                    return red(Kind::Panic, line);
+                }
+                if run.status == Some(101) {
+                    return red(Kind::Panic, "rc 101");
+                }
+                if let Some(line) = refusal(run) {
+                    if line.starts_with(INVARIANT) {
+                        return red(Kind::Invariant, &line);
+                    }
+                    if DETERMINISM.iter().any(|text| line.contains(text)) {
+                        return red(Kind::Determinism, &line);
+                    }
+                    let twin_hangs =
+                        seen.is_some_and(|seen| seen.iter().any(|one| one.status == "none"));
+                    if DESIGN_LIMIT.iter().any(|text| line.contains(text)) && !twin_hangs {
+                        return red(Kind::DesignLimit, &line);
+                    }
+                }
+                if sim_line(&run.stderr).is_none() {
+                    return red(Kind::NoReport, "no rexx-sim line ends stderr");
+                }
+                if row.program() || row.injects() || policy.starts_with("pct:") {
+                    return Vec::new();
+                }
+                let mut known: BTreeSet<String> = seen
+                    .unwrap_or_default()
+                    .iter()
+                    .flat_map(|one| failing_of(&one.key))
+                    .collect();
+                known.extend(failing_unswitched(row));
+                failing(run)
+                    .into_iter()
+                    .filter(|name| !known.contains(name))
+                    .map(|name| Red {
+                        kind: Kind::Check,
+                        line: format!("{name} fails; no oracle outcome of the part fails it"),
+                        test: name,
+                    })
+                    .collect()
+            }
+
+            /// The tests [`DIFFERING`] lists as failing in `row`'s part in the
+            /// shipped scheduler's mode, where its outcome is not the oracle's.
+            fn failing_unswitched(row: &Row) -> BTreeSet<String> {
+                DIFFERING
+                    .iter()
+                    .filter(|(group, part, mode, ..)| {
+                        *group == row.group && *part == row.part && *mode == "normal"
+                    })
+                    .flat_map(|(.., key, _)| failing_of(key))
+                    .collect()
+            }
+
+            /// One row of [`EXEMPT`]: group, part, test, kind and a text the
+            /// red's line holds (its refusal where it has one), each `*` for
+            /// any, then the reason and its evidence.
+            struct Exempt {
+                cells: [String; 5],
+            }
+
+            fn read_exempt() -> Vec<Exempt> {
+                let path = rust_root().join(EXEMPT);
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+                text.lines()
+                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                    .map(|line| {
+                        let cells: Vec<&str> = line.split('\t').collect();
+                        assert_eq!(cells.len(), 7, "{EXEMPT}: {line:?} is not seven cells");
+                        assert!(
+                            cells[5..].iter().all(|cell| !cell.trim().is_empty()),
+                            "{EXEMPT}: {line:?} has no reason or no evidence"
+                        );
+                        Exempt {
+                            cells: [0, 1, 2, 3, 4].map(|at| cells[at].to_string()),
+                        }
+                    })
+                    .collect()
+            }
+
+            fn exempted(exempt: &[Exempt], row: &Row, red: &Red) -> bool {
+                let wanted = [
+                    row.group.as_str(),
+                    row.part.as_str(),
+                    red.test.as_str(),
+                    red.kind.label(),
+                ];
+                exempt.iter().any(|one| {
+                    one.cells[..4]
+                        .iter()
+                        .zip(wanted)
+                        .all(|(cell, wanted)| cell == "*" || cell == wanted)
+                        && (one.cells[4] == "*" || red.line.contains(one.cells[4].as_str()))
+                })
+            }
+
+            /// Runs `body` over `items` on [`JOBS_ENV`] threads, answering the
+            /// results in order.
+            fn in_jobs<I: Sync, T: Send>(
+                items: &[I],
+                body: impl Fn(usize, &I) -> T + Sync,
+            ) -> Vec<T> {
+                let jobs = std::env::var(JOBS_ENV).map_or(JOBS_DEFAULT, |value| {
+                    value
+                        .parse()
+                        .unwrap_or_else(|_| panic!("{JOBS_ENV} is not a count: {value:?}"))
+                });
+                let next = Mutex::new(0_usize);
+                let results: Mutex<Vec<Option<T>>> =
+                    Mutex::new((0..items.len()).map(|_| None).collect());
+                std::thread::scope(|scope| {
+                    for _ in 0..jobs.max(1) {
+                        scope.spawn(|| {
+                            loop {
+                                let at = {
+                                    let mut next = next.lock().expect("the work index");
+                                    let at = *next;
+                                    *next += 1;
+                                    at
+                                };
+                                if at >= items.len() {
+                                    break;
+                                }
+                                let result = body(at, &items[at]);
+                                results.lock().expect("the results")[at] = Some(result);
+                            }
+                        });
+                    }
+                });
+                results
+                    .into_inner()
+                    .expect("the results")
+                    .into_iter()
+                    .map(|result| result.expect("every item ran"))
+                    .collect()
+            }
+
+            /// A fresh scratch directory for item `at` of the run `name`.
+            fn scratch(name: &str, at: usize) -> PathBuf {
+                PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                    .join(format!("{name}-{}", std::process::id()))
+                    .join(at.to_string())
+                    .join("run")
+            }
+
+            fn remove(dir: &Path) {
+                if dir.exists() {
+                    std::fs::remove_dir_all(dir).expect("cannot remove a run");
+                }
+            }
+
+            /// What one unit found.
+            struct Found {
+                key: String,
+                sim: String,
+                took: Duration,
+                reds: Vec<Red>,
+                /// `None` where not compared, else the oracle outcome it
+                /// matches, by number.
+                compared: Option<Option<usize>>,
+                /// The rerun of a run whose reds were all checks in a test
+                /// whose outcome depends on the wall clock (ruling P48), and
+                /// what it found.
+                rerun: Option<String>,
+            }
+
+            /// Whether every red of `reds` is a failed check in a test
+            /// `WALL_CLOCK` lists for `row`'s group.
+            fn wall_clock_checks(row: &Row, reds: &[Red]) -> bool {
+                !reds.is_empty()
+                    && reds.iter().all(|red| {
+                        red.kind == Kind::Check
+                            && WALL_CLOCK.contains(&format!("{} {}", row.group, red.test).as_str())
+                    })
+            }
+
+            fn run_unit(
+                unit: &Unit,
+                derived: &BTreeMap<String, BTreeSet<String>>,
+                dir: &Path,
+            ) -> Found {
+                let mut ran = run_here(&unit.row, derived, dir, &unit.mode(), unit.row.deadline());
+                remove(dir);
+                let seen = read_oracle(&unit.row);
+                let mut reds = judge(&unit.row, &unit.policy, &ran, seen.as_deref());
+                let mut rerun = None;
+                if wall_clock_checks(&unit.row, &reds) {
+                    let first: Vec<&str> = reds.iter().map(|red| red.test.as_str()).collect();
+                    let first = first.join(" ");
+                    ran = run_here(&unit.row, derived, dir, &unit.mode(), unit.row.deadline());
+                    remove(dir);
+                    reds = judge(&unit.row, &unit.policy, &ran, seen.as_deref());
+                    rerun = Some(format!(
+                        "{}: failed {first}, rerun {}",
+                        unit.name(),
+                        if reds.is_empty() {
+                            "passed".to_string()
+                        } else {
+                            format!("failed {}", outcome_key(&unit.row, &compared(&ran.run)))
+                        }
+                    ));
+                }
+                let mine = compared(&ran.run);
+                let compared = (!unit.row.injects()).then(|| {
+                    let digest = digest(&mine);
+                    seen.as_deref()
+                        .unwrap_or_default()
+                        .iter()
+                        .position(|one| one.digest == digest)
+                });
+                Found {
+                    key: outcome_key(&unit.row, &mine),
+                    sim: sim_line(&ran.run.stderr).unwrap_or_else(|| "-".to_string()),
+                    took: ran.took,
+                    reds,
+                    compared,
+                    rerun,
+                }
+            }
+
+            fn report_path() -> PathBuf {
+                std::env::var_os(REPORT_ENV).map_or_else(
+                    || PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sim-gate-report.txt"),
+                    PathBuf::from,
+                )
+            }
+
+            #[test]
+            fn the_seeded_gate() {
+                if !gate_mode() {
+                    eprintln!("sim_gate: skipped without {GATE_ENV}");
+                    return;
+                }
+                let rows = read_table();
+                let exempt = read_exempt();
+                let derived = derived_tests();
+                let units = units(&rows);
+                assert!(!units.is_empty(), "the gate has no run in this build");
+                let start = std::time::Instant::now();
+                let found = in_jobs(&units, |at, unit| {
+                    run_unit(unit, &derived, &scratch("sim-gate", at))
+                });
+                let wall = start.elapsed();
+                let mut report = format!(
+                    "# sim gate: {} runs in {} s, profile {}, stack {}\n\
+                     # group\tpart\tseed\tpolicy\tms\toracle\tkey\trexx-sim\n",
+                    units.len(),
+                    wall.as_secs(),
+                    if cfg!(debug_assertions) {
+                        "debug"
+                    } else {
+                        "release"
+                    },
+                    rexx_exec::INTERPRETER_STACK_BYTES
+                );
+                let mut differences = String::new();
+                let reruns: Vec<&str> = found
+                    .iter()
+                    .filter_map(|one| one.rerun.as_deref())
+                    .collect();
+                let mut reds = Vec::new();
+                let mut exempted_reds = Vec::new();
+                for (unit, found) in units.iter().zip(&found) {
+                    let oracle = match found.compared {
+                        None => "not compared".to_string(),
+                        Some(Some(at)) => format!("agrees with {}", at + 1),
+                        Some(None) => {
+                            let theirs: Vec<String> = read_oracle(&unit.row)
+                                .unwrap_or_default()
+                                .iter()
+                                .map(|one| format!("{} x {}", one.count, one.key))
+                                .collect();
+                            let _ = writeln!(
+                                differences,
+                                "{}: ours {}; oracle [{}]",
+                                unit.name(),
+                                found.key,
+                                theirs.join("; ")
+                            );
+                            "differs".to_string()
+                        }
+                    };
+                    let _ = writeln!(
+                        report,
+                        "{}\t{}\t{}\t{}\t{}\t{oracle}\t{}\t{}",
+                        unit.row.group,
+                        unit.row.part,
+                        unit.seed,
+                        unit.policy,
+                        found.took.as_millis(),
+                        found.key,
+                        found.sim
+                    );
+                    for red in &found.reds {
+                        let line = format!(
+                            "{} {} in {}: {}\n  replay: {}",
+                            red.kind.label(),
+                            unit.name(),
+                            red.test,
+                            red.line,
+                            unit.replay()
+                        );
+                        if exempted(&exempt, &unit.row, red) {
+                            exempted_reds.push(line);
+                        } else {
+                            reds.push(line);
+                        }
+                    }
+                }
+                let _ = write!(
+                    report,
+                    "\n## Differences from the oracle sets\n{differences}\n## Wall-clock reruns \
+                     (ruling P48)\n{}\n\n## Reds\n{}\n\n## Exempted reds\n{}\n",
+                    reruns.join("\n"),
+                    reds.join("\n"),
+                    exempted_reds.join("\n")
+                );
+                let path = report_path();
+                std::fs::write(&path, &report).expect("cannot write the report");
+                eprintln!(
+                    "sim gate: {} runs, {} s, {} reds, {} exempted, {} differences; report {}",
+                    units.len(),
+                    wall.as_secs(),
+                    reds.len(),
+                    exempted_reds.len(),
+                    differences.lines().count(),
+                    path.display()
+                );
+                assert!(reds.is_empty(), "{}", reds.join("\n"));
+            }
+
+            /// Step 4's self-test: each row with debug seeds, seed 0 under
+            /// `pre:2`, run twice, each in a process of its own, gives one
+            /// trace hash and one outcome.
+            #[test]
+            fn a_seeded_run_repeats_in_a_fresh_process() {
+                if !gate_mode() {
+                    eprintln!("sim_gate: skipped without {GATE_ENV}");
+                    return;
+                }
+                let derived = derived_tests();
+                let sample: Vec<Unit> = read_table()
+                    .into_iter()
+                    .filter(|row| row.debug_seeds > 0)
+                    .map(|row| Unit {
+                        seed: seed(&row.group, &row.part, 0),
+                        policy: with_k("pre:2", row.k),
+                        row,
+                    })
+                    .collect();
+                assert!(!sample.is_empty(), "no row has debug seeds");
+                let pairs = in_jobs(&sample, |at, unit| {
+                    [0, 1].map(|again| {
+                        let dir = scratch("sim-self", at * 2 + again);
+                        let ran =
+                            run_here(&unit.row, &derived, &dir, &unit.mode(), unit.row.deadline());
+                        remove(&dir);
+                        ran
+                    })
+                });
+                let mut broken = Vec::new();
+                for (unit, [first, second]) in sample.iter().zip(&pairs) {
+                    let hash = |ran: &ProcessRun| {
+                        sim_line(&ran.run.stderr)
+                            .and_then(|line| sim_field(&line, "trace").map(str::to_string))
+                    };
+                    let same = hash(first).is_some()
+                        && hash(first) == hash(second)
+                        && compared(&first.run).stdout == compared(&second.run).stdout
+                        && compared(&first.run).stderr == compared(&second.run).stderr
+                        && first.run.status == second.run.status;
+                    eprintln!(
+                        "self-test {}: trace {:?} {:?}, {}",
+                        unit.name(),
+                        hash(first),
+                        hash(second),
+                        if same { "same" } else { "DIFFERENT" }
+                    );
+                    if !same {
+                        broken.push(format!(
+                            "{}: {} / {}\n  replay: {}",
+                            unit.name(),
+                            outcome_key(&unit.row, &compared(&first.run)),
+                            outcome_key(&unit.row, &compared(&second.run)),
+                            unit.replay()
+                        ));
+                    }
+                }
+                assert!(broken.is_empty(), "{}", broken.join("\n"));
+            }
+
+            /// Under [`REFRESH_ENV`], runs each row's oracle 5 times, 30 where
+            /// its outcomes vary or none is the outcome of seed 0 here under
+            /// `fifo`, and adds what it saw to the row's committed set.
+            #[test]
+            fn the_oracle_sets_grow_only_under_refresh() {
+                if !gate_mode() || std::env::var(REFRESH_ENV).as_deref() != Ok("1") {
+                    eprintln!("sim_gate: oracle sets not refreshed without {REFRESH_ENV}=1");
+                    return;
+                }
+                let oracle = oracle::locate();
+                let derived = derived_tests();
+                let rows: Vec<Row> = read_table()
+                    .into_iter()
+                    .filter(|row| !row.injects())
+                    .filter(|row| {
+                        std::env::var(ONLY_ENV).map_or(true, |only| {
+                            let cells: Vec<&str> = only.splitn(3, ':').collect();
+                            cells[0] == row.group
+                                && cells.get(1).is_none_or(|part| *part == row.part)
+                        })
+                    })
+                    .collect();
+                in_jobs(&rows, |at, row| {
+                    let dir = scratch("sim-oracle", at);
+                    let oracle_runs = |runs: std::ops::Range<usize>| {
+                        at_once(&runs.collect::<Vec<_>>(), |k| {
+                            let run =
+                                run_oracle(&oracle, row, &derived, &dir.join(format!("o{k}")));
+                            compared(&run)
+                        })
+                    };
+                    let mut runs = oracle_runs(0..ORACLE_RUNS);
+                    let mine = compared(
+                        &run_here(
+                            row,
+                            &derived,
+                            &dir.join("here"),
+                            &row.mode(seed(&row.group, &row.part, 0), "fifo"),
+                            CALIBRATION_DEADLINE,
+                        )
+                        .run,
+                    );
+                    let digests: BTreeSet<u64> = runs.iter().map(digest).collect();
+                    if digests.len() > 1 || !digests.contains(&digest(&mine)) {
+                        runs.extend(oracle_runs(ORACLE_RUNS..ORACLE_RUNS_UNSETTLED));
+                    }
+                    remove(&dir);
+                    let mut seen = read_oracle(row).unwrap_or_default();
+                    for run in &runs {
+                        let digest = digest(run);
+                        match seen.iter_mut().find(|one| one.digest == digest) {
+                            Some(one) => one.count += 1,
+                            None => seen.push(Seen {
+                                count: 1,
+                                status: run.status.map_or_else(
+                                    || "none".to_string(),
+                                    |status| status.to_string(),
+                                ),
+                                digest,
+                                key: outcome_key(row, run),
+                            }),
+                        }
+                    }
+                    seen.sort_by_key(|one| std::cmp::Reverse(one.count));
+                    write_oracle(row, &seen);
+                    eprintln!(
+                        "oracle set {} {}: {} outcomes",
+                        row.group,
+                        row.part,
+                        seen.len()
+                    );
+                });
+            }
+
+            /// Step 1: where [`CALIBRATION_ENV`] names a file, runs each part
+            /// once under `fifo` (seed 0, no preemption but the floor) and
+            /// writes its contended steps, wall time and outcome; a whole part
+            /// whose run refuses gets a rest part leaving the refusing tests
+            /// out, as `whole_groups` derives it.
+            #[test]
+            fn calibration() {
+                let Some(out) = std::env::var_os(CALIBRATION_ENV) else {
+                    eprintln!("sim_gate: no calibration without {CALIBRATION_ENV}");
+                    return;
+                };
+                let derived = derived_tests();
+                let mut rows: Vec<Row> = Vec::new();
+                let blank = |group: &str, part: &str, knobs: Option<&str>| Row {
+                    group: group.to_string(),
+                    part: part.to_string(),
+                    k: 0,
+                    release_seeds: 0,
+                    debug_seeds: 0,
+                    release_ms: 0,
+                    debug_ms: 0,
+                    knobs: knobs.map(str::to_string),
+                    left_out: Vec::new(),
+                };
+                for group in derived.keys() {
+                    rows.push(blank(group, "whole", None));
+                    rows.push(blank(group, "derived", None));
+                }
+                let list = rust_root().join("corpus/phase-6.txt");
+                for line in std::fs::read_to_string(&list).expect("phase-6.txt").lines() {
+                    let line = line.trim();
+                    if !line.is_empty() && !line.starts_with('#') {
+                        rows.push(blank(&format!("corpus/{line}"), "program", None));
+                    }
+                }
+                rows.push(blank(
+                    "crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex",
+                    "program",
+                    Some("fail=wait:1"),
+                ));
+                let lines = in_jobs(&rows, |at, row| {
+                    let mut row = row.clone();
+                    let mut out = String::new();
+                    let mut refusing: Vec<String> = Vec::new();
+                    loop {
+                        let dir = scratch("sim-calibration", at);
+                        let mode = row.mode(seed(&row.group, &row.part, 0), "fifo");
+                        let ran = run_here(&row, &derived, &dir, &mode, CALIBRATION_DEADLINE);
+                        remove(&dir);
+                        let mine = compared(&ran.run);
+                        let line = sim_line(&ran.run.stderr).unwrap_or_default();
+                        let contended = sim_field(&line, "contended").unwrap_or("0");
+                        let _ = writeln!(
+                            out,
+                            "{}\t{}\t{contended}\t{}\t{}\t{}\t{:?}\t{}",
+                            row.group,
+                            row.part,
+                            ran.took.as_millis(),
+                            row.knobs.as_deref().unwrap_or("-"),
+                            if refusing.is_empty() {
+                                "-".to_string()
+                            } else {
+                                refusing.join(" ")
+                            },
+                            ran.ended,
+                            outcome_key(&row, &mine)
+                        );
+                        if row.program() || row.part == "derived" {
+                            break;
+                        }
+                        let Some(line) = refusal(&mine) else { break };
+                        if line.ends_with("the run exceeded its deadline") {
+                            break;
+                        }
+                        let Some(test) = started(&mine).pop() else {
+                            break;
+                        };
+                        assert!(
+                            !refusing.contains(&test),
+                            "{}: {test} refused twice",
+                            row.group
+                        );
+                        refusing.push(test);
+                        row.part = "rest".to_string();
+                        row.left_out = refusing.clone();
+                    }
+                    out
+                });
+                std::fs::write(&out, lines.concat()).expect("cannot write the calibration");
+            }
+
+            #[test]
+            fn a_seed_is_derived_by_rule_and_the_mix_repeats_every_seven() {
+                assert_eq!(fnv(b""), 0xcbf2_9ce4_8422_2325);
+                assert_eq!(splitmix(0, 0), 0xe220_a839_7b1d_cdaf);
+                let a = seed("base/class/Alarm.testGroup", "whole", 0);
+                assert_eq!(a, seed("base/class/Alarm.testGroup", "whole", 0));
+                assert_ne!(a, seed("base/class/Alarm.testGroup", "whole", 1));
+                assert_ne!(a, seed("base/class/Alarm.testGroup", "derived", 0));
+                let row = Row {
+                    group: "g".to_string(),
+                    part: "whole".to_string(),
+                    k: 40,
+                    release_seeds: 7,
+                    debug_seeds: 0,
+                    release_ms: 0,
+                    debug_ms: 0,
+                    knobs: None,
+                    left_out: Vec::new(),
+                };
+                if std::env::var(POLICY_ENV).is_err() {
+                    let policies: Vec<String> = (0..8).map(|i| row.policy(i)).collect();
+                    assert_eq!(
+                        policies,
+                        [
+                            "pre:1,k=40",
+                            "pre:2,k=40",
+                            "pre:3,k=40",
+                            "pct:3,k=40",
+                            "uniform:0.01",
+                            "uniform:0.2",
+                            "uniform:1",
+                            "pre:1,k=40"
+                        ]
+                    );
+                }
+                assert_eq!(with_k("pre:2", 0), "pre:2,k=1");
+            }
+
+            #[test]
+            fn a_run_is_compared_without_its_sim_lines() {
+                let stderr = b"rexx-sim: seed=9 policy=fifo\nstarted X\nrexx-sim: seed=1 \
+                    policy=fifo steps=3 contended=2 switches=1 trace=00000000000000ff \
+                    profile=release stack=1\n";
+                assert_eq!(sim_masked(stderr), b"started X\n");
+                let line = sim_line(stderr).expect("the run's own line");
+                assert_eq!(sim_field(&line, "contended"), Some("2"));
+                assert_eq!(sim_field(&line, "trace"), Some("00000000000000ff"));
+                assert_eq!(sim_line(b"rexx-sim: x\nrexx-exec: y\n"), None);
+            }
+
+            #[test]
+            fn a_key_names_its_failing_tests() {
+                assert_eq!(
+                    failing_of("failure, assertions 3, rc 1, last started B, failing [A B]"),
+                    BTreeSet::from(["A".to_string(), "B".to_string()])
+                );
+                assert!(
+                    failing_of("pass, assertions 3, rc 0, last started B, failing []").is_empty()
+                );
+            }
+
+            /// Every row of the table is a part the gate names: each group
+            /// file of the derived list whole and derived, each program of
+            /// `corpus/phase-6.txt`, and the rows injecting failures; a rest
+            /// or single row names a group with a whole row. Every other row has an
+            /// oracle set, and every exempt row names a table row.
+            #[test]
+            fn the_table_holds_the_parts_the_spec_names() {
+                let rows = read_table();
+                let have: BTreeSet<(String, String)> = rows
+                    .iter()
+                    .filter(|row| !matches!(row.part.as_str(), "rest" | "single") && !row.injects())
+                    .map(|row| (row.group.clone(), row.part.clone()))
+                    .collect();
+                let mut want = BTreeSet::new();
+                for group in derived_tests().keys() {
+                    want.insert((group.clone(), "whole".to_string()));
+                    want.insert((group.clone(), "derived".to_string()));
+                }
+                let list = rust_root().join("corpus/phase-6.txt");
+                for line in std::fs::read_to_string(&list).expect("phase-6.txt").lines() {
+                    let line = line.trim();
+                    if !line.is_empty() && !line.starts_with('#') {
+                        want.insert((format!("corpus/{line}"), "program".to_string()));
+                    }
+                }
+                assert_eq!(have, want);
+                for row in rows.iter().filter(|row| row.part == "single") {
+                    assert!(
+                        have.contains(&(row.group.clone(), "whole".to_string())),
+                        "{} single has no whole row",
+                        row.group
+                    );
+                    assert_eq!(row.left_out.len(), 1, "{} single names one test", row.group);
+                }
+                for row in rows.iter().filter(|row| row.part == "rest") {
+                    assert!(
+                        have.contains(&(row.group.clone(), "whole".to_string())),
+                        "{} rest has no whole row",
+                        row.group
+                    );
+                    assert!(
+                        !row.left_out.is_empty(),
+                        "{} rest leaves nothing out",
+                        row.group
+                    );
+                }
+                for row in rows.iter().filter(|row| !row.injects()) {
+                    assert!(
+                        read_oracle(row).is_some_and(|seen| !seen.is_empty()),
+                        "{} {} has no committed oracle set",
+                        row.group,
+                        row.part
+                    );
+                }
+                assert!(rows.iter().any(|row| row.release_seeds > 0));
+                assert!(rows.iter().any(|row| row.debug_seeds > 0));
+                for one in read_exempt() {
+                    assert!(
+                        rows.iter().any(|row| {
+                            (one.cells[0] == "*" || one.cells[0] == row.group)
+                                && (one.cells[1] == "*" || one.cells[1] == row.part)
+                        }),
+                        "{EXEMPT} row {:?} names no table row",
+                        one.cells
+                    );
+                }
+            }
         }
     }
 }

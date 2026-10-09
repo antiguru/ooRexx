@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/builtin_argument_call.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	03261f02e7b69eb2	rc 0, stdout 6 lines, stderr 0 lines

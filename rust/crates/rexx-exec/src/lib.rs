@@ -64,7 +64,9 @@ use queue::Queue;
 mod invocation;
 pub use invocation::{Invocation, ProgramInput, Sinks, SwitchMode, join_command_line};
 pub use rexx_core::FrameBlock;
-pub use sim::{ClockOrigin, Decision, Knobs, Order, Policy, Replay, SimConfig, SimReport};
+pub use sim::{
+    ClockOrigin, Decision, Knobs, Order, Policy, Replay, SIM_CHILD_ENV, SimConfig, SimReport,
+};
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.

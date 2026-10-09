@@ -115,7 +115,10 @@ fn main() -> ExitCode {
     let _ = std::io::stdout().write_all(&outcome.stdout);
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().write_all(&outcome.stderr);
-    if let Some(sim) = outcome.sim {
+    if let Some(sim) = outcome
+        .sim
+        .filter(|_| std::env::var_os(rexx_exec::SIM_CHILD_ENV).is_none())
+    {
         let trace = sim
             .trace_hash
             .map(|hash| format!(" trace={hash:016x}"))

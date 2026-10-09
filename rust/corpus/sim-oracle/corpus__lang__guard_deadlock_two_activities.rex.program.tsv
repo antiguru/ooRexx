@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/guard_deadlock_two_activities.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	0f2c1eeb0fc617ab	rc 0, stdout 7 lines, stderr 4 lines

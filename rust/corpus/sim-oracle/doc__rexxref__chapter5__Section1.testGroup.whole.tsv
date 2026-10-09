@@ -1,0 +1,3 @@
+# The oracle's outcomes of doc/rexxref/chapter5/Section1.testGroup whole, 30 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+30	0	23fc35a79350e3bd	pass, assertions 17, rc 0, last started TEST_OBJECT_START, failing []

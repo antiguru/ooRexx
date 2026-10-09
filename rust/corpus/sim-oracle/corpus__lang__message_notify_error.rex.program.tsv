@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/message_notify_error.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	70ca633062e59b56	rc 0, stdout 3 lines, stderr 3 lines

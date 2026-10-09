@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/mutex_semaphore_released_when_its_activity_ends.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	8f4ec6832f94164c	rc 0, stdout 3 lines, stderr 0 lines

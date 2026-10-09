@@ -1,0 +1,11 @@
+# The oracle's outcomes of base/keyword/REPLY.testGroup whole, 30 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+7	0	3842484797ee3028	pass, assertions 11, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+6	0	ff3e304679f8c3ac	pass, assertions 15, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+4	0	2a59dba0c1b3c10d	pass, assertions 16, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+4	0	f9aa68f2d4f63b22	pass, assertions 17, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+3	0	1151106c67cfd29b	pass, assertions 10, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+2	0	22a84049d06ed06e	pass, assertions 13, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+2	0	bb568d1c263da271	pass, assertions 9, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+1	0	79065f1d50ff83ff	pass, assertions 14, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+1	0	7d54540705ecb573	pass, assertions 18, rc 0, last started TEST_REPLY__CODE_RETURN, failing []

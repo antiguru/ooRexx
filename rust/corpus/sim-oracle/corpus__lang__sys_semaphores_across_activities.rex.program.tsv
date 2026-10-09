@@ -1,0 +1,3 @@
+# The oracle's outcomes of corpus/lang/sys_semaphores_across_activities.rex program, 5 runs, written under REXX_SIM_ORACLE_REFRESH=1.
+# count, status, digest of the compared descriptors, key.
+5	0	377c7e03645b62f7	rc 0, stdout 10 lines, stderr 0 lines
