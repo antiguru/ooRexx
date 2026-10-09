@@ -1887,11 +1887,12 @@ DEVIATIONS -- permanent, chosen
 
      This crate refuses each, rc 120, with `a message send to a value that
      is not an array` (Array, Queue), `... that carries no method scope`,
-     `... that is not a class object`, and for Table with `method "ITEMS" of
-     class "T" is not implemented (Phase 9)`; ITEMS of Directory, StringTable,
-     Stem, Set, Bag and Relation, MutableBuffer LENGTH and Message SEND also
-     refuse naming Phase 9 (queued
-     2026-10-09-wrong-type-native-rows-name-phase-9). Through `enhanced`,
+     `... that is not a class object`, and `... that is not a hash
+     collection` (Table). ITEMS of Directory, StringTable, Set, Bag and
+     Relation refuse the same way, Stem's with `... that is not a stem`,
+     MutableBuffer LENGTH with `... that is not a mutable buffer`, and
+     Message SEND, START and REPLY with `... that is not a message` (Phase
+     6.1 Task 11a). Through `enhanced`,
      `.object~enhanced(d)` with `d['E9'] = .array~method('ITEMS')` then
      `~send('E9')` is rc 0 on the oracle and the same refusal here (Task 7
      review). The oracle's answer is a read through the wrong layout, not a

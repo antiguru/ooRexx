@@ -998,7 +998,7 @@ fn dispatch_held_message(
         interp.native_entry(message, MESSAGE_NAME),
         interp.native_entry(message, MESSAGE_ARGUMENTS),
     ) else {
-        return Err(Loud::native_method(b"SEND", "Message").into());
+        return Err(Loud::receiver_class(NOT_A_MESSAGE).into());
     };
     let scope = interp.native_entry(message, MESSAGE_SCOPE);
     let name = interp.to_text(name).into_owned();
@@ -1112,7 +1112,7 @@ fn start_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<Obj
         interp.native_entry(message, MESSAGE_NAME),
         interp.native_entry(message, MESSAGE_ARGUMENTS),
     ) else {
-        return Err(Loud::native_method(b"START", "Message").into());
+        return Err(Loud::receiver_class(NOT_A_MESSAGE).into());
     };
     let scope = interp.native_entry(message, MESSAGE_SCOPE);
     let name = interp.to_text(name).into_owned();
@@ -1194,7 +1194,7 @@ fn reply_held_message(interp: &mut Interp, message: ObjRef) -> Result<Option<Obj
     }
     clear_completion(interp, message);
     let Some(target) = interp.native_entry(message, MESSAGE_TARGET) else {
-        return Err(Loud::native_method(b"REPLY", "Message").into());
+        return Err(Loud::receiver_class(NOT_A_MESSAGE).into());
     };
     let scope = interp.native_entry(message, MESSAGE_SCOPE);
     interp.validate_scope_override(target, scope)?;
@@ -1274,6 +1274,10 @@ pub(super) fn native_message_message_complete(
 
 /// The message each object `~notify` named is sent.
 const MESSAGE_COMPLETE: &[u8] = b"MESSAGECOMPLETE";
+
+/// What a receiver with no held send is not: every `Message`, a subclass
+/// instance included, has its entries from `NEW` (Deviation 28).
+const NOT_A_MESSAGE: &str = "a value that is not a message";
 
 impl Interp {
     /// Puts `message` in the running activation's notify slot and answers

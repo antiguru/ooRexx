@@ -325,6 +325,63 @@ fn run_source(source: &str) -> (i32, String, String) {
     )
 }
 
+/// A primitive's native method run on an instance of a plain class refuses
+/// as a receiver of the wrong type, owner none (Deviation 28), where a
+/// `Directory` with no store keeps its own method's refusal and a
+/// `MutableBuffer` subclass whose `INIT` does not forward still answers.
+#[test]
+fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
+    let run = |class: &str, method: &str| {
+        run_source(&format!(
+            "say .t~new~go(.{class}~method('{method}'))\n::class t\n::method go\n\
+             use arg m\nreturn self~run(m)\n"
+        ))
+    };
+    for (class, method, kind) in [
+        ("directory", "ITEMS", "a hash collection"),
+        ("stringtable", "ITEMS", "a hash collection"),
+        ("set", "ITEMS", "a hash collection"),
+        ("bag", "ITEMS", "a hash collection"),
+        ("relation", "ITEMS", "a hash collection"),
+        ("table", "ITEMS", "a hash collection"),
+        ("stem", "ITEMS", "a stem"),
+        ("mutablebuffer", "LENGTH", "a mutable buffer"),
+        ("message", "SEND", "a message"),
+        ("message", "START", "a message"),
+        ("message", "REPLY", "a message"),
+    ] {
+        assert_eq!(
+            run(class, method),
+            (
+                120,
+                String::new(),
+                format!(
+                    "rexx-exec: a message send to a value that is not {kind} is not implemented\n"
+                )
+            ),
+            "{class}~{method}"
+        );
+    }
+    let (code, _, stderr) = run_source(
+        "m = .t~new~start('boom')\nm~wait\nc = m~errorCondition\nsay c~items\n\
+         ::class t\n::method boom unguarded\n  return 1/0\n",
+    );
+    assert_eq!(code, 120);
+    assert!(
+        stderr.ends_with(
+            "rexx-exec: method \"ITEMS\" of class \"Directory\" is not implemented (Phase 9)\n"
+        ),
+        "{stderr}"
+    );
+    assert_eq!(
+        run_source(
+            "b = .b~new\nsay b~length\nb~append('xy')\nsay b~string\n\
+             ::class b subclass mutablebuffer\n::method init\n"
+        ),
+        (0, "0\nxy\n".to_owned(), String::new())
+    );
+}
+
 /// A user `STRING` method's answer reads as `primitiveMakeString` reads it:
 /// an array (or an `Array` subclass) joins its items, a buffer is its text,
 /// and a `Queue`, `.nil` or any other object is refused (Deviation 30).

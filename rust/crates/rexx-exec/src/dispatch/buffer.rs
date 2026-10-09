@@ -384,27 +384,23 @@ pub(super) fn native_mutable_buffer_new(
 /// `MutableBuffer::DEFAULT_BUFFER_LENGTH` (`classes/MutableBufferClass.hpp:150`).
 const BUFFER_DEFAULT_LENGTH: usize = 256;
 
-/// The receiver's buffer state, or [`Loud::native_method`] for a receiver
-/// that carries none.
-fn buffer_state<'a>(
-    interp: &'a Interp,
-    receiver: ObjRef,
-    name: &[u8],
-) -> Result<&'a BufferState, Failure> {
+/// What a receiver with no buffer state is not.
+const NOT_A_BUFFER: &str = "a value that is not a mutable buffer";
+
+/// The receiver's buffer state, or [`Loud::receiver_class`] for a receiver
+/// that carries none: every `MutableBuffer` has one, a subclass instance
+/// whose `INIT` does not forward included (Deviation 28).
+fn buffer_state(interp: &Interp, receiver: ObjRef) -> Result<&BufferState, Failure> {
     interp
         .buffer(receiver)
-        .ok_or_else(|| Loud::native_method(name, "MutableBuffer").into())
+        .ok_or_else(|| Loud::receiver_class(NOT_A_BUFFER).into())
 }
 
 /// [`buffer_state`] for a method that changes the contents.
-fn buffer_state_mut<'a>(
-    interp: &'a mut Interp,
-    receiver: ObjRef,
-    name: &[u8],
-) -> Result<&'a mut BufferState, Failure> {
+fn buffer_state_mut(interp: &mut Interp, receiver: ObjRef) -> Result<&mut BufferState, Failure> {
     interp
         .buffer_mut(receiver)
-        .ok_or_else(|| Loud::native_method(name, "MutableBuffer").into())
+        .ok_or_else(|| Loud::receiver_class(NOT_A_BUFFER).into())
 }
 
 /// `MutableBuffer::lengthRexx` (`classes/MutableBufferClass.cpp:310`).
@@ -414,7 +410,7 @@ fn native_mutable_buffer_length(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let length = buffer_state(interp, receiver, b"LENGTH")?.bytes.len();
+    let length = buffer_state(interp, receiver)?.bytes.len();
     Ok(Some(interp.counted(length)))
 }
 
@@ -425,7 +421,7 @@ fn native_mutable_buffer_getbuffersize(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let capacity = buffer_state(interp, receiver, b"GETBUFFERSIZE")?.capacity;
+    let capacity = buffer_state(interp, receiver)?.capacity;
     Ok(Some(interp.counted(capacity)))
 }
 
@@ -438,7 +434,7 @@ fn native_mutable_buffer_string(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let state = buffer_state(interp, receiver, b"STRING")?;
+    let state = buffer_state(interp, receiver)?;
     let mut out = interp.take_result_buffer();
     out.extend_from_slice(&state.bytes);
     Ok(Some(interp.text_built(out)))
@@ -455,7 +451,7 @@ fn native_mutable_buffer_makestring(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let state = buffer_state(interp, receiver, b"MAKESTRING")?;
+    let state = buffer_state(interp, receiver)?;
     let mut out = interp.take_result_buffer();
     out.extend_from_slice(&state.bytes);
     Ok(Some(interp.text_built(out)))
@@ -469,7 +465,7 @@ fn native_mutable_buffer_endswith(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = named_string_argument(interp, args, 0, "match")?;
-    let state = buffer_state(interp, receiver, b"ENDSWITH")?;
+    let state = buffer_state(interp, receiver)?;
     let answer = ends_with(&state.bytes, &needle, <[u8]>::eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
@@ -484,7 +480,7 @@ fn native_mutable_buffer_caselessendswith(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = named_string_argument(interp, args, 0, "match")?;
-    let state = buffer_state(interp, receiver, b"CASELESSENDSWITH")?;
+    let state = buffer_state(interp, receiver)?;
     let answer = ends_with(&state.bytes, &needle, crate::builtin::string::caseless_eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
@@ -508,7 +504,7 @@ fn native_mutable_buffer_append(
         let argument = required_string_argument(interp, argument, index + 1)?;
         let mut piece = interp.take_result_buffer();
         piece.extend_from_slice(&interp.to_text(argument));
-        let state = grow_buffer(interp, receiver, b"APPEND", piece.len())?;
+        let state = grow_buffer(interp, receiver, piece.len())?;
         state.bytes.extend_from_slice(&piece);
         interp.give_result_buffer(piece);
     }
@@ -522,10 +518,9 @@ fn buffer_delete(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-    name: &[u8],
 ) -> Result<Option<ObjRef>, Failure> {
     let (begin, range) = delete_arguments(interp, args)?;
-    let state = buffer_state_mut(interp, receiver, name)?;
+    let state = buffer_state_mut(interp, receiver)?;
     state
         .bytes
         .edit(|bytes| crate::builtin::string::delete_range(bytes, begin, range));
@@ -539,7 +534,7 @@ fn native_mutable_buffer_delstr(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    buffer_delete(interp, receiver, args, b"DELSTR")
+    buffer_delete(interp, receiver, args)
 }
 
 /// `MutableBuffer~delete`, [`buffer_delete`].
@@ -549,7 +544,7 @@ fn native_mutable_buffer_delete(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    buffer_delete(interp, receiver, args, b"DELETE")
+    buffer_delete(interp, receiver, args)
 }
 
 /// `MutableBuffer::setBufferSize` (`classes/MutableBufferClass.cpp:679`),
@@ -561,7 +556,7 @@ fn native_mutable_buffer_setbuffersize(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let size = required_length_argument(interp, args, 0)?;
-    let state = buffer_state_mut(interp, receiver, b"SETBUFFERSIZE")?;
+    let state = buffer_state_mut(interp, receiver)?;
     let before = state.capacity;
     let grown = state
         .set_buffer_size(size)
@@ -582,10 +577,8 @@ fn native_mutable_buffer_settext(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let new = string_method_argument(interp, args, 0)?;
-    buffer_state_mut(interp, receiver, b"SETTEXT")?
-        .bytes
-        .clear();
-    let state = grow_buffer(interp, receiver, b"SETTEXT", new.len())?;
+    buffer_state_mut(interp, receiver)?.bytes.clear();
+    let state = grow_buffer(interp, receiver, new.len())?;
     state.bytes.extend_from_slice(&new);
     interp.give_result_buffer(new);
     Ok(Some(receiver))
@@ -751,7 +744,7 @@ fn native_mutable_buffer_substr(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (start, length, pad) = substr_arguments(interp, args)?;
-    let state = buffer_state(interp, receiver, b"SUBSTR")?;
+    let state = buffer_state(interp, receiver)?;
     let mut out = interp.take_result_buffer();
     crate::builtin::string::substr_bytes(&mut out, &state.bytes, start, length, pad)?;
     Ok(Some(interp.text_built(out)))
@@ -769,7 +762,7 @@ fn native_mutable_buffer_brackets(
 ) -> Result<Option<ObjRef>, Failure> {
     let start = required_position_argument(interp, args, 0)? - 1;
     let length = optional_length_argument(interp, args, 1)?.unwrap_or(1);
-    let state = buffer_state(interp, receiver, b"[]")?;
+    let state = buffer_state(interp, receiver)?;
     let capped = length.min(state.bytes.len().saturating_sub(start));
     let mut out = interp.take_result_buffer();
     crate::builtin::string::substr_bytes(&mut out, &state.bytes, start, Some(capped), b' ')?;
@@ -840,11 +833,10 @@ fn buffer_pos(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-    name: &[u8],
     scan: fn(&[u8], &[u8], usize, usize) -> usize,
 ) -> Result<usize, Failure> {
     let (needle, start, range) = forward_search_arguments(interp, args)?;
-    let state = buffer_state(interp, receiver, name)?;
+    let state = buffer_state(interp, receiver)?;
     let found = forward_search(&state.bytes, &needle, start, range, scan);
     interp.give_result_buffer(needle);
     Ok(found)
@@ -857,13 +849,7 @@ fn native_mutable_buffer_pos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_pos(
-        interp,
-        receiver,
-        args,
-        b"POS",
-        crate::builtin::string::find_forward,
-    )?;
+    let found = buffer_pos(interp, receiver, args, crate::builtin::string::find_forward)?;
     Ok(Some(interp.counted(found)))
 }
 
@@ -874,13 +860,7 @@ fn native_mutable_buffer_contains(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_pos(
-        interp,
-        receiver,
-        args,
-        b"CONTAINS",
-        crate::builtin::string::find_forward,
-    )?;
+    let found = buffer_pos(interp, receiver, args, crate::builtin::string::find_forward)?;
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 
@@ -895,7 +875,6 @@ fn native_mutable_buffer_caselesspos(
         interp,
         receiver,
         args,
-        b"CASELESSPOS",
         crate::builtin::string::caseless_find_forward,
     )?;
     Ok(Some(interp.counted(found)))
@@ -912,7 +891,6 @@ fn native_mutable_buffer_caselesscontains(
         interp,
         receiver,
         args,
-        b"CASELESSCONTAINS",
         crate::builtin::string::caseless_find_forward,
     )?;
     Ok(Some(interp.counted(usize::from(found > 0))))
@@ -928,7 +906,7 @@ fn native_mutable_buffer_lastpos(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (needle, start, range) = backward_search_arguments(interp, args)?;
-    let state = buffer_state(interp, receiver, b"LASTPOS")?;
+    let state = buffer_state(interp, receiver)?;
     let found = backward_search(
         &state.bytes,
         &needle,
@@ -949,7 +927,7 @@ fn native_mutable_buffer_caselesslastpos(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (needle, start, range) = backward_search_arguments(interp, args)?;
-    let state = buffer_state(interp, receiver, b"CASELESSLASTPOS")?;
+    let state = buffer_state(interp, receiver)?;
     let found = backward_search(
         &state.bytes,
         &needle,
@@ -969,7 +947,7 @@ fn native_mutable_buffer_countstr(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = string_method_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"COUNTSTR")?;
+    let state = buffer_state(interp, receiver)?;
     let count = crate::builtin::string::count_occurrences(&state.bytes, &needle, usize::MAX);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(count)))
@@ -983,7 +961,7 @@ fn native_mutable_buffer_caselesscountstr(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = string_method_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"CASELESSCOUNTSTR")?;
+    let state = buffer_state(interp, receiver)?;
     let count =
         crate::builtin::string::caseless_count_occurrences(&state.bytes, &needle, usize::MAX);
     interp.give_result_buffer(needle);
@@ -1000,7 +978,7 @@ fn native_mutable_buffer_verify(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (reference, option, start, range) = verify_arguments(interp, args)?;
-    let state = buffer_state(interp, receiver, b"VERIFY")?;
+    let state = buffer_state(interp, receiver)?;
     let answer =
         crate::builtin::string::verify_bytes(&state.bytes, &reference, option, start, range);
     interp.give_result_buffer(reference);
@@ -1016,7 +994,7 @@ fn native_mutable_buffer_subword(
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
     let count = optional_length_argument(interp, args, 1)?;
-    let state = buffer_state(interp, receiver, b"SUBWORD")?;
+    let state = buffer_state(interp, receiver)?;
     let found = crate::builtin::word::subword_range(&state.bytes, position, count);
     let mut out = interp.take_result_buffer();
     out.extend_from_slice(&state.bytes[found]);
@@ -1057,7 +1035,7 @@ fn native_mutable_buffer_subwords(
 ) -> Result<Option<ObjRef>, Failure> {
     let position = optional_position_argument(interp, args, 0)?.unwrap_or(1);
     let count = optional_length_argument(interp, args, 1)?.unwrap_or(usize::MAX);
-    let state = buffer_state(interp, receiver, b"SUBWORDS")?;
+    let state = buffer_state(interp, receiver)?;
     let words: Vec<Vec<u8>> = crate::builtin::word::word_slices(&state.bytes)
         .into_iter()
         .skip(position - 1)
@@ -1078,7 +1056,7 @@ fn native_mutable_buffer_makearray(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let separator = optional_string_or_none_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"MAKEARRAY")?;
+    let state = buffer_state(interp, receiver)?;
     let pieces = match &separator {
         Some(separator) => crate::builtin::string::split_slices(&state.bytes, separator),
         None => crate::builtin::string::line_slices(&state.bytes),
@@ -1095,7 +1073,7 @@ fn native_mutable_buffer_word(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"WORD")?;
+    let state = buffer_state(interp, receiver)?;
     let found = crate::builtin::word::word_range(&state.bytes, position).unwrap_or(0..0);
     let mut out = interp.take_result_buffer();
     out.extend_from_slice(&state.bytes[found]);
@@ -1110,7 +1088,7 @@ fn native_mutable_buffer_wordindex(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"WORDINDEX")?;
+    let state = buffer_state(interp, receiver)?;
     let index =
         crate::builtin::word::word_range(&state.bytes, position).map_or(0, |word| word.start + 1);
     Ok(Some(interp.counted(index)))
@@ -1124,7 +1102,7 @@ fn native_mutable_buffer_wordlength(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"WORDLENGTH")?;
+    let state = buffer_state(interp, receiver)?;
     let length =
         crate::builtin::word::word_range(&state.bytes, position).map_or(0, |word| word.len());
     Ok(Some(interp.counted(length)))
@@ -1137,7 +1115,7 @@ fn native_mutable_buffer_words(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let count = crate::builtin::word::word_count(&buffer_state(interp, receiver, b"WORDS")?.bytes);
+    let count = crate::builtin::word::word_count(&buffer_state(interp, receiver)?.bytes);
     Ok(Some(interp.counted(count)))
 }
 
@@ -1159,11 +1137,10 @@ fn buffer_wordpos(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-    name: &[u8],
     scan: fn(&[u8], &[u8], usize) -> usize,
 ) -> Result<usize, Failure> {
     let (phrase, start) = wordpos_arguments(interp, args)?;
-    let state = buffer_state(interp, receiver, name)?;
+    let state = buffer_state(interp, receiver)?;
     let found = scan(&phrase, &state.bytes, start);
     interp.give_result_buffer(phrase);
     Ok(found)
@@ -1176,13 +1153,7 @@ fn native_mutable_buffer_wordpos(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_wordpos(
-        interp,
-        receiver,
-        args,
-        b"WORDPOS",
-        crate::builtin::word::wordpos_bytes,
-    )?;
+    let found = buffer_wordpos(interp, receiver, args, crate::builtin::word::wordpos_bytes)?;
     Ok(Some(interp.counted(found)))
 }
 
@@ -1193,13 +1164,7 @@ fn native_mutable_buffer_containsword(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let found = buffer_wordpos(
-        interp,
-        receiver,
-        args,
-        b"CONTAINSWORD",
-        crate::builtin::word::wordpos_bytes,
-    )?;
+    let found = buffer_wordpos(interp, receiver, args, crate::builtin::word::wordpos_bytes)?;
     Ok(Some(interp.counted(usize::from(found > 0))))
 }
 
@@ -1214,7 +1179,6 @@ fn native_mutable_buffer_caselesswordpos(
         interp,
         receiver,
         args,
-        b"CASELESSWORDPOS",
         crate::builtin::word::caseless_wordpos_bytes,
     )?;
     Ok(Some(interp.counted(found)))
@@ -1231,7 +1195,6 @@ fn native_mutable_buffer_caselesscontainsword(
         interp,
         receiver,
         args,
-        b"CASELESSCONTAINSWORD",
         crate::builtin::word::caseless_wordpos_bytes,
     )?;
     Ok(Some(interp.counted(usize::from(found > 0))))
@@ -1268,7 +1231,7 @@ fn native_mutable_buffer_startswith(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = named_string_argument(interp, args, 0, "match")?;
-    let state = buffer_state(interp, receiver, b"STARTSWITH")?;
+    let state = buffer_state(interp, receiver)?;
     let answer = starts_with(&state.bytes, &needle, <[u8]>::eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
@@ -1283,7 +1246,7 @@ fn native_mutable_buffer_caselessstartswith(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let needle = named_string_argument(interp, args, 0, "match")?;
-    let state = buffer_state(interp, receiver, b"CASELESSSTARTSWITH")?;
+    let state = buffer_state(interp, receiver)?;
     let answer = starts_with(&state.bytes, &needle, crate::builtin::string::caseless_eq);
     interp.give_result_buffer(needle);
     Ok(Some(interp.counted(usize::from(answer))))
@@ -1299,11 +1262,11 @@ fn native_mutable_buffer_match(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let start = required_position_argument(interp, args, 0)?;
-    if start > buffer_state(interp, receiver, b"MATCH")?.bytes.len() {
+    if start > buffer_state(interp, receiver)?.bytes.len() {
         return Ok(Some(interp.counted(0)));
     }
     let other = string_method_argument(interp, args, 1)?;
-    let answer = match_region(interp, receiver, args, start, &other, b"MATCH", <[u8]>::eq);
+    let answer = match_region(interp, receiver, args, start, &other, <[u8]>::eq);
     interp.give_result_buffer(other);
     Ok(Some(interp.counted(usize::from(answer?))))
 }
@@ -1319,11 +1282,7 @@ fn native_mutable_buffer_caselessmatch(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let start = required_position_argument(interp, args, 0)?;
-    if start
-        > buffer_state(interp, receiver, b"CASELESSMATCH")?
-            .bytes
-            .len()
-    {
+    if start > buffer_state(interp, receiver)?.bytes.len() {
         return Ok(Some(interp.counted(0)));
     }
     let other = string_method_argument(interp, args, 1)?;
@@ -1333,7 +1292,6 @@ fn native_mutable_buffer_caselessmatch(
         args,
         start,
         &other,
-        b"CASELESSMATCH",
         crate::builtin::string::caseless_eq,
     );
     interp.give_result_buffer(other);
@@ -1388,11 +1346,10 @@ fn match_region(
     args: &[Option<ObjRef>],
     start: usize,
     other: &[u8],
-    name: &[u8],
     matches: fn(&[u8], &[u8]) -> bool,
 ) -> Result<bool, Failure> {
     let region = match_region_arguments(interp, args, other.len())?;
-    let state = buffer_state(interp, receiver, name)?;
+    let state = buffer_state(interp, receiver)?;
     Ok(match_region_over(
         &state.bytes,
         start,
@@ -1412,11 +1369,11 @@ fn native_mutable_buffer_matchchar(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
-    if position > buffer_state(interp, receiver, b"MATCHCHAR")?.bytes.len() {
+    if position > buffer_state(interp, receiver)?.bytes.len() {
         return Ok(Some(interp.counted(0)));
     }
     let set = string_method_argument(interp, args, 1)?;
-    let state = buffer_state(interp, receiver, b"MATCHCHAR")?;
+    let state = buffer_state(interp, receiver)?;
     let answer = state
         .bytes
         .get(position - 1)
@@ -1436,15 +1393,11 @@ fn native_mutable_buffer_caselessmatchchar(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
-    if position
-        > buffer_state(interp, receiver, b"CASELESSMATCHCHAR")?
-            .bytes
-            .len()
-    {
+    if position > buffer_state(interp, receiver)?.bytes.len() {
         return Ok(Some(interp.counted(0)));
     }
     let set = string_method_argument(interp, args, 1)?;
-    let state = buffer_state(interp, receiver, b"CASELESSMATCHCHAR")?;
+    let state = buffer_state(interp, receiver)?;
     let answer = state.bytes.get(position - 1).is_some_and(|byte| {
         let byte = byte.to_ascii_uppercase();
         set.iter().any(|member| member.to_ascii_uppercase() == byte)
@@ -1462,7 +1415,7 @@ fn native_mutable_buffer_subchar(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let position = required_position_argument(interp, args, 0)?;
-    let state = buffer_state(interp, receiver, b"SUBCHAR")?;
+    let state = buffer_state(interp, receiver)?;
     let mut out = interp.take_result_buffer();
     out.extend(state.bytes.get(position - 1));
     Ok(Some(interp.text_built(out)))
@@ -1481,10 +1434,9 @@ fn replace_buffer_contents(state: &mut BufferState, built: &[u8]) {
 fn grow_buffer<'a>(
     interp: &'a mut Interp,
     receiver: ObjRef,
-    name: &[u8],
     added: usize,
 ) -> Result<&'a mut BufferState, Failure> {
-    let state = buffer_state_mut(interp, receiver, name)?;
+    let state = buffer_state_mut(interp, receiver)?;
     let grown = state
         .ensure_capacity(added)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
@@ -1492,7 +1444,7 @@ fn grow_buffer<'a>(
     // growth it never charged would leave the live figure short for the
     // buffer's life.
     interp.charge_growth(grown);
-    buffer_state_mut(interp, receiver, name)
+    buffer_state_mut(interp, receiver)
 }
 
 /// `changeStr`'s arguments: needle, replacement, and a count defaulting to
@@ -1644,10 +1596,10 @@ fn native_mutable_buffer_insert(
 ) -> Result<Option<ObjRef>, Failure> {
     let (new, begin, length, pad) = insert_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
-    let held = buffer_state_mut(interp, receiver, b"INSERT")?.bytes.len();
+    let held = buffer_state_mut(interp, receiver)?.bytes.len();
     let insert_length = length.unwrap_or(new.len());
     let added = insert_length.saturating_add(begin.saturating_sub(held));
-    let state = grow_buffer(interp, receiver, b"INSERT", added)?;
+    let state = grow_buffer(interp, receiver, added)?;
     crate::builtin::string::insert_bytes(&mut out, &state.bytes, &new, begin, length, pad)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
@@ -1668,7 +1620,7 @@ fn native_mutable_buffer_overlay(
     let mut out = interp.take_result_buffer();
     let overlay_length = length.unwrap_or(new.len());
     let added = begin.saturating_add(overlay_length);
-    let state = grow_buffer(interp, receiver, b"OVERLAY", added)?;
+    let state = grow_buffer(interp, receiver, added)?;
     crate::builtin::string::overlay_bytes(&mut out, &state.bytes, &new, begin, length, pad)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
@@ -1683,16 +1635,15 @@ fn buffer_replace_at(
     interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-    name: &[u8],
 ) -> Result<Option<ObjRef>, Failure> {
     let new = named_string_argument(interp, args, 0, "new")?;
     let begin = named_position_argument(interp, args, 1, "position")? - 1;
     let length = optional_named_length_argument(interp, args, 2, "length")?;
     let pad = named_pad_argument(interp, args, 3, "pad")?.unwrap_or(b' ');
     let mut out = interp.take_result_buffer();
-    let held = buffer_state_mut(interp, receiver, name)?.bytes.len();
+    let held = buffer_state_mut(interp, receiver)?.bytes.len();
     let (replaced, final_length) = replace_at_plan(held, begin, length, new.len());
-    let state = grow_buffer(interp, receiver, name, final_length)?;
+    let state = grow_buffer(interp, receiver, final_length)?;
     out.try_reserve(final_length)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
     replace_at_bytes(&mut out, &state.bytes, &new, begin, replaced, pad)?;
@@ -1708,7 +1659,7 @@ fn native_mutable_buffer_replaceat(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    buffer_replace_at(interp, receiver, args, b"REPLACEAT")
+    buffer_replace_at(interp, receiver, args)
 }
 
 /// `MutableBuffer~'[]='`, [`buffer_replace_at`].
@@ -1718,7 +1669,7 @@ fn native_mutable_buffer_bracketsequal(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    buffer_replace_at(interp, receiver, args, b"[]=")
+    buffer_replace_at(interp, receiver, args)
 }
 
 /// `MutableBuffer::changeStr` (`classes/MutableBufferClass.cpp:971`): answers
@@ -1732,13 +1683,13 @@ fn native_mutable_buffer_changestr(
 ) -> Result<Option<ObjRef>, Failure> {
     let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
-    let mut state = buffer_state_mut(interp, receiver, b"CHANGESTR")?;
+    let mut state = buffer_state_mut(interp, receiver)?;
     if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
         let matches = crate::builtin::string::count_occurrences(&state.bytes, &needle, limit);
         if matches > 0 {
             let growth = matches.saturating_mul(replacement.len() - needle.len());
             let result_length = state.bytes.len().saturating_add(growth);
-            state = grow_buffer(interp, receiver, b"CHANGESTR", result_length)?;
+            state = grow_buffer(interp, receiver, result_length)?;
         }
     }
     crate::builtin::string::changestr_bytes(&mut out, &state.bytes, &needle, &replacement, limit)?;
@@ -1761,14 +1712,14 @@ fn native_mutable_buffer_caselesschangestr(
 ) -> Result<Option<ObjRef>, Failure> {
     let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
-    let mut state = buffer_state_mut(interp, receiver, b"CASELESSCHANGESTR")?;
+    let mut state = buffer_state_mut(interp, receiver)?;
     if !needle.is_empty() && limit > 0 && replacement.len() > needle.len() {
         let matches =
             crate::builtin::string::caseless_count_occurrences(&state.bytes, &needle, limit);
         if matches > 0 {
             let growth = matches.saturating_mul(replacement.len() - needle.len());
             let result_length = state.bytes.len().saturating_add(growth);
-            state = grow_buffer(interp, receiver, b"CASELESSCHANGESTR", result_length)?;
+            state = grow_buffer(interp, receiver, result_length)?;
         }
     }
     crate::builtin::string::caseless_changestr_bytes(
@@ -1792,11 +1743,10 @@ fn buffer_case_shift(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
     first: usize,
-    name: &[u8],
     shift: fn(&u8) -> u8,
 ) -> Result<Option<ObjRef>, Failure> {
     let (start, range) = case_shift_arguments(interp, args, first)?;
-    let state = buffer_state_mut(interp, receiver, name)?;
+    let state = buffer_state_mut(interp, receiver)?;
     crate::builtin::string::case_shift_bytes(&mut state.bytes, start, range, shift);
     Ok(Some(receiver))
 }
@@ -1808,7 +1758,7 @@ fn native_mutable_buffer_upper(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    buffer_case_shift(interp, receiver, args, 0, b"UPPER", u8::to_ascii_uppercase)
+    buffer_case_shift(interp, receiver, args, 0, u8::to_ascii_uppercase)
 }
 
 /// `MutableBuffer~lower`, [`buffer_case_shift`].
@@ -1818,7 +1768,7 @@ fn native_mutable_buffer_lower(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    buffer_case_shift(interp, receiver, args, 0, b"LOWER", u8::to_ascii_lowercase)
+    buffer_case_shift(interp, receiver, args, 0, u8::to_ascii_lowercase)
 }
 
 /// `MutableBuffer::translate` (`classes/MutableBufferClass.cpp:1382`): each
@@ -1832,17 +1782,10 @@ fn native_mutable_buffer_translate(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     if args.iter().take(3).all(Option::is_none) {
-        return buffer_case_shift(
-            interp,
-            receiver,
-            args,
-            3,
-            b"TRANSLATE",
-            u8::to_ascii_uppercase,
-        );
+        return buffer_case_shift(interp, receiver, args, 3, u8::to_ascii_uppercase);
     }
     let (out_table, in_table, pad, start, range) = translate_arguments(interp, args)?;
-    let state = buffer_state_mut(interp, receiver, b"TRANSLATE")?;
+    let state = buffer_state_mut(interp, receiver)?;
     crate::builtin::string::translate_bytes(
         &mut state.bytes,
         &out_table,
@@ -1866,12 +1809,12 @@ fn native_mutable_buffer_space(
 ) -> Result<Option<ObjRef>, Failure> {
     let (gap, pad) = space_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
-    let state = buffer_state_mut(interp, receiver, b"SPACE")?;
+    let state = buffer_state_mut(interp, receiver)?;
     crate::builtin::string::space_bytes(&mut out, &state.bytes, gap, pad)?;
     let gaps = crate::builtin::word::word_count(&state.bytes).saturating_sub(1);
     let growth = gaps.saturating_mul(gap.saturating_sub(1));
     state.bytes.truncate(out.len() - growth);
-    let state = grow_buffer(interp, receiver, b"SPACE", growth)?;
+    let state = grow_buffer(interp, receiver, growth)?;
     replace_buffer_contents(state, &out);
     interp.give_result_buffer(out);
     Ok(Some(receiver))
@@ -1887,7 +1830,7 @@ fn native_mutable_buffer_delword(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (position, count) = delword_arguments(interp, args)?;
-    let state = buffer_state_mut(interp, receiver, b"DELWORD")?;
+    let state = buffer_state_mut(interp, receiver)?;
     state
         .bytes
         .edit(|bytes| crate::builtin::word::delword_bytes(bytes, position, count));

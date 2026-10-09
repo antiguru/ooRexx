@@ -14,7 +14,7 @@
 
 use super::{
     Arity, Body, Cleared, Failure, Interp, NativeMethod, ObjRef, Raised, insert, new_instance,
-    not_this_task, required_string_argument, unconverted_array_argument,
+    refusal_outside, required_string_argument, unconverted_array_argument,
 };
 
 // ---- `Stem` ----
@@ -141,7 +141,13 @@ fn is_stem(interp: &Interp, receiver: ObjRef) -> bool {
 }
 
 fn stem_refusal(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
-    not_this_task(interp, receiver, method)
+    refusal_outside(
+        interp,
+        receiver,
+        method,
+        &["Stem"],
+        "a value that is not a stem",
+    )
 }
 
 /// One node of the stem's tail tree, laid out as

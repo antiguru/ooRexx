@@ -164,10 +164,15 @@ pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
     ) {
         return false;
     }
+    class_is_one_of(interp, receiver, OWNED)
+}
+
+/// Whether `receiver`'s class is or inherits from one of `names`.
+fn class_is_one_of(interp: &mut Interp, receiver: ObjRef, names: &[&str]) -> bool {
     let Some(class) = interp.class_of_value(receiver) else {
         return false;
     };
-    for name in OWNED {
+    for name in names {
         let Some(base) = interp.classes().lookup(name) else {
             continue;
         };
@@ -178,12 +183,35 @@ pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
     false
 }
 
-/// The refusal a receiver another task owns gets, which is the one it got
-/// before this file existed: the class's own name and the method's.
+/// The refusal for a receiver [`owns`] declines: a collection of one of
+/// `classes` with no store (a condition object's `Directory`) is the class's
+/// own unbuilt method, and any other receiver is of the wrong type
+/// (Deviation 28).
 fn not_this_task(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
+    refusal_outside(
+        interp,
+        receiver,
+        method,
+        OWNED,
+        "a value that is not a hash collection",
+    )
+}
+
+/// [`not_this_task`] for the classes `classes`, with `kind` naming what a
+/// wrong-type receiver is not.
+fn refusal_outside(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    method: &[u8],
+    classes: &[&str],
+    kind: &str,
+) -> Failure {
+    if !class_is_one_of(interp, receiver, classes) {
+        return Loud::receiver_class(kind).into();
+    }
     match interp.receiver_class_id(receiver) {
         Some(id) => Loud::native_method(method, &id).into(),
-        None => Loud::unknown_receiver("a value that is not a hash collection").into(),
+        None => Loud::unknown_receiver(kind).into(),
     }
 }
 
