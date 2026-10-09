@@ -105,8 +105,8 @@ pub(crate) struct FlatLoop {
     pub(crate) do_index: usize,
     resume: usize,
     label: Option<SymbolId>,
-    do_indent: usize,
-    loop_indent: usize,
+    pub(crate) do_indent: usize,
+    pub(crate) loop_indent: usize,
     do_line: usize,
     end_line: usize,
     header_clause: HeaderClause,
@@ -1879,6 +1879,16 @@ impl Interp {
                 Err(failure)
             }
         }
+    }
+
+    /// Ends the innermost flat loop away from a pass boundary: its objects
+    /// released, its box spare, and the loop enclosing it uncovered.
+    pub(crate) fn close_flat_top(&mut self) {
+        if let Some(top) = self.activity.flat_top.take() {
+            self.release_loop_objects(&top);
+            self.activity.flat_spares.push(top);
+        }
+        self.activity.flat_top = self.activity.flat_loops.pop();
     }
 
     /// One pass boundary: what the body just answered, then the

@@ -2472,6 +2472,12 @@ impl Interp {
             Flow::Iterate(_, origin) | Flow::Leave(_, origin) => Some(origin.index),
             _ => None,
         };
+        let paused_clause = self.save_clause_state();
+        let indents = self
+            .activity
+            .flat_top
+            .as_ref()
+            .map(|flat| (flat.do_indent, flat.loop_indent));
         let step = self.flat_loop_step_top(code, source, arrival, |it| {
             it.count_clause_against_deadline(false)
         })?;
@@ -2481,14 +2487,42 @@ impl Interp {
         if !matches!(
             step,
             crate::run::FlatStep::Body(_) | crate::run::FlatStep::Done(Flow::Goto(_))
-        ) || !self.debug_pause_instruction()?
-        {
+        ) {
             return Ok(step);
         }
-        Ok(match step {
-            crate::run::FlatStep::Body(_) => crate::run::FlatStep::Body(op_at(chunk, index)?),
-            crate::run::FlatStep::Done(_) => crate::run::FlatStep::Done(Flow::Goto(index)),
-        })
+        // The pause, and the boundary that delivers what it queued, belong to
+        // the `LEAVE`/`ITERATE` clause and not to the step's re-echo.
+        let stepped = self.save_clause_state();
+        self.restore_clause_state(paused_clause);
+        if self.debug_pause_instruction()? {
+            return Ok(match step {
+                crate::run::FlatStep::Body(_) => crate::run::FlatStep::Body(op_at(chunk, index)?),
+                crate::run::FlatStep::Done(_) => crate::run::FlatStep::Done(Flow::Goto(index)),
+            });
+        }
+        let exit = if self.activity.pending_traps.is_empty() {
+            None
+        } else {
+            // Its handlers run at the loop's indent: the body's for a pass
+            // that goes on, the `DO`'s for a loop that ended.
+            if let Some((do_indent, loop_indent)) = indents {
+                self.activity.clause_state.current_value_indent = match step {
+                    crate::run::FlatStep::Body(_) => loop_indent,
+                    crate::run::FlatStep::Done(_) => do_indent,
+                };
+            }
+            self.deliver_pending_traps(code)?
+        };
+        self.restore_clause_state(stepped);
+        match exit {
+            None => Ok(step),
+            Some(exit) => {
+                if let crate::run::FlatStep::Body(_) = step {
+                    self.close_flat_top();
+                }
+                Ok(crate::run::FlatStep::Done(Flow::Exit(exit.value())))
+            }
+        }
     }
 
     /// Parks the clause region `park` stopped at, for its callee to run:

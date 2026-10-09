@@ -1,0 +1,9 @@
+/* CALL ON NOTREADY for LINEIN of standard input in a loop: one line, then
+   the end. */
+call on notready name h
+do i = 1 to 3
+  x = linein()
+  say i '[' || x || ']'
+end
+exit
+h: say 'h sigl' sigl i; return

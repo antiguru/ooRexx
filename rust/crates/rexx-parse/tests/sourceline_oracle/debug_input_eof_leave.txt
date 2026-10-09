@@ -1,0 +1,12 @@
+count 11
+/* With .DebugInput set to .stdin, the NOTREADY of the pause after a LEAVE
+   runs its CALL ON handler before the clause after the loop. */
+.local~debuginput = .stdin
+call on notready name nr
+trace ?a
+do i = 1 to 2
+  leave
+end
+say 'after'
+exit
+nr: say 'nr' sigl; return

@@ -1854,6 +1854,20 @@ DEVIATIONS -- permanent, chosen
      agrees with the oracle. The block stack is an oracle defect, not a
      specified observable. Not witnessed in the corpus.
 
+ 27. A `.DebugInput` ANSWER THAT IS NOT A STRING IS READ BY ITS STRING VALUE
+     (Phase 6.1 Task 6). OWNER: none.
+
+     `Activity::traceInput` casts whatever `LINEIN` answers to `RexxString *`
+     unchecked (interpreter/concurrency/Activity.cpp:3252), so a non-string
+     answer is read through another object's layout: an Array answering
+     `say 'arr'` ran as the command `AN ...` (probe dj1), and no answer at all
+     is a SIGSEGV (corpus/oracle-crashes.txt entry 31). This crate reads the
+     answer's string value: the Array runs `say 'arr'`, and an object whose
+     STRING method answers a line runs its default string, as `to_text` gives
+     it. The oracle's answer is a type confusion, not a specified observable.
+     Measured by Phase 6.1 Task 6's review (probes dj1, di3). Not witnessed in
+     the corpus.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -3398,15 +3412,24 @@ above.
   behind: `=` after `if i = 1 then iterate` in a loop echoes
   `3 *-*   iterate` where this crate echoes `3 *-*       iterate`, and `=`
   after a LEAVE echoes it outside the loop (`3 *-* leave`, this crate
-  `3 *-*   leave`). Everything else agrees, the 28.1 the re-run LEAVE raises
-  included (crate test reexecuting_a_leave_raises_outside_its_loop). Measured
-  by Phase 6.1 Task 6 and its review (probes e1, e2).
+  `3 *-*   leave`), and so does the error report's echo of that LEAVE ahead of
+  the 28.1 it raises. Everything else agrees, the 28.1 and rc 228 included
+  (crate test reexecuting_a_leave_raises_outside_its_loop). Measured by Phase
+  6.1 Task 6 and its reviews (probes e1, e2).
 
   KNOWN GAP: A LABELLED BLOCK DO HAS NO DEBUG PAUSE AFTER ITS HEADER.
   `do label lbl` under `trace ?a` pauses after its header in the oracle and
   not here, where the labelled block runs on the nested path and answers its
   Flow only after the body. An unlabelled block DO and every repeating loop
   pause. Measured by Phase 6.1 Task 6's review (probe l1).
+
+
+  KNOWN GAP: A REPLY UNDER INTERACTIVE DEBUG. The oracle pauses after REPLY,
+  on the continuation's thread, and prints the method's debug prompt there.
+  This crate takes no pause at the REPLY and prints the prompt at the
+  continuation's first pause instead, so every typed line after it runs one
+  clause late. Measured by Phase 6.1 Task 6's review (probe k3); the same at
+  base fe4956b36.
 
 
 CLOSED DEFECTS -- measured wrong, measured again, now matching

@@ -74,7 +74,11 @@ impl Interp {
 
     /// The trap the running activation has enabled for `condition`, if any.
     pub(crate) fn trap_for(&self, condition: &[u8]) -> Option<Trap> {
-        let traps = &self.trap_frame()?.traps;
+        let frame = self.trap_frame()?;
+        if ignored_in_debug_pause(frame, condition) {
+            return None;
+        }
+        let traps = &frame.traps;
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
@@ -625,7 +629,11 @@ impl Interp {
     /// The trap the activation at `depth` has enabled, or `None` past the
     /// outermost level.
     fn trap_at_depth(&self, depth: usize, condition: &[u8]) -> Option<Trap> {
-        let traps = &self.frame_at(depth)?.traps;
+        let frame = self.frame_at(depth)?;
+        if ignored_in_debug_pause(frame, condition) {
+            return None;
+        }
+        let traps = &frame.traps;
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
@@ -1101,4 +1109,10 @@ impl Interp {
 /// A `RAISE`'s condition name as `Raised::condition` carries it.
 fn condition_name(name: &[u8]) -> Cow<'static, str> {
     Cow::Owned(String::from_utf8_lossy(name).into_owned())
+}
+
+/// `RexxActivation::trap` while a line typed at a debug pause runs: every
+/// condition but `SYNTAX` goes untrapped (`RexxActivation.cpp:2475`, `:2600`).
+fn ignored_in_debug_pause(frame: &crate::activation::Activation, condition: &[u8]) -> bool {
+    frame.flags.debug_pause() && condition != b"SYNTAX"
 }

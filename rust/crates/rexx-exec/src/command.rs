@@ -1046,6 +1046,12 @@ impl Interp {
             }
         }
 
+        // A command typed at a debug pause sets neither `RC` nor `.RS`,
+        // traces nothing and raises nothing (`RexxActivation.cpp:4442`).
+        if self.debug_pause() {
+            return Ok(Flow::Next);
+        }
+
         // `RC` before anything else, which is where the C++ puts it too
         // (`RexxActivation::command`).
         //

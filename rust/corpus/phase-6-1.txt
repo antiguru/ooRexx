@@ -238,3 +238,15 @@ lang/debug_input_eof_call_on.rex
 lang/debug_input_eof_call_on_loop.rex
 lang/debug_input_stdin_eof_call_on.rex
 lang/debug_interpret_indent.rex
+
+# Task 6 fix round 2: a LEAVE's or ITERATE's pause delivers what its read
+# queued; a line typed at a pause traps nothing but SYNTAX, and a command
+# typed there leaves RC alone; CALL ON NOTREADY for a read of standard input
+# runs in the program.
+lang/debug_input_eof_iterate.rex
+lang/debug_input_eof_leave.rex
+lang/debug_input_eof_iterate_outer.rex
+lang/debug_typed_condition_ignored.rex
+lang/debug_typed_command_quiet.rex
+lang/notready_call_on_stdin.rex
+lang/notready_call_on_stdin_loop.rex
