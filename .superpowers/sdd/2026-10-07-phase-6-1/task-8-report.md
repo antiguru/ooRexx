@@ -229,3 +229,27 @@ Commit `95df78c16`, on `task-8-review.md` and the ruling on I1.
   stderr, and `sim:2` differs.
 - **P1** is queued by the controller, not addressed here.
 - Per-task check and perf: the gate record's `### Fix round 1`.
+
+## Fix round 2
+
+Commits `27cbe2510`, `da89562a3`, on the review's `## Fix round 1` and the ruling on I2.
+
+- **I2.** In sim, `exit_for_native`'s inline path (a native call made on the baton while another
+  activity lives) runs under a watch (`Interp::sim_watch_native`, `sim_end_watch`): a thread that,
+  each `block=` the call outlasts, signals the interpreter's thread with a real-time signal
+  (`SIGRTMIN + 3` on Linux, `SIGURG` elsewhere) whose handler does nothing, installed once where its
+  action is the default (`signal::Interrupter`, in `signal.rs`). A call blocked in a system call
+  returns with `EINTR`; the watch is joined before the call's path goes on, and a call that fired it
+  is refused at the next boundary as `sim_blocked_native` (LIMIT row: timing-dependent; a native that
+  retries on `EINTR` or blocks outside a system call stays unbounded). Default mode pays one
+  `self.sim` test per inline native exit. Witness above (gate record).
+- **N1.** Both LIMIT rows say any command, or native call made while another activity lives,
+  slower than `block=` is refused, and that `block=` is how a program with slow commands runs.
+- **N2.** `block=` is validated at parse, from 0 to 86400 seconds (`BLOCK_LIMIT`); `-1`, `x`,
+  `inf`, `NaN` and `1e30` are errors (test `a_config_reads_back_what_it_prints`).
+- The first workspace run at `27cbe2510` failed the new witness's sim half with `bind -1 listen 0`.
+  Both runs bound one port; `da89562a3` gives each run its own port below the ephemeral range, and
+  the workspace run then passed. Why the second bind failed was not established; the commit message
+  names the default run's unclosed accepted socket as the likely cause without having shown it.
+- `27cbe2510` also committed `progress.md` and `task-8-review.md`, which were modified in the tree
+  when I staged by listing `git status`; their content is what the tree held.

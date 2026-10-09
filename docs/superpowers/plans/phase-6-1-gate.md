@@ -854,3 +854,20 @@ emptyloop +0.22%, startup +4.17% (24 ms against 25 ms); startup alone at `-r 9` 
 Per-task check at `95df78c16`: `cargo fmt --all --check` exit 0; clippy exit 0; workspace debug
 test exit 0 (3097 passed, 0 failed, 4 ignored); gated corpus exit 0 (29 passed, 1 ignored;
 ir_recorded_oracle 21 passed).
+
+### Fix round 2
+
+Commits `27cbe2510`, `da89562a3`. Witness: the review's `p4/sock2.rex` (an `rxsock` accept in a
+started activity that main's later connect ends), loopback, port changed, through the debug
+`rexx-run` with `LD_LIBRARY_PATH` at the oracle's `build/lib`: default mode `bind 0 listen 0`,
+`connect 0`, `got 1`, rc 0 in 0.24 s; `sim:1` rc 120, `a native call in the simulation mode that
+runs longer than its bound`, 2.12 s; `sim:1,block=0.5` the same in 0.62 s. The crate test
+`a_native_call_only_another_activity_can_end_is_refused_after_its_bound` runs both modes.
+
+Callgrind against `0765d19ef` (`$S/cg4`, head4 = `da89562a3`, sha256
+`191222d8003eead560f5172d95882aa3341fd637882b0201d3c81ae64c18e044`): rexxcps +0.0001%, emptyloop
++0.0006%, startup +0.0009%.
+
+Per-task check at `da89562a3`: `cargo fmt --all --check` exit 0; clippy exit 0; workspace debug
+test exit 0 (3098 passed, 0 failed, 4 ignored); gated corpus exit 0 (29 passed, 1 ignored;
+ir_recorded_oracle 21 passed).
