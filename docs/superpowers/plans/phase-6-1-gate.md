@@ -975,6 +975,58 @@ Exit 0, every spread at most 0.0017%. Percentages are against base61 except the 
 heapshape is +1.16% against the 6.1 base, +1.03% of it present before Task 9 (base, `6358ca7a6`).
 It is being bisected separately and goes to Moritz for a ruling; this round does not change it.
 
+### Heapshape round 1
+
+Code commit `5214a2089` (live body bytes kept as a running figure; report
+`.superpowers/sdd/2026-10-07-phase-6-1/heapshape-round-report.md`). Binaries from `git archive <sha>
+rust interpreter`, every file touched, `CARGO_INCREMENTAL=0 memcap 8G cargo build --release -j 4 -p
+rexx-exec --bin rexx-run`, one `Compiling rexx-exec` line each. `head` was built in
+`/tmp/claude-1000/p61/hsr/target-base`, `r1` in `/tmp/claude-1000/p61/hsr/target`. base61's sha256
+matches the `## Task 1` table.
+
+| binary | source | sha256 |
+|---|---|---|
+| base61 | `e6af1198b` | `2ea19b3ea2875fada8718eaf5b89f828d5ae07587a74feaf9b34681c879c891e` |
+| head | `7aedf9501` | `8b154c88a4defebf8aeba56f00f3dfdd56d8dccedbd3d7c4bcee59ddf5194b61` |
+| r1 | `5214a2089` | `c9cf373fad59449e71ffe5a7d17dd4e993f4ee1129d228462f62cd741c58343f` |
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 6 -o /tmp/claude-1000/p61/hsr/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run head=/tmp/claude-1000/p61/hsr/bin/head/rexx-run r1=/tmp/claude-1000/p61/hsr/bin/r1/rexx-run
+```
+
+Exit 0, every spread at most 0.0001%. Percentages are against base61 except the last column.
+
+| program | head % | r1 (running total) % | r1 vs head % | verdict |
+|---|---:|---:|---:|---|
+| pingmsg | -0.2545 | +0.0096 | +0.2647 | inside |
+| pingguard | -0.3663 | -0.3664 | -0.0000 | inside |
+| pingsem | -0.2494 | -0.2494 | -0.0000 | inside |
+| alloc | +0.0738 | +0.2330 | +0.1591 | inside |
+| alloc4c | -0.8139 | +0.0607 | +0.8817 | inside |
+| heapshape | +1.1559 | +0.0525 | -1.0907 | inside |
+| rexxcps | +0.0924 | +0.4409 | +0.3482 | inside |
+| emptyloop | -0.3191 | -0.3191 | +0.0000 | inside |
+
+`cgdiff.py` head against r1: every program's change is in `Interp::collect_now` (the sweep, inlined):
+heapshape -25.75M (the survivor sums gone), rexxcps +61.99M, alloc +29.39M, alloc4c +27.47M, pingmsg
++4.27M (the freed bodies' bytes read per dead object). Outside it, alloc's `array_of_class` is
++3.00M and pingmsg's `security_arguments_array` and `text_built` +80,000 each (the hold beside each
+charge). No call count moved by more than 26 (`free`). The survivor cost moved to a per-dead-object cost, so rexxcps has
+0.06% left under the budget.
+
+```
+PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o /tmp/claude-1000/p61/hsr/wall2 base61=... head=... r1=...
+```
+
+Exit 0, load average 1.06 at start and 1.01 at end. r1 against base61: rexxcps +1.59%, emptyloop
++4.43% (head +5.36%), alloc -1.99%, alloc4c +1.62%, heapshape -0.55%, pingmsg +0.23%, pingsem
++8.94% (head +1.63%), pingguard +5.04% (head +1.68%). A rerun at `-r 11` (`wall3`) gave pingsem
++8.26% (head +4.13%), pingguard +4.20% (head +0.84%), emptyloop +3.48% (head +3.02%). Against a
+layout control (head with `layout-pad.py 48`, `wall4`, `-r 11`, against head): pad48 pingsem
++1.59%, pingguard +0.00%; r1 pingsem +3.17%, pingguard +3.28%. r1 and head run the same instructions
+on pingsem and pingguard (310 and 114 Ir apart), so the wall-clock gap is not added work; not
+attributed further.
+
 ## Task 10
 
 The seeded gate: `concurrency_tests.rs` `group_runs::whole_groups::sim_gate`, parts and seed counts
