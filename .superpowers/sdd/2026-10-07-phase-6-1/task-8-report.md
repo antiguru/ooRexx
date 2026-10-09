@@ -192,3 +192,40 @@ OOM-killed at the 8G cap in the lib tests: the defect `909d87b09` fixes.
 4. The quantum is drawn once per run, not per clause.
 5. `rexx-run` prints `trace=H` only when `trace_hash` is `Some`, which Task 9 fills.
 6. The oracle measurement is on the RelWithDebInfo (`-O2`) build at `build/`, the only one here.
+
+## Fix round 1
+
+Commit `95df78c16`, on `task-8-review.md` and the ruling on I1.
+
+- **I1 (a), a native's own thread.** `rexx_api::values::Baton` gains `refuses_foreign` (default
+  `false`); `ffi.rs`'s `reached` answers a new `Addressed::Refused` for a callback from a thread
+  running none of the interpreter's native calls when the requester refuses, and every member then
+  does nothing, without taking the baton. `Requester::refuses_foreign`
+  (`src/dispatch/library.rs`) refuses while the inbox's `SIM` request bit is set (by `start_sim`)
+  and sets `FOREIGN` (`src/timer.rs`); `sim_breached` turns `FOREIGN` into `sim_foreign_post("a
+  callback")` at the next boundary, idle or run end. So a native joining its calling-back thread
+  returns and the run is refused, deterministically. Witness
+  `scheduler::tests::callbacks::a_callback_from_another_thread_is_refused_in_the_simulation_mode`
+  (`run_shaped`'s `Shape` gains `switch`), under a 20 s channel timeout: stdout `1` (the call's
+  logical answer), rc 120, the refusal. Before the fix the same shape hung (the review's probe and
+  this task's scratch probe).
+- **I1 (b), a command's peer.** In sim, `run_command`'s two waits on the baton go through
+  `collect_on_baton` (`src/command.rs`): the wait runs on a helper thread and the baton thread waits
+  `block=` seconds of real time (default 2, `Knobs::block`); past that the child's process group is
+  killed (sim children start in a group of their own, `process_group(0)`; `rustix`'s `process`
+  feature, no new crate) and the clause raises `sim_blocked_command`, a new LIMIT row stating it is
+  timing-dependent. Witnesses: the review's `p3/fifo.rex` through `rexx-run` under `sim:1`, rc 120
+  in 2.14 s, no `cat` left; `sim::tests::a_command_only_another_activity_can_end_is_refused_after_its_bound`
+  (default mode prints `hi`, `read done wrote`; `sim:1,block=0.5` refuses in 0.5 to 5 s).
+  A native blocked inline on something other than a callback is not bounded: the baton thread is
+  inside its code, which cannot be abandoned.
+- **Minors.** The stream fields lost their forward-looking docs. `clippy.toml` (comment now says
+  workspace-wide) also disallows `Instant::elapsed`, `SystemTime::elapsed` and `thread::sleep`; the
+  new sites are `scheduler/pool.rs`'s `cfg(test)` sleep, `signal.rs`'s test module and
+  `rexx-api/src/load.rs`'s test natives (one module-level exemption). Every exemption is now
+  `#[expect]`, and clippy passes, so each fires. `file_completions` screens the inbox after a
+  recall's re-drain. `tests/sim_processes.rs` runs `rexx-run` under `sim:1` in two processes
+  (sleeps, `TIME`, `DATE`, `RANDOM` in main and two started activities) and compares stdout and
+  stderr, and `sim:2` differs.
+- **P1** is queued by the controller, not addressed here.
+- Per-task check and perf: the gate record's `### Fix round 1`.

@@ -836,3 +836,21 @@ At `909d87b09`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 -
 (3094 passed, 0 failed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
 --test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle
 21 passed).
+
+### Fix round 1
+
+Commit `95df78c16`. Witnesses: a callback from `SENDFROMANOTHERTHREAD`'s own thread under `sim:1`
+is refused (`a_callback_from_another_thread_is_refused_in_the_simulation_mode`: stdout `1`, rc 120,
+in 0.12 s); the review's `p3/fifo.rex` (a fifo read by main's command and written by another
+activity's) under `REXX_SWITCH_MODE=sim:1` through `rexx-run` is refused in 2.14 s wall, rc 120,
+no process left behind; the crate test of the same shape under `block=0.5`.
+
+Callgrind against `0765d19ef` (`$S/cg3`, head3 = `95df78c16`, sha256
+`76ea39fb8677f9c6940af402af2f686fba21afe3bb28e24c1db92b5db08f56d8`): rexxcps +0.0001%, emptyloop
++0.0006%, startup +0.0000%. Wall clock `-r 5` (`$S/wall4`, load 1.26 to 1.24): rexxcps +2.22%,
+emptyloop +0.22%, startup +4.17% (24 ms against 25 ms); startup alone at `-r 9` (`$S/wall5`):
++0.00%.
+
+Per-task check at `95df78c16`: `cargo fmt --all --check` exit 0; clippy exit 0; workspace debug
+test exit 0 (3097 passed, 0 failed, 4 ignored); gated corpus exit 0 (29 passed, 1 ignored;
+ir_recorded_oracle 21 passed).
