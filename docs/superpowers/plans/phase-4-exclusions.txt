@@ -1873,9 +1873,10 @@ DEVIATIONS -- permanent, chosen
      WHERE THE ORACLE ANSWERS AN ACCIDENT OF MEMORY (Phase 6.1 Task 7).
      OWNER: none.
 
-     `self~run(m)` with `m` a primitive's own method object, from a method of
-     a plain `::class t`, has the native read the instance through the layout
-     of the class it was written for. Measured by Phase 6.1's scout A (probes
+     A primitive's own method object installed on or run on an instance of
+     a plain `::class t` (`self~run(m)` from its method, or `enhanced` and a
+     send) has the native read the instance through the layout of the class
+     it was written for. Measured by Phase 6.1's scout A (probes
      `b2_run_*_on_inst`, 5 runs each where it says so):
 
        .array~method('ITEMS'), .queue~method('ITEMS')   rc 0, a number that
@@ -1887,10 +1888,15 @@ DEVIATIONS -- permanent, chosen
      This crate refuses each, rc 120, with `a message send to a value that
      is not an array` (Array, Queue), `... that carries no method scope`,
      `... that is not a class object`, and for Table with `method "ITEMS" of
-     class "T" is not implemented (Phase 9)`. The oracle's answer is a read
-     through the wrong layout, not a specified observable; where the same
-     read crashes, the shape is corpus/oracle-crashes.txt entry 33. Not
-     witnessed in the corpus.
+     class "T" is not implemented (Phase 9)`; ITEMS of Directory, StringTable,
+     Stem, Set, Bag and Relation, MutableBuffer LENGTH and Message SEND also
+     refuse naming Phase 9 (queued
+     2026-10-09-wrong-type-native-rows-name-phase-9). Through `enhanced`,
+     `.object~enhanced(d)` with `d['E9'] = .array~method('ITEMS')` then
+     `~send('E9')` is rc 0 on the oracle and the same refusal here (Task 7
+     review). The oracle's answer is a read through the wrong layout, not a
+     specified observable; where the same read crashes, the shape is
+     corpus/oracle-crashes.txt entry 33. Not witnessed in the corpus.
 
  29. A VALUE-LESS ENTRY-METHOD ASSIGNMENT IS REFUSED (Phase 6.1 Task 7).
      OWNER: none.

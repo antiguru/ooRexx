@@ -265,8 +265,7 @@ const RESOLVED: &[&str] = &["DELIVERED", "CLOSED", "RE-HOMED", "FIXED", "RESOLVE
 /// owner. A sentence ends at a full stop followed by a space, and a
 /// resolution word resolves only where it opens a sentence, a paragraph or
 /// the clause after a colon, so a word about something else in the same
-/// paragraph (`EXTERNAL was DELIVERED`) resolves nothing; the phase is read
-/// from the owner sentence up to its resolution.
+/// paragraph (`EXTERNAL was DELIVERED`) resolves nothing.
 fn open_owners(text: &str) -> Vec<String> {
     let mut paragraphs: Vec<String> = Vec::new();
     let mut current = Vec::new();
@@ -314,16 +313,12 @@ fn open_owners(text: &str) -> Vec<String> {
                 .copied()
                 .unwrap_or(window.len())
                 .max(end);
-            let resolution = RESOLVED
-                .iter()
-                .filter_map(|marker| {
-                    window[at..stop]
-                        .match_indices(marker)
-                        .map(|(offset, _)| at + offset)
-                        .find(|&found| resolves(&window, found, marker, opens))
-                })
-                .min();
-            if resolution.is_some() {
+            let resolved = RESOLVED.iter().any(|marker| {
+                window[at..stop]
+                    .match_indices(marker)
+                    .any(|(offset, _)| resolves(&window, at + offset, marker, opens))
+            });
+            if resolved {
                 continue;
             }
             for phase in CLOSED {

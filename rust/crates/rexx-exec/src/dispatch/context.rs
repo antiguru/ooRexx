@@ -454,7 +454,7 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
                 Some(Body::Native(native)) => native.entry(&name).ok_or_else(|| {
                     Loud::unknown_receiver("a routine with no package entry").into()
                 }),
-                _ => Err(Loud::receiver_class("a package table this crate did not build").into()),
+                _ => Err(Loud::unknown_receiver("a package table this crate did not build").into()),
             }
         }
         _ => Ok(interp.program_routine_object(program)),

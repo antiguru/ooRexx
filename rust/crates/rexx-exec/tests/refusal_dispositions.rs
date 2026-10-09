@@ -26,7 +26,9 @@
 //! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N; an
 //! `Option` a caller passes in is no owner, since a caller can pass `None`; and
 //! an owner computed by a function is no owner unless [`COMPUTED_OWNERS`] names
-//! the function and the test that holds it to `Some`. A `Loud` struct literal
+//! the function and the test that holds it to `Some`.
+//! Every `message:` field of a constructor is read, and the constructor has
+//! an owner only when each of them does. A `Loud` struct literal
 //! outside a constructor must carry an owner, so an ownerless refusal always
 //! has a constructor name to key a row on.
 
@@ -182,11 +184,29 @@ struct Constructor {
     body: String,
 }
 
-/// Every `fn NAME(...) -> Loud` in `files`, with the body up to the closing
-/// brace at the `fn` line's indent.
+/// Whether the line at `index` of `lines` sits inside an `impl Loud` block,
+/// for each line.
+fn in_impl_loud(lines: &[(usize, String)]) -> Vec<bool> {
+    let mut inside = false;
+    lines
+        .iter()
+        .map(|(_, code)| {
+            if code.starts_with("impl Loud") {
+                inside = true;
+            } else if code == "}" {
+                inside = false;
+            }
+            inside
+        })
+        .collect()
+}
+
+/// Every `fn NAME(...) -> Loud`, and `-> Self` inside `impl Loud`, in
+/// `files`, with the body up to the closing brace at the `fn` line's indent.
 fn constructors(files: &[(String, Vec<(usize, String)>)]) -> Vec<Constructor> {
     let mut found = Vec::new();
     for (path, lines) in files {
+        let impl_loud = in_impl_loud(lines);
         for (index, (number, code)) in lines.iter().enumerate() {
             let Some(at) = code.find("fn ") else {
                 continue;
@@ -217,12 +237,14 @@ fn constructors(files: &[(String, Vec<(usize, String)>)]) -> Vec<Constructor> {
                 continue;
             };
             let returns = returns.trim_start();
-            if !returns.starts_with("Loud")
-                || returns
-                    .as_bytes()
-                    .get(4)
-                    .is_some_and(|b| *b == b'_' || b.is_ascii_alphanumeric())
-            {
+            let names = |kind: &str| {
+                returns.starts_with(kind)
+                    && !returns
+                        .as_bytes()
+                        .get(kind.len())
+                        .is_some_and(|b| *b == b'_' || b.is_ascii_alphanumeric())
+            };
+            if !(names("Loud") || (impl_loud[index] && names("Self"))) {
                 continue;
             }
             let indent = code.len() - code.trim_start().len();
@@ -302,13 +324,104 @@ fn arguments(text: &str, open: usize) -> Vec<String> {
     out
 }
 
-/// The owner a refusal built in `body` carries, given the parameters `params`
-/// its owner may come from.
+/// The expression starting at `from` in `text`, up to the comma or closing
+/// bracket that ends it at its own depth.
+fn expression_at(text: &str, from: usize) -> &str {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quoted = false;
+    let mut at = from;
+    while at < bytes.len() {
+        let byte = bytes[at];
+        if quoted {
+            match byte {
+                b'\\' => at += 1,
+                b'"' => quoted = false,
+                _ => {}
+            }
+        } else {
+            match byte {
+                b'"' => quoted = true,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' if depth == 0 => break,
+                b')' | b']' | b'}' => depth -= 1,
+                b',' if depth == 0 => break,
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    text[from..at.min(text.len())].trim()
+}
+
+/// The index just past the bracket matching the one at `open` in `text`, or
+/// the end of `text`.
+fn closing(text: &str, open: usize) -> usize {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quoted = false;
+    let mut at = open;
+    while at < bytes.len() {
+        let byte = bytes[at];
+        if quoted {
+            match byte {
+                b'\\' => at += 1,
+                b'"' => quoted = false,
+                _ => {}
+            }
+        } else {
+            match byte {
+                b'"' => quoted = true,
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return at + 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    text.len()
+}
+
+/// The owner every refusal built in `body` carries, given the parameters
+/// `params` its owner may come from: each `message:` field is read, and the
+/// body has an owner only when every one of them does.
 fn owner_in(body: &str, params: &str) -> Owner {
-    let Some(at) = body.find("owned_message(") else {
+    let mut owners = Vec::new();
+    for (at, _) in body.match_indices("message:") {
+        if body[..at]
+            .bytes()
+            .next_back()
+            .is_some_and(|b| b == b'_' || b.is_ascii_alphanumeric())
+        {
+            continue;
+        }
+        owners.push(message_owner(
+            expression_at(body, at + "message:".len()),
+            body,
+            params,
+        ));
+    }
+    if owners.is_empty() || owners.contains(&Owner::None) {
         return Owner::None;
-    };
-    let args = arguments(body, at + "owned_message".len());
+    }
+    if owners.iter().all(|owner| *owner == owners[0]) {
+        return owners.swap_remove(0);
+    }
+    Owner::Given
+}
+
+/// The owner of one `message:` field's value `field`.
+fn message_owner(field: &str, body: &str, params: &str) -> Owner {
+    let field = field.strip_prefix("crate::").unwrap_or(field);
+    if !field.starts_with("owned_message(") {
+        return Owner::None;
+    }
+    let args = arguments(field, "owned_message".len());
     let Some(mut owner) = args.get(1).cloned() else {
         return Owner::None;
     };
@@ -335,9 +448,6 @@ fn owner_in(body: &str, params: &str) -> Owner {
                 .is_some_and(|b| b == b'_' || b.is_ascii_alphanumeric())
         })
     };
-    if owner == "None" {
-        return Owner::None;
-    }
     if let Some(inner) = owner
         .strip_prefix("Some(")
         .and_then(|s| s.strip_suffix(')'))
@@ -355,33 +465,39 @@ fn owner_in(body: &str, params: &str) -> Owner {
     {
         return Owner::Given;
     }
-    // An `Option` parameter, a function this file does not vouch for, or
-    // anything else: a caller or a branch can make it `None`.
+    // `None`, an `Option` parameter, a function this file does not vouch
+    // for, or anything else: a caller or a branch can make it `None`.
     Owner::None
 }
 
-/// Every `Loud { ... }` struct literal outside a constructor, as its site and
-/// the owner it carries. The parameters an owner may come from are read from
-/// the nearest enclosing signature or closure header above the literal.
+/// Every `Loud { ... }` struct literal outside a constructor, and `Self {
+/// ... }` inside `impl Loud`, as its site and the owner it carries. The
+/// literal is read to its matching brace. The parameters an owner may come
+/// from are read from the nearest enclosing signature or closure header
+/// above the literal.
 fn literals(
     files: &[(String, Vec<(usize, String)>)],
     constructors: &[Constructor],
 ) -> Vec<(String, Owner)> {
     let mut found = Vec::new();
     for (path, lines) in files {
+        let impl_loud = in_impl_loud(lines);
         for (index, (number, code)) in lines.iter().enumerate() {
-            let Some(at) = code.find("Loud {") else {
-                continue;
-            };
             if code.contains("struct Loud")
                 || code.contains("impl Loud")
                 || code.contains("-> Loud")
+                || code.contains("-> Self")
             {
                 continue;
             }
-            if at > 0 && code.as_bytes()[at - 1].is_ascii_alphanumeric() {
+            let opener = ["Loud {", "Self {"]
+                .iter()
+                .filter(|opener| **opener == "Loud {" || impl_loud[index])
+                .filter_map(|opener| code.find(opener))
+                .find(|&at| at == 0 || !code.as_bytes()[at - 1].is_ascii_alphanumeric());
+            let Some(at) = opener else {
                 continue;
-            }
+            };
             let site = format!("{path}:{number}");
             let inside = constructors.iter().any(|ctor| {
                 let Some((file, line)) = ctor.site.rsplit_once(':') else {
@@ -394,17 +510,19 @@ fn literals(
             if inside {
                 continue;
             }
-            let text = lines[index..(index + 12).min(lines.len())]
+            let rest = lines[index..]
                 .iter()
                 .map(|(_, code)| code.as_str())
                 .collect::<Vec<_>>()
                 .join("\n");
+            let open = at + "Loud ".len();
+            let literal = &rest[open..closing(&rest, open)];
             let header = lines[index.saturating_sub(15)..index]
                 .iter()
                 .map(|(_, code)| code.as_str())
                 .collect::<Vec<_>>()
                 .join(",");
-            found.push((site, owner_in(&text, &header)));
+            found.push((site, owner_in(literal, &header)));
         }
     }
     found
@@ -681,7 +799,8 @@ fn the_scanner_reads_each_owner_form() {
 /// Each way a table can be wrong is found: an ownerless constructor with no
 /// row, a row with no constructor, a REHOME whose constructor carries another
 /// phase, a disposition row for a constructor that names a phase, an ownerless
-/// struct literal, and a citation that does not resolve.
+/// struct literal (beside an owned one too), a citation that does not
+/// resolve, a `-> Self` constructor, and one whose every branch is not owned.
 #[test]
 fn the_check_finds_each_kind_of_disagreement() {
     let source = "\
@@ -711,6 +830,21 @@ impl Loud {
             message: owned_message(\"w\", owner),
         }
     }
+    fn mutant_self(what: &str) -> Self {
+        Self {
+            message: owned_message(what, None),
+        }
+    }
+    fn mixed(what: &str, early: bool) -> Loud {
+        if early {
+            return Loud {
+                message: owned_message(what, Some(\"Phase 9\")),
+            };
+        }
+        Loud {
+            message: what.to_string(),
+        }
+    }
 }
 fn elsewhere() -> Result<(), Failure> {
     Err(Loud {
@@ -718,14 +852,25 @@ fn elsewhere() -> Result<(), Failure> {
     }
     .into())
 }
+fn adjacent(r: u8) -> Failure {
+    match r {
+        0 => return Loud { message: String::new() }.into(),
+        _ => Loud {
+            message: owned_message(\"t\", Some(\"Phase 10\")),
+        }
+        .into(),
+    }
+}
 ";
     let files = vec![("src/lib.rs".to_string(), code_lines(source))];
     let constructors = constructors(&files);
     let owners = owners(&constructors);
     let literals = literals(&files, &constructors);
-    assert_eq!(owners.len(), 5);
+    assert_eq!(owners.len(), 7);
     assert_eq!(owners["optional"].0, Owner::None);
     assert_eq!(owners["given"].0, Owner::Given);
+    assert_eq!(owners["mutant_self"].0, Owner::None);
+    assert_eq!(owners["mixed"].0, Owner::None);
     let documents = Documents {
         crashes: "\n## 6. An array\n".to_string(),
         exclusions: " 20. A WAIT NOTHING LEFT TO RUN CAN END IS REFUSED\n".to_string(),
@@ -736,6 +881,8 @@ fn elsewhere() -> Result<(), Failure> {
 plain\tGUARD\t-\tprobe p1
 none\tDEVIATION\t-\toracle-crashes.txt entry 6
 optional\tLIMIT\t-\tDeviation 20
+mutant_self\tGUARD\t-\tprobe p4
+mixed\tGUARD\t-\tprobe p5
 ";
     assert!(
         problems(&owners, &[], &parse_table(table), &documents).is_empty(),
@@ -751,7 +898,10 @@ given\tGUARD\t-\tprobe p3
 ";
     let found = problems(&owners, &literals, &parse_table(wrong), &documents);
     let expect = [
-        "src/lib.rs:29: a `Loud` struct literal",
+        "src/lib.rs:44: a `Loud` struct literal",
+        "src/lib.rs:51: a `Loud` struct literal",
+        "mutant_self (src/lib.rs:27): no owner and no disposition row",
+        "mixed (src/lib.rs:32): no owner and no disposition row",
         "none: cites oracle-crashes.txt entry 7",
         "gone: a row with no constructor",
         "nine: REHOME to Phase 10, but the constructor",

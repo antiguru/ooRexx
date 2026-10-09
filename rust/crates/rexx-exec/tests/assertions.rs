@@ -188,7 +188,8 @@ struct ExemptRow {
 /// this harness inside a test-case class, the oracle answers each row and this
 /// crate refuses the package argument with `method "NEW" of class "Routine" is
 /// not implemented (Phase 9)`. In this harness the row also has no test case
-/// for `self`, so `self~hex` is 97.1 on both engines.
+/// for `self`, so `self~hex` is 97.1 on both engines (queued
+/// `2026-10-09-literals-rows-need-a-test-case`).
 const EXEMPT: &[ExemptRow] = &[
     ExemptRow {
         group: "Literals",
