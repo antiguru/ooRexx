@@ -1,0 +1,1684 @@
+# Review package: ba3aae4fe..118d78b5e
+
+## Commits
+118d78b5e Phase 6.1 heapshape round 1: report and gate record
+d1e54f178 Phase 6.1: R11 and Tasks 11a, 11b for deferred items still reproducing
+5214a2089 Phase 6.1 heapshape round 1: live body bytes as a running figure
+
+## Files changed
+ .../2026-10-07-phase-6-1/heapshape-round-report.md | 181 +++++++++++++
+ .superpowers/sdd/2026-10-07-phase-6-1/progress.md  |   3 +
+ .../sdd/2026-10-07-phase-6-1/scout-e1-report.md    | 298 +++++++++++++++++++++
+ .../sdd/2026-10-07-phase-6-1/scout-e2-report.md    | 275 +++++++++++++++++++
+ docs/superpowers/plans/2026-10-07-phase-6-1.md     |  78 ++++++
+ docs/superpowers/plans/phase-6-1-gate.md           |  52 ++++
+ .../specs/2026-10-07-phase-6-1-loose-ends.md       |   1 +
+ rust/crates/rexx-core/src/heap.rs                  |  99 +++++--
+ rust/crates/rexx-core/tests/collect.rs             |  14 +-
+ rust/crates/rexx-exec/src/dispatch/array.rs        |  10 +-
+ rust/crates/rexx-exec/src/dispatch/buffer.rs       |   3 +
+ .../rexx-exec/src/dispatch/library/surface.rs      |  23 +-
+ rust/crates/rexx-exec/src/dispatch/stream.rs       |  15 +-
+ rust/crates/rexx-exec/src/lib.rs                   |   1 +
+ rust/crates/rexx-exec/src/tests.rs                 |  21 ++
+ 15 files changed, 1034 insertions(+), 40 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/heapshape-round-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/heapshape-round-report.md
+new file mode 100644
+index 000000000..44a4dd9ff
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/heapshape-round-report.md
+@@ -0,0 +1,181 @@
++# Heapshape round 1: report
++
++Implementer hs-round, 2026-10-09. BASE `7aedf9501`. Code commit `5214a2089`. Scratch:
++`/tmp/claude-1000/p61/hsr` (`H` below).
++
++## Change
++
++The heap keeps `held_bytes`, the body bytes every live object holds now, as a running figure.
++`Heap::collect` no longer sums `Body::held_bytes` over the survivors. It subtracts the
++`held_bytes` of every body the sweep frees, and the figure it leaves becomes `live_bytes`, which
++the byte trigger reads as before (`bytes_due = max(COLLECT_BYTES_FLOOR, live_bytes)`).
++`bytes_since` is not touched, so no new charge is made anywhere and the trigger condition is R10's.
++
++* `Heap::charge_body_bytes` is unchanged (it adds to `bytes_since` only). `Interp::charge_body_bytes`
++  (`lib.rs`) also calls the new `Heap::hold_body_bytes`, so every R10 charge site (`charge_text`,
++  `charge_growth`, `alloc_charged`) adds to the running figure where it charges today.
++* `Heap::alloc` and `Heap::alloc_immortal` hold `body.held_bytes()` themselves. Neither is on the
++  interpreter's allocation path (`alloc_with` calls `alloc_with_uncollected`, which holds nothing,
++  as its doc now says). `alloc_immortal` covers `Interp::interned_literal`, whose non-inline literal
++  texts were never charged and are live for the run.
++* `Heap::release_body_bytes` and `Heap::rehold_body_bytes` record a shrink or a replacement.
++  `release_body_bytes` has a `debug_assert!` against releasing more than is held.
++
++### Every place that changes a body's held bytes
++
++`Body::held_bytes` is nonzero for three things: a `Text` whose `Bytes` are not inline, an `Array`'s
++slot capacity, and an `Instance` whose native state is a `Buffer` (its `capacity` field). The
++enumeration commands, run in `rust/`:
++
++1. Constructions:
++   `grep -rn "Body::Text {" crates/*/src | grep -v "Body::Text { bytes, .. }\|Body::Text { .. }\|=> \|matches!\|let Body::Text\|if let\|Some(Body::Text"`;
++   `grep -rn "Body::Array {" crates/*/src | grep -v "=>\|matches!\|let Body::Array\|if let\|Some(Body::Array\|Some(&Body::Array\|Some(&mut Body::Array"`;
++   `grep -rn "Body::array(" crates/rexx-exec/src`;
++   `grep -rn "NativeState::Buffer(BufferState\|BufferState {" crates/*/src`;
++   and the clone, `grep -rnE "body\.clone\(\)" crates/rexx-exec/src`.
++2. Heap entry points: `grep -rn "heap\.alloc(\|heap\.alloc_immortal(\|\.alloc_with_uncollected(\|heap\.mint_class" crates/*/src`.
++3. Whole-body, text and native replacement:
++   `grep -rnE "\.body = |\*body = |mem::(replace|take|swap)\(&mut [a-z_.]*body" crates/rexx-exec/src crates/rexx-core/src crates/rexx-api/src`;
++   `grep -rnE "\*bytes = " crates/rexx-exec/src crates/rexx-core/src`;
++   `grep -rnE "\*native = |\.native = |native\.take\(\)|native\.replace\(|mem::(take|replace)\(&mut \*?[a-z_.]*native" crates/rexx-exec/src crates/rexx-core/src`.
++4. Slot capacity:
++   `grep -rnE "slots\.(push|insert|resize|resize_with|extend|extend_from_slice|reserve|reserve_exact|try_reserve|try_reserve_exact|append|splice|shrink_to|shrink_to_fit|clone_from)\b|\*slots = |slots = |mem::(take|replace|swap)\(\s*slots|mem::(take|replace|swap)\(&mut \*?slots" crates/rexx-exec/src`,
++   and `grep -rnE "Body::Array \{ *slots: [a-z_]+|slots: ref" crates/rexx-exec/src` for a renamed binding (none).
++5. Buffer capacity: `grep -rn "\.capacity = " crates/rexx-core/src/body.rs` (only inside
++   `BufferState`), then its callers: `grep -rn "set_buffer_size\|\.writable()\|ensure_capacity\|buffer_capacity(" crates/rexx-exec/src crates/rexx-api/src`,
++   and the accessors handing out the state: `grep -rn "&mut BufferState\|&mut NativeState\|&mut Vec<Option<ObjRef>>" crates/rexx-exec/src crates/rexx-core/src`.
++
++What they find, by disposition:
++
++* **Charged today, now also held:** `Interp::text`, `text_owned`, `take_piece`, `new_raw_string`
++  (`charge_text`); every `BehaviourId::ARRAY` construction and `copy_object` (`alloc_charged`);
++  `MutableBuffer~new`, the native API's `new_mutable_buffer`; growth in `array_resize`,
++  `array_splice_slot`, `array_grow`, the notify-list push, `ensure_capacity`'s callers and
++  `set_mutable_buffer_capacity` (`charge_growth`).
++* **Held, not charged:** `Interp::interned_literal` (immortal, through `Heap::alloc_immortal`); the
++  test fakes and crate tests that call `Heap::alloc` (`rexx-api` `callbacks/fake.rs`,
++  `invoke/tests.rs`, `rexx-exec` `tests.rs`, `rexx-core/tests`).
++* **Released or reheld, new in this round:** the sweep (every freed body);
++  `MutableBuffer~setBufferSize` (`dispatch/buffer.rs`, a shrink to the default or a smaller
++  size); `mutable_buffer` and `set_mutable_buffer_capacity` in `dispatch/library/surface.rs`
++  (`BufferState::writable` drops the capacity on a failed reservation); `finish_string` (rewrites a
++  charged text at the made length, which may be shorter or inline); `array_reshape`
++  (`dispatch/array.rs`, the replacement vector can hold fewer slots than an extended original);
++  `stream_init` and `stream_uninit` (`dispatch/stream.rs`, which replace or drop whatever native
++  state the receiver had; a buffer only where the method is run against a `MutableBuffer`).
++* **No change to held bytes:** the weak-reference clear in `Heap::collect` (a `WeakRef` holds
++  nothing); writes, pops, removes, clears and truncations inside an array's capacity (Vec
++  capacity does not shrink); `BufferBytes::truncate`, `clear` and `edit` (the held figure is the
++  `capacity` field, not the Vec's); stream's standard-stream instance (fresh from `new_instance`,
++  no native state); `NativeState::zeroed` (`Data`, not `Buffer`).
++
++The debug check ran over the whole debug workspace suite, the `collect_stress` L0 subset under
++collect-on-every-allocation among it. Its first run (`$H/logs/test1.log`) failed on the immortal
++literals (running figure 117 bytes short, for example `10325` against `10208`) and on the crate
++tests that build arrays through `Heap::alloc`; both are covered above. The second run
++(`test2.log`) left only `rexx-core/tests/collect.rs` `reference_cycles_are_collected`, which
++replaced a body through `get_mut` (`32 body bytes released of 16 held`). That test now writes the
++cycle's slot in place, which tests the same cycle; it is not an R10 test.
++
++## Debug check
++
++In debug builds `Heap::collect` sums `held_bytes` over the survivors in both mark loops and
++asserts the sum equals the running figure after the sweep, with the message `the survivors hold
++{survivor_bytes} body bytes, the running figure says {held}`.
++
++Inversion: the `release_body_bytes(shrunk)` in `native_mutable_buffer_setbuffersize` replaced by
++`let _ = shrunk;`, then
++`CARGO_TARGET_DIR=$H/target memcap 8G cargo test -j 4 -p rexx-exec --lib bytes_a_body_stops`:
++
++```
++thread 'rexx-interp' (2083873) panicked at crates/rexx-core/src/heap.rs:371:9:
++assertion `left == right` failed: the survivors hold 2010209 body bytes, the running figure says 42010208
++```
++
++The same inversion in release (`--release`, where the assertion is compiled out) fails the new
++test's pin instead: `left: 8, right: 12`. The file was restored from a copy taken before the edit
++(`$H/buffer.rs.keep`); `git status` was clean in `rust/` afterwards.
++
++## Tests
++
++* The R10 tests (`large_dead_strings_...`, `copied_strings_...`, `sized_arrays_...`,
++  `grown_arrays_...`, `reshaped_arrays_...`, `grown_buffers_...`, `short_strings_keep_the_slot_cadence`,
++  `heap::body_bytes_tests::a_collection_sums_the_survivors_body_bytes`) pass with their code
++  unchanged. The last one's doc comment said the survivors are summed from both mark loops, which
++  is no longer true in release; that sentence was reworded, its body not touched.
++* New: `rexx-exec/src/tests.rs` `bytes_a_body_stops_holding_leave_the_live_figure`. A 40 MB
++  `MutableBuffer` live through a loop of 100 dead 1 MB copies, cut by `setBufferSize(1)`, another
++  loop, a live 40 MB string, another loop, `drop` of the string, another loop. It pins
++  `collections == 12`.
++* Against the base: `git archive 7aedf9501 rust interpreter` into `$H/base-src`, this commit's
++  `tests.rs` diff applied with `patch`, every file touched, `CARGO_TARGET_DIR=$H/target-base memcap 8G
++  cargo test -j 4 -p rexx-exec --lib bytes_a_body_stops`: `Compiling rexx-exec` present, 1 passed.
++  The base, which sums the survivors at every collection, gives the same 12.
++
++## Performance
++
++Binaries, sha256 and the full tables are in the gate record, `## Task 9`, `### Heapshape round 1`.
++`callgrind.sh -r 2` over the eight programs, base61 (sha256 matches `## Task 1`), head
++(`7aedf9501`), r1 (`5214a2089`); exit 0, spreads at most 0.0001%. Against base61:
++
++| program | head % | r1 % |
++|---|---:|---:|
++| pingmsg | -0.2545 | +0.0096 |
++| pingguard | -0.3663 | -0.3664 |
++| pingsem | -0.2494 | -0.2494 |
++| alloc | +0.0738 | +0.2330 |
++| alloc4c | -0.8139 | +0.0607 |
++| heapshape | +1.1559 | **+0.0525** |
++| rexxcps | +0.0924 | **+0.4409** |
++| emptyloop | -0.3191 | -0.3191 |
++
++Target met: heapshape is within +0.5% of base61 and no program is over +0.5%. `cgdiff.py` head
++against r1 puts the change in `Interp::collect_now`: heapshape -25.75M, rexxcps +61.99M, alloc
+++29.39M, alloc4c +27.47M, pingmsg +4.27M. The cost moved from a `held_bytes` per survivor to one
++per freed body, and garbage-heavy programs free far more than they keep.
++
++One variant was tried and dropped: a `Bytes::held_len` (one match instead of `is_inline` then
++`as_slice`) and the sweep's class test folded into the same match. At `-r 1` it measured rexxcps
+++0.4262% and alloc4c +0.9132% against head, worse than r1's +0.3482% and +0.8817% (built in the
++working tree rather than an archive, so its paths differ; not a controlled comparison). Its files
++were restored from `HEAD` with `git show HEAD:path > path`.
++
++Wall clock (`wallclock.sh`, interleaved, `$H/wall2` at `-r 5`, `wall3` and `wall4` at `-r 11`) is
++inside ±4% of base61 everywhere except pingsem (+8.94%, then +8.26%; head +1.63%, then +4.13%),
++pingguard (+5.04%, then +4.20%), and emptyloop (+4.43%, then +3.48%; head +5.36%, then +3.02%).
++Against head with a layout control (head plus `layout-pad.py 48`): pad48 pingsem +1.59%, pingguard
+++0.00%; r1 pingsem +3.17%, pingguard +3.28%. r1 and head execute the same instructions on pingsem
++and pingguard (310 and 114 Ir apart), so this is not added work. It is not attributed further:
++`perf stat` here rejected `task-clock` and I did not pursue it.
++
++## Per-task check
++
++At `5214a2089`'s tree:
++
++* `cargo fmt`: no change. `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`:
++  exit 0.
++* `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug, so with the check live):
++  exit 0, 3122 passed, 0 failed, 4 ignored (`$H/logs/test3.log`).
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test
++  ir_recorded_oracle`: exit 0, corpus 29 passed and 1 ignored, ir_recorded_oracle 21 passed.
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test concurrency_tests
++  the_seeded_gate`: exit 0, 1 passed (124.6 s).
++
++All with `CARGO_TARGET_DIR=$H/target`. The base test and the head and layout-control binaries
++used a second target directory, `$H/target-base`, so that the base tree's build did not invalidate
++this one's.
++
++## Concerns
++
++1. **rexxcps is at +0.4409% against base61**, 0.06% under the budget. The per-freed-body read is
++   the cost, and it grows with garbage. A second round could skip it for bodies that cannot hold
++   bytes using a per-slot bit set at charge time, or count released bytes where a body is dropped
++   rather than reading every dead body. Neither was tried.
++2. **pingsem and pingguard wall clock** are over ±4% against base61 with identical instruction
++   counts to head; head itself is +1.6% to +4.1% on pingsem. Unattributed.
++3. Two test edits outside the new test: `rexx-core/tests/collect.rs`
++   `reference_cycles_are_collected` now builds its cycle by a slot write, and the R10 heap test's
++   doc comment was reworded.
++4. Exactness rests on every held-byte change being enumerated. A path the greps above miss shows up
++   only as the debug assertion firing in a test that reaches it; in release it moves the trigger
++   (a missed release keeps `bytes_due` high, a missed hold lowers it).
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/progress.md b/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
+index 6d79626b9..d4acb8bcb 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
+@@ -201,10 +201,13 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
+   - whole_groups at Task 10 close: TRACE whole DIFFERING row moved in both modes (120 -> 129 assertions; six TEST_TRACE_? tests and NUMERIC_DEBUG now pass), already at 0e9d6fe6e; last green whole_groups was 5a at 0d18b0045. Ruling: rewrite both keys in Task 10 and bisect the moving commit, plus one oracle check of the moved tests — the behaviour constraint requires a changed program to be named and witnessed — cost if wrong: an unexplained pass hides a wrong answer.
+ - Task 10 implementer DONE_WITH_CONCERNS: 39f14832b, 902de404e, b8bba37a2, 7dc679e36. Release gate 13720 runs 126 s (budget 10 min), debug 1792 runs 12 s; self-test 128/128; whole_groups green; Step 5 reds I1 60, N1 24, M11 53 (I1, N1 needed new gate programs tests/sim_gate/); origin REPLY failure 0/300. TRACE drift attributed to Task 6 (f062f791e, 072e536ac), oracle-matched. Concerns: sim children escape deadline kill (own process group); program diffs thin; R3 src change. Review t10-review (opus).
+ - Task 10 review (task-10-review.md): Needs fixes, 0/1/6. I1 judge lets an early-ended run pass (unlisted refusal, unchecked rc; Section1 whole refuses every seed, shows only as oracle diff). Risks 1-7 otherwise clean (exemptions narrow; child escape bounded, false doc comment; I1 program route correct). Fix round 1 sent to t10-impl.
+ - Task 10 fix round 1: 705dfb767, 6ac9a8c1a. Early-end red added (no summary / refusal or rc outside DIFFERING key and oracle set); Section1 whole's refusal is in its DIFFERING key so not red; WALL_CLOCK nondeterministic rerun now a determinism red; gate self-test for new routes is a unit test on the judge. Re-review t10-rereview (sonnet).
+ - Task 10 re-review 1: all findings addressed; two Minors (early_end substring match and unchecked rc; self-test misses status-abort and WALL_CLOCK determinism routes). Ruling: fix both in round 2 — cheap, and (a) is a correctness gap in the gate's judge — cost if wrong: one more short round. Controller verifies round 2 by diff and mutation evidence, no separate re-review agent.
+ - Task 10 fix round 2: 7c2515201, 7aedf9501. Controller check of the diff: refusal_listed matches the refusal as an exact prefix followed by ", rc {status}," (group key) or exact suffix after "rc {status}, " (program key); after_rerun makes a passing WALL_CLOCK rerun outside clock=real a determinism red; four self-test cases each shown failing under their mutation in the report.
+ - Parked to final review (Minor): sim-started commands sit in their own process group, outside the gate's deadline kill (bounded: output reads time out, the hang is already red).
+ - Task 10: complete (39f14832b..7aedf9501).
+ - Heapshape round 1 dispatched: hs-round (opus), brief W/heapshape-round-brief.md, BASE 7aedf9501.
+ - Moritz 2026-10-09: scout deferred items for 6.1 (items 1-9 + perf). scout-e1 (opus): full-pool inline command hang, TIME('E') loop hang, halt after replied send, EXIT in handler at REPLY, REPLY continuation state visibility, mid-run UNINIT finalization memory. scout-e2 (opus): user STRING answering non-string (R9 residue), wrong-type native rows naming Phase 9, Literals test case, COPIES doubling fill, Array~append quadratic, SYNTAX unwind superlinear. Brief W/scout-e-brief.md; reports W/scout-e1-report.md, W/scout-e2-report.md. Survivors become Task 11a (after Task 11, before close). Excluded: two-interpreters signal race and aborted-run Interp leak (interpreter API phase), uninit-reply-at-termination (P39), trace/debug divergences.
++- scout-e1 (W/scout-e1-report.md): 1 full-pool hang STILL (M); 2 TIME('E') loop hang CHANGED, empty-body loops only (S, per-pass store, perf); 3 halt after send STILL, any ~send (S; new record must be rooted/pruned in collect_now); 4 EXIT in handler at REPLY STILL (S); 5 REPLY continuation visibility FIXED by 9f5c68ed5; 6 mid-run UNINIT STILL, 355 MB vs 15 MB, oracle drains at every activation return (M; changes UNINIT timing, R10/heapshape interaction, per-return check).
++- scout-e2 (W/scout-e2-report.md): 7 STRING answering Array STILL (S; non-Array answer: oracle garbage, needs ruling); truth-ignores-STRING fixed by d27a9d441; 8 wrong-type rows naming Phase 9 STILL, also Message START/REPLY (S-M); 9 Literals rows STILL, interpreter half S (Routine~new 3-arg in test-case class refuses Phase 9), harness half M; P1 COPIES doubling 6.38G->2.21G libc-excl (S); P2 Array~append/items clone-all-slots, 5.4 s at 1e5 vs 0.01 (S); P3 SYNTAX unwind superlinear root cause List~append copying handles, linear with scratch fix (S). Scratch patches /tmp/claude-1000/p61/se2/{copies-doubling,collections-scratch}.diff.
++- Moritz 2026-10-09: all 11 survivors into 6.1, split 11a (S items) / 11b (full-pool hang, UNINIT drain); non-Array STRING answer = loud refusal + deviation row. Spec R11, plan Tasks 11a, 11b. Order: hs-round, Task 11, 11a, 11b, 12, final review.
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md
+new file mode 100644
+index 000000000..123916c26
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md
+@@ -0,0 +1,298 @@
++# Scout E1: concurrency and memory deferred items
++
++Binary: `git archive f7170918c rust interpreter` into `/tmp/claude-1000/p61/se1/src`, tree touched,
++`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/claude-1000/p61/se1/target memcap 8G cargo build --release
++-j 4 -p rexx-exec --bin rexx-run` (log shows `Compiling rexx-exec v0.1.0 (/tmp/claude-1000/p61/se1/src/...)`).
++`rexx-run` sha256 `83a0a85c16f90c7f868c319c9d15227696b2f57ad23984751f7d89a9e93de445`. Line numbers
++below are at f7170918c.
++
++| Item | Verdict | Size | Files a fix touches | Risk to 6.1 work |
++|---|---|---|---|---|
++| 1. full-pool inline command hang | STILL REPRODUCES (crate 5/5 hang, killed rc 137; oracle 5/5 rc 0, but only outside `ulimit -v`) | M | `command.rs` (:715-717), `scheduler.rs` (`exit_for_native` :653-683, `exit_for_block` :687), `input.rs` (:371-373), `scheduler/pool.rs` | Sim mode: `collect_on_baton` already bounds the inline wait there (`sim_block_bound`), and any park-for-a-worker path adds a scheduling event the seeded gate would record. Native inline path holds `PinKind::NativeApiCallback`. |
++| 2. `TIME('E')` loop hang | CHANGED: an empty loop body still hangs (plain `WHILE`, controlled `WHILE`, `UNTIL`, inside `INTERPRET`); a body with any clause (`nop`, assignment) now ends | S | `ir/drive.rs` (`Op::LoopNext` arm :3738), `run/loops.rs` (`flat_loop_step` :1897, `run_repeating` :1330) | One store per loop pass on the hottest loop path. Measure loop benchmarks (emptyloop, rexxcps); see the per-clause-branch memory. Not related to the sim mode or R9/R10. |
++| 3. `Message~halt` after a `~send` | STILL REPRODUCES, and wider than the item: any `~send`, replied or not (crate 5/5 `0`, rc 0; oracle 5/5 `1` and 4.1, rc 252) | S | `dispatch/object_protocol.rs` (`dispatch_held_message` :988), `scheduler.rs` (`halt_message` :2316), `lib.rs` (a message-to-activity record beside `started_messages` :1407, pruned at collection) | Halt delivery and wake order under sim mode (`halt_all`'s `sim_order_event`). The new record keys on message objects and must be pruned or rooted in `collect_now` (heapshape round edits `heap.rs` and the collection path). |
++| 4. `EXIT` in a handler run at the `REPLY` clause's end | STILL REPRODUCES (crate 5/5 `got v`, rc 0; oracle 5/5 91.999, rc 165) | S | `dispatch.rs` (`release_method_activation` :3294, the `None` continuation arm :3327-3336), the handler-`EXIT` path that leaves `Activation::replied` set | REPLY split accounting (`splits_owed`) and ruling P41's REPLYASSERT allowance. No sim/R9/R10 contact. |
++| 5. REPLY continuation state visibility | FIXED by 9f5c68ed5 (S3 Task 11, guard locks; `guards.rs` `transfer_on_reply`). The original `p04_*` probes are lost; three reconstructions match the oracle byte for byte, 5/5 per engine and 3/3 under `REXX_SWITCH_MODE=every` | none | none | none |
++| 6. pending `UNINIT` objects never finalized mid-run | STILL REPRODUCES, grows linearly: 1000 objects 355 MB vs oracle 15 MB; 3000 objects 1.16 GB vs 21 MB; no-UNINIT control 53 MB vs 14 MB | M | `lib.rs` (`collect_now` :3010-3016, whose comment states a false premise), the activation-return paths (`dispatch.rs` `release_method_activation`, `run/call.rs` routine/internal returns), `dispatch.rs` `run_ready_uninits` :3478 | Changes when `UNINIT` Rexx code runs: visible in corpus output (oracle `done 995` vs crate `done 0`, currently licensed GC timing), in sim-mode schedules and the seeded gate. Interacts with R10 (resurrected bodies count live in `bytes_due`) and the heapshape round (collection cadence). Adds a check on every activation return (perf budget). |
++
++## 1. Full native pool runs a blocking command inline
++
++Probe `full.rex` (from `/tmp/claude-1000/p61/t8rev/p3/full.rex`, fifo path changed; fifo made with
++`mkfifo /tmp/claude-1000/p61/se1/ff`):
++
++```rexx
++do i = 1 to 64
++  s.i = .s~new~start('NAP')
++end
++call SysSleep 0.5
++w = .w~new~start('WRITE')
++address system 'cat /tmp/claude-1000/p61/se1/ff'
++say 'read done' w~result
++::class s
++::method nap
++  address system 'sleep 3'
++::class w
++::method write
++  call SysSleep 0.1
++  address system 'echo hi > /tmp/claude-1000/p61/se1/ff'
++  return 'wrote'
++```
++
++Control `fifo.rex` (same without the 64 nappers): crate and oracle both `hi` / `read done wrote`,
++rc 0, stderr empty.
++
++Crate, 5 runs, each from a fresh directory:
++`memcap 2G timeout -k 5 15 /tmp/claude-1000/p61/se1/target/release/rexx-run /tmp/claude-1000/p61/se1/probes/full.rex`,
++followed by `timeout 2 tee /tmp/claude-1000/p61/se1/ff </dev/null` to release any blocked reader.
++5/5: stdout empty, rc 137 (the TERM at 15 s did not end it; the KILL 5 s later did). stderr:
++
++```
++     6 *-* address system 'cat /tmp/claude-1000/p61/se1/ff'
++Error 4 running /tmp/claude-1000/p61/se1/probes/full.rex line 6:  Program interrupted.
++Error 4.1:  Program interrupted with HALT condition.
++    10 *-* address system 'sleep 3'
++Error 4 running ... line 10:  Program interrupted.
++... (the same pair for the started activities)
++memcap: ... Killed ...
++```
++
++Oracle under the standard wrapper (`( ulimit -v 1048576; LD_LIBRARY_PATH=... timeout -k 5 20 .../rexx FILE )`),
++5/5: rc 208, stdout empty, stderr:
++
++```
++       *-* Compiled method "START" with scope "Object".
++     2 *-*   s.i = .s~new~start('NAP')
++Error 48 running /tmp/claude-1000/p61/se1/probes/full.rex line 2:  Failure in system service.
++Error 48.1:  Failure in system service: ERROR CREATING THREAD.
++```
++
++The 1 GB virtual limit cannot hold 64 oracle thread stacks. Deviation from the standard command,
++stated: the oracle run again with `memcap 2G` in place of `ulimit -v`
++(`LD_LIBRARY_PATH=... memcap 2G timeout -k 5 20 .../rexx FILE`), 5/5: stdout `hi` / `read done wrote`,
++stderr empty, rc 0. The oracle has one thread per activity and no pool, so this hang has no oracle
++counterpart.
++
++Root cause: `command.rs:715-717`. When `exit_for_block` finds no free pool worker it answers
++`Err(block)` and the command is collected by `collect_on_baton` on the baton thread with no bound
++outside the sim mode, so the started writer can never run and the deadline is never checked. The same
++inline fallback exists for native calls (`scheduler.rs:669-683`, `call.run` on the baton) and stdin
++reads (`input.rs:371-373`).
++
++Size M: three fallback sites and one design choice. A `Block` touches no island value, so the command
++and stdin sites can run on an unpooled overflow thread (as `collect_on_baton`'s sim branch already
++does); a native call needs the baton lent to its thread, so it either parks until a worker frees or
++lends to an overflow thread.
++
++## 2. `TIME('E')` loop hang
++
++Probe `elapsed.rex` (the item's text):
++
++```rexx
++call time 'r'
++do while time('e') < 0.3
++end
++say 'empty body ended'
++call time 'r'
++do while time('e') < 0.3
++  nop
++end
++say 'nop body ended'
++```
++
++Command: `memcap 2G timeout -k 5 10 .../rexx-run elapsed.rex` (crate), standard oracle wrapper.
++Crate: stdout empty, rc 124, stderr
++
++```
++     3 *-*   end
++Error 4 running /tmp/claude-1000/p61/se1/probes/elapsed.rex line 3:  Program interrupted.
++Error 4.1:  Program interrupted with HALT condition.
++```
++
++Oracle: `empty body ended` / `nop body ended`, stderr empty, rc 0.
++
++Splitting the probe shows what changed since the item was written:
++
++| Probe | Crate (timeout 5 s) | Oracle |
++|---|---|---|
++| `elapsed_nop.rex`: `do while time('e') < 0.3; nop; end` | `nop body ended`, rc 0 | same, rc 0 |
++| `elapsed_asg.rex`: body `x = 1` | `assign body ended`, rc 0 | not run |
++| `elapsed_until.rex`: `do until time('e') >= 0.3; n = n + 1; end` | `until ended`, rc 0 | not run |
++| `elapsed_forever.rex`: `do forever; if time('e') >= 0.3 then leave; end` | `forever ended`, rc 0 | not run |
++| `elapsed_ctl.rex`: `do i = 1 while time('e') < 0.3` / `end`, then `do until time('e') >= 0.3` / `end` | hangs, rc 124, 4.1 at line 3 | `ctl ended 1` / `until empty ended`, rc 0 |
++| `elapsed_untilempty.rex`: `do until time('e') >= 0.3` / `end` | hangs, rc 124, 4.1 at line 3 | not run |
++| `elapsed_interp.rex`: `interpret "do while time('e') < 0.3; end"` | hangs, rc 124, 4.1 at line 2 | `interp ended`, rc 0 |
++
++Root cause: the clock cache is invalidated only in `Interp::enter_stepped_clause` (`run.rs:2849`,
++`clock_stale = true`). A pass boundary (`ir/drive.rs:3738` `Op::LoopNext`, then
++`run/loops.rs:1897` `flat_loop_step`) counts the header clause against the deadline but does not mark
++the clock stale, so a loop with no body clause re-reads the cached `TIME('E')` forever. The oracle
++invalidates after every instruction it executes, the loop's own `DO`/`END` included
++(`RexxActivation.cpp:647`).
++
++Size S: set `clock_stale` at the pass boundary (`flat_loop_step`, and the non-flat
++`run_repeating` at `run/loops.rs:1330`).
++
++## 3. `Message~halt` after a `~send`
++
++Probe `pend4.rex` (the item's text). Crate, 5 runs, `memcap 2G timeout -k 5 10`: 5/5 identical,
++rc 0, stderr empty:
++
++```
++v
++0
++rest 1
++rest 2
++rest 3
++main end
++```
++
++Oracle, 5 runs: 5/5 rc 252, stderr
++
++```
++     5 *-* say m~halt
++Error 4 running /tmp/claude-1000/p61/se1/probes/pend4.rex line 5:  Program interrupted.
++Error 4.1:  Program interrupted with HALT condition.
++```
++
++stdout `v, 1, rest 1, rest 2, rest 3` in 3 runs and `v, rest 1, 1, rest 2, rest 3` in 2.
++
++The reply is not needed. `sendhalt.rex`:
++
++```rexx
++m = .message~new(.k~new, 'm')
++say m~send
++say m~halt
++say 'main end'
++::class k
++::method m
++  return 'v'
++```
++
++Crate: `v` / `0` / `main end`, rc 0. Oracle: `v` / `1`, then the 4.1 at line 3, rc 252.
++
++Root cause: `MessageClass::send` records the sender's activity as the message's `startActivity`
++(`MessageClass.cpp:432`), and `halt` asks that activity (`:811-816`). The crate's `Message~send`
++(`dispatch/object_protocol.rs:988`, `dispatch_held_message`) records nothing, and
++`Interp::halt_message` (`scheduler.rs:2316`) answers false for any message not in `started_messages`
++and finds a target only by `root_then == Then::Started(message)`.
++
++Size S: record the sending activity for a sent message and let `halt_message` target it.
++
++## 4. `EXIT` in a `CALL ON` handler run at the `REPLY` clause's end
++
++Probe `hexit.rex` (the item's text). Crate, 5 runs: 5/5 rc 0, stderr empty, stdout
++`handler on main 1` / `got v` / `main end`. Oracle, 5 runs: 5/5 rc 165, stdout `handler on main 1`,
++stderr
++
++```
++     2 *-* say 'got' .k~new~m
++Error 91 running /tmp/claude-1000/p61/se1/probes/hexit.rex line 2:  No result object.
++Error 91.999:  Message "M" did not return a result.
++```
++
++Root cause: `exec_reply` (`run.rs:2142`) leaves the split owed until the replier's next clause
++(`ir/drive.rs:2602-2611`). The handler's `EXIT` ends the method first, and
++`release_method_activation` (`dispatch.rs:3294`) takes the `None`-continuation arm (`:3327-3336`) and
++answers the `REPLY` value. The oracle's `EXIT` overwrites the result before the split, so the sender
++gets none.
++
++Size S: an `EXIT` that ends a replied activation before its split answers the `EXIT`'s value
++(here none) rather than `Replied::value`.
++
++## 5. REPLY continuation state visibility
++
++The item's probes (`p6-final-a/probes/p04_reply_in_arg.rex`, `p04b_reply_where.rex`) are not on disk
++(`find / -name p04_reply_in_arg.rex` finds nothing). The item carried the remaining cause (the
++continuation not holding the replier's guard) to S3 Task 11 as `reply-guard-transfer-witness`. The
++guard transfer (`guards.rs:791` `transfer_on_reply`) first appears in 9f5c68ed5
++(`git log -S transfer_on_reply`).
++
++Reconstructions:
++
++`replyvis.rex`: a guarded `m` replies `'r'`, loops 20000 times, then sets `v` to its argument;
++main then sends guarded `get`.
++
++```rexx
++o = .k~new
++say 'got' o~m('argument-value-long')
++say 'after' o~get
++say 'end main'
++::class k
++::attribute v
++::method init
++  expose v
++  v = 'none'
++::method m
++  expose v
++  use arg a
++  reply 'r'
++  do i = 1 to 20000; end
++  v = a
++  say 'continuation wrote' v
++::method get
++  expose v
++  return v
++```
++
++`replyvis2.rex`: `reply f('argument-value-long')` then `v = 'cont-' || v`, read back through the
++`v` attribute. `replyvis3.rex`: the replying send inside a `CALL` argument
++(`call show o~m('argument-value-long')`).
++
++Both engines, 5 runs each, all rc 0 with empty stderr, crate stdout byte-identical to the oracle's
++first run in every run (`cmp`):
++
++```
++replyvis:  got r / continuation wrote argument-value-long / after argument-value-long / end main
++replyvis2: got argument-value-long / after cont-none / end main
++replyvis3: got r / after argument-value-long / end main
++```
++
++`REXX_SWITCH_MODE=every` (read by `rexx-run.rs:63`): replyvis and replyvis2 3/3, replyvis3 5/5
++identical to the oracle.
++
++## 6. Pending `UNINIT` objects never finalized mid-run
++
++The Task 5a review's probe text is not recorded; reconstructed from its description. `uninit.rex`:
++
++```rexx
++.local~n = 0
++do i = 1 to 1000
++  o = .f~new(copies('x', 300000) || i)
++end
++say 'done' .local~n
++::class f
++::method init
++  expose s
++  use arg s
++::method uninit
++  .local~n = .local~n + 1
++```
++
++`uninit3k.rex` is the same with 3000; `nouninit.rex` drops the `uninit` method.
++
++Commands, `/usr/bin/time -v` directly on the interpreter:
++`memcap 2G timeout -k 5 60 /usr/bin/time -v .../rexx-run PROBE` and
++`( ulimit -v 1048576; LD_LIBRARY_PATH=... timeout -k 5 60 /usr/bin/time -v .../rexx PROBE )`.
++3 runs each; all rc 0, stderr only `time -v`'s report.
++
++| Probe | Crate stdout | Crate peak RSS (KB) | Crate wall | Oracle stdout | Oracle peak RSS (KB) | Oracle wall |
++|---|---|---|---|---|---|---|
++| uninit (1000) | `done 0` | 356 500, 356 392, 355 420 | 0.72-0.74 s | `done 995` | 16 004, 14 460, 16 228 | 0.63 s |
++| uninit3k (3000) | `done 0` | 1 155 504, 1 155 040, 1 155 596 | 2.20-2.65 s | `done 2995` | 21 060, 20 264, 20 728 | 1.91 s |
++| nouninit (1000) | `done 0` | 52 444, 53 120, 52 728 | 0.65-0.84 s | `done 0` | 14 180, 18 916, 14 120 | 0.62-0.63 s |
++
++The crate holds every finalizable object's 300 KB string until termination, about 385 KB per object
++(800 MB more for 2000 more objects); the oracle stays flat.
++
++Root cause: `lib.rs:3010-3016` (`collect_now`) queues resurrected objects on `uninit_ready` and says
++the oracle's `runUninits` is reached only from `GC('force')` and termination. That premise is false:
++`MemoryObject::checkUninitQueue` (`RexxMemory.hpp:123`, `if (pendingUninits > 0) runUninits()`) is
++called at every Rexx activation's return (`RexxActivation.cpp:705`), at native activation return
++(`NativeActivation.cpp:1361`), and in the activity loop (`Activity.cpp:249`, `:324`, `:3440`). The
++crate drains `uninit_ready` only from `GC('force')` (`builtin/state.rs:128`), an activity's end
++(`scheduler.rs:1599`) and termination (`lib.rs:3484`).
++
++Size M: a drain at activation return, guarded by an emptiness check on a hot path, with
++`run_ending_uninits`-style routing of refusals raised inside an `UNINIT`, and re-entrancy through
++`processing_uninits`. Expected effect: the 1000-object probe should fall to roughly the `nouninit`
++figure (53 MB); not built or measured here.
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/scout-e2-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/scout-e2-report.md
+new file mode 100644
+index 000000000..bb67579b6
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/scout-e2-report.md
+@@ -0,0 +1,275 @@
++# Scout E2: items 7, 8, 9, P1, P2, P3
++
++| item | verdict | size | files a fix touches | risk |
++|---|---|---|---|---|
++| 7 user STRING answering an Array / another object | STILL REPRODUCES for the Array answer (`say`, concat, `length()`, truth). The older line "truth tests ignore a user STRING method" is FIXED by `d27a9d441` (Task 4a). A non-Array, non-string answer is oracle garbage (`length` = 139937618269872, concat = Error 5, `say` = 88.909): no target | S (Array); the non-Array answer needs a ruling (loud refusal or Deviation 28-style licence) | `rexx-exec/src/dispatch/reqstr.rs:165` (route the answer through `required_string_answer`/`classify_string_conversion` instead of `string_value_text`) | R9: `truth_of_string_value` goes through `required_string_value`, so the fix changes truth answers too (i7d: oracle `if true`, crate 34.1); `tests/truth/values` should gain an Array-answer case. A new `Loud` for the non-Array case re-derives `refusal-sites.tsv` and `refusal-dispositions.tsv` |
++| 8 wrong-type native rows name Phase 9 | STILL REPRODUCES, and wider than queued: Message `START` and `REPLY` refuse the same way as `SEND` | S-M (three sites, one each in hash, buffer and Message code) | `dispatch/hash.rs:183` `not_this_task` (all hash `ITEMS` rows, Stem via `hash/stem.rs:143`, Relation via `hash/relation.rs:124`), `dispatch/buffer.rs:396,407`, `dispatch/object_protocol.rs:1001,1114,1196` | Refusal tables (Task 7's `refusal-dispositions.tsv`) re-derived. `dispatch/buffer.rs` has uncommitted edits in the shared tree. A MutableBuffer subclass whose INIT does not forward still answers (checked), so `buffer_state`'s None arm is wrong-type only |
++| 9 Literals rows need a test case | STILL REPRODUCES, both halves: top-level `self~hex` is 97.1 on both engines; inside a test-case class, `.routine~new(name, code, package)` is refused `method "NEW" of class "Routine" ... (Phase 9)` where the oracle answers `AB A` | interpreter half S (accept the third argument by reusing `new_file_context`); harness half M (`program_for` must wrap rows in a test-case class carrying `q`/`hex`/`bin`/`runDynamicSource`) | `dispatch/construct.rs:172` (`args.len() > 2` refusal), `tests/assertions.rs` (`program_for`, `EXEMPT`) | None with sim/seeded/R10/heapshape. The `EXEMPT` rows' `unblocked_by: "Phase 9"` goes stale if the interpreter half lands |
++| P1 COPIES byte-by-byte fill | STILL REPRODUCES. callgrind at HEAD, loop999 N=1e6: 13.68 G total, 6.38 G with libc excluded; the scratch doubling fill gives 4.07 G total, 2.21 G with libc excluded. Wall 1.00-1.12 s falls to 0.45-0.50 s | S | `rexx-exec/src/builtin/string.rs:725-727` (`copies_bytes`) | No bench program calls COPIES, so the gate programs see only layout. callgrind.sh's libc-excluded column hides most of this cost (the 3-byte `memcpy` calls are in libc) |
++| P2 Array~append quadratic | STILL REPRODUCES. Crate user time 0.02 / 0.07 / 5.4 s at n = 1e3 / 1e4 / 1e5. Oracle 0.00 / 0.00 / 0.01 s, and 0.16 s at 1e6 | S | `dispatch/collection.rs:167` `last_item` (collects `occupied` into a Vec per append) and `:253` `slots_of(..).len()` (`collection.rs:40` clones the slots). The same clone-to-read shape sits in `array/surface.rs` (ITEMS: 6.3 s for 1e5 calls at n=1e5 vs oracle 0.03 s) | heapshape and the gate programs do not append. R10: `append_slot` calls `array_grow`'s `charge_growth`; keep it |
++| P3 SYNTAX unwind superlinear | STILL REPRODUCES within the default cap (Ir, depth 2000/4000/8000: 0.24 / 0.48 / 1.35 G; `exit 0` control 0.13 / 0.14 / 0.16 G). Cause found: building TRACEBACK/STACKFRAMES appends one item per frame to a `List`, and `List~append` is O(n) | S | `dispatch/collection/list.rs:136` (`array_slots_owned(handles).len()` clones every handle per append) and `:126` (clones the free stack) | The same fix makes `List~append` linear for programs (listappend 1e4: 0.95 G to 0.15 G Ir). With the fix, unwind is 0.17 / 0.22 / 0.33 G Ir (linear). Wall clock within the cap is small (0.09 s vs 0.08 s at 8000) |
++
++## Setup
++
++Binary: `git archive f7170918c rust interpreter` into `/tmp/claude-1000/p61/se2/src`, touched, then
++`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/claude-1000/p61/se2/target memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run`
++from `src/rust`. `build.log` has `Compiling rexx-exec`. Copied to `/tmp/claude-1000/p61/se2/bin/rexx-run`,
++sha256 `5bfa31112b586ca1a1a4a7382b44627603720e14d626e5a391de47bf451664aa`.
++
++Scratch builds were made in the same source copy and target dir, each with a `Compiling rexx-exec` line. Afterwards the
++sources were restored and `cmp`'d against `git show f7170918c:...`:
++* `bin/rexx-run-doubling`, sha256 `06bd516687609f0def32faa041b7bed3642e5a93ab8331b09ef6a9afca906ac8`.
++  The patch is `/tmp/claude-1000/p61/se2/copies-doubling.diff`.
++* `bin/rexx-run-coll`, sha256 `75f78ea0bde709ed040acde76f68804a91430f82af93cf2f20718521e6c74d56`.
++  It has `list.rs` `array_slots` in place of `array_slots_owned` at `:126,:136`, and `last_item` as an `rposition` over the
++  borrowed slots. The patch is `/tmp/claude-1000/p61/se2/collections-scratch.diff`.
++
++Runner `/tmp/claude-1000/p61/se2/tools/both.sh FILE` runs these from fresh `mktemp -d` dirs under `runs/`:
++* crate: `memcap 2G timeout -k 5 20 bin/rexx-run FILE`;
++* oracle: `( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx FILE )`.
++
++The oracle's outputs are written outside its run dir.
++
++Callgrind uses `tools/cg.sh`, which runs `rust/bench-programs/callgrind.sh`'s `one()` invocation and `cgsum.py` on a
++single program, because callgrind.sh only accepts its fixed program list. Rows are total / libc / ld / total less both.
++Wall clock uses `tools/wall.sh`, which interleaves crate and oracle runs and reports `/usr/bin/time` elapsed and user
++seconds. Probes are in `/tmp/claude-1000/p61/se2/probes/`. None is concurrent.
++
++## Item 7: a user STRING answering an Array or another object
++
++Probe `i7a.rex`:
++
++    o = .k~new
++    say o
++    say 'x' o
++    say length(o)
++    say o || '!'
++    ::class k
++    ::method string
++      return .array~of('a', 'b', 'c')
++
++* crate rc 0, stderr empty, stdout `an Array` / `x an Array` / `8` / `an Array!`
++* oracle rc 0, stderr empty, stdout `a` `b` `c` / `x a` `b` `c` / `5` / `a` `b` `c!`. The items are joined by newlines.
++
++Probe `i7d.rex` (truth):
++
++    o = .k~new
++    if o then say 'if true'; else say 'if false'
++    ::class k
++    ::method string
++      return .array~of(1)
++
++* crate rc 222, stdout empty. stderr: `2 *-* if o`, `Error 34 running .../i7d.rex line 2:  Logical value not 0 or 1.`, `Error 34.1: ... found "an Array".`
++* oracle rc 0, stdout `if true`, stderr empty.
++
++Probe `i7c.rex` (the older ledger line; STRING answers `1`):
++
++    o = .k~new
++    if o then say 'if true'; else say 'if false'
++    do while o; say 'while ran'; leave; end
++    n = 0
++    do until o; n = n + 1; if n > 2 then leave; end
++    say 'until n' n
++    ::class k
++    ::method string
++      return 1
++
++Both rc 0 with identical stdout `if true` / `while ran` / `until n 1`, stderr empty. This is FIXED by `d27a9d441`
++("Phase 6.1 Task 4a: one truth judgment", `git log -S truth_user_string -- rust/corpus`).
++
++Non-Array answers. Each probe's STRING returns `.directory~new` (`i7b`, `i7e`, `i7f`, `i7g`) or another instance (`i7h`):
++
++| probe | crate | oracle |
++|---|---|---|
++| `i7b` `say o` | rc 0, `a Directory` | rc 168, stderr `Error 88.909: Argument 1 must have a string value.` (traceback through `Stream~SAY`) |
++| `i7e` `say length(o)` | rc 0, `11` | rc 0, `139937618269872` |
++| `i7f` `say 'x' o` | rc 0, `x a Directory` | rc 251, `Error 5 ... System resources exhausted.` |
++| `i7g` `if o` | rc 222, 34.1 `found "a Directory"` | rc 222, 34.1 `found "The NIL object"` |
++| `i7h` STRING answers a `.k2` whose STRING is `'inner'`: `say o`, `say length(o)` | rc 0, `a K2` / `4` | rc 168, 88.909 on `say o` |
++
++The oracle reads a non-string answer as a string object. Its `length` is a pointer-sized number, which is the
++Deviation 28 shape. Only the Array answer has a well-defined oracle result.
++
++Root cause: `dispatch/reqstr.rs:165` renders the STRING send's answer with `string_value_text`, and
++`value.rs:397` answers `an Array` for an array and the default name otherwise. The Array-joining limb that already
++exists (`StringConversion::Bytes`, reached through `required_string_answer`) is not applied to the answer.
++`length()` and truth share this path through `required_string_value`.
++
++Not probed: the ledger's rooting-harness gap ("could not detect removing truth push or condition_value push"). It
++is a final-review item.
++
++## Item 8: wrong-type native rows that name Phase 9
++
++These are crate-only runs. The oracle is not run because `rust/corpus/oracle-crashes.txt` entry 33 covers this exact
++shape: SIGSEGV for `List~ITEMS` and others, with garbage answers under Deviation 28. Template, with `.X~method('M')`
++varied:
++
++    say .t~new~go(.directory~method('ITEMS'))
++    ::class t
++    ::method go
++    use arg m
++    return self~run(m)
++
++Command: `memcap 2G timeout -k 5 20 bin/rexx-run FILE` from a fresh dir. Every run below has stdout empty.
++
++| method | rc | stderr |
++|---|---|---|
++| Directory, StringTable, Stem, Set, Bag, Relation, Table `ITEMS` | 120 | `rexx-exec: method "ITEMS" of class "T" is not implemented (Phase 9)` |
++| MutableBuffer `LENGTH` | 120 | `rexx-exec: method "LENGTH" of class "MutableBuffer" is not implemented (Phase 9)` |
++| Message `SEND` | 120 | `rexx-exec: method "SEND" of class "Message" is not implemented (Phase 9)` |
++| Message `START` (not in the queued item) | 120 | `rexx-exec: method "START" of class "Message" is not implemented (Phase 9)` |
++| Message `REPLY` (not in the queued item) | 120 | `rexx-exec: method "REPLY" of class "Message" is not implemented (Phase 9)` |
++| Message `NOTIFY` | 168 | `Error 88.901: Missing argument; argument notification target is required.` (argument check first) |
++| control: List `ITEMS` | 120 | `rexx-exec: a message send to a value that is not a list is not implemented` (the right refusal) |
++
++Adjacent success, `i8_mb_subclass_noinit.rex` (`::class b subclass mutablebuffer` / `::method init`, then `length`, `append('xy')`,
++`string`): both rc 0, stdout `0` / `xy`, stderr empty. So a missing buffer state means a wrong-type receiver.
++
++Root cause: `dispatch/hash.rs:183` `not_this_task` maps any receiver with a class id to `Loud::native_method` (owner Phase 9),
++including a non-hash receiver. The same mapping happens at `dispatch/buffer.rs:396,407` (`buffer_state`/`buffer_state_mut`
++None arm) and at `dispatch/object_protocol.rs:1001,1114,1196`, where Message's `native_entry` misses. The fix is to route
++these to `Loud::receiver_class`. `relation.rs` and `stem.rs` go through `not_this_task` and need no separate change.
++
++## Item 9: the `Literals` rows
++
++`i9a.rex` follows `program_for`'s shape:
++
++    numeric digits 9
++    numeric form scientific
++    tab = "09"x
++    say "AB"
++    say self~runDynamicSource("return" self~hex("41" || tab || "42"))
++
++Both rc 159, stdout `AB`. Both stderr: `5 *-* say self~runDynamicSource(...)`, `Error 97 ... line 5:  Object method not found.`,
++`Error 97.1:  Object "SELF" does not understand message "HEX".` The two are byte-identical apart from the path.
++
++`i9b.rex` is the test-case shape, using the framework's `runDynamicSource` body (`ootest/framework/OOREXXUNIT.CLS:1223`) and
++`Literals.testGroup`'s `hex`/`bin`:
++
++    say .t~new~go
++    ::class t
++    ::method go
++      tab = "09"x
++      return self~runDynamicSource("return" self~hex("41" || tab || "42")) self~runDynamicSource("return" self~bin("0100" || tab || "0001"))
++    ::method hex
++      return '"' || arg(1) || '"x'
++    ::method bin
++      return '"' || arg(1) || '"b'
++    ::method runDynamicSource
++      use strict arg code, parentPackage = (self~class~package)
++      r = .routine~new(parentPackage~name, code, parentPackage)
++      return r[]
++
++* crate rc 120, stdout empty, stderr `rexx-exec: method "NEW" of class "Routine" is not implemented (Phase 9)`
++* oracle rc 0, stdout `AB A`, stderr empty.
++
++`i9c.rex` is the same without the package argument (`.routine~new('x', code)`). Both rc 0, stdout `AB`, stderr empty.
++
++Root cause: `dispatch/construct.rs:172` refuses `args.len() > 2` for `Routine~new`/`Method~new`. `new_file_context` at
++`construct.rs:212` already resolves a Package/Routine/Method/`PROGRAMSCOPE` context for `newFile` and is the reuse candidate.
++The harness half is `tests/assertions.rs` `program_for` (`:93`), which emits top-level code with no `self` test case.
++
++## P1: COPIES fills byte by byte
++
++The program comes from the Task 5a report (`task-5a-report.md:78`): `loop999.rex` is
++`do i = 1 to 1000000; x = copies('abc', 333) || i; end` / `say 'done' i`. It was rewritten here as `probes/loop999_1000000.rex`,
++plus `loop999_100000.rex` at N = 100 000. The ledger's 14.4 G / 4.07 G were `perf stat` instructions for the whole process,
++libc included.
++
++Callgrind (`tools/cg.sh`). Columns are total Ir / libc / total less libc and ld. Every run was rc 0 with stdout `done N+1`:
++
++| program | HEAD | doubling fill |
++|---|---|---|
++| loop999 N=1e5 | 1 467 986 791 / 779 391 270 / 688 249 316 | 507 087 610 / 235 691 318 / 271 050 113 |
++| loop999 N=1e6 | 13 680 937 843 / 7 297 369 818 / 6 383 221 965 | 4 071 938 128 / 1 860 370 013 / 2 211 221 950 |
++| `copies('-', 80)` x1e6 | 4 114 321 764 / 1 734 431 004 / 2 379 544 569 | 2 103 321 891 / 638 431 013 / 1 464 544 699 |
++| `copies('abcdefgh', 2)` x3e5 (worst case for doubling) | 589 455 606 / 112 758 052 / 476 351 349 | 590 355 949 / 112 758 595 / 477 251 189 (+0.19%) |
++
++At HEAD, `__memcpy_avx_unaligned_erms` is 40% of loop999's Ir: one libc call per 3-byte piece. As a result, callgrind.sh's
++gated column (libc excluded) understates this item. Its gain is 6.38 G to 2.21 G there and 13.68 G to 4.07 G in total.
++
++Wall clock, loop999 N=1e6, 5 interleaved runs each, sorted elapsed s:
++`rexx-run` 1.00 1.02 1.07 1.07 1.12; `rexx-run-doubling` 0.45 0.46 0.46 0.47 0.50.
++
++Root cause: `builtin/string.rs:725-727`, `for _ in 0..count { out.extend_from_slice(string) }`. The scratch fix does one
++`extend_from_slice`, then `extend_from_within(..min(len, total-len))` until the length reaches `total`.
++
++## P2: Array~append quadratic
++
++Probe `append_N.rex`:
++
++    a = .array~new
++    do j = 1 to N; a~append(j); end
++    say a~items a[N]
++
++Wall clock, 5 interleaved runs (crate `memcap 2G timeout -k 5 120`, oracle standard wrapper). Every run was rc 0, stdout
++`N N`, stderr empty:
++
++| n | crate elapsed / user s | oracle elapsed / user s |
++|---|---|---|
++| 1e3 | 0.05-0.06 / 0.02 | 0.00 / 0.00 |
++| 1e4 | 0.08-0.13 / 0.07-0.08 | 0.00-0.01 / 0.00 |
++| 1e5 | 5.44-5.57 / 5.40-5.53 | 0.01-0.02 / 0.01 |
++| 1e6 | not run (about 550 s projected) | 0.17 / 0.16 (1 run) |
++
++Callgrind at HEAD: 1e3 140 749 485 total / 68 842 209 less libc; 1e4 1 784 008 374 / 886 592 225. The 1e5 run was stopped
++after more than 10 minutes. In the profile, `collection::occupied` is about 50% (it collects every occupied offset into a Vec
++per append, via `last_item`, `collection.rs:167`). `memcpy` is 45%, called from `slots_of` (`collection.rs:40`, which clones
++the slots via `array_slots_owned`) at `append_slot`'s `slots_of(..).len()` (`collection.rs:253`).
++
++Scratch `rexx-run-coll` fixes `last_item` only: append 1e4 goes to 941 674 206 total / 77 672 756 less libc, so `occupied` is
++gone. libc is still 863 M, all from `slots_of` (10 000 calls). The `:253` clone also needs replacing. The same
++clone-to-read pattern is in `array/surface.rs` (`:76`, `:88`, `:141`, `:158`, `:175`, `:404`, `:427`, `:472`, `:502`, `:544`),
++`array/sort.rs:281,302` and `collection/queue.rs:175`. A loop of `a~items` over a 1e5-slot array takes crate 6.36 s vs
++oracle 0.03 s (`arrayitems_100000.rex`, one run each, both rc 0, same stdout). Plain `a[j]` reads and writes are linear
++(`arrayread_100000`: 0.09 s vs 0.03 s), because they take another path.
++
++## P3: SYNTAX unwind superlinear
++
++The queued program, with the depth N varied (`unwind_N.rex`; the handler also prints `condition('C') rc`):
++
++    signal on syntax name h
++    say f(0)
++    exit
++    h: say 'h' condition('C') rc
++    ::routine f
++      use arg n
++      if n = N then exit
++      return f(n+1)
++
++The controls are `unwindexit_N` (`exit 0`, no trap) and `unwindnotrap_N` (bare `exit`, no trap).
++
++At HEAD the crate's call cap is `MAX_ACTIVATION_DEPTH = 10_000` (`run/call.rs:148`). One run each, wall elapsed / user s:
++
++| depth | unwind crate | unwind oracle | unwindexit crate / oracle | unwindnotrap crate / oracle |
++|---|---|---|---|---|
++| 5000 | rc 0 `h SYNTAX 44`, 0.07 | rc 0 `h SYNTAX 44`, 0.02 | rc 0 `0` / rc 0 `0` | rc 212 / rc 212 (Error 44 traceback, both) |
++| 10000 | rc 0 `h SYNTAX 11`, 0.11 | rc 0 `h SYNTAX 44`, 0.04 | rc 245 / rc 0 `0` | rc 245 / rc 212 |
++| 20000-80000 | rc 0 `h SYNTAX 11`, 0.10-0.12 | rc 0 `h SYNTAX 11`, 0.07 | rc 245 / rc 245 | rc 245 / rc 245 |
++
++The oracle's own limit lies between 10 000 and 20 000. The crate refuses at 10 000, where the oracle still answers. This is a
++cap difference, not this item. So at HEAD the item's 20k-1M depths cannot run. The superlinearity shows within the cap in
++callgrind (total / libc / less libc), every run with the stdout shown:
++
++| depth | unwind HEAD | unwind `rexx-run-coll` | unwindexit HEAD | unwindnotrap HEAD |
++|---|---|---|---|---|
++| 2000 | 235 789 971 / 147 773 201 / 87 670 565 | 173 299 805 / 85 539 378 / 87 414 262 | 130 929 627 | 165 550 170 (rc 212) |
++| 4000 | 479 585 361 / 362 259 244 / 116 979 912 | 224 162 102 / 107 348 346 / 116 467 591 | 140 731 810 | 208 497 530 (rc 212) |
++| 8000 | 1 352 760 087 / 1 176 816 196 / 175 597 686 | 325 570 139 / 150 650 618 / 174 573 501 | 160 333 853 | 294 204 056 (rc 212) |
++
++Only the libc part is quadratic. At depth 8000, 1.02 G of 1.03 G `memcpy` Ir comes from `list_insert_at` (16 000 calls, two
++per frame). `condition.rs:584-615` (`condition_frames`) appends each frame and each trace line to the TRACEBACK and
++STACKFRAMES `List`s. `List~append` goes through `list_next_handle` (`collection/list.rs:124`), which clones the whole handles
++array (`:136`) and the free stack (`:126`) to read a length or the last element. With those two borrowed (`rexx-run-coll`),
++unwind becomes linear: 173 / 224 / 326 M. `List~append` x1e4 goes from 952 487 549 to 149 578 541 Ir.
++
++Wall clock within the cap is small, 5 interleaved runs each:
++
++| program | crate elapsed s | oracle elapsed s |
++|---|---|---|
++| unwind_2000 | 0.06-0.08 | 0.01 |
++| unwind_8000 | 0.09-0.10 | 0.03 |
++| unwindexit_8000 | 0.05-0.07 | 0.01 |
++
++`rexx-run-coll` unwind_8000 takes 0.07-0.09 s. The cost bites only past the cap, which is the cap-lifted build the item came
++from. That build was not rebuilt here.
+diff --git a/docs/superpowers/plans/2026-10-07-phase-6-1.md b/docs/superpowers/plans/2026-10-07-phase-6-1.md
+index 9c038e2fe..e2f9d9e67 100644
+--- a/docs/superpowers/plans/2026-10-07-phase-6-1.md
++++ b/docs/superpowers/plans/2026-10-07-phase-6-1.md
+@@ -567,20 +567,98 @@ debug subset), new `rust/corpus/sim-exempt.tsv`, new committed oracle outcome se
+ - [ ] **Step 3:** M9 under `halt@K` and `fail=wait:K` (a GUARD WHEN wait fails trappably, the program
+       parks on `~result`, a halt reaches `wake_for_halt`); M10 under `fail=wait:K` (a guard-lock wait
+       fails while another activity holds the guard; a later send). A defect either shows is fixed here, witnessed per the Global Constraints' found-defect rule.
+ - [ ] **Step 4:** M12 with the dead-handle write counter and a `gc=q` run of a program whose main drops
+       the message first (and a Message subclass with UNINIT); judged by the counter: 0 unmutated; above 0 under the mutant kills it; 0 under the mutant
+       records it equivalent with the program named. M6 recorded as
+       equivalent under any outcome judge, with scout C's argument.
+ - [ ] **Step 5:** Each mutant run with `REXX_CORPUS_GATE=1 --no-fail-fast` and restored; the table in
+       `## Task 11`; the per-task check. Commit.
+ 
++### Task 11a: Deferred items, small
++
++**Evidence:** `.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md` (items 2, 3, 4) and
++`scout-e2-report.md` (items 7, 8, 9, P1, P2, P3), each with its probe, both engines' output and the
++crate site at `f7170918c`. Ruling R11. Scratch patches for P1 and P2/P3:
++`/tmp/claude-1000/p61/se2/copies-doubling.diff`, `collections-scratch.diff` (measurement builds, not
++reviewed).
++
++**Rule:** each item answers as the oracle answers, witnessed against the oracle (5 runs for any
++concurrent probe); each fix lands with a crate or corpus test that fails at the task's base. A user
++STRING answering a non-Array, non-string object is a loud refusal with a deviation row (R11).
++
++**Files:** `ir/drive.rs` (`Op::LoopNext`), `run/loops.rs` (`flat_loop_step`, `run_repeating`),
++`run.rs` (`clock_stale`); `dispatch/object_protocol.rs` (`dispatch_held_message`), `scheduler.rs`
++(`halt_message`), `lib.rs` (the sender record, rooted or pruned in `collect_now`);
++`dispatch.rs` (`release_method_activation`); `dispatch/reqstr.rs`; `dispatch/hash.rs`
++(`not_this_task`), `dispatch/buffer.rs`, `dispatch/object_protocol.rs` (Message SEND, START,
++REPLY wrong-type rows); `dispatch/construct.rs`, `tests/assertions.rs`; `builtin/string.rs`
++(`copies_bytes`); `dispatch/collection.rs` (`last_item`, `slots_of`),
++`dispatch/collection/list.rs`, `dispatch/array/surface.rs`, `dispatch/array/sort.rs`,
++`dispatch/collection/queue.rs`; `phase-6-1-gate.md`.
++
++- [ ] **Step 1: Empty-body `TIME('E')` loop.** A loop with no body clause (plain WHILE, controlled
++      WHILE, UNTIL, and inside INTERPRET) re-reads the clock each pass as a body clause would; the
++      scout's probes end. Measure emptyloop and rexxcps (Task 2's callgrind command, +0.5% budget):
++      this is a store on the hottest loop path.
++- [ ] **Step 2: `Message~halt` after `~send`.** The sending activity is recorded as the oracle's
++      `startActivity` (`MessageClass.cpp:432`); `m~halt` answers `1` and halts it with 4.1. The
++      record is rooted or pruned in `collect_now`. Witness under default mode and `every`.
++- [ ] **Step 3: `EXIT` in a CALL ON handler at the REPLY clause's end** raises 91.999 to the sender
++      (oracle rc 165).
++- [ ] **Step 4: User STRING answering an Array** is joined as the oracle joins it (the existing
++      array-joining path), so `say`, `length()`, concatenation and R9's truth judgment see the joined
++      text; another non-string object answer is a loud refusal and a deviation row. Add an Array
++      case to `tests/truth/values`.
++- [ ] **Step 5: Wrong-type native rows.** `ITEMS` of the hash collections, MutableBuffer `LENGTH`,
++      Message `SEND`, `START` and `REPLY` on a receiver of the wrong type refuse through
++      `Loud::receiver_class` (owner none, D3), not a Phase 9 refusal. Re-derive the refusal tables.
++- [ ] **Step 6: `Literals` rows.** `.routine~new(name, code, package)` inside a test-case class
++      answers as the oracle (`AB A`); the `Literals` assertion rows gain a test case for `self` in
++      `tests/assertions.rs`, and their `EXEMPT` rows go.
++- [ ] **Step 7: Collections without copying every slot.** `Array~append`, `items`, `last` and
++      `List~append` read the length and last element without cloning the slots (keep R10's
++      `charge_growth`); SYNTAX unwinding through deep frames becomes linear. Scaling table (n = 1e3,
++      1e4, 1e5 appends; unwind depth 2000, 4000, 8000) before and after, both engines.
++- [ ] **Step 8: COPIES** fills by doubling. Callgrind with libc included (the scout shows the
++      libc-excluded column hides this) on a COPIES program, plus the eight perf programs.
++- [ ] **Step 9:** The per-task check; the seeded gate in release; perf against the task's base and
++      base61 on the eight programs, recorded under `## Task 11a`. Each queued item fixed gets a
++      first line `RESOLVED by <commit>: ...` as earlier resolved items have. Commit.
++
++### Task 11b: Deferred items, scheduling and finalization
++
++**Evidence:** `scout-e1-report.md` items 1 and 6. Ruling R11.
++
++**Rule:** a blocking command or native never runs inline on the baton when that can hang the
++process; pending UNINITs run at activation return as the oracle runs them (`RexxActivation.cpp:705`,
++`NativeActivation.cpp:1361`, `Activity.cpp:249/324/3440`), so a loop creating finalizable objects
++runs in bounded memory.
++
++**Files:** `command.rs`, `scheduler.rs` (`exit_for_native`, `exit_for_block`), `scheduler/pool.rs`,
++`input.rs`; `dispatch.rs` (activation return, `run_ready_uninits`), `run/call.rs`, `lib.rs`
++(`collect_now` and its false comment about when the oracle runs UNINITs); `phase-6-1-gate.md`.
++
++- [ ] **Step 1: Full pool.** With every pool thread busy, a blocking command or native parks its
++      activity for a worker (or the pool grows) instead of running inline; the scout's 64-activity
++      probe ends (the oracle, given memory for 64 thread stacks, ends 5/5). Sim mode keeps its bound;
++      the new park is a recorded scheduling event. Test with explicit switch points.
++- [ ] **Step 2: UNINIT drain.** Pending UNINITs run at activation return; the scout's probe prints
++      the oracle's count (`done 995` order of magnitude) and peak RSS stays within a small multiple of
++      the no-UNINIT control. Corpus programs whose output order changes are named and witnessed
++      against the oracle (5 runs each). The check at activation return is one test on the common
++      path: measure it.
++- [ ] **Step 3:** The per-task check; `whole_groups` and the seeded gate in release (UNINIT timing
++      feeds both: update their committed outcomes only where the oracle agrees); perf against the
++      task's base and base61, recorded under `## Task 11b`. The queued item
++      `2026-10-09-full-pool-inline-command-hang.md` gets its `RESOLVED by` line. Commit.
++
+ ### Task 12: Close
+ 
+ **Files:** `.superpowers/sdd/queued/` (new items), `docs/superpowers/plans/2026-07-27-rust-rewrite.md`
+ (rows 6.1 and 9), `phase-6-1-gate.md`, the SDD workspace's `bggates.sh`.
+ 
+ - [ ] **Step 1:** Queue, one file each: scout A section 4's silent divergences (concatenation with a
+       variable reference, `RAISE NOVALUE` into `CALL ON ANY`, `subclass package`, `subclass rexxinfo`;
+       `.context~name` in a `Routine~new` body already has a file); scout B's `cond3` extra traceback
+       line; scout D's `Class~enhanced` skipping `NEW` and `'12'~translate('','')`; the shrinker; an
+       oracle-judged seeded gate; P52 lending under sim (a pool with seeded delivery).
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index a34169d8a..0bed7a4d2 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -968,20 +968,72 @@ Exit 0, every spread at most 0.0017%. Percentages are against base61 except the
+ | pingsem | -0.4358 | -0.2494 | -0.2485 | +0.0009 | inside |
+ | alloc | -0.2804 | +0.0738 | +0.0738 | +0.0000 | inside |
+ | alloc4c | -0.8796 | -0.8139 | -0.8139 | -0.0000 | inside |
+ | heapshape | +1.0265 | +1.1558 | +1.1558 | -0.0000 | **over** |
+ | rexxcps | +0.0230 | +0.0924 | +0.0924 | -0.0000 | inside |
+ | emptyloop | -0.3191 | -0.3191 | -0.3191 | -0.0000 | inside |
+ 
+ heapshape is +1.16% against the 6.1 base, +1.03% of it present before Task 9 (base, `6358ca7a6`).
+ It is being bisected separately and goes to Moritz for a ruling; this round does not change it.
+ 
++### Heapshape round 1
++
++Code commit `5214a2089` (live body bytes kept as a running figure; report
++`.superpowers/sdd/2026-10-07-phase-6-1/heapshape-round-report.md`). Binaries from `git archive <sha>
++rust interpreter`, every file touched, `CARGO_INCREMENTAL=0 memcap 8G cargo build --release -j 4 -p
++rexx-exec --bin rexx-run`, one `Compiling rexx-exec` line each. `head` was built in
++`/tmp/claude-1000/p61/hsr/target-base`, `r1` in `/tmp/claude-1000/p61/hsr/target`. base61's sha256
++matches the `## Task 1` table.
++
++| binary | source | sha256 |
++|---|---|---|
++| base61 | `e6af1198b` | `2ea19b3ea2875fada8718eaf5b89f828d5ae07587a74feaf9b34681c879c891e` |
++| head | `7aedf9501` | `8b154c88a4defebf8aeba56f00f3dfdd56d8dccedbd3d7c4bcee59ddf5194b61` |
++| r1 | `5214a2089` | `c9cf373fad59449e71ffe5a7d17dd4e993f4ee1129d228462f62cd741c58343f` |
++
++```
++memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 6 -o /tmp/claude-1000/p61/hsr/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run head=/tmp/claude-1000/p61/hsr/bin/head/rexx-run r1=/tmp/claude-1000/p61/hsr/bin/r1/rexx-run
++```
++
++Exit 0, every spread at most 0.0001%. Percentages are against base61 except the last column.
++
++| program | head % | r1 (running total) % | r1 vs head % | verdict |
++|---|---:|---:|---:|---|
++| pingmsg | -0.2545 | +0.0096 | +0.2647 | inside |
++| pingguard | -0.3663 | -0.3664 | -0.0000 | inside |
++| pingsem | -0.2494 | -0.2494 | -0.0000 | inside |
++| alloc | +0.0738 | +0.2330 | +0.1591 | inside |
++| alloc4c | -0.8139 | +0.0607 | +0.8817 | inside |
++| heapshape | +1.1559 | +0.0525 | -1.0907 | inside |
++| rexxcps | +0.0924 | +0.4409 | +0.3482 | inside |
++| emptyloop | -0.3191 | -0.3191 | +0.0000 | inside |
++
++`cgdiff.py` head against r1: every program's change is in `Interp::collect_now` (the sweep, inlined):
++heapshape -25.75M (the survivor sums gone), rexxcps +61.99M, alloc +29.39M, alloc4c +27.47M, pingmsg
+++4.27M (the freed bodies' bytes read per dead object). Outside it, alloc's `array_of_class` is
+++3.00M and pingmsg's `security_arguments_array` and `text_built` +80,000 each (the hold beside each
++charge). No call count moved by more than 26 (`free`). The survivor cost moved to a per-dead-object cost, so rexxcps has
++0.06% left under the budget.
++
++```
++PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o /tmp/claude-1000/p61/hsr/wall2 base61=... head=... r1=...
++```
++
++Exit 0, load average 1.06 at start and 1.01 at end. r1 against base61: rexxcps +1.59%, emptyloop
+++4.43% (head +5.36%), alloc -1.99%, alloc4c +1.62%, heapshape -0.55%, pingmsg +0.23%, pingsem
+++8.94% (head +1.63%), pingguard +5.04% (head +1.68%). A rerun at `-r 11` (`wall3`) gave pingsem
+++8.26% (head +4.13%), pingguard +4.20% (head +0.84%), emptyloop +3.48% (head +3.02%). Against a
++layout control (head with `layout-pad.py 48`, `wall4`, `-r 11`, against head): pad48 pingsem
+++1.59%, pingguard +0.00%; r1 pingsem +3.17%, pingguard +3.28%. r1 and head run the same instructions
++on pingsem and pingguard (310 and 114 Ir apart), so the wall-clock gap is not added work; not
++attributed further.
++
+ ## Task 10
+ 
+ The seeded gate: `concurrency_tests.rs` `group_runs::whole_groups::sim_gate`, parts and seed counts
+ in `rust/corpus/sim-gate.tsv`, exemptions in `rust/corpus/sim-exempt.tsv`, oracle sets in
+ `rust/corpus/sim-oracle/`. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-10-report.md`.
+ 
+ ### Calibration and budget
+ 
+ Seed 0 of each part under `fifo`, both builds (`REXX_SIM_CALIBRATION=FILE ... cargo test
+ [--release] -p rexx-exec --test concurrency_tests sim_gate::calibration`, 8 jobs): 196 rows, k and
+diff --git a/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md b/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
+index ce38ef0d7..736af33cc 100644
+--- a/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
++++ b/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
+@@ -211,20 +211,21 @@ Moritz, 2026-10-07, on the open items the spec reviews left (R5-R8 after the fin
+ | R1 | D7's scope | Sim and invariants; oracle differences reported, never gating. "Treat it as a tool for as long as we're building the implementation, but eventually we'll be stand alone ideally." |
+ | R2 | b14 cannot be rehomed with a true reason (D4) | Into 6.1 with subclass `NEW` on String, Stem, Method, Routine and Message (and VariableReference's 93.967), if a scout sizes `NEW` at M or less; else Phase 9's row is amended to name these refusals as its work. |
+ | R3 | Parse-error message inserts | Not in 6.1. The 2026-07-28 decision stands; 6.1 lands the traceback line for all three paths. A later reversal goes through a raising API that cannot be called without the inserts its message needs. |
+ | R4 | `size_of::<Activation>() == 512` | Kept. The existing `condition` field, the seed and the SETLOCAL list go in one cold box allocated on first use, measured on the T1 programs. |
+ | R5 | PCT (the row's wording) | Built as an opt-in policy `pct:d,k=N`, in the gate mix, judged by invariants only; random bounded preemption stays the main policy. |
+ | R6 | A program's own failed check under R1 | Red where no committed oracle outcome has it; then decided case by case. |
+ | R7 | D6 with no branch-free design | Pay the ~0.5%: correct debug pauses are worth it. A branch-free design is still tried first. |
+ | R8 | Criterion 1's reach | The row's: census classes (b) and (c). |
+ | R9 | One truth judgment (Moritz, 2026-10-08, from the truthiness survey) | Added to 6.1 as Task 4a: every site that turns a value into true or false goes through one function judging as the oracle's `truthValue` does (identity fast path, `requestString`, exactly `0` or `1`, else Error 34 with the caller's sub-number); SELECT CASE and collection `==` answers included; fast paths checked against it; Deviation 25 stays for DO TO and BY only. |
+ | R10 | Collection trigger counts slots only (Moritz, 2026-10-08, from the whole_groups OOM diagnosis) | Added to 6.1 as Task 5a: a collection is also due on bytes allocated since the last one, so a loop of large dead strings runs in bounded memory; within the +0.5% perf budget. |
++| R11 | Deferred items still reproducing (Moritz, 2026-10-09, from scout E: `.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md`, `scout-e2-report.md`) | Added to 6.1 as Task 11a (empty-body `TIME('E')` loop hang, `Message~halt` after `~send`, `EXIT` in a handler at the REPLY clause's end, a user STRING answering an Array joined as the oracle joins it, wrong-type native rows that name Phase 9, the `Literals` rows, COPIES doubling fill, `Array`/`List` append and length without copying every slot) and Task 11b (a blocking call never runs inline while it can starve the process; pending UNINITs drained at activation return as the oracle drains them). A user STRING answering any other non-string object is a loud refusal and a deviation row, owner none: the oracle answers garbage there (a pointer length, Error 5, 88.909). |
+ 
+ Settled from the reviews: FIFO with seeded one-event order; inline pool; `fail=wait:K` ships, sim
+ only; seeded clock origin; trace and replay in 6.1, shrinker queued; seeds by rule; b13's
+ non-crashing rows are a deviation (the oracle reads a wrong-type object; the value is an accident of
+ layout).
+ 
+ ## 7. Staging
+ 
+ | Stage | Delivers |
+ |---|---|
+diff --git a/rust/crates/rexx-core/src/heap.rs b/rust/crates/rexx-core/src/heap.rs
+index eddc07e75..63f1d5b78 100644
+--- a/rust/crates/rexx-core/src/heap.rs
++++ b/rust/crates/rexx-core/src/heap.rs
+@@ -64,22 +64,25 @@ pub struct Heap {
+     /// How many times `collect` has run, ever. Exists for Task 16's
+     /// collect-on-every-allocation gate criterion (4a exit gate, criterion
+     /// 4): the mode has to *prove* it collected rather than merely claim to,
+     /// and a caller that never sees this move above zero has not tested
+     /// what it says it tested. Not reset by anything; a fresh count needs a
+     /// fresh `Heap`.
+     collections: u64,
+     /// Body bytes charged by [`Heap::charge_body_bytes`] since the last
+     /// collection.
+     bytes_since: usize,
+-    /// The survivors' body bytes as the last collection summed them.
++    /// The body bytes the last collection found live.
+     live_bytes: usize,
++    /// The body bytes every live object holds now: what was charged or held
++    /// less what was released and what the sweeps freed.
++    held_bytes: usize,
+     /// The most body bytes held at once as of the last collection.
+     peak_bytes: usize,
+     #[cfg(feature = "sharing")]
+     sharing: Sharing,
+ }
+ 
+ /// The sharing-fraction instrument (spec 2026-09-29 section 5): each slot's
+ /// object is tagged with the last activity that resolved it through
+ /// [`Heap::get`], [`Heap::get_mut`] or [`Heap::body_text`], or else made it.
+ #[cfg(feature = "sharing")]
+@@ -119,44 +122,75 @@ impl Heap {
+         Heap {
+             slots: Vec::new(),
+             free_head: None,
+             live: 0,
+             marks: Vec::new(),
+             immortal: Vec::new(),
+             uninit: Vec::new(),
+             collections: 0,
+             bytes_since: 0,
+             live_bytes: 0,
++            held_bytes: 0,
+             peak_bytes: 0,
+             #[cfg(feature = "sharing")]
+             sharing: Sharing::default(),
+         }
+     }
+ 
+     pub fn slot_capacity(&self) -> usize {
+         self.slots.len()
+     }
+ 
+     /// How many times `collect` has run against this heap. See the field's
+     /// own doc comment.
+     pub fn collections_performed(&self) -> u64 {
+         self.collections
+     }
+ 
+-    /// Records `bytes` of body allocated outside the slot, and answers the
+-    /// bytes charged since the last collection.
++    /// Records `bytes` of body allocated outside the slot toward the next
++    /// collection, and answers the bytes charged since the last one. What a
++    /// live object holds is recorded apart, by [`Heap::hold_body_bytes`].
+     #[inline]
+     pub fn charge_body_bytes(&mut self, bytes: usize) -> usize {
+         self.bytes_since += bytes;
+         self.bytes_since
+     }
+ 
++    /// Records `bytes` of body a live object holds outside its slot.
++    #[inline]
++    pub fn hold_body_bytes(&mut self, bytes: usize) {
++        self.held_bytes += bytes;
++    }
++
++    /// Records that a live object no longer holds `bytes` of body outside
++    /// its slot.
++    #[inline]
++    pub fn release_body_bytes(&mut self, bytes: usize) {
++        debug_assert!(
++            bytes <= self.held_bytes,
++            "{bytes} body bytes released of {} held",
++            self.held_bytes
++        );
++        self.held_bytes = self.held_bytes.saturating_sub(bytes);
++    }
++
++    /// Records that a live object's body went from holding `before` bytes
++    /// outside its slot to holding `after`.
++    #[inline]
++    pub fn rehold_body_bytes(&mut self, before: usize, after: usize) {
++        if after >= before {
++            self.hold_body_bytes(after - before);
++        } else {
++            self.release_body_bytes(before - after);
++        }
++    }
++
+     /// The body bytes charged since the last collection.
+     pub fn bytes_since(&self) -> usize {
+         self.bytes_since
+     }
+ 
+     /// The most body bytes this heap has held at once: the bytes the last
+     /// collection found live plus everything charged since, at its largest.
+     /// An upper bound, since a body charged and dropped before a collection
+     /// still counts.
+     pub fn peak_body_bytes(&self) -> usize {
+@@ -176,35 +210,41 @@ impl Heap {
+         let mut work: Vec<ObjRef> = roots.iter().chain(self.immortal.iter().copied()).collect();
+         let mut reached = Vec::new();
+         // The marked weak references, gathered here rather than by a walk of
+         // the arena afterwards. The mark loop visits each marked slot exactly
+         // once -- that is what the `replace` below guarantees -- so this ends
+         // up holding precisely the slots such a walk would have selected, at
+         // the cost of one discriminant test per marked object instead of a
+         // read of every slot in the table. Whether a *target* survived cannot
+         // be decided here, so the decision waits for the loop to finish.
+         let mut weak_marked: Vec<u32> = Vec::new();
+-        let mut live_bytes = 0;
++        // The survivors' body bytes, summed only to check the running figure
++        // the sweep leaves in `held_bytes`.
++        #[cfg(debug_assertions)]
++        let mut survivor_bytes = 0;
+         while let Some(r) = work.pop() {
+             let Some(slot) = self.resolve(r) else {
+                 continue;
+             };
+             if std::mem::replace(&mut self.marks[slot], true) {
+                 continue; // already marked: this is what terminates cycles
+             }
+             let Slot::Live { object, .. } = &self.slots[slot] else {
+                 unreachable!("resolve rejects free slots")
+             };
+             if matches!(object.body, Body::WeakRef(_)) {
+                 weak_marked.push(slot as u32);
+             }
+-            live_bytes += object.body.held_bytes();
++            #[cfg(debug_assertions)]
++            {
++                survivor_bytes += object.body.held_bytes();
++            }
+             reached.clear();
+             object.body.trace(&mut reached);
+             work.extend(reached.iter().copied());
+         }
+ 
+         // Pass 1: clear weak references whose target did not survive.
+         for slot in weak_marked {
+             let slot = slot as usize;
+             let Slot::Live { object, .. } = &self.slots[slot] else {
+                 unreachable!("the mark loop only records live slots")
+@@ -267,46 +307,45 @@ impl Heap {
+         while let Some(r) = resurrect.pop() {
+             let Some(slot) = self.resolve(r) else {
+                 continue;
+             };
+             if std::mem::replace(&mut self.marks[slot], true) {
+                 continue;
+             }
+             let Slot::Live { object, .. } = &self.slots[slot] else {
+                 unreachable!("resolve rejects free slots")
+             };
+-            live_bytes += object.body.held_bytes();
++            #[cfg(debug_assertions)]
++            {
++                survivor_bytes += object.body.held_bytes();
++            }
+             reached.clear();
+             object.body.trace(&mut reached);
+             resurrect.extend(reached.iter().copied());
+         }
+ 
+         let mut swept = 0;
++        let mut freed_bytes = 0;
+         let mut freed_classes = Vec::new();
+         for slot in 0..self.slots.len() {
+-            if self.marks[slot] || matches!(self.slots[slot], Slot::Free { .. }) {
++            if self.marks[slot] {
+                 continue;
+             }
+-            let generation = self.slots[slot].generation();
++            let Slot::Live { object, generation } = &self.slots[slot] else {
++                continue;
++            };
++            let generation = *generation;
++            freed_bytes += object.body.held_bytes();
+             // Reported so the caller can drop the rows it keys by this class.
+             // The handle is still the live one here; after the assignment
+             // below its generation has moved on and it would name nothing.
+-            if matches!(
+-                self.slots[slot],
+-                Slot::Live {
+-                    object: Object {
+-                        body: Body::Class { .. },
+-                        ..
+-                    },
+-                    ..
+-                }
+-            ) {
++            if matches!(object.body, Body::Class { .. }) {
+                 freed_classes.push(ObjRef::heap(slot as u32, generation));
+             }
+             swept += 1;
+             self.live -= 1;
+             // A slot whose generation would overflow is retired, not reused:
+             // wrapping would let a stale handle alias a live object again,
+             // which is the whole reason the generation exists.
+             self.slots[slot] = match generation.checked_add(1) {
+                 Some(next) if next <= crate::GENERATION_MAX => {
+                     let free = Slot::Free {
+@@ -315,42 +354,54 @@ impl Heap {
+                     };
+                     self.free_head = Some(slot as u32);
+                     free
+                 }
+                 _ => Slot::Free {
+                     next: None,
+                     generation,
+                 },
+             };
+         }
++        self.release_body_bytes(freed_bytes);
++        #[cfg(debug_assertions)]
++        assert_eq!(
++            survivor_bytes, self.held_bytes,
++            "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
++            self.held_bytes
++        );
+         self.peak_bytes = self.peak_body_bytes();
+-        self.live_bytes = live_bytes;
++        self.live_bytes = self.held_bytes;
+         self.bytes_since = 0;
+         CollectStats {
+             swept,
+             live: self.live,
+             pending_uninit,
+             freed_classes,
+-            live_bytes,
++            live_bytes: self.held_bytes,
+         }
+     }
+ 
++    /// Allocates `body` and holds the bytes it holds outside its slot.
+     pub fn alloc(&mut self, body: Body) -> ObjRef {
++        self.hold_body_bytes(body.held_bytes());
+         self.alloc_with_uncollected(BehaviourId::OBJECT, body)
+     }
+ 
+     /// Allocates an object this heap will never sweep.
+     pub fn mint_class(&mut self) -> ObjRef {
+         self.alloc_immortal(BehaviourId::OBJECT, Body::Class { owned: Vec::new() })
+     }
+ 
++    /// Allocates an object this heap will never sweep, and holds the bytes
++    /// its body holds outside its slot.
+     pub fn alloc_immortal(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
++        self.hold_body_bytes(body.held_bytes());
+         let handle = self.alloc_with_uncollected(behaviour, body);
+         self.immortal.push(handle);
+         handle
+     }
+ 
+     /// Records that `r`'s object defines `UNINIT`, so the collector
+     /// resurrects and reports it rather than sweeping it. Answers whether the
+     /// handle named a live object.
+     pub fn set_uninit(&mut self, r: ObjRef) -> bool {
+         let Some(slot) = self.resolve(r) else {
+@@ -410,21 +461,23 @@ impl Heap {
+                 })
+             })
+             .collect();
+     }
+ 
+     /// How many objects this heap has interned as immortal.
+     pub fn immortal_count(&self) -> usize {
+         self.immortal.len()
+     }
+ 
+-    /// Allocates without ever collecting, whatever else is enabled.
++    /// Allocates without ever collecting, whatever else is enabled. The
++    /// caller holds the bytes the body holds outside its slot
++    /// ([`Heap::hold_body_bytes`]).
+     #[inline]
+     pub fn alloc_with_uncollected(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
+         self.live += 1;
+         // **`Object` is built inside each arm rather than once above the
+         // match**, so that the body lands in the slot it will live in instead
+         // of being written to a stack temporary and copied. A slot is wide --
+         // see this module's `size_of::<Slot>()` assertion -- and the copy is
+         // its full width. Measured on the allocating benchmark axes.
+         match self.free_head {
+             Some(slot) => {
+@@ -746,22 +799,22 @@ mod body_bytes_tests {
+     use crate::bytes::Bytes;
+ 
+     fn text(heap: &mut Heap, len: usize) -> ObjRef {
+         heap.charge_body_bytes(len);
+         heap.alloc(Body::Text {
+             bytes: Bytes::from_slice(&vec![b'x'; len]),
+             num: None,
+         })
+     }
+ 
+-    /// The survivors are summed from both mark loops, a resurrected
+-    /// `UNINIT` object included, and an inline body holds no bytes.
++    /// The survivors' bytes include a resurrected `UNINIT` object's, and an
++    /// inline body holds no bytes.
+     #[test]
+     fn a_collection_sums_the_survivors_body_bytes() {
+         let mut heap = Heap::new();
+         let mut roots = RootSet::new();
+         let kept = text(&mut heap, 100);
+         let _dead = text(&mut heap, 200);
+         let finalized = text(&mut heap, 300);
+         let inline = heap.alloc(Body::Text {
+             bytes: Bytes::from_slice(b"short"),
+             num: None,
+diff --git a/rust/crates/rexx-core/tests/collect.rs b/rust/crates/rexx-core/tests/collect.rs
+index 9840dbe4a..853d194b0 100644
+--- a/rust/crates/rexx-core/tests/collect.rs
++++ b/rust/crates/rexx-core/tests/collect.rs
+@@ -1,11 +1,11 @@
+-use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, RootSet};
++use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, Object, RootSet};
+ 
+ #[test]
+ fn unreachable_objects_are_swept() {
+     let mut heap = Heap::new();
+     let roots = RootSet::new();
+     heap.alloc(Body::Text {
+         bytes: Bytes::from_slice(b"garbage"),
+         num: None,
+     });
+     let stats = heap.collect(&roots);
+@@ -43,26 +43,32 @@ fn transitively_reachable_objects_survive() {
+     let holder = heap.alloc(Body::array(vec![Some(leaf)]));
+     roots.add_global(".HOLDER", holder);
+     heap.collect(&roots);
+     assert!(heap.get(leaf).is_some());
+ }
+ 
+ #[test]
+ fn reference_cycles_are_collected() {
+     let mut heap = Heap::new();
+     let roots = RootSet::new();
+-    let a = heap.alloc(Body::array(vec![]));
++    let a = heap.alloc(Body::array(vec![None]));
+     let b = heap.alloc(Body::array(vec![Some(a)]));
+-    let Some(obj) = heap.get_mut(a) else {
++    // Written in place: a replaced body would hold bytes the heap was never
++    // told of.
++    let Some(Object {
++        body: Body::Array { slots, .. },
++        ..
++    }) = heap.get_mut(a)
++    else {
+         panic!("a exists")
+     };
+-    obj.body = Body::array(vec![Some(b)]);
++    slots[0] = Some(b);
+     let stats = heap.collect(&roots);
+     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
+ }
+ 
+ #[test]
+ fn swept_slots_are_reused_by_the_next_allocation() {
+     let mut heap = Heap::new();
+     let roots = RootSet::new();
+     heap.alloc(Body::Text {
+         bytes: Bytes::from_slice(b"x"),
+diff --git a/rust/crates/rexx-exec/src/dispatch/array.rs b/rust/crates/rexx-exec/src/dispatch/array.rs
+index e3607d6b4..edde47d36 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array.rs
+@@ -394,33 +394,37 @@ fn array_reshape(
+             let mut offset = 0;
+             let mut multiplier = 1;
+             for (extent, dimension) in old.iter().zip(dimensions) {
+                 offset += multiplier * (rest % extent);
+                 rest /= extent;
+                 multiplier *= dimension;
+             }
+             grown[offset] = *item;
+         }
+     }
+-    let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
++    let (before, after) = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array {
+             slots,
+             dimensions: held,
+         }) => {
+             let before = slots.capacity();
+             *slots = grown;
+             *held = Some(dimensions.into());
+-            slots.capacity().saturating_sub(before)
++            (before, slots.capacity())
+         }
+         _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+     };
+-    interp.charge_growth(grown * rexx_core::SLOT_BYTES);
++    // The replacement can hold fewer slots than the extended original did.
++    interp.charge_growth(after.saturating_sub(before) * rexx_core::SLOT_BYTES);
++    interp
++        .heap
++        .release_body_bytes(before.saturating_sub(after) * rexx_core::SLOT_BYTES);
+     Ok(())
+ }
+ 
+ /// `Array~at(index)` and `Array~[index]`: the item at `index`, or `.nil` for
+ /// an empty slot and for a subscript past the end -- `ArrayClass::getRexx`
+ /// (`classes/ArrayClass.cpp:979`), whose out-of-bounds answer is
+ /// `TheNilObject` and whose in-bounds answer is `resultOrNil(get(position))`.
+ pub(super) fn native_array_at(
+     interp: &mut Interp,
+     cleared: Cleared,
+diff --git a/rust/crates/rexx-exec/src/dispatch/buffer.rs b/rust/crates/rexx-exec/src/dispatch/buffer.rs
+index 4e340739d..8be51749a 100644
+--- a/rust/crates/rexx-exec/src/dispatch/buffer.rs
++++ b/rust/crates/rexx-exec/src/dispatch/buffer.rs
+@@ -559,24 +559,27 @@ fn native_mutable_buffer_delete(
+ /// `MutableBuffer::setBufferSize` (`classes/MutableBufferClass.cpp:679`),
+ /// whose rule [`BufferState::set_buffer_size`] carries; answers the receiver.
+ fn native_mutable_buffer_setbuffersize(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let size = required_length_argument(interp, args, 0)?;
+     let state = buffer_state_mut(interp, receiver, b"SETBUFFERSIZE")?;
++    let before = state.capacity;
+     let grown = state
+         .set_buffer_size(size)
+         .map_err(|_| Failure::from(Raised::system_resources()))?;
++    let shrunk = before.saturating_sub(state.capacity);
+     interp.charge_growth(grown);
++    interp.heap.release_body_bytes(shrunk);
+     Ok(Some(receiver))
+ }
+ 
+ /// `MutableBuffer::setTextRexx` (`classes/MutableBufferClass.cpp:355`)
+ /// reaching `setText` (`:369`): the contents become the argument's; answers
+ /// the receiver.
+ fn native_mutable_buffer_settext(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+diff --git a/rust/crates/rexx-exec/src/dispatch/library/surface.rs b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+index f3bf37f71..5895b26ea 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library/surface.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+@@ -191,25 +191,28 @@ impl Surface for Interp {
+                 bytes: Bytes::from_slice(&vec![0; length]),
+                 num: None,
+             },
+         );
+         self.roots.activity_mut().push_temp(string);
+         self.charge_text(length);
+         string
+     }
+ 
+     fn finish_string(&mut self, string: ObjRef, made: &[u8], length: usize) {
+-        if let Some(Body::Text { bytes, num }) =
+-            self.heap.get_mut(string).map(|held| &mut held.body)
+-        {
+-            *bytes = Bytes::from_slice(&made[..length]);
+-            *num = None;
++        if let Some(body) = self.heap.get_mut(string).map(|held| &mut held.body) {
++            let before = body.held_bytes();
++            if let Body::Text { bytes, num } = body {
++                *bytes = Bytes::from_slice(&made[..length]);
++                *num = None;
++            }
++            let after = body.held_bytes();
++            self.heap.rehold_body_bytes(before, after);
+         }
+         // Rewritten where it lies, as the oracle's string data is: a call
+         // may hold the address `StringData` answered for the unfinished
+         // string. Every byte made is copied and the terminator at the made
+         // length stays, as `RexxString::finish` sets only the length
+         // (`StringClass.hpp:541`).
+         match self.kept_strings.get_mut(&string) {
+             Some(kept) if made.len() < kept.len() => {
+                 kept[..made.len()].copy_from_slice(made);
+             }
+@@ -244,22 +247,26 @@ impl Surface for Interp {
+                 capacity,
+                 default_size: capacity,
+             }),
+         );
+         self.charge_growth(capacity);
+         buffer
+     }
+ 
+     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
+         let state = self.lent_buffer(buffer)?;
++        let before = state.capacity;
+         let (address, capacity) = state.writable();
+-        Some((address.cast(), state.bytes.len(), capacity))
++        let length = state.bytes.len();
++        // A failed reservation drops the capacity to what the storage holds.
++        self.heap.rehold_body_bytes(before, capacity);
++        Some((address.cast(), length, capacity))
+     }
+ 
+     fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize> {
+         let state = self.buffer_mut(buffer)?;
+         // `MutableBuffer::setDataLength`
+         // (`interpreter/classes/MutableBufferClass.cpp:264`): capped at the
+         // capacity, and padded with NULs where it grows.
+         let length = length.min(state.capacity);
+         state.bytes.resize(length, 0);
+         Some(length)
+@@ -267,22 +274,26 @@ impl Surface for Interp {
+ 
+     fn set_mutable_buffer_capacity(&mut self, buffer: ObjRef, capacity: usize) -> Option<POINTER> {
+         let state = self.lent_buffer(buffer)?;
+         // `MutableBuffer::setCapacity` (`:292`), which asks `ensureCapacity`
+         // for the difference over the capacity and not over the length.
+         let mut grown = 0;
+         if capacity > state.capacity {
+             let added = capacity - state.capacity;
+             grown = state.ensure_capacity(added).unwrap_or(0);
+         }
++        let reserved = state.capacity;
+         let address = state.writable().0.cast();
++        let shrunk = reserved - state.capacity;
+         self.charge_growth(grown);
++        // A failed reservation drops the capacity to what the storage holds.
++        self.heap.release_body_bytes(shrunk);
+         Some(address)
+     }
+ 
+     fn object_cself(&mut self, object: ObjRef, scope: Option<ObjRef>) -> Option<POINTER> {
+         let owner = self.pool_owner(object).ok()?;
+         let held = match scope {
+             None => self.pools_of(owner)?.find(b"CSELF"),
+             Some(mut scope) => loop {
+                 if scope == ObjRef::NIL {
+                     break None;
+diff --git a/rust/crates/rexx-exec/src/dispatch/stream.rs b/rust/crates/rexx-exec/src/dispatch/stream.rs
+index e6985d5e3..cdb2c0d0b 100644
+--- a/rust/crates/rexx-exec/src/dispatch/stream.rs
++++ b/rust/crates/rexx-exec/src/dispatch/stream.rs
+@@ -119,24 +119,28 @@ pub(super) fn init(
+     let qualified = if name.is_empty() {
+         Vec::new()
+     } else {
+         let cwd = interp.cwd_text();
+         crate::paths::normalize(&String::from_utf8_lossy(&name), &cwd).into_bytes()
+     };
+     let state = StreamState::new(name, qualified);
+     let Some(object) = interp.heap.get_mut(receiver) else {
+         unreachable!("a live receiver")
+     };
++    // The receiver may hold a state of another class's, a buffer's among
++    // them, where this method was run against it.
++    let before = object.body.held_bytes();
+     let Body::Instance { native, .. } = &mut object.body else {
+         unreachable!("Stream is allocated as Body::Instance")
+     };
+     *native = Some(Box::new(NativeState::Stream(state)));
++    interp.heap.release_body_bytes(before);
+     Ok(None)
+ }
+ 
+ /// `std_set`: marks a stream named `STDIN`, `STDOUT` or `STDERR`, with or
+ /// without a trailing colon. The Rexx half decides which name qualifies and
+ /// only then sends this, so the marker is taken from the name it recorded.
+ pub(super) fn std_set(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+@@ -1909,17 +1913,20 @@ pub(super) fn flush(
+ 
+ /// `stream_uninit`: drops the state block, after which every entry point here
+ /// raises 48.1. **Answers nothing**, so a value context is 91.999 -- measured
+ /// on the oracle, which returns no result either.
+ pub(super) fn uninit(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    if let Some(object) = interp.heap.get_mut(receiver)
+-        && let Body::Instance { native, .. } = &mut object.body
+-    {
+-        *native = None;
++    if let Some(object) = interp.heap.get_mut(receiver) {
++        let before = object.body.held_bytes();
++        if let Body::Instance { native, .. } = &mut object.body {
++            *native = None;
++        }
++        let after = object.body.held_bytes();
++        interp.heap.rehold_body_bytes(before, after);
+     }
+     Ok(None)
+ }
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 1bdc3ce99..354176198 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -2730,20 +2730,21 @@ impl Interp {
+             }
+             self.collect_now();
+         }
+     }
+ 
+     /// Charges `bytes` of a body allocated outside its slot. When the bytes
+     /// since the last collection reach `bytes_due`, the next allocation
+     /// collects.
+     #[inline]
+     pub(crate) fn charge_body_bytes(&mut self, bytes: usize) {
++        self.heap.hold_body_bytes(bytes);
+         let since = self.heap.charge_body_bytes(bytes);
+         self.collect_due |= since >= self.bytes_due;
+     }
+ 
+     /// [`Interp::charge_body_bytes`] for a body that may have grown by
+     /// nothing.
+     pub(crate) fn charge_growth(&mut self, bytes: usize) {
+         if bytes > 0 {
+             self.charge_body_bytes(bytes);
+         }
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index 6da9d3740..afaa8b211 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -1195,10 +1195,31 @@ fn short_strings_keep_the_slot_cadence() {
+     let program = b"do i = 1 to 200000; x = copies('abcd', 5) || i; end\n";
+     let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
+     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+     assert_eq!(outcome.collections, 6);
+     assert!(
+         outcome.peak_body_bytes < 1 << 18,
+         "{} body bytes held at once",
+         outcome.peak_body_bytes
+     );
+ }
++
++/// The bytes a body stops holding between collections leave the live figure
++/// the next collection starts from: a 40 MB buffer cut to one byte, then a
++/// 40 MB string dropped, each followed by a loop of dead 1 MB copies. The
++/// count is the one a survivor sum at each collection gives, measured on the
++/// commit before the live figure became a running one.
++#[test]
++fn bytes_a_body_stops_holding_leave_the_live_figure() {
++    let program = b"s = copies('x', 1000000)\n\
++          b = .mutableBuffer~new(, 40000000)\n\
++          do i = 1 to 100; x = s~copy; end\n\
++          b~setBufferSize(1)\n\
++          do i = 1 to 100; x = s~copy; end\n\
++          t = copies('y', 40000000)\n\
++          do i = 1 to 100; x = s~copy; end\n\
++          drop t\n\
++          do i = 1 to 100; x = s~copy; end\n";
++    let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
++    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
++    assert_eq!(outcome.collections, 12, "the trigger point moved");
++}
