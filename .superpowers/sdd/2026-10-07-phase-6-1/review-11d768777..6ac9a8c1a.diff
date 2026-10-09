@@ -1,0 +1,679 @@
+# Review package: 11d768777..6ac9a8c1a
+
+## Commits
+6ac9a8c1a Phase 6.1 Task 10 fix round 1: report
+705dfb767 Phase 6.1 Task 10 fix round 1: an early end is red
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-10-report.md     |  50 ++++++
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   | 196 +++++++++++++++++++--
+ .../rexx-exec/tests/sim_gate/m11_stale_sleeper.rex |   3 +-
+ .../tests/sim_gate/n1_halt_ready_once.rex          |   3 +-
+ .../crates/rexx-exec/tests/support/group_runner.rs |  17 +-
+ 5 files changed, 248 insertions(+), 21 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-10-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-10-report.md
+index c930594f4..26549766e 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-10-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-10-report.md
+@@ -260,10 +260,60 @@ Not reproduced.
+ 1. A sim child (`rexx` run as a command) is started in a process group of its own
+    (`command.rs`), so the gate's deadline kill of the run's group does not reach it; a hung child
+    is ended only by the sim watchdog (`block=`).
+ 2. The oracle report compares digests; a program part's key holds only status and line counts, so
+    a difference has to be read through its replay line.
+ 3. The k column comes from a calibration run at a PID-named path; with unit-named paths the step
+    count of path-sensitive parts (MethodArgs) differs by a few steps. k only bounds where `pre`
+    and `pct` draw their points.
+ 4. `/tmp` ran out of inodes mid-task (my gate leaked an empty directory per run, fixed; other
+    tasks' trees were the bulk).
++
++## Fix round 1
++
++Review: `task-10-review.md` (Needs fixes). Code commit `705dfb767`; this section in the commit after
++it. Line numbers at `705dfb767`, paths under `rust/crates/rexx-exec/`.
++
++* **I1, early end.** `judge` (`tests/concurrency_tests.rs:4171-4176`) calls `early_end` (`:4223`), red
++  kind `abort`, for every row not injecting failures. It reds a refusal that neither the part's
++  oracle outcomes nor its `DIFFERING` normal-mode key (`differing_keys`, `:4210`) names, every policy.
++  Except under `pct`, it also reds a group part with no ooTest summary, and a status none of them
++  has in a run naming no failing test (the origin's `pass, rc 1`). Failing tests stay with the check
++  route. A design-limit refusal whose oracle twin hangs now ends judging (`:4163`), so it is not
++  re-judged as an abort. Pinned by `a_run_ending_where_no_listed_outcome_ends_is_red` (`:4877`):
++  - a pass summary at rc 1 is red, at rc 0 is not, and under `pct` is not;
++  - an empty stdout is red;
++  - Section1's listed `OBJECTNAME=` refusal is not red;
++  - an unlisted `COPY` refusal is red in Section1 (pre and pct) and in a part with no `DIFFERING`
++    row.
++
++  With the call disabled (`if false && ...`) the test fails (`left: []`).
++  Section1 whole does not go red: its refusal is its `DIFFERING` normal key's, the known-set route the
++  review names. The release gate at `705dfb767` showed no new red, so none went to the controller.
++* **Minor 1, deadline kill.** The doc's false claim is deleted (`tests/support/group_runner.rs:536-538`
++  now says a command a sim run starts is in a group of its own, which the kill does not reach). Not
++  fixed in code: it is bounded (readers time out, a hang is already red); recorded as concern 1.
++* **Minor 2, WALL_CLOCK rerun.** In `run_unit`, a rerun that passes on a row without `clock=real`
++  (`Row::real_clock`, `:3674`) is a `determinism` red, with the failed test named. Close run: the
++  reruns were STREAM (`clock=real`) and SysSleep (rerun failed, exempt), so no such red.
++* **Minor 3, scratch.** `unit_dir` (`:4349`) is `<target tmp>/sim-gate-<profile>/<unit hash>/run`
++  (`profile`, `:3562`). The replay line prints that path (`:3761`).
++* **Minor 4, environment.** `REXX_SIM_*` variables are dropped from the program's environment, both
++  for group parts (`crate_environment`, `group_runner.rs:481`) and for programs (`:3892`). No child
++  needs them: a sim child gets `REXX_SWITCH_MODE` and `REXX_SIM_CHILD` from the command that starts it
++  (`src/command.rs`).
++* **Minor 5, stdin.** The sidecar's stdin is written from a thread of its own
++  (`group_runner.rs:590-597`).
++* **Minor 6, gate programs.** `m11_stale_sleeper.rex` and `n1_halt_ready_once.rex` say in their
++  header comment that the gate reads only the invariants, not their stdout.
++
++Per-task check at `705dfb767`:
++* `cargo fmt --all --check` exit 0.
++* `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings` exit 0.
++* `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0: 3120 passed, 0 failed, 4 ignored
++  (`/tmp/claude-1000/p61/t10/logs/ws2.txt`).
++* `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: 29 passed and 1 ignored; 21
++  passed.
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 1 --release -p rexx-exec --test concurrency_tests
++  whole_groups`: exit 0, 15 passed, 4:08 wall. The seeded gate inside it ran 13720 runs in 126 s,
++  with no red (`/tmp/claude-1000/p61/t10/gate-f1-final.txt`).
++* Debug `sim_gate::`: 9 passed, 1792 runs in 12 s.
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 54beaea6c..3b5dd164f 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -3462,22 +3462,22 @@ mod group_runs {
+         /// (ruling R6). An outcome no committed oracle outcome of its part has
+         /// goes to the report, never red.
+         mod sim_gate {
+             use std::collections::{BTreeMap, BTreeSet};
+             use std::fmt::Write as _;
+             use std::path::{Path, PathBuf};
+             use std::sync::Mutex;
+             use std::time::Duration;
+ 
+             use super::super::super::group_runner::{
+-                Ended, GATE_ENV, ProcessRun, Run, VERBOSITY, gate_mode, masked, run_crate_process,
+-                run_crate_sim, run_oracle_within,
++                Ended, GATE_ENV, ProcessRun, Run, VERBOSITY, gate_mode, masked, outcome,
++                run_crate_process, run_crate_sim, run_oracle_within,
+             };
+             use super::super::super::support::{oracle, sidecar};
+             use super::{
+                 DIFFERING, ORACLE_DEADLINE, ORACLE_RUNS, ORACLE_RUNS_UNSETTLED, Part, WALL_CLOCK,
+                 at_once, copy, failing, key, left_out_of, refusal, relative, split, started,
+             };
+ 
+             /// The gate's parts, relative to `rust/`.
+             const TABLE: &str = "corpus/sim-gate.tsv";
+ 
+@@ -3552,20 +3552,28 @@ mod group_runs {
+             /// holds a run that did not end.
+             const DESIGN_LIMIT: &[&str] = &[
+                 "that only an activity pinned below it can end",
+                 "a REPLY its method body runs on a nested Rust frame",
+                 "a wait that nothing left to run can end",
+                 "a wait in the simulation mode that only a signal can end",
+                 "a command in the simulation mode that waits longer than its bound",
+                 "a native call in the simulation mode that runs longer than its bound",
+             ];
+ 
++            fn profile() -> &'static str {
++                if cfg!(debug_assertions) {
++                    "debug"
++                } else {
++                    "release"
++                }
++            }
++
+             fn rust_root() -> PathBuf {
+                 Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+             }
+ 
+             /// FNV-1a 64 over `bytes`.
+             fn fnv(bytes: &[u8]) -> u64 {
+                 bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+                     (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+                 })
+             }
+@@ -3655,20 +3663,27 @@ mod group_runs {
+                 }
+ 
+                 /// The policy of seed `i`.
+                 fn policy(&self, i: u64) -> String {
+                     let mix = std::env::var(POLICY_ENV).unwrap_or_else(|_| {
+                         MIX[usize::try_from(i % 7).expect("below 7")].to_string()
+                     });
+                     with_k(&mix, self.k)
+                 }
+ 
++                /// Whether the row's virtual time starts at the wall clock.
++                fn real_clock(&self) -> bool {
++                    self.knobs
++                        .as_deref()
++                        .is_some_and(|knobs| knobs.split(',').any(|knob| knob == "clock=real"))
++                }
++
+                 fn mode(&self, seed: u64, policy: &str) -> String {
+                     let mut mode = format!("sim:{seed},{policy}");
+                     if let Some(knobs) = &self.knobs {
+                         mode.push(',');
+                         mode.push_str(knobs);
+                     }
+                     mode
+                 }
+ 
+                 fn oracle_file(&self) -> PathBuf {
+@@ -3736,26 +3751,27 @@ mod group_runs {
+                 /// The command that runs this unit alone.
+                 fn replay(&self) -> String {
+                     let profile = if cfg!(debug_assertions) {
+                         ("", "debug")
+                     } else {
+                         (" --release", "release")
+                     };
+                     format!(
+                         "REXX_CORPUS_GATE=1 {ONLY_ENV}='{}' memcap 8G cargo test -j 4{} -p \
+                          rexx-exec --test concurrency_tests the_seeded_gate -- --nocapture \
+-                         (profile={}, stack={}, REXX_SWITCH_MODE={})",
++                         (profile={}, stack={}, REXX_SWITCH_MODE={}, scratch {})",
+                         self.name(),
+                         profile.0,
+                         profile.1,
+                         rexx_exec::INTERPRETER_STACK_BYTES,
+-                        self.mode()
++                        self.mode(),
++                        unit_dir("sim-gate", self).display()
+                     )
+                 }
+             }
+ 
+             /// The gate's units: each row's seeds, or where [`ONLY_ENV`] is
+             /// set, `GROUP` or `GROUP:PART` its rows' seeds and
+             /// `GROUP:PART:SEED:POLICY` that one run.
+             fn units(rows: &[Row]) -> Vec<Unit> {
+                 let only = std::env::var(ONLY_ENV).ok();
+                 let cells: Vec<&str> = only
+@@ -3866,20 +3882,21 @@ mod group_runs {
+                 derived: &BTreeMap<String, BTreeSet<String>>,
+                 scratch: &Path,
+                 mode: &str,
+                 deadline: Duration,
+             ) -> ProcessRun {
+                 if row.program() {
+                     let (path, cwd, side, overrides) = program_run(row, scratch);
+                     let mut environment: Vec<(String, String)> = std::env::vars()
+                         .filter(|(name, _)| {
+                             name != "REXX_SWITCH_MODE"
++                                && !name.starts_with("REXX_SIM_")
+                                 && !overrides.iter().any(|(over, _)| over == name)
+                         })
+                         .collect();
+                     environment.extend(overrides);
+                     let mut environment: Vec<(Vec<u8>, Vec<u8>)> = environment
+                         .into_iter()
+                         .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
+                         .collect();
+                     environment.sort();
+                     return run_crate_process(
+@@ -4063,33 +4080,35 @@ mod group_runs {
+             /// What a red is.
+             #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+             enum Kind {
+                 Panic,
+                 Crash,
+                 Hang,
+                 Invariant,
+                 Determinism,
+                 DesignLimit,
+                 Check,
++                Abort,
+                 NoReport,
+             }
+ 
+             impl Kind {
+                 fn label(self) -> &'static str {
+                     match self {
+                         Kind::Panic => "panic",
+                         Kind::Crash => "crash",
+                         Kind::Hang => "hang",
+                         Kind::Invariant => "invariant",
+                         Kind::Determinism => "determinism",
+                         Kind::DesignLimit => "design-limit",
+                         Kind::Check => "check",
++                        Kind::Abort => "abort",
+                         Kind::NoReport => "no-report",
+                     }
+                 }
+             }
+ 
+             /// One red: its kind, the test it is in (`-` for a program) and
+             /// the line that shows it.
+             #[derive(Clone, Debug)]
+             struct Red {
+                 kind: Kind,
+@@ -4133,27 +4152,35 @@ mod group_runs {
+                 }
+                 if let Some(line) = refusal(run) {
+                     if line.starts_with(INVARIANT) {
+                         return red(Kind::Invariant, &line);
+                     }
+                     if DETERMINISM.iter().any(|text| line.contains(text)) {
+                         return red(Kind::Determinism, &line);
+                     }
+                     let twin_hangs =
+                         seen.is_some_and(|seen| seen.iter().any(|one| one.status == "none"));
+-                    if DESIGN_LIMIT.iter().any(|text| line.contains(text)) && !twin_hangs {
++                    if DESIGN_LIMIT.iter().any(|text| line.contains(text)) {
++                        if twin_hangs {
++                            return Vec::new();
++                        }
+                         return red(Kind::DesignLimit, &line);
+                     }
+                 }
+                 if sim_line(&run.stderr).is_none() {
+                     return red(Kind::NoReport, "no rexx-sim line ends stderr");
+                 }
++                if !row.injects()
++                    && let Some(line) = early_end(row, policy, run, seen.unwrap_or_default())
++                {
++                    return red(Kind::Abort, &line);
++                }
+                 if row.injects() || policy.starts_with("pct:") {
+                     return Vec::new();
+                 }
+                 if row.program() {
+                     return String::from_utf8_lossy(&run.stdout)
+                         .lines()
+                         .filter(|line| line.starts_with(ASSERTION))
+                         .map(|line| Red {
+                             kind: Kind::Check,
+                             test: test.clone(),
+@@ -4171,30 +4198,63 @@ mod group_runs {
+                     .into_iter()
+                     .filter(|name| !known.contains(name))
+                     .map(|name| Red {
+                         kind: Kind::Check,
+                         line: format!("{name} fails; no oracle outcome of the part fails it"),
+                         test: name,
+                     })
+                     .collect()
+             }
+ 
+-            /// The tests [`DIFFERING`] lists as failing in `row`'s part in the
+-            /// shipped scheduler's mode, where its outcome is not the oracle's.
+-            fn failing_unswitched(row: &Row) -> BTreeSet<String> {
++            /// The keys [`DIFFERING`] lists for `row`'s part in the shipped
++            /// scheduler's mode.
++            fn differing_keys(row: &Row) -> impl Iterator<Item = &'static str> {
+                 DIFFERING
+                     .iter()
+                     .filter(|(group, part, mode, ..)| {
+                         *group == row.group && *part == row.part && *mode == "normal"
+                     })
+-                    .flat_map(|(.., key, _)| failing_of(key))
+-                    .collect()
++                    .map(|(.., key, _)| *key)
++            }
++
++            /// Why a run ended where none of the part's oracle outcomes and
++            /// [`DIFFERING`] keys does: a refusal none of them names, or, but
++            /// under `pct`, no ooTest summary, or a status none of them has in
++            /// a run naming no failing test.
++            fn early_end(row: &Row, policy: &str, run: &Run, seen: &[Seen]) -> Option<String> {
++                let mut keys: Vec<&str> = differing_keys(row).collect();
++                keys.extend(seen.iter().map(|one| one.key.as_str()));
++                if let Some(line) = refusal(run) {
++                    return (!keys.iter().any(|key| key.contains(line.as_str()))).then(|| {
++                        format!("{line}: no oracle outcome or DIFFERING key of the part ends so")
++                    });
++                }
++                if policy.starts_with("pct:") {
++                    return None;
++                }
++                if !row.program() && outcome(&run.stdout).starts_with("no summary") {
++                    return Some("no ooTest summary".to_string());
++                }
++                let status = run
++                    .status
++                    .map_or_else(|| "none".to_string(), |status| status.to_string());
++                let listed = seen.iter().any(|one| one.status == status)
++                    || differing_keys(row).any(|key| key.contains(&format!(", rc {status},")));
++                (!listed && (row.program() || failing(run).is_empty())).then(|| {
++                    format!("rc {status}, which no oracle outcome or DIFFERING key of the part has")
++                })
++            }
++
++            /// The tests [`DIFFERING`] lists as failing in `row`'s part in the
++            /// shipped scheduler's mode, where its outcome is not the oracle's.
++            fn failing_unswitched(row: &Row) -> BTreeSet<String> {
++                differing_keys(row).flat_map(failing_of).collect()
+             }
+ 
+             /// One row of [`EXEMPT`]: group, part, test, kind and a text the
+             /// red's line holds (its refusal where it has one), each `*` for
+             /// any, then the reason and its evidence.
+             struct Exempt {
+                 cells: [String; 5],
+             }
+ 
+             fn read_exempt() -> Vec<Exempt> {
+@@ -4275,26 +4335,27 @@ mod group_runs {
+             }
+ 
+             /// A fresh scratch directory for item `at` of the run `name`.
+             fn scratch(name: &str, at: usize) -> PathBuf {
+                 PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                     .join(format!("{name}-{}", std::process::id()))
+                     .join(at.to_string())
+                     .join("run")
+             }
+ 
+-            /// The scratch directory of `unit` below the run `name`, named by
+-            /// the unit alone: a program may read its own path, so a replay
+-            /// runs where the gate ran.
++            /// The scratch directory of `unit` below the run `name` and this
++            /// build's profile, named by the unit alone: a program may read its
++            /// own path, so a replay from the same target directory runs where
++            /// the gate ran.
+             fn unit_dir(name: &str, unit: &Unit) -> PathBuf {
+                 PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+-                    .join(name)
++                    .join(format!("{name}-{}", profile()))
+                     .join(format!("{:016x}", fnv(unit.name().as_bytes())))
+                     .join("run")
+             }
+ 
+             /// Removes the item directory a [`scratch`] directory `dir` is in,
+             /// and the run's directory once it is empty.
+             fn remove(dir: &Path) {
+                 let item = dir.parent().expect("an item directory");
+                 if item.exists() {
+                     std::fs::remove_dir_all(item).expect("cannot remove a run");
+@@ -4346,20 +4407,31 @@ mod group_runs {
+                     reds = judge(&unit.row, &unit.policy, &ran, seen.as_deref());
+                     rerun = Some(format!(
+                         "{}: failed {first}, rerun {}",
+                         unit.name(),
+                         if reds.is_empty() {
+                             "passed".to_string()
+                         } else {
+                             format!("failed {}", outcome_key(&unit.row, &compared(&ran.run)))
+                         }
+                     ));
++                    // Outside `clock=real` a seed and mode fix the run, so a
++                    // rerun that passes shows the first run was not fixed.
++                    if reds.is_empty() && !unit.row.real_clock() {
++                        reds.push(Red {
++                            kind: Kind::Determinism,
++                            line: format!(
++                                "{first} failed, and the rerun of the same seed and mode passed"
++                            ),
++                            test: first,
++                        });
++                    }
+                 }
+                 let mine = compared(&ran.run);
+                 let compared = (!unit.row.injects()).then(|| {
+                     let digest = digest(&mine);
+                     seen.as_deref()
+                         .unwrap_or_default()
+                         .iter()
+                         .position(|one| one.digest == digest)
+                 });
+                 Found {
+@@ -4753,20 +4825,116 @@ mod group_runs {
+                 let stderr = b"rexx-sim: seed=9 policy=fifo\nstarted X\nrexx-sim: seed=1 \
+                     policy=fifo steps=3 contended=2 switches=1 trace=00000000000000ff \
+                     profile=release stack=1\n";
+                 assert_eq!(sim_masked(stderr), b"started X\n");
+                 let line = sim_line(stderr).expect("the run's own line");
+                 assert_eq!(sim_field(&line, "contended"), Some("2"));
+                 assert_eq!(sim_field(&line, "trace"), Some("00000000000000ff"));
+                 assert_eq!(sim_line(b"rexx-sim: x\nrexx-exec: y\n"), None);
+             }
+ 
++            /// A finished run of a group part: `stdout`, the started test `T`
++            /// and `refusal` on stderr, a `rexx-sim:` line, `status`.
++            fn finished(stdout: &str, refusal: Option<&str>, status: i32) -> ProcessRun {
++                let mut stderr = "started T\n".to_string();
++                if let Some(line) = refusal {
++                    stderr.push_str(line);
++                    stderr.push('\n');
++                }
++                stderr.push_str("rexx-sim: seed=1 policy=fifo steps=1 contended=0 switches=0\n");
++                ProcessRun {
++                    run: Run {
++                        stdout: stdout.as_bytes().to_vec(),
++                        stderr: stderr.into_bytes(),
++                        status: Some(status),
++                    },
++                    ended: Ended::Exited(status),
++                    took: Duration::ZERO,
++                }
++            }
++
++            fn group_row(group: &str) -> Row {
++                Row {
++                    group: group.to_string(),
++                    part: "whole".to_string(),
++                    k: 1,
++                    release_seeds: 1,
++                    debug_seeds: 1,
++                    release_ms: 0,
++                    debug_ms: 0,
++                    knobs: None,
++                    left_out: Vec::new(),
++                }
++            }
++
++            const PASSED: &str = "Tests ran:          1\nAssertions:         3\n\
++                                  Failures:           0\nErrors:             0\n";
++
++            /// The early-end reds (review I1): an exit status no oracle
++            /// outcome has, beside a pass summary, and a refusal that neither
++            /// an oracle outcome nor the part's `DIFFERING` key names; each
++            /// beside the run that differs from it only in what is listed.
++            #[test]
++            fn a_run_ending_where_no_listed_outcome_ends_is_red() {
++                let row = group_row("base/x/Y.testGroup");
++                let seen = [Seen {
++                    count: 5,
++                    status: "0".to_string(),
++                    digest: 0,
++                    key: "pass, assertions 3, rc 0, last started T, failing []".to_string(),
++                }];
++                let kinds = |ran: &ProcessRun, row: &Row, policy: &str| -> Vec<(Kind, String)> {
++                    judge(row, policy, ran, Some(&seen))
++                        .into_iter()
++                        .map(|red| (red.kind, red.line))
++                        .collect()
++                };
++                assert_eq!(kinds(&finished(PASSED, None, 0), &row, "pre:1,k=1"), []);
++                assert_eq!(
++                    kinds(&finished(PASSED, None, 1), &row, "pre:1,k=1"),
++                    [(
++                        Kind::Abort,
++                        "rc 1, which no oracle outcome or DIFFERING key of the part has"
++                            .to_string()
++                    )]
++                );
++                assert_eq!(kinds(&finished(PASSED, None, 1), &row, "pct:3,k=1"), []);
++                assert_eq!(
++                    kinds(&finished("", None, 0), &row, "pre:1,k=1"),
++                    [(Kind::Abort, "no ooTest summary".to_string())]
++                );
++                let listed = "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not \
++                              implemented (Phase 9)";
++                let other = "rexx-exec: method \"COPY\" of class \"Object\" is not implemented \
++                             (Phase 9)";
++                let section = group_row("doc/rexxref/chapter5/Section1.testGroup");
++                assert_eq!(
++                    kinds(&finished("", Some(listed), 120), &section, "pre:1,k=1"),
++                    []
++                );
++                for (row, policy) in [
++                    (&section, "pre:1,k=1"),
++                    (&section, "pct:3,k=1"),
++                    (&row, "pre:1,k=1"),
++                ] {
++                    assert_eq!(
++                        kinds(&finished("", Some(other), 120), row, policy),
++                        [(
++                            Kind::Abort,
++                            format!(
++                                "{other}: no oracle outcome or DIFFERING key of the part ends so"
++                            )
++                        )]
++                    );
++                }
++            }
++
+             #[test]
+             fn a_key_names_its_failing_tests() {
+                 assert_eq!(
+                     failing_of("failure, assertions 3, rc 1, last started B, failing [A B]"),
+                     BTreeSet::from(["A".to_string(), "B".to_string()])
+                 );
+                 assert!(
+                     failing_of("pass, assertions 3, rc 0, last started B, failing []").is_empty()
+                 );
+             }
+diff --git a/rust/crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex b/rust/crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex
+index 901c85c73..575b45d03 100644
+--- a/rust/crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex
++++ b/rust/crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex
+@@ -1,13 +1,14 @@
+ /* A pinned sleep that fails (fail=wait:1 in the seeded gate's row), then a
+    park on a started activity's result: the failed sleep's deadline must not
+-   ready the parked main. */
++   ready the parked main. The gate judges this program by the scheduler's
++   invariants only: its stdout is not read. */
+ call time 'R'
+ call sleeper
+ m = .w~new~start('slow')
+ say 'result' m~result 'after' (time('E') >= 2.5)
+ exit
+ sleeper: procedure
+   signal on syntax name caught
+   interpret 'call SysSleep 1'
+   say 'slept'
+   return
+diff --git a/rust/crates/rexx-exec/tests/sim_gate/n1_halt_ready_once.rex b/rust/crates/rexx-exec/tests/sim_gate/n1_halt_ready_once.rex
+index d9b55ac66..1aa39ee16 100644
+--- a/rust/crates/rexx-exec/tests/sim_gate/n1_halt_ready_once.rex
++++ b/rust/crates/rexx-exec/tests/sim_gate/n1_halt_ready_once.rex
+@@ -1,13 +1,14 @@
+ /* A halt reaching main after its timed wait's deadline readied it leaves it
+    ready once (the seeded gate's witness, run under halt@K). Main polls with
+-   timed waits while a started activity runs a long loop. */
++   timed waits while a started activity runs a long loop. The gate judges
++   this program by the scheduler's invariants only: its stdout is not read. */
+ call on halt name h
+ s = .eventsemaphore~new
+ o = .w~new~start('w')
+ halted = 0
+ do until halted
+   r = s~wait(0.001)
+ end
+ call time 'R'
+ call SysSleep 1
+ say 'slept' (time('E') >= 0.9)
+diff --git a/rust/crates/rexx-exec/tests/support/group_runner.rs b/rust/crates/rexx-exec/tests/support/group_runner.rs
+index 040840cb8..af8742eec 100644
+--- a/rust/crates/rexx-exec/tests/support/group_runner.rs
++++ b/rust/crates/rexx-exec/tests/support/group_runner.rs
+@@ -455,35 +455,37 @@ pub fn run_crate_within(
+     let outcome = watchdog::run_bounded_with(&driver.to_string_lossy(), text, invocation, abandon);
+     let status = (!watchdog::did_not_finish(&outcome)).then_some(outcome.exit_code);
+     Run {
+         stdout: outcome.stdout,
+         stderr: outcome.stderr,
+         status,
+     }
+ }
+ 
+ /// The environment a run of the group copy `run` gets here: the process's
+-/// own without `LD_LIBRARY_PATH`, `PATH` and `REXX_SWITCH_MODE`, then the
++/// own without `LD_LIBRARY_PATH`, `PATH`, `REXX_SWITCH_MODE` and the
++/// `REXX_SIM_` variables (a sim child gets its own from the command that
++/// starts it), then the
+ /// oracle's library directory and [`interpreter_bin`] ahead of `PATH`.
+ fn crate_environment(run: &Path) -> Vec<(Vec<u8>, Vec<u8>)> {
+     let lib = oracle::oracle_root().join("lib");
+     let bin = interpreter_bin(run);
+     let path = env::join_paths(
+         std::iter::once(bin).chain(env::var_os("PATH").iter().flat_map(env::split_paths)),
+     )
+     .expect("a PATH");
+     let mut environment: Vec<(Vec<u8>, Vec<u8>)> = env::vars()
+         .filter(|(name, _)| {
+             !matches!(
+                 name.as_str(),
+                 "LD_LIBRARY_PATH" | "PATH" | "REXX_SWITCH_MODE"
+-            )
++            ) && !name.starts_with("REXX_SIM_")
+         })
+         .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
+         .collect();
+     environment.push((
+         b"LD_LIBRARY_PATH".to_vec(),
+         lib.to_string_lossy().into_owned().into_bytes(),
+     ));
+     environment.push((
+         b"PATH".to_vec(),
+         path.to_string_lossy().into_owned().into_bytes(),
+@@ -525,21 +527,22 @@ pub enum Ended {
+ /// One [`run_crate_process`]: its descriptors (status `None` unless it
+ /// exited), how it ended and how long it took.
+ pub struct ProcessRun {
+     pub run: Run,
+     pub ended: Ended,
+     pub took: std::time::Duration,
+ }
+ 
+ /// Runs `rexx-run` on `words` (the program, then its arguments) from `cwd`
+ /// with `REXX_SWITCH_MODE` set to `mode`, in a process group of its own that
+-/// is killed at `deadline`, a child it started included. `environment`
++/// is killed at `deadline`; a command a simulation run starts runs in a group
++/// of its own, which that kill does not reach. `environment`
+ /// replaces the process's own where given, else is inherited; `stdin` is
+ /// written to its standard input, which is otherwise empty.
+ #[expect(
+     clippy::disallowed_methods,
+     reason = "this harness bounds a real process"
+ )]
+ pub fn run_crate_process(
+     words: &[String],
+     cwd: &Path,
+     environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
+@@ -579,23 +582,27 @@ pub fn run_crate_process(
+     let mut child = command
+         .spawn()
+         .unwrap_or_else(|e| panic!("cannot start rexx-run on {words:?}: {e}"));
+     let group = rustix::process::Pid::from_child(&child);
+     let kill_group = || {
+         // The group may be gone already; that is the outcome wanted.
+         let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+     };
+     if let Some(bytes) = stdin {
+         let mut pipe = child.stdin.take().expect("stdin was piped");
++        let bytes = bytes.to_vec();
+         // A program that stops reading early closes the pipe; what it read is
+-        // the outcome.
+-        let _ = pipe.write_all(bytes);
++        // the outcome. A thread of its own, so a program that never reads
++        // cannot hold the deadline off.
++        std::thread::spawn(move || {
++            let _ = pipe.write_all(&bytes);
++        });
+     }
+     let reader = |mut pipe: Box<dyn std::io::Read + Send>| {
+         let (sender, receiver) = std::sync::mpsc::channel();
+         std::thread::spawn(move || {
+             let mut bytes = Vec::new();
+             let _ = pipe.read_to_end(&mut bytes);
+             let _ = sender.send(bytes);
+         });
+         receiver
+     };
