@@ -429,8 +429,10 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
 }
 
 /// A user `STRING` method's answer reads as `primitiveMakeString` reads it:
-/// an array (or an `Array` subclass) joins its items, a buffer is its text,
-/// and a `Queue`, `.nil` or any other object is refused (Deviation 30).
+/// an array (or an `Array` subclass) joins its items and a buffer is its
+/// text. A `Queue`, `.nil` or any other object is `.nil` there: a truth
+/// value and a logical operator judge `.nil`, and a consumer of its bytes
+/// (concatenation, `LENGTH`) refuses (Deviation 30).
 #[test]
 fn a_string_answer_reads_as_primitive_make_string_reads_it() {
     let program = |answer: &str| {
@@ -451,17 +453,38 @@ fn a_string_answer_reads_as_primitive_make_string_reads_it() {
             "{answer}"
         );
     }
+    let refusal = "rexx-exec: a STRING method answering an object with no string value \
+                   is not implemented\n";
     for answer in [".directory~new", ".queue~of('a')", ".nil", ".object~new"] {
         assert_eq!(
             run_source(&program(answer)),
-            (
-                120,
-                String::new(),
-                "rexx-exec: a STRING method answering an object with no string value \
-                 is not implemented\n"
-                    .to_owned()
-            ),
+            (120, String::new(), refusal.to_owned()),
             "{answer}"
+        );
+        let length = format!("say length(.k~new)\n::class k\n::method string\n  return {answer}\n");
+        assert_eq!(
+            run_source(&length),
+            (120, String::new(), refusal.to_owned()),
+            "length over {answer}"
+        );
+        let judged = format!(
+            "o = .k~new\nsignal on syntax name s1\nif o then nop\n\
+             s1: say condition('O')~code condition('O')~message\n\
+             signal on syntax name s2\nsay 1 & o\n\
+             s2: say condition('O')~code condition('O')~message\n\
+             exit\n::class k\n::method string\n  return {answer}\n"
+        );
+        assert_eq!(
+            run_source(&judged),
+            (
+                0,
+                "34.1 Value of expression following IF keyword must be exactly \"0\" or \"1\"; \
+                 found \"The NIL object\".\n\
+                 34.901 Logical value must be exactly \"0\" or \"1\"; found \"The NIL object\".\n"
+                    .to_owned(),
+                String::new()
+            ),
+            "truth over {answer}"
         );
     }
 }

@@ -1321,7 +1321,13 @@ impl Interp {
         if right == ObjRef::NIL && is_equality(op) {
             return Ok(logical(is_inequality(op)));
         }
-        let right = self.required_string_value(right)?;
+        // A logical operator judges its operand's truth value, which reads a
+        // `STRING` answer with no string value as `.nil`.
+        let right = if matches!(op, Operator::And | Operator::Or | Operator::Xor) {
+            self.required_string_or_nil(right)?
+        } else {
+            self.required_string_value(right)?
+        };
         match op {
             Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, None),
             Operator::Blank => self.concat_values(left, right, Some(b' ')),
@@ -1476,7 +1482,7 @@ impl Interp {
     ) -> Result<bool, Failure> {
         let frame = self.roots.activity_mut().push_frame();
         self.roots.activity_mut().push_temp(value);
-        let string = self.required_string_value(value)?;
+        let string = self.required_string_or_nil(value)?;
         let text = self.to_text(string);
         let holds = match logical_value(&text) {
             Some(holds) => holds,

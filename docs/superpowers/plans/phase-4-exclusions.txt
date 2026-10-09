@@ -1920,25 +1920,27 @@ DEVIATIONS -- permanent, chosen
      `primitiveMakeString` (interpreter/classes/ObjectClass.cpp:1285). A
      string, a number, an Array (its items joined by a newline) and a
      MutableBuffer convert, and this crate reads them the same way. Any other
-     object converts to `.nil`, which the oracle then uses as a string.
-     Measured by Phase 6.1's scout E (probes i7b, i7e to i7h) and Task 11a
-     (probes s4_dir, s4_inst, s4_nil, s4_queue), STRING answering:
+     object converts to `.nil`. A truth value (every condition context), the
+     logical operators and a native logical argument judge `.nil` as an
+     object, and this crate answers as the oracle does: 34.x with found
+     "The NIL object". A consumer of the string's bytes reads `.nil` through
+     the string layout. Measured by Phase 6.1's scout E (probes i7b, i7e,
+     i7f, i7h) and Task 11a (probes bytes_dir, bytes_nil, bytes_queue,
+     bytes_obj, s4_nil, s4_queue), STRING answering a Directory, `.nil`, a
+     Queue or an Object:
 
-       .directory~new, `say o`                 rc 168, 88.909
-       .directory~new, `say length(o)`         rc 0, a pointer-sized number
-                                               (139937618269872 and
-                                               140221402781360 in two runs)
-       .directory~new, `say 'x' o`             rc 251, Error 5
-       .directory~new, `if o`                  rc 222, 34.1 found "The NIL
-                                               object"
-       an instance whose own STRING answers    rc 251, Error 5 (`say 'x' o`)
-       a string
-       .nil, a Queue                           rc 168, 88.909 (`say o`)
+       `say length(o)`                rc 0, a pointer-sized number that
+                                      differed in each of two runs
+       `say 'x' o`                    rc 251, Error 5
+       `say o`                        rc 168, 88.909, with a traceback
+                                      through the REXX package's
+                                      `Stream~SAY` and `Monitor~UNKNOWN`
 
      This crate refuses each, rc 120, with `a STRING method answering an
-     object with no string value is not implemented`. The oracle's answer is
-     a read of `.nil` through the string layout, not a specified observable.
-     Not witnessed in the corpus.
+     object with no string value is not implemented`; `say` is refused too,
+     since this crate builds no frames for the REXX package's methods. The
+     oracle's answer to the first two is a read of `.nil` through the string
+     layout, not a specified observable. Not witnessed in the corpus.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

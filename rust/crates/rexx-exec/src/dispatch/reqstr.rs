@@ -58,6 +58,22 @@ impl Interp {
     /// is the silent wrong answer the protocol exists to prevent.**
     #[inline]
     pub(crate) fn required_string_value(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        self.required_string_or::<false>(value)
+    }
+
+    /// [`Interp::required_string_value`] for a consumer that reads the answer
+    /// as an object (a truth value, a native logical argument): a user
+    /// `STRING` answer with no string value is `.nil` here, as
+    /// `primitiveMakeString` makes it, where the bytes consumers refuse it.
+    #[inline]
+    pub(crate) fn required_string_or_nil(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        self.required_string_or::<true>(value)
+    }
+
+    /// The required-string protocol, with `NIL` saying whether a user
+    /// `STRING` answer with no string value is `.nil` or refused.
+    #[inline]
+    fn required_string_or<const NIL: bool>(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
         // **A string and a small integer are their own string value**, and
         // that is the answer whether the latch is armed or clear:
         // `classify_string_conversion`'s first arm returns
@@ -84,7 +100,7 @@ impl Interp {
                 self.roots.activity_mut().push_temp(value);
                 return Ok(value);
             }
-            return self.required_string_dispatch(value);
+            return self.required_string_dispatch(value, NIL);
         }
         debug_assert!(
             unshared!(self, self.required_string_latch_holds(value)),
@@ -133,7 +149,7 @@ impl Interp {
     /// value.
     #[cold]
     #[inline(never)]
-    fn required_string_dispatch(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+    fn required_string_dispatch(&mut self, value: ObjRef, nil: bool) -> Result<ObjRef, Failure> {
         match self.required_string_answer(value) {
             Ok(Some(RequiredString::Object(text))) => {
                 self.roots.activity_mut().push_temp(text);
@@ -155,6 +171,7 @@ impl Interp {
         // wherever `STRING` resolves to `native_string`. Measured, oracle
         // rc 0: with `::METHOD string` returning `from-string`, `say o`,
         // `'x' o` and `length(o)` all follow it.
+        let mut no_string = false;
         let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance { .. })) {
             let caller = self.caller();
             match pinned!(
@@ -162,7 +179,14 @@ impl Interp {
                 crate::pinning::PinKind::Conversion,
                 self.send_message(value, STRING, None, &[], caller)
             )? {
-                Some(answered) => self.string_answer_text(answered)?,
+                Some(answered) => match self.string_answer_text(answered) {
+                    Some(text) => text,
+                    None if nil => {
+                        no_string = true;
+                        self.string_value_text(ObjRef::NIL)
+                    }
+                    None => return Err(Loud::string_answer_not_a_string().into()),
+                },
                 None => self.string_value_text(value),
             }
         } else {
@@ -184,6 +208,9 @@ impl Interp {
         if self.condition_raises_syntax(b"NOSTRING") {
             return Err(Raised::nostring_syntax(&readable).into());
         }
+        if no_string {
+            return Ok(ObjRef::NIL);
+        }
         let readable = self.text_built(readable);
         self.roots.activity_mut().push_temp(readable);
         Ok(readable)
@@ -192,9 +219,9 @@ impl Interp {
     /// What a user `STRING` method's answer reads as: `primitiveMakeString`
     /// on it (`classes/ObjectClass.cpp:1285`). A string or a number is
     /// itself, an array (not a queue) is its items joined by a newline, and a
-    /// buffer is its text. Any other object is `.nil` there, which the oracle
-    /// then reads as a string, so it is refused (Deviation 30).
-    fn string_answer_text(&mut self, answered: ObjRef) -> Result<Vec<u8>, Failure> {
+    /// buffer is its text. Any other object is `None`: `.nil` there, which a
+    /// consumer of bytes reads as a string (Deviation 30).
+    fn string_answer_text(&mut self, answered: ObjRef) -> Option<Vec<u8>> {
         let joined = match answered.decode() {
             Decoded::SmallInt(_) | Decoded::Text(_) => None,
             Decoded::Heap { .. } if !self.heap.is_class(answered) => {
@@ -211,14 +238,14 @@ impl Interp {
                     if self.array_slots(store).is_none()
                         || super::collection::is_queue(self, answered)
                     {
-                        return Err(Loud::string_answer_not_a_string().into());
+                        return None;
                     }
                     Some(store)
                 }
             }
-            _ => return Err(Loud::string_answer_not_a_string().into()),
+            _ => return None,
         };
-        Ok(match joined {
+        Some(match joined {
             Some(store) => self.string_conversion_array_text(store),
             None => self.to_text(answered).into_owned(),
         })

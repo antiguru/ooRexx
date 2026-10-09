@@ -508,9 +508,9 @@ impl Loud {
     }
 
     /// A user `STRING` method that answered an object with no string value of
-    /// its own: not a string, a number, an array or a buffer. The oracle's
-    /// `primitiveMakeString` answers `.nil` for it and reads that as a string
-    /// (Deviation 30).
+    /// its own (not a string, a number, an array or a buffer), read by a
+    /// consumer of its bytes. The oracle's `primitiveMakeString` answers
+    /// `.nil` for it and reads that as a string (Deviation 30).
     #[cold]
     fn string_answer_not_a_string() -> Loud {
         Loud {

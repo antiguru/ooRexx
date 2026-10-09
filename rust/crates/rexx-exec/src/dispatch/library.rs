@@ -1500,7 +1500,13 @@ impl Host for Interp {
                 _ => Err(object),
             });
         }
-        let text = self.native_string_conversion(object)?;
+        let text = match self.required_string_or_nil(object) {
+            Ok(text) => {
+                self.roots.activity_mut().push_temp(text);
+                text
+            }
+            Err(failure) => return Err(self.hold_native_condition(failure)),
+        };
         // A string is its own string value, so the only failure is its not
         // being logical, which the boundary reports with `text`.
         Ok(self.truth(text, Raised::not_logical).map_err(|_| text))

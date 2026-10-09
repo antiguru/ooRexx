@@ -483,6 +483,31 @@ list-index: true
 table-hasitem: true
 table-index: true
 
+# a user object whose STRING answers an object with no string value is
+# judged as .nil, as primitiveMakeString makes it
+truth
+.sn~new
+----
+if: 34.1
+when: 34.2
+while: 34.3
+until: 34.4
+not: 97.1
+and: 34.901
+list: 34.6
+if-compare: 34.1
+when-compare: 34.2
+while-compare: 34.3
+case: 34.905
+do-to: 34.901
+do-by: 34.901
+array-hasitem: 34.901
+array-index: 34.901
+list-hasitem: 34.901
+list-index: 34.901
+table-hasitem: 34.901
+table-index: 34.901
+
 # a user object is judged by what its STRING answers
 truth
 .sd~new
