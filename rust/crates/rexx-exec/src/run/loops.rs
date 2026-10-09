@@ -1472,6 +1472,11 @@ impl Interp {
             }
 
             let flow = self.run_bounded(code, body_start, end_index, source, engine)?;
+            // The pass boundary is an instruction of its own on the oracle
+            // (`END`, or the `ITERATE` that jumped to it), and the clock is
+            // stale after it (`RexxActivation.cpp:647`), so a loop with no
+            // body clause still reads a fresh `TIME('E')` per test.
+            self.activation_mut().clock_stale = true;
             match self.do_body_outcome(code, do_index, label, true, resume, flow)? {
                 DoOutcome::Escaped(escape) => return Ok(escape),
                 // **`END` is not reached at all when an `ITERATE` ended the
@@ -1935,6 +1940,9 @@ impl Interp {
                 }
             }
         }
+        // The clock is stale after the pass boundary, as `run_repeating`'s
+        // own store says.
+        self.activation_mut().clock_stale = true;
         // **`UNTIL`'s own test, and its own re-echo of the `DO`/`LOOP`
         // clause.** `run_repeating`'s own arm has the measurement: the oracle
         // re-enters the loop instruction to make this decision as much as to

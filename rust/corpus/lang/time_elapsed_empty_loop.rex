@@ -1,0 +1,17 @@
+/* A loop with no body clause still reads a fresh elapsed time on each
+   pass: the pass boundary is an instruction, and the clock is stale after it. */
+call time 'r'
+do while time('e') < 0.05
+end
+say 'while ended'
+call time 'r'
+do i = 1 while time('e') < 0.05
+end
+say 'controlled while ended' (i > 1)
+call time 'r'
+do until time('e') >= 0.05
+end
+say 'until ended'
+call time 'r'
+interpret "do while time('e') < 0.05; end"
+say 'interpret ended'

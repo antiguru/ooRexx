@@ -254,3 +254,7 @@ lang/notready_call_on_stdin_loop.rex
 # Task 6 fix round 3: a handler EXIT at an ITERATE pause leaves the method with
 # its loop closed; a method under debug prints its own banner.
 lang/debug_handler_exit_at_iterate.rex
+
+# Task 11a: deferred items. A loop with no body clause reads a fresh elapsed
+# time per pass.
+lang/time_elapsed_empty_loop.rex
