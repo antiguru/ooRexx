@@ -253,3 +253,18 @@ Commits `27cbe2510`, `da89562a3`, on the review's `## Fix round 1` and the rulin
   names the default run's unclosed accepted socket as the likely cause without having shown it.
 - `27cbe2510` also committed `progress.md` and `task-8-review.md`, which were modified in the tree
   when I staged by listing `git status`; their content is what the tree held.
+
+## Fix round 3
+
+Commit `1f7b73ac0`, on the review's `## Fix round 2`.
+
+- **I3.** `block=` is 0.001 to 86400 s (`BLOCK_FLOOR`), rejected at parse below the floor
+  (`block=0` and `block=0.0009` are in the test's wrong list), and the watcher sends at most one
+  signal per watched call: it waits `block=`, signals once if the call is still running, then waits
+  to be stopped. Test `quick_native_calls_at_the_smallest_bound_run_alike`: 50 `RxCalcSqrt` calls
+  under `sim:1,block=0.001`, each leaving its driver (50 exits), 20 runs with the same rc, stdout
+  and stderr.
+- **N3.** The `Knobs::block` doc, the `sim_blocked_native` constructor doc and its LIMIT row no
+  longer say "while another activity lives": the watch covers every native call that leaves its
+  driver, which in sim is every one outside a pin or a resume.
+- **N4.** The row lists a native call under a pin as unbounded, noting that the oracle hangs there too.

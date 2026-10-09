@@ -871,3 +871,12 @@ Callgrind against `0765d19ef` (`$S/cg4`, head4 = `da89562a3`, sha256
 Per-task check at `da89562a3`: `cargo fmt --all --check` exit 0; clippy exit 0; workspace debug
 test exit 0 (3098 passed, 0 failed, 4 ignored); gated corpus exit 0 (29 passed, 1 ignored;
 ir_recorded_oracle 21 passed).
+
+### Fix round 3
+
+Commit `1f7b73ac0`, sim code only (the `block=` parse and the watcher), so no perf run.
+`REXX_SWITCH_MODE=sim:1,block=0` exits 2 with `block is a number of seconds from 0.001 to 86400`.
+`quick_native_calls_at_the_smallest_bound_run_alike` (50 `RxCalcSqrt` calls that leave the driver,
+`block=0.001`, 20 runs alike) passed in 5 separate runs. Per-task check at `1f7b73ac0`: fmt exit 0;
+clippy exit 0; workspace debug test exit 0 (3099 passed, 0 failed, 4 ignored); gated corpus exit 0
+(29 passed, 1 ignored; ir_recorded_oracle 21 passed).
