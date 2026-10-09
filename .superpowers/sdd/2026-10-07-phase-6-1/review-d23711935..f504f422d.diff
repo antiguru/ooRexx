@@ -1,0 +1,2253 @@
+# Review package: d23711935..f504f422d
+
+## Commits
+f504f422d Phase 6.1 Task 9 fix round 1: report and gate record
+474e4bdb9 Phase 6.1 Task 9 fix round 1: loud replay divergence, linear invariant check
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-9-fix1-report.md | 155 ++++++++++
+ docs/superpowers/plans/phase-6-1-gate.md           |  31 ++
+ rust/corpus/refusal-dispositions.tsv               |   2 +
+ rust/corpus/refusal-sites.tsv                      |  94 +++---
+ rust/crates/rexx-exec/src/guards.rs                |  51 +++-
+ rust/crates/rexx-exec/src/lib.rs                   |   9 +-
+ rust/crates/rexx-exec/src/scheduler.rs             | 159 +++++++---
+ rust/crates/rexx-exec/src/sim.rs                   | 322 ++++++++++++++++-----
+ rust/crates/rexx-exec/src/sim/tests.rs             | 314 +++++++++++++++++++-
+ rust/crates/rexx-exec/tests/sim_processes.rs       |  35 +++
+ 10 files changed, 977 insertions(+), 195 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-9-fix1-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-9-fix1-report.md
+new file mode 100644
+index 000000000..ff6b04afa
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-9-fix1-report.md
+@@ -0,0 +1,155 @@
++# Task 9 fix round 1 report
++
++Base `d23711935`. Code commit `474e4bdb9`; this report and the gate record in the commit after it.
++Paths are under `rust/crates/rexx-exec/`, line numbers at `474e4bdb9`. Scratch:
++`/tmp/claude-1000/p61/t9f1/`.
++
++Test commands below run from `rust/` with `CARGO_TARGET_DIR=/tmp/claude-1000/p61/t9f1/target
++CARGO_INCREMENTAL=0 memcap 8G`.
++
++## I1: replay divergence is refused
++
++`Replaying` (`src/sim.rs:666`) takes the file's decisions in file order through one cursor, with
++the positions of the preemptions and collections indexed for the position-keyed checks:
++
++* `point` (`:715`), for a preemption at a contended step or a collection at an allocation: a
++  recorded point below the run's position is passed; a point equal to it that is not the file's
++  next decision is a kind mismatch; a floor preemption the file does not hold diverges.
++* `pick` (`:760`): the file's next decision must be a pick in range, else it diverges (another
++  kind, out of range, or the file exhausted).
++* `finish` (`:777`, from `sim_finish`): decisions left at the run's end diverge.
++* `diverge` (`:784`) builds the refusal once, `Loud::sim_replay_diverged` (`:1400`), raised at the
++  next boundary by `sim_breached` or at the run's end by `sim_finish` (`:1311`); `sim_is_stuck`
++  (`:1169`) ends the program's wait for its activities once a replay diverged. After a divergence
++  the run takes no decision from the file. Line format:
++  `rexx-exec: the replay of `FILE` diverged at decision N: the file holds `pick 999`, the run picks
++  from 0 to 2` (N counts from 1; `holds no more` past the end; the run `ends`, `preempts at
++  contended step S`, `collects at allocation A`, or `reaches contended step S without preempting at
++  P`). Exit 120.
++
++Header hash: the trace's first line is `CONFIG hash=H` (`sim_finish`), and `read_replay` (`:361`)
++refuses a header without it and a file whose decisions do not hash to `H`, before running. M3:
++`trace_hash` (`:474`) is now private and used by `read_replay`; its `pub use` in `lib.rs` is gone.
++
++Tests:
++
++* `sim::tests::a_replay_that_diverges_is_refused` (`src/sim/tests.rs:536`): DECIDING's
++  `sim:3,uniform:0.3` trace replayed on THREE_ACTIVITIES (another program: decision 4, `preempt 16`,
++  the run ends); `pick 999` in place of the first pick, rehashed (`picks from 0 to 2`); truncated
++  before the first pick, rehashed (`holds no more`); an extra trailing `preempt 999999`, rehashed
++  (`the run ends`); `pick 0` inserted first (kind: `preempts at contended step 3`); the first two
++  preemptions swapped (passed: `reaches contended step 8 without preempting at 3`). Each asserts
++  rc 120 and the whole stderr. The unedited file replays on its own program with rc 0.
++* `sim::tests::a_damaged_trace_is_refused_before_the_run` (`:628`): a changed header hash and a
++  header without one, each the exact `SimConfig::parse` error.
++* `tests/sim_processes.rs` `a_damaged_trace_is_refused_before_the_run` (`:104`): through
++  `rexx-run`, status 2, empty stdout, stderr `rexx-run: REXX_SWITCH_MODE: `FILE`: the decisions
++  hash to H, the header holds 0123456789abcdef`; the undamaged file replays to the recording's
++  stdout.
++* Same-program replay stays green: `a_recorded_trace_replays_to_the_same_output_and_hash` (now also
++  asserting the header line with its hash). The reviewer's 48 cross-process recordings (four
++  programs, six policies, seeds 3 and 11) re-run on the release binary of `474e4bdb9`
++  (`/tmp/claude-1000/p61/t9f1/rep.sh`): 48 of 48 match rc 0, stdout and trace hash.
++
++`cargo test -j 4 -p rexx-exec --lib sim::` 22 passed; `--test sim_processes` 3 passed.
++
++## I2: invariant check in one pass
++
++`check_invariants` (`src/scheduler.rs:1036`) builds `parked` (sleepers, message waiters, guard
++waits), `ready` (ready queue and set-aside) and `free` vectors indexed by handle, then checks each
++handle in O(1); `has_wake_source` and `holds_park_reason` are folded into it, their comments kept
++inline. The order of checks and every message is unchanged. `GuardTable::inconsistency`
++(`src/guards.rs:184`) was quadratic in a lock's waiters and is now linear (one set of queued
++`(waiter, key)` pairs); `GuardTable::waiters` (`:177`) feeds the guard waits to the pass.
++
++The reviewer's nine injected corruptions are permanent `Corruption` variants (`src/scheduler.rs:2532`,
++guard helpers `src/guards.rs:211-230`, `BatonReleased` re-takes the baton in `sim_uncorrupt`
++`:2668`) and rows of `each_invariant_is_refused_where_a_switch_finds_it_broken`
++(`src/sim/tests.rs:719`) beside the committed six: all fifteen fire with their own message, one
++line, rc 120; the unbroken run of each program ends normally.
++
++Scaling probe (`/tmp/claude-1000/p61/t9r/p1/many2.rex` with n set, release binaries, wall seconds,
++one run each, load average about 4 to 6; `/tmp/claude-1000/p61/t9f1/scale.sh`):
++
++| n | head2 `every` | head2 `sim:1,uniform:0.5` | fix1 `every` | fix1 `sim:1,uniform:0.5` |
++|---:|---:|---:|---:|---:|
++| 250 | 0.05 | 0.10 | 0.05 | 0.04 |
++| 500 | 0.08 | 0.48 | 0.08 | 0.09 |
++| 1000 | 0.10 | 3.07 | 0.09 | 0.13 |
++| 2000 | 0.11 | 20.66 | 0.12 | 0.35 |
++
++Per switch the check is linear in the handles, so the whole run is still O(n) per switch times the
++switches; 1000 to 2000 is 2.7x against head2's 6.7x.
++
++## M1: one refusal per violation
++
++`Sim::invariant_broken` (`src/sim.rs:879`): `sim_check_switch` (`:1344`) checks nothing after the
++first violation. The invariant test asserts `(120, "rexx-exec: the scheduler found X\n")` exactly.
++Mutation: deleting the early return reddens it on `ReadyTwice` with the line twice (run, then
++restored from a copy).
++
++## M2: trace file edges
++
++`nonempty_path` (`src/sim.rs:328`) refuses `trace=` and `replay=` with an empty path; a second
++`trace=` or `replay=` is refused; an item after a path item that is no item there is refused by
++`comma_in_path` (`:337`) naming the whole path, `` `replay=/tmp/c,d.txt`: a path may not contain a
++comma ``. The replay form parses its items before reading the file, so the refusal names the right
++file. A trace that cannot be written is `Loud::sim_trace_unwritten` (`:1405`) from `sim_finish`:
++rc 120 and `rexx-exec: the trace `PATH` could not be written: ERROR`.
++
++Tests: `a_trace_path_is_refused_where_it_cannot_be_the_file_meant` (`src/sim/tests.rs:154`, nine
++exact parse errors) and `a_trace_that_cannot_be_written_is_refused` (`:662`, rc, stdout and stderr).
++
++The two new `Loud` constructors have `LIMIT` rows in `corpus/refusal-dispositions.tsv`;
++`refusal-sites.tsv` re-derived (`REXX_REFUSAL_SITES_REFRESH=1 cargo test -p rexx-exec --test
++refusal_sites`: the two rows and line shifts), then `refusal_sites` 5 passed and
++`refusal_dispositions` 3 passed.
++
++## M4
++
++`pre_1_reaches_every_interleaving_over_a_seed_range` (`src/sim/tests.rs:397`): seeds 1 to 40 under
++`pre:1,k=3`, the set of outputs equals the three interleavings exactly.
++
++## I3: perf record
++
++Gate record `docs/superpowers/plans/phase-6-1-gate.md`, `## Task 9`, `### Fix round 1`. base61's
++sha256 matches `## Task 1`. Command:
++
++```
++memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 6 -o /tmp/claude-1000/p61/t9f1/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base=/tmp/claude-1000/p61/t9/perf/bin/base/rexx-run head2=/tmp/claude-1000/p61/t9/perf/bin/head2/rexx-run fix1=/tmp/claude-1000/p61/t9f1/bin/head/rexx-run base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run
++```
++
++Exit 0, spreads at most 0.0017%. Against base61:
++
++| program | base % | head2 % | fix1 (running total) % | fix1 vs head2 % |
++|---|---:|---:|---:|---:|
++| pingmsg | -0.4541 | -0.2545 | -0.2545 | +0.0000 |
++| pingguard | -0.5914 | -0.3665 | -0.3661 | +0.0004 |
++| pingsem | -0.4358 | -0.2494 | -0.2485 | +0.0009 |
++| alloc | -0.2804 | +0.0738 | +0.0738 | +0.0000 |
++| alloc4c | -0.8796 | -0.8139 | -0.8139 | -0.0000 |
++| heapshape | +1.0265 | +1.1558 | **+1.1558** | -0.0000 |
++| rexxcps | +0.0230 | +0.0924 | +0.0924 | -0.0000 |
++| emptyloop | -0.3191 | -0.3191 | -0.3191 | -0.0000 |
++
++heapshape is over the +0.5% budget, as reviewed; not addressed here (bisect and ruling elsewhere).
++
++## Per-task check at `474e4bdb9`
++
++* `cargo fmt --all --check`: exit 0.
++* `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`: exit 0.
++* `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0, 3110 passed, 0 failed, 4 ignored
++  (`/tmp/claude-1000/p61/t9f1/ws.txt`).
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test
++  ir_recorded_oracle`: exit 0, corpus 29 passed 1 ignored, ir_recorded_oracle 21 passed.
++
++## Concerns
++
++1. A trace truncated at a line boundary and given a matching hash, where the dropped decisions are
++   all position-keyed (preemptions, collections) and no pick follows, replays without refusal: the
++   file does not record how many contended steps or allocations the run had. Run: DECIDING's
++   `sim:3,uniform:0.3` trace (51 decisions) cut to its first 10, the last pick plus one preemption,
++   rehashed: the replay exits 0 with the recording's stdout and prints a different `trace=` hash
++   (`/tmp/claude-1000/p61/t9f1/trunc/`). Any truncation without a rehash is refused by the header
++   hash.
++2. heapshape stays +1.16% over the 6.1 base (I3), pending the bisect and Moritz's ruling.
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index a4e548b0e..db96d7949 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -936,10 +936,41 @@ its own figures and was not timed.
+ 
+ ### Per-task check
+ 
+ At `60f21ad1b`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 --workspace
+ --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
+ (3105 passed, 0 failed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
+ --test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle
+ 21 passed); `refusal_sites` 5 passed and `refusal_dispositions` 3 passed after
+ `REXX_REFUSAL_SITES_REFRESH=1`. At `296cac74f`: fmt and clippy exit 0, the `sim::` and `uniform_1`
+ lib tests 19 passed.
++
++### Fix round 1: running totals against the 6.1 base
++
++Commit `474e4bdb9`. `fix1` built as above from `git archive 474e4bdb9 rust interpreter` in
++`/tmp/claude-1000/p61/t9f1/target-head`, one `Compiling rexx-exec` line. `base61` is Task 1's base
++binary (`e6af1198b`), its sha256 matching the `## Task 1` table.
++
++| binary | source | sha256 |
++|---|---|---|
++| fix1 | `474e4bdb9` | `cbc6aa343be07ff75e914daef4e0055f7ccd6de23ac943845204d18194d472ca` |
++| base61 | `e6af1198b` | `2ea19b3ea2875fada8718eaf5b89f828d5ae07587a74feaf9b34681c879c891e` |
++
++```
++memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 6 -o /tmp/claude-1000/p61/t9f1/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base=/tmp/claude-1000/p61/t9/perf/bin/base/rexx-run head2=/tmp/claude-1000/p61/t9/perf/bin/head2/rexx-run fix1=/tmp/claude-1000/p61/t9f1/bin/head/rexx-run base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run
++```
++
++Exit 0, every spread at most 0.0017%. Percentages are against base61 except the last column.
++
++| program | base (Tasks 1-8) % | head2 % | fix1 (running total) % | fix1 vs head2 % | verdict |
++|---|---:|---:|---:|---:|---|
++| pingmsg | -0.4541 | -0.2545 | -0.2545 | +0.0000 | inside |
++| pingguard | -0.5914 | -0.3665 | -0.3661 | +0.0004 | inside |
++| pingsem | -0.4358 | -0.2494 | -0.2485 | +0.0009 | inside |
++| alloc | -0.2804 | +0.0738 | +0.0738 | +0.0000 | inside |
++| alloc4c | -0.8796 | -0.8139 | -0.8139 | -0.0000 | inside |
++| heapshape | +1.0265 | +1.1558 | +1.1558 | -0.0000 | **over** |
++| rexxcps | +0.0230 | +0.0924 | +0.0924 | -0.0000 | inside |
++| emptyloop | -0.3191 | -0.3191 | -0.3191 | -0.0000 | inside |
++
++heapshape is +1.16% against the 6.1 base, +1.03% of it present before Task 9 (base, `6358ca7a6`).
++It is being bisected separately and goes to Moritz for a ruling; this round does not change it.
+diff --git a/rust/corpus/refusal-dispositions.tsv b/rust/corpus/refusal-dispositions.tsv
+index 09f1975fe..0387828a2 100644
+--- a/rust/corpus/refusal-dispositions.tsv
++++ b/rust/corpus/refusal-dispositions.tsv
+@@ -50,15 +50,17 @@ parse_trigger_operand	GUARD	-	parser guarantee: a PARSE trigger that needs an op
+ receiver_class	DEVIATION	-	oracle-crashes.txt entry 33 and Deviation 28: a primitive's native method run on an object of another class crashes the oracle or answers an accident of memory; Task 4 probes b2_run_*_on_inst, Task 7 probes rc2, rc3
+ register_not_logical	GUARD	-	compiler invariant: a branch reads a register holding a logical (census d-guard)
+ scheduler_inconsistency	GUARD	-	scheduler invariant (refusal-sites.tsv: guarded_getter_waits_for_reply.rex agrees)
+ select_op_off_its_node	GUARD	-	compiler invariant: a SELECT op names its own SELECT (census d-guard)
+ setup_method	GUARD	-	scout A b15: b_define_class_method_setup, b_inherit_instance_methods are 97.1 on both engines
+ signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNAL's form (census d-guard)
+ sim_blocked_command	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (a wait only a command's peer can end is refused in sim): a command runs on the baton under a real-time bound, block= (2 s by default), and any command slower than it is refused, whether it waits on another activity or is only slow; timing-dependent by nature, and block= is how a program with slow commands runs under sim
+ sim_blocked_native	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (a wait only a native's own thread or a peer can end is refused in sim): a native call that leaves its driver runs on the baton under block=, past which the interpreter's thread is signalled once and the call refused once it returns; any such call slower than the bound is refused, timing-dependent by nature; a native that retries on EINTR or blocks outside a system call stays unbounded, and so does a native call under a pin, which does not leave its driver (it hangs on the oracle too)
+ sim_endless_wait	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: a deadlock in the simulation mode is a loud refusal; virtual time cannot end a wait only a real signal can
+ sim_foreign_post	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: any inbox post other than a signal's halt, and a callback from a thread running none of the interpreter's native calls, is a determinism breach, refused loudly
++sim_replay_diverged	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (trace and replay): a replay takes the trace's decisions in order, and one the run takes otherwise (another program, a damaged or edited file) is refused rather than run on a schedule the trace does not hold
++sim_trace_unwritten	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (trace and replay): a run asked for a decision trace that it cannot write fails, so a harness that checks the status learns it has none
+ stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
+ store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
+ unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probes rc4 (a Method copy refuses at COPY first); the rest are handles whose object is gone or kinds receiver_kind has no arm for
+ unreadable_collection	GUARD	-	scout A b18: env_supplier; with no owner it is a directory holding an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
+ unsatisfiable_wait	LIMIT	-	Deviation 20 (rulings P27, P65, P77)
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index b84739484..e3c1b829c 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -81,174 +81,174 @@ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	o
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1813	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:587	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:585	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1197	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+-Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:453	off-send-surface	-	-	-
++Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:451	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:800	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:724	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:733	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:798	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:731	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1542	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:808	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:806	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:691	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:689	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:735	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:596	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:566	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:594	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:564	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1807	off-send-surface	-	-	-
+-Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:555	off-send-surface	-	-	-
++Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:553	off-send-surface	-	-	-
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1748	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:673	off-send-surface	-	-	-
+-Loud	expression	body	crates/rexx-exec/src/lib.rs:445	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:671	off-send-surface	-	-	-
++Loud	expression	body	crates/rexx-exec/src/lib.rs:443	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1855	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1753	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:844	off-send-surface	-	-	-
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:842	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1147	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+-Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:392	off-send-surface	-	-	-
++Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:390	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+-Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:479	off-send-surface	-	-	-
++Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:477	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:832	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:750	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:830	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:748	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:620	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:652	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:618	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:650	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:774	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:772	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1516	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1678	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1248	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1115	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1694	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:716	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:714	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1262	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1476	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1469	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+-Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:488	off-send-surface	-	-	-
++Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:486	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1327	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1337	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1275	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1453	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1421	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1402	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1350	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1279	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1300	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:575	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:573	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1523	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1180	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1619	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1553	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1564	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1573	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1083	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1733	off-send-surface	-	-	-
+ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1606	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:681	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:643	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:679	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:641	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:742	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:540	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:630	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:538	off-send-surface	-	-	-
++Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:628	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:708	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:706	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -265,65 +265,67 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:493	off-send-surface	-	-	-
+ Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+ Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+-Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:504	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
++Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:502	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+-Loud	redirection	body	crates/rexx-exec/src/lib.rs:529	off-send-surface	-	-	-
++Loud	redirection	body	crates/rexx-exec/src/lib.rs:527	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:758	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1785	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:824	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:822	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1213	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1219	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:766	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:662	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:783	off-send-surface	-	-	-
+-Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1212	off-send-surface	-	-	-
+-Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1223	off-send-surface	-	-	-
+-Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1233	off-send-surface	-	-	-
+-Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1201	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:660	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:781	off-send-surface	-	-	-
++Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1378	off-send-surface	-	-	-
++Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1389	off-send-surface	-	-	-
++Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1415	off-send-surface	-	-	-
++Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1367	off-send-surface	-	-	-
++Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1400	off-send-surface	-	-	-
++Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:700	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:698	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:792	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:790	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
+-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:519	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:611	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+-Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:462	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:816	off-send-surface	-	-	-
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:517	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:609	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:460	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:814	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/guards.rs b/rust/crates/rexx-exec/src/guards.rs
+index ce2b37247..c703cafc4 100644
+--- a/rust/crates/rexx-exec/src/guards.rs
++++ b/rust/crates/rexx-exec/src/guards.rs
+@@ -11,21 +11,21 @@
+ 
+ //! The guard locks: per object and method scope, the owning activity, its
+ //! nesting count and the activities waiting, served FIFO
+ //! (`VariableDictionary::reserve`/`release`/`transfer`,
+ //! `execution/VariableDictionary.cpp:522-617`).
+ 
+ use std::collections::VecDeque;
+ use std::collections::hash_map::Entry;
+ 
+ use rexx_core::ObjRef;
+-use rustc_hash::FxHashMap;
++use rustc_hash::{FxHashMap, FxHashSet};
+ 
+ use crate::Interp;
+ use crate::activation::{Activation, ActivationId};
+ use crate::error::{Failure, Raised};
+ use crate::scheduler::{ActivityId, MessageId, ParkReason, Scheduler};
+ 
+ /// One object's variable pool for one scope: what a guard lock covers.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+ pub(crate) struct GuardKey {
+     pub(crate) object: ObjRef,
+@@ -166,51 +166,82 @@ impl GuardTable {
+     }
+ 
+     pub(crate) fn set_waiting(&mut self, activity: ActivityId, waiting: Waiting) {
+         self.waiting.insert(activity, waiting);
+     }
+ 
+     pub(crate) fn waiting(&self, activity: ActivityId) -> Option<Waiting> {
+         self.waiting.get(&activity).copied()
+     }
+ 
++    /// Every activity with a wait recorded, on a guard or a message.
++    pub(crate) fn waiters(&self) -> impl Iterator<Item = ActivityId> + '_ {
++        self.waiting.keys().copied()
++    }
++
+     /// The first way the locks and the waits recorded disagree, where
+-    /// `alive` answers which handles name an activity.
++    /// `alive` answers which handles name an activity. Linear in the locks
++    /// and the waits.
+     pub(crate) fn inconsistency(&self, alive: impl Fn(ActivityId) -> bool) -> Option<&'static str> {
++        let mut queued = FxHashSet::default();
+         for (key, lock) in &self.locks {
+             if !alive(lock.owner) {
+                 return Some("a guard held by no activity");
+             }
+-            for (at, waiter) in lock.waiters.iter().enumerate() {
+-                if *waiter == lock.owner || lock.waiters.iter().take(at).any(|w| w == waiter) {
++            for waiter in &lock.waiters {
++                if *waiter == lock.owner || !queued.insert((*waiter, *key)) {
+                     return Some("a guard waiter queued twice or behind itself");
+                 }
+                 if self.waiting.get(waiter) != Some(&Waiting::Guard(*key)) {
+                     return Some("a guard waiter with no wait recorded for its guard");
+                 }
+             }
+         }
+-        let queued = |activity: &ActivityId, key: &GuardKey| {
+-            self.locks
+-                .get(key)
+-                .is_some_and(|lock| lock.waiters.contains(activity))
+-        };
+         for (activity, waiting) in &self.waiting {
+             if let Waiting::Guard(key) = waiting
+-                && !queued(activity, key)
++                && !queued.contains(&(*activity, *key))
+             {
+                 return Some("a guard wait missing from its guard's queue");
+             }
+         }
+         None
+     }
+ 
++    /// Sets the first lock's owner to `owner`, if there is a lock.
++    #[cfg(test)]
++    pub(crate) fn corrupt_owner(&mut self, owner: ActivityId) -> bool {
++        let lock = self.locks.values_mut().next();
++        lock.map(|lock| lock.owner = owner).is_some()
++    }
++
++    /// Queues the first waiter of the first lock with one again.
++    #[cfg(test)]
++    pub(crate) fn corrupt_queue_twice(&mut self) -> bool {
++        let lock = self
++            .locks
++            .values_mut()
++            .find(|lock| !lock.waiters.is_empty());
++        lock.map(|lock| lock.waiters.push_back(lock.waiters[0]))
++            .is_some()
++    }
++
++    /// Takes the first waiter of the first lock with one off its queue,
++    /// keeping its wait record.
++    #[cfg(test)]
++    pub(crate) fn corrupt_unqueue(&mut self) -> bool {
++        let lock = self
++            .locks
++            .values_mut()
++            .find(|lock| !lock.waiters.is_empty());
++        lock.map(|lock| lock.waiters.pop_front()).is_some()
++    }
++
+     /// The first activity queued for a guard, if any.
+     #[cfg(test)]
+     pub(crate) fn first_queued(&self) -> Option<ActivityId> {
+         self.locks
+             .values()
+             .find_map(|lock| lock.waiters.front().copied())
+     }
+ 
+     /// Ends `activity`'s wait: its record, and its place in a lock's queue.
+     pub(crate) fn withdraw(&mut self, activity: ActivityId) {
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 8274dafc1..ca67c05b2 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -57,23 +57,21 @@ mod stem;
+ // `PULL`/`PARSE PULL` read back.
+ mod queue;
+ use queue::Queue;
+ 
+ // What a command line supplies to a top-level program: the one argument string
+ // it can carry, how a list of words becomes that string, and where `.input`
+ // reads from.
+ mod invocation;
+ pub use invocation::{Invocation, ProgramInput, Sinks, SwitchMode, join_command_line};
+ pub use rexx_core::FrameBlock;
+-pub use sim::{
+-    ClockOrigin, Decision, Knobs, Order, Policy, Replay, SimConfig, SimReport, trace_hash,
+-};
++pub use sim::{ClockOrigin, Decision, Knobs, Order, Policy, Replay, SimConfig, SimReport};
+ 
+ // `.input`: one line position, shared by every construct that reads a line,
+ // and the queue-first rule `PULL` follows on top of it.
+ mod input;
+ use input::Input;
+ 
+ // The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the
+ // plan cache, and the full name-resolution order (plan, then `extra`, then
+ // growth).
+ mod plan;
+@@ -3494,23 +3492,21 @@ fn execute_on(
+     report_late_failures(&mut interp, started, path, &mut exit_code);
+ 
+     // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached
+     // from `Interpreter::terminateInterpreter` (`runtime/Interpreter.cpp:279`)
+     // -- after everything the program and its activities do, and reached
+     // whatever the program's own outcome was. Measured, oracle: a program
+     // whose main body raises 42.3 still prints its class `UNINIT` and exits
+     // 214, and one ending `exit 7` prints it and exits 7.
+     // An activity those `UNINIT`s start is not waited for (ruling P39).
+     refused.extend(interp.terminate());
+-    if let Err(Failure::Loud(loud)) = interp.sim_breached() {
+-        refused.push(*loud);
+-    }
++    refused.extend(interp.sim_finish());
+     for loud in refused {
+         interp
+             .trace
+             .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+         exit_code = NOT_IMPLEMENTED_EXIT;
+     }
+ 
+     // **The one place a deadline becomes an answer**, below everything that
+     // runs clauses, so that a run abandoned part-way cannot report the status
+     // its main body happened to reach. It is here rather than in the three
+@@ -3521,21 +3517,20 @@ fn execute_on(
+     // check itself set, not the clock, so a run that finished inside its bound
+     // is untouched however narrow the margin was.
+     if interp.deadline_expired() {
+         interp.trace.extend_from_slice(DEADLINE_REPORT);
+         exit_code = DEADLINE_EXIT;
+     }
+ 
+     // Read after the activities above, so a collection or a refused chunk
+     // inside one is counted: `run_program_collect_every_alloc` decides that its
+     // mode ran from `collections`.
+-    interp.sim_write_trace();
+     let stack = interp.stack_span();
+     let collections = interp.heap.collections_performed() - interp.collections_before_program;
+     let chunks_refused = interp.chunks_refused;
+     #[cfg(test)]
+     crate::dispatch::library::note_callback_takes(interp.baton.takes());
+     #[cfg(test)]
+     crate::scheduler::note_abandoned_held(&interp.activities);
+ 
+     let outcome = Outcome {
+         exit_code,
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index 81540ad38..89e820a23 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -1024,21 +1024,22 @@ impl Interp {
+         }
+         if self.sim.is_some() {
+             self.sim_check_switch();
+         }
+     }
+ 
+     /// The scheduler's invariants (spec 2026-10-07 section 4), which the
+     /// simulation mode checks at every switch: this thread holds the baton;
+     /// each activity is running, ready, parked or finished, and one only; a
+     /// ready activity holds no park reason and a parked one has a wake
+-    /// source; the guard queues agree with the waits recorded.
++    /// source; the guard queues agree with the waits recorded. One pass over
++    /// the table's queues marks each handle, then each handle is checked.
+     pub(crate) fn check_invariants(&self) -> Result<(), Loud> {
+         let fail = |what| Err(Loud::scheduler_inconsistency(what));
+         #[cfg(test)]
+         let held = self.baton.held_here() && !BATON_ELSEWHERE.with(std::cell::Cell::get);
+         #[cfg(not(test))]
+         let held = self.baton.held_here();
+         if !held {
+             return fail("a switch on a thread not holding the baton");
+         }
+         let table = &self.activities;
+@@ -1047,94 +1048,97 @@ impl Interp {
+             |activity: ActivityId| matches!(table.idle.get(activity.index()), Some(Some(_)));
+         if filed(running) {
+             return fail("a running activity filed as idle");
+         }
+         if let Some(what) = table
+             .guards
+             .inconsistency(|activity| activity == running || filed(activity))
+         {
+             return fail(what);
+         }
+-        let readied: Vec<ActivityId> = (table.ready.iter().copied())
+-            .chain(table.set_aside.iter().map(|(activity, _)| *activity))
+-            .collect();
+-        for (at, &activity) in readied.iter().enumerate() {
++        let handles = table.idle.len();
++        // A sleeper, a message's waiter or a guard's waiter; a `GUARD WHEN`
++        // is the other park reason, kept on the activity's own record.
++        let mut parked = vec![false; handles];
++        let sleepers = table
++            .sleepers
++            .iter()
++            .map(|Reverse((_, _, sleeper))| *sleeper);
++        let waiters = table.waiters.values().flatten().copied();
++        for activity in sleepers.chain(waiters).chain(table.guards.waiters()) {
++            if let Some(mark) = parked.get_mut(activity.index()) {
++                *mark = true;
++            }
++        }
++        let when_parked = |activity: ActivityId| {
++            matches!(
++                table.idle.get(activity.index()),
++                Some(Some(idle)) if idle.activity.when_parked
++            )
++        };
++        let mut ready = vec![false; handles];
++        let readied = (table.ready.iter().copied())
++            .chain(table.set_aside.iter().map(|(activity, _)| *activity));
++        for activity in readied {
+             if activity == running {
+                 return fail("an activity both running and ready");
+             }
+-            if readied[..at].contains(&activity) {
++            if ready.get(activity.index()) == Some(&true) {
+                 return fail("an activity ready twice");
+             }
+             if !filed(activity) {
+                 return fail("a ready handle naming no idle activity");
+             }
+-            if self.holds_park_reason(activity) {
++            if parked[activity.index()] || when_parked(activity) {
+                 return fail("a ready activity holding a park reason");
+             }
++            ready[activity.index()] = true;
++        }
++        let mut free = vec![false; handles];
++        for &handle in &table.free {
++            if let Some(mark) = free.get_mut(handle as usize) {
++                *mark = true;
++            }
+         }
+         for (index, slot) in table.idle.iter().enumerate() {
+             let activity = ActivityId(u32::try_from(index).expect("handles fit u32"));
+-            let free = table.free.contains(&activity.0);
+             match slot {
+                 _ if activity == running => {
+-                    if free {
++                    if free[index] {
+                         return fail("a running activity's handle free");
+                     }
+                 }
+-                None if !free => return fail("a handle neither free nor filed"),
++                None if !free[index] => return fail("a handle neither free nor filed"),
+                 None => {}
+-                Some(_) if free => return fail("a free handle naming an activity"),
++                Some(_) if free[index] => return fail("a free handle naming an activity"),
+                 Some(idle) => {
++                    let record = &idle.activity;
+                     let finished =
+-                        idle.activity.root_end.is_some() || activity == MAIN && table.main_finished;
+-                    if !readied.contains(&activity)
+-                        && !finished
+-                        && !self.has_wake_source(activity, &idle.activity)
+-                    {
++                        record.root_end.is_some() || activity == MAIN && table.main_finished;
++                    // A deadline, a post (a message's completion, a
++                    // semaphore's post or release, a native call's or a
++                    // command's end) or a guard (its release, a store a
++                    // `GUARD WHEN` watches); a halt ends each of these.
++                    let wakes = parked[index]
++                        || record.when_parked
++                        || table.semaphores.queues(activity)
++                        || record.native_call.is_some()
++                        || record.blocked.is_some();
++                    if !ready[index] && !finished && !wakes {
+                         return fail("a parked activity with no wake source");
+                     }
+                 }
+             }
+         }
+         Ok(())
+     }
+ 
+-    /// Whether `activity`, not running, is still recorded as waiting: a
+-    /// sleeper, a message's waiter, a guard's waiter or a `GUARD WHEN`.
+-    fn holds_park_reason(&self, activity: ActivityId) -> bool {
+-        let table = &self.activities;
+-        table
+-            .sleepers
+-            .iter()
+-            .any(|Reverse((_, _, sleeper))| *sleeper == activity)
+-            || table
+-                .waiters
+-                .values()
+-                .any(|waiters| waiters.contains(&activity))
+-            || table.guards.waiting(activity).is_some()
+-            || matches!(
+-                table.idle.get(activity.index()),
+-                Some(Some(idle)) if idle.activity.when_parked
+-            )
+-    }
+-
+-    /// Whether something can wake `activity`, parked with `record`: a
+-    /// deadline, a post (a message's completion, a semaphore's post or
+-    /// release, a native call's or a command's end), a guard (its release,
+-    /// a store a `GUARD WHEN` watches), or a halt, which ends each of these.
+-    fn has_wake_source(&self, activity: ActivityId, record: &Activity) -> bool {
+-        self.holds_park_reason(activity)
+-            || self.activities.semaphores.queues(activity)
+-            || record.native_call.is_some()
+-            || record.blocked.is_some()
+-    }
+-
+     /// Runs other activities until the running one, parked, is woken. The
+     /// failure, where nothing left to run can wake it or another activity
+     /// failed with something that is not a condition, is the one its wait
+     /// answers.
+     pub(crate) fn wait_until_woken(&mut self) -> Option<Failure> {
+         #[cfg(test)]
+         if self.activity.native_call.is_some() && std::mem::take(&mut self.fail_native_wait) {
+             self.cancel_wait();
+             return Some(Raised::insufficient_stack().into());
+         }
+@@ -2531,27 +2535,46 @@ pub(crate) enum Corruption {
+     /// The running activity queued.
+     RunningReady,
+     /// The first ready activity recorded as a message's waiter.
+     ReadyParked,
+     /// A sleeper taken off the sleepers, readied by nothing.
+     NoWakeSource,
+     /// A guard waiter's wait record dropped.
+     GuardQueue,
+     /// The baton read as held by another thread.
+     Baton,
++    /// A handle past the table's end queued as ready.
++    BogusReady,
++    /// A handle neither free nor naming an activity.
++    UnfiledHandle,
++    /// The first ready activity's handle also freed.
++    FreeFiled,
++    /// The running activity's handle freed.
++    RunningFree,
++    /// The first ready activity's record moved into the running slot.
++    RunningFiled,
++    /// A lock's owner set to a handle naming no activity.
++    GuardOwnerDead,
++    /// A lock's first waiter queued again.
++    GuardWaiterTwice,
++    /// A lock's first waiter taken off its queue, its wait record kept.
++    GuardWaitUnqueued,
++    /// The baton released for the check, and taken again after it.
++    BatonReleased,
+ }
+ 
+ #[cfg(test)]
+ thread_local! {
+     pub(crate) static CORRUPTION: std::cell::Cell<Option<Corruption>> =
+         const { std::cell::Cell::new(None) };
+     static BATON_ELSEWHERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++    static BATON_RELEASED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+ }
+ 
+ #[cfg(test)]
+ impl Interp {
+     /// Applies the [`Corruption`] this thread asked for, once the run has a
+     /// state it applies to.
+     pub(crate) fn sim_corrupt(&mut self) {
+         let Some(corruption) = CORRUPTION.with(std::cell::Cell::take) else {
+             return;
+         };
+@@ -2592,26 +2615,68 @@ impl Interp {
+                 Some(waiter) => {
+                     table.guards.woken(waiter);
+                     true
+                 }
+                 None => false,
+             },
+             (Corruption::Baton, _) => {
+                 BATON_ELSEWHERE.with(|elsewhere| elsewhere.set(true));
+                 true
+             }
+-            (Corruption::ReadyTwice | Corruption::ReadyParked, None) => false,
++            (Corruption::BogusReady, _) => {
++                table.ready.push_back(ActivityId(9999));
++                true
++            }
++            (Corruption::UnfiledHandle, _) => {
++                table.idle.push(None);
++                true
++            }
++            (Corruption::FreeFiled, Some(first)) => {
++                table.free.push(first.0);
++                true
++            }
++            (Corruption::RunningFree, _) => {
++                table.free.push(running.0);
++                true
++            }
++            (Corruption::RunningFiled, Some(first)) => {
++                let moved = table.idle[first.index()].take();
++                table.idle[running.index()] = moved;
++                true
++            }
++            (Corruption::GuardOwnerDead, _) => table.guards.corrupt_owner(ActivityId(9999)),
++            (Corruption::GuardWaiterTwice, _) => table.guards.corrupt_queue_twice(),
++            (Corruption::GuardWaitUnqueued, _) => table.guards.corrupt_unqueue(),
++            (Corruption::BatonReleased, _) => {
++                self.baton.release();
++                BATON_RELEASED.with(|released| released.set(true));
++                true
++            }
++            (
++                Corruption::ReadyTwice
++                | Corruption::ReadyParked
++                | Corruption::FreeFiled
++                | Corruption::RunningFiled,
++                None,
++            ) => false,
+         };
+         if !applied {
+             CORRUPTION.with(|asked| asked.set(Some(corruption)));
+         }
+     }
++
++    /// Takes the baton back where [`Corruption::BatonReleased`] released it.
++    pub(crate) fn sim_uncorrupt(&self) {
++        if BATON_RELEASED.with(std::cell::Cell::take) {
++            self.baton.acquire();
++        }
++    }
+ }
+ 
+ #[cfg(test)]
+ thread_local! {
+     static SCRIPT: std::cell::RefCell<std::collections::VecDeque<Scripted>> =
+         const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
+ }
+ 
+ /// Queues `outcomes` for the next `Op::Exec` instructions this thread runs.
+ #[cfg(test)]
+diff --git a/rust/crates/rexx-exec/src/sim.rs b/rust/crates/rexx-exec/src/sim.rs
+index 416c4a7ab..1832dda56 100644
+--- a/rust/crates/rexx-exec/src/sim.rs
++++ b/rust/crates/rexx-exec/src/sim.rs
+@@ -159,21 +159,22 @@ pub enum ClockOrigin {
+ #[derive(Clone, Copy, Debug, PartialEq)]
+ pub struct SimReport {
+     pub seed: u64,
+     pub policy: Policy,
+     /// The clause boundaries counted.
+     pub steps: u64,
+     /// The contended steps among them.
+     pub contended: u64,
+     /// The switches from one activity to another.
+     pub switches: u64,
+-    /// [`trace_hash`] of the decisions the run took.
++    /// The hash of the decisions the run took, FNV-1a over each one's tag
++    /// byte and its value's eight bytes, little endian.
+     pub trace_hash: Option<u64>,
+ }
+ 
+ impl SimConfig {
+     /// Reads `sim`, `sim:SEED[,item...]` or `sim:replay=FILE[,trace=FILE]`;
+     /// `sim` alone takes its seed from the clock. A path holds no comma.
+     pub fn parse(text: &str) -> Result<SimConfig, String> {
+         let mut config = SimConfig {
+             seed: 0,
+             policy: Policy::Fifo,
+@@ -192,33 +193,45 @@ impl SimConfig {
+         if text == "sim" {
+             config.seed = clock_seed();
+             return Ok(config);
+         }
+         let Some(rest) = text.strip_prefix("sim:") else {
+             return Err(format!("`{text}` is not `sim` or `sim:SEED[,...]`"));
+         };
+         let mut items = rest.split(',');
+         let first = items.next().unwrap_or_default();
+         if let Some(path) = first.strip_prefix("replay=") {
+-            config = read_replay(Path::new(path))?;
++            let replay = nonempty_path(first, path)?;
++            let mut trace = None;
++            let mut previous = first;
+             for item in items {
++                if item.starts_with("replay=") {
++                    return Err(format!("`{item}`: a second `replay=`"));
++                }
+                 let Some(path) = item.strip_prefix("trace=") else {
+-                    return Err(format!("`{item}`: a replay takes `trace=FILE` alone"));
++                    return Err(comma_in_path(previous, item));
+                 };
+-                config.trace = Some(PathBuf::from(path));
++                if trace.is_some() {
++                    return Err(format!("`{item}`: a second `trace=`"));
++                }
++                trace = Some(nonempty_path(item, path)?);
++                previous = item;
+             }
++            config = read_replay(&replay)?;
++            config.trace = trace;
+             return Ok(config);
+         }
+         config.seed = first
+             .parse()
+             .map_err(|_| format!("`{first}` is not a seed: a whole number below 2**64"))?;
+         let mut items = items.peekable();
++        let mut previous = first;
+         while let Some(item) = items.next() {
+             let knobs = &mut config.knobs;
+             if item == "fifo" {
+                 config.policy = Policy::Fifo;
+             } else if let Some(d) = item.strip_prefix("pre:") {
+                 let (d, k) = depth_and_steps(item, d, items.next())?;
+                 config.policy = Policy::Pre { d, k };
+             } else if let Some(d) = item.strip_prefix("pct:") {
+                 let (d, k) = depth_and_steps(item, d, items.next())?;
+                 config.policy = Policy::Pct { d, k };
+@@ -245,28 +258,34 @@ impl SimConfig {
+                         format!(
+                             "`{item}`: block is a number of seconds from {BLOCK_FLOOR} to \
+                              {BLOCK_LIMIT}"
+                         )
+                     })?;
+             } else if item == "clock=midnight" {
+                 knobs.clock = ClockOrigin::Midnight;
+             } else if item == "clock=real" {
+                 knobs.clock = ClockOrigin::Real;
+             } else if let Some(path) = item.strip_prefix("trace=") {
+-                config.trace = Some(PathBuf::from(path));
++                if config.trace.is_some() {
++                    return Err(format!("`{item}`: a second `trace=`"));
++                }
++                config.trace = Some(nonempty_path(item, path)?);
++            } else if previous.starts_with("trace=") {
++                return Err(comma_in_path(previous, item));
+             } else {
+                 return Err(format!(
+                     "`{item}` is not a policy (`fifo`, `pre:D,k=N`, `uniform:P`, `pct:D,k=N`) \
+                      or a knob (`order=fifo`, `gc=Q`, `halt@K`, `fail=wait:K`, `block=S`, \
+                      `floor=F`, `clock=midnight`, `clock=real`, `trace=FILE`)"
+                 ));
+             }
++            previous = item;
+         }
+         Ok(config)
+     }
+ 
+     /// The configuration a child `rexx` runs under: `seed`, this policy, and
+     /// the knobs that are not scripted against this run's own clauses or
+     /// files.
+     fn child(&self, seed: u64) -> SimConfig {
+         SimConfig {
+             seed,
+@@ -298,64 +317,95 @@ fn depth_and_steps(item: &str, d: &str, next: Option<&str>) -> Result<(u32, u64)
+         .parse()
+         .ok()
+         .filter(|d| *d > 0)
+         .ok_or_else(|| format!("`{item}`: a depth from 1"))?;
+     let Some(k) = next.and_then(|next| next.strip_prefix("k=")) else {
+         return Err(format!("`{item}` needs `k=N` after it"));
+     };
+     Ok((d, count(item, k)?))
+ }
+ 
++/// The path of `trace=FILE` or `replay=FILE`, refused where empty.
++fn nonempty_path(item: &str, path: &str) -> Result<PathBuf, String> {
++    if path.is_empty() {
++        return Err(format!("`{item}`: an empty path"));
++    }
++    Ok(PathBuf::from(path))
++}
++
++/// The refusal of `item`, which follows the path item `path_item` and is no
++/// item there: the path's tail, cut at a comma.
++fn comma_in_path(path_item: &str, item: &str) -> String {
++    format!("`{path_item},{item}`: a path may not contain a comma")
++}
++
+ /// A probability from 0 to 1.
+ fn probability(item: &str, p: &str) -> Result<f64, String> {
+     p.parse()
+         .ok()
+         .filter(|p| (0.0..=1.0).contains(p))
+         .ok_or_else(|| format!("`{item}`: a probability from 0 to 1"))
+ }
+ 
+ /// `K` of `halt@K`, `fail=wait:K`, `floor=F` or `k=N`, counting from 1.
+ fn count(item: &str, k: &str) -> Result<u64, String> {
+     k.parse()
+         .ok()
+         .filter(|k| *k > 0)
+         .ok_or_else(|| format!("`{item}`: a count from 1"))
+ }
+ 
+ /// The configuration a trace file's first line holds, replaying the
+-/// decisions on its other lines.
++/// decisions on its other lines. The first line is `CONFIG hash=H`, `H` the
++/// decisions' [`trace_hash`] in 16 hex digits; a file whose decisions do not
++/// hash to `H` is refused.
+ fn read_replay(path: &Path) -> Result<SimConfig, String> {
+     let text =
+         std::fs::read_to_string(path).map_err(|error| format!("`{}`: {error}", path.display()))?;
+     let mut lines = text.lines();
+     let header = lines.next().unwrap_or_default();
+-    let mut config = SimConfig::parse(header)?;
+-    if config.trace.is_some() || config.replay.is_some() || header == "sim" {
+-        return Err(format!(
+-            "`{}`: `{header}` is not a trace's configuration",
++    let not_a_header = || {
++        format!(
++            "`{}`: `{header}` is not a trace's header, `CONFIG hash=H`",
+             path.display()
+-        ));
++        )
++    };
++    let (configuration, hash) = header.rsplit_once(" hash=").ok_or_else(not_a_header)?;
++    let hash = (hash.len() == 16)
++        .then(|| u64::from_str_radix(hash, 16).ok())
++        .flatten()
++        .ok_or_else(not_a_header)?;
++    let mut config = SimConfig::parse(configuration)?;
++    if config.trace.is_some() || config.replay.is_some() || configuration == "sim" {
++        return Err(not_a_header());
+     }
+     let decisions = lines
+         .map(|line| {
+             let (kind, value) = line.split_once(' ').unwrap_or((line, ""));
+             let value: u64 = value
+                 .parse()
+                 .map_err(|_| format!("`{}`: `{line}` is not a decision", path.display()))?;
+             match kind {
+                 "preempt" => Ok(Decision::Preempt(value)),
+                 "pick" => Ok(Decision::Pick(value)),
+                 "collect" => Ok(Decision::Collect(value)),
+                 _ => Err(format!("`{}`: `{line}` is not a decision", path.display())),
+             }
+         })
+         .collect::<Result<Arc<[Decision]>, String>>()?;
++    let held = trace_hash(&decisions);
++    if held != hash {
++        return Err(format!(
++            "`{}`: the decisions hash to {held:016x}, the header holds {hash:016x}",
++            path.display()
++        ));
++    }
+     config.replay = Some(Replay {
+         path: path.to_path_buf(),
+         decisions,
+     });
+     Ok(config)
+ }
+ 
+ impl std::fmt::Display for Policy {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         match self {
+@@ -414,21 +464,21 @@ impl std::fmt::Display for SimConfig {
+         }
+         if let Some(path) = &self.trace {
+             write!(f, ",trace={}", path.display())?;
+         }
+         Ok(())
+     }
+ }
+ 
+ /// FNV-1a over each decision's tag byte and its value's eight bytes, little
+ /// endian: the same on every build and platform.
+-pub fn trace_hash(decisions: &[Decision]) -> u64 {
++fn trace_hash(decisions: &[Decision]) -> u64 {
+     let mut trace = Trace::new(false);
+     for decision in decisions {
+         trace.record(*decision);
+     }
+     trace.hash
+ }
+ 
+ /// A seed for `sim` alone.
+ fn clock_seed() -> u64 {
+     #[expect(clippy::disallowed_methods, reason = "the seed of `sim` alone")]
+@@ -603,69 +653,152 @@ impl Trace {
+         };
+         for byte in std::iter::once(tag).chain(value.to_le_bytes()) {
+             self.hash = (self.hash ^ u64::from(byte)).wrapping_mul(Trace::PRIME);
+         }
+         if let Some(kept) = &mut self.kept {
+             kept.push(decision);
+         }
+     }
+ }
+ 
+-/// A replay's place in each kind of decision it reads back.
++/// A replay's place in the decisions it reads back, taken in the order the
++/// file holds them. The first decision the run takes otherwise is refused,
++/// and after it the run takes no decision from the file.
+ struct Replaying {
+-    preempts: Vec<u64>,
+-    picks: Vec<u64>,
+-    collects: Vec<u64>,
++    path: PathBuf,
++    decisions: Arc<[Decision]>,
++    /// The next decision to take.
++    next: usize,
++    /// The positions in `decisions` of the preemptions and of the
++    /// collections, each with the next one not yet taken.
++    preempts: Vec<usize>,
++    collects: Vec<usize>,
+     next_preempt: usize,
+-    next_pick: usize,
+     next_collect: usize,
++    /// Whether the run took a decision the file does not hold.
++    diverged: bool,
++    /// That divergence's refusal, until a boundary raises it.
++    refusal: Option<Loud>,
++}
++
++/// A decision keyed to a position the run counts: a contended step or an
++/// allocation.
++#[derive(Clone, Copy)]
++enum Point {
++    Preempt,
++    Collect,
+ }
+ 
+ impl Replaying {
+-    fn new(decisions: &[Decision]) -> Replaying {
+-        let mut replaying = Replaying {
+-            preempts: Vec::new(),
+-            picks: Vec::new(),
+-            collects: Vec::new(),
+-            next_preempt: 0,
+-            next_pick: 0,
+-            next_collect: 0,
++    fn new(replay: &Replay) -> Replaying {
++        let at = |wanted: fn(&Decision) -> bool| {
++            (replay.decisions.iter().enumerate())
++                .filter(|(_, decision)| wanted(decision))
++                .map(|(at, _)| at)
++                .collect()
+         };
+-        for decision in decisions {
+-            match *decision {
+-                Decision::Preempt(step) => replaying.preempts.push(step),
+-                Decision::Pick(index) => replaying.picks.push(index),
+-                Decision::Collect(at) => replaying.collects.push(at),
++        Replaying {
++            path: replay.path.clone(),
++            decisions: Arc::clone(&replay.decisions),
++            next: 0,
++            preempts: at(|decision| matches!(decision, Decision::Preempt(_))),
++            collects: at(|decision| matches!(decision, Decision::Collect(_))),
++            next_preempt: 0,
++            next_collect: 0,
++            diverged: false,
++            refusal: None,
++        }
++    }
++
++    /// Whether the trace takes `kind`'s decision at position `at`; positions
++    /// come in increasing order, one at a time. `forced` is a preemption the
++    /// floor takes whatever the trace holds.
++    fn point(&mut self, kind: Point, at: u64, forced: bool) -> bool {
++        if self.diverged {
++            return forced;
++        }
++        let (positions, cursor, did, without) = match kind {
++            Point::Preempt => (
++                &self.preempts,
++                &mut self.next_preempt,
++                format!("preempts at contended step {at}"),
++                format!("reaches contended step {at} without preempting at"),
++            ),
++            Point::Collect => (
++                &self.collects,
++                &mut self.next_collect,
++                format!("collects at allocation {at}"),
++                format!("reaches allocation {at} without collecting at"),
++            ),
++        };
++        if let Some(&position) = positions.get(*cursor) {
++            let point = match self.decisions[position] {
++                Decision::Preempt(point) | Decision::Collect(point) | Decision::Pick(point) => {
++                    point
++                }
++            };
++            if point < at {
++                self.diverge(position, format!("{without} {point}"));
++                return forced;
++            }
++            if point == at {
++                if position != self.next {
++                    self.diverge(self.next, did);
++                    return forced;
++                }
++                *cursor += 1;
++                self.next += 1;
++                return true;
+             }
+         }
+-        replaying.preempts.sort_unstable();
+-        replaying.collects.sort_unstable();
+-        replaying
++        if forced {
++            self.diverge(self.next, did);
++        }
++        forced
+     }
+ 
+-    /// Whether the trace preempts at contended step `step`; steps come in
+-    /// increasing order.
+-    fn preempts_at(&mut self, step: u64) -> bool {
+-        reached(&self.preempts, &mut self.next_preempt, step)
+-    }
+-
+-    /// Whether the trace collects at allocation `at`; allocations come in
+-    /// increasing order.
+-    fn collects_at(&mut self, at: u64) -> bool {
+-        reached(&self.collects, &mut self.next_collect, at)
+-    }
+-
+-    /// The next pick, at most `last`; the front where the trace has no more.
++    /// The next pick, from 0 to `last`.
+     fn pick(&mut self, last: u64) -> u64 {
+-        let pick = self.picks.get(self.next_pick).copied().unwrap_or(0);
+-        self.next_pick += 1;
+-        pick.min(last)
++        if self.diverged {
++            return 0;
++        }
++        match self.decisions.get(self.next) {
++            Some(Decision::Pick(index)) if *index <= last => {
++                self.next += 1;
++                *index
++            }
++            _ => {
++                self.diverge(self.next, format!("picks from 0 to {last}"));
++                0
++            }
++        }
++    }
++
++    /// Refuses the decisions left where the run has ended.
++    fn finish(&mut self) {
++        if !self.diverged && self.next < self.decisions.len() {
++            self.diverge(self.next, "ends".into());
++        }
++    }
++
++    /// Notes that the run, at the decision at `at` in the file, did `did`.
++    fn diverge(&mut self, at: usize, did: String) {
++        let held = match self.decisions.get(at) {
++            Some(decision) => format!("`{decision}`"),
++            None => "no more".into(),
++        };
++        self.diverged = true;
++        self.refusal = Some(Loud::sim_replay_diverged(format!(
++            "the replay of `{}` diverged at decision {}: the file holds {held}, the run {did}",
++            self.path.display(),
++            at + 1
++        )));
+     }
+ }
+ 
+ /// Whether the sorted `points` hold `at`, moving `next` past every point up
+ /// to it.
+ fn reached(points: &[u64], next: &mut usize, at: u64) -> bool {
+     while points.get(*next).is_some_and(|point| *point < at) {
+         *next += 1;
+     }
+     if points.get(*next) == Some(&at) {
+@@ -732,22 +865,25 @@ pub(crate) struct Sim {
+     allocations: u64,
+     /// The pinned waits begun.
+     pinned_waits: u64,
+     /// Whether a wait nothing in the simulation can end was refused.
+     stuck: bool,
+     /// What another thread posted, where it posted something other than a
+     /// signal's halt.
+     breach: Option<&'static str>,
+     /// Whether an inline native call outlasted `block=`.
+     blocked_native: bool,
+-    /// The first invariant a switch found broken.
++    /// The first invariant a switch found broken, until a boundary refuses
++    /// it.
+     inconsistent: Option<Loud>,
++    /// Whether a switch found an invariant broken.
++    invariant_broken: bool,
+ }
+ 
+ /// The watch on an inline native call in the simulation mode: a thread that
+ /// interrupts the interpreter's thread once, if the call outlasts `block=`.
+ pub(crate) struct Watch {
+     stop: std::sync::mpsc::Sender<()>,
+     watcher: std::thread::JoinHandle<bool>,
+ }
+ 
+ impl Interp {
+@@ -777,24 +913,21 @@ impl Interp {
+     /// draw their points, and `pct:` the priorities of the activities there
+     /// are.
+     pub(crate) fn start_sim(&mut self, config: SimConfig) {
+         let mut streams = Streams::new(config.seed);
+         let clock = Clock::new(config.knobs.clock, &mut streams.clock);
+         let points = match config.policy {
+             Policy::Pre { d, k } => draw_points(&mut streams.schedule, u64::from(d), k),
+             Policy::Pct { d, k } => draw_points(&mut streams.schedule, u64::from(d) - 1, k),
+             Policy::Fifo | Policy::Uniform { .. } => Vec::new(),
+         };
+-        let replaying = config
+-            .replay
+-            .as_ref()
+-            .map(|replay| Replaying::new(&replay.decisions));
++        let replaying = config.replay.as_ref().map(Replaying::new);
+         let collecting = config.knobs.gc.is_some();
+         self.sim = Some(Box::new(Sim {
+             trace: Trace::new(config.trace.is_some()),
+             config,
+             streams,
+             clock,
+             schedule: Schedule {
+                 contended: 0,
+                 run_contended: 0,
+                 seen_switches: self.activities.switches(),
+@@ -803,20 +936,21 @@ impl Interp {
+                 changes: 0,
+                 priorities: Vec::new(),
+             },
+             replaying,
+             allocations: 0,
+             pinned_waits: 0,
+             stuck: false,
+             breach: None,
+             blocked_native: false,
+             inconsistent: None,
++            invariant_broken: false,
+         }));
+         for handle in 0..self.activities.handles() {
+             self.sim_spawned(handle);
+         }
+         self.pool.set_bound(0);
+         self.timer.requests().set(crate::timer::SIM);
+         self.activity.random_source = None;
+         if collecting {
+             self.collect_due = true;
+         }
+@@ -874,21 +1008,21 @@ impl Interp {
+         if schedule.seen_switches != switches {
+             schedule.seen_switches = switches;
+             schedule.run_contended = 0;
+         }
+         schedule.run_contended += 1;
+         let forced = schedule.run_contended >= sim.config.knobs.floor;
+         if forced {
+             schedule.run_contended = 0;
+         }
+         let chosen = match (&mut sim.replaying, sim.config.policy) {
+-            (Some(replaying), _) => replaying.preempts_at(step),
++            (Some(replaying), _) => replaying.point(Point::Preempt, step, forced),
+             (None, Policy::Fifo) => false,
+             (None, Policy::Pre { .. }) => reached(&schedule.points, &mut schedule.next_point, step),
+             (None, Policy::Uniform { p }) => sim.streams.schedule.unit() < p,
+             (None, Policy::Pct { d, .. }) => {
+                 let priority = |handle: usize, priorities: &[i64]| {
+                     priorities.get(handle).copied().unwrap_or(PRIORITY_BASE)
+                 };
+                 if reached(&schedule.points, &mut schedule.next_point, step) {
+                     schedule.changes += 1;
+                     set_priority(
+@@ -980,20 +1114,23 @@ impl Interp {
+         {
+             return Err(Loud::sim_blocked_native().into());
+         }
+         if let Some(loud) = self
+             .sim
+             .as_deref_mut()
+             .and_then(|sim| sim.inconsistent.take())
+         {
+             return Err(loud.into());
+         }
++        if let Some(loud) = self.sim_replay_refusal() {
++            return Err(loud.into());
++        }
+         match self.sim.as_deref_mut().and_then(|sim| sim.breach.take()) {
+             Some(what) => Err(Loud::sim_foreign_post(what).into()),
+             None => Ok(()),
+         }
+     }
+ 
+     /// Idles until `due` in the simulation mode: virtual time jumps there,
+     /// unless the run's deadline, which is real, has passed.
+     pub(crate) fn sim_idle_until(&mut self, due: Instant) -> Result<(), Failure> {
+         if self.deadline_passed() {
+@@ -1020,24 +1157,32 @@ impl Interp {
+         ))
+     }
+ 
+     fn sim_stuck(&mut self, loud: Loud) -> Failure {
+         if let Some(sim) = self.sim.as_deref_mut() {
+             sim.stuck = true;
+         }
+         loud.into()
+     }
+ 
+-    /// Whether a wait nothing in the simulation can end was refused, which
+-    /// ends the program's wait for its activities.
++    /// Whether a wait nothing in the simulation can end was refused, or a
++    /// replay diverged, which ends the program's wait for its activities.
+     pub(crate) fn sim_is_stuck(&self) -> bool {
+-        self.sim.as_ref().is_some_and(|sim| sim.stuck)
++        self.sim.as_ref().is_some_and(|sim| {
++            sim.stuck || sim.replaying.as_ref().is_some_and(|replay| replay.diverged)
++        })
++    }
++
++    /// The refusal of a replay's divergence, once.
++    fn sim_replay_refusal(&mut self) -> Option<Loud> {
++        let sim = self.sim.as_deref_mut()?;
++        sim.replaying.as_mut()?.refusal.take()
+     }
+ 
+     /// Whether the pinned wait now beginning is the one `fail=wait:K` fails.
+     pub(crate) fn sim_fails_wait(&mut self) -> bool {
+         let Some(sim) = self.sim.as_deref_mut() else {
+             return false;
+         };
+         sim.pinned_waits += 1;
+         sim.config.knobs.fail_wait == Some(sim.pinned_waits)
+     }
+@@ -1049,21 +1194,21 @@ impl Interp {
+     pub(crate) fn sim_declines_collection(&mut self) -> bool {
+         let Some(sim) = self.sim.as_deref_mut() else {
+             return false;
+         };
+         let Some(q) = sim.config.knobs.gc else {
+             return false;
+         };
+         sim.allocations += 1;
+         let at = sim.allocations;
+         let collects = match &mut sim.replaying {
+-            Some(replaying) => replaying.collects_at(at),
++            Some(replaying) => replaying.point(Point::Collect, at, false),
+             None => sim.streams.gc.unit() < q,
+         };
+         if collects {
+             sim.trace.record(Decision::Collect(at));
+             return false;
+         }
+         self.heap.bytes_since() < self.bytes_due
+             && !(self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
+     }
+ 
+@@ -1152,54 +1297,73 @@ impl Interp {
+         Some(SimReport {
+             seed: sim.config.seed,
+             policy: sim.config.policy,
+             steps: self.switch_clauses(),
+             contended: sim.schedule.contended,
+             switches: self.activities.switches(),
+             trace_hash: Some(sim.trace.hash),
+         })
+     }
+ 
+-    /// Writes the decision trace to `trace=`'s file: the configuration that
+-    /// replays it, then one decision a line. A failure to write is reported
+-    /// on the trace sink.
+-    pub(crate) fn sim_write_trace(&mut self) {
++    /// The refusals a run in the simulation mode ends with: the one a
++    /// boundary has not raised yet, a replay's decisions left, and a trace
++    /// file not written. The decision trace goes to `trace=`'s file: its
++    /// header, `CONFIG hash=H`, then one decision a line.
++    pub(crate) fn sim_finish(&mut self) -> Vec<Loud> {
++        let mut refused = Vec::new();
++        let Some(sim) = self.sim.as_deref_mut() else {
++            return refused;
++        };
++        if let Some(replaying) = &mut sim.replaying {
++            replaying.finish();
++        }
++        if let Err(Failure::Loud(loud)) = self.sim_breached() {
++            refused.push(*loud);
++        }
++        refused.extend(self.sim_replay_refusal());
+         let Some(sim) = self.sim.as_deref() else {
+-            return;
++            return refused;
+         };
+         let (Some(path), Some(kept)) = (&sim.config.trace, &sim.trace.kept) else {
+-            return;
++            return refused;
+         };
+-        let mut text = format!("{}\n", sim.config.header());
++        let mut text = format!("{} hash={:016x}\n", sim.config.header(), sim.trace.hash);
+         for decision in kept {
+             text.push_str(&format!("{decision}\n"));
+         }
+         if let Err(error) = std::fs::write(path, text) {
+-            let line = format!("rexx-sim: the trace `{}`: {error}\n", path.display());
+-            self.trace.extend_from_slice(line.as_bytes());
++            refused.push(Loud::sim_trace_unwritten(path, &error));
+         }
++        refused
+     }
+ 
+     /// Checks the scheduler's invariants at a switch; the first broken one is
+     /// refused at the next boundary, and ends the program's wait for its
+-    /// activities.
++    /// activities. No switch after it is checked.
+     #[cold]
+     #[inline(never)]
+     pub(crate) fn sim_check_switch(&mut self) {
++        if self.sim.as_deref().is_some_and(|sim| sim.invariant_broken) {
++            return;
++        }
+         #[cfg(test)]
+         self.sim_corrupt();
+-        let Err(loud) = self.check_invariants() else {
++        let checked = self.check_invariants();
++        #[cfg(test)]
++        self.sim_uncorrupt();
++        let Err(loud) = checked else {
+             return;
+         };
+         if let Some(sim) = self.sim.as_deref_mut() {
+             sim.stuck = true;
+-            sim.inconsistent.get_or_insert(loud);
++            sim.invariant_broken = true;
++            sim.inconsistent = Some(loud);
+         }
+     }
+ }
+ 
+ impl Loud {
+     /// A post or a callback in the simulation mode from a thread other than
+     /// this one, other than a signal's halt, whose timing is real.
+     pub(crate) fn sim_foreign_post(what: &str) -> Loud {
+         Loud {
+             message: crate::owned_message(
+@@ -1224,20 +1388,36 @@ impl Loud {
+     /// `block=`'s real time.
+     pub(crate) fn sim_blocked_native() -> Loud {
+         Loud {
+             message: crate::owned_message(
+                 "a native call in the simulation mode that runs longer than its bound",
+                 None,
+             ),
+         }
+     }
+ 
++    /// A replay that took a decision its trace file does not hold; `what`
++    /// names the file, the decision and what the run did.
++    pub(crate) fn sim_replay_diverged(what: String) -> Loud {
++        Loud { message: what }
++    }
++
++    /// A decision trace that could not be written to `path`.
++    pub(crate) fn sim_trace_unwritten(path: &Path, error: &std::io::Error) -> Loud {
++        Loud {
++            message: format!(
++                "the trace `{}` could not be written: {error}",
++                path.display()
++            ),
++        }
++    }
++
+     /// A wait in the simulation mode that nothing but a real signal can end.
+     pub(crate) fn sim_endless_wait() -> Loud {
+         Loud {
+             message: crate::owned_message(
+                 "a wait in the simulation mode that only a signal can end",
+                 None,
+             ),
+         }
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/sim/tests.rs b/rust/crates/rexx-exec/src/sim/tests.rs
+index af320b8af..0b3a2c78b 100644
+--- a/rust/crates/rexx-exec/src/sim/tests.rs
++++ b/rust/crates/rexx-exec/src/sim/tests.rs
+@@ -141,20 +141,51 @@ fn a_config_reads_back_what_it_prints() {
+         "sim:1,k=3",
+         "sim:1,floor=0",
+         "sim:1,order=one",
+         "sim:replay=/nonexistent/trace",
+         "simx",
+     ] {
+         assert!(SimConfig::parse(wrong).is_err(), "{wrong} parsed");
+     }
+ }
+ 
++/// An empty path, a second `trace=` or `replay=`, and a path cut at a comma
++/// are refused, each naming what it refuses.
++#[test]
++fn a_trace_path_is_refused_where_it_cannot_be_the_file_meant() {
++    for (wrong, refusal) in [
++        ("sim:1,trace=", "`trace=`: an empty path"),
++        ("sim:replay=", "`replay=`: an empty path"),
++        ("sim:replay=/t,trace=", "`trace=`: an empty path"),
++        ("sim:1,trace=/a,trace=/b", "`trace=/b`: a second `trace=`"),
++        (
++            "sim:replay=/a,trace=/b,trace=/c",
++            "`trace=/c`: a second `trace=`",
++        ),
++        ("sim:replay=/a,replay=/b", "`replay=/b`: a second `replay=`"),
++        (
++            "sim:1,trace=/tmp/a,b.txt",
++            "`trace=/tmp/a,b.txt`: a path may not contain a comma",
++        ),
++        (
++            "sim:replay=/tmp/c,d.txt",
++            "`replay=/tmp/c,d.txt`: a path may not contain a comma",
++        ),
++        (
++            "sim:replay=/tmp/c,trace=/tmp/e,f",
++            "`trace=/tmp/e,f`: a path may not contain a comma",
++        ),
++    ] {
++        assert_eq!(SimConfig::parse(wrong), Err(refusal.into()), "{wrong}");
++    }
++}
++
+ /// splitmix64 from 0, and xoshiro256** from `[1, 2, 3, 4]`, against their
+ /// reference outputs.
+ #[test]
+ fn the_generators_give_their_reference_outputs() {
+     let mut state = 0;
+     assert_eq!(super::splitmix64(&mut state), 0xE220_A839_7B1D_CDAF);
+     let mut rng = super::Rng([1, 2, 3, 4]);
+     let drawn: Vec<u64> = (0..4).map(|_| rng.next_u64()).collect();
+     assert_eq!(drawn, [11520, 0, 1_509_978_240, 1_215_971_899_390_074_240]);
+ }
+@@ -356,31 +387,33 @@ fn a_command_only_another_activity_can_end_is_refused_after_its_bound() {
+     assert!(took < std::time::Duration::from_secs(5), "took {took:?}");
+ }
+ 
+ /// Main prints two lines while a started activity waits to print one: with
+ /// no preemption the started line comes last, and one preemption at a
+ /// contended step drawn among the first three puts it earlier.
+ const TWO_ACTIVITIES: &str = "t = .t~new~start('run')\nsay 'm1'\nsay 'm2'\nt~wait\n\
+      ::class t\n::method run\n  say 't'\n";
+ 
+ #[test]
+-fn pre_1_reaches_both_interleavings_over_a_seed_range() {
++fn pre_1_reaches_every_interleaving_over_a_seed_range() {
+     let unpreempted = run_in(TWO_ACTIVITIES, Some(sim("sim:1")));
+     assert_eq!(stdout(&unpreempted), "m1\nm2\nt\n");
+     let mut seen = std::collections::BTreeSet::new();
+-    for seed in 1..=20 {
++    for seed in 1..=40 {
+         let outcome = run_in(TWO_ACTIVITIES, Some(sim(&format!("sim:{seed},pre:1,k=3"))));
+         assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+         seen.insert(stdout(&outcome));
+     }
+-    assert!(seen.contains("t\nm1\nm2\n"), "{seen:?}");
+-    assert!(seen.contains("m1\nm2\nt\n"), "{seen:?}");
++    let every: std::collections::BTreeSet<String> = ["t\nm1\nm2\n", "m1\nt\nm2\n", "m1\nm2\nt\n"]
++        .map(String::from)
++        .into();
++    assert_eq!(seen, every);
+ }
+ 
+ /// A started activity polls a flag with no park point in its loop while the
+ /// activity that sets it is ready.
+ const POLLING: &str = "f = .flag~new\na = f~start('waitForFlag')\nf~start('setFlag')\n\
+      say a~result\n::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
+      done = 0\n::method waitForFlag unguarded\n  do while \\self~done\n  end\n  \
+      return 'A ended'\n::method setFlag unguarded\n  self~done = 1\n";
+ 
+ /// No policy below preempts the poller in time, so each run ends because
+@@ -415,41 +448,241 @@ const DECIDING: &str = "m = .message~new('abc', 'length')\n\
+ #[test]
+ fn a_recorded_trace_replays_to_the_same_output_and_hash() {
+     let dir = std::env::temp_dir().join(format!("rexx-sim-trace-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("a directory");
+     let file = dir.join("trace.txt");
+     let spec = format!("sim:3,uniform:0.2,gc=0.05,trace={}", file.display());
+     let recorded = run_in(DECIDING, Some(sim(&spec)));
+     assert_eq!(recorded.exit_code, 0, "{}", stderr(&recorded));
+     let written = std::fs::read_to_string(&file).expect("the trace written");
+     let mut lines = written.lines();
+-    assert_eq!(lines.next(), Some("sim:3,uniform:0.2,gc=0.05"));
++    let hash = |outcome: &Outcome| outcome.sim.as_ref().and_then(|sim| sim.trace_hash);
++    let header = format!(
++        "sim:3,uniform:0.2,gc=0.05 hash={:016x}",
++        hash(&recorded).expect("a hash")
++    );
++    assert_eq!(lines.next(), Some(header.as_str()));
+     for kind in ["preempt ", "pick ", "collect "] {
+         assert!(written.contains(kind), "no {kind}in {written}");
+     }
+     let replayed = run_in(
+         DECIDING,
+         Some(sim(&format!("sim:replay={}", file.display()))),
+     );
+     let _ = std::fs::remove_dir_all(&dir);
+     assert_eq!(
+         (replayed.exit_code, stdout(&replayed), stderr(&replayed)),
+         (recorded.exit_code, stdout(&recorded), stderr(&recorded))
+     );
+     assert_eq!(recorded.collections, replayed.collections);
+-    let hash = |outcome: &Outcome| outcome.sim.as_ref().and_then(|sim| sim.trace_hash);
+-    assert!(hash(&recorded).is_some());
+     assert_eq!(hash(&recorded), hash(&replayed));
+     let other = run_in(DECIDING, Some(sim("sim:4,uniform:0.2,gc=0.05")));
+     assert_ne!(hash(&recorded), hash(&other));
+ }
+ 
++/// A directory of its own for a test's trace files.
++fn trace_dir(name: &str) -> std::path::PathBuf {
++    let dir = std::env::temp_dir().join(format!("rexx-sim-{name}-{}", std::process::id()));
++    std::fs::create_dir_all(&dir).expect("a directory");
++    dir
++}
++
++/// Records `DECIDING` under `sim:3,uniform:0.3` to `file`, and answers the
++/// decision lines.
++fn record_deciding(file: &std::path::Path) -> Vec<String> {
++    let recorded = run_in(
++        DECIDING,
++        Some(sim(&format!("sim:3,uniform:0.3,trace={}", file.display()))),
++    );
++    assert_eq!(recorded.exit_code, 0, "{}", stderr(&recorded));
++    let written = std::fs::read_to_string(file).expect("the trace written");
++    written.lines().skip(1).map(String::from).collect()
++}
++
++/// Writes `decisions` to `file` under `DECIDING`'s header with their own hash,
++/// so that the file loads and only the run can tell it from the recording.
++fn write_rehashed(file: &std::path::Path, decisions: &[String]) {
++    let parsed: Vec<super::Decision> = decisions
++        .iter()
++        .map(|line| {
++            let (kind, value) = line.split_once(' ').expect("a decision");
++            let value = value.parse().expect("a value");
++            match kind {
++                "preempt" => super::Decision::Preempt(value),
++                "pick" => super::Decision::Pick(value),
++                _ => super::Decision::Collect(value),
++            }
++        })
++        .collect();
++    let mut text = format!(
++        "sim:3,uniform:0.3 hash={:016x}\n",
++        super::trace_hash(&parsed)
++    );
++    for line in decisions {
++        text.push_str(line);
++        text.push('\n');
++    }
++    std::fs::write(file, text).expect("the trace rewritten");
++}
++
++/// Replays `file` on `source`.
++fn replay(source: &str, file: &std::path::Path) -> Outcome {
++    run_in(source, Some(sim(&format!("sim:replay={}", file.display()))))
++}
++
++/// A replay that takes a decision its file does not hold, or ends with
++/// decisions left, is refused naming the file, the decision's place and
++/// what the run did; the same file replays on its own program.
++#[test]
++fn a_replay_that_diverges_is_refused() {
++    let dir = trace_dir("diverge");
++    let file = dir.join("t.txt");
++    let decisions = record_deciding(&file);
++    let path = file.display().to_string();
++    let same = replay(DECIDING, &file);
++    assert_eq!(same.exit_code, 0, "{}", stderr(&same));
++    let refusal = |at: usize, held: &str, did: &str| {
++        format!(
++            "rexx-exec: the replay of `{path}` diverged at decision {at}: the file holds {held}, \
++             the run {did}\n"
++        )
++    };
++    let other = replay(THREE_ACTIVITIES, &file);
++    let first_pick = decisions
++        .iter()
++        .position(|line| line.starts_with("pick "))
++        .expect("a pick");
++    let out_of_range = {
++        let mut edited = decisions.clone();
++        edited[first_pick] = "pick 999".into();
++        write_rehashed(&file, &edited);
++        replay(DECIDING, &file)
++    };
++    let truncated = {
++        write_rehashed(&file, &decisions[..first_pick]);
++        replay(DECIDING, &file)
++    };
++    let extra = {
++        let mut edited = decisions.clone();
++        edited.push("preempt 999999".into());
++        write_rehashed(&file, &edited);
++        replay(DECIDING, &file)
++    };
++    let kind = {
++        let mut edited = decisions.clone();
++        edited.insert(0, "pick 0".into());
++        write_rehashed(&file, &edited);
++        replay(DECIDING, &file)
++    };
++    let passed = {
++        let mut edited = decisions.clone();
++        edited.swap(0, 1);
++        write_rehashed(&file, &edited);
++        replay(DECIDING, &file)
++    };
++    let _ = std::fs::remove_dir_all(&dir);
++    assert_eq!(decisions[..2], ["preempt 3", "preempt 7"]);
++    for (name, outcome, expected) in [
++        ("other", &other, refusal(4, "`preempt 16`", "ends")),
++        (
++            "out of range",
++            &out_of_range,
++            refusal(first_pick + 1, "`pick 999`", "picks from 0 to 2"),
++        ),
++        (
++            "truncated",
++            &truncated,
++            refusal(first_pick + 1, "no more", "picks from 0 to 2"),
++        ),
++        (
++            "extra",
++            &extra,
++            refusal(decisions.len() + 1, "`preempt 999999`", "ends"),
++        ),
++        (
++            "kind",
++            &kind,
++            refusal(1, "`pick 0`", "preempts at contended step 3"),
++        ),
++        (
++            "passed",
++            &passed,
++            refusal(
++                2,
++                "`preempt 3`",
++                "reaches contended step 8 without preempting at 3",
++            ),
++        ),
++    ] {
++        assert_eq!(
++            (outcome.exit_code, stderr(outcome)),
++            (120, expected),
++            "{name}"
++        );
++    }
++}
++
++/// A trace whose decisions do not hash to its header's hash is refused
++/// before the run, and so is a header without one; the file as written
++/// loads.
++#[test]
++fn a_damaged_trace_is_refused_before_the_run() {
++    let dir = trace_dir("damaged");
++    let file = dir.join("t.txt");
++    let decisions = record_deciding(&file);
++    let written = std::fs::read_to_string(&file).expect("the trace written");
++    let loads = SimConfig::parse(&format!("sim:replay={}", file.display())).is_ok();
++    let (header, rest) = written.split_once('\n').expect("a header");
++    let (configuration, hash) = header.rsplit_once(" hash=").expect("a hash");
++    let damaged = format!("{configuration} hash=0123456789abcdef\n{rest}");
++    std::fs::write(&file, damaged).expect("the trace damaged");
++    let wrong_hash = SimConfig::parse(&format!("sim:replay={}", file.display()));
++    std::fs::write(&file, format!("{configuration}\n{rest}")).expect("the hash dropped");
++    let no_hash = SimConfig::parse(&format!("sim:replay={}", file.display()));
++    let _ = std::fs::remove_dir_all(&dir);
++    assert!(loads);
++    assert!(!decisions.is_empty());
++    let path = file.display();
++    assert_eq!(
++        wrong_hash,
++        Err(format!(
++            "`{path}`: the decisions hash to {hash}, the header holds 0123456789abcdef"
++        ))
++    );
++    assert_eq!(
++        no_hash,
++        Err(format!(
++            "`{path}`: `{configuration}` is not a trace's header, `CONFIG hash=H`"
++        ))
++    );
++}
++
++/// A trace file that cannot be written is refused, and the run's status
++/// says so.
++#[test]
++fn a_trace_that_cannot_be_written_is_refused() {
++    let outcome = run_in(
++        "say 'ran'\n",
++        Some(sim("sim:1,trace=/nonexistent/dir/t.txt")),
++    );
++    assert_eq!(
++        (outcome.exit_code, stdout(&outcome), stderr(&outcome)),
++        (
++            120,
++            "ran\n".into(),
++            "rexx-exec: the trace `/nonexistent/dir/t.txt` could not be written: No such file or \
++             directory (os error 2)\n"
++                .into()
++        )
++    );
++}
++
+ /// Runs `source` under `spec` with `corruption` asked of the first switch
+ /// that has what it breaks.
+ fn corrupted(
+     source: &'static str,
+     spec: &str,
+     corruption: Option<crate::scheduler::Corruption>,
+ ) -> Outcome {
+     let invocation = Invocation::none()
+         .with_deadline(RUN_DEADLINE)
+         .with_switch_mode(sim(spec));
+@@ -473,22 +706,22 @@ const THREE_ACTIVITIES: &str = "a = .t~new~start('run', 'a')\nb = .t~new~start('
+ /// Main asleep while a started activity runs.
+ const SLEEPING: &str = "t = .t~new~start('nap')\ncall SysSleep 0.5\nsay t~result\n\
+      ::class t\n::method nap\n  call SysSleep 1\n  return 'woke'\n";
+ 
+ /// Two activities in one guarded method of one object, the first asleep
+ /// holding its guard and the second queued for it.
+ const GUARDED: &str = "o = .g~new\na = o~start('hold', 'a')\nb = o~start('hold', 'b')\n\
+      say a~result b~result\n::class g\n::method hold\n  use arg tag\n  call SysSleep 1\n  \
+      return tag\n";
+ 
+-/// Each invariant fires on the state that breaks it, through the refusal
+-/// the next boundary raises; the same runs unbroken end normally.
++/// Each invariant fires on the state that breaks it, through the one
++/// refusal the next boundary raises; the same runs unbroken end normally.
+ #[test]
+ fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
+     use crate::scheduler::Corruption;
+     for (source, corruption, expected, answer) in [
+         (
+             THREE_ACTIVITIES,
+             Corruption::ReadyTwice,
+             "an activity ready twice",
+             "a b\n",
+         ),
+@@ -515,23 +748,76 @@ fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
+             Corruption::GuardQueue,
+             "a guard waiter with no wait recorded for its guard",
+             "a b\n",
+         ),
+         (
+             THREE_ACTIVITIES,
+             Corruption::Baton,
+             "a switch on a thread not holding the baton",
+             "a b\n",
+         ),
++        (
++            THREE_ACTIVITIES,
++            Corruption::BogusReady,
++            "a ready handle naming no idle activity",
++            "a b\n",
++        ),
++        (
++            THREE_ACTIVITIES,
++            Corruption::UnfiledHandle,
++            "a handle neither free nor filed",
++            "a b\n",
++        ),
++        (
++            THREE_ACTIVITIES,
++            Corruption::FreeFiled,
++            "a free handle naming an activity",
++            "a b\n",
++        ),
++        (
++            THREE_ACTIVITIES,
++            Corruption::RunningFree,
++            "a running activity's handle free",
++            "a b\n",
++        ),
++        (
++            THREE_ACTIVITIES,
++            Corruption::RunningFiled,
++            "a running activity filed as idle",
++            "a b\n",
++        ),
++        (
++            GUARDED,
++            Corruption::GuardOwnerDead,
++            "a guard held by no activity",
++            "a b\n",
++        ),
++        (
++            GUARDED,
++            Corruption::GuardWaiterTwice,
++            "a guard waiter queued twice or behind itself",
++            "a b\n",
++        ),
++        (
++            GUARDED,
++            Corruption::GuardWaitUnqueued,
++            "a guard wait missing from its guard's queue",
++            "a b\n",
++        ),
++        (
++            THREE_ACTIVITIES,
++            Corruption::BatonReleased,
++            "a switch on a thread not holding the baton",
++            "a b\n",
++        ),
+     ] {
+         let sound = corrupted(source, "sim:1", None);
+         assert_eq!(sound.exit_code, 0, "{corruption:?}: {}", stderr(&sound));
+         assert_eq!(stdout(&sound), answer, "{corruption:?}");
+         let broken = corrupted(source, "sim:1", Some(corruption));
+-        assert_eq!(broken.exit_code, 120, "{corruption:?}: {}", stderr(&broken));
+-        assert!(
+-            stderr(&broken).contains(&format!("rexx-exec: the scheduler found {expected}\n")),
+-            "{corruption:?}: {}",
+-            stderr(&broken)
++        assert_eq!(
++            (broken.exit_code, stderr(&broken)),
++            (120, format!("rexx-exec: the scheduler found {expected}\n")),
++            "{corruption:?}"
+         );
+     }
+ }
+diff --git a/rust/crates/rexx-exec/tests/sim_processes.rs b/rust/crates/rexx-exec/tests/sim_processes.rs
+index 29f9cf512..65baca016 100644
+--- a/rust/crates/rexx-exec/tests/sim_processes.rs
++++ b/rust/crates/rexx-exec/tests/sim_processes.rs
+@@ -90,10 +90,45 @@ fn a_seed_gives_one_trace_hash_in_two_processes() {
+     let stderr = String::from_utf8_lossy(&first.stderr).into_owned();
+     assert!(first.status.success(), "{stderr}");
+     assert_eq!(
+         String::from_utf8_lossy(&first.stdout),
+         "slept 1 1\nrang 1\nwaited 0\nelapsed 1 1\nroot 4\n"
+     );
+     assert!(stderr.contains(" trace="), "{stderr}");
+     assert_eq!(first.stdout, second.stdout);
+     assert_eq!(first.stderr, second.stderr);
+ }
++
++/// A trace whose header's hash does not match its decisions is refused
++/// before the program runs, and the file as written replays.
++#[test]
++fn a_damaged_trace_is_refused_before_the_run() {
++    let dir = std::env::temp_dir().join(format!("rexx-sim-damaged-{}", std::process::id()));
++    std::fs::create_dir_all(&dir).expect("a directory");
++    std::fs::write(dir.join("p.rex"), PROGRAM).expect("the program written");
++    let file = dir.join("t.txt");
++    let recorded = run(&dir, &format!("sim:1,uniform:0.3,trace={}", file.display()));
++    let written = std::fs::read_to_string(&file).expect("the trace written");
++    let replayed = run(&dir, &format!("sim:replay={}", file.display()));
++    let (header, rest) = written.split_once('\n').expect("a header");
++    let (configuration, hash) = header.rsplit_once(" hash=").expect("a hash");
++    std::fs::write(
++        &file,
++        format!("{configuration} hash=0123456789abcdef\n{rest}"),
++    )
++    .expect("the trace damaged");
++    let damaged = run(&dir, &format!("sim:replay={}", file.display()));
++    let _ = std::fs::remove_dir_all(&dir);
++    assert!(recorded.status.success());
++    assert!(replayed.status.success());
++    assert_eq!(recorded.stdout, replayed.stdout);
++    assert_eq!(damaged.status.code(), Some(2));
++    assert_eq!(damaged.stdout, b"");
++    assert_eq!(
++        String::from_utf8_lossy(&damaged.stderr),
++        format!(
++            "rexx-run: REXX_SWITCH_MODE: `{}`: the decisions hash to {hash}, the header holds \
++             0123456789abcdef\n",
++            file.display()
++        )
++    );
++}
