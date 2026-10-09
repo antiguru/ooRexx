@@ -4223,9 +4223,15 @@ mod group_runs {
             fn early_end(row: &Row, policy: &str, run: &Run, seen: &[Seen]) -> Option<String> {
                 let mut keys: Vec<&str> = differing_keys(row).collect();
                 keys.extend(seen.iter().map(|one| one.key.as_str()));
+                let status = run
+                    .status
+                    .map_or_else(|| "none".to_string(), |status| status.to_string());
                 if let Some(line) = refusal(run) {
-                    return (!keys.iter().any(|key| key.contains(line.as_str()))).then(|| {
-                        format!("{line}: no oracle outcome or DIFFERING key of the part ends so")
+                    return (!keys.iter().any(|key| refusal_listed(key, &line, &status))).then(|| {
+                        format!(
+                            "{line}, rc {status}: no oracle outcome or DIFFERING key of the part \
+                             ends so"
+                        )
                     });
                 }
                 if policy.starts_with("pct:") {
@@ -4234,14 +4240,41 @@ mod group_runs {
                 if !row.program() && outcome(&run.stdout).starts_with("no summary") {
                     return Some("no ooTest summary".to_string());
                 }
-                let status = run
-                    .status
-                    .map_or_else(|| "none".to_string(), |status| status.to_string());
                 let listed = seen.iter().any(|one| one.status == status)
                     || differing_keys(row).any(|key| key.contains(&format!(", rc {status},")));
                 (!listed && (row.program() || failing(run).is_empty())).then(|| {
                     format!("rc {status}, which no oracle outcome or DIFFERING key of the part has")
                 })
+            }
+
+            /// Whether `key` is an outcome ending in the refusal `line` at
+            /// `status`: a group part's key starts with the refusal and then
+            /// its status, a program's key starts with its status and ends
+            /// with the refusal.
+            fn refusal_listed(key: &str, line: &str, status: &str) -> bool {
+                key.strip_prefix(line)
+                    .is_some_and(|rest| rest.starts_with(&format!(", rc {status},")))
+                    || (key.starts_with(&format!("rc {status},"))
+                        && key
+                            .strip_suffix(line)
+                            .is_some_and(|head| head.ends_with(", ")))
+            }
+
+            /// The reds of a run whose first run's WALL_CLOCK checks on the
+            /// tests `first` were rerun, given the rerun's `reds`: outside
+            /// `clock=real` a seed and mode fix the run, so a rerun that
+            /// passes shows the first run was not fixed.
+            fn after_rerun(row: &Row, first: String, mut reds: Vec<Red>) -> Vec<Red> {
+                if reds.is_empty() && !row.real_clock() {
+                    reds.push(Red {
+                        kind: Kind::Determinism,
+                        line: format!(
+                            "{first} failed, and the rerun of the same seed and mode passed"
+                        ),
+                        test: first,
+                    });
+                }
+                reds
             }
 
             /// The tests [`DIFFERING`] lists as failing in `row`'s part in the
@@ -4414,17 +4447,7 @@ mod group_runs {
                             format!("failed {}", outcome_key(&unit.row, &compared(&ran.run)))
                         }
                     ));
-                    // Outside `clock=real` a seed and mode fix the run, so a
-                    // rerun that passes shows the first run was not fixed.
-                    if reds.is_empty() && !unit.row.real_clock() {
-                        reds.push(Red {
-                            kind: Kind::Determinism,
-                            line: format!(
-                                "{first} failed, and the rerun of the same seed and mode passed"
-                            ),
-                            test: first,
-                        });
-                    }
+                    reds = after_rerun(&unit.row, first, reds);
                 }
                 let mine = compared(&ran.run);
                 let compared = (!unit.row.injects()).then(|| {
@@ -4921,11 +4944,94 @@ mod group_runs {
                         [(
                             Kind::Abort,
                             format!(
-                                "{other}: no oracle outcome or DIFFERING key of the part ends so"
+                                "{other}, rc 120: no oracle outcome or DIFFERING key of the part \
+                                 ends so"
                             )
                         )]
                     );
                 }
+                // A strict prefix of the listed refusal, and the listed refusal
+                // at another status, are not the listed outcome.
+                let prefix = listed.trim_end_matches(" (Phase 9)");
+                for (line, status) in [(prefix, 120), (listed, 1)] {
+                    assert_eq!(
+                        kinds(&finished("", Some(line), status), &section, "pre:1,k=1"),
+                        [(
+                            Kind::Abort,
+                            format!(
+                                "{line}, rc {status}: no oracle outcome or DIFFERING key of the \
+                                 part ends so"
+                            )
+                        )]
+                    );
+                }
+                // A program's status is judged against its oracle set's.
+                let program = Row {
+                    part: "program".to_string(),
+                    ..group_row("crates/rexx-exec/tests/sim_gate/x.rex")
+                };
+                let seen_program = [Seen {
+                    count: 5,
+                    status: "0".to_string(),
+                    digest: 0,
+                    key: "rc 0, stdout 1 lines, stderr 0 lines".to_string(),
+                }];
+                let program_run = |status: i32| {
+                    let mut ran = finished("done\n", None, status);
+                    ran.run.stderr = b"rexx-sim: seed=1 policy=fifo\n".to_vec();
+                    judge(&program, "pre:1,k=1", &ran, Some(&seen_program))
+                        .into_iter()
+                        .map(|red| (red.kind, red.line))
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(program_run(0), []);
+                assert_eq!(
+                    program_run(3),
+                    [(
+                        Kind::Abort,
+                        "rc 3, which no oracle outcome or DIFFERING key of the part has"
+                            .to_string()
+                    )]
+                );
+            }
+
+            /// A WALL_CLOCK rerun that passes is a determinism red outside
+            /// `clock=real` and not under it; a rerun that fails keeps its
+            /// own reds.
+            #[test]
+            fn a_passing_rerun_is_a_determinism_red_outside_the_real_clock() {
+                let virtual_clock = group_row("base/bif/STREAM.testGroup");
+                let real_clock = Row {
+                    knobs: Some("clock=real".to_string()),
+                    ..group_row("base/bif/STREAM.testGroup")
+                };
+                let reds = after_rerun(
+                    &virtual_clock,
+                    "TEST_QUERYDIR_EXISTS".to_string(),
+                    Vec::new(),
+                );
+                assert_eq!(
+                    reds.iter()
+                        .map(|red| (red.kind, red.test.as_str(), red.line.as_str()))
+                        .collect::<Vec<_>>(),
+                    [(
+                        Kind::Determinism,
+                        "TEST_QUERYDIR_EXISTS",
+                        "TEST_QUERYDIR_EXISTS failed, and the rerun of the same seed and mode passed"
+                    )]
+                );
+                assert!(
+                    after_rerun(&real_clock, "TEST_QUERYDIR_EXISTS".to_string(), Vec::new())
+                        .is_empty()
+                );
+                let failed = vec![Red {
+                    kind: Kind::Check,
+                    test: "TEST_QUERYDIR_EXISTS".to_string(),
+                    line: "fails".to_string(),
+                }];
+                let kept = after_rerun(&virtual_clock, "TEST_QUERYDIR_EXISTS".to_string(), failed);
+                assert_eq!(kept.len(), 1);
+                assert_eq!(kept[0].kind, Kind::Check);
             }
 
             #[test]
