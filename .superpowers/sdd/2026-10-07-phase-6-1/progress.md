@@ -151,3 +151,5 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 12 queue add: commit the Directory-read loop (/tmp/claude-1000/p61/t7/perf/bench/bench-programs/dirread.rex) as a bench program so later perf runs cover the store-backed directory read path.
 - Task 7 re-review: Approved, 3 new Minors. Controller fixed two (queued item site attribution for Stem/Relation; "twelve" prose in the Literals item and report). Parked to final review: m10 (impl Loud indented inside a nested module escapes in_impl_loud, column-0 match; no such block exists).
 - Task 7: complete (3b9a80364..b71606f16).
+- Task 8 dispatched: t8-impl (opus), BASE 0765d19ef.
+- Task 8 implementer DONE_WITH_CONCERNS: b7a050d6b, 909d87b09, 1cc240446. Perf vs 0765d19ef: rexxcps +0.0001%, emptyloop +0.0006%, startup +0.0004%. Oracle per-clause 58 ns; quantum 29-116 ns. Concern: native thread calling back while the native waits deadlocks at pool bound 0 (and in default mode with no free pool thread). Review t8-review dispatched.

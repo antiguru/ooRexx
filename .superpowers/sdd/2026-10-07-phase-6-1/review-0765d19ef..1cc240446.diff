@@ -1,0 +1,3864 @@
+# Review package: 0765d19ef..1cc240446
+
+## Commits
+1cc240446 Phase 6.1 Task 8: report and gate record
+909d87b09 Phase 6.1 Task 8: a refused endless wait ends the program's end
+b7a050d6b Phase 6.1 Task 8: the simulation mode, its streams and the clock seam
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-8-report.md      | 194 +++++++
+ docs/superpowers/plans/phase-6-1-gate.md           |  58 ++
+ rust/clippy.toml                                   |   9 +
+ rust/corpus/refusal-dispositions.tsv               |   2 +
+ rust/corpus/refusal-sites.tsv                      |  86 +--
+ rust/crates/rexx-api/src/load.rs                   |   4 +
+ rust/crates/rexx-bench/src/timing.rs               |   2 +
+ rust/crates/rexx-core/src/heap.rs                  |   5 +
+ rust/crates/rexx-exec/src/bin/rexx-run.rs          |  40 +-
+ rust/crates/rexx-exec/src/builtin/datetime.rs      |   8 +-
+ rust/crates/rexx-exec/src/builtin/numeric.rs       |  17 +-
+ rust/crates/rexx-exec/src/builtin/rexxutil.rs      |   6 +-
+ rust/crates/rexx-exec/src/clause.rs                |  20 +-
+ rust/crates/rexx-exec/src/command.rs               |   9 +-
+ rust/crates/rexx-exec/src/dispatch/semaphore.rs    |  15 +-
+ rust/crates/rexx-exec/src/dispatch/time_support.rs |   3 +-
+ rust/crates/rexx-exec/src/invocation.rs            |   4 +-
+ rust/crates/rexx-exec/src/lib.rs                   |  20 +-
+ rust/crates/rexx-exec/src/run.rs                   |   2 +-
+ rust/crates/rexx-exec/src/scheduler.rs             |  46 +-
+ rust/crates/rexx-exec/src/scheduler/pool.rs        |  23 +
+ .../crates/rexx-exec/src/scheduler/tests/native.rs |  39 ++
+ rust/crates/rexx-exec/src/semaphores.rs            |   5 +-
+ rust/crates/rexx-exec/src/sim.rs                   | 584 +++++++++++++++++++++
+ rust/crates/rexx-exec/src/sim/tests.rs             | 285 ++++++++++
+ rust/crates/rexx-exec/src/sync.rs                  |   6 +
+ .../rexx-exec/tests/bootstrap_install_oracle.rs    |   5 +
+ rust/crates/rexx-exec/tests/builtin_status.rs      |   5 +
+ rust/crates/rexx-exec/tests/collection_scopes.rs   |   5 +
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   |   5 +
+ rust/crates/rexx-exec/tests/deadline.rs            |   5 +
+ rust/crates/rexx-exec/tests/input_oracle.rs        |   5 +
+ .../crates/rexx-exec/tests/introspection_scopes.rs |   5 +
+ rust/crates/rexx-exec/tests/ir_recorded_oracle.rs  |   5 +
+ .../rexx-exec/tests/library_routine_memory.rs      |   5 +
+ .../crates/rexx-exec/tests/licensed_divergences.rs |   5 +
+ rust/crates/rexx-exec/tests/method_bodies.rs       |   6 +
+ rust/crates/rexx-exec/tests/oracle_deadline.rs     |   5 +
+ rust/crates/rexx-exec/tests/package_requires.rs    |   5 +
+ .../crates/rexx-exec/tests/parse_version_oracle.rs |   5 +
+ rust/crates/rexx-exec/tests/program_end.rs         |   5 +
+ rust/crates/rexx-exec/tests/prompt_before_read.rs  |   5 +
+ rust/crates/rexx-exec/tests/signals.rs             |   5 +
+ .../crates/rexx-exec/tests/state_builtin_oracle.rs |   5 +
+ rust/crates/rexx-exec/tests/stdin_contention.rs    |   5 +
+ rust/crates/rexx-exec/tests/support/arity.rs       |   4 +
+ rust/crates/rexx-exec/tests/support/oracle.rs      |   6 +
+ rust/crates/rexx-exec/tests/watchdog/mod.rs        |   1 +
+ 48 files changed, 1525 insertions(+), 74 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-8-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-8-report.md
+new file mode 100644
+index 000000000..e4c2a1875
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-8-report.md
+@@ -0,0 +1,194 @@
++# Task 8 report: the simulation mode (seed, streams, clock seam, inline pool)
++
++Base `0765d19ef`. Commits `b7a050d6b` (the mode), `909d87b09` (a refused endless wait ends the
++program's end), and the commit carrying this report and the gate record. Paths below are under
++`rust/crates/rexx-exec/` unless they say otherwise; line numbers at `909d87b09`.
++
++## Design
++
++- `SwitchMode::Sim(SimConfig)` (`src/invocation.rs:98`), reached only through the existing
++  switch-mode arm of `serve_requests` (`src/scheduler.rs:2025`), so the default mode has no new
++  per-clause branch. `set_switch_mode` calls `start_sim` (`src/scheduler.rs:1983`,
++  `src/sim.rs:395`), which boxes a `Sim` on `Interp::sim`, sets the pool's bound to 0, clears main's
++  `RANDOM` generator and, under `gc=`, makes a collection due.
++- `SimConfig::parse` (`src/sim.rs:100`) reads `sim` (seed from the clock, `clock_seed`
++  `src/sim.rs:206`) or `sim:SEED[,fifo][,gc=Q][,halt@K][,fail=wait:K][,clock=midnight|real]`;
++  `Display` prints the same text back. `Policy` has `Fifo` only (no preemption); Task 9 fills it.
++- PRNG: splitmix64 seeding xoshiro256\*\*, in crate. `Streams` (`src/sim.rs:264`) splits
++  `schedule, order, clock, gc, children` and a sixth, `random`, from consecutive splitmix64 outputs,
++  so each stream's seed does not depend on how much another draws. `fifo` draws neither `schedule`
++  nor `order`; they are split anyway so the later streams keep their seeds (an `#[expect(dead_code)]`
++  says so).
++- Clock (`Clock::new` `src/sim.rs:305`): the quantum (29 to 116 ns, `QUANTUM_NANOS`
++  `src/sim.rs:35`) and the origin are drawn from the clock stream, always in the same order whatever
++  the `clock=` knob is. Seeded origin: 2026-01-01T00:00:00Z plus an offset under a year.
++  `clock=midnight`: 0.5 to 5 s before the local midnight ending the seeded day (local offset from
++  `datetime::local_offset_micros`). `clock=real`: the wall clock at start. Virtual instants are a
++  real `Instant` taken at start plus the virtual elapsed time; the wall reading is the origin plus
++  the same elapsed time. `sim_clause` (`src/sim.rs:417`) adds a quantum at each boundary;
++  `sim_idle_until` (`src/sim.rs:440`) jumps to the deadline, after checking the run's deadline on
++  real time.
++- Seam: `Interp::now` and `Interp::wall_now` (`src/sim.rs:375`, `:386`).
++- Knobs: `gc=q` draws at the allocation where `collect_if_due` found a collection due
++  (`src/lib.rs:2726`); with the knob on, `collect_now` leaves the next allocation due
++  (`src/lib.rs:3036`), and the draw declines only where neither the slot nor the byte trigger would
++  collect (`sim_declines_collection` `src/sim.rs:489`). The default allocation path is unchanged:
++  the call is inside the taken branch. `halt@K` calls `halt_all` at boundary K, as a signal's halt
++  does. `fail=wait:K` fails the K-th pinned wait with 11.1 after it parked, withdrawing it with
++  `cancel_wait` (`src/scheduler.rs:1023`).
++- Children: `run_command` draws a seed from the children stream and sets the child's
++  `REXX_SWITCH_MODE` to the parent's config with that seed and without `halt@`/`fail=`
++  (`src/command.rs:713`, `SimConfig::child`).
++- Refusals: `sim_screen_posts` (`src/sim.rs:513`, called from `file_completions`
++  `src/scheduler.rs:1263`) records any post other than `Completed` and `Halt`; under bound 0 a
++  `Completed` is only ever posted by the baton thread itself, inline. The breach is refused at the
++  next boundary, at a sim idle and at the run's end (`src/lib.rs:3502`) as `Loud::sim_foreign_post`.
++  `idle_for_good` in sim refuses `Loud::sim_endless_wait` (`src/scheduler.rs:1499`): a wait only a
++  real signal can end. `idle_for_posts` in sim is `scheduler_inconsistency` (`src/clause.rs:354`):
++  with bound 0 every completion is posted before it is waited for. Both mark the run stuck, which
++  stops the program-end loop (`src/scheduler.rs:1432`).
++- Report: `Outcome::sim: Option<SimReport>` (`src/lib.rs:3546`): seed, policy, steps (the switch
++  mode's clause count), switches (a counter on the activity table incremented in `switch_to`,
++  `src/scheduler.rs:974`, unconditionally, so default mode pays an add and no branch), `trace_hash:
++  None`. `rexx-run` prints `rexx-sim: seed=S policy=P steps=N switches=M profile=X stack=Z` at exit
++  (`src/bin/rexx-run.rs:129`); `trace=H` is printed when `trace_hash` is `Some`. `sim` alone also
++  prints `rexx-sim: seed=S` at start (`:69`), so a run that never ends has its seed.
++- The timer arms no slice in sim: the switch-mode arm never arms it and `set_switch_mode` disarms
++  it; `timer.rs` needed no change. A test pins it.
++
++## Changes
++
++`src/sim.rs` (new) and `src/sim/tests.rs` (new); `src/invocation.rs` (the variant; `SwitchMode`
++loses `Eq` for the `f64` knob); `src/lib.rs` (field, exports, `Outcome::sim`, gc hook, end-of-run
++breach); `src/scheduler.rs` (sim arm, `start_sim` call, `post_timer`/`wake_due_sleepers`/
++`idle_for_good` on the seam, `fail=wait`, screen, switch counter, `switch_clauses`, the stuck stop);
++`src/clause.rs` (sim idles, `deadline_passed`, `expire_deadline` made `pub(crate)`);
++`src/scheduler/pool.rs` (`set_bound`, `reserve` answers `None` at bound 0, a test spawn counter);
++`src/semaphores.rs` (`retest_semaphore`), `src/builtin/rexxutil.rs` (`SysSleep`, `SysSemWait`
++poll), `src/dispatch/semaphore.rs` (`semaphore_wait` takes the interpreter),
++`src/dispatch/time_support.rs` (`timed_wait`), `src/builtin/datetime.rs` (`real_clock_base_time`),
++`src/builtin/numeric.rs` (`initial_seed`), `src/run.rs` (the scripted park's deadline) on the
++seam; `src/command.rs` (child mode); `src/bin/rexx-run.rs`; `rexx-core/src/heap.rs`
++(`bytes_since`); `rust/clippy.toml` (new); `#[allow]`s listed below; `sim: None` in the test
++harnesses' `Outcome` literals; `rust/corpus/refusal-dispositions.tsv`, `refusal-sites.tsv`.
++
++## Clock-read allow-list
++
++`grep -rn -E '\.elapsed\(\)|thread::sleep|Instant::now|SystemTime::now' src --include=*.rs` at
++`909d87b09`, sorted. `rust/clippy.toml` disallows `Instant::now`, `SystemTime::now`,
++`chrono::Local::now` and `chrono::Utc::now`; `.elapsed()` and `thread::sleep` are not disallowed
++and appear only where listed.
++
++Routed through the seam (no longer printed): `scheduler.rs` `post_timer`, `wake_due_sleepers`,
++`idle_for_good`; `semaphores.rs` `retest_semaphore`; `builtin/rexxutil.rs` `SysSleep` and the
++`SysSemWait` poll; `dispatch/semaphore.rs` `semaphore_wait`; `dispatch/time_support.rs`
++`timed_wait`; `builtin/datetime.rs` `real_clock_base_time`; `builtin/numeric.rs` `initial_seed`;
++`run.rs` the `cfg(test)` scripted park (routed rather than allowed).
++
++Allowed, each with its `reason`:
++
++| site | reason |
++|---|---|
++| `sim.rs:208` `clock_seed` | the seed of `sim` alone |
++| `sim.rs:323` | `clock=real`'s origin |
++| `sim.rs:332` | virtual instants count from a real `Instant` |
++| `sim.rs:377`, `:388` | the seam's default arms |
++| `clause.rs:37` `Deadline::starting_now`, `:309` `countdown_reached`, `:336` `idle_until`, `:376` `deadline_passed` | the run's deadline, real in every mode |
++| `sync.rs:197` `now` | the timer thread's clock, which sim does not arm |
++| `sync.rs:220` | the loom model clock (`cfg(all(loom, test))`; clippy does not compile it) |
++| `sync.rs:239`-`:261` | `sync` tests time real waits (allow on the module) |
++| `scheduler/tests.rs`, `scheduler/tests/pool.rs`, `sim/tests.rs`, `dispatch/time_support/tests.rs` | tests time real runs (allow on each `mod tests;`) |
++| `signal.rs:238`, `:270` | `thread::sleep` in `signal.rs`'s `cfg(test)` module; not a clock read, not disallowed |
++| `scheduler/pool.rs:43` | `thread::sleep` under `cfg(test)` on a pool thread, which sim does not run |
++| `scheduler/tests/callbacks.rs:53` | `thread::sleep` in a test native |
++
++Outside `src`: `rexx-api/src/load.rs` `await_buffer_changed` (a test native's own bound),
++`rexx-bench/src/timing.rs` (a benchmark times real runs), and each `tests/*.rs` harness that reads
++the clock (this harness times or bounds real runs), as crate-level `#![allow]`.
++
++## Tests
++
++Failing first: `src/sim/tests.rs`'s three Step 1 tests did not build before the mode existed
++(`E0432 unresolved import crate::SimConfig`, `E0599 no variant ... Sim`;
++`/tmp/claude-1000/p61/t8/logs/step1-red.txt`). Then, all passing at `909d87b09`:
++
++- `a_timed_program_runs_on_virtual_time_and_prints_what_it_prints_on_real_time`: `SysSleep 5`,
++  `time('E')`, an `.Alarm` ringing a class method, `EventSemaphore~wait(1)` timing out. Under
++  `sim:1` under a second of wall time; with no switch mode (8 s) the same four lines. The oracle
++  prints `slept 1 1`, `rang 1`, `waited 0`, `elapsed 1 1` in 8.01 s (probe
++  `/tmp/claude-1000/p61/t8/probe1/s1.rex`).
++- `one_seed_gives_one_output`, `two_seeds_draw_different_randoms`: unseeded `RANDOM`, `TIME('L')`,
++  `DATE('S')` in main and a started activity. Read through `rexx-run` in separate processes:
++  `sim:1` twice gives `780 691 664166` / `07:01:26.808042 20260615 0` / `707 07:01:26.808042`;
++  `sim:2` gives `906 819 48982`.
++- `a_config_reads_back_what_it_prints`, `the_generators_give_their_reference_outputs` (splitmix64
++  from 0 is `0xE220A8397B1DCDAF`; xoshiro256\*\* from `[1, 2, 3, 4]` gives 11520, 0, 1509978240,
++  1215971899390074240; the third was worked by hand).
++- `a_wait_only_a_signal_can_end_is_refused`, paired with the default mode reaching the run's
++  deadline. This test found the program-end loop defect fixed in `909d87b09` (OOM at a 2G cap
++  before the fix, 0.33 s after).
++- `halt_at_k_halts_at_its_boundary` (`halt@50` prints `halted 48` for seeds 1 and 9, `halt@60`
++  `halted 58`, none `done`), `fail_wait_k_fails_the_kth_pinned_wait` (`fail=wait:1` traps 11.1,
++  `fail=wait:2` and no knob sort), `gc_q_collects_at_random_allocations_the_seed_chooses` (0
++  collections without the knob and at `gc=0`, some at `gc=0.01`, equal across two runs),
++  `a_knob_leaves_the_other_streams_draws` (`gc=0.5` on and off print the same `RANDOM` and `TIME`),
++  `a_child_gets_a_seed_from_the_children_stream` (two `echo $REXX_SWITCH_MODE` print
++  `sim:7735830288798199505,fifo,gc=0.5` and `sim:7407052850021197627,fifo,gc=0.5` under
++  `sim:1,gc=0.5,halt@1000`), `clock_midnight_crosses_a_day_boundary` (86396 s, then the next day
++  after `SysSleep 6`), `a_post_from_another_thread_is_refused` (an `Output` posted from another
++  thread is refused at the next boundary; a `Halt` is not).
++- `scheduler/tests/native.rs`: `the_timer_arms_no_slice_in_the_simulation_mode` (a call in flight
++  arms the timer in default mode, `the_timer_is_armed_for_a_call_in_flight`, and not in sim);
++  `a_native_call_in_the_simulation_mode_spawns_no_pool_thread` (the same two native calls: under
++  `every` the pool spawns threads, under sim none; both print `5`, `7`).
++
++## LIMIT rows
++
++`rust/corpus/refusal-dispositions.tsv`:
++
++- `sim_endless_wait`: spec section 4, a deadlock in the simulation mode is a loud refusal.
++- `sim_foreign_post`: spec section 4, any inbox post other than a signal's halt is a determinism
++  breach.
++
++`scheduler_inconsistency` keeps its GUARD row; its new sim site is unreachable for the reason in
++Design. `refusal-sites.tsv` re-derived with `REXX_REFUSAL_SITES_REFRESH=1`.
++
++## Performance
++
++`docs/superpowers/plans/phase-6-1-gate.md` `## Task 8`. Callgrind against `0765d19ef`: rexxcps
+++0.0001%, emptyloop +0.0006%, startup +0.0004%. Wall clock at load 1.0: rexxcps +1.32%,
++emptyloop -0.45%, startup -4.00% (one millisecond of 25). The oracle's rexxcps median is 17,229,378
++clauses per second, 58 ns per clause, recorded there with the quantum range.
++
++## Commands and results
++
++At `909d87b09`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 --workspace
++--all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0,
++3094 passed, 0 failed, 4 ignored (`/tmp/claude-1000/p61/t8/logs/ws2.txt`); `REXX_CORPUS_GATE=1
++memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle` exit 0, corpus 29
++passed 1 ignored, ir_recorded_oracle 21 passed; `refusal_dispositions`, `refusal_sites`,
++`closed_phases`, `loud`, `no_process_state` pass. The first workspace run, at `b7a050d6b`, was
++OOM-killed at the 8G cap in the lib tests: the defect `909d87b09` fixes.
++
++## Concerns
++
++1. **A native that waits for its own thread's callback deadlocks in sim.** With bound 0 the call
++   runs on the baton thread; a native that spawns a thread, has it call back, and joins it (the
++   test library's `SENDFROMANOTHERTHREAD`) blocks the baton thread inside native code while the
++   other thread waits for the baton. Nothing on the baton thread runs, so neither the refusal nor
++   the run's deadline fires; only an outer timeout ends it. Measured on the same inline path in
++   default mode with the pool's bound set to 0 (a scratch test over `run_shaped`, not committed):
++   `SENDFROMANOTHERTHREAD` under a 3 s run deadline had not answered after 10 s. Default mode
++   takes that path too whenever the pool has no thread to give. A post from another thread that
++   the baton thread drains is refused (`sim_foreign_post`, `a_post_from_another_thread_is_refused`);
++   no end-to-end witness through a native was built. A
++   command whose child waits on another activity is the same shape as the join (not run). The spec's refusal for "a wait for a post only a native's own thread or a command's
++   peer can deliver" is therefore not reachable as a scheduler wait.
++2. **Named semaphores and rxapi** are refused in every mode today (`Loud::named_semaphore` and the
++   Phase 10 rows), so no sim-specific refusal was added: one would be unreachable. Phase 10's
++   implementation is where sim needs its own refusal.
++3. `Streams` has a sixth stream, `random`, beyond the brief's interface, for each activity's
++   `RANDOM` starting state; it comes last so the five named ones keep their seeds.
++4. The quantum is drawn once per run, not per clause.
++5. `rexx-run` prints `trace=H` only when `trace_hash` is `Some`, which Task 9 fills.
++6. The oracle measurement is on the RelWithDebInfo (`-O2`) build at `build/`, the only one here.
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index ae364cb0c..9cf7eafdd 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -771,10 +771,68 @@ failed on the `Literals` rows and a `bif_assertions.rs` report string before the
+ Dispositions, the `Literals` probes and the receiver split's probes are in
+ `.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md`. No performance run (refusal paths and
+ the `owed` owner type only).
+ 
+ ### Fix round 1
+ 
+ Commits `732c65404`, `58a558ff1`. At `58a558ff1`: clippy exit 0; workspace debug test exit 0
+ (3079 passed, 0 failed); gated corpus exit 0 (29 passed, 1 ignored; ir_recorded_oracle 21).
+ Callgrind against `6860d4f80`, `-r 3`: rexxcps -0.0000%, dispatch +0.0727%, a Directory-read loop
+ -0.0756% (+0.8013% before `#[cold]` on the receiver refusals). Details in the Task 7 report.
++
++## Task 8
++
++Commits `b7a050d6b` (the mode), `909d87b09` (a refused endless wait ends the program's end).
++
++### The oracle's per-clause time
++
++`rust/bench-rexxcps/rexxcps.rex` on the oracle (`build/`, RelWithDebInfo), five runs from a fresh
++directory, `( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout
++-k 5 60 /home/moritz/dev/repos/ooRexx/build/bin/rexx rexxcps.rex )`: 17,410,653, 17,187,757,
++17,229,378, 16,947,286 and 17,328,049 clauses per second, all rc 0. Median 17,229,378, which is
++58 ns per clause. The simulation's per-clause quantum is drawn once per run from 29 to 116 ns
++(half and twice; `QUANTUM_NANOS` in `rexx-exec/src/sim.rs`). At that rate the oracle's 24 ms
++slice is 413,793 clauses.
++
++### Performance
++
++`S` is `/tmp/claude-1000/p61/t8/perf`. Each binary from `git archive <sha> rust interpreter`, every
++file touched, built with `CARGO_TARGET_DIR=$S/target-NAME memcap 8G cargo build --release -j 4 -p
++rexx-exec --bin rexx-run`, one `Compiling rexx-exec` line each.
++
++| binary | source | sha256 |
++|---|---|---|
++| base | `0765d19ef` | `14bae372deb870ad0a7ec80910f929be55807327700df8f8ac98a5e27ebe2d6f` |
++| head2 | `909d87b09` | `8db9e19626471e2ae106bd14b2ecc753099cb15af65cb7191bc40a0b996d20cc` |
++
++```
++memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 6 -o $S/cg2 -p "rexxcps emptyloop startup" base=$S/bin/base/rexx-run head=$S/bin/head2/rexx-run
++```
++
++Exit 0.
++
++| program | base | head | head % |
++|---|---:|---:|---:|
++| rexxcps | 17792490814 | 17792513774 | +0.0001 |
++| emptyloop | 7761204239 | 7761253168 | +0.0006 |
++| startup | 58250145 | 58250393 | +0.0004 |
++
++`b7a050d6b` measured the same way (`cg1`): +0.0001, +0.0006, +0.0001.
++
++```
++PROGRAMS="rexxcps emptyloop startup" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $S/wall3 base=$S/bin/base/rexx-run head=$S/bin/head2/rexx-run
++```
++
++Exit 0; load average 1.01 at start, 1.00 at end. rexxcps +1.32%, emptyloop -0.45%, startup
++-4.00% (25 ms against 24 ms, the timer's millisecond); inside ±4%. Two earlier runs against
++`b7a050d6b` at load average 5 to 15 (`wall1`, `wall2`) are not counted.
++
++One callgrind run of `bench-programs/pingpong/pingmsg.rex` per binary, glibc included: base
++7,585,612,504, head2 7,585,522,883 (-0.0012%).
++
++### Per-task check
++
++At `909d87b09`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 --workspace
++--all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
++(3094 passed, 0 failed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
++--test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle
++21 passed).
+diff --git a/rust/clippy.toml b/rust/clippy.toml
+new file mode 100644
+index 000000000..4a7b8dbfd
+--- /dev/null
++++ b/rust/clippy.toml
+@@ -0,0 +1,9 @@
++# Every clock read in rexx-exec goes through `Interp::now` and `Interp::wall_now`
++# (`crates/rexx-exec/src/sim.rs`), which the simulation mode answers with virtual
++# time. Each other read carries an `#[allow]` with its reason.
++disallowed-methods = [
++    { path = "std::time::Instant::now", reason = "read the clock through Interp::now" },
++    { path = "std::time::SystemTime::now", reason = "read the clock through Interp::wall_now" },
++    { path = "chrono::Local::now", reason = "read the clock through Interp::wall_now" },
++    { path = "chrono::Utc::now", reason = "read the clock through Interp::wall_now" },
++]
+diff --git a/rust/corpus/refusal-dispositions.tsv b/rust/corpus/refusal-dispositions.tsv
+index 8f398c8e0..c27007262 100644
+--- a/rust/corpus/refusal-dispositions.tsv
++++ b/rust/corpus/refusal-dispositions.tsv
+@@ -46,15 +46,17 @@ numeric_form_without_expression	GUARD	-	parser guarantee: NUMERIC FORM VALUE wit
+ object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .string~inherit (98.985), SETMETHOD to an Array or String (97.2), setMethod, unsetMethod and setMethod OBJECT from methods of Directory, .local, .environment and a Directory subclass; all answer or raise, oracle-identical
+ op_not_driven	GUARD	-	driver invariant: every op the compiler emits has a driver arm (census d-guard)
+ operator_operand	GUARD	-	scout A b12: spec-op.txt, every dyadic and prefix operator on nine left operands, refused none
+ parse_trigger_operand	GUARD	-	parser guarantee: a PARSE trigger that needs an operand carries one (census d-guard)
+ receiver_class	DEVIATION	-	oracle-crashes.txt entry 33 and Deviation 28: a primitive's native method run on an object of another class crashes the oracle or answers an accident of memory; Task 4 probes b2_run_*_on_inst, Task 7 probes rc2, rc3
+ register_not_logical	GUARD	-	compiler invariant: a branch reads a register holding a logical (census d-guard)
+ scheduler_inconsistency	GUARD	-	scheduler invariant (refusal-sites.tsv: guarded_getter_waits_for_reply.rex agrees)
+ select_op_off_its_node	GUARD	-	compiler invariant: a SELECT op names its own SELECT (census d-guard)
+ setup_method	GUARD	-	scout A b15: b_define_class_method_setup, b_inherit_instance_methods are 97.1 on both engines
+ signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNAL's form (census d-guard)
++sim_endless_wait	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: a deadlock in the simulation mode is a loud refusal; virtual time cannot end a wait only a real signal can
++sim_foreign_post	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: any inbox post other than a signal's halt is a determinism breach, refused loudly
+ stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
+ store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
+ unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probes rc4 (a Method copy refuses at COPY first); the rest are handles whose object is gone or kinds receiver_kind has no arm for
+ unreadable_collection	GUARD	-	scout A b18: env_supplier; with no owner it is a directory holding an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
+ unsatisfiable_wait	LIMIT	-	Deviation 20 (rulings P27, P65, P77)
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index 2d036bdfc..86e478636 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -81,174 +81,174 @@ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	o
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1813	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:579	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:585	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1197	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+-Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:445	off-send-surface	-	-	-
++Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:451	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:792	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:716	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:725	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:798	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:731	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1542	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:800	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:806	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:683	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:689	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:735	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:588	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:558	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:594	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:564	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1807	off-send-surface	-	-	-
+-Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:547	off-send-surface	-	-	-
++Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:553	off-send-surface	-	-	-
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1748	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:665	off-send-surface	-	-	-
+-Loud	expression	body	crates/rexx-exec/src/lib.rs:437	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:671	off-send-surface	-	-	-
++Loud	expression	body	crates/rexx-exec/src/lib.rs:443	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1855	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1753	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:836	off-send-surface	-	-	-
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:842	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1147	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+-Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:384	off-send-surface	-	-	-
++Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:390	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+-Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:471	off-send-surface	-	-	-
++Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:477	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:824	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:742	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:830	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:748	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:612	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:644	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:618	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:650	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:766	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:772	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1516	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1678	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1248	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1115	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1694	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:708	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:714	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1262	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1476	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1469	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+-Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
++Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:486	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1327	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1337	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1275	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1453	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1421	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1402	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1350	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1279	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1300	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:567	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:573	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1523	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1180	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1619	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1553	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1564	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1573	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1083	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1733	off-send-surface	-	-	-
+ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1606	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:673	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:635	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:679	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:641	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:734	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:532	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:622	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:538	off-send-surface	-	-	-
++Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:628	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:700	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:706	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -265,61 +265,63 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:493	off-send-surface	-	-	-
+ Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+ Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+-Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:496	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
++Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:502	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+-Loud	redirection	body	crates/rexx-exec/src/lib.rs:521	off-send-surface	-	-	-
++Loud	redirection	body	crates/rexx-exec/src/lib.rs:527	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:750	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1785	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:816	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:822	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1213	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1219	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:758	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:654	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:775	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:660	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:781	off-send-surface	-	-	-
++Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:572	off-send-surface	-	-	-
++Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:562	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:692	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:698	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:784	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:790	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
+-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:511	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:603	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+-Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:454	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:808	off-send-surface	-	-	-
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:517	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:609	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:460	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:814	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-api/src/load.rs b/rust/crates/rexx-api/src/load.rs
+index 4cf3e4ac2..a0886b9ea 100644
+--- a/rust/crates/rexx-api/src/load.rs
++++ b/rust/crates/rexx-api/src/load.rs
+@@ -897,20 +897,24 @@ static BUFFER_HANDSHAKE: Mutex<BufferHandshake> = Mutex::new(BufferHandshake {
+ static BUFFER_CHANGED: std::sync::Condvar = std::sync::Condvar::new();
+ 
+ fn buffer_handshake() -> std::sync::MutexGuard<'static, BufferHandshake> {
+     BUFFER_HANDSHAKE
+         .lock()
+         .unwrap_or_else(std::sync::PoisonError::into_inner)
+ }
+ 
+ /// Waits up to five seconds for `BUFFERCHANGED(key)`, answering whether it
+ /// came, and ends `key`'s hold either way.
++#[allow(
++    clippy::disallowed_methods,
++    reason = "a test native's own bound, on real time"
++)]
+ fn await_buffer_changed(key: &[u8]) -> bool {
+     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+     let mut handshake = buffer_handshake();
+     let changed = loop {
+         if let Some(at) = handshake.changed.iter().position(|k| k == key) {
+             handshake.changed.swap_remove(at);
+             break true;
+         }
+         let left = deadline.saturating_duration_since(std::time::Instant::now());
+         if left.is_zero() {
+diff --git a/rust/crates/rexx-bench/src/timing.rs b/rust/crates/rexx-bench/src/timing.rs
+index 13a8e9c64..fa90b75dd 100644
+--- a/rust/crates/rexx-bench/src/timing.rs
++++ b/rust/crates/rexx-bench/src/timing.rs
+@@ -5,20 +5,22 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Timing one subprocess, summarising a set of such timings, and putting a
+ //! distribution-free confidence interval around the median of them.
+ 
++#![allow(clippy::disallowed_methods, reason = "a benchmark times real runs")]
++
+ use std::io;
+ use std::process::{Command, Stdio};
+ use std::time::{Duration, Instant};
+ 
+ /// What a timed run does with the child's standard output and standard error.
+ #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+ pub enum Capture {
+     Discard,
+     Collect,
+ }
+diff --git a/rust/crates/rexx-core/src/heap.rs b/rust/crates/rexx-core/src/heap.rs
+index 0cc90d721..eddc07e75 100644
+--- a/rust/crates/rexx-core/src/heap.rs
++++ b/rust/crates/rexx-core/src/heap.rs
+@@ -143,20 +143,25 @@ impl Heap {
+     }
+ 
+     /// Records `bytes` of body allocated outside the slot, and answers the
+     /// bytes charged since the last collection.
+     #[inline]
+     pub fn charge_body_bytes(&mut self, bytes: usize) -> usize {
+         self.bytes_since += bytes;
+         self.bytes_since
+     }
+ 
++    /// The body bytes charged since the last collection.
++    pub fn bytes_since(&self) -> usize {
++        self.bytes_since
++    }
++
+     /// The most body bytes this heap has held at once: the bytes the last
+     /// collection found live plus everything charged since, at its largest.
+     /// An upper bound, since a body charged and dropped before a collection
+     /// still counts.
+     pub fn peak_body_bytes(&self) -> usize {
+         self.peak_bytes.max(self.live_bytes + self.bytes_since)
+     }
+ 
+     /// Marks from the roots, then sweeps everything unmarked.
+     pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
+diff --git a/rust/crates/rexx-exec/src/bin/rexx-run.rs b/rust/crates/rexx-exec/src/bin/rexx-run.rs
+index cbd16bbcd..fef37fac9 100644
+--- a/rust/crates/rexx-exec/src/bin/rexx-run.rs
++++ b/rust/crates/rexx-exec/src/bin/rexx-run.rs
+@@ -51,29 +51,46 @@ fn main() -> ExitCode {
+                 let _ = std::io::stdout().write_all(bytes);
+                 let _ = std::io::stdout().flush();
+             }),
+             stderr: Box::new(|bytes| {
+                 let _ = std::io::stderr().write_all(bytes);
+                 let _ = std::io::stderr().flush();
+             }),
+         });
+ 
+     // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:
+-    // `every`, or `at:K` for the program's K-th clause.
++    // `every`, `at:K` for the program's K-th clause, or the simulation mode,
++    // `sim` or `sim:SEED[,...]`.
+     let invocation = match std::env::var("REXX_SWITCH_MODE").as_deref() {
+         Ok("every") => invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
++        Ok(mode) if mode == "sim" || mode.starts_with("sim:") => {
++            match rexx_exec::SimConfig::parse(mode) {
++                Ok(config) => {
++                    if mode == "sim" {
++                        eprintln!("rexx-sim: seed={}", config.seed);
++                    }
++                    invocation.with_switch_mode(rexx_exec::SwitchMode::Sim(config))
++                }
++                Err(error) => {
++                    eprintln!("rexx-run: REXX_SWITCH_MODE: {error}");
++                    return ExitCode::from(2);
++                }
++            }
++        }
+         Ok(mode) => match mode.strip_prefix("at:").map(str::parse) {
+             Some(Ok(clause)) => {
+                 invocation.with_switch_mode(rexx_exec::SwitchMode::AtClause(clause))
+             }
+             _ => {
+-                eprintln!("rexx-run: REXX_SWITCH_MODE is `every` or `at:K`, not `{mode}`");
++                eprintln!(
++                    "rexx-run: REXX_SWITCH_MODE is `every`, `at:K` or `sim[:SEED,...]`, not `{mode}`"
++                );
+                 return ExitCode::from(2);
+             }
+         },
+         Err(_) => invocation,
+     };
+ 
+     let text = match std::fs::read(&path) {
+         Ok(text) => text,
+         Err(error) => {
+             eprintln!("rexx-run: {}: {error}", path.to_string_lossy());
+@@ -91,18 +108,37 @@ fn main() -> ExitCode {
+     let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
+     let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text, invocation);
+ 
+     // Whatever the sinks above did not already take: written in the order the
+     // program produced them relative to each other, which is no order at all
+     // -- they are separate descriptors, and D17 records that their
+     // interleaving is not observable.
+     let _ = std::io::stdout().write_all(&outcome.stdout);
+     let _ = std::io::stdout().flush();
+     let _ = std::io::stderr().write_all(&outcome.stderr);
++    if let Some(sim) = outcome.sim {
++        let trace = sim
++            .trace_hash
++            .map(|hash| format!(" trace={hash:016x}"))
++            .unwrap_or_default();
++        let profile = if cfg!(debug_assertions) {
++            "debug"
++        } else {
++            "release"
++        };
++        eprintln!(
++            "rexx-sim: seed={} policy={} steps={} switches={}{trace} profile={profile} stack={}",
++            sim.seed,
++            sim.policy,
++            sim.steps,
++            sim.switches,
++            rexx_exec::INTERPRETER_STACK_BYTES
++        );
++    }
+ 
+     // `ExitCode::from` takes a `u8`, which is the whole range a process exit
+     // status carries anyway. What makes that range meaningful is
+     // `Raised::exit_code`'s `256 - major`, which `execute` applies, and now
+     // `EXIT expr`'s own result, which `Interp::exit_code_for` (`lib.rs`)
+     // converts into an `i32` that can be negative or wider than a byte.
+     ExitCode::from(outcome.exit_code as u8)
+ }
+diff --git a/rust/crates/rexx-exec/src/builtin/datetime.rs b/rust/crates/rexx-exec/src/builtin/datetime.rs
+index c36016abd..98b6f05a1 100644
+--- a/rust/crates/rexx-exec/src/builtin/datetime.rs
++++ b/rust/crates/rexx-exec/src/builtin/datetime.rs
+@@ -750,43 +750,45 @@ fn whole_number_of(text: &[u8]) -> Option<i64> {
+     std::str::from_utf8(text)
+         .ok()
+         .and_then(Number::parse)?
+         .whole_value(rexx_num::ARGUMENT_DIGITS)
+ }
+ 
+ // ---- the per-clause clock and the elapsed-time anchor ----
+ 
+ /// Wall-clock time right now, in [`Timestamp::base_time`]'s own unit --
+ /// UTC, with no time zone applied (the module doc's own divergence).
+-fn real_clock_base_time() -> i64 {
+-    let since_epoch = std::time::SystemTime::now()
++fn real_clock_base_time(interp: &Interp) -> i64 {
++    let since_epoch = interp
++        .wall_now()
+         .duration_since(std::time::UNIX_EPOCH)
+         .unwrap_or_default();
+     UNIX_BASE_TIME + since_epoch.as_micros() as i64
+ }
+ 
+ /// The clock reading in force for the clause the *currently executing
+ /// activation* is stepping -- cached on that activation, and read fresh
+ /// only once [`Activation::clock_stale`] says so. See its own doc for why
+ /// the cache lives on the activation rather than on `Interp`.
+ fn now_base_time(interp: &mut Interp) -> i64 {
+     let activation = interp.activation_mut();
+     if !activation.clock_stale {
+         return activation.cached_clock;
+     }
+     if activation.flags.elapsed_reset() {
+         if activation.cached_clock != NO_CLOCK {
+             activation.elapsed_anchor = activation.cached_clock;
+         }
+         activation.flags.set_elapsed_reset(false);
+     }
+-    let micros = real_clock_base_time();
++    let micros = real_clock_base_time(interp);
++    let activation = interp.activation_mut();
+     activation.cached_clock = micros;
+     activation.clock_stale = false;
+     micros
+ }
+ 
+ /// Microseconds the host's local zone is ahead of UTC at `utc_micros`,
+ /// which is [`UNIX_BASE_TIME`]-based like every other reading here.
+ ///
+ /// `.File`'s timestamps read through this too: a file's stamp is encoded at
+ /// the offset in force **at that stamp**, not at the offset in force now.
+diff --git a/rust/crates/rexx-exec/src/builtin/numeric.rs b/rust/crates/rexx-exec/src/builtin/numeric.rs
+index 0df4e2186..a49bff0c0 100644
+--- a/rust/crates/rexx-exec/src/builtin/numeric.rs
++++ b/rust/crates/rexx-exec/src/builtin/numeric.rs
+@@ -579,34 +579,43 @@ fn next_seed(interp: &mut Interp, seed: Option<i64>) -> u64 {
+     if let Some(activation) = interp.top_level_activation_mut() {
+         activation.cold_mut().random_seed = Some(state);
+     }
+     state
+ }
+ 
+ /// `Activity::getRandomSeed`: a new activation's seed, advancing the
+ /// activity's generator once. A splitmix64 step, so successive activations'
+ /// streams are not shifted copies of one another.
+ fn activation_seed(interp: &mut Interp) -> u64 {
++    if interp.activity.random_source.is_none() {
++        interp.activity.random_source = Some(initial_seed(interp));
++    }
+     let source = interp
+         .activity
+         .random_source
+-        .get_or_insert_with(initial_seed);
++        .as_mut()
++        .expect("the generator was seeded above");
+     *source = source.wrapping_add(0x9E37_79B9_7F4A_7C15);
+     let mut mixed = *source;
+     mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+     mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+     mixed ^ (mixed >> 31)
+ }
+ 
+-/// The generator's starting state.
+-fn initial_seed() -> u64 {
+-    let nanos = std::time::SystemTime::now()
++/// The generator's starting state: the random stream's draw in the
++/// simulation mode, else the clock's nanoseconds and the process id.
++fn initial_seed(interp: &mut Interp) -> u64 {
++    if let Some(seed) = interp.sim_random_seed() {
++        return seed;
++    }
++    let nanos = interp
++        .wall_now()
+         .duration_since(std::time::UNIX_EPOCH)
+         .map_or(0, |elapsed| elapsed.subsec_nanos());
+     u64::from(nanos) << 32 ^ u64::from(std::process::id())
+ }
+ 
+ /// The bit reversal `RexxActivation::random` does before taking the modulus:
+ /// the seed's bits, most significant first.
+ fn reverse_bits(seed: u64) -> u64 {
+     let mut work = 0u64;
+     let mut seed = seed;
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil.rs b/rust/crates/rexx-exec/src/builtin/rexxutil.rs
+index 2f0d50477..b847abf65 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil.rs
+@@ -6,22 +6,20 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The `REXXUTIL` package's file-system, sleep, semaphore and version routines --
+ //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
+ //! `RexxUtilCommon.cpp`.
+ 
+-use std::time::Instant;
+-
+ use rexx_core::{Decoded, ObjRef};
+ use rexx_num::{DIGITS64, Number};
+ 
+ use crate::error::Raised;
+ use crate::scheduler::ParkReason;
+ use crate::semaphores::{SEM_POLL, SemaphoreKey, SemaphoreWait, WaitKind};
+ use crate::{Failure, Interp, Loud};
+ 
+ /// The one path argument these routines take, resolved against the
+ /// interpreter's own directory rather than the process's.
+@@ -179,21 +177,21 @@ pub(crate) fn sleep(
+     let text = interp.to_text(value).into_owned();
+     let Ok(seconds) = String::from_utf8_lossy(&text).trim().parse::<f64>() else {
+         return Err(Raised::native_argument_not_a_number("delay", &text).into());
+     };
+     if !(0.0..=SLEEP_MAXIMUM).contains(&seconds) {
+         return Err(
+             Raised::native_argument_out_of_range("delay", 0, SLEEP_MAXIMUM as i64, &text).into(),
+         );
+     }
+     park_point!(interp, crate::pinning::ParkKind::SysSleep);
+-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
++    let deadline = interp.now() + std::time::Duration::from_secs_f64(seconds);
+     let done = answer(interp, 0);
+     interp.park_routine_with(
+         crate::scheduler::ParkReason::Sleep { deadline },
+         |interp, done| {
+             interp.activity.asleep = None;
+             if std::mem::take(&mut interp.activity.woken_by_halt) {
+                 return Ok(Some(answer(interp, EINTR)));
+             }
+             Ok(Some(done))
+         },
+@@ -343,21 +341,21 @@ pub(crate) fn wait_sem(
+     if timeout < 0 {
+         return Ok(answer(interp, 0));
+     }
+     match interp.take_counting(handle) {
+         None => return Ok(answer(interp, INVALID_HANDLE)),
+         Some(true) => return Ok(answer(interp, 0)),
+         Some(false) => {}
+     }
+     let (kind, deadline) = if timeout > 0 {
+         let polls = u32::try_from(timeout.unsigned_abs().div_ceil(100)).unwrap_or(u32::MAX);
+-        (WaitKind::Poll(polls - 1), Some(Instant::now() + SEM_POLL))
++        (WaitKind::Poll(polls - 1), Some(interp.now() + SEM_POLL))
+     } else {
+         (WaitKind::Counting, None)
+     };
+     park_point!(interp, crate::pinning::ParkKind::SysSemWait);
+     let wait = SemaphoreWait {
+         key: SemaphoreKey::Handle(handle),
+         kind,
+         deadline,
+     };
+     let receiver = handle_answer(interp, handle);
+diff --git a/rust/crates/rexx-exec/src/clause.rs b/rust/crates/rexx-exec/src/clause.rs
+index ee360e144..aa627d451 100644
+--- a/rust/crates/rexx-exec/src/clause.rs
++++ b/rust/crates/rexx-exec/src/clause.rs
+@@ -24,20 +24,21 @@ pub(crate) struct Deadline {
+     /// Whether the clock has already been found past [`Deadline::at`].
+     expired: bool,
+ }
+ 
+ impl Deadline {
+     /// Clauses between two visits to [`Interp::countdown_reached`], with or
+     /// without a deadline.
+     pub(crate) const CLAUSES_PER_CHECK: u32 = 1024;
+ 
+     /// A bound `limit` from now.
++    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+     pub(crate) fn starting_now(limit: Duration) -> Deadline {
+         Deadline {
+             at: Instant::now() + limit,
+             expired: false,
+         }
+     }
+ }
+ 
+ /// Proof that the clause about to be opened has had the deadline counted
+ /// against it.
+@@ -295,38 +296,43 @@ impl Interp {
+         if self.clause_countdown == 0 {
+             self.countdown_reached(yields)?;
+         }
+         Ok(DeadlineCounted(()))
+     }
+ 
+     /// Reads the clock and either ends the run or reloads the countdown and
+     /// serves the requests pending.
+     #[cold]
+     #[inline(never)]
++    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+     fn countdown_reached(&mut self, yields: bool) -> Result<(), Failure> {
+         if let Some(deadline) = &mut self.deadline
+             && (deadline.expired || Instant::now() >= deadline.at)
+         {
+             // Reloaded to 1, so the very next clause lands here again and
+             // fails too. A run that has outlived its bound does not get to
+             // resume because a caller swallowed one failure.
+             deadline.expired = true;
+             self.clause_countdown = 1;
+             return Err(Failure::Deadline);
+         }
+         self.clause_countdown = Deadline::CLAUSES_PER_CHECK;
+         self.serve_requests(yields)
+     }
+ 
+     /// Blocks this thread until `due` or a post to the inbox, whose
+     /// completions it files, or fails where the run's deadline comes first.
++    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+     pub(crate) fn idle_until(&mut self, due: Instant) -> Result<(), Failure> {
++        if self.sim.is_some() {
++            return self.sim_idle_until(due);
++        }
+         self.hand_over_output();
+         if let Some(deadline) = &self.deadline
+             && (deadline.expired || deadline.at <= due)
+         {
+             let at = deadline.at;
+             // A post ends the idle early; a wake with nothing posted may be
+             // one left from an earlier idle, so the clock decides.
+             while !self.deadline_expired() && Instant::now() < at {
+                 let posted = self.timer.idle_until(at);
+                 if !posted.is_empty() {
+@@ -337,31 +343,43 @@ impl Interp {
+             return Err(self.expire_deadline());
+         }
+         let posted = self.timer.idle_until(due);
+         self.file_completions(posted);
+         Ok(())
+     }
+ 
+     /// Blocks this thread until something is posted to the inbox, whose
+     /// completions it files, or fails where the run's deadline comes first.
+     pub(crate) fn idle_for_posts(&mut self) -> Result<(), Failure> {
++        if self.sim.is_some() {
++            return Err(self.sim_unpostable_wait());
++        }
+         if let Some(deadline) = &self.deadline {
+             return self.idle_until(deadline.at);
+         }
+         self.hand_over_output();
+         let posted = self.timer.idle();
+         self.file_completions(posted);
+         Ok(())
+     }
+ 
++    /// Whether the run's deadline, which is real time in every mode, has
++    /// passed.
++    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
++    pub(crate) fn deadline_passed(&self) -> bool {
++        self.deadline
++            .as_ref()
++            .is_some_and(|deadline| deadline.expired || Instant::now() >= deadline.at)
++    }
++
+     /// Marks the run's deadline passed, so every later clause fails too.
+-    fn expire_deadline(&mut self) -> Failure {
++    pub(crate) fn expire_deadline(&mut self) -> Failure {
+         if let Some(deadline) = &mut self.deadline {
+             deadline.expired = true;
+         }
+         self.clause_countdown = 1;
+         Failure::Deadline
+     }
+ 
+     /// Whether this run was cut short by its deadline.
+     pub(crate) fn deadline_expired(&self) -> bool {
+         self.deadline
+diff --git a/rust/crates/rexx-exec/src/command.rs b/rust/crates/rexx-exec/src/command.rs
+index 01e240585..f8989d10d 100644
+--- a/rust/crates/rexx-exec/src/command.rs
++++ b/rust/crates/rexx-exec/src/command.rs
+@@ -516,25 +516,28 @@ enum Child {
+         input: Option<Vec<u8>>,
+         merged: Option<std::io::PipeReader>,
+     },
+ }
+ 
+ /// Starts `command` in a child.
+ ///
+ /// Standard input is inherited unless `io` supplies one, which is the
+ /// oracle's own rule -- it spawns with no file actions until an `ADDRESS ...
+ /// WITH` asks for them.
++///
++/// `switch_mode`, where there is one, is the child's `REXX_SWITCH_MODE`.
+ fn start(
+     interp: &Interp,
+     handler: &Handler,
+     command: &[u8],
+     io: Option<&IoContext>,
++    switch_mode: Option<String>,
+ ) -> Result<Child, Failure> {
+     let nothing = |rc| {
+         Child::Ran(Waited {
+             rc,
+             out: Vec::new(),
+             err: Vec::new(),
+         })
+     };
+     let mut builder = match handler {
+         Handler::Shell(shell) => {
+@@ -553,20 +556,23 @@ fn start(
+             for argument in rest {
+                 builder.arg(OsStr::from_bytes(argument));
+             }
+             builder
+         }
+     };
+     builder.env_clear();
+     for (name, value) in &interp.env {
+         builder.env(OsStr::from_bytes(name), OsStr::from_bytes(value));
+     }
++    if let Some(mode) = switch_mode {
++        builder.env("REXX_SWITCH_MODE", mode);
++    }
+     builder.current_dir(interp.cwd_text());
+     let input = io.and_then(IoContext::input_bytes);
+     if input.is_some() {
+         builder.stdin(Stdio::piped());
+     }
+     // **Output and error on one target share one pipe**, which is the
+     // `adddup2` of the child's standard error onto its standard output the
+     // unix handler performs before the spawn. Two pipes read separately
+     // could not put the two streams back in the order the child wrote them.
+     let merged = match io.is_some_and(IoContext::shares_one_target) {
+@@ -697,21 +703,22 @@ impl Interp {
+         // `handleCommandInternally` sits in the branch `ioCommandHandler`
+         // reaches only when nothing is redirected, so a `cd` issued under an
+         // `ADDRESS ... WITH` is a child like any other command and moves no
+         // directory of this interpreter's.
+         if io.is_none()
+             && matches!(handler, Handler::Shell(_))
+             && let Some(outcome) = run_internally(self, command)
+         {
+             return Ok(Commanded::Done(outcome));
+         }
+-        let spawned = match start(self, &handler, command, io)? {
++        let switch_mode = self.child_switch_mode();
++        let spawned = match start(self, &handler, command, io, switch_mode)? {
+             Child::Ran(spawned) => spawned,
+             Child::Running { running, .. } if io.is_none() && !self.activity.resuming => {
+                 match self.exit_for_block(Block { running }) {
+                     Ok(token) => return Ok(Commanded::Left(token)),
+                     Err(block) => block.wait(),
+                 }
+             }
+             Child::Running {
+                 running,
+                 input,
+diff --git a/rust/crates/rexx-exec/src/dispatch/semaphore.rs b/rust/crates/rexx-exec/src/dispatch/semaphore.rs
+index f2102b4e4..e1f49272b 100644
+--- a/rust/crates/rexx-exec/src/dispatch/semaphore.rs
++++ b/rust/crates/rexx-exec/src/dispatch/semaphore.rs
+@@ -6,21 +6,21 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `EventSemaphore`'s and `MutexSemaphore`'s methods
+ //! (`classes/EventSemaphore.cpp`, `classes/MutexSemaphore.cpp`), whose waits
+ //! park the activity.
+ 
+-use std::time::{Duration, Instant};
++use std::time::Duration;
+ 
+ use rexx_core::{Decoded, ObjRef};
+ use rexx_num::Number;
+ 
+ use super::{Cleared, NativeStarted};
+ use crate::error::Raised;
+ use crate::scheduler::ParkReason;
+ use crate::semaphores::{Request, SemaphoreKey, SemaphoreWait, WaitKind};
+ use crate::{Failure, Interp};
+ 
+@@ -66,21 +66,21 @@ pub(super) fn native_event_wait(
+     args: &[Option<ObjRef>],
+ ) -> Result<NativeStarted, Failure> {
+     let timeout = timeout_argument(interp, b"WAIT", args)?;
+     let posted = interp.event_posted(receiver);
+     if posted || timeout == Some(Duration::ZERO) {
+         return Ok(NativeStarted::Ran(Some(
+             interp.counted(usize::from(posted)),
+         )));
+     }
+     park_point!(interp, crate::pinning::ParkKind::SemaphoreWait);
+-    let wait = semaphore_wait(receiver, WaitKind::Event, timeout);
++    let wait = semaphore_wait(interp, receiver, WaitKind::Event, timeout);
+     interp.park_native(ParkReason::Semaphore(wait), woken, receiver)
+ }
+ 
+ /// A woken wait's answer, which its re-test kept.
+ fn woken(interp: &mut Interp, _receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+     let answer = interp.take_semaphore_answer();
+     Ok(Some(interp.counted(usize::from(answer))))
+ }
+ 
+ /// `MutexSemaphoreClass::request(timeout)`, the method `ACQUIRE`: the lock
+@@ -91,21 +91,21 @@ pub(super) fn native_mutex_acquire(
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<NativeStarted, Failure> {
+     let timeout = timeout_argument(interp, b"ACQUIRE", args)?;
+     let acquired = match interp.request_mutex(receiver, timeout == Some(Duration::ZERO)) {
+         Request::Acquired => true,
+         Request::Refused => false,
+         Request::Wait => {
+             park_point!(interp, crate::pinning::ParkKind::SemaphoreWait);
+-            let wait = semaphore_wait(receiver, WaitKind::Mutex, timeout);
++            let wait = semaphore_wait(interp, receiver, WaitKind::Mutex, timeout);
+             return interp.park_native(ParkReason::Semaphore(wait), woken, receiver);
+         }
+     };
+     Ok(NativeStarted::Ran(Some(
+         interp.counted(usize::from(acquired)),
+     )))
+ }
+ 
+ /// `MutexSemaphoreClass::release`.
+ pub(super) fn native_mutex_release(
+@@ -123,25 +123,30 @@ pub(super) fn native_mutex_uninit(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     interp.close_mutex(receiver);
+     Ok(None)
+ }
+ 
+ /// A wait of `kind` on `object` for `timeout`, or for ever.
+-fn semaphore_wait(object: ObjRef, kind: WaitKind, timeout: Option<Duration>) -> SemaphoreWait {
++fn semaphore_wait(
++    interp: &Interp,
++    object: ObjRef,
++    kind: WaitKind,
++    timeout: Option<Duration>,
++) -> SemaphoreWait {
+     SemaphoreWait {
+         key: SemaphoreKey::Object(object),
+         kind,
+-        deadline: timeout.map(|timeout| Instant::now() + timeout),
++        deadline: timeout.map(|timeout| interp.now() + timeout),
+     }
+ }
+ 
+ /// The largest timeout in seconds the oracle's `uint32_t` milliseconds hold;
+ /// beyond it, as below zero, the wait is for ever.
+ const LONGEST_SECONDS: f64 = 4_294_967.0;
+ 
+ /// A `WAIT` or `ACQUIRE` timeout, a `TimeSpan` read through its
+ /// `totalSeconds`, in whole milliseconds: `None` for ever.
+ fn timeout_argument(
+diff --git a/rust/crates/rexx-exec/src/dispatch/time_support.rs b/rust/crates/rexx-exec/src/dispatch/time_support.rs
+index eda3b886e..4f60fac50 100644
+--- a/rust/crates/rexx-exec/src/dispatch/time_support.rs
++++ b/rust/crates/rexx-exec/src/dispatch/time_support.rs
+@@ -161,21 +161,21 @@ struct TimedWait {
+ /// `millis` milliseconds, taken modulo 2^32 as the oracle's `uint32_t`
+ /// timeout takes them, with `woken` as the native's answer after.
+ fn timed_wait(
+     interp: &mut Interp,
+     wait: TimedWait,
+     days: i64,
+     millis: i64,
+     woken: NativeResume,
+ ) -> Result<NativeStarted, Failure> {
+     park_point!(interp, crate::pinning::ParkKind::Timer);
+-    let now = Instant::now();
++    let now = interp.now();
+     let whole_days = TIMER_DAY.saturating_mul(u32::try_from(days.max(0)).unwrap_or(u32::MAX));
+     let remainder = Duration::from_millis(
+         u64::try_from(millis.rem_euclid(1 << 32)).expect("a remainder modulo 2^32 is positive"),
+     );
+     let days_end = later(now, whole_days);
+     let deadline = later(days_end, remainder);
+     interp.begin_timer_wait(wait.id, wait.receiver, wait.scope, days_end);
+     interp.park_native(
+         ParkReason::Timer {
+             deadline,
+@@ -293,11 +293,12 @@ fn whole_number_argument(
+         Some(number) => Ok(number),
+         None => {
+             let found = interp.string_value_text(value);
+             let (min, max) = (i128::from(-MAX_WHOLENUMBER), i128::from(MAX_WHOLENUMBER));
+             Err(Raised::native_argument_outside_range(index + 1, min, max, &found).into())
+         }
+     }
+ }
+ 
+ #[cfg(test)]
++#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
+ mod tests;
+diff --git a/rust/crates/rexx-exec/src/invocation.rs b/rust/crates/rexx-exec/src/invocation.rs
+index e35e2e781..78f3e4b39 100644
+--- a/rust/crates/rexx-exec/src/invocation.rs
++++ b/rust/crates/rexx-exec/src/invocation.rs
+@@ -81,26 +81,28 @@ pub struct Invocation {
+     /// string says where the second word ended. The two are independent
+     /// afterwards -- appending to `.SYSCARGS` leaves `ARG(1)` unchanged.
+     words: Vec<Vec<u8>>,
+     /// The register frame arena's block size.
+     frame_block: FrameBlock,
+     switch_mode: Option<SwitchMode>,
+ }
+ 
+ /// Where a test sets `SLICE` itself in place of the timer (spec 2026-09-29
+ /// section 4, the deterministic switch mode).
+-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++#[derive(Clone, Copy, Debug, PartialEq)]
+ pub enum SwitchMode {
+     /// At the program's `k`-th clause, counting from 1.
+     AtClause(u64),
+     /// At every clause boundary.
+     EveryOpportunity,
++    /// The simulation mode (spec 2026-10-07 section 4).
++    Sim(crate::SimConfig),
+ }
+ 
+ /// What an embedding that owns real descriptors hands the interpreter so that
+ /// a prompt is visible before the read that waits for its answer.
+ ///
+ /// **The interpreter never writes to a descriptor**: it appends to two
+ /// buffers, and without sinks nothing is written until the caller drains
+ /// [`Outcome`](crate::Outcome). That is invisible to a program whose output is
+ /// compared at the end and wrong for one that asks a question -- an
+ /// interactive `TRACE` pause prints its prompt and then reads, and a buffered
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 7420e4f32..88d84b08a 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -57,20 +57,21 @@ mod stem;
+ // `PULL`/`PARSE PULL` read back.
+ mod queue;
+ use queue::Queue;
+ 
+ // What a command line supplies to a top-level program: the one argument string
+ // it can carry, how a list of words becomes that string, and where `.input`
+ // reads from.
+ mod invocation;
+ pub use invocation::{Invocation, ProgramInput, Sinks, SwitchMode, join_command_line};
+ pub use rexx_core::FrameBlock;
++pub use sim::{ClockOrigin, Knobs, Policy, SimConfig, SimReport};
+ 
+ // `.input`: one line position, shared by every construct that reads a line,
+ // and the queue-first rule `PULL` follows on top of it.
+ mod input;
+ use input::Input;
+ 
+ // The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the
+ // plan cache, and the full name-resolution order (plan, then `extra`, then
+ // growth).
+ mod plan;
+@@ -111,20 +112,23 @@ mod scheduler;
+ 
+ // The guard locks and the deadlock check.
+ mod guards;
+ 
+ // The semaphore classes' and the unnamed `Sys*Sem` routines' state.
+ mod semaphores;
+ 
+ // The live-interpreter registry, the timer thread and the inbox.
+ mod timer;
+ 
++// The deterministic simulation mode: seed, streams and the clock seam.
++mod sim;
++
+ // The signal handlers (D-U3).
+ mod signal;
+ 
+ // The baton, and the synchronisation shim it, the inbox and the timer use.
+ mod baton;
+ mod sync;
+ 
+ // The interpreter's state on another OS thread (D-U2).
+ mod island;
+ 
+@@ -318,20 +322,22 @@ pub struct Outcome {
+     pub stack: StackSpan,
+     /// How many times `Heap::collect` ran during this program.
+     pub collections: u64,
+     /// `Heap::peak_body_bytes` at the end of the run, for this crate's tests.
+     #[cfg(test)]
+     pub peak_body_bytes: usize,
+     /// How many times the run declined to compile a body because it does not
+     /// fit the compiled stream's index widths. Such a body raises
+     /// [`Loud::chunk_refused`]; there is no second engine to run it.
+     pub chunks_refused: usize,
++    /// The simulation mode's report, for a run in it.
++    pub sim: Option<SimReport>,
+     /// The would-be park points the run reached.
+     #[cfg(feature = "pinning")]
+     pub pinning: PinReport,
+     #[cfg(feature = "sharing")]
+     pub sharing: SharingReport,
+ }
+ 
+ /// The sharing fraction's counts (spec 2026-09-29 section 5): objects
+ /// touched means resolved through the heap's accessors, or made.
+ #[cfg(feature = "sharing")]
+@@ -1229,20 +1235,22 @@ struct Interp {
+     /// not known.
+     stack_base: usize,
+     stack_room: usize,
+     /// This interpreter's entry in the live-interpreter registry, with the
+     /// inbox and the request word the timer sets.
+     timer: crate::timer::Registration,
+     /// The right to touch this interpreter's state.
+     baton: crate::sync::Arc<crate::island::InterpBaton>,
+     /// The deterministic switch mode, where a test set one.
+     switch: Option<crate::scheduler::Switch>,
++    /// The simulation mode's state, where the switch mode is `Sim`.
++    sim: Option<Box<crate::sim::Sim>>,
+     /// Whether the pending `SLICE` has been counted as deferred.
+     slice_deferred: bool,
+     /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
+     /// rather than invented afresh for it, under `plans`' own `BodyKey`
+     /// **paired with the trace setting the chunk was compiled under**.
+     chunks: NameMap<(BodyKey, ChunkTrace), Rc<crate::ir::Chunk>>,
+     /// How many times `chunk_for` has refused a body because it does not fit
+     /// the index widths the compiled stream commits to (`ChunkTooLarge`) --
+     /// never because a body contains a construct the compiler does not
+     /// know, which does not exist (D21: every instruction compiles).
+@@ -2000,20 +2008,21 @@ impl Interp {
+             security_managers: FxHashMap::default(),
+             plans: NameMap::default(),
+             last_plan: None,
+             deadline: None,
+             clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
+             stack_base: 0,
+             stack_room: usize::MAX,
+             timer,
+             baton,
+             switch: None,
++            sim: None,
+             slice_deferred: false,
+             chunks: NameMap::default(),
+             chunks_refused: 0,
+             routines: FxHashMap::default(),
+             package_public_routines: FxHashMap::default(),
+             merged_public_routines: FxHashMap::default(),
+             merged_public_classes: NameMap::default(),
+             rexx_class_cache: NameMap::default(),
+             package_namespaces: FxHashMap::default(),
+             package_locals: FxHashMap::default(),
+@@ -2707,20 +2716,23 @@ impl Interp {
+         self.collect_if_due();
+         self.heap.alloc_with_uncollected(behaviour, body)
+     }
+ 
+     /// The collection decision every allocation site makes, without the
+     /// allocation.
+     fn collect_if_due(&mut self) {
+         if self.collect_due
+             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
+         {
++            if self.sim_declines_collection() {
++                return;
++            }
+             self.collect_now();
+         }
+     }
+ 
+     /// Charges `bytes` of a body allocated outside its slot. When the bytes
+     /// since the last collection reach `bytes_due`, the next allocation
+     /// collects.
+     #[inline]
+     pub(crate) fn charge_body_bytes(&mut self, bytes: usize) {
+         let since = self.heap.charge_body_bytes(bytes);
+@@ -2770,20 +2782,21 @@ impl Interp {
+             plans: _,
+             last_plan: _,
+             deadline: _,
+             clause_countdown: _,
+             stack_base: _,
+             stack_room: _,
+             timer: _,
+             baton: _,
+             pool: _,
+             switch: _,
++            sim: _,
+             slice_deferred: _,
+             // A chunk's interned literals are allocated immortal.
+             chunks: _,
+             chunks_refused: _,
+             routines: _,
+             package_public_routines: _,
+             merged_public_routines: _,
+             merged_public_classes,
+             // **Not a root, deliberately.** Its values are class handles, and
+             // rooting them would pin every class a `.NAME` ever resolved --
+@@ -3013,21 +3026,21 @@ impl Interp {
+             self.method_objects
+                 .retain(|(class, _), _| !dead.contains(class));
+         }
+         // **Not raised for the stress mode**, which collects on every
+         // allocation by definition and must not have its watermark moved
+         // out from under it.
+         if !self.stress_collect {
+             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
+         }
+         self.bytes_due = COLLECT_BYTES_FLOOR.max(stats.live_bytes);
+-        self.collect_due = self.stress_collect;
++        self.collect_due = self.stress_collect || self.sim_collects_at_random();
+         #[cfg(feature = "sharing")]
+         self.heap.sharing_pause(false);
+     }
+ 
+     /// Flags a class carrying a class-side `UNINIT` so the collector
+     /// resurrects it rather than freeing it, exactly as it does for an
+     /// instance.
+     pub(crate) fn flag_class_uninit(&mut self, class: ObjRef) {
+         if self.classes().has_pending_class_uninit(class) {
+             self.heap.set_uninit(class);
+@@ -3305,20 +3318,21 @@ fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome
+         stdout: Vec::new(),
+         stderr: raised.report(&ClauseSite {
+             path,
+             sites: &sites,
+         }),
+         stack: StackSpan::default(),
+         collections: 0,
+         #[cfg(test)]
+         peak_body_bytes: 0,
+         chunks_refused: 0,
++        sim: None,
+         #[cfg(feature = "pinning")]
+         pinning: PinReport::default(),
+         #[cfg(feature = "sharing")]
+         sharing: SharingReport::default(),
+     }
+ }
+ 
+ /// Everything that happens on the interpreter thread: parse, run, report.
+ /// `stack` is the thread's stack size, where known.
+ fn execute_on(
+@@ -3478,20 +3492,23 @@ fn execute_on(
+     report_late_failures(&mut interp, started, path, &mut exit_code);
+ 
+     // `MemoryObject::lastChanceUninit` (`memory/RexxMemory.cpp:324`), reached
+     // from `Interpreter::terminateInterpreter` (`runtime/Interpreter.cpp:279`)
+     // -- after everything the program and its activities do, and reached
+     // whatever the program's own outcome was. Measured, oracle: a program
+     // whose main body raises 42.3 still prints its class `UNINIT` and exits
+     // 214, and one ending `exit 7` prints it and exits 7.
+     // An activity those `UNINIT`s start is not waited for (ruling P39).
+     refused.extend(interp.terminate());
++    if let Err(Failure::Loud(loud)) = interp.sim_breached() {
++        refused.push(*loud);
++    }
+     for loud in refused {
+         interp
+             .trace
+             .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+         exit_code = NOT_IMPLEMENTED_EXIT;
+     }
+ 
+     // **The one place a deadline becomes an answer**, below everything that
+     // runs clauses, so that a run abandoned part-way cannot report the status
+     // its main body happened to reach. It is here rather than in the three
+@@ -3519,20 +3536,21 @@ fn execute_on(
+ 
+     let outcome = Outcome {
+         exit_code,
+         stdout: std::mem::take(&mut interp.out),
+         stderr: std::mem::take(&mut interp.trace),
+         stack,
+         collections,
+         #[cfg(test)]
+         peak_body_bytes: interp.heap.peak_body_bytes(),
+         chunks_refused,
++        sim: interp.sim_report(),
+         #[cfg(feature = "pinning")]
+         pinning: interp.pinning.take(&interp.activity.pins),
+         #[cfg(feature = "sharing")]
+         sharing: {
+             let [bootstrap, program] = interp.heap.sharing_counts();
+             SharingReport { bootstrap, program }
+         },
+     };
+     // A pool thread still running a call ends it under the baton, through
+     // this interpreter's state, which therefore outlives the run.
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index 3f4fea833..2350932d7 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -564,21 +564,21 @@ impl Interp {
+         &mut self,
+         code: &Code<'_>,
+         index: usize,
+         instruction: &Instruction,
+         source: Option<&ProgramSource>,
+         first_instruction: bool,
+     ) -> Result<ExecOutcome, Failure> {
+         #[cfg(test)]
+         if let Some(crate::scheduler::Scripted::Park) = crate::scheduler::take_scripted() {
+             return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Sleep {
+-                deadline: std::time::Instant::now(),
++                deadline: self.now(),
+             }));
+         }
+         match &instruction.kind {
+             InstructionKind::Guard(guard) => self.exec_guard(code, index, guard),
+             InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
+             InstructionKind::Command { .. } | InstructionKind::Address(_)
+                 if self.blocked_command_ended() =>
+             {
+                 self.end_blocked_command(index, instruction, source)
+                     .map(ExecOutcome::Done)
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index 8281e6441..e83a5872e 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -296,20 +296,22 @@ pub(crate) struct Activities {
+     /// so that no loop above them can wait for their completions.
+     runs_below: usize,
+     /// The last token a blocking operation was posted under.
+     next_block: u64,
+     /// The tokens of blocking operations a halt abandoned, no longer in
+     /// flight, until their ends are drained.
+     abandoned_blocks: Vec<u64>,
+     /// The guard locks, and what each parked activity waits on.
+     pub(crate) guards: crate::guards::GuardTable,
+     pub(crate) semaphores: crate::semaphores::Semaphores,
++    /// The switches from one activity to another.
++    switches: u64,
+ }
+ 
+ /// The oracle's `msecInADay`: a timer's wait is whole days of this, then a
+ /// remainder.
+ pub(crate) const TIMER_DAY: std::time::Duration = std::time::Duration::from_secs(86_400);
+ 
+ /// Main's handle, which `Activities::new` gives the activity that runs the
+ /// program.
+ const MAIN: ActivityId = ActivityId(0);
+ 
+@@ -346,23 +348,29 @@ impl Activities {
+             last_number: 0,
+             next_native: 0,
+             late_failures: Vec::new(),
+             in_flight: 0,
+             abandoned: Vec::new(),
+             runs_below: 0,
+             next_block: 0,
+             abandoned_blocks: Vec::new(),
+             guards: crate::guards::GuardTable::default(),
+             semaphores: crate::semaphores::Semaphores::default(),
++            switches: 0,
+         }
+     }
+ 
++    /// The switches from one activity to another so far.
++    pub(crate) fn switches(&self) -> u64 {
++        self.switches
++    }
++
+     /// Puts `activity` at the back of the ready queue unless it is ready
+     /// already: a second entry would end the next park it makes.
+     fn make_ready(&mut self, activity: ActivityId) {
+         if !self.ready.contains(&activity)
+             && !self.set_aside.iter().any(|(set, _)| *set == activity)
+         {
+             self.ready.push_back(activity);
+         }
+     }
+ 
+@@ -956,20 +964,21 @@ impl Interp {
+     fn switch_to(&mut self, next: ActivityId, ended: bool) {
+         let table = &mut self.activities;
+         let Some(mut idle) = table.idle[next.0 as usize].take() else {
+             unreachable!("a ready handle names an idle activity");
+         };
+         std::mem::swap(&mut self.activity, &mut idle.activity);
+         std::mem::swap(self.roots.activity_mut(), &mut idle.roots);
+         #[cfg(feature = "sharing")]
+         self.heap.share_as(self.activity.sharing_tag);
+         let outgoing = std::mem::replace(&mut table.running, next);
++        table.switches += 1;
+         if ended {
+             table.retired.extend(idle.activity.thread.take());
+             table.free.push(outgoing.0);
+             if table.pooled.len() <= MAX_POOLED {
+                 table.pooled.push_back(idle.activity.number);
+             }
+         } else {
+             table.idle[outgoing.0 as usize] = Some(idle);
+         }
+         // A slice belongs to the activity it was set for.
+@@ -1004,20 +1013,25 @@ impl Interp {
+ 
+     /// A wait for `reason` with Rust frames between the scheduler and the
+     /// running driver (spec 2026-09-29 section 2.6): the other activities run
+     /// on this stack until the running one is woken. Where nothing can run,
+     /// the refusal is an inverted wait if an activity is ready whose frames
+     /// lie below a loop on the stack, and a wait nothing can end where no
+     /// activity is ready at all.
+     pub(crate) fn pinned_wait(&mut self, reason: ParkReason) -> Option<Failure> {
+         pinned_park!(self, reason);
+         self.park(reason);
++        if self.sim_fails_wait() {
++            pinned_unpark!(self);
++            self.cancel_wait();
++            return Some(Raised::insufficient_stack().into());
++        }
+         let waited = self.run_others(true);
+         pinned_unpark!(self);
+         let failure = match waited {
+             Ok(Waited::Woken) => return None,
+             Ok(Waited::Blocked { inverted: false }) => Loud::unsatisfiable_wait().into(),
+             Ok(Waited::Blocked { inverted: true }) => {
+                 inverted_wait!(self, reason);
+                 Loud::inverted_wait(reason.waits_for()).into()
+             }
+             Err(failure) => failure,
+@@ -1145,30 +1159,30 @@ impl Interp {
+ 
+     /// Posts `id`, `cancelled` saying for each of [`Interp::timer_waiters`]
+     /// whether its object's `CANCELED` is `.true`, and wakes every waiter. A
+     /// waiter in its whole days whose object is not cancelled resets the post
+     /// and has its current day end instead, as the oracle's day loop does.
+     ///
+     /// # Panics
+     ///
+     /// If `cancelled` does not hold one flag per waiter.
+     pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: &[bool]) {
++        let now = self.now();
+         let table = &mut self.activities;
+         let Some(timer) = table.timers.get_mut(&id) else {
+             return;
+         };
+         assert_eq!(
+             timer.waiters.len(),
+             cancelled.len(),
+             "a timer posted with a cancel flag per waiter"
+         );
+-        let now = Instant::now();
+         let mut moved: Vec<(u64, Instant, Instant)> = Vec::new();
+         let mut woken: Vec<u64> = Vec::new();
+         let mut waiting = Vec::new();
+         for (waiter, &cancelled) in std::mem::take(&mut timer.waiters)
+             .into_iter()
+             .zip(cancelled)
+         {
+             let end = waiter.days_end;
+             if !cancelled && now < end {
+                 let begun = (end - now).as_nanos().div_ceil(TIMER_DAY.as_nanos());
+@@ -1238,20 +1252,23 @@ impl Interp {
+     pub(crate) fn drain_completions(&mut self) {
+         let posted = self.timer.drain();
+         self.file_completions(posted);
+     }
+ 
+     /// Hands each completion of `posted` to the parked activity that made its
+     /// call and readies that activity, and lends the baton to each thread
+     /// that recalls it. What follows a recall goes back to the inbox before
+     /// the lend, where a loop the lendee nests can drain it.
+     pub(crate) fn file_completions(&mut self, mut posted: VecDeque<Posted>) {
++        if self.sim.is_some() {
++            self.sim_screen_posts(&posted);
++        }
+         while let Some(next) = posted.pop_front() {
+             match next {
+                 Posted::Completed(Completed {
+                     activity,
+                     frame,
+                     completion,
+                 }) => {
+                     self.activities.in_flight -= 1;
+                     if let Some(call) = self
+                         .record_of(activity)
+@@ -1388,40 +1405,40 @@ impl Interp {
+     }
+ 
+     /// Whether an activity other than the running one is alive.
+     pub(crate) fn others_live(&self) -> bool {
+         self.activities.idle.len() - 1 > self.activities.free.len()
+     }
+ 
+     /// Moves every sleeper whose deadline is due to the ready queue, in
+     /// deadline order.
+     fn wake_due_sleepers(&mut self) {
+-        let now = Instant::now();
++        let now = self.now();
+         let table = &mut self.activities;
+         while let Some(Reverse((deadline, _, sleeper))) = table.sleepers.peek().copied() {
+             if deadline > now {
+                 break;
+             }
+             table.sleepers.pop();
+             table.make_ready(sleeper);
+         }
+     }
+ 
+     /// [`Interp::run_started_activities`] until it has nothing left to run or
+     /// the run's deadline has passed, with each failure it answered on the
+     /// way, in order.
+     pub(crate) fn run_started_to_end(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
+         let mut failures = self.take_late_failures();
+         while let Err(failure) = self.run_started_activities() {
+-            let deadline = matches!(failure, Failure::Deadline);
++            let last = matches!(failure, Failure::Deadline) || self.sim_is_stuck();
+             failures.push((failure, Vec::new()));
+-            if deadline {
++            if last {
+                 break;
+             }
+         }
+         failures
+     }
+ 
+     /// The `UNINIT`s a collection readied, run on an activity whose dispatch
+     /// has ended (`Activity::runThread`, `concurrency/Activity.cpp:249`). The
+     /// first refusal they meet is answered; the later ones are kept for the
+     /// program's end, in order.
+@@ -1471,22 +1488,25 @@ impl Interp {
+                 && table.in_flight == table.runs_below
+             {
+                 self.idle_for_good()?;
+             }
+         }
+     }
+ 
+     /// Idles this thread with nothing left that can wake an activity but a
+     /// signal's halt; the run's deadline ends it.
+     fn idle_for_good(&mut self) -> Result<(), Failure> {
++        if self.sim.is_some() {
++            return Err(self.sim_endless_wait());
++        }
+         while self.activities.ready.is_empty() {
+-            self.idle_until(Instant::now() + TIMER_DAY)?;
++            self.idle_until(self.now() + TIMER_DAY)?;
+         }
+         Ok(())
+     }
+ 
+     /// Runs ready activities with the running one set aside, until it is
+     /// ready again, it has ended as main ends in another loop, or nothing can
+     /// run. It is running again on return. The running activity is `buried`
+     /// where it waits from Rust frames below this loop; a buried activity is
+     /// not run by a loop above its own: it is set aside and goes back to the
+     /// ready queue for its own loop when this one returns. An activity whose
+@@ -1938,30 +1958,38 @@ impl Interp {
+                 self.activity.sliced = Some((floor, at));
+                 if !self.parked_for_guard() {
+                     self.yield_at_slice();
+                 }
+             }
+             Ok(Driven::Ended(ended)) => self.activity.root_end = Some(Ok(ended)),
+             Err(failure) => self.activity.root_end = Some(Err(failure)),
+         }
+     }
+ 
++    /// The clause boundaries the switch mode has counted.
++    pub(crate) fn switch_clauses(&self) -> u64 {
++        self.switch.as_ref().map_or(0, |switch| switch.clauses)
++    }
++
+     /// Whether the running activation has replied and its split has yet to
+     /// run.
+     pub(crate) fn split_owed(&self) -> bool {
+         self.running_activation()
+             .and_then(|activation| activation.replied.as_ref())
+             .is_some_and(|replied| replied.continuation.is_none())
+     }
+ 
+     /// Switches activities as `mode` says, and never on the timer's word.
+     pub(crate) fn set_switch_mode(&mut self, mode: SwitchMode) {
++        if let SwitchMode::Sim(config) = mode {
++            self.start_sim(config);
++        }
+         self.switch = Some(Switch { mode, clauses: 0 });
+         self.timer.disarm();
+         self.clause_countdown = 1;
+     }
+ 
+     /// The requests a visit of the clause countdown serves, before the clause
+     /// begins: the sleepers now due, the switch mode's count, the timer's
+     /// arming, and `SLICE`. A slice ends where the clause `yields` and
+     /// nothing pins the activity; anywhere else it is deferred to the next
+     /// clause that does (spec 2026-09-29 P6-4), and a second slice that finds
+@@ -1987,20 +2015,25 @@ impl Interp {
+         }
+         if !self.activities.sleepers.is_empty() {
+             self.wake_due_sleepers();
+         }
+         if let Some(switch) = &mut self.switch {
+             self.clause_countdown = 1;
+             switch.clauses += 1;
+             let due = match switch.mode {
+                 SwitchMode::EveryOpportunity => true,
+                 SwitchMode::AtClause(clause) => switch.clauses == clause,
++                SwitchMode::Sim(_) => {
++                    let clauses = switch.clauses;
++                    self.sim_clause(clauses)?;
++                    false
++                }
+             };
+             if due {
+                 self.timer.requests().set(SLICE);
+             }
+         } else if self.activities.ready.is_empty() && self.activities.in_flight == 0 {
+             self.timer.disarm();
+         } else {
+             self.timer.arm();
+         }
+         let fresh = self.timer.requests().pending(SLICE);
+@@ -2339,14 +2372,17 @@ pub(crate) fn script(outcomes: &[Scripted]) {
+ /// The next queued outcome, outside the library bootstrap.
+ #[cfg(test)]
+ pub(crate) fn take_scripted() -> Option<Scripted> {
+     if !crate::ir::drive::counting() {
+         return None;
+     }
+     SCRIPT.with(|script| script.borrow_mut().pop_front())
+ }
+ 
+ mod pool;
++#[cfg(test)]
++pub(crate) use pool::threads_spawned;
+ pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
+ 
+ #[cfg(test)]
++#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
+ mod tests;
+diff --git a/rust/crates/rexx-exec/src/scheduler/pool.rs b/rust/crates/rexx-exec/src/scheduler/pool.rs
+index b466a20de..6fae70c00 100644
+--- a/rust/crates/rexx-exec/src/scheduler/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/pool.rs
+@@ -99,43 +99,54 @@ impl Pool {
+             stack,
+             bound,
+         }
+     }
+ 
+     /// The stack each thread gets.
+     pub(crate) fn stack(&self) -> usize {
+         self.stack
+     }
+ 
++    /// Bounds the pool at `bound` threads from now on; at 0 no thread, idle
++    /// or new, is reserved.
++    pub(crate) fn set_bound(&mut self, bound: usize) {
++        self.bound = bound;
++    }
++
+     /// An idle thread, or a new one, for one job; `None` where the bound is
+     /// reached or the spawn fails.
+     pub(crate) fn reserve(&self) -> Option<Worker> {
++        if self.bound == 0 {
++            return None;
++        }
+         let mut state = lock(&self.shared.state);
+         if let Some(worker) = state.idle.pop() {
+             return Some(worker);
+         }
+         if state.threads.len() >= self.bound {
+             return None;
+         }
+         let mailbox = Arc::new(Mailbox {
+             mail: Mutex::new(None),
+             arrived: Condvar::new(),
+         });
+         let spawned = std::thread::Builder::new()
+             .name("rexx-pool".to_string())
+             .stack_size(self.stack)
+             .spawn({
+                 let (shared, mailbox) = (Arc::clone(&self.shared), Arc::clone(&mailbox));
+                 move || work(&shared, &mailbox)
+             })
+             .ok()?;
+         let thread = spawned.thread().id();
++        #[cfg(test)]
++        SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
+         state.threads.push((thread, spawned));
+         Some(Worker { thread, mailbox })
+     }
+ }
+ 
+ impl Drop for Pool {
+     /// Ends the idle threads and waits for them; a thread still running a
+     /// job ends once it has run it.
+     fn drop(&mut self) {
+         let (idle, mut threads) = {
+@@ -166,20 +177,32 @@ impl Worker {
+     pub(crate) fn run(self, job: Job) {
+         self.send(Mail::Run(job));
+     }
+ 
+     fn send(&self, mail: Mail) {
+         *lock(&self.mailbox.mail) = Some(mail);
+         self.mailbox.arrived.notify_one();
+     }
+ }
+ 
++#[cfg(test)]
++thread_local! {
++    /// How many pool threads this thread has spawned.
++    static SPAWNED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
++}
++
++/// [`SPAWNED`]'s count.
++#[cfg(test)]
++pub(crate) fn threads_spawned() -> u64 {
++    SPAWNED.with(std::cell::Cell::get)
++}
++
+ /// A pool thread: runs each job it is sent, then waits idle for the next.
+ fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
+     crate::signal::block();
+     loop {
+         let mail = {
+             let mut mail = lock(&mailbox.mail);
+             loop {
+                 if let Some(arrived) = mail.take() {
+                     break arrived;
+                 }
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/native.rs b/rust/crates/rexx-exec/src/scheduler/tests/native.rs
+index 4e4eae6fb..d23a4ff58 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/native.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/native.rs
+@@ -15,20 +15,22 @@
+ use crate::{Interp, Invocation, Outcome, SwitchMode};
+ 
+ const RUN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+ 
+ /// A run of a program, with the driver exits it made and the times a
+ /// callback took the baton.
+ struct Counted {
+     outcome: Outcome,
+     exits: u64,
+     takes: u64,
++    /// The pool threads the run spawned.
++    spawned: u64,
+ }
+ 
+ impl Counted {
+     fn stdout(&self) -> String {
+         String::from_utf8_lossy(&self.outcome.stdout).into_owned()
+     }
+ 
+     fn stderr(&self) -> String {
+         String::from_utf8_lossy(&self.outcome.stderr).into_owned()
+     }
+@@ -53,20 +55,21 @@ fn counted(source: &str, stress: bool, invocation: Invocation) -> Counted {
+                 "/tmp/native.rex",
+                 text,
+                 stress,
+                 invocation,
+                 Some(crate::INTERPRETER_STACK_BYTES),
+             );
+             Counted {
+                 outcome,
+                 exits: crate::scheduler::native_exits(),
+                 takes: crate::dispatch::library::callback_takes(),
++                spawned: crate::scheduler::threads_spawned(),
+             }
+         })
+         .expect("the interpreter thread")
+         .join()
+         .expect("the run did not panic")
+ }
+ 
+ fn bounded() -> Invocation {
+     Invocation::none().with_deadline(RUN_DEADLINE)
+ }
+@@ -241,20 +244,56 @@ fn the_timer_is_armed_for_a_call_in_flight() {
+     interp.serve_requests(false).expect("no request fails");
+     assert!(!interp.timer.armed_in_registry());
+     interp.activities.in_flight = 1;
+     interp.serve_requests(false).expect("no request fails");
+     assert!(interp.timer.armed_in_registry());
+     interp.activities.in_flight = 0;
+     interp.serve_requests(false).expect("no request fails");
+     assert!(!interp.timer.armed_in_registry());
+ }
+ 
++/// The timer arms no slice in the simulation mode, even with a call in
++/// flight.
++#[test]
++fn the_timer_arms_no_slice_in_the_simulation_mode() {
++    let mut interp = Interp::new();
++    let config = crate::SimConfig::parse("sim:1").expect("a sim spec");
++    interp.set_switch_mode(SwitchMode::Sim(config));
++    interp.activities.in_flight = 1;
++    interp.serve_requests(false).expect("no request fails");
++    assert!(!interp.timer.armed_in_registry());
++    interp.activities.in_flight = 0;
++}
++
++/// In the simulation mode a native call that leaves its driver runs on the
++/// baton: the pool spawns no thread, where it spawns one under the switch
++/// mode, and the program prints the same.
++#[test]
++fn a_native_call_in_the_simulation_mode_spawns_no_pool_thread() {
++    let source = "m = .t~new~start('work')\nsay TestIntArg(5)\nsay m~result\n\
++                  ::requires 'orxfunction' LIBRARY\n::class t\n::method work\n  return TestIntArg(7)\n";
++    let config = crate::SimConfig::parse("sim:1").expect("a sim spec");
++    let switched_run = counted(source, false, switched());
++    let sim_run = counted(
++        source,
++        false,
++        bounded().with_switch_mode(SwitchMode::Sim(config)),
++    );
++    for run in [&switched_run, &sim_run] {
++        assert_eq!(run.outcome.exit_code, 0, "{}", run.stderr());
++        assert_eq!(run.stdout(), "5\n7\n");
++        assert_eq!(run.exits, 2);
++    }
++    assert!(switched_run.spawned > 0);
++    assert_eq!(sim_run.spawned, 0);
++}
++
+ /// A guarded library method whose send waited for its guard runs once the
+ /// guard is granted, from the wait's continuation, which is outside every
+ /// driver: the call keeps the baton there.
+ #[test]
+ fn a_guarded_library_method_runs_after_its_guard_wait() {
+     let source = "o = .k~new\nm = o~start('hold')\ncall SysSleep 0.05\nsay o~lib(5)\n\
+                   say m~result\n::class k\n::method hold\n  call SysSleep 0.2\n  return 'held'\n\
+                   ::method lib external \"LIBRARY orxmethod TestIntArg\"\n";
+     for invocation in [bounded(), switched()] {
+         let run = counted(source, false, invocation);
+diff --git a/rust/crates/rexx-exec/src/semaphores.rs b/rust/crates/rexx-exec/src/semaphores.rs
+index fd94f3a01..37e4d0326 100644
+--- a/rust/crates/rexx-exec/src/semaphores.rs
++++ b/rust/crates/rexx-exec/src/semaphores.rs
+@@ -211,23 +211,22 @@ impl Interp {
+         let me = self.running_activity();
+         self.activities.semaphores.withdraw(me);
+         // A halt withdrew the wait: an untimed `Sys*Sem` wait answers `0`, as
+         // `sem_wait` interrupted does (`platform/unix/SysRexxUtil.cpp:836-850`),
+         // and every other wait answers that it took nothing.
+         if std::mem::take(&mut self.activity.woken_by_halt) {
+             let answer = wait.kind == WaitKind::Counting;
+             self.activities.semaphores.answers.insert(me, answer);
+             return None;
+         }
+-        let expired = wait
+-            .deadline
+-            .is_some_and(|deadline| Instant::now() >= deadline);
++        let now = self.now();
++        let expired = wait.deadline.is_some_and(|deadline| now >= deadline);
+         let answer = match (wait.kind, wait.key) {
+             (WaitKind::Event, SemaphoreKey::Object(object)) => {
+                 if wait.deadline.is_none() || self.event_posted(object) {
+                     true
+                 } else if expired {
+                     false
+                 } else {
+                     return Some(wait);
+                 }
+             }
+diff --git a/rust/crates/rexx-exec/src/sim.rs b/rust/crates/rexx-exec/src/sim.rs
+new file mode 100644
+index 000000000..18adfdd53
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/sim.rs
+@@ -0,0 +1,584 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The deterministic simulation mode (spec 2026-10-07 section 4) and the
++//! clock seam every clock read goes through. Each decision kind draws from a
++//! stream of its own, so a knob turned on or off moves no other draw.
++//! ```text
++//! sim                    a seed from the clock, printed
++//! sim:7                  seed 7, policy fifo, the seeded clock origin
++//! sim:7,fifo,gc=0.01     a collection at each allocation with probability 0.01
++//! sim:7,halt@500         every activity halted at clause boundary 500
++//! sim:7,fail=wait:2      the second pinned wait fails with 11.1
++//! sim:7,clock=midnight   virtual time starts seconds before a local midnight
++//! sim:7,clock=real       virtual time starts at the wall clock
++//! ```
++
++use std::collections::VecDeque;
++use std::time::{Duration, Instant, SystemTime};
++
++use crate::error::Failure;
++use crate::scheduler::Posted;
++use crate::{Interp, Loud};
++
++/// The per-clause quantum's range: half and twice the oracle's measured
++/// 58 ns per clause (`rexxcps`, median of five runs, 17,229,378 clauses per
++/// second; `docs/superpowers/plans/phase-6-1-gate.md`, `## Task 8`).
++const QUANTUM_NANOS: std::ops::RangeInclusive<u64> = 29..=116;
++
++/// The seeded origin's epoch, 2026-01-01T00:00:00Z, in seconds since the Unix
++/// epoch; a seed adds an offset under a year.
++const EPOCH_SECONDS: u64 = 1_767_225_600;
++
++const DAY_SECONDS: u64 = 86_400;
++
++/// How a run in the simulation mode is driven: its seed, its policy and its
++/// knobs.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct SimConfig {
++    pub seed: u64,
++    pub policy: Policy,
++    pub knobs: Knobs,
++}
++
++/// When the running activity is preempted.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Policy {
++    /// Never: an activity runs until it parks or ends, and the ready queue
++    /// is first in, first out.
++    Fifo,
++}
++
++/// The simulation's knobs, each off by default.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct Knobs {
++    /// The probability of a collection at each allocation.
++    pub gc: Option<f64>,
++    /// The clause boundary, counting from 1, at which every activity is
++    /// halted as a signal halts them.
++    pub halt_at: Option<u64>,
++    /// The pinned wait, counting from 1, that fails with 11.1 in place of
++    /// waiting.
++    pub fail_wait: Option<u64>,
++    pub clock: ClockOrigin,
++}
++
++/// Where virtual time starts.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum ClockOrigin {
++    /// A fixed epoch plus a seeded offset.
++    Seeded,
++    /// Seconds before a local day boundary, the day seeded.
++    Midnight,
++    /// The wall clock when the run starts.
++    Real,
++}
++
++/// What a run in the simulation mode reports beside its outcome.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct SimReport {
++    pub seed: u64,
++    pub policy: Policy,
++    /// The clause boundaries counted.
++    pub steps: u64,
++    /// The switches from one activity to another.
++    pub switches: u64,
++    pub trace_hash: Option<u64>,
++}
++
++impl SimConfig {
++    /// Reads `sim` or `sim:SEED[,item...]`; `sim` alone takes its seed from
++    /// the clock.
++    pub fn parse(text: &str) -> Result<SimConfig, String> {
++        let mut config = SimConfig {
++            seed: 0,
++            policy: Policy::Fifo,
++            knobs: Knobs {
++                gc: None,
++                halt_at: None,
++                fail_wait: None,
++                clock: ClockOrigin::Seeded,
++            },
++        };
++        if text == "sim" {
++            config.seed = clock_seed();
++            return Ok(config);
++        }
++        let Some(rest) = text.strip_prefix("sim:") else {
++            return Err(format!("`{text}` is not `sim` or `sim:SEED[,...]`"));
++        };
++        let mut items = rest.split(',');
++        let seed = items.next().unwrap_or_default();
++        config.seed = seed
++            .parse()
++            .map_err(|_| format!("`{seed}` is not a seed: a whole number below 2**64"))?;
++        for item in items {
++            let knobs = &mut config.knobs;
++            if item == "fifo" {
++                config.policy = Policy::Fifo;
++            } else if let Some(q) = item.strip_prefix("gc=") {
++                let q: f64 = q
++                    .parse()
++                    .ok()
++                    .filter(|q| (0.0..=1.0).contains(q))
++                    .ok_or_else(|| format!("`{item}`: gc is a probability from 0 to 1"))?;
++                knobs.gc = Some(q);
++            } else if let Some(k) = item.strip_prefix("halt@") {
++                knobs.halt_at = Some(count(item, k)?);
++            } else if let Some(k) = item.strip_prefix("fail=wait:") {
++                knobs.fail_wait = Some(count(item, k)?);
++            } else if item == "clock=midnight" {
++                knobs.clock = ClockOrigin::Midnight;
++            } else if item == "clock=real" {
++                knobs.clock = ClockOrigin::Real;
++            } else {
++                return Err(format!(
++                    "`{item}` is not a policy (`fifo`) or a knob (`gc=Q`, `halt@K`, \
++                     `fail=wait:K`, `clock=midnight`, `clock=real`)"
++                ));
++            }
++        }
++        Ok(config)
++    }
++
++    /// The configuration a child `rexx` runs under: `seed`, this policy, and
++    /// the knobs that are not scripted against this run's own clauses.
++    fn child(self, seed: u64) -> SimConfig {
++        SimConfig {
++            seed,
++            knobs: Knobs {
++                halt_at: None,
++                fail_wait: None,
++                ..self.knobs
++            },
++            ..self
++        }
++    }
++}
++
++/// `K` of `halt@K` or `fail=wait:K`, counting from 1.
++fn count(item: &str, k: &str) -> Result<u64, String> {
++    k.parse()
++        .ok()
++        .filter(|k| *k > 0)
++        .ok_or_else(|| format!("`{item}`: a count from 1"))
++}
++
++impl std::fmt::Display for Policy {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        match self {
++            Policy::Fifo => f.write_str("fifo"),
++        }
++    }
++}
++
++impl std::fmt::Display for SimConfig {
++    /// The text [`SimConfig::parse`] reads back.
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(f, "sim:{},{}", self.seed, self.policy)?;
++        let knobs = &self.knobs;
++        if let Some(q) = knobs.gc {
++            write!(f, ",gc={q}")?;
++        }
++        if let Some(k) = knobs.halt_at {
++            write!(f, ",halt@{k}")?;
++        }
++        if let Some(k) = knobs.fail_wait {
++            write!(f, ",fail=wait:{k}")?;
++        }
++        match knobs.clock {
++            ClockOrigin::Seeded => Ok(()),
++            ClockOrigin::Midnight => f.write_str(",clock=midnight"),
++            ClockOrigin::Real => f.write_str(",clock=real"),
++        }
++    }
++}
++
++/// A seed for `sim` alone.
++fn clock_seed() -> u64 {
++    #[allow(clippy::disallowed_methods, reason = "the seed of `sim` alone")]
++    let since = SystemTime::now()
++        .duration_since(SystemTime::UNIX_EPOCH)
++        .unwrap_or_default();
++    since.as_secs() ^ u64::from(since.subsec_nanos()) << 32 ^ u64::from(std::process::id())
++}
++
++/// splitmix64's step: advances `state` and answers its next output.
++fn splitmix64(state: &mut u64) -> u64 {
++    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
++    let mut z = *state;
++    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
++    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
++    z ^ (z >> 31)
++}
++
++/// xoshiro256**.
++pub(crate) struct Rng([u64; 4]);
++
++impl Rng {
++    /// A generator seeded with the next four outputs of the splitmix64 at
++    /// `state`.
++    fn split(state: &mut u64) -> Rng {
++        Rng(std::array::from_fn(|_| splitmix64(state)))
++    }
++
++    pub(crate) fn next_u64(&mut self) -> u64 {
++        let s = &mut self.0;
++        let result = s[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
++        let t = s[1] << 17;
++        s[2] ^= s[0];
++        s[3] ^= s[1];
++        s[1] ^= s[2];
++        s[0] ^= s[3];
++        s[2] ^= t;
++        s[3] = s[3].rotate_left(45);
++        result
++    }
++
++    /// A draw from `[0, 1)`.
++    pub(crate) fn unit(&mut self) -> f64 {
++        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
++    }
++
++    /// A draw from `range`.
++    pub(crate) fn within(&mut self, range: std::ops::RangeInclusive<u64>) -> u64 {
++        let span = range.end() - range.start() + 1;
++        range.start() + ((u128::from(self.next_u64()) * u128::from(span)) >> 64) as u64
++    }
++}
++
++/// One stream per decision kind, each seeded from consecutive splitmix64
++/// outputs of the seed, in this order.
++#[expect(
++    dead_code,
++    reason = "`fifo` draws neither `schedule` nor `order`; both are split so the later streams keep their seeds"
++)]
++pub(crate) struct Streams {
++    /// Preemption decisions.
++    pub(crate) schedule: Rng,
++    /// The pick among the activities one event readied.
++    pub(crate) order: Rng,
++    /// The clock's origin and quantum.
++    pub(crate) clock: Rng,
++    /// Collections at allocations.
++    pub(crate) gc: Rng,
++    /// The seeds of child `rexx` processes.
++    pub(crate) children: Rng,
++    /// The starting states of each activity's `RANDOM` generator.
++    pub(crate) random: Rng,
++}
++
++impl Streams {
++    fn new(seed: u64) -> Streams {
++        let mut state = seed;
++        Streams {
++            schedule: Rng::split(&mut state),
++            order: Rng::split(&mut state),
++            clock: Rng::split(&mut state),
++            gc: Rng::split(&mut state),
++            children: Rng::split(&mut state),
++            random: Rng::split(&mut state),
++        }
++    }
++}
++
++/// Virtual time: the instant and the wall time it started at, and how far
++/// it has run.
++pub(crate) struct Clock {
++    origin: Instant,
++    wall_origin: Duration,
++    elapsed: Duration,
++    quantum: Duration,
++}
++
++impl Clock {
++    /// Draws the quantum and then the origin's offset from `stream`, both
++    /// whatever `origin` is, so the knob moves no later draw.
++    fn new(origin: ClockOrigin, stream: &mut Rng) -> Clock {
++        let quantum = Duration::from_nanos(stream.within(QUANTUM_NANOS));
++        let offset_micros = stream.within(0..=365 * DAY_SECONDS * 1_000_000 - 1);
++        let before_midnight_micros = stream.within(500_000..=5_000_000);
++        let epoch = Duration::from_secs(EPOCH_SECONDS);
++        let wall_origin = match origin {
++            ClockOrigin::Seeded => epoch + Duration::from_micros(offset_micros),
++            ClockOrigin::Midnight => {
++                let day = offset_micros / (DAY_SECONDS * 1_000_000);
++                let midnight = epoch + Duration::from_secs((day + 1) * DAY_SECONDS);
++                let utc = crate::builtin::datetime::UNIX_BASE_TIME + midnight.as_micros() as i64;
++                let local = crate::builtin::datetime::local_offset_micros(utc);
++                let at = midnight.as_micros() as i64 - local - before_midnight_micros as i64;
++                Duration::from_micros(u64::try_from(at).unwrap_or_default())
++            }
++            ClockOrigin::Real =>
++            {
++                #[allow(clippy::disallowed_methods, reason = "`clock=real`'s origin")]
++                SystemTime::now()
++                    .duration_since(SystemTime::UNIX_EPOCH)
++                    .unwrap_or_default()
++            }
++        };
++        #[allow(
++            clippy::disallowed_methods,
++            reason = "virtual instants count from here"
++        )]
++        let origin = Instant::now();
++        Clock {
++            origin,
++            wall_origin,
++            elapsed: Duration::ZERO,
++            quantum,
++        }
++    }
++
++    fn now(&self) -> Instant {
++        self.origin + self.elapsed
++    }
++
++    fn wall_now(&self) -> SystemTime {
++        SystemTime::UNIX_EPOCH + self.wall_origin + self.elapsed
++    }
++
++    /// Moves virtual time on to `due`, or leaves it where it is past `due`.
++    fn advance_to(&mut self, due: Instant) {
++        if let Some(ahead) = due.checked_duration_since(self.now()) {
++            self.elapsed += ahead;
++        }
++    }
++}
++
++/// A run's simulation state.
++pub(crate) struct Sim {
++    config: SimConfig,
++    streams: Streams,
++    clock: Clock,
++    /// The pinned waits begun.
++    pinned_waits: u64,
++    /// Whether a wait nothing in the simulation can end was refused.
++    stuck: bool,
++    /// What another thread posted, where it posted something other than a
++    /// signal's halt.
++    breach: Option<&'static str>,
++}
++
++impl Interp {
++    /// The clock every deadline is set and tested against: virtual time in
++    /// the simulation mode, else the monotonic clock.
++    #[inline]
++    pub(crate) fn now(&self) -> Instant {
++        match &self.sim {
++            Some(sim) => sim.clock.now(),
++            #[allow(clippy::disallowed_methods, reason = "the seam")]
++            None => Instant::now(),
++        }
++    }
++
++    /// The wall clock `TIME` and `DATE` read: virtual time in the simulation
++    /// mode.
++    #[inline]
++    pub(crate) fn wall_now(&self) -> SystemTime {
++        match &self.sim {
++            Some(sim) => sim.clock.wall_now(),
++            #[allow(clippy::disallowed_methods, reason = "the seam")]
++            None => SystemTime::now(),
++        }
++    }
++
++    /// Enters the simulation mode for the rest of the run.
++    pub(crate) fn start_sim(&mut self, config: SimConfig) {
++        let mut streams = Streams::new(config.seed);
++        let clock = Clock::new(config.knobs.clock, &mut streams.clock);
++        self.sim = Some(Box::new(Sim {
++            config,
++            streams,
++            clock,
++            pinned_waits: 0,
++            stuck: false,
++            breach: None,
++        }));
++        self.pool.set_bound(0);
++        self.activity.random_source = None;
++        if config.knobs.gc.is_some() {
++            self.collect_due = true;
++        }
++    }
++
++    /// A clause boundary in the simulation mode, the `clauses`-th: virtual
++    /// time moves on a quantum, and `halt@K` halts at its boundary.
++    #[cold]
++    #[inline(never)]
++    pub(crate) fn sim_clause(&mut self, clauses: u64) -> Result<(), Failure> {
++        let Some(sim) = self.sim.as_deref_mut() else {
++            return Ok(());
++        };
++        sim.clock.elapsed += sim.clock.quantum;
++        let halt = sim.config.knobs.halt_at == Some(clauses);
++        self.sim_breached()?;
++        if halt {
++            self.halt_all();
++        }
++        Ok(())
++    }
++
++    /// Fails with the refusal for a post another thread made, if one did.
++    pub(crate) fn sim_breached(&mut self) -> Result<(), Failure> {
++        match self.sim.as_deref_mut().and_then(|sim| sim.breach.take()) {
++            Some(what) => Err(Loud::sim_foreign_post(what).into()),
++            None => Ok(()),
++        }
++    }
++
++    /// Idles until `due` in the simulation mode: virtual time jumps there,
++    /// unless the run's deadline, which is real, has passed.
++    pub(crate) fn sim_idle_until(&mut self, due: Instant) -> Result<(), Failure> {
++        if self.deadline_passed() {
++            return Err(self.expire_deadline());
++        }
++        if let Some(sim) = self.sim.as_deref_mut() {
++            sim.clock.advance_to(due);
++        }
++        self.drain_completions();
++        self.sim_breached()
++    }
++
++    /// The refusal for a wait that only a signal can end.
++    pub(crate) fn sim_endless_wait(&mut self) -> Failure {
++        self.sim_stuck(Loud::sim_endless_wait())
++    }
++
++    /// The refusal for a wait for another thread's post, which a pool of
++    /// bound 0 leaves none to make: every completion is posted by this
++    /// thread before it is waited for.
++    pub(crate) fn sim_unpostable_wait(&mut self) -> Failure {
++        self.sim_stuck(Loud::scheduler_inconsistency(
++            "a wait for another thread's post in the simulation mode",
++        ))
++    }
++
++    fn sim_stuck(&mut self, loud: Loud) -> Failure {
++        if let Some(sim) = self.sim.as_deref_mut() {
++            sim.stuck = true;
++        }
++        loud.into()
++    }
++
++    /// Whether a wait nothing in the simulation can end was refused, which
++    /// ends the program's wait for its activities.
++    pub(crate) fn sim_is_stuck(&self) -> bool {
++        self.sim.as_ref().is_some_and(|sim| sim.stuck)
++    }
++
++    /// Whether the pinned wait now beginning is the one `fail=wait:K` fails.
++    pub(crate) fn sim_fails_wait(&mut self) -> bool {
++        let Some(sim) = self.sim.as_deref_mut() else {
++            return false;
++        };
++        sim.pinned_waits += 1;
++        sim.config.knobs.fail_wait == Some(sim.pinned_waits)
++    }
++
++    /// Whether `gc=q`'s draw declines the collection due at an allocation,
++    /// where neither the slot nor the byte trigger makes it due.
++    pub(crate) fn sim_declines_collection(&mut self) -> bool {
++        let Some(sim) = self.sim.as_deref_mut() else {
++            return false;
++        };
++        let Some(q) = sim.config.knobs.gc else {
++            return false;
++        };
++        if sim.streams.gc.unit() < q {
++            return false;
++        }
++        self.heap.bytes_since() < self.bytes_due
++            && !(self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
++    }
++
++    /// Whether `gc=q` keeps a collection due at every allocation.
++    pub(crate) fn sim_collects_at_random(&self) -> bool {
++        self.sim
++            .as_ref()
++            .is_some_and(|sim| sim.config.knobs.gc.is_some())
++    }
++
++    /// Notes a post in `posted` that another thread made. Under a pool of
++    /// bound 0 the one post this thread makes is an inline native call's
++    /// completion, and the one another thread may make is a signal's halt.
++    pub(crate) fn sim_screen_posts(&mut self, posted: &VecDeque<Posted>) {
++        let Some(sim) = self.sim.as_deref_mut() else {
++            return;
++        };
++        for post in posted {
++            let what = match post {
++                Posted::Completed(_) | Posted::Halt => continue,
++                Posted::Recall(_) => "a recall of the baton",
++                Posted::Output { .. } => "a command's output",
++                Posted::Unblocked { .. } => "a command's end",
++                Posted::Input(_) => "a standard input chunk",
++                Posted::Panicked(_) => "a pool thread's panic",
++            };
++            sim.breach.get_or_insert(what);
++        }
++    }
++
++    /// The starting state of an activity's `RANDOM` generator in the
++    /// simulation mode.
++    pub(crate) fn sim_random_seed(&mut self) -> Option<u64> {
++        let sim = self.sim.as_deref_mut()?;
++        Some(sim.streams.random.next_u64())
++    }
++
++    /// The `REXX_SWITCH_MODE` a child process gets in the simulation mode,
++    /// its seed drawn from the children stream.
++    pub(crate) fn child_switch_mode(&mut self) -> Option<String> {
++        let sim = self.sim.as_deref_mut()?;
++        let seed = sim.streams.children.next_u64();
++        Some(sim.config.child(seed).to_string())
++    }
++
++    /// The report a run in the simulation mode ends with.
++    pub(crate) fn sim_report(&self) -> Option<SimReport> {
++        let sim = self.sim.as_deref()?;
++        Some(SimReport {
++            seed: sim.config.seed,
++            policy: sim.config.policy,
++            steps: self.switch_clauses(),
++            switches: self.activities.switches(),
++            trace_hash: None,
++        })
++    }
++}
++
++impl Loud {
++    /// A post in the simulation mode from a thread other than this one, other
++    /// than a signal's halt: a native's own thread or a pool thread, whose
++    /// timing is real.
++    pub(crate) fn sim_foreign_post(what: &str) -> Loud {
++        Loud {
++            message: crate::owned_message(
++                &format!("{what} posted by another thread in the simulation mode"),
++                None,
++            ),
++        }
++    }
++
++    /// A wait in the simulation mode that nothing but a real signal can end.
++    pub(crate) fn sim_endless_wait() -> Loud {
++        Loud {
++            message: crate::owned_message(
++                "a wait in the simulation mode that only a signal can end",
++                None,
++            ),
++        }
++    }
++}
++
++#[cfg(test)]
++#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
++mod tests;
+diff --git a/rust/crates/rexx-exec/src/sim/tests.rs b/rust/crates/rexx-exec/src/sim/tests.rs
+new file mode 100644
+index 000000000..6229441e3
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/sim/tests.rs
+@@ -0,0 +1,285 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++use crate::{Invocation, Outcome, SimConfig, SwitchMode, run_program};
++
++/// A bound on every run here, real time.
++const RUN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
++
++fn sim(spec: &str) -> SwitchMode {
++    SwitchMode::Sim(SimConfig::parse(spec).expect("a sim spec"))
++}
++
++fn run_in(source: &str, mode: Option<SwitchMode>) -> Outcome {
++    let invocation = Invocation::none().with_deadline(RUN_DEADLINE);
++    let invocation = match mode {
++        Some(mode) => invocation.with_switch_mode(mode),
++        None => invocation,
++    };
++    run_program("/tmp/sim.rex", source.as_bytes().to_vec(), invocation)
++}
++
++fn stdout(outcome: &Outcome) -> String {
++    String::from_utf8_lossy(&outcome.stdout).into_owned()
++}
++
++fn stderr(outcome: &Outcome) -> String {
++    String::from_utf8_lossy(&outcome.stderr).into_owned()
++}
++
++/// Sleeps 5 s, reads `time('e')`, lets an alarm ring and times out a wait on
++/// an event semaphore: 8 s of program time, each value read as a predicate.
++/// The oracle prints these four lines in 8.01 s.
++const TIMED: &str = "call time 'R'\n\
++    call SysSleep 5\n\
++    e = time('E')\n\
++    say 'slept' (e >= 5) (e < 6)\n\
++    alarm = .Alarm~new(1, .Message~new(.ringer, 'RING'))\n\
++    call SysSleep 2\n\
++    say 'rang' .ringer~rung\n\
++    sem = .EventSemaphore~new\n\
++    say 'waited' sem~wait(1)\n\
++    e = time('E')\n\
++    say 'elapsed' (e >= 8) (e < 9)\n\
++    ::class ringer\n\
++    ::attribute rung class\n\
++    ::method init class\n  self~rung = 0\n\
++    ::method ring class\n  self~rung = 1\n";
++
++const TIMED_OUT: &str = "slept 1 1\nrang 1\nwaited 0\nelapsed 1 1\n";
++
++#[test]
++fn a_timed_program_runs_on_virtual_time_and_prints_what_it_prints_on_real_time() {
++    let began = std::time::Instant::now();
++    let simulated = run_in(TIMED, Some(sim("sim:1")));
++    let took = began.elapsed();
++    assert_eq!(simulated.exit_code, 0, "{}", stderr(&simulated));
++    assert_eq!(stdout(&simulated), TIMED_OUT);
++    assert!(took < std::time::Duration::from_secs(1), "took {took:?}");
++    let real = run_in(TIMED, None);
++    assert_eq!(real.exit_code, 0, "{}", stderr(&real));
++    assert_eq!(stdout(&real), TIMED_OUT);
++}
++
++/// Unseeded `RANDOM`, `TIME` and `DATE`, which read the seed's streams and
++/// clock.
++const DRAWN: &str = "say random() random() random(1, 1000000)\n\
++    say time('L') date('S') time('E')\n\
++    t = .w~new~start('DRAW')\n\
++    say t~result\n\
++    ::class w\n::method draw\n  return random() time('L')\n";
++
++#[test]
++fn one_seed_gives_one_output() {
++    let first = run_in(DRAWN, Some(sim("sim:1")));
++    let second = run_in(DRAWN, Some(sim("sim:1")));
++    assert_eq!(first.exit_code, 0, "{}", stderr(&first));
++    assert_eq!(stdout(&first), stdout(&second));
++    assert_eq!(first.stderr, second.stderr);
++}
++
++#[test]
++fn two_seeds_draw_different_randoms() {
++    let one = run_in("say random() random() random()\n", Some(sim("sim:1")));
++    let two = run_in("say random() random() random()\n", Some(sim("sim:2")));
++    assert_eq!(one.exit_code, 0, "{}", stderr(&one));
++    assert_eq!(two.exit_code, 0, "{}", stderr(&two));
++    assert_ne!(stdout(&one), stdout(&two));
++}
++
++#[test]
++fn a_config_reads_back_what_it_prints() {
++    for text in [
++        "sim:7,fifo",
++        "sim:18446744073709551615,fifo,gc=0.25,halt@3,fail=wait:2,clock=midnight",
++        "sim:0,fifo,clock=real",
++    ] {
++        let config = SimConfig::parse(text).expect("a sim spec");
++        assert_eq!(config.to_string(), text);
++    }
++    assert_eq!(
++        SimConfig::parse("sim:7").map(|c| c.to_string()),
++        Ok("sim:7,fifo".into())
++    );
++    for wrong in [
++        "sim:",
++        "sim:x",
++        "sim:1,gc=2",
++        "sim:1,halt@0",
++        "sim:1,fail=wait:",
++        "sim:1,pre:1",
++        "simx",
++    ] {
++        assert!(SimConfig::parse(wrong).is_err(), "{wrong} parsed");
++    }
++}
++
++/// splitmix64 from 0, and xoshiro256** from `[1, 2, 3, 4]`, against their
++/// reference outputs.
++#[test]
++fn the_generators_give_their_reference_outputs() {
++    let mut state = 0;
++    assert_eq!(super::splitmix64(&mut state), 0xE220_A839_7B1D_CDAF);
++    let mut rng = super::Rng([1, 2, 3, 4]);
++    let drawn: Vec<u64> = (0..4).map(|_| rng.next_u64()).collect();
++    assert_eq!(drawn, [11520, 0, 1_509_978_240, 1_215_971_899_390_074_240]);
++}
++
++/// A started activity whose wait nothing can end is refused at the
++/// program's end, where real time waits for the run's deadline.
++#[test]
++fn a_wait_only_a_signal_can_end_is_refused() {
++    let source = ".w~new~start('WAITON', .message~new('abc', 'length'))\nsay 'main done'\n\
++                  ::class w\n::method waiton\n  use arg m\n  say 'waits'\n  return m~result\n";
++    let outcome = run_in(source, Some(sim("sim:1")));
++    assert_eq!(outcome.exit_code, 120);
++    assert_eq!(stdout(&outcome), "main done\nwaits\n");
++    assert_eq!(
++        stderr(&outcome),
++        "rexx-exec: a wait in the simulation mode that only a signal can end is not implemented\n"
++    );
++    let real = run_program(
++        "/tmp/sim.rex",
++        source.as_bytes().to_vec(),
++        Invocation::none().with_deadline(std::time::Duration::from_millis(300)),
++    );
++    assert_eq!(real.exit_code, crate::DEADLINE_EXIT);
++}
++
++/// `halt@K` halts every activity at clause boundary `K`, the same boundary
++/// on every run.
++#[test]
++fn halt_at_k_halts_at_its_boundary() {
++    let source = "signal on halt\ndo i = 1 to 1000\nend\nsay 'done'\nexit\nhalt:\nsay 'halted' i\n";
++    let first = run_in(source, Some(sim("sim:1,halt@50")));
++    let second = run_in(source, Some(sim("sim:9,halt@50")));
++    assert_eq!(first.exit_code, 0, "{}", stderr(&first));
++    assert!(stdout(&first).starts_with("halted "), "{}", stdout(&first));
++    assert_eq!(stdout(&first), stdout(&second));
++    let later = run_in(source, Some(sim("sim:1,halt@60")));
++    assert_ne!(stdout(&first), stdout(&later));
++    let unhalted = run_in(source, Some(sim("sim:1")));
++    assert_eq!(stdout(&unhalted), "done\n");
++}
++
++/// The pinned wait a sort comparator makes on a message's result: `fail=wait:1`
++/// fails it with 11.1, without the knob it answers.
++const PINNED: &str = "signal on syntax\nm = .message~new('abc', 'length')\n\
++     t = .k~new~start('SEND', m)\n\
++     a = .array~of(2, 1)\na~sortWith(.c~new(m))\nsay 'sorted' a~toString('L', ',')\nexit\n\
++     syntax:\nsay 'trapped' condition('o')~code\nexit\n\
++     ::class k\n::method send\n  use arg m\n  m~send\n\
++     ::class c\n::method init\n  expose m\n  use arg m\n\
++     ::method compare\n  expose m\n  use arg l, r\n  say m~result\n  return l - r\n";
++
++#[test]
++fn fail_wait_k_fails_the_kth_pinned_wait() {
++    let failed = run_in(PINNED, Some(sim("sim:1,fail=wait:1")));
++    assert_eq!(failed.exit_code, 0, "{}", stderr(&failed));
++    assert_eq!(stdout(&failed), "trapped 11.1\n");
++    let second = run_in(PINNED, Some(sim("sim:1,fail=wait:2")));
++    assert_eq!(stdout(&second), "3\nsorted 1,2\n");
++    let waited = run_in(PINNED, Some(sim("sim:1")));
++    assert_eq!(stdout(&waited), "3\nsorted 1,2\n");
++}
++
++/// Allocates enough short-lived strings, each too long to be held inline,
++/// that a collection at each allocation with probability 0.01 happens, and
++/// few enough that no other trigger fires.
++const ALLOCATING: &str = "do i = 1 to 3000\n  s = 'a long string' || i\nend\nsay 'done'\n";
++
++#[test]
++fn gc_q_collects_at_random_allocations_the_seed_chooses() {
++    let none = run_in(ALLOCATING, Some(sim("sim:1")));
++    assert_eq!(none.collections, 0);
++    let first = run_in(ALLOCATING, Some(sim("sim:1,gc=0.01")));
++    let again = run_in(ALLOCATING, Some(sim("sim:1,gc=0.01")));
++    assert_eq!(stdout(&first), "done\n");
++    assert!(first.collections > 0);
++    assert_eq!(first.collections, again.collections);
++    let zero = run_in(ALLOCATING, Some(sim("sim:1,gc=0")));
++    assert_eq!(zero.collections, 0);
++}
++
++/// The gc knob draws from its own stream: random numbers are the same with
++/// it on and off.
++#[test]
++fn a_knob_leaves_the_other_streams_draws() {
++    let source = "do i = 1 to 300\n  s = 'x' || i\nend\nsay random() random() time('L')\n";
++    let plain = run_in(source, Some(sim("sim:4")));
++    let collecting = run_in(source, Some(sim("sim:4,gc=0.5")));
++    assert!(collecting.collections > 0);
++    assert_eq!(stdout(&plain), stdout(&collecting));
++}
++
++/// A command's child gets a seed of its own, drawn from the children
++/// stream, and the parent's policy and knobs but `halt@` and `fail=`.
++#[test]
++fn a_child_gets_a_seed_from_the_children_stream() {
++    let source =
++        "address system 'echo $REXX_SWITCH_MODE'\naddress system 'echo $REXX_SWITCH_MODE'\n";
++    let first = run_in(source, Some(sim("sim:1,gc=0.5,halt@1000")));
++    let again = run_in(source, Some(sim("sim:1,gc=0.5,halt@1000")));
++    assert_eq!(first.exit_code, 0, "{}", stderr(&first));
++    assert_eq!(stdout(&first), stdout(&again));
++    let modes: Vec<&str> = stdout(&first).leak().lines().collect();
++    assert_eq!(modes.len(), 2);
++    assert_ne!(modes[0], modes[1]);
++    for mode in modes {
++        let child = SimConfig::parse(mode).expect("the child's mode parses");
++        assert_ne!(child.seed, 1);
++        assert_eq!(mode, format!("sim:{},fifo,gc=0.5", child.seed));
++    }
++}
++
++/// `clock=midnight` starts seconds before a local midnight, so a sleep
++/// crosses into the next day.
++#[test]
++fn clock_midnight_crosses_a_day_boundary() {
++    let source = "d = date('S')\nt = time('S')\ncall SysSleep 6\n\
++                  say (t >= 86394) (date('B', date('S'), 'S') - date('B', d, 'S'))\n";
++    let outcome = run_in(source, Some(sim("sim:3,clock=midnight")));
++    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
++    assert_eq!(stdout(&outcome), "1 1\n");
++}
++
++/// A post from another thread is a determinism breach, refused at the next
++/// clause boundary; a signal's halt is not.
++#[test]
++fn a_post_from_another_thread_is_refused() {
++    let post = |posted: crate::scheduler::Posted| {
++        let mut interp = crate::Interp::new();
++        interp.set_switch_mode(sim("sim:1"));
++        let inbox = interp.timer.inbox();
++        std::thread::spawn(move || inbox.post(posted))
++            .join()
++            .expect("the posting thread");
++        interp
++            .serve_requests(true)
++            .err()
++            .map(|failure| match failure {
++                crate::Failure::Loud(loud) => loud.message,
++                _ => panic!("a failure that is not a refusal"),
++            })
++    };
++    assert_eq!(
++        post(crate::scheduler::Posted::Output {
++            error: false,
++            bytes: b"x".to_vec(),
++        }),
++        Some(
++            "a command's output posted by another thread in the simulation mode is not \
++             implemented"
++                .into()
++        )
++    );
++    assert_eq!(post(crate::scheduler::Posted::Halt), None);
++}
+diff --git a/rust/crates/rexx-exec/src/sync.rs b/rust/crates/rexx-exec/src/sync.rs
+index f28a36bd1..89b1865a3 100644
+--- a/rust/crates/rexx-exec/src/sync.rs
++++ b/rust/crates/rexx-exec/src/sync.rs
+@@ -180,21 +180,26 @@ impl Wake {
+     }
+ 
+     /// The shipped take, `signal::take_pending`'s.
+     pub(crate) fn take_signal(&self) -> bool {
+         self.signalled
+             .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+             .is_ok()
+     }
+ }
+ 
++/// The timer thread's clock, which slices and wakes on real time.
+ #[cfg(not(all(loom, test)))]
++#[allow(
++    clippy::disallowed_methods,
++    reason = "the timer thread, which the simulation mode does not arm"
++)]
+ pub(crate) fn now() -> Instant {
+     Instant::now()
+ }
+ 
+ /// The model clock: the instant the model execution began, plus what
+ /// [`advance`] added.
+ #[cfg(all(loom, test))]
+ pub(crate) fn now() -> Instant {
+     let (began, elapsed) = &*CLOCK;
+     *began + Duration::from_nanos(elapsed.load(std::sync::atomic::Ordering::SeqCst))
+@@ -209,20 +214,21 @@ pub(crate) fn advance(by: Duration) {
+         .fetch_add(nanos, std::sync::atomic::Ordering::SeqCst);
+ }
+ 
+ #[cfg(all(loom, test))]
+ loom::lazy_static! {
+     static ref CLOCK: (Instant, std::sync::atomic::AtomicU64) =
+         (Instant::now(), std::sync::atomic::AtomicU64::new(0));
+ }
+ 
+ #[cfg(all(test, not(loom)))]
++#[allow(clippy::disallowed_methods, reason = "these tests time real waits")]
+ mod tests {
+     use super::Wake;
+     use std::time::{Duration, Instant};
+ 
+     /// A timed wait with nothing written ends at its timeout: the best of
+     /// three 300 ms waits is under 1 ms late. Measured at niceness 5, a
+     /// socket read timeout was 15 to 24 ms late and a poll timeout about
+     /// 1.5 ms.
+     #[test]
+     fn a_timed_wait_ends_close_to_its_timeout() {
+diff --git a/rust/crates/rexx-exec/tests/bootstrap_install_oracle.rs b/rust/crates/rexx-exec/tests/bootstrap_install_oracle.rs
+index b5acd998c..7af198409 100644
+--- a/rust/crates/rexx-exec/tests/bootstrap_install_oracle.rs
++++ b/rust/crates/rexx-exec/tests/bootstrap_install_oracle.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The directive halves of `CoreClasses.orx` and `StreamClasses.orx`,
+ //! installed and then questioned, against the oracle.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::PathBuf;
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use support::oracle::{descriptor_diffs, did_not_finish};
+ 
+ /// Env var that flips this file from a skip into the check --
+ /// `tests/corpus.rs`'s own switch, for the reason
+diff --git a/rust/crates/rexx-exec/tests/builtin_status.rs b/rust/crates/rexx-exec/tests/builtin_status.rs
+index 286be6d01..8be853330 100644
+--- a/rust/crates/rexx-exec/tests/builtin_status.rs
++++ b/rust/crates/rexx-exec/tests/builtin_status.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Where the builtin implemented/not-implemented boundary sits, measured
+ //! rather than described, and committed as `rust/corpus/builtin-status.txt`.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::collections::BTreeMap;
+ use std::fmt::Write as _;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use rexx_exec::NOT_IMPLEMENTED_EXIT;
+ use support::oracle::{Oracle, descriptor_diffs, did_not_finish};
+diff --git a/rust/crates/rexx-exec/tests/collection_scopes.rs b/rust/crates/rexx-exec/tests/collection_scopes.rs
+index ec1fee32b..bd31aa742 100644
+--- a/rust/crates/rexx-exec/tests/collection_scopes.rs
++++ b/rust/crates/rexx-exec/tests/collection_scopes.rs
+@@ -6,20 +6,25 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `corpus/collection-scopes.tsv` (D89): which scope defines each documented
+ //! collection method, whether that scope's body is C++ or Rexx, and for a C++
+ //! body the `Setup.cpp` token and arity operand.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use support::setup_cpp::setup_tables;
+ 
+ use std::collections::HashMap;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ 
+ const TABLE_FILE: &str = "corpus/collection-scopes.tsv";
+ const REFRESH_ENV: &str = "REXX_COLLECTION_SCOPES_REFRESH";
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 87075db46..ab9a9053e 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -7,20 +7,25 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Phase 6 exit criterion 1's test list, derived per test method from the
+ //! ooTest sources and held equal to the one in
+ //! `docs/superpowers/plans/phase-6-pinning.md`; with the `pinning` feature, the
+ //! would-be park points each of those tests reaches.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ use std::collections::{BTreeMap, BTreeSet};
+ use std::env;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ 
+ /// Overrides the directory the derivation walks, for the negative control.
+ const ROOT_ENV: &str = "REXX_CONCURRENCY_ROOT";
+ 
+ fn worktree() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+diff --git a/rust/crates/rexx-exec/tests/deadline.rs b/rust/crates/rexx-exec/tests/deadline.rs
+index 0321e9377..ed6d24227 100644
+--- a/rust/crates/rexx-exec/tests/deadline.rs
++++ b/rust/crates/rexx-exec/tests/deadline.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The crate-side watchdog: a run that does not terminate ends as a bounded,
+ //! distinguishable outcome instead of running for ever.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod watchdog;
+ 
+ use std::time::{Duration, Instant};
+ 
+ use rexx_exec::{DEADLINE_EXIT, DEADLINE_REPORT, Invocation, Outcome, run_program};
+ 
+ /// A path for a program that was never on disk, matching what the other
+ /// in-process harnesses pass.
+ const PATH: &str = "<deadline test>";
+ 
+diff --git a/rust/crates/rexx-exec/tests/input_oracle.rs b/rust/crates/rexx-exec/tests/input_oracle.rs
+index 1dc9f102b..b53cd1e67 100644
+--- a/rust/crates/rexx-exec/tests/input_oracle.rs
++++ b/rust/crates/rexx-exec/tests/input_oracle.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Command-line arguments and a non-empty console, compared against the
+ //! running oracle.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::process::{Command, Stdio};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use support::oracle::{CppOutcome, classify_termination, did_not_finish, write_and_wait};
+ 
+ /// Env var that flips this file from a skip into the check.
+diff --git a/rust/crates/rexx-exec/tests/introspection_scopes.rs b/rust/crates/rexx-exec/tests/introspection_scopes.rs
+index 1e562ee02..4564243ba 100644
+--- a/rust/crates/rexx-exec/tests/introspection_scopes.rs
++++ b/rust/crates/rexx-exec/tests/introspection_scopes.rs
+@@ -6,20 +6,25 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `corpus/introspection-scopes.tsv` (Phase 5i Task 0): which scope defines
+ //! each documented introspection method, whether that scope's body is C++ or
+ //! Rexx, and for a C++ body the `Setup.cpp` token and arity operand.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use support::arity::{self, Receiver};
+ use support::setup_cpp::setup_tables;
+ 
+ use std::collections::HashMap;
+ use std::fs;
+ use std::path::PathBuf;
+ 
+ const TABLE_FILE: &str = "corpus/introspection-scopes.tsv";
+diff --git a/rust/crates/rexx-exec/tests/ir_recorded_oracle.rs b/rust/crates/rexx-exec/tests/ir_recorded_oracle.rs
+index 320d85792..e3f7601da 100644
+--- a/rust/crates/rexx-exec/tests/ir_recorded_oracle.rs
++++ b/rust/crates/rexx-exec/tests/ir_recorded_oracle.rs
+@@ -8,20 +8,25 @@
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `ir_recorded_cases`' recorded expectations, checked against the running oracle
+ //! rather than against this crate.
+ //! ```text
+ //! program not-oracle-bytes=do-with-refused
+ //! ```
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::collections::BTreeMap;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use rexx_exec::{Invocation, Outcome, run_program};
+ use support::oracle::{Oracle, did_not_finish, locate};
+ 
+diff --git a/rust/crates/rexx-exec/tests/library_routine_memory.rs b/rust/crates/rexx-exec/tests/library_routine_memory.rs
+index e7f31149e..430357ad8 100644
+--- a/rust/crates/rexx-exec/tests/library_routine_memory.rs
++++ b/rust/crates/rexx-exec/tests/library_routine_memory.rs
+@@ -11,20 +11,25 @@
+ 
+ //! A library routine's imported `Routine` object, asked for in a loop, under
+ //! the address-space cap the corpus gives the oracle. The corpus runs this
+ //! crate in-process and uncapped, so it cannot see a run that exceeds it.
+ //!
+ //! It loads the oracle checkout's `librxmath.so`. On a machine without that
+ //! checkout it fails naming what is missing: it calls
+ //! [`support::oracle::locate`], as `licensed_divergences.rs` and
+ //! `datetime_zone.rs` do, and checks the library the same way.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::Path;
+ use std::process::{Command, Stdio};
+ 
+ use support::oracle::{ORACLE_MEMORY_LIMIT_KIB, locate};
+ 
+ /// **A loop of `importedRoutines` sends runs to completion under the cap.**
+ /// Measured, 400,000 sends under `::requires 'rxmath' LIBRARY` and `ulimit -v
+diff --git a/rust/crates/rexx-exec/tests/licensed_divergences.rs b/rust/crates/rexx-exec/tests/licensed_divergences.rs
+index 58ac551aa..ab3f70bfd 100644
+--- a/rust/crates/rexx-exec/tests/licensed_divergences.rs
++++ b/rust/crates/rexx-exec/tests/licensed_divergences.rs
+@@ -7,20 +7,25 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The executable half of the DEVIATION rows that license a difference from
+ //! the oracle: each row's program run through the C++ interpreter and through
+ //! both of this crate's engines, with all three descriptors asserted on every
+ //! side.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::collections::BTreeSet;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use rexx_exec::{Invocation, Outcome, run_program};
+ use support::oracle::{CppOutcome, did_not_finish, locate, wrapped_exit_code};
+ 
+diff --git a/rust/crates/rexx-exec/tests/method_bodies.rs b/rust/crates/rexx-exec/tests/method_bodies.rs
+index 0966bc110..4020f9bdf 100644
+--- a/rust/crates/rexx-exec/tests/method_bodies.rs
++++ b/rust/crates/rexx-exec/tests/method_bodies.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The method-body table (D76): whether each documented method **works**,
+ //! where gate table C only asks whether `hasMethod` answers for it.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod gate_tables;
+ mod support;
+ mod watchdog;
+ 
+ use std::collections::{BTreeMap, BTreeSet};
+ use std::fmt::Write as _;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::process::Command;
+ 
+@@ -530,20 +535,21 @@ fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
+                 abs.display()
+             )
+         });
+     Outcome {
+         exit_code: out.status.code().unwrap_or(-1),
+         stdout: out.stdout,
+         stderr: out.stderr,
+         stack: StackSpan::default(),
+         collections: 0,
+         chunks_refused: 0,
++        sim: None,
+         #[cfg(feature = "pinning")]
+         pinning: rexx_exec::PinReport::default(),
+         #[cfg(feature = "sharing")]
+         sharing: rexx_exec::SharingReport::default(),
+     }
+ }
+ 
+ /// A row this crate answered, held between the oracle's first run and the
+ /// second pass that decides what its verdict is allowed to be.
+ struct Pending {
+diff --git a/rust/crates/rexx-exec/tests/oracle_deadline.rs b/rust/crates/rexx-exec/tests/oracle_deadline.rs
+index 469357399..c7d74a7d0 100644
+--- a/rust/crates/rexx-exec/tests/oracle_deadline.rs
++++ b/rust/crates/rexx-exec/tests/oracle_deadline.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! A program that never finishes reddens the oracle harness at its
+ //! deadline, rather than hanging it.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::PathBuf;
+ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+ 
+ use support::oracle::{ORACLE_DEADLINE, Termination, did_not_finish};
+ 
+ const GATE_ENV: &str = "REXX_CORPUS_GATE";
+ 
+diff --git a/rust/crates/rexx-exec/tests/package_requires.rs b/rust/crates/rexx-exec/tests/package_requires.rs
+index f02440073..41cb87947 100644
+--- a/rust/crates/rexx-exec/tests/package_requires.rs
++++ b/rust/crates/rexx-exec/tests/package_requires.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The `::REQUIRES` search, the cycle report and `::OPTIONS NOPROLOG`, each
+ //! against the oracle.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::process::{Command, Stdio};
+ 
+ use support::oracle::locate;
+ 
+ /// One route the search covers, as a directory holding the required file and
+ /// the answer that directory's copy gives.
+diff --git a/rust/crates/rexx-exec/tests/parse_version_oracle.rs b/rust/crates/rexx-exec/tests/parse_version_oracle.rs
+index e2f0449f4..a30eaffbf 100644
+--- a/rust/crates/rexx-exec/tests/parse_version_oracle.rs
++++ b/rust/crates/rexx-exec/tests/parse_version_oracle.rs
+@@ -5,20 +5,25 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `PARSE VERSION`'s string, checked against the running oracle rather than
+ //! against a copy of itself.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::PathBuf;
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use support::oracle::{descriptor_diffs, did_not_finish};
+ 
+ /// Env var that flips this file from a skip into the check. `corpus.rs`'s own
+ /// switch, deliberately reused rather than given a fourth spelling.
+diff --git a/rust/crates/rexx-exec/tests/program_end.rs b/rust/crates/rexx-exec/tests/program_end.rs
+index 2a0286e01..437822dc7 100644
+--- a/rust/crates/rexx-exec/tests/program_end.rs
++++ b/rust/crates/rexx-exec/tests/program_end.rs
+@@ -7,20 +7,25 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Program end with an activity that never finishes (the Phase 6 S2-S5
+ //! plan's Review Focus 2): the oracle waits for ever, and so does
+ //! `rexx-run`, with main's output written and without spinning. Each test
+ //! kills the process once it has seen that.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ use std::io::Read;
+ use std::path::PathBuf;
+ use std::process::{Child, Command, Stdio};
+ use std::sync::mpsc;
+ use std::time::{Duration, Instant};
+ 
+ /// How long main's output may take to appear.
+ const OUTPUT_WAIT: Duration = Duration::from_secs(30);
+ 
+ /// How long the process is watched once main's output is out.
+diff --git a/rust/crates/rexx-exec/tests/prompt_before_read.rs b/rust/crates/rexx-exec/tests/prompt_before_read.rs
+index 5e81477e0..215070a1a 100644
+--- a/rust/crates/rexx-exec/tests/prompt_before_read.rs
++++ b/rust/crates/rexx-exec/tests/prompt_before_read.rs
+@@ -12,20 +12,25 @@
+ //! A prompt reaches the terminal before the read that waits for its answer.
+ //!
+ //! **No corpus program can see this.** The differential harness supplies
+ //! stdin as a buffer and compares the two output streams once the run is
+ //! over, so a prompt written at exit and a prompt written before the read
+ //! compare equal. What the two differ in is whether a person is looking at
+ //! the question while the interpreter waits for their answer, which is a
+ //! property of `rexx-run`'s own descriptors and is only observable by
+ //! spawning it.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ use std::io::{BufRead, BufReader, Read, Write};
+ use std::path::PathBuf;
+ use std::process::{Child, Command, Stdio};
+ use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
+ use std::time::Duration;
+ 
+ /// How long a line may take to arrive before the run counts as blocked. Long
+ /// enough that a loaded machine does not fail it, short enough that a
+ /// genuinely buffered prompt is not waited on for the harness's own timeout.
+ const PATIENCE: Duration = Duration::from_secs(20);
+diff --git a/rust/crates/rexx-exec/tests/signals.rs b/rust/crates/rexx-exec/tests/signals.rs
+index 4d4037ddc..704e4119f 100644
+--- a/rust/crates/rexx-exec/tests/signals.rs
++++ b/rust/crates/rexx-exec/tests/signals.rs
+@@ -17,20 +17,25 @@
+ //! bytes are the oracle's, measured under `timeout -s SIGNAL 1` or by the
+ //! same PID or group signal, 30 runs each, except where a test says
+ //! otherwise.
+ //!
+ //! Every test here depends on a wall-clock boundary (ruling P48): the signal
+ //! must land inside a sleep, and the halt within [`PROMPT`]. A mismatch is
+ //! run again once, and only a second mismatch fails; the Ctrl-C witnesses
+ //! run once, since the thread that takes a terminal's signal is the one
+ //! that waits on the command (ruling P67).
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ use std::io::Read;
+ use std::os::unix::process::CommandExt;
+ use std::path::PathBuf;
+ use std::process::{Command, Stdio};
+ use std::sync::mpsc;
+ use std::time::{Duration, Instant};
+ 
+ /// How long the readiness line may take to appear.
+ const READY_WAIT: Duration = Duration::from_secs(30);
+ 
+diff --git a/rust/crates/rexx-exec/tests/state_builtin_oracle.rs b/rust/crates/rexx-exec/tests/state_builtin_oracle.rs
+index 0b18ff1b9..977c6ed01 100644
+--- a/rust/crates/rexx-exec/tests/state_builtin_oracle.rs
++++ b/rust/crates/rexx-exec/tests/state_builtin_oracle.rs
+@@ -6,20 +6,25 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! A differential sweep over `builtin/state.rs`'s eleven names: every case
+ //! runs through both interpreters and all three descriptors must agree,
+ //! except for the declared gaps in [`DECLARED_GAPS`].
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ mod support;
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
+ use support::oracle::{Oracle, descriptor_diffs, did_not_finish};
+ 
+ /// One swept program: a name for the failure message, and the whole
+ /// single-clause-or-two source.
+diff --git a/rust/crates/rexx-exec/tests/stdin_contention.rs b/rust/crates/rexx-exec/tests/stdin_contention.rs
+index 76ea8b77c..dcb7063db 100644
+--- a/rust/crates/rexx-exec/tests/stdin_contention.rs
++++ b/rust/crates/rexx-exec/tests/stdin_contention.rs
+@@ -8,20 +8,25 @@
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Activities that touch standard input while another reads it: each case
+ //! runs `rexx-run` with standard input a pipe, writes lines to it (and
+ //! signals it) at the times its `run` line names, and compares all three
+ //! descriptors with the oracle's, 30 runs each. Every case depends on a
+ //! wall-clock boundary (ruling P48), so a mismatch is run again once.
+ 
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
++
+ use std::io::{Read, Write};
+ use std::path::PathBuf;
+ use std::process::{Command, Stdio};
+ use std::time::{Duration, Instant};
+ 
+ const CASE_DIR: &str = "tests/stdin_contention";
+ 
+ /// How long a case may run before it is killed.
+ const END_WAIT: Duration = Duration::from_secs(20);
+ 
+diff --git a/rust/crates/rexx-exec/tests/support/arity.rs b/rust/crates/rexx-exec/tests/support/arity.rs
+index 58be175e2..cd08126aa 100644
+--- a/rust/crates/rexx-exec/tests/support/arity.rs
++++ b/rust/crates/rexx-exec/tests/support/arity.rs
+@@ -6,20 +6,24 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The arity probe: what a documented method does when it is sent an argument
+ //! list it could accept, measured against the oracle.
+ 
+ #![allow(dead_code)]
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
+ 
+ use std::collections::HashMap;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ use std::process::Command;
+ 
+ use super::oracle;
+ 
+ pub const EXEMPT: &str = "EXEMPT:";
+ 
+diff --git a/rust/crates/rexx-exec/tests/support/oracle.rs b/rust/crates/rexx-exec/tests/support/oracle.rs
+index 4d4e9cf95..5852ad6f1 100644
+--- a/rust/crates/rexx-exec/tests/support/oracle.rs
++++ b/rust/crates/rexx-exec/tests/support/oracle.rs
+@@ -12,20 +12,24 @@
+ //! Running a Rexx program through the built C++ interpreter, and comparing
+ //! its three observable channels against this crate's own.
+ 
+ // This module is pulled in by `mod support;` in more than one integration
+ // test binary, and each one links only the part of it that binary uses. A
+ // helper used by one harness and not another is therefore "dead" from the
+ // other's point of view, which is a fact about Cargo's test-target model
+ // rather than about this code. `tests/owners.rs` carries the same attribute
+ // for the same reason.
+ #![allow(dead_code)]
++#![allow(
++    clippy::disallowed_methods,
++    reason = "this harness times or bounds real runs"
++)]
+ 
+ use std::io::Read;
+ use std::path::{Path, PathBuf};
+ use std::process::{Child, Command, Stdio};
+ use std::sync::atomic::{AtomicUsize, Ordering};
+ use std::sync::mpsc;
+ use std::thread;
+ use std::time::{Duration, Instant};
+ 
+ use rexx_exec::Outcome;
+@@ -638,20 +642,21 @@ mod tests {
+     }
+ 
+     fn outcome(stderr: &[u8]) -> Outcome {
+         Outcome {
+             exit_code: 0,
+             stdout: Vec::new(),
+             stderr: stderr.to_vec(),
+             stack: StackSpan::default(),
+             collections: 0,
+             chunks_refused: 0,
++            sim: None,
+             #[cfg(feature = "pinning")]
+             pinning: rexx_exec::PinReport::default(),
+             #[cfg(feature = "sharing")]
+             sharing: rexx_exec::SharingReport::default(),
+         }
+     }
+ 
+     fn cpp_outcome(stderr: &[u8]) -> CppOutcome {
+         CppOutcome {
+             stdout: Vec::new(),
+@@ -692,20 +697,21 @@ mod tests {
+     }
+ 
+     fn stdout_outcome(stdout: &[u8]) -> Outcome {
+         Outcome {
+             exit_code: 0,
+             stdout: stdout.to_vec(),
+             stderr: Vec::new(),
+             stack: StackSpan::default(),
+             collections: 0,
+             chunks_refused: 0,
++            sim: None,
+             #[cfg(feature = "pinning")]
+             pinning: rexx_exec::PinReport::default(),
+             #[cfg(feature = "sharing")]
+             sharing: rexx_exec::SharingReport::default(),
+         }
+     }
+ 
+     fn cpp_stdout_outcome(stdout: &[u8]) -> CppOutcome {
+         CppOutcome {
+             stdout: stdout.to_vec(),
+diff --git a/rust/crates/rexx-exec/tests/watchdog/mod.rs b/rust/crates/rexx-exec/tests/watchdog/mod.rs
+index cc4f523ef..eaf784524 100644
+--- a/rust/crates/rexx-exec/tests/watchdog/mod.rs
++++ b/rust/crates/rexx-exec/tests/watchdog/mod.rs
+@@ -95,20 +95,21 @@ pub fn run_bounded_with(
+ 
+ /// The outcome of a run this harness gave up waiting for.
+ pub fn abandoned(path: &str, after: Duration) -> Outcome {
+     Outcome {
+         exit_code: DEADLINE_EXIT,
+         stdout: Vec::new(),
+         stderr: format!("rexx-watchdog: {path} was abandoned after {after:?}\n").into_bytes(),
+         stack: StackSpan::default(),
+         collections: 0,
+         chunks_refused: 0,
++        sim: None,
+         #[cfg(feature = "pinning")]
+         pinning: rexx_exec::PinReport::default(),
+         #[cfg(feature = "sharing")]
+         sharing: rexx_exec::SharingReport::default(),
+     }
+ }
+ 
+ /// Whether `outcome` is a run that did not finish -- either layer's.
+ pub fn did_not_finish(outcome: &Outcome) -> bool {
+     outcome.stderr.ends_with(rexx_exec::DEADLINE_REPORT)
