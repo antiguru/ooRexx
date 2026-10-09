@@ -999,8 +999,8 @@ Exit 0, every spread at most 0.0001%. Percentages are against base61 except the 
 | program | head % | r1 (running total) % | r1 vs head % | verdict |
 |---|---:|---:|---:|---|
 | pingmsg | -0.2545 | +0.0096 | +0.2647 | inside |
-| pingguard | -0.3663 | -0.3664 | -0.0000 | inside |
-| pingsem | -0.2494 | -0.2494 | -0.0000 | inside |
+| pingguard | -0.3663 | -0.3664 | -0.0000 | callgrind inside; wall clock unresolved |
+| pingsem | -0.2494 | -0.2494 | -0.0000 | callgrind inside; wall clock unresolved |
 | alloc | +0.0738 | +0.2330 | +0.1591 | inside |
 | alloc4c | -0.8139 | +0.0607 | +0.8817 | inside |
 | heapshape | +1.1559 | +0.0525 | -1.0907 | inside |
@@ -1026,6 +1026,25 @@ layout control (head with `layout-pad.py 48`, `wall4`, `-r 11`, against head): p
 +1.59%, pingguard +0.00%; r1 pingsem +3.17%, pingguard +3.28%. r1 and head run the same instructions
 on pingsem and pingguard (310 and 114 Ir apart), so the wall-clock gap is not added work; not
 attributed further.
+
+Fix round 1 (code `cc21b5ae3`: `MutableBuffer` growth charged inside `grow_buffer`). `head2` is
+`fe66504f3` (Task 11 closed, `rexx-run` built from that archive), `fr1` is `cc21b5ae3`, both in
+`/tmp/claude-1000/p61/hsr/target-base` with one `Compiling rexx-exec` line each.
+
+| binary | source | sha256 |
+|---|---|---|
+| head2 | `fe66504f3` | `ec4bb1d83c35e7396e44c606532072639777ea8835265aab8bf21eff37198e7d` |
+| fr1 | `cc21b5ae3` | `7d3aeb454301a3493a68755f8824e033a4ea413bca93462ec5c81c9b580519d7` |
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 4 -o /tmp/claude-1000/p61/hsr/cg3 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run head2=/tmp/claude-1000/p61/hsr/bin/head2/rexx-run fr1=/tmp/claude-1000/p61/hsr/bin/fr1/rexx-run
+```
+
+Exit 0, every spread at most 0.0001%. Against base61, head2 and fr1 read the same to four places
+on every program: pingmsg +0.0096, pingguard -0.3663, pingsem -0.2494, alloc +0.2330, alloc4c
++0.0607, heapshape +0.0525, rexxcps +0.4409, emptyloop -0.3191. fr1 against head2 is at most 6,090
+Ir on any program (rexxcps). The pingsem and pingguard wall-clock verdict stays unresolved; no wall
+clock was rerun, since fr1 adds no instructions to either.
 
 ## Task 10
 

@@ -179,3 +179,101 @@ this one's.
 4. Exactness rests on every held-byte change being enumerated. A path the greps above miss shows up
    only as the debug assertion firing in a test that reaches it; in release it moves the trigger
    (a missed release keeps `bytes_due` high, a missed hold lowers it).
+
+## Fix round 1
+
+Review: `heapshape-round-review.md`. Base `fe66504f3`. Code commit `cc21b5ae3`.
+
+### I1: growth on a mutator's error exit
+
+`buffer_capacity(state, added)` answered the growth for its caller to charge, and five mutators
+(`INSERT`, `OVERLAY`, `REPLACEAT`/`[]=`, `CHANGESTR`, `CASELESSCHANGESTR`) had a `?` between it and
+the charge. The shape is gone rather than the five sites patched: `grow_buffer(interp, receiver,
+name, added)` (`dispatch/buffer.rs`) grows the receiver's state, charges the growth, and only then
+answers the state, re-borrowed. Every growing mutator goes through it, so no caller holds a growth
+it has not yet charged: those five, `APPEND` (which called `ensure_capacity` directly), `SETTEXT`
+and `SPACE`. A caller that read the length first (`INSERT`, `REPLACEAT`) reads it before the call.
+
+Re-check of every other growth and charge for the same shape, with
+`grep -rn "charge_growth\|charge_text(\|alloc_charged" crates/rexx-exec/src` and reading each site
+from the growth to the charge:
+
+* `array_resize`: its one `?` is the `try_reserve_exact`, before any capacity change.
+* `array_reshape`, `array_splice_slot`, `array_grow`, the notify-list push: no `?` between.
+* `MutableBuffer~new` (`buffer.rs:378`): the `?`s (`try_reserve_exact` on a local, `new_instance`)
+  precede the state's installation; the charge follows it directly.
+* `setBufferSize`: `set_buffer_size`'s `?` returns before it writes `capacity`, so a failure grows
+  nothing.
+* Native API `new_mutable_buffer` and `set_mutable_buffer_capacity`: no `?` (the reservation is
+  `unwrap_or(0)`).
+* Text charges (`text`, `text_owned`, `take_piece`, `new_raw_string`) and `alloc_charged`: the
+  charge follows the allocation with no `?` between.
+
+**Test.** `rexx-exec/tests/buffer_growth_error_exit.rs`
+`a_buffer_grown_before_a_failed_insert_is_counted` runs the debug `rexx-run`
+(`CARGO_BIN_EXE_rexx-run`) under `ulimit -v 3500000`, the pattern `library_routine_memory.rs` uses.
+`b~insert('z', 2000000000)` under `signal on syntax` grows the buffer to 2 000 000 001 bytes, then
+fails the result's reservation; the handler churns 200 000 objects with the buffer live, drops it,
+and churns again. It asserts rc 0, stdout `5.0 2000000001` and `done`, and empty stderr. The cap was
+chosen by raising it by hand against the reviewer's probe on the debug build (`$H/p2/g.rex`, under
+`memcap 2G` or `3G`): before the fix, 2 000 000 fails the buffer's reservation, and 3 000 000 to
+4 500 000 fail only the second; after it, 3 500 000 to 4 500 000 fail only the second and 5 000 000
+makes both (the run then writes the 2 GB, so the cap must stay below that).
+
+* At HEAD (`fe66504f3` archive plus this test file, `$H/head2-src`, `Compiling rexx-exec`
+  present, `$H/logs/i1-at-head.txt`): fails, rc 101, stderr `the survivors hold 2000010805 body
+  bytes, the running figure says 11060`.
+* At `cc21b5ae3`: passes.
+
+The report's enumeration gains a sixth item: a `?` between a capacity change and its charge, which
+greps that find the growth and the charge in one function do not see. Found by reading every
+charge site, listed above.
+
+### Minors
+
+1. **`get_mut` contract.** `Heap::get_mut` now documents that a caller changing what a body holds
+   outside its slot records it with `hold_body_bytes`, `release_body_bytes` or `rehold_body_bytes`
+   before any step that can fail, and that `peek_mut` is under the same rule.
+2. **Unwitnessed release sites.** Not tested, for these reasons. `finish_string` and the
+   `writable` failure are reached only through the native API (a loaded library calling
+   `RexxStringObject` finishing or `SetMutableBufferCapacity` under a failed reservation); no crate
+   test loads a library that does either, and building one is not cheap. The `array_reshape` shrink
+   needs an array whose slot capacity exceeds the slots a multidimensional extend builds; the
+   reviewer's `a~empty` route refuses with 93.926, and I found no route that leaves spare capacity
+   on a multidimensional array (its slots are built exact by `empty_slots` and replaced exact by
+   the reshape). `stream_init`/`stream_uninit` against a buffer: the reviewer's `run` of the
+   stream's `INIT` on a `MutableBuffer` fails with 97.1, and I did not find another route. The
+   dispositions for these four rest on reading, as the review says.
+3. **Gate record.** pingsem and pingguard now read `callgrind inside; wall clock unresolved` in the
+   round 1 table, and the fix round's paragraph keeps that verdict.
+4. **rexxcps margin.** Accepted as stated: rexxcps is +0.4409% against base61 at `cc21b5ae3`, 0.06%
+   under the budget, and the per-freed-body read grows with garbage. Carried to Tasks 10 to 12's
+   planning; no change in this round.
+
+### Perf
+
+`callgrind.sh -r 2` over the eight programs, base61 / head2 (`fe66504f3`) / fr1 (`cc21b5ae3`), exit 0,
+spreads at most 0.0001% (`$H/cg3`; binaries and sha256 in the gate record). head2 and fr1 are equal
+to four places against base61: pingmsg +0.0096, pingguard -0.3663, pingsem -0.2494, alloc +0.2330,
+alloc4c +0.0607, heapshape +0.0525, rexxcps +0.4409, emptyloop -0.3191. fr1 against head2 is at
+most 6,090 Ir (rexxcps).
+
+### Per-task check at `cc21b5ae3`
+
+* `cargo fmt`; `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings` exit 0;
+  `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets --features pinning,sharing -- -D
+  warnings` exit 0.
+* `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0, 3127 passed, 0 failed, 4 ignored
+  (`$H/logs/test4.log`).
+* `REXX_CORPUS_GATE=1` corpus pair: exit 0, corpus 29 passed and 1 ignored, ir_recorded_oracle 21
+  passed.
+* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test concurrency_tests
+  the_seeded_gate`: exit 0, 1 passed (124.3 s).
+
+### Concerns after this round
+
+1. The new test depends on the debug binary's address-space footprint sitting between about 0.5
+   and 1 GB under a 3.5 GB cap. A much larger footprint would fail the buffer's own reservation
+   (the test then fails on its stdout, not silently); a much smaller one would let both
+   reservations succeed and the run write 2 GB.
+2. rexxcps margin and the pingsem/pingguard wall clock, as before.
