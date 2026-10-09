@@ -1,0 +1,177 @@
+# Task 6 report: interactive debug, pause placement and `.DebugInput`
+
+Base `fe4956b36`. Commits `f062f791e` (the change) and `004312db8` (perf round). Line citations are
+at `004312db8`.
+
+## Design
+
+The pause decision lives in one cold function, `debug_pause_after_clause`
+(`run/interpret.rs:208`), given the clause and, on a cold exit, the `Flow` it answered. It asks
+`pauses_after(kind)` (`run/interpret.rs:461`), the oracle's per-instruction list, against the flags
+`TraceSetting::setDebug` derives from the letter: `pauseInstructions` is `tracingAll`, so an
+instruction pauses under `?A`/`?R`/`?I` only, a label where labels trace (`pauseLabel`). Under a
+negative skip count the flags come from the setting the count saved (`pausing_mode`, `:279`),
+since suppression replaces the setting with one whose `all` is clear.
+
+| where | what | `=` |
+|---|---|---|
+| hot exit, `ir/drive.rs:1887` | every promoted clause, now per kind (THEN no longer pauses) | `$pc = $clause_pc` |
+| cold exit before `leave_stepped_clause`, `ir/drive.rs:1900` via `debug_pause_in_region` (`:2430`) | a Flowed region (Op::Exec, PARSE, EXPOSE, Message, unparked CALL, LEAVE, WHEN CASE false, a repeating DO with no passes) and a region ending with traps pending | `RegionEnd::At(clause_pc)` |
+| `leave_parked`, `ir/drive.rs:3286` | a parked CALL once the callee returns | `RegionEnd::At(clause_pc)` |
+| `settle`'s loop arm, `flat_loop_step_escaped` (`ir/drive.rs:2456`, called at `:3861`) | ITERATE, once the flat loop has stepped and echoed the DO | the ITERATE's op, `LeaveOrigin::index` |
+| `exec_flow`'s INTERPRET arm, `run.rs:766` | before the fragment (`InterpretInstruction.cpp:76`) | `Flow::Goto(index)` |
+| `settle_command`, `command.rs:1100` | a command the clause traced, after RC and its condition (`RexxActivation.cpp:4525`) | `Flow::Goto(index)` |
+
+The cold-exit pause runs before the clause boundary, as the oracle's `execute` pauses before its
+trap check: measured, the pause after `x = f()` comes before the `CALL ON` handler `f` queued
+(`debug_pause_before_trap`; base runs the handler first). No pause follows an `Exit`, `Return` or
+`Signal` flow, an `Iterate` flow (the loop arm owns it), an IF or SELECT that answers a `Flow`, or a
+block `DO` that answers one (a labelled block runs nested, so its `Flow` comes after the body).
+Commands are decided by `debug_pause_after_command` (`run/interpret.rs:260`): traced by `all` or
+`commands`, or retraced for an error or failure, as `instruction_traced` is in the oracle.
+
+The read (`debug_input_line`, `run/interpret.rs:341`) is `Activity::traceInput`: `LINEIN` sent to
+`local_route(b"DEBUGINPUT")` under `pinned!` (`PinKind::TraceWrapper`); an absent entry or a `.nil`
+answer is the null string, and a `.nil` entry is sent `LINEIN` as the oracle sends it (97.1). A
+failure the read raises returns through `debug_pause_now`'s `Result`; on the cold exit it becomes
+the region's failure and `leave_stepped_clause` records the site, and the hot exit records it
+itself (without, the report said `0 *-* <no failing clause recorded>`).
+
+## Branch-free attempt (R7) and outcome
+
+Tried first, by reading the mechanism the spec named: lower the flowed ops differently when the
+chunk is compiled under `?`, reached through the recompile on trace change. It cannot work. A chunk
+is chosen once per level, in `running_level` (`run.rs:423`, its `chunk_for` at `:457` the only
+caller, `grep -rn 'chunk_for(' crates/rexx-exec/src`), and a running chunk is never replaced: a
+`TRACE ?A` inside a body leaves that body on the chunk compiled before it, which `$stale` exists to
+gate. Frames hold op positions of that chunk (`Frame::op_end`, a flat loop's `op_body`), so
+switching chunks mid-body would remap every open frame. `pa` (`trace ?a` then `numeric` in one body)
+is exactly the case such a lowering never reaches.
+
+Considered and not built: folding the pause into the `pending_traps.is_empty()` test both exits
+already make, by keeping a marker in `pending_traps` while debugging. Branch-free in the default
+mode, but every reader of `pending_traps` (scheduler, delivery, fragment retains) would have to
+skip the marker.
+
+So R7 applied: a `$debugging` test on the cold exit of `clause_region` and of `leave_parked`, and
+ITERATE's step behind an out-of-line call in `settle`'s loop arm. Its cost is below.
+
+## Other changes
+
+- `activation.rs:767`, `:1073`, `run/call.rs:902`: an internal call inherits the caller's
+  `DebugState` (`putSettings` copies the debug flags and the skip count). Without it the callee's
+  first pause printed the prompt again (`dbgcall`'s only stderr difference at base).
+- `trace.rs:210`: a command echoed only for its error or failure prints the debug banner first, as
+  `traceClause` does (`RexxActivation.cpp:4305`).
+- `run.rs:262`: `LeaveOrigin::index`. `command.rs`: `exec_command`, `end_blocked_command` and
+  `settle_command` take the clause index.
+- `ir/compile.rs:1919`, `:1927`: `assert_analysis_only_narrows` exempts a chunk keyed to a debugging
+  setting, for which `trace_flow::analyse` answers `Unknown` by design. Pre-existing: a debug build
+  of base panics at `compile.rs:1914` on `trace ?a` / `interpret "say 1"` (rc 101, base debug binary
+  built from `fe4956b36`); release builds skip it.
+- `clause.rs:271`: `enter_clause`'s tripwire exempts a line typed at a pause, which now runs while
+  the paused clause's queued condition waits for its boundary (`debug_pause_before_trap` tripped it).
+  Measured that the typed lines do not deliver it: `say 'typed1'`/`say 'typed2'` print before
+  `handler` on both engines.
+- `tests/collect_stress.rs`: `scope_case_text_debug_line`, `scope_debug_pause_routine`,
+  `trace_debug_ignores_trace` and `trace_debug_skip` leave the zero-collection list: each pause now
+  sends `LINEIN` through the `.DebugInput` monitor, which allocates.
+
+## Witnesses and oracle agreement
+
+`rust/corpus/phase-6-1.txt` `# Task 6`, each with its SOURCELINE expectation
+(`crates/rexx-parse/tests/sourceline_oracle/<name>.txt`, from the sanctioned driver; each count
+equals the file's `wc -l`). One run per engine (none concurrent), stdout, stderr and status compared
+separately (`/tmp/claude-1000/p61/t6/run.sh`). Each differs from the oracle at base and agrees at
+`004312db8` (the release binary measured below):
+
+| witness | scout probe | base vs oracle | head vs oracle |
+|---|---|---|---|
+| `debug_pause_flowed` | `pa` | stdout | same |
+| `debug_pause_kinds` | `pakinds` | stderr | same |
+| `debug_pause_loops` | new | stderr | same |
+| `debug_pause_commands` | new (`?C`) | stderr | same |
+| `debug_pause_command_error` | new (`?E`) | stderr | same |
+| `debug_pause_before_trap` | new | stderr | same |
+| `debug_call_return` | `dbgcall` | stderr | same |
+| `debug_call_pause_caller` | new | stderr | same |
+| `debug_reexecute` | new | stdout, stderr | same |
+| `debug_reexecute_command` | new | stdout, stderr | same |
+| `debug_skip_flowed` | new | stderr | same |
+| `debug_input_object` | `di` | stdout | same |
+| `debug_input_eof` | `eof` | all three | same |
+| `debug_input_nil` | new | all three | same |
+| `debug_input_removed` | new | stdout | same |
+
+The pre-existing debug programs (`trace_debug`, `trace_debug_skip`, `trace_debug_ignores_trace`,
+`scope_debug_pause_routine`, `scope_case_text_debug_line`) still agree. Stdout and stderr of each
+witness were read: each path its header comment names prints (the `pN`/`TN` lines a pause writes to
+`.stderr` mark where it paused). `debug_input_object`, `debug_input_eof` and `debug_input_nil` have
+no `.stdin`: none reads standard input, and the sidecar control rejects an inert one.
+`debug_input_removed` ends in `PARSE PULL`, so its stdin is load-bearing and a pause that read
+stdin would change what is pulled.
+
+Crate tests (`src/tests.rs:465`, `:490`): `an_internal_call_does_not_prompt_again` and
+`a_command_traced_for_its_error_prints_the_debug_banner`. Their programs run on the base release
+binary show both defects (2 prompts; no banner before `2 *-* 'false'`).
+
+## Performance
+
+Builds, each in its own target directory with a `Compiling rexx-exec` line: base `fe4956b36`
+(`target-base`), `head` (the worktree release build of `004312db8`'s code before its debug-only
+`clause.rs` edit, copied to `bin-head4`), and `nobranch`, the same tree without the three R7 sites
+(`target-nb4`; the only difference is `ir/drive.rs`, `diff -r -q`). Under `/tmp/claude-1000/p61/t6/`.
+
+`memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o $T/cg9 -p "emptyloop rexxcps" base=... nobranch=... head=...`,
+exit 0, spreads 0.0001% at most:
+
+| program | base | nobranch | head | nobranch % | head % |
+|---|---:|---:|---:|---:|---:|
+| rexxcps | 17784651519 | 17784933655 | 17793791881 | +0.0016 | +0.0514 |
+| emptyloop | 7761304793 | 7761305047 | 7811303828 | +0.0000 | +0.6442 |
+
+Inside the budget without the branch. **The R7 branch, apart: rexxcps +0.050%, emptyloop +0.644%**
+(head against nobranch), under the house figure of ~0.5% and ~1.25%. emptyloop's step is 50,000,000
+instructions, 2 per pass of its 25,000,000, in `ops_loop_steady`'s codegen; it moved in steps of
+that size with unrelated edits (`cg7`, `cg8`: removing the `leave_parked` test alone gave +1.29%).
+
+`PROGRAMS="rexxcps emptyloop" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $T/wall1 base=... nobranch=... head=...`,
+exit 0, load average 1.90 at start and 1.55 at end:
+
+| program | base s | nobranch % | head % |
+|---|---:|---:|---:|
+| rexxcps | 1.945 | +1.44 | +0.21 |
+| emptyloop | 0.440 | -0.68 | +2.50 |
+
+All inside ±4%.
+
+Rounds: `f062f791e` measured rexxcps +0.84% (`cg1`; the branch was a test on the Flowed arm after
+the boundary, with the clause's values kept live for it, plus a test inline in `settle`); variants
+`vA` and `vC` (`cg2`) put +0.50% on the `settle` test and +0.29% on passing the clause's values to
+the Flowed-arm call. Round 2 moved the test ahead of `leave_stepped_clause`, which takes the same
+values, and the ITERATE step out of line; and the zero-pass DO pause out of `flat_loop_start`: a
+no-branch build with it there measured emptyloop +0.6442% (`cg3`), without it +0.0000% (`cg4`).
+
+## Commands and results
+
+- `cargo fmt --all --check`: exit 0. `memcap 8G cargo clippy -j 8 --workspace --all-targets -- -D warnings`: exit 0.
+- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle`
+  at `004312db8`'s tree: exit 0, 29 passed 1 ignored, and 21 passed.
+- `memcap 8G cargo test -j 4 --workspace --no-fail-fast` at `f062f791e`: exit 0, 3073 passed,
+  0 failed, 4 ignored (summed over the `test result` lines, `/tmp/claude-1000/p61/t6/ws2.txt`).
+- The same at `004312db8`: exit 0, 3073 passed, 0 failed, 4 ignored (`/tmp/claude-1000/p61/t6/ws3.txt`).
+
+## Concerns
+
+1. `=` at the pause after an ITERATE echoes the ITERATE at its static indent (`10 *-*       iterate`);
+   the oracle echoes it at the loop body's (`10 *-*   iterate`). Not witnessed, not fixed.
+2. The oracle mishandles `=` at a zero-pass DO's pause: a later valid `END` raises 10.1 (`trace ?a`
+   / `do 0` / `say 'never'` / `end` / `do i = 1 to 2` / `nop` / `end`, stdin `=` then empty lines,
+   rc 246). Ours re-runs the DO and continues. Not witnessed.
+3. REPLY does not pause; the oracle pauses on the continuation's thread.
+4. A labelled block `DO` (`do lbl; ...; end`, the nested path) does not pause after its header; the
+   oracle does. Unchanged from base.
+5. The new pause read runs Rexx (the `.DebugInput` monitor) at every pause, which is why four
+   debug programs now collect under the stress mode.
+6. The incidental fixes (prompt inheritance, banner before a retrace) are single-threaded; their
+   crate tests assert the output, not switch points.

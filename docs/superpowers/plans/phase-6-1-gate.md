@@ -709,3 +709,48 @@ instructions flat), so it is not the collections. The extra cycles are in `copie
 `memmove`, and they move with the environment's size (heap placement). `array_fill20` shows no
 regression on my build of `d9794b41f` (3.01 to 3.05 G against base 3.01 to 3.11 G), so the review's
 +35% is one build's code placement.
+
+## Task 6
+
+Commits: `f062f791e` (pause placement, `.DebugInput`, witnesses), `004312db8` (perf round: the
+pause ahead of the clause boundary, ITERATE's step out of line). Report:
+`.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md`. `T` is `/tmp/claude-1000/p61/t6`.
+
+### Performance
+
+| binary | source | sha256 |
+|---|---|---|
+| base | `fe4956b36` | `2764952da672477aa8fae8a4588680a60026c7d5b7bc193cd0b7b06651f633f6` |
+| nobranch | `004312db8`'s code without the three R7 sites (`ir/drive.rs` only) | `fa4476b1505e68b07c3916da7597829cc52608b4f276e2955d27e174194f7b1d` |
+| head | `004312db8`'s code (release-identical: the commit's `clause.rs` edit is a `debug_assert`) | `ff3665d8d52bb536c2e670535b988e0e5a4808f8521ea4840ee453243e4bf4b1` |
+
+Each in its own target directory with one `Compiling rexx-exec` line; base from `git archive
+fe4956b36 rust interpreter` with every file touched.
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o $T/cg9 -p "emptyloop rexxcps" base=$T/target-base/release/rexx-run nobranch=$T/target-nb4/release/rexx-run head=$T/bin-head4/rexx-run
+```
+
+Exit 0, spreads 0.0001% at most.
+
+| program | nobranch % | head % | verdict |
+|---|---:|---:|---|
+| rexxcps | +0.0016 | +0.0514 | inside |
+| emptyloop | +0.0000 | +0.6442 | inside with R7 apart |
+
+R7's branch (head against nobranch): rexxcps +0.050%, emptyloop +0.644%, accounted beside the
+budget. `f062f791e` was rexxcps +0.8393% and emptyloop -0.3234% (`cg1`).
+
+```
+PROGRAMS="rexxcps emptyloop" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $T/wall1 base=$T/target-base/release/rexx-run nobranch=$T/target-nb4/release/rexx-run head=$T/bin-head4/rexx-run
+```
+
+Exit 0; load average 1.90 at start, 1.55 at end. nobranch / head %: rexxcps +1.44 / +0.21,
+emptyloop -0.68 / +2.50; inside ±4%.
+
+### Per-task check
+
+At `004312db8`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 8 --workspace
+--all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
+(3073 passed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus
+--test ir_recorded_oracle` exit 0 (50 passed, 1 ignored).
