@@ -272,6 +272,11 @@ pub(crate) struct Activities {
     next_timer: u32,
     message_ids: FxHashMap<ObjRef, MessageId>,
     next_message: u32,
+    /// The activity each `Message` object was last sent from
+    /// (`MessageClass`'s `startActivity`, set by `dispatch`,
+    /// `classes/MessageClass.cpp:432`), which `Message~halt` asks. Pruned
+    /// of swept messages at each collection.
+    senders: FxHashMap<ObjRef, ActivityId>,
     /// The parked activities waiting on each message, in the order they
     /// parked.
     waiters: FxHashMap<MessageId, Vec<ActivityId>>,
@@ -335,6 +340,11 @@ const STACK_MARGIN: usize = 32 * 1024 * 1024;
 const MAX_POOLED: usize = 5;
 
 impl Activities {
+    /// Drops the sender records of messages `live` no longer answers for.
+    pub(crate) fn prune_senders(&mut self, live: impl Fn(ObjRef) -> bool) {
+        self.senders.retain(|message, _| live(*message));
+    }
+
     /// The table of an interpreter whose activities' thread contexts link
     /// `thread_table`.
     pub(crate) fn new(thread_table: rexx_api::ffi::ThreadTable) -> Activities {
@@ -351,6 +361,7 @@ impl Activities {
             next_timer: 0,
             message_ids: FxHashMap::default(),
             next_message: 0,
+            senders: FxHashMap::default(),
             waiters: FxHashMap::default(),
             retired: Vec::new(),
             thread_table,
@@ -2333,14 +2344,28 @@ impl Interp {
     }
 
     /// `Message~halt` (`MessageClass::halt`, `classes/MessageClass.cpp:806`):
-    /// false for a message never started and for an activity already asked;
-    /// true where the request is queued for the started activity's running
-    /// activation (`RexxActivation::halt`), and where that activity has no
-    /// Rexx frame to make it to (`Activity::halt`,
+    /// false for a message never started or sent and for an activity already
+    /// asked; true where the request is queued for the running activation of
+    /// the activity that started or sent it (`RexxActivation::halt`), and
+    /// where that activity has no Rexx frame to make it to (`Activity::halt`,
     /// `concurrency/Activity.cpp:2155`), which drops it.
     pub(crate) fn halt_message(&mut self, message: ObjRef, description: Option<Vec<u8>>) -> bool {
         if !self.started_messages.contains(&message) {
-            return false;
+            let Some(&sender) = self.activities.senders.get(&message) else {
+                return false;
+            };
+            let target = if sender == self.activities.running {
+                Some(&mut self.activity)
+            } else {
+                match self.activities.idle.get_mut(sender.index()) {
+                    Some(Some(idle)) => Some(&mut idle.activity),
+                    _ => None,
+                }
+            };
+            return match target {
+                Some(target) => request_halt(target, description) != Some(false),
+                None => true,
+            };
         }
         let runs = |activity: &Activity| matches!(activity.root_then, Some(Then::Started(started)) if started == message);
         let target = if runs(&self.activity) {
@@ -2357,6 +2382,14 @@ impl Interp {
             Some(target) => request_halt(target, description) != Some(false),
             None => true,
         }
+    }
+
+    /// Records the running activity as `message`'s sender, which
+    /// [`Interp::halt_message`] asks.
+    pub(crate) fn record_message_sender(&mut self, message: ObjRef) {
+        self.activities
+            .senders
+            .insert(message, self.activities.running);
     }
 
     /// A signal's halt (`InterpreterInstance::haltAllActivities`,

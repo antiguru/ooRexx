@@ -1006,6 +1006,7 @@ fn dispatch_held_message(
     clear_completion(interp, message);
     interp.validate_scope_override(target, scope)?;
     interp.set_notify_message(Some(message));
+    interp.record_message_sender(message);
     let caller = interp.caller();
     let sent = match interp.begin_send(target, &name, scope, &values, caller) {
         Ok(Started::Entered) => return Ok(NativeStarted::Entered(then)),

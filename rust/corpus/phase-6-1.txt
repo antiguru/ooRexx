@@ -256,5 +256,7 @@ lang/notready_call_on_stdin_loop.rex
 lang/debug_handler_exit_at_iterate.rex
 
 # Task 11a: deferred items. A loop with no body clause reads a fresh elapsed
-# time per pass.
+# time per pass; Message~halt asks the activity a message was sent from.
 lang/time_elapsed_empty_loop.rex
+lang/message_halt_after_send.rex
+lang/message_halt_sender_ended.rex

@@ -1507,6 +1507,38 @@ fn the_creating_thread_holds_the_baton_and_collects() {
     interp.collect_now();
 }
 
+/// A sent message's sender record lasts as long as the message: a
+/// collection keeps the record of a held message and drops the record of
+/// one nothing holds, and `Message~halt` still finds the held one's sender.
+#[test]
+fn a_sender_record_lives_and_dies_with_its_message() {
+    let mut interp = Interp::new();
+    // Any heap object stands for a message: the record is keyed by handle.
+    let held = interp.text(b"a heap string standing for a held message");
+    interp.global_references.register(held);
+    let loose = interp.text(b"a heap string standing for a loose message");
+    interp.record_message_sender(held);
+    interp.record_message_sender(loose);
+    assert_eq!(interp.activities.senders.len(), 2);
+    interp.collect_now();
+    assert!(
+        interp.heap.peek(loose).is_none(),
+        "nothing held the loose message"
+    );
+    assert_eq!(
+        interp
+            .activities
+            .senders
+            .keys()
+            .copied()
+            .collect::<Vec<_>>(),
+        [held]
+    );
+    // Main has no Rexx frame here, so the request is dropped and answered
+    // true (`Activity::halt`).
+    assert!(interp.halt_message(held, None));
+}
+
 /// Posts reach the holder in order, and the holder's `drain` answers nothing
 /// once `INBOX` is clear.
 #[test]

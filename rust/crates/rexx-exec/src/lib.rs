@@ -3006,6 +3006,8 @@ impl Interp {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
                 || heap.peek(object).is_some()
         });
+        self.activities
+            .prune_senders(|message| heap.peek(message).is_some());
         // A sweep can free a class the registry named, which unlinks its row
         // and leaves any `.NAME` answer derived from it naming nothing.
         self.invalidate_rexx_class_cache();
