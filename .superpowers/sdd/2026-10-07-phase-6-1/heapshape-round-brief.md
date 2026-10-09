@@ -26,7 +26,7 @@ report.
   the base too, and say in the report whether it passes there.
 * **Perf.** Use callgrind on the eight programs (`pingmsg pingguard pingsem alloc alloc4c heapshape
   rexxcps emptyloop`) with `rust/bench-programs/callgrind.sh`, against three columns:
-  * HEAD before this round, `7dc679e36` or the current base you start from;
+  * HEAD before this round, `7aedf9501`, the current HEAD you start from;
   * base61, `/tmp/claude-1000/p61/t1/bin/base/rexx-run`; verify its sha256 against the gate
     record's `## Task 1`;
   * this round's binary.
