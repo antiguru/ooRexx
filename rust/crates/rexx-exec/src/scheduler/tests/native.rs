@@ -292,9 +292,9 @@ fn a_native_call_in_the_simulation_mode_spawns_no_pool_thread() {
 /// connects, and the call is interrupted and refused after `block=`.
 #[test]
 fn a_native_call_only_another_activity_can_end_is_refused_after_its_bound() {
-    let port = 40_000 + std::process::id() % 10_000;
-    let source = format!(
-        "s = SockSocket('AF_INET', 'SOCK_STREAM', 0)\n\
+    let source = |port: u32| {
+        format!(
+            "s = SockSocket('AF_INET', 'SOCK_STREAM', 0)\n\
          addr.family = 'AF_INET'; addr.port = {port}; addr.addr = '127.0.0.1'\n\
          call SockSetSockOpt s, 'SOL_SOCKET', 'SO_REUSEADDR', 1\n\
          say 'bind' SockBind(s, 'addr.') 'listen' SockListen(s, 1)\n\
@@ -309,8 +309,11 @@ fn a_native_call_only_another_activity_can_end_is_refused_after_its_bound() {
          ::routine SockConnect public external \"LIBRARY rxsock SockConnect\"\n\
          ::routine SockClose public external \"LIBRARY rxsock SockClose\"\n\
          ::class srv\n::method accept\n  use arg s\n  a = SockAccept(s)\n  return a > 0\n"
-    );
-    let real = counted(&source, false, bounded());
+        )
+    };
+    // Below the ephemeral range, one port per run.
+    let port = 20_000 + 2 * (std::process::id() % 5_000);
+    let real = counted(&source(port), false, bounded());
     assert_eq!(real.outcome.exit_code, 0, "{}", real.stderr());
     assert_eq!(real.stdout(), "bind 0 listen 0\nconnect 0\ngot 1\n");
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -318,7 +321,7 @@ fn a_native_call_only_another_activity_can_end_is_refused_after_its_bound() {
         let config = crate::SimConfig::parse("sim:1,block=0.5").expect("a sim spec");
         let began = std::time::Instant::now();
         let run = counted(
-            &source,
+            &source(port + 1),
             false,
             bounded().with_switch_mode(SwitchMode::Sim(config)),
         );
