@@ -1,0 +1,3557 @@
+# Review package: 2bde37127..c1938dfa2
+
+## Commits
+c1938dfa2 Phase 6.1 Task 6 fix round 1: report
+ac6cb27f6 Phase 6.1 Task 6 fix round 1: the LEAVE test counts the report echo
+ca3a558b6 Phase 6.1 Task 6 fix round 1: pause before the boundary, review fixes
+939e7a62d SDD ledger: Phase 6.1 Task 6 to review
+
+## Files changed
+ .superpowers/sdd/2026-10-07-phase-6-1/progress.md  |    3 +
+ .../review-fe4956b36..2bde37127.diff               | 2385 ++++++++++++++++++++
+ .../sdd/2026-10-07-phase-6-1/task-6-report.md      |   77 +
+ docs/superpowers/plans/phase-4-exclusions.txt      |   34 +
+ rust/corpus/lang/debug_input_eof_call_on.rex       |    8 +
+ rust/corpus/lang/debug_input_eof_call_on_loop.rex  |   10 +
+ rust/corpus/lang/debug_input_stdin_eof_call_on.rex |    9 +
+ rust/corpus/lang/debug_interpret_indent.rex        |    6 +
+ rust/corpus/lang/debug_interpret_indent.stdin      |   20 +
+ rust/corpus/lang/debug_leave_no_loop.rex           |    4 +
+ rust/corpus/lang/debug_leave_no_loop.stdin         |   20 +
+ rust/corpus/lang/debug_leave_unknown_label.rex     |    5 +
+ rust/corpus/lang/debug_leave_unknown_label.stdin   |   20 +
+ rust/corpus/lang/debug_pause_call_on.rex           |    9 +
+ rust/corpus/lang/debug_pause_call_on.stdin         |   20 +
+ rust/corpus/lang/debug_pause_sigl_error.rex        |    9 +
+ rust/corpus/lang/debug_pause_sigl_error.stdin      |    9 +
+ rust/corpus/lang/debug_pause_sigl_notready.rex     |    8 +
+ rust/corpus/lang/debug_pause_sigl_notready.stdin   |    8 +
+ rust/corpus/lang/debug_reexecute_call_on.rex       |    7 +
+ rust/corpus/lang/debug_reexecute_call_on.stdin     |   60 +
+ rust/corpus/oracle-crashes.txt                     |   16 +
+ rust/corpus/phase-6-1.txt                          |   15 +
+ rust/crates/rexx-exec/src/clause.rs                |    9 +-
+ rust/crates/rexx-exec/src/ir/drive.rs              |   46 +-
+ rust/crates/rexx-exec/src/run/condition.rs         |   16 +-
+ rust/crates/rexx-exec/src/run/interpret.rs         |   26 +-
+ rust/crates/rexx-exec/src/tests.rs                 |   21 +
+ .../sourceline_oracle/debug_input_eof_call_on.txt  |    9 +
+ .../debug_input_eof_call_on_loop.txt               |   11 +
+ .../debug_input_stdin_eof_call_on.txt              |   10 +
+ .../sourceline_oracle/debug_interpret_indent.txt   |    7 +
+ .../sourceline_oracle/debug_leave_no_loop.txt      |    5 +
+ .../debug_leave_unknown_label.txt                  |    6 +
+ .../sourceline_oracle/debug_pause_call_on.txt      |   10 +
+ .../sourceline_oracle/debug_pause_sigl_error.txt   |   10 +
+ .../debug_pause_sigl_notready.txt                  |    9 +
+ .../sourceline_oracle/debug_reexecute_call_on.txt  |    8 +
+ 38 files changed, 2928 insertions(+), 37 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/progress.md b/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
+index 6dd023b41..aea34fdbd 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
+@@ -123,10 +123,13 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
+ - Task 5a dispatched: t5a-impl (opus), BASE 37d874a36.
+ - Task 5a implementer DONE: 8e52e14ca, 5f5b80b3d, 0d18b0045, 38e1dbbbb, d9794b41f. 300 KB loop peak 1.19 GB -> 52 MB (oracle 13 MB). Perf vs 37d874a36: rexxcps +0.20%, strings +0.10%, alloc +0.04%, alloc4c -0.41%. Concerns: bimodal wall on 1 KB loop; only text bodies counted; Outcome::peak_body_bytes public. Review t5a-review dispatched.
+ - Task 5a review (task-5a-review.md): 1 Important (~copy uncharged, 899 MB), 5 Minors; concern 2 confirmed (MutableBuffer ~3.3 GB/s, Array~new(100000) ~4 GB/s unbounded); concern 1 real (+18% wall, equal Ir); array_fill20 +35% cycles from layout (collection::occupied offset 0 -> 32 mod 64).
+ - Ruling: R10 covers dead large values, so MutableBuffer and Array bodies count too (charge at creation and at capacity growth) — cost if wrong: an extra charge in grow paths, measured. Wall-clock: one diagnosis round, then back to Moritz if unresolved — cost if wrong: a cycles regression callgrind cannot see.
+ - Task 12 queue add: pending UNINIT objects never finalized mid-run (1000 finalizable objects with 300 KB strings reach 312 MB vs oracle 19 MB); Array~append quadratic (pre-existing).
+ - Task 5a fix round 1: d0a3d5db3, 17cbe8a9e. ~copy, arrays (alloc_charged, growth delta) and MutableBuffer (creation, growth) charged; three loops bounded (52/55/44 MB vs base 0.9-1.6 GB). Callgrind vs 37d874a36: rexxcps +0.24%, strings +0.14%, alloc +0.19%, alloc4c -0.38%. Wall-clock diagnosis: slow mode persists with byte trigger off; cycles in copies_bytes/memmove; data-placement sensitive (env padding moves it), not this task. array_fill20 +35% did not reproduce in the implementer build. Re-review t5a-rereview dispatched.
+ - Task 12 queue add: COPIES fills byte by byte and is data-placement sensitive; doubling fill (extend_from_within) took loop999 from 14.4 G to 4.07 G instructions with no slow mode in a scratch build — candidate perf item, not landed.
+ - Task 5a re-review 1 (task-5a-rereview.md): Important 1 and Minors addressed; new Important: array_reshape (multi-dim extend) uncharged, 957 MB in 60 passes. Fix round 2 sent to t5a-impl; controller checks the diff and re-runs the probe.
+ - Task 5a fix round 2: 72287a744, 1fd487d02 (array_reshape and ~notify push charged). Re-review appended to task-5a-rereview.md: 0/0/0; reshape loop 81 MB at 300 passes (base OOM at 2G).
+ - Task 5a: complete (8e52e14ca..1fd487d02).
++- Task 6 dispatched: t6-impl (opus), BASE fe4956b36.
++- Task 6 implementer DONE: f062f791e, 004312db8, 2bde37127. 15 witnesses agree. Branch-free route failed (chunk chosen once per level); R7 branch: rexxcps +0.05%, emptyloop +0.64%. Stalled 03:30-~04:20 on an rm -rf $T/$v approval (rule ignored despite brief). Review t6-review dispatched.
++- Task 12 queue add: Task 6 gaps (= after ITERATE indent, REPLY no pause, labelled block DO header pause); oracle defect = at zero-pass DO pause then END 10.1.
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/review-fe4956b36..2bde37127.diff b/.superpowers/sdd/2026-10-07-phase-6-1/review-fe4956b36..2bde37127.diff
+new file mode 100644
+index 000000000..642dec8e6
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/review-fe4956b36..2bde37127.diff
+@@ -0,0 +1,2385 @@
++# Review package: fe4956b36..2bde37127
++
++## Commits
++2bde37127 Phase 6.1 Task 6: report and gate record
++004312db8 Phase 6.1 Task 6 perf round: the pause before the clause boundary
++f062f791e Phase 6.1 Task 6: debug pause placement and .DebugInput
++
++## Files changed
++ .../sdd/2026-10-07-phase-6-1/task-6-report.md      | 177 +++++++++++++++++++++
++ docs/superpowers/plans/phase-6-1-gate.md           |  45 ++++++
++ rust/corpus/lang/debug_call_pause_caller.rex       |  15 ++
++ rust/corpus/lang/debug_call_pause_caller.stdin     |  24 +++
++ rust/corpus/lang/debug_call_return.rex             |  10 ++
++ rust/corpus/lang/debug_call_return.stdin           |  21 +++
++ rust/corpus/lang/debug_input_eof.rex               |   8 +
++ rust/corpus/lang/debug_input_nil.rex               |   6 +
++ rust/corpus/lang/debug_input_object.rex            |  16 ++
++ rust/corpus/lang/debug_input_removed.rex           |   7 +
++ rust/corpus/lang/debug_input_removed.stdin         |   2 +
++ rust/corpus/lang/debug_pause_before_trap.rex       |  12 ++
++ rust/corpus/lang/debug_pause_before_trap.stdin     |  24 +++
++ rust/corpus/lang/debug_pause_command_error.rex     |   7 +
++ rust/corpus/lang/debug_pause_command_error.stdin   |  20 +++
++ rust/corpus/lang/debug_pause_commands.rex          |  14 ++
++ rust/corpus/lang/debug_pause_commands.stdin        |  40 +++++
++ rust/corpus/lang/debug_pause_flowed.rex            |   7 +
++ rust/corpus/lang/debug_pause_flowed.stdin          |   6 +
++ rust/corpus/lang/debug_pause_kinds.rex             |  37 +++++
++ rust/corpus/lang/debug_pause_kinds.stdin           | 120 ++++++++++++++
++ rust/corpus/lang/debug_pause_loops.rex             |  19 +++
++ rust/corpus/lang/debug_pause_loops.stdin           |  80 ++++++++++
++ rust/corpus/lang/debug_reexecute.rex               |  11 ++
++ rust/corpus/lang/debug_reexecute.stdin             |  14 ++
++ rust/corpus/lang/debug_reexecute_command.rex       |   4 +
++ rust/corpus/lang/debug_reexecute_command.stdin     |   4 +
++ rust/corpus/lang/debug_skip_flowed.rex             |  12 ++
++ rust/corpus/lang/debug_skip_flowed.stdin           |  11 ++
++ rust/corpus/phase-6-1.txt                          |  20 +++
++ rust/crates/rexx-exec/src/activation.rs            |   4 +-
++ rust/crates/rexx-exec/src/clause.rs                |   3 +
++ rust/crates/rexx-exec/src/command.rs               |  18 ++-
++ rust/crates/rexx-exec/src/ir/compile.rs            |  25 +--
++ rust/crates/rexx-exec/src/ir/drive.rs              |  83 +++++++++-
++ rust/crates/rexx-exec/src/run.rs                   |  12 +-
++ rust/crates/rexx-exec/src/run/call.rs              |   2 +
++ rust/crates/rexx-exec/src/run/interpret.rs         | 155 ++++++++++++++++--
++ rust/crates/rexx-exec/src/tests.rs                 |  44 +++++
++ rust/crates/rexx-exec/src/trace.rs                 |   1 +
++ rust/crates/rexx-exec/tests/collect_stress.rs      |   4 -
++ .../sourceline_oracle/debug_call_pause_caller.txt  |  16 ++
++ .../tests/sourceline_oracle/debug_call_return.txt  |  11 ++
++ .../tests/sourceline_oracle/debug_input_eof.txt    |   9 ++
++ .../tests/sourceline_oracle/debug_input_nil.txt    |   7 +
++ .../tests/sourceline_oracle/debug_input_object.txt |  17 ++
++ .../sourceline_oracle/debug_input_removed.txt      |   8 +
++ .../sourceline_oracle/debug_pause_before_trap.txt  |  13 ++
++ .../debug_pause_command_error.txt                  |   8 +
++ .../sourceline_oracle/debug_pause_commands.txt     |  15 ++
++ .../tests/sourceline_oracle/debug_pause_flowed.txt |   8 +
++ .../tests/sourceline_oracle/debug_pause_kinds.txt  |  38 +++++
++ .../tests/sourceline_oracle/debug_pause_loops.txt  |  20 +++
++ .../tests/sourceline_oracle/debug_reexecute.txt    |  12 ++
++ .../sourceline_oracle/debug_reexecute_command.txt  |   5 +
++ .../tests/sourceline_oracle/debug_skip_flowed.txt  |  13 ++
++ 56 files changed, 1309 insertions(+), 35 deletions(-)
++
++## Diff
++diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md
++new file mode 100644
++index 000000000..694a42552
++--- /dev/null
+++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md
++@@ -0,0 +1,177 @@
+++# Task 6 report: interactive debug, pause placement and `.DebugInput`
+++
+++Base `fe4956b36`. Commits `f062f791e` (the change) and `004312db8` (perf round). Line citations are
+++at `004312db8`.
+++
+++## Design
+++
+++The pause decision lives in one cold function, `debug_pause_after_clause`
+++(`run/interpret.rs:208`), given the clause and, on a cold exit, the `Flow` it answered. It asks
+++`pauses_after(kind)` (`run/interpret.rs:461`), the oracle's per-instruction list, against the flags
+++`TraceSetting::setDebug` derives from the letter: `pauseInstructions` is `tracingAll`, so an
+++instruction pauses under `?A`/`?R`/`?I` only, a label where labels trace (`pauseLabel`). Under a
+++negative skip count the flags come from the setting the count saved (`pausing_mode`, `:279`),
+++since suppression replaces the setting with one whose `all` is clear.
+++
+++| where | what | `=` |
+++|---|---|---|
+++| hot exit, `ir/drive.rs:1887` | every promoted clause, now per kind (THEN no longer pauses) | `$pc = $clause_pc` |
+++| cold exit before `leave_stepped_clause`, `ir/drive.rs:1900` via `debug_pause_in_region` (`:2430`) | a Flowed region (Op::Exec, PARSE, EXPOSE, Message, unparked CALL, LEAVE, WHEN CASE false, a repeating DO with no passes) and a region ending with traps pending | `RegionEnd::At(clause_pc)` |
+++| `leave_parked`, `ir/drive.rs:3286` | a parked CALL once the callee returns | `RegionEnd::At(clause_pc)` |
+++| `settle`'s loop arm, `flat_loop_step_escaped` (`ir/drive.rs:2456`, called at `:3861`) | ITERATE, once the flat loop has stepped and echoed the DO | the ITERATE's op, `LeaveOrigin::index` |
+++| `exec_flow`'s INTERPRET arm, `run.rs:766` | before the fragment (`InterpretInstruction.cpp:76`) | `Flow::Goto(index)` |
+++| `settle_command`, `command.rs:1100` | a command the clause traced, after RC and its condition (`RexxActivation.cpp:4525`) | `Flow::Goto(index)` |
+++
+++The cold-exit pause runs before the clause boundary, as the oracle's `execute` pauses before its
+++trap check: measured, the pause after `x = f()` comes before the `CALL ON` handler `f` queued
+++(`debug_pause_before_trap`; base runs the handler first). No pause follows an `Exit`, `Return` or
+++`Signal` flow, an `Iterate` flow (the loop arm owns it), an IF or SELECT that answers a `Flow`, or a
+++block `DO` that answers one (a labelled block runs nested, so its `Flow` comes after the body).
+++Commands are decided by `debug_pause_after_command` (`run/interpret.rs:260`): traced by `all` or
+++`commands`, or retraced for an error or failure, as `instruction_traced` is in the oracle.
+++
+++The read (`debug_input_line`, `run/interpret.rs:341`) is `Activity::traceInput`: `LINEIN` sent to
+++`local_route(b"DEBUGINPUT")` under `pinned!` (`PinKind::TraceWrapper`); an absent entry or a `.nil`
+++answer is the null string, and a `.nil` entry is sent `LINEIN` as the oracle sends it (97.1). A
+++failure the read raises returns through `debug_pause_now`'s `Result`; on the cold exit it becomes
+++the region's failure and `leave_stepped_clause` records the site, and the hot exit records it
+++itself (without, the report said `0 *-* <no failing clause recorded>`).
+++
+++## Branch-free attempt (R7) and outcome
+++
+++Tried first, by reading the mechanism the spec named: lower the flowed ops differently when the
+++chunk is compiled under `?`, reached through the recompile on trace change. It cannot work. A chunk
+++is chosen once per level, in `running_level` (`run.rs:423`, its `chunk_for` at `:457` the only
+++caller, `grep -rn 'chunk_for(' crates/rexx-exec/src`), and a running chunk is never replaced: a
+++`TRACE ?A` inside a body leaves that body on the chunk compiled before it, which `$stale` exists to
+++gate. Frames hold op positions of that chunk (`Frame::op_end`, a flat loop's `op_body`), so
+++switching chunks mid-body would remap every open frame. `pa` (`trace ?a` then `numeric` in one body)
+++is exactly the case such a lowering never reaches.
+++
+++Considered and not built: folding the pause into the `pending_traps.is_empty()` test both exits
+++already make, by keeping a marker in `pending_traps` while debugging. Branch-free in the default
+++mode, but every reader of `pending_traps` (scheduler, delivery, fragment retains) would have to
+++skip the marker.
+++
+++So R7 applied: a `$debugging` test on the cold exit of `clause_region` and of `leave_parked`, and
+++ITERATE's step behind an out-of-line call in `settle`'s loop arm. Its cost is below.
+++
+++## Other changes
+++
+++- `activation.rs:767`, `:1073`, `run/call.rs:902`: an internal call inherits the caller's
+++  `DebugState` (`putSettings` copies the debug flags and the skip count). Without it the callee's
+++  first pause printed the prompt again (`dbgcall`'s only stderr difference at base).
+++- `trace.rs:210`: a command echoed only for its error or failure prints the debug banner first, as
+++  `traceClause` does (`RexxActivation.cpp:4305`).
+++- `run.rs:262`: `LeaveOrigin::index`. `command.rs`: `exec_command`, `end_blocked_command` and
+++  `settle_command` take the clause index.
+++- `ir/compile.rs:1919`, `:1927`: `assert_analysis_only_narrows` exempts a chunk keyed to a debugging
+++  setting, for which `trace_flow::analyse` answers `Unknown` by design. Pre-existing: a debug build
+++  of base panics at `compile.rs:1914` on `trace ?a` / `interpret "say 1"` (rc 101, base debug binary
+++  built from `fe4956b36`); release builds skip it.
+++- `clause.rs:271`: `enter_clause`'s tripwire exempts a line typed at a pause, which now runs while
+++  the paused clause's queued condition waits for its boundary (`debug_pause_before_trap` tripped it).
+++  Measured that the typed lines do not deliver it: `say 'typed1'`/`say 'typed2'` print before
+++  `handler` on both engines.
+++- `tests/collect_stress.rs`: `scope_case_text_debug_line`, `scope_debug_pause_routine`,
+++  `trace_debug_ignores_trace` and `trace_debug_skip` leave the zero-collection list: each pause now
+++  sends `LINEIN` through the `.DebugInput` monitor, which allocates.
+++
+++## Witnesses and oracle agreement
+++
+++`rust/corpus/phase-6-1.txt` `# Task 6`, each with its SOURCELINE expectation
+++(`crates/rexx-parse/tests/sourceline_oracle/<name>.txt`, from the sanctioned driver; each count
+++equals the file's `wc -l`). One run per engine (none concurrent), stdout, stderr and status compared
+++separately (`/tmp/claude-1000/p61/t6/run.sh`). Each differs from the oracle at base and agrees at
+++`004312db8` (the release binary measured below):
+++
+++| witness | scout probe | base vs oracle | head vs oracle |
+++|---|---|---|---|
+++| `debug_pause_flowed` | `pa` | stdout | same |
+++| `debug_pause_kinds` | `pakinds` | stderr | same |
+++| `debug_pause_loops` | new | stderr | same |
+++| `debug_pause_commands` | new (`?C`) | stderr | same |
+++| `debug_pause_command_error` | new (`?E`) | stderr | same |
+++| `debug_pause_before_trap` | new | stderr | same |
+++| `debug_call_return` | `dbgcall` | stderr | same |
+++| `debug_call_pause_caller` | new | stderr | same |
+++| `debug_reexecute` | new | stdout, stderr | same |
+++| `debug_reexecute_command` | new | stdout, stderr | same |
+++| `debug_skip_flowed` | new | stderr | same |
+++| `debug_input_object` | `di` | stdout | same |
+++| `debug_input_eof` | `eof` | all three | same |
+++| `debug_input_nil` | new | all three | same |
+++| `debug_input_removed` | new | stdout | same |
+++
+++The pre-existing debug programs (`trace_debug`, `trace_debug_skip`, `trace_debug_ignores_trace`,
+++`scope_debug_pause_routine`, `scope_case_text_debug_line`) still agree. Stdout and stderr of each
+++witness were read: each path its header comment names prints (the `pN`/`TN` lines a pause writes to
+++`.stderr` mark where it paused). `debug_input_object`, `debug_input_eof` and `debug_input_nil` have
+++no `.stdin`: none reads standard input, and the sidecar control rejects an inert one.
+++`debug_input_removed` ends in `PARSE PULL`, so its stdin is load-bearing and a pause that read
+++stdin would change what is pulled.
+++
+++Crate tests (`src/tests.rs:465`, `:490`): `an_internal_call_does_not_prompt_again` and
+++`a_command_traced_for_its_error_prints_the_debug_banner`. Their programs run on the base release
+++binary show both defects (2 prompts; no banner before `2 *-* 'false'`).
+++
+++## Performance
+++
+++Builds, each in its own target directory with a `Compiling rexx-exec` line: base `fe4956b36`
+++(`target-base`), `head` (the worktree release build of `004312db8`'s code before its debug-only
+++`clause.rs` edit, copied to `bin-head4`), and `nobranch`, the same tree without the three R7 sites
+++(`target-nb4`; the only difference is `ir/drive.rs`, `diff -r -q`). Under `/tmp/claude-1000/p61/t6/`.
+++
+++`memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o $T/cg9 -p "emptyloop rexxcps" base=... nobranch=... head=...`,
+++exit 0, spreads 0.0001% at most:
+++
+++| program | base | nobranch | head | nobranch % | head % |
+++|---|---:|---:|---:|---:|---:|
+++| rexxcps | 17784651519 | 17784933655 | 17793791881 | +0.0016 | +0.0514 |
+++| emptyloop | 7761304793 | 7761305047 | 7811303828 | +0.0000 | +0.6442 |
+++
+++Inside the budget without the branch. **The R7 branch, apart: rexxcps +0.050%, emptyloop +0.644%**
+++(head against nobranch), under the house figure of ~0.5% and ~1.25%. emptyloop's step is 50,000,000
+++instructions, 2 per pass of its 25,000,000, in `ops_loop_steady`'s codegen; it moved in steps of
+++that size with unrelated edits (`cg7`, `cg8`: removing the `leave_parked` test alone gave +1.29%).
+++
+++`PROGRAMS="rexxcps emptyloop" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $T/wall1 base=... nobranch=... head=...`,
+++exit 0, load average 1.90 at start and 1.55 at end:
+++
+++| program | base s | nobranch % | head % |
+++|---|---:|---:|---:|
+++| rexxcps | 1.945 | +1.44 | +0.21 |
+++| emptyloop | 0.440 | -0.68 | +2.50 |
+++
+++All inside ±4%.
+++
+++Rounds: `f062f791e` measured rexxcps +0.84% (`cg1`; the branch was a test on the Flowed arm after
+++the boundary, with the clause's values kept live for it, plus a test inline in `settle`); variants
+++`vA` and `vC` (`cg2`) put +0.50% on the `settle` test and +0.29% on passing the clause's values to
+++the Flowed-arm call. Round 2 moved the test ahead of `leave_stepped_clause`, which takes the same
+++values, and the ITERATE step out of line; and the zero-pass DO pause out of `flat_loop_start`: a
+++no-branch build with it there measured emptyloop +0.6442% (`cg3`), without it +0.0000% (`cg4`).
+++
+++## Commands and results
+++
+++- `cargo fmt --all --check`: exit 0. `memcap 8G cargo clippy -j 8 --workspace --all-targets -- -D warnings`: exit 0.
+++- `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle`
+++  at `004312db8`'s tree: exit 0, 29 passed 1 ignored, and 21 passed.
+++- `memcap 8G cargo test -j 4 --workspace --no-fail-fast` at `f062f791e`: exit 0, 3073 passed,
+++  0 failed, 4 ignored (summed over the `test result` lines, `/tmp/claude-1000/p61/t6/ws2.txt`).
+++- The same at `004312db8`: exit 0, 3073 passed, 0 failed, 4 ignored (`/tmp/claude-1000/p61/t6/ws3.txt`).
+++
+++## Concerns
+++
+++1. `=` at the pause after an ITERATE echoes the ITERATE at its static indent (`10 *-*       iterate`);
+++   the oracle echoes it at the loop body's (`10 *-*   iterate`). Not witnessed, not fixed.
+++2. The oracle mishandles `=` at a zero-pass DO's pause: a later valid `END` raises 10.1 (`trace ?a`
+++   / `do 0` / `say 'never'` / `end` / `do i = 1 to 2` / `nop` / `end`, stdin `=` then empty lines,
+++   rc 246). Ours re-runs the DO and continues. Not witnessed.
+++3. REPLY does not pause; the oracle pauses on the continuation's thread.
+++4. A labelled block `DO` (`do lbl; ...; end`, the nested path) does not pause after its header; the
+++   oracle does. Unchanged from base.
+++5. The new pause read runs Rexx (the `.DebugInput` monitor) at every pause, which is why four
+++   debug programs now collect under the stress mode.
+++6. The incidental fixes (prompt inheritance, banner before a retrace) are single-threaded; their
+++   crate tests assert the output, not switch points.
++diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
++index 376063750..80e6b4ada 100644
++--- a/docs/superpowers/plans/phase-6-1-gate.md
+++++ b/docs/superpowers/plans/phase-6-1-gate.md
++@@ -702,10 +702,55 @@ emptyloop +0.0000; all inside.
++ Peak RSS, one run each (base / fr1 / oracle, KB): `y~copy` of 300 KB x 3000 898 520 / 52 352 /
++ 13 848; `.array~new(100000)` x 1000 1 582 256 / 54 884 / 22 156; MutableBuffer with three 100 KB
++ appends x 3000 911 376 / 44 388 / 15 448.
++ 
++ Wall-clock diagnosis (report, Fix round 1): `loop999`'s slow mode survives with the byte trigger
++ switched off (`COLLECT_BYTES_FLOOR` = 2^60: cycles 2.98 to 3.96 G against base 3.08 to 3.13 G,
++ instructions flat), so it is not the collections. The extra cycles are in `copies_bytes` and
++ `memmove`, and they move with the environment's size (heap placement). `array_fill20` shows no
++ regression on my build of `d9794b41f` (3.01 to 3.05 G against base 3.01 to 3.11 G), so the review's
++ +35% is one build's code placement.
+++
+++## Task 6
+++
+++Commits: `f062f791e` (pause placement, `.DebugInput`, witnesses), `004312db8` (perf round: the
+++pause ahead of the clause boundary, ITERATE's step out of line). Report:
+++`.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md`. `T` is `/tmp/claude-1000/p61/t6`.
+++
+++### Performance
+++
+++| binary | source | sha256 |
+++|---|---|---|
+++| base | `fe4956b36` | `2764952da672477aa8fae8a4588680a60026c7d5b7bc193cd0b7b06651f633f6` |
+++| nobranch | `004312db8`'s code without the three R7 sites (`ir/drive.rs` only) | `fa4476b1505e68b07c3916da7597829cc52608b4f276e2955d27e174194f7b1d` |
+++| head | `004312db8`'s code (release-identical: the commit's `clause.rs` edit is a `debug_assert`) | `ff3665d8d52bb536c2e670535b988e0e5a4808f8521ea4840ee453243e4bf4b1` |
+++
+++Each in its own target directory with one `Compiling rexx-exec` line; base from `git archive
+++fe4956b36 rust interpreter` with every file touched.
+++
+++```
+++memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o $T/cg9 -p "emptyloop rexxcps" base=$T/target-base/release/rexx-run nobranch=$T/target-nb4/release/rexx-run head=$T/bin-head4/rexx-run
+++```
+++
+++Exit 0, spreads 0.0001% at most.
+++
+++| program | nobranch % | head % | verdict |
+++|---|---:|---:|---|
+++| rexxcps | +0.0016 | +0.0514 | inside |
+++| emptyloop | +0.0000 | +0.6442 | inside with R7 apart |
+++
+++R7's branch (head against nobranch): rexxcps +0.050%, emptyloop +0.644%, accounted beside the
+++budget. `f062f791e` was rexxcps +0.8393% and emptyloop -0.3234% (`cg1`).
+++
+++```
+++PROGRAMS="rexxcps emptyloop" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $T/wall1 base=$T/target-base/release/rexx-run nobranch=$T/target-nb4/release/rexx-run head=$T/bin-head4/rexx-run
+++```
+++
+++Exit 0; load average 1.90 at start, 1.55 at end. nobranch / head %: rexxcps +1.44 / +0.21,
+++emptyloop -0.68 / +2.50; inside ±4%.
+++
+++### Per-task check
+++
+++At `004312db8`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 8 --workspace
+++--all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
+++(3073 passed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus
+++--test ir_recorded_oracle` exit 0 (50 passed, 1 ignored).
++diff --git a/rust/corpus/lang/debug_call_pause_caller.rex b/rust/corpus/lang/debug_call_pause_caller.rex
++new file mode 100644
++index 000000000..c94fbd5c4
++--- /dev/null
+++++ b/rust/corpus/lang/debug_call_pause_caller.rex
++@@ -0,0 +1,15 @@
+++/* RETURN has no debug pause; the CALL that ran the routine pauses in the
+++   caller, under the caller's setting. */
+++call r
+++say 'back'
+++trace ?a
+++call q
+++say 'end'
+++exit
+++::routine r
+++  trace ?a
+++  say 'in r'
+++  return
+++::routine q
+++  say 'in q'
+++  return
++diff --git a/rust/corpus/lang/debug_call_pause_caller.stdin b/rust/corpus/lang/debug_call_pause_caller.stdin
++new file mode 100644
++index 000000000..cdc5e321e
++--- /dev/null
+++++ b/rust/corpus/lang/debug_call_pause_caller.stdin
++@@ -0,0 +1,24 @@
+++.stderr~lineout('p1')
+++
+++.stderr~lineout('p2')
+++
+++.stderr~lineout('p3')
+++
+++.stderr~lineout('p4')
+++
+++.stderr~lineout('p5')
+++
+++.stderr~lineout('p6')
+++
+++.stderr~lineout('p7')
+++
+++.stderr~lineout('p8')
+++
+++.stderr~lineout('p9')
+++
+++.stderr~lineout('p10')
+++
+++.stderr~lineout('p11')
+++
+++.stderr~lineout('p12')
+++
++diff --git a/rust/corpus/lang/debug_call_return.rex b/rust/corpus/lang/debug_call_return.rex
++new file mode 100644
++index 000000000..7ac0660f5
++--- /dev/null
+++++ b/rust/corpus/lang/debug_call_return.rex
++@@ -0,0 +1,10 @@
+++/* An internal routine called from a line typed at a pause pauses in its own
+++   clauses without a second prompt. */
+++trace ?r
+++x = 1
+++say 'main'
+++exit
+++s:
+++  y = 2
+++  say 'in s'
+++  return
++diff --git a/rust/corpus/lang/debug_call_return.stdin b/rust/corpus/lang/debug_call_return.stdin
++new file mode 100644
++index 000000000..4d3265a22
++--- /dev/null
+++++ b/rust/corpus/lang/debug_call_return.stdin
++@@ -0,0 +1,21 @@
+++call s
+++.stderr~lineout('T1')
+++
+++.stderr~lineout('T2')
+++
+++.stderr~lineout('T3')
+++
+++.stderr~lineout('T4')
+++
+++.stderr~lineout('T5')
+++
+++.stderr~lineout('T6')
+++
+++.stderr~lineout('T7')
+++
+++.stderr~lineout('T8')
+++
+++.stderr~lineout('T9')
+++
+++.stderr~lineout('T10')
+++
++diff --git a/rust/corpus/lang/debug_input_eof.rex b/rust/corpus/lang/debug_input_eof.rex
++new file mode 100644
++index 000000000..5018bf163
++--- /dev/null
+++++ b/rust/corpus/lang/debug_input_eof.rex
++@@ -0,0 +1,8 @@
+++/* A debug pause at the end of standard input raises NOTREADY, which the
+++   program traps. */
+++signal on notready name nr
+++trace ?a
+++say 'a'
+++say 'b'
+++exit
+++nr: trace off; say 'NOTREADY trapped' condition('D'); exit 3
++diff --git a/rust/corpus/lang/debug_input_nil.rex b/rust/corpus/lang/debug_input_nil.rex
++new file mode 100644
++index 000000000..5ef118611
++--- /dev/null
+++++ b/rust/corpus/lang/debug_input_nil.rex
++@@ -0,0 +1,6 @@
+++/* A debug pause with .DEBUGINPUT set to .nil sends LINEIN to .nil, and the
+++   error is reported against the clause that paused. */
+++.local~debuginput = .nil
+++trace ?a
+++say 'x'
+++say 'y'
++diff --git a/rust/corpus/lang/debug_input_object.rex b/rust/corpus/lang/debug_input_object.rex
++new file mode 100644
++index 000000000..33177fe2e
++--- /dev/null
+++++ b/rust/corpus/lang/debug_input_object.rex
++@@ -0,0 +1,16 @@
+++/* A debug pause reads its line by sending LINEIN to .DebugInput, so a
+++   destination object answers it; a null string continues. */
+++.DebugInput~destination(.lines~new)
+++trace ?a
+++nop
+++say 'after'
+++exit
+++::class lines
+++::method init
+++  expose n
+++  n = 0
+++::method linein
+++  expose n
+++  n = n + 1
+++  if n = 1 then return "say 'typed'"
+++  return ''
++diff --git a/rust/corpus/lang/debug_input_removed.rex b/rust/corpus/lang/debug_input_removed.rex
++new file mode 100644
++index 000000000..bfdb2f561
++--- /dev/null
+++++ b/rust/corpus/lang/debug_input_removed.rex
++@@ -0,0 +1,7 @@
+++/* A debug pause with no .DEBUGINPUT entry reads a null string and leaves
+++   standard input to PULL. */
+++.local~remove('DEBUGINPUT')
+++trace ?a
+++say 'x'
+++parse pull q
+++say 'pulled' q
++diff --git a/rust/corpus/lang/debug_input_removed.stdin b/rust/corpus/lang/debug_input_removed.stdin
++new file mode 100644
++index 000000000..e5549cf9e
++--- /dev/null
+++++ b/rust/corpus/lang/debug_input_removed.stdin
++@@ -0,0 +1,2 @@
+++say 'typed'
+++
++diff --git a/rust/corpus/lang/debug_pause_before_trap.rex b/rust/corpus/lang/debug_pause_before_trap.rex
++new file mode 100644
++index 000000000..34f71916e
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_before_trap.rex
++@@ -0,0 +1,12 @@
+++/* The debug pause after a clause comes before a CALL ON handler the clause
+++   queued runs. */
+++call on user u name h
+++trace ?a
+++x = f()
+++say 'after' x
+++exit
+++f:
+++  raise user u return 7
+++h:
+++  say 'handler'
+++  return
++diff --git a/rust/corpus/lang/debug_pause_before_trap.stdin b/rust/corpus/lang/debug_pause_before_trap.stdin
++new file mode 100644
++index 000000000..cdc5e321e
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_before_trap.stdin
++@@ -0,0 +1,24 @@
+++.stderr~lineout('p1')
+++
+++.stderr~lineout('p2')
+++
+++.stderr~lineout('p3')
+++
+++.stderr~lineout('p4')
+++
+++.stderr~lineout('p5')
+++
+++.stderr~lineout('p6')
+++
+++.stderr~lineout('p7')
+++
+++.stderr~lineout('p8')
+++
+++.stderr~lineout('p9')
+++
+++.stderr~lineout('p10')
+++
+++.stderr~lineout('p11')
+++
+++.stderr~lineout('p12')
+++
++diff --git a/rust/corpus/lang/debug_pause_command_error.rex b/rust/corpus/lang/debug_pause_command_error.rex
++new file mode 100644
++index 000000000..dba8656e5
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_command_error.rex
++@@ -0,0 +1,7 @@
+++/* Under TRACE ?E a command that fails is traced, and pauses. */
+++trace ?e
+++'false'
+++say 'a'
+++'true'
+++say 'b'
+++trace ?n
++diff --git a/rust/corpus/lang/debug_pause_command_error.stdin b/rust/corpus/lang/debug_pause_command_error.stdin
++new file mode 100644
++index 000000000..11e0bbc81
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_command_error.stdin
++@@ -0,0 +1,20 @@
+++.stderr~lineout('p1')
+++
+++.stderr~lineout('p2')
+++
+++.stderr~lineout('p3')
+++
+++.stderr~lineout('p4')
+++
+++.stderr~lineout('p5')
+++
+++.stderr~lineout('p6')
+++
+++.stderr~lineout('p7')
+++
+++.stderr~lineout('p8')
+++
+++.stderr~lineout('p9')
+++
+++.stderr~lineout('p10')
+++
++diff --git a/rust/corpus/lang/debug_pause_commands.rex b/rust/corpus/lang/debug_pause_commands.rex
++new file mode 100644
++index 000000000..13b73b1ef
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_commands.rex
++@@ -0,0 +1,14 @@
+++/* Under TRACE ?C only a traced command pauses, and a TRACE instruction met
+++   in debug is ignored. */
+++trace ?c
+++say 'c1'
+++x = 1
+++say 'c2'
+++'true'
+++say 'c3'
+++l:
+++say 'c4'
+++trace ?l
+++say 'c5'
+++m:
+++say 'c6'
++diff --git a/rust/corpus/lang/debug_pause_commands.stdin b/rust/corpus/lang/debug_pause_commands.stdin
++new file mode 100644
++index 000000000..4c28a569d
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_commands.stdin
++@@ -0,0 +1,40 @@
+++.stderr~lineout('p1')
+++
+++.stderr~lineout('p2')
+++
+++.stderr~lineout('p3')
+++
+++.stderr~lineout('p4')
+++
+++.stderr~lineout('p5')
+++
+++.stderr~lineout('p6')
+++
+++.stderr~lineout('p7')
+++
+++.stderr~lineout('p8')
+++
+++.stderr~lineout('p9')
+++
+++.stderr~lineout('p10')
+++
+++.stderr~lineout('p11')
+++
+++.stderr~lineout('p12')
+++
+++.stderr~lineout('p13')
+++
+++.stderr~lineout('p14')
+++
+++.stderr~lineout('p15')
+++
+++.stderr~lineout('p16')
+++
+++.stderr~lineout('p17')
+++
+++.stderr~lineout('p18')
+++
+++.stderr~lineout('p19')
+++
+++.stderr~lineout('p20')
+++
++diff --git a/rust/corpus/lang/debug_pause_flowed.rex b/rust/corpus/lang/debug_pause_flowed.rex
++new file mode 100644
++index 000000000..b8acfffea
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_flowed.rex
++@@ -0,0 +1,7 @@
+++/* Interactive debug pauses after NUMERIC as after SAY, so each line typed at
+++   a pause runs before the next clause. */
+++trace ?a
+++say 'c1'
+++numeric digits 9
+++say 'c3'
+++say 'c4'
++diff --git a/rust/corpus/lang/debug_pause_flowed.stdin b/rust/corpus/lang/debug_pause_flowed.stdin
++new file mode 100644
++index 000000000..d45e259fb
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_flowed.stdin
++@@ -0,0 +1,6 @@
+++say 'p1'
+++
+++say 'p2'
+++
+++say 'p3'
+++
++diff --git a/rust/corpus/lang/debug_pause_kinds.rex b/rust/corpus/lang/debug_pause_kinds.rex
++new file mode 100644
++index 000000000..a4aabbd70
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_kinds.rex
++@@ -0,0 +1,37 @@
+++/* Which clauses an interactive-debug pause follows. THEN, END and SIGNAL have
+++   none, INTERPRET pauses before its fragment, and CALL pauses once the callee
+++   returns. Each pause types a line to the trace stream. */
+++trace ?a
+++say 'c1'
+++numeric digits 9
+++say 'c2'
+++address command
+++say 'c3'
+++drop zz
+++say 'c4'
+++say 'c5'
+++push 'q'
+++parse pull qq
+++say 'c6'
+++x = 1
+++say 'c7'
+++nop
+++do i = 1 to 1
+++  say 'c8'
+++end
+++if x = 1 then say 'c9'
+++select
+++  when x = 1 then say 'c10'
+++  otherwise nop
+++end
+++call sub
+++say 'c11'
+++.nil~string
+++say 'c12'
+++interpret "say 'c13'"
+++say 'c14'
+++signal lbl
+++lbl:
+++say 'c15'
+++exit
+++sub: return
++diff --git a/rust/corpus/lang/debug_pause_kinds.stdin b/rust/corpus/lang/debug_pause_kinds.stdin
++new file mode 100644
++index 000000000..02ae5f9df
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_kinds.stdin
++@@ -0,0 +1,120 @@
+++.stderr~lineout('p1')
+++
+++.stderr~lineout('p2')
+++
+++.stderr~lineout('p3')
+++
+++.stderr~lineout('p4')
+++
+++.stderr~lineout('p5')
+++
+++.stderr~lineout('p6')
+++
+++.stderr~lineout('p7')
+++
+++.stderr~lineout('p8')
+++
+++.stderr~lineout('p9')
+++
+++.stderr~lineout('p10')
+++
+++.stderr~lineout('p11')
+++
+++.stderr~lineout('p12')
+++
+++.stderr~lineout('p13')
+++
+++.stderr~lineout('p14')
+++
+++.stderr~lineout('p15')
+++
+++.stderr~lineout('p16')
+++
+++.stderr~lineout('p17')
+++
+++.stderr~lineout('p18')
+++
+++.stderr~lineout('p19')
+++
+++.stderr~lineout('p20')
+++
+++.stderr~lineout('p21')
+++
+++.stderr~lineout('p22')
+++
+++.stderr~lineout('p23')
+++
+++.stderr~lineout('p24')
+++
+++.stderr~lineout('p25')
+++
+++.stderr~lineout('p26')
+++
+++.stderr~lineout('p27')
+++
+++.stderr~lineout('p28')
+++
+++.stderr~lineout('p29')
+++
+++.stderr~lineout('p30')
+++
+++.stderr~lineout('p31')
+++
+++.stderr~lineout('p32')
+++
+++.stderr~lineout('p33')
+++
+++.stderr~lineout('p34')
+++
+++.stderr~lineout('p35')
+++
+++.stderr~lineout('p36')
+++
+++.stderr~lineout('p37')
+++
+++.stderr~lineout('p38')
+++
+++.stderr~lineout('p39')
+++
+++.stderr~lineout('p40')
+++
+++.stderr~lineout('p41')
+++
+++.stderr~lineout('p42')
+++
+++.stderr~lineout('p43')
+++
+++.stderr~lineout('p44')
+++
+++.stderr~lineout('p45')
+++
+++.stderr~lineout('p46')
+++
+++.stderr~lineout('p47')
+++
+++.stderr~lineout('p48')
+++
+++.stderr~lineout('p49')
+++
+++.stderr~lineout('p50')
+++
+++.stderr~lineout('p51')
+++
+++.stderr~lineout('p52')
+++
+++.stderr~lineout('p53')
+++
+++.stderr~lineout('p54')
+++
+++.stderr~lineout('p55')
+++
+++.stderr~lineout('p56')
+++
+++.stderr~lineout('p57')
+++
+++.stderr~lineout('p58')
+++
+++.stderr~lineout('p59')
+++
+++.stderr~lineout('p60')
+++
++diff --git a/rust/corpus/lang/debug_pause_loops.rex b/rust/corpus/lang/debug_pause_loops.rex
++new file mode 100644
++index 000000000..11539417a
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_loops.rex
++@@ -0,0 +1,19 @@
+++/* LEAVE pauses, ITERATE pauses once its loop has stepped and echoed the DO
+++   again, WHEN in a SELECT CASE pauses whether it matched or not, and a DO
+++   with no passes pauses after its header. */
+++trace ?a
+++do i = 1 to 3
+++  if i = 2 then leave
+++  if i = 1 then iterate
+++  say 'never'
+++end
+++select case i
+++  when 1 then say 'one'
+++  when 2 then say 'two'
+++  otherwise nop
+++end
+++x = 0
+++do 0
+++  say 'zero'
+++end
+++say 'done'
++diff --git a/rust/corpus/lang/debug_pause_loops.stdin b/rust/corpus/lang/debug_pause_loops.stdin
++new file mode 100644
++index 000000000..278ce08b9
++--- /dev/null
+++++ b/rust/corpus/lang/debug_pause_loops.stdin
++@@ -0,0 +1,80 @@
+++.stderr~lineout('p1')
+++
+++.stderr~lineout('p2')
+++
+++.stderr~lineout('p3')
+++
+++.stderr~lineout('p4')
+++
+++.stderr~lineout('p5')
+++
+++.stderr~lineout('p6')
+++
+++.stderr~lineout('p7')
+++
+++.stderr~lineout('p8')
+++
+++.stderr~lineout('p9')
+++
+++.stderr~lineout('p10')
+++
+++.stderr~lineout('p11')
+++
+++.stderr~lineout('p12')
+++
+++.stderr~lineout('p13')
+++
+++.stderr~lineout('p14')
+++
+++.stderr~lineout('p15')
+++
+++.stderr~lineout('p16')
+++
+++.stderr~lineout('p17')
+++
+++.stderr~lineout('p18')
+++
+++.stderr~lineout('p19')
+++
+++.stderr~lineout('p20')
+++
+++.stderr~lineout('p21')
+++
+++.stderr~lineout('p22')
+++
+++.stderr~lineout('p23')
+++
+++.stderr~lineout('p24')
+++
+++.stderr~lineout('p25')
+++
+++.stderr~lineout('p26')
+++
+++.stderr~lineout('p27')
+++
+++.stderr~lineout('p28')
+++
+++.stderr~lineout('p29')
+++
+++.stderr~lineout('p30')
+++
+++.stderr~lineout('p31')
+++
+++.stderr~lineout('p32')
+++
+++.stderr~lineout('p33')
+++
+++.stderr~lineout('p34')
+++
+++.stderr~lineout('p35')
+++
+++.stderr~lineout('p36')
+++
+++.stderr~lineout('p37')
+++
+++.stderr~lineout('p38')
+++
+++.stderr~lineout('p39')
+++
+++.stderr~lineout('p40')
+++
++diff --git a/rust/corpus/lang/debug_reexecute.rex b/rust/corpus/lang/debug_reexecute.rex
++new file mode 100644
++index 000000000..a2e591257
++--- /dev/null
+++++ b/rust/corpus/lang/debug_reexecute.rex
++@@ -0,0 +1,11 @@
+++/* = at a pause runs the clause again: NUMERIC, a label, an assignment, and
+++   INTERPRET, whose pause comes before its fragment. */
+++n = 0
+++trace ?a
+++numeric digits 9
+++call sub
+++interpret "say 'frag' n"
+++drop zz
+++say 'end' n
+++exit
+++sub: n = n + 1; return
++diff --git a/rust/corpus/lang/debug_reexecute.stdin b/rust/corpus/lang/debug_reexecute.stdin
++new file mode 100644
++index 000000000..cdb8cbd37
++--- /dev/null
+++++ b/rust/corpus/lang/debug_reexecute.stdin
++@@ -0,0 +1,14 @@
+++=
+++
+++=
+++
+++=
+++
+++
+++=
+++
+++
+++
+++
+++
+++
++diff --git a/rust/corpus/lang/debug_reexecute_command.rex b/rust/corpus/lang/debug_reexecute_command.rex
++new file mode 100644
++index 000000000..59e99a9da
++--- /dev/null
+++++ b/rust/corpus/lang/debug_reexecute_command.rex
++@@ -0,0 +1,4 @@
+++/* = at the pause after a traced command runs the command again. */
+++trace ?c
+++'echo hi'
+++say 'after'
++diff --git a/rust/corpus/lang/debug_reexecute_command.stdin b/rust/corpus/lang/debug_reexecute_command.stdin
++new file mode 100644
++index 000000000..643d287db
++--- /dev/null
+++++ b/rust/corpus/lang/debug_reexecute_command.stdin
++@@ -0,0 +1,4 @@
+++=
+++
+++
+++
++diff --git a/rust/corpus/lang/debug_skip_flowed.rex b/rust/corpus/lang/debug_skip_flowed.rex
++new file mode 100644
++index 000000000..f2c870b75
++--- /dev/null
+++++ b/rust/corpus/lang/debug_skip_flowed.rex
++@@ -0,0 +1,12 @@
+++/* A negative skip count typed at a pause suppresses the echo of the clauses
+++   whose pauses it counts, NUMERIC's, DROP's and a label's among them. */
+++trace ?a
+++say 'c1'
+++numeric digits 9
+++drop q
+++call s
+++say 'c2'
+++say 'c3'
+++nop
+++exit
+++s: return
++diff --git a/rust/corpus/lang/debug_skip_flowed.stdin b/rust/corpus/lang/debug_skip_flowed.stdin
++new file mode 100644
++index 000000000..5ad179e26
++--- /dev/null
+++++ b/rust/corpus/lang/debug_skip_flowed.stdin
++@@ -0,0 +1,11 @@
+++trace -3
+++
+++
+++
+++
+++
+++
+++
+++
+++
+++
++diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
++index 329482d50..30e654d2a 100644
++--- a/rust/corpus/phase-6-1.txt
+++++ b/rust/corpus/phase-6-1.txt
++@@ -196,10 +196,30 @@ lang/parse_error_package_new.rex
++ lang/parse_error_method_new.rex
++ 
++ # Task 5 fix round 1: a ::REQUIRES file that does not parse, or whose prologue
++ # raises, inside a file a native method loads.
++ lang/parse_error_nested_requires.rex
++ lang/parse_error_nested_requires_rnf.rex
++ lang/parse_error_nested_requires_mnf.rex
++ lang/parse_error_nested_requires_pkg.rex
++ lang/parse_error_nested_requires_lp.rex
++ lang/package_new_prologue_raise.rex
+++
+++# Task 6: an interactive-debug pause follows each instruction the oracle's
+++# own execute pauses after, a traced command, a CALL once it returns, and an
+++# INTERPRET before its fragment; = runs the clause again; the line is read by
+++# sending LINEIN to .DebugInput.
+++lang/debug_pause_flowed.rex
+++lang/debug_pause_kinds.rex
+++lang/debug_pause_loops.rex
+++lang/debug_pause_commands.rex
+++lang/debug_pause_command_error.rex
+++lang/debug_pause_before_trap.rex
+++lang/debug_call_return.rex
+++lang/debug_call_pause_caller.rex
+++lang/debug_reexecute.rex
+++lang/debug_reexecute_command.rex
+++lang/debug_skip_flowed.rex
+++lang/debug_input_object.rex
+++lang/debug_input_eof.rex
+++lang/debug_input_nil.rex
+++lang/debug_input_removed.rex
++diff --git a/rust/crates/rexx-exec/src/activation.rs b/rust/crates/rexx-exec/src/activation.rs
++index 165ee871b..09e516c48 100644
++--- a/rust/crates/rexx-exec/src/activation.rs
+++++ b/rust/crates/rexx-exec/src/activation.rs
++@@ -757,21 +757,21 @@ impl Activation {
++                 let mut flags = ActivationFlags::default();
++                 flags.set_elapsed_reset(inherited.elapsed_reset);
++                 flags
++             },
++             first_instruction_pending: true,
++             trace_entry: TraceEntry::Pending,
++             pc,
++             settings: inherited.settings,
++             condition_syntax: inherited.condition_syntax,
++             trace_mode: inherited.trace_mode,
++-            debug: DebugState::default(),
+++            debug: inherited.debug,
++             address: inherited.address,
++             io_configs: inherited.io_configs,
++             traps: inherited.traps,
++             cold: inherited.cold,
++             // The caller's stamp, invalid: `RexxActivation`'s internal-call
++             // constructor copies the settings and sets `timeStamp.valid =
++             // false` (`RexxActivation.cpp:241`), so a reset the caller left
++             // pending anchors to the caller's last reading.
++             cached_clock: inherited.cached_clock,
++             elapsed_anchor: inherited.elapsed_anchor,
++@@ -1062,20 +1062,22 @@ pub(crate) struct Inherited {
++     pub(crate) trace_mode: TraceMode,
++     pub(crate) address: AddressState,
++     pub(crate) io_configs: Option<Rc<IoConfigs>>,
++     pub(crate) traps: TrapMap,
++     /// The caller's `CONDITION()` and `RAISE PROPAGATE` conditions
++     /// ([`ActivationCold::inherited`]).
++     pub(crate) cold: Option<Box<ActivationCold>>,
++     pub(crate) cached_clock: i64,
++     pub(crate) elapsed_anchor: i64,
++     pub(crate) elapsed_reset: bool,
+++    /// `putSettings` copies the debug flags and the skip count with the rest.
+++    pub(crate) debug: DebugState,
++ }
++ 
++ /// The code body a `(program, selector)` pair denotes: `None` is
++ /// `program.main`, `Some(i)` is `program.directives[i]`'s own body.
++ pub(crate) fn body_of(program: &Program, selector: Option<usize>) -> Option<&CodeBody> {
++     match selector {
++         None => Some(&program.main),
++         Some(index) => match &program.directives.get(index)?.kind {
++             DirectiveKind::Routine(routine) => routine.body.as_ref(),
++             DirectiveKind::Method(method) => method.body.as_ref(),
++diff --git a/rust/crates/rexx-exec/src/clause.rs b/rust/crates/rexx-exec/src/clause.rs
++index 473eecb7e..4fd6be3bf 100644
++--- a/rust/crates/rexx-exec/src/clause.rs
+++++ b/rust/crates/rexx-exec/src/clause.rs
++@@ -257,22 +257,25 @@ impl Interp {
++         // by 3.3 MB without it.
++         self.activity.value_buffer.clear();
++         // **The fourth-site tripwire** (fix round 4). A condition queued by
++         // this activation's clause at line L that is still waiting when a
++         // clause at a *different* line begins means some construct resolved
++         // an instruction inside its own `step` without ending its header
++         // clause first -- the defect behind re-review finding NEW-2's four
++         // sites and three rounds' worth before them, always silently. The
++         // handler will now report `SIGL` for the wrong clause, which is the
++         // half of the defect that has recurred every round.
+++        // A line typed at a debug pause runs ahead of the boundary that
+++        // delivers what the paused clause queued, as the oracle's pause does.
++         debug_assert!(
++             self.activity.clause_state.current_clause_line == line
+++                || self.debug_pause()
++                 || !self.activity.pending_traps.iter().any(|pending| {
++                     !pending.queued_during_delivery && pending.activation == self.activation().id
++                 }),
++             "a clause at line {} began while a condition queued by this activation's clause at \
++              line {} was still waiting: some construct ran an instruction inside its own step \
++              without ending its header clause first",
++             line,
++             self.activity.clause_state.current_clause_line
++         );
++         self.activity.clause_state.current_clause_line = line;
++diff --git a/rust/crates/rexx-exec/src/command.rs b/rust/crates/rexx-exec/src/command.rs
++index 841622944..11ef8f539 100644
++--- a/rust/crates/rexx-exec/src/command.rs
+++++ b/rust/crates/rexx-exec/src/command.rs
++@@ -870,23 +870,28 @@ impl Interp {
++     /// `environment` names the handler for this clause alone. `ADDRESS env
++     /// command` leaves the activation's own pair untouched -- measured,
++     /// `ADDRESS()` is unchanged afterwards and a later bare `ADDRESS`
++     /// toggles to the alternate the one-off never wrote.
++     ///
++     /// `io` is the `WITH` configuration the issuing `ADDRESS` instruction
++     /// carried, which merges with whatever the environment name has stored.
++     ///
++     /// Where the child's wait leaves the baton, the clause parks its activity
++     /// and [`Interp::end_blocked_command`] settles it once the child is done.
+++    #[expect(
+++        clippy::too_many_arguments,
+++        reason = "the clause's own index and node beside the command's parts, each one the caller holds"
+++    )]
++     pub(crate) fn exec_command(
++         &mut self,
++         code: &Code<'_>,
+++        index: usize,
++         instruction: &Instruction,
++         source: Option<&ProgramSource>,
++         expression: &Expr,
++         environment: Option<&[u8]>,
++         io: Option<&AddressIo>,
++     ) -> Result<ExecOutcome, Failure> {
++         let indent = self.activity.clause_state.current_value_indent;
++         let value = self.eval(code, expression)?;
++         self.roots.activity_mut().push_temp(value);
++         let value = self.required_string_value(value)?;
++@@ -938,37 +943,38 @@ impl Interp {
++             }
++         };
++         // The SYNTAX condition the input reader's dispatcher took, raised now
++         // that the command has completed: measured, oracle rc 0, a `LINEIN`
++         // failing on its second line leaves `cat`'s one line of output in
++         // the target and `RC` 41 in the trap.
++         if let Some(kept) = kept {
++             self.reraise_failure_levels();
++             return Err(kept);
++         }
++-        self.settle_command(instruction, source, &command, indent, &outcome)
+++        self.settle_command(index, instruction, source, &command, indent, &outcome)
++             .map(ExecOutcome::Done)
++     }
++ 
++     /// Whether the running activity's command clause has a child that ended
++     /// off the baton, which [`Interp::end_blocked_command`] settles.
++     pub(crate) fn blocked_command_ended(&self) -> bool {
++         self.activity
++             .blocked
++             .as_ref()
++             .is_some_and(|blocked| blocked.ended.is_some())
++     }
++ 
++     /// The command clause whose child ended off the baton, settled as
++     /// [`Interp::exec_command`] settles one whose child it waited for.
++     pub(crate) fn end_blocked_command(
++         &mut self,
+++        index: usize,
++         instruction: &Instruction,
++         source: Option<&ProgramSource>,
++     ) -> Result<Flow, Failure> {
++         let Some(blocked) = self.activity.blocked.take() else {
++             return Err(
++                 crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
++             );
++         };
++         let Blocked {
++             command,
++@@ -976,27 +982,28 @@ impl Interp {
++             token: _,
++             ended: Some(ended),
++         } = *blocked
++         else {
++             return Err(crate::Loud::scheduler_inconsistency(
++                 "a command resumed before its child ended",
++             )
++             .into());
++         };
++         let outcome = self.command_ended(&ended);
++-        self.settle_command(instruction, source, &command, indent, &outcome)
+++        self.settle_command(index, instruction, source, &command, indent, &outcome)
++     }
++ 
++-    /// `RC`, `.RS`, the trace lines and any condition of a command clause
++-    /// that ran `command` to `outcome`.
+++    /// `RC`, `.RS`, the trace lines, any condition and the debug pause of a
+++    /// command clause, instruction `index`, that ran `command` to `outcome`.
++     fn settle_command(
++         &mut self,
+++        index: usize,
++         instruction: &Instruction,
++         source: Option<&ProgramSource>,
++         command: &[u8],
++         indent: usize,
++         outcome: &CommandOutcome,
++     ) -> Result<Flow, Failure> {
++         if let Some(supplied) = &outcome.supplied {
++             // The frame that held it is gone and `RC` is assigned below,
++             // after allocations of this clause's own.
++             self.roots.activity_mut().push_temp(supplied.object);
++@@ -1083,20 +1090,23 @@ impl Interp {
++             Some(held) => {
++                 let name = held.name.clone();
++                 self.raise_handler_condition(held, &name)?;
++             }
++             None => {
++                 if let Some(condition) = outcome.status.condition() {
++                     self.raise_command_condition(condition, command, outcome.rc)?;
++                 }
++             }
++         }
+++        if self.debug_pause_after_command(outcome.status)? {
+++            return Ok(Flow::Goto(index));
+++        }
++         Ok(Flow::Next)
++     }
++ 
++     /// The `SYNTAX` error the `::OPTIONS` for `condition` makes of a
++     /// handler's condition: its description and, for `ERROR` and `FAILURE`
++     /// alone, its `RESULT` as the `RC` substitution.
++     fn handler_escalation(&mut self, held: &HandlerCondition, condition: &[u8]) -> Failure {
++         let rc = match held.result {
++             Some(result) if matches!(condition, b"ERROR" | b"FAILURE") => {
++                 self.string_value_text(result)
++diff --git a/rust/crates/rexx-exec/src/ir/compile.rs b/rust/crates/rexx-exec/src/ir/compile.rs
++index 878f7faeb..687ad73c8 100644
++--- a/rust/crates/rexx-exec/src/ir/compile.rs
+++++ b/rust/crates/rexx-exec/src/ir/compile.rs
++@@ -1885,52 +1885,57 @@ fn op_index(ops: &[Op]) -> Result<u32, ChunkTooLarge> {
++ 
++ /// An instruction index as an op payload, refused rather than wrapped.
++ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
++     u32::try_from(index).map_err(|_| ChunkTooLarge { what: "op stream" })
++ }
++ 
++ /// **What wiring the analysis into emission may and may not do**, asserted
++ /// while it is not yet wired in, so that the commit that wires it in cannot
++ /// be the one that discovers either.
++ ///
++-/// * A body nothing in which can change the setting has one answer at every
++-///   clause, and it is the setting this chunk is keyed under -- so no such
++-///   body loses the compile-time decision it already has.
+++/// * A body nothing in which can change the setting, entered outside
+++///   interactive debug, has one answer at every clause, and it is the setting
+++///   this chunk is keyed under -- so no such body loses the compile-time
+++///   decision it already has. Under debug a line typed at a pause can change
+++///   the setting, and `trace_flow::analyse` answers `Unknown`.
++ /// * No clause gains an echo the body-wide bool does not already carry, in
++-///   either of the two questions those bools answer.
+++///   either of the two questions those bools answer. A body entered in debug
+++///   is answered `Unknown` throughout and asks nothing of either.
++ #[cfg(debug_assertions)]
++ fn assert_analysis_only_narrows(
++     plan: &Plan,
++     trace: ChunkTrace,
++     settings: &[super::trace_flow::Setting],
++ ) {
++     // The two body-wide decisions this analysis replaced, restated here
++     // because this is now the only thing that reads them.
++     let never_retraces = plan
++         .trace_events()
++         .iter()
++         .all(|event| *event == crate::trace::TraceEvent::Keeps);
++     let echoes_values = trace.intermediates() || !never_retraces;
++     let echoes_keyword = trace.results() || !never_retraces;
++     debug_assert!(
++         !never_retraces
+++            || trace.debugging()
++             || settings
++                 .iter()
++                 .all(|setting| *setting == super::trace_flow::Setting::Known(trace)),
++-        "nothing in this body can change the TRACE setting, so every clause runs under the one \
++-         the chunk is keyed to: {settings:?}"
+++        "nothing in this body can change the TRACE setting and it is not entered in debug, so \
+++         every clause runs under the one the chunk is keyed to: {settings:?}"
++     );
++     debug_assert!(
++-        settings
++-            .iter()
++-            .all(|setting| (!setting.echoes_values() || echoes_values)
++-                && (!setting.echoes_keyword() || echoes_keyword)),
+++        trace.debugging()
+++            || settings
+++                .iter()
+++                .all(|setting| (!setting.echoes_values() || echoes_values)
+++                    && (!setting.echoes_keyword() || echoes_keyword)),
++         "a clause's own answer asks for an echo this chunk does not emit today: {settings:?}"
++     );
++ }
++ 
++ // Test-only instrumentation: how many times `compile` has actually run. The
++ // chunk-cache test (`golden_tests.rs`) needs this to tell "the chunk cache
++ // compiled the body once" apart from "the second lookup happened not to
++ // fail" -- an implementation that recompiles on every call and returns an
++ // equal-looking `Chunk` would still pass a check that only inspects the
++ // result, and a `thread_local` counter is what lets the test inspect the
++diff --git a/rust/crates/rexx-exec/src/ir/drive.rs b/rust/crates/rexx-exec/src/ir/drive.rs
++index 61a5fcf3b..35147d4af 100644
++--- a/rust/crates/rexx-exec/src/ir/drive.rs
+++++ b/rust/crates/rexx-exec/src/ir/drive.rs
++@@ -1876,29 +1876,38 @@ macro_rules! clause_region {
++                     // `finish_plain_clause` discharges what is left of the
++                     // boundary.
++                     if $self.activity.pending_traps.is_empty() {
++                         $self.finish_plain_clause($entry);
++                         // **Asked of the setting and not of `stale`.**
++                         // Staleness heals -- the chunk is recompiled under
++                         // the setting now in force -- so a skip count set
++                         // at a pause would stop running down after the
++                         // first clause. Measured: `trace -2` then suppressed
++                         // every later clause instead of two.
++-                        if $debugging && $self.debug_pause_after_clause()? {
+++                        if $debugging
+++                            && $self.debug_pause_after_clause(
+++                                $code, $index, $clause, $source, None,
+++                            )?
+++                        {
++                             $pc = $clause_pc;
++                             continue $ops_label;
++                         }
++                         $pc = next;
++                         continue $ops_label;
++                     }
++                     Ok(RegionEnd::At(next))
++                 };
+++                let ran = if $debugging {
+++                    $self.debug_pause_in_region(ran, $code, $index, $clause, $source, $clause_pc)
+++                } else {
+++                    ran
+++                };
++                 break 'arm match $self
++                     .leave_stepped_clause($entry, $code, $index, $clause, $source, ran)?
++                 {
++                     ClauseOutcome::Ran(region) => match region? {
++                         // A promoted clause produces no `Flow` of its own:
++                         // where it leaves the counter *is* its answer, which
++                         // is what a jump op is for. Only its boundary can
++                         // end the activation, and that is the `Ended` below.
++                         RegionEnd::At(next) => {
++                             $pc = next;
++@@ -2405,20 +2414,82 @@ impl Interp {
++         let array =
++             self.alloc_charged(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
++         registers.set(dst, array);
++         if let Some(rendered) = self.result_text(array) {
++             let indent = self.activity.clause_state.current_value_indent;
++             self.trace_result(indent, &rendered);
++         }
++         Ok(())
++     }
++ 
+++    /// The debug pause a clause region owes on its cold exit, ahead of the
+++    /// clause boundary as the oracle's `execute` pauses ahead of its trap
+++    /// check. `=` answers the region's own first op, and a failure the pause
+++    /// raises is the clause's.
+++    #[cold]
+++    #[inline(never)]
+++    fn debug_pause_in_region(
+++        &mut self,
+++        ran: Result<RegionEnd, Failure>,
+++        code: &Code<'_>,
+++        index: usize,
+++        clause: &Instruction,
+++        source: Option<&ProgramSource>,
+++        clause_pc: u32,
+++    ) -> Result<RegionEnd, Failure> {
+++        let flow = match &ran {
+++            Ok(RegionEnd::At(_)) => None,
+++            Ok(RegionEnd::Flowed(flow)) => Some(flow),
+++            Err(_) => return ran,
+++        };
+++        match self.debug_pause_after_clause(code, index, clause, source, flow) {
+++            Ok(true) => Ok(RegionEnd::At(clause_pc)),
+++            Ok(false) => ran,
+++            Err(failure) => Err(failure),
+++        }
+++    }
+++
+++    /// [`Interp::flat_loop_step_top`] for a flow that escaped to a flat
+++    /// loop's frame, with the pause an `ITERATE` owes once the loop has
+++    /// stepped (`RexxInstructionLeave::execute`). `=` runs the `ITERATE`
+++    /// again.
+++    #[inline(never)]
+++    fn flat_loop_step_escaped(
+++        &mut self,
+++        code: &Code<'_>,
+++        chunk: &Chunk,
+++        source: Option<&ProgramSource>,
+++        arrival: Flow,
+++    ) -> Result<crate::run::FlatStep, Failure> {
+++        let iterated = match &arrival {
+++            Flow::Iterate(_, origin) => Some(origin.index),
+++            _ => None,
+++        };
+++        let step = self.flat_loop_step_top(code, source, arrival, |it| {
+++            it.count_clause_against_deadline(false)
+++        })?;
+++        let Some(index) = iterated else {
+++            return Ok(step);
+++        };
+++        if !matches!(
+++            step,
+++            crate::run::FlatStep::Body(_) | crate::run::FlatStep::Done(Flow::Goto(_))
+++        ) || !self.debug_pause_instruction()?
+++        {
+++            return Ok(step);
+++        }
+++        Ok(match step {
+++            crate::run::FlatStep::Body(_) => crate::run::FlatStep::Body(op_at(chunk, index)?),
+++            crate::run::FlatStep::Done(_) => crate::run::FlatStep::Done(Flow::Goto(index)),
+++        })
+++    }
+++
++     /// Parks the clause region `park` stopped at, for its callee to run:
++     /// everything [`Interp::ops_loop`] needs to go on from `park.at`.
++     #[expect(
++         clippy::too_many_arguments,
++         reason = "every argument is one the driver already holds for the clause it has open"
++     )]
++     #[inline(always)]
++     fn park_call(
++         &mut self,
++         park: Park,
++@@ -3198,25 +3269,31 @@ impl Interp {
++         base: usize,
++         len: usize,
++         parked: ParkedCall,
++         ran: Result<RegionEnd, Failure>,
++     ) -> Result<Exit, Failure> {
++         let ParkedCall {
++             clause_pc,
++             end,
++             index,
++             entry,
+++            debugging,
++             ..
++         } = parked;
++         let Some(clause) = code.body.instructions.get(index) else {
++             return Err(Loud::chunk_map_too_short().into());
++         };
+++        let ran = if debugging {
+++            self.debug_pause_in_region(ran, code, index, clause, source, clause_pc)
+++        } else {
+++            ran
+++        };
++         let (flow, next) =
++             match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
++                 ClauseOutcome::Ran(region) => match region? {
++                     RegionEnd::At(next) => return Ok(Exit::At(next)),
++                     RegionEnd::Flowed(flow) => (flow, end),
++                 },
++                 ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
++             };
++         Ok(
++             match self.settle(code, chunk, base, flow, next, 0, len, source)? {
++@@ -3774,23 +3851,21 @@ impl Interp {
++                         FrameKind::Select(frame) => {
++                             flow = self.leave_branch(code, &frame, other)?;
++                         }
++                         // A `LEAVE`/`ITERATE` that reached this
++                         // loop, decided by the same `do_body_outcome` the
++                         // nested form hands the answering `Flow` to. An
++                         // `ITERATE` this loop consumes puts the frame back and
++                         // resumes at the body's first op -- the same place
++                         // `Op::LoopNext` resumes a pass that fell through.
++                         FrameKind::Loop => {
++-                            match self.flat_loop_step_top(code, source, other, |it| {
++-                                it.count_clause_against_deadline(false)
++-                            })? {
+++                            match self.flat_loop_step_escaped(code, chunk, source, other)? {
++                                 crate::run::FlatStep::Body(op_body) => {
++                                     self.activity.frames.push(Frame {
++                                         op_end: u32::MAX,
++                                         start: frame_start,
++                                         end: frame_end,
++                                         kind: FrameKind::Loop,
++                                     });
++                                     return Ok(Settled::At(op_body));
++                                 }
++                                 crate::run::FlatStep::Done(escape) => flow = escape,
++diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
++index b9be0482d..3ac45acdb 100644
++--- a/rust/crates/rexx-exec/src/run.rs
+++++ b/rust/crates/rexx-exec/src/run.rs
++@@ -250,20 +250,23 @@ pub(crate) struct LeaveOrigin {
++     /// `None` only when `source` was `None` at the moment this instruction
++     /// stepped, which **no caller produces**: `run_fragment` passes its own
++     /// fragment source, so a `LEAVE`/`ITERATE` inside fragment text resolves a
++     /// real site and becomes the report's innermost echo. See
++     /// `Interp::clause_site`.
++     site: Option<(usize, Vec<u8>)>,
++     indent: usize,
++     /// This `LEAVE`/`ITERATE` clause's own line, captured the same way and at
++     /// the same moment as `site` and `indent`, and for the same reason.
++     clause_line: usize,
+++    /// The instruction's own index, which `=` at the pause after an
+++    /// `ITERATE` runs again.
+++    pub(crate) index: usize,
++ }
++ 
++ /// What `eval_condition` should do with the value it just computed, beyond
++ /// answering the caller's `bool` -- a caller-chosen variant rather than a
++ /// decision `eval_condition` makes on its own, because the same function
++ /// serves `IF`/`WHEN` (their own `>>>`, measured) and `WHILE`/`UNTIL`
++ /// (their own `>K>` instead, never a bare `>>>` alongside it, also
++ /// measured) and the two are genuinely different oracle behaviours, not
++ /// two spellings of one.
++ pub(crate) enum ConditionTrace<'a> {
++@@ -570,42 +573,42 @@ impl Interp {
++             return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Sleep {
++                 deadline: std::time::Instant::now(),
++             }));
++         }
++         match &instruction.kind {
++             InstructionKind::Guard(guard) => self.exec_guard(code, index, guard),
++             InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
++             InstructionKind::Command { .. } | InstructionKind::Address(_)
++                 if self.blocked_command_ended() =>
++             {
++-                self.end_blocked_command(instruction, source)
+++                self.end_blocked_command(index, instruction, source)
++                     .map(ExecOutcome::Done)
++             }
++             // A command clause: the string is evaluated, handed to the
++             // `ADDRESS` environment in force, and its return code settles
++             // `RC`, `.RS` and any condition. See `command.rs`.
++             //
++             // The expression is `Option` because `opt_expr` builds it, but a
++             // clause reaching the command fallback has a term in it -- an
++             // empty one is a null clause and is dropped before this. Measured
++             // on the oracle: `;`, a blank line and `;;` each run nothing at
++             // all, and the C++'s own `execute` would fault on the null it
++             // would need. The assertion is the tripwire rather than a
++             // sentence claiming it cannot happen.
++             InstructionKind::Command { expression } => {
++                 debug_assert!(
++                     expression.is_some(),
++                     "a command clause reached execution with no expression"
++                 );
++                 match expression {
++                     Some(expression) => {
++-                        self.exec_command(code, instruction, source, expression, None, None)
+++                        self.exec_command(code, index, instruction, source, expression, None, None)
++                     }
++                     None => Ok(ExecOutcome::Done(Flow::Next)),
++                 }
++             }
++             // `ADDRESS`: the forms that only name an environment -- the
++             // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and
++             // the bare toggle -- go to `exec_address`. `ADDRESS env command`
++             // runs one command against that name and writes neither half of
++             // the activation's pair, measured. `WITH`'s redirection is what
++             // is still owed.
++@@ -621,20 +624,21 @@ impl Interp {
++                         }
++                         (None, None) => Vec::new(),
++                     };
++                     // **The configuration is this command's alone.** The
++                     // arm that carries a command never calls `setAddress`,
++                     // so it stores nothing under the name -- measured, a
++                     // later command in the same program is not redirected
++                     // and the stem it filled keeps its one line.
++                     return self.exec_command(
++                         code,
+++                        index,
++                         instruction,
++                         source,
++                         command,
++                         Some(&environment),
++                         address.io.as_deref(),
++                     );
++                 }
++                 self.exec_address(code, address)?;
++                 Ok(ExecOutcome::Done(Flow::Next))
++             }
++@@ -752,20 +756,23 @@ impl Interp {
++                 // `current_value_indent`. Review finding I1(a): the arm
++                 // shipped without this and was the only value-producing arm in
++                 // the crate that traced nothing. Measured (`trace r`, `zz =
++                 // 'nop'`, `interpret zz`), the oracle prints
++                 // ```text
++                 //      3 *-* interpret zz
++                 //        >>>   "nop"
++                 //      3 *-* nop
++                 // ```
++                 self.trace_result(self.activity.clause_state.current_value_indent, &text);
+++                if self.debug_pause_instruction()? {
+++                    return Ok(Flow::Goto(index));
+++                }
++                 // **The fragment's level, with delta 0.** Measured: a
++                 // fragment's clauses print at the enclosing `INTERPRET`
++                 // clause's own absolute indent plus whatever nests them
++                 // *inside* the fragment -- `interpret "do jj = 1 to 1; say 2
++                 // & 1; end"` at top level echoes the inner clause at 2 and
++                 // the `INTERPRET` at 0, and the identical fragment two `DO`s
++                 // deep echoes them at 6 and 4. So the base is the enclosing
++                 // clause's printed indent exactly, with no bump of its own --
++                 // unlike a called routine's, which the same measurements put
++                 // two spaces further in (`call sub1` at printed indent 4 into
++@@ -3165,20 +3172,21 @@ impl Interp {
++             // a `LEAVE`/`ITERATE` inside an escaped `OTHERWISE`'s own body
++             // captures its own origin indent here, not through `step_in_
++             // temps_frame`'s own computation at all (`Flow::Leave`'s own
++             // doc comment: eagerly, before any propagation), so it needs
++             // the identical addition independently, not by inheritance.
++             indent: self.printed_indent(code, index),
++             // Already this instruction's own line: `Op::Clause`'s region's
++             // `in_clause` set it before dispatching this `step`, through the
++             // same `clause_line` call `SIGL` reads.
++             clause_line: self.activity.clause_state.line(),
+++            index,
++         }
++     }
++ 
++     /// Assigns `origin`'s own captured site to `self.failure_site`, first
++     /// call wins, at `origin`'s own captured indent.
++     fn record_leave_failure(&mut self, origin: &LeaveOrigin) {
++         self.record_failure_site_at(origin.site.clone(), origin.indent);
++     }
++ 
++     /// The same first-wins record from an already-resolved `(line, text)`
++diff --git a/rust/crates/rexx-exec/src/run/call.rs b/rust/crates/rexx-exec/src/run/call.rs
++index cd2cd85d6..dd8c1c33d 100644
++--- a/rust/crates/rexx-exec/src/run/call.rs
+++++ b/rust/crates/rexx-exec/src/run/call.rs
++@@ -892,20 +892,21 @@ impl Interp {
++                 // elapsed clock are copied the same way.
++                 let cold = caller
++                     .cold
++                     .as_deref()
++                     .and_then(crate::activation::ActivationCold::inherited);
++                 let (cached_clock, elapsed_anchor, elapsed_reset) = (
++                     caller.cached_clock,
++                     caller.elapsed_anchor,
++                     caller.flags.elapsed_reset(),
++                 );
+++                let debug = caller.debug;
++                 let mut callee = Activation::nested(
++                     callee_id,
++                     program,
++                     program_id,
++                     selector,
++                     plan,
++                     frame,
++                     target,
++                     Inherited {
++                         call_type: caller_call_type,
++@@ -916,20 +917,21 @@ impl Interp {
++                         address,
++                         // The refcount, not the table: a write in the callee
++                         // clones first, which is how the oracle keeps the
++                         // inheritance one-way (`checkIOConfigTable`).
++                         io_configs: caller_io_configs,
++                         traps,
++                         cold,
++                         cached_clock,
++                         elapsed_anchor,
++                         elapsed_reset,
+++                        debug,
++                     },
++                 );
++                 callee.extra = extra;
++                 callee.exposed = exposed;
++                 self.push_activation(callee);
++             }
++             // **A pool of its own, and not one of the five inheritances**
++             // -- `Activation::routine` is where that is stated and
++             // `Activation::nested`'s own doc carries the six probes. The
++             // plan is the routine body's own, cached under its own
++diff --git a/rust/crates/rexx-exec/src/run/interpret.rs b/rust/crates/rexx-exec/src/run/interpret.rs
++index de9f41085..70ea9de55 100644
++--- a/rust/crates/rexx-exec/src/run/interpret.rs
+++++ b/rust/crates/rexx-exec/src/run/interpret.rs
++@@ -5,23 +5,24 @@
++ /* This program and the accompanying materials are made available under       */
++ /* the terms of the Common Public License v1.0 which accompanies this         */
++ /* distribution. A copy is also available at the following address:           */
++ /* https://www.oorexx.org/license.html                                        */
++ /*                                                                            */
++ /*----------------------------------------------------------------------------*/
++ 
++ //! `INTERPRET` fragments, `DROP`, and the interactive debug pause.
++ 
++ use super::{
++-    BodyEngine, Code, Failure, Flow, Fragment, Interp, Loud, NameShape, Rc, TraceEntry,
++-    VariableRef, raised_iterate_no_loop, raised_iterate_no_match, raised_leave_no_loop,
++-    raised_leave_no_match, shape_of, split_indirect_words, validate_indirect_word,
+++    BodyEngine, Code, Failure, Flow, Fragment, Instruction, InstructionKind, Interp, Loud,
+++    NameShape, ObjRef, ProgramSource, Rc, TraceEntry, VariableRef, raised_iterate_no_loop,
+++    raised_iterate_no_match, raised_leave_no_loop, raised_leave_no_match, shape_of,
+++    split_indirect_words, validate_indirect_word,
++ };
++ 
++ impl Interp {
++     /// Parses `text` as an `INTERPRET` fragment and runs it **inside the
++     /// current activation**.
++     /// ```text
++     ///      2 *-*   leave outer
++     ///      2 *-*   interpret "leave outer"
++     /// ```
++     pub(super) fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
++@@ -179,28 +180,123 @@ impl Interp {
++                 let dot = name
++                     .iter()
++                     .position(|&b| b == b'.')
++                     .expect("NameShape::Compound guarantees at least one period");
++                 let (stem_name, key) = name.split_at(dot + 1);
++                 self.stem_drop_tail(stem_name, key);
++             }
++         }
++     }
++ 
++-    /// `doDebugPause` (`RexxActivation.cpp:4199`-`4283`), after a clause the
++-    /// setting in force traced. Answers whether the clause is to run again,
++-    /// which is what `=` asks for.
+++    /// The pause owed once `clause` has done its own work under a setting
+++    /// that is interactive, `flow` being what it answered if it answered one.
+++    /// Answers whether the clause is to run again, which is what `=` asks for.
+++    /// A failure the pause raises is recorded against `clause`.
+++    ///
+++    /// The oracle decides per instruction class (`pauseInstruction`,
+++    /// `pauseLabel`) against flags `TraceSetting::setDebug` derives from the
+++    /// letter: an instruction pauses under `A`, `R` and `I` and a label
+++    /// wherever labels trace. A command pauses from
+++    /// [`Interp::debug_pause_after_command`] instead. A negative skip count
+++    /// suppresses the echo and not the pauses it counts, so the flags come
+++    /// from the setting it saved. An `IF`, a `SELECT` or a block `DO` that
+++    /// answers a `Flow` ran its whole construct; a repeating `DO` that answers
+++    /// one ended before any pass, and pauses after its header. A flow that
+++    /// leaves the instruction for good owes no pause, and an `ITERATE` pauses
+++    /// once the loop it reaches has stepped.
+++    #[cold]
+++    #[inline(never)]
+++    pub(crate) fn debug_pause_after_clause(
+++        &mut self,
+++        code: &Code<'_>,
+++        index: usize,
+++        clause: &Instruction,
+++        source: Option<&ProgramSource>,
+++        flow: Option<&Flow>,
+++    ) -> Result<bool, Failure> {
+++        let kind = &clause.kind;
+++        if let Some(flow) = flow
+++            && (matches!(
+++                flow,
+++                Flow::Exit(_) | Flow::Return(_) | Flow::Signal(_) | Flow::Iterate(..)
+++            ) || matches!(
+++                kind,
+++                InstructionKind::If { .. } | InstructionKind::Select { .. }
+++            ) || matches!(
+++                kind,
+++                InstructionKind::Do(body) | InstructionKind::Loop(body)
+++                    if matches!(body.kind, rexx_parse::LoopKind::Simple)
+++            ))
+++        {
+++            return Ok(false);
+++        }
+++        let mode = self.pausing_mode();
+++        let pausing = match kind {
+++            InstructionKind::Label { .. } => mode.labels,
+++            InstructionKind::Command { .. } => false,
+++            InstructionKind::Address(address) if address.command.is_some() => false,
+++            _ => mode.all && pauses_after(kind),
+++        };
+++        if !pausing {
+++            return Ok(false);
+++        }
+++        self.debug_pause_now()
+++            .inspect_err(|_| self.record_failure_site(code, index, source, clause))
+++    }
+++
+++    /// `conditionalPauseInstruction`: the pause an instruction takes from
+++    /// inside its own work, `INTERPRET`'s before its fragment and `ITERATE`'s
+++    /// once the loop has stepped. Answers whether the instruction is to run again.
+++    pub(crate) fn debug_pause_instruction(&mut self) -> Result<bool, Failure> {
+++        let mode = self.pausing_mode();
+++        if !(mode.debug && mode.all) {
+++            return Ok(false);
+++        }
+++        self.debug_pause_now()
+++    }
+++
+++    /// The pause `RexxActivation::command` takes once a command it traced
+++    /// has settled `RC` and raised its condition. Answers whether the command
+++    /// is to run again.
+++    pub(crate) fn debug_pause_after_command(
+++        &mut self,
+++        status: crate::command::ReturnStatus,
+++    ) -> Result<bool, Failure> {
+++        let mode = self.pausing_mode();
+++        let traced = mode.all
+++            || mode.commands
+++            || match status {
+++                crate::command::ReturnStatus::Error => mode.errors,
+++                crate::command::ReturnStatus::Failure => mode.failures,
+++                crate::command::ReturnStatus::Normal => false,
+++            };
+++        if !(mode.debug && traced) {
+++            return Ok(false);
+++        }
+++        self.debug_pause_now()
+++    }
+++
+++    /// The setting whose flags decide which clauses pause.
+++    fn pausing_mode(&self) -> crate::trace::TraceMode {
+++        match self.activation().debug.saved {
+++            Some(saved) => saved,
+++            None => self.trace_mode(),
+++        }
+++    }
+++
+++    /// `doDebugPause` (`RexxActivation.cpp:4199`-`4283`). Answers whether the
+++    /// clause is to run again.
++     ///
++     /// The prompt is printed once per activation, and a line that is neither
++     /// empty nor `=` runs as an `INTERPRET` fragment; the pause ends when the
++     /// fragment ended debug or changed a setting from inside it.
++-    pub(crate) fn debug_pause_after_clause(&mut self) -> Result<bool, Failure> {
+++    pub(crate) fn debug_pause_now(&mut self) -> Result<bool, Failure> {
++         if self.debug_pause() {
++             return Ok(false);
++         }
++         if self.activation().debug.bypass {
++             self.activation_mut().debug.bypass = false;
++             return Ok(false);
++         }
++         let skip = self.activation().debug.skip;
++         if skip > 0 {
++             let left = skip - 1;
++@@ -214,40 +310,57 @@ impl Interp {
++         }
++         if !self.activation().debug.prompt_issued {
++             self.activation_mut().debug.prompt_issued = true;
++             let line = crate::error::Raised::debug_prompt_line();
++             let start = self.trace.len();
++             self.trace.extend_from_slice(&line);
++             self.trace.push(b'\n');
++             self.route_trace_line(start);
++         }
++         loop {
++-            let Some(line) = self.input_line() else {
++-                return Ok(false);
++-            };
+++            let line = self.debug_input_line()?;
++             if line.is_empty() {
++                 return Ok(false);
++             }
++             if line == b"=" {
++                 return Ok(true);
++             }
++             self.run_debug_fragment(line)?;
++             if self.activation().debug.bypass {
++                 self.activation_mut().debug.bypass = false;
++                 return Ok(false);
++             }
++             if !self.trace_mode().debug {
++                 return Ok(false);
++             }
++         }
++     }
++ 
+++    /// `Activity::traceInput` (`Activity.cpp:3240`-`3263`): `LINEIN` sent to
+++    /// `.local~DEBUGINPUT`, an absent entry or a `.nil` answer read as the
+++    /// null string. A condition the send raises is the pause's failure.
+++    fn debug_input_line(&mut self) -> Result<Vec<u8>, Failure> {
+++        let Some(route) = self.local_route(b"DEBUGINPUT")? else {
+++            return Ok(Vec::new());
+++        };
+++        let caller = self.caller();
+++        let answer = pinned!(
+++            self,
+++            crate::pinning::PinKind::TraceWrapper,
+++            self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)
+++        )?;
+++        Ok(match answer {
+++            Some(value) if value != ObjRef::NIL => self.to_text(value).into_owned(),
+++            _ => Vec::new(),
+++        })
+++    }
+++
++     /// One line typed at a pause, run as an `INTERPRET` fragment that traces
++     /// nothing. A SYNTAX condition inside it is reported under the two
++     /// `+++ Interactive trace.` lines and swallowed, and the pause goes on --
++     /// measured, `zz = 1/0` at a pause reports 42.3 and the next line still
++     /// runs.
++     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
++         let saved_pause = self.replace_debug_pause(true);
++         // A `SELECT CASE` typed at the pause opens and closes inside the
++         // line; the construct the pause interrupted keeps its own value.
++         let saved_case = self.activation().current_case;
++@@ -332,10 +445,32 @@ impl Interp {
++     }
++ 
++     /// Puts the enclosing state back after a fragment, **except** that a
++     /// fragment which announced leaves the activation `Done`.
++     pub(super) fn leave_fragment(&mut self, enclosing: TraceEntry) {
++         if self.activation().trace_entry != TraceEntry::Done {
++             self.activation_mut().trace_entry = enclosing;
++         }
++     }
++ }
+++
+++/// Whether a debug pause follows an instruction of `kind` once its own work
+++/// is done, as the oracle's `execute` ends in `pauseInstruction` or a block
+++/// header's in `conditionalPauseInstruction`. `INTERPRET` pauses before its
+++/// fragment instead. `REPLY` answers false: the oracle pauses on the
+++/// continuation's thread, and this crate does not pause there.
+++pub(crate) fn pauses_after(kind: &InstructionKind) -> bool {
+++    !matches!(
+++        kind,
+++        InstructionKind::Then
+++            | InstructionKind::Else { .. }
+++            | InstructionKind::Otherwise
+++            | InstructionKind::End { .. }
+++            | InstructionKind::Return { .. }
+++            | InstructionKind::Exit { .. }
+++            | InstructionKind::Signal(_)
+++            | InstructionKind::Raise(_)
+++            | InstructionKind::Guard(_)
+++            | InstructionKind::Interpret { .. }
+++            | InstructionKind::Reply { .. }
+++    )
+++}
++diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
++index b92a6e2f3..2f08de95c 100644
++--- a/rust/crates/rexx-exec/src/tests.rs
+++++ b/rust/crates/rexx-exec/src/tests.rs
++@@ -452,20 +452,64 @@ fn a_failing_pause_line_leaves_no_traceback_level() {
++     let stderr = String::from_utf8_lossy(&outcome.stderr);
++     for reached in ["Error 42.3:", "Error 35.1:"] {
++         assert!(
++             stderr.contains(&format!("+++ Interactive trace.  {reached}")),
++             "the pause did not report {reached}: {stderr}"
++         );
++     }
++     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1\n");
++ }
++ 
+++/// An internal call inherits its caller's debug state, so the prompt the
+++/// caller printed is not printed again at the callee's first pause.
+++#[test]
+++fn an_internal_call_does_not_prompt_again() {
+++    let program = "trace ?a\nsay 'a'\ncall s\nexit\ns: nop\n  return\n";
+++    let input = crate::ProgramInput::Bytes(b"\n\n\n\n\n\n".to_vec());
+++    let outcome = run_program(
+++        TEST_PATH,
+++        program.as_bytes().to_vec(),
+++        crate::Invocation::none().with_input(input),
+++    );
+++    let stderr = String::from_utf8_lossy(&outcome.stderr);
+++    assert!(
+++        stderr.contains("*-*   nop"),
+++        "the callee's clause was not traced: {stderr}"
+++    );
+++    assert_eq!(
+++        stderr
+++            .matches("+++ Interactive trace. \"Trace Off\"")
+++            .count(),
+++        1,
+++        "{stderr}"
+++    );
+++}
+++
+++/// A failing command that only `TRACE ?E` traces prints the debug banner
+++/// ahead of its clause, as any first traced clause does.
+++#[test]
+++fn a_command_traced_for_its_error_prints_the_debug_banner() {
+++    let program = "trace ?e\n'false'\nsay 'a'\n";
+++    let input = crate::ProgramInput::Bytes(b"\n\n".to_vec());
+++    let outcome = run_program(
+++        TEST_PATH,
+++        program.as_bytes().to_vec(),
+++        crate::Invocation::none().with_input(input),
+++    );
+++    let stderr = String::from_utf8_lossy(&outcome.stderr);
+++    let banner = stderr.find("       +++ \"").expect("no debug banner");
+++    let clause = stderr
+++        .find("*-* 'false'")
+++        .expect("the command was not traced");
+++    assert!(banner < clause, "{stderr}");
+++}
+++
++ /// The reported span comes from one call chain, so what else the program
++ /// evaluated cannot change it.
++ #[test]
++ fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
++     let mut alone = b"say 'a'".to_vec();
++     for _ in 1..1_000 {
++         alone.extend_from_slice(b"||''");
++     }
++     alone.push(b'\n');
++ 
++diff --git a/rust/crates/rexx-exec/src/trace.rs b/rust/crates/rexx-exec/src/trace.rs
++index e602b4ffd..0151b846e 100644
++--- a/rust/crates/rexx-exec/src/trace.rs
+++++ b/rust/crates/rexx-exec/src/trace.rs
++@@ -200,20 +200,21 @@ impl Interp {
++     /// where the setting did not already echo them. Ungated: `run_command`
++     /// has made the decision, which is not one of the clause-echo questions
++     /// [`Interp::tracing_clause`] answers.
++     pub(crate) fn trace_command_retrace(
++         &mut self,
++         line: usize,
++         indent: usize,
++         text: &[u8],
++         value: &[u8],
++     ) {
+++        self.trace_debug_source();
++         let start = self.trace.len();
++         push_clause(&mut self.trace, line, indent, text);
++         self.route_trace_line(start);
++         self.trace_result_line(indent, value);
++     }
++ 
++     /// `+++ "RC(n)"`, the return code of a command that was traced by either
++     /// route. Ungated for [`Interp::trace_command_retrace`]'s reason.
++     pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: &[u8]) {
++         let start = self.trace.len();
++diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
++index 48f1504fa..f30303673 100644
++--- a/rust/crates/rexx-exec/tests/collect_stress.rs
+++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
++@@ -134,29 +134,25 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
++     "lang/message_instruction.rex",
++     "lang/message_send_scope_override.rex",
++     "lang/message_send_unknown_method.rex",
++     "lang/message_send_unknown_method_on_a_number.rex",
++     "lang/message_send_unknown_method_on_nil.rex",
++     "lang/mutation_controlled_order.rex",
++     "lang/no_trailing_newline.rex",
++     "lang/options.rex",
++     "lang/scope_case_text_absorbed.rex",
++     "lang/scope_case_text_absorbed_other.rex",
++-    "lang/scope_case_text_debug_line.rex",
++-    "lang/scope_debug_pause_routine.rex",
++     "lang/select_when.rex",
++     "lang/select_when_absorption.rex",
++     "lang/select_when_bodies.rex",
++     "lang/string_caseless.rex",
++     "lang/string_compare.rex",
++-    "lang/trace_debug_ignores_trace.rex",
++-    "lang/trace_debug_skip.rex",
++     "lang/trace_numeric_request.rex",
++     "lang/trace_output.rex",
++     "lang/trace_results.rex",
++     "num/comparison.rex",
++ ];
++ 
++ /// The phase subset files that exist in the corpus directory, sorted.
++ fn phase_subset_files_on_disk() -> Vec<String> {
++     let dir = corpus_dir();
++     let entries =
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_call_pause_caller.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_call_pause_caller.txt
++new file mode 100644
++index 000000000..40895c1ef
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_call_pause_caller.txt
++@@ -0,0 +1,16 @@
+++count 15
+++/* RETURN has no debug pause; the CALL that ran the routine pauses in the
+++   caller, under the caller's setting. */
+++call r
+++say 'back'
+++trace ?a
+++call q
+++say 'end'
+++exit
+++::routine r
+++  trace ?a
+++  say 'in r'
+++  return
+++::routine q
+++  say 'in q'
+++  return
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_call_return.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_call_return.txt
++new file mode 100644
++index 000000000..c58f66336
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_call_return.txt
++@@ -0,0 +1,11 @@
+++count 10
+++/* An internal routine called from a line typed at a pause pauses in its own
+++   clauses without a second prompt. */
+++trace ?r
+++x = 1
+++say 'main'
+++exit
+++s:
+++  y = 2
+++  say 'in s'
+++  return
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof.txt
++new file mode 100644
++index 000000000..fc8a01fe6
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof.txt
++@@ -0,0 +1,9 @@
+++count 8
+++/* A debug pause at the end of standard input raises NOTREADY, which the
+++   program traps. */
+++signal on notready name nr
+++trace ?a
+++say 'a'
+++say 'b'
+++exit
+++nr: trace off; say 'NOTREADY trapped' condition('D'); exit 3
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_nil.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_nil.txt
++new file mode 100644
++index 000000000..7c78c11af
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_nil.txt
++@@ -0,0 +1,7 @@
+++count 6
+++/* A debug pause with .DEBUGINPUT set to .nil sends LINEIN to .nil, and the
+++   error is reported against the clause that paused. */
+++.local~debuginput = .nil
+++trace ?a
+++say 'x'
+++say 'y'
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_object.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_object.txt
++new file mode 100644
++index 000000000..8d6df9604
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_object.txt
++@@ -0,0 +1,17 @@
+++count 16
+++/* A debug pause reads its line by sending LINEIN to .DebugInput, so a
+++   destination object answers it; a null string continues. */
+++.DebugInput~destination(.lines~new)
+++trace ?a
+++nop
+++say 'after'
+++exit
+++::class lines
+++::method init
+++  expose n
+++  n = 0
+++::method linein
+++  expose n
+++  n = n + 1
+++  if n = 1 then return "say 'typed'"
+++  return ''
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_removed.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_removed.txt
++new file mode 100644
++index 000000000..a72e3eaa9
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_removed.txt
++@@ -0,0 +1,8 @@
+++count 7
+++/* A debug pause with no .DEBUGINPUT entry reads a null string and leaves
+++   standard input to PULL. */
+++.local~remove('DEBUGINPUT')
+++trace ?a
+++say 'x'
+++parse pull q
+++say 'pulled' q
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_before_trap.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_before_trap.txt
++new file mode 100644
++index 000000000..9510df09e
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_before_trap.txt
++@@ -0,0 +1,13 @@
+++count 12
+++/* The debug pause after a clause comes before a CALL ON handler the clause
+++   queued runs. */
+++call on user u name h
+++trace ?a
+++x = f()
+++say 'after' x
+++exit
+++f:
+++  raise user u return 7
+++h:
+++  say 'handler'
+++  return
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_command_error.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_command_error.txt
++new file mode 100644
++index 000000000..9163f6184
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_command_error.txt
++@@ -0,0 +1,8 @@
+++count 7
+++/* Under TRACE ?E a command that fails is traced, and pauses. */
+++trace ?e
+++'false'
+++say 'a'
+++'true'
+++say 'b'
+++trace ?n
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_commands.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_commands.txt
++new file mode 100644
++index 000000000..1a420ed4e
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_commands.txt
++@@ -0,0 +1,15 @@
+++count 14
+++/* Under TRACE ?C only a traced command pauses, and a TRACE instruction met
+++   in debug is ignored. */
+++trace ?c
+++say 'c1'
+++x = 1
+++say 'c2'
+++'true'
+++say 'c3'
+++l:
+++say 'c4'
+++trace ?l
+++say 'c5'
+++m:
+++say 'c6'
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_flowed.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_flowed.txt
++new file mode 100644
++index 000000000..e32141047
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_flowed.txt
++@@ -0,0 +1,8 @@
+++count 7
+++/* Interactive debug pauses after NUMERIC as after SAY, so each line typed at
+++   a pause runs before the next clause. */
+++trace ?a
+++say 'c1'
+++numeric digits 9
+++say 'c3'
+++say 'c4'
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_kinds.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_kinds.txt
++new file mode 100644
++index 000000000..0a75be006
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_kinds.txt
++@@ -0,0 +1,38 @@
+++count 37
+++/* Which clauses an interactive-debug pause follows. THEN, END and SIGNAL have
+++   none, INTERPRET pauses before its fragment, and CALL pauses once the callee
+++   returns. Each pause types a line to the trace stream. */
+++trace ?a
+++say 'c1'
+++numeric digits 9
+++say 'c2'
+++address command
+++say 'c3'
+++drop zz
+++say 'c4'
+++say 'c5'
+++push 'q'
+++parse pull qq
+++say 'c6'
+++x = 1
+++say 'c7'
+++nop
+++do i = 1 to 1
+++  say 'c8'
+++end
+++if x = 1 then say 'c9'
+++select
+++  when x = 1 then say 'c10'
+++  otherwise nop
+++end
+++call sub
+++say 'c11'
+++.nil~string
+++say 'c12'
+++interpret "say 'c13'"
+++say 'c14'
+++signal lbl
+++lbl:
+++say 'c15'
+++exit
+++sub: return
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_loops.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_loops.txt
++new file mode 100644
++index 000000000..5ea095361
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_loops.txt
++@@ -0,0 +1,20 @@
+++count 19
+++/* LEAVE pauses, ITERATE pauses once its loop has stepped and echoed the DO
+++   again, WHEN in a SELECT CASE pauses whether it matched or not, and a DO
+++   with no passes pauses after its header. */
+++trace ?a
+++do i = 1 to 3
+++  if i = 2 then leave
+++  if i = 1 then iterate
+++  say 'never'
+++end
+++select case i
+++  when 1 then say 'one'
+++  when 2 then say 'two'
+++  otherwise nop
+++end
+++x = 0
+++do 0
+++  say 'zero'
+++end
+++say 'done'
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute.txt
++new file mode 100644
++index 000000000..7eae28985
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute.txt
++@@ -0,0 +1,12 @@
+++count 11
+++/* = at a pause runs the clause again: NUMERIC, a label, an assignment, and
+++   INTERPRET, whose pause comes before its fragment. */
+++n = 0
+++trace ?a
+++numeric digits 9
+++call sub
+++interpret "say 'frag' n"
+++drop zz
+++say 'end' n
+++exit
+++sub: n = n + 1; return
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute_command.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute_command.txt
++new file mode 100644
++index 000000000..3e722e202
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute_command.txt
++@@ -0,0 +1,5 @@
+++count 4
+++/* = at the pause after a traced command runs the command again. */
+++trace ?c
+++'echo hi'
+++say 'after'
++diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_skip_flowed.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_skip_flowed.txt
++new file mode 100644
++index 000000000..5ddb5b7c1
++--- /dev/null
+++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_skip_flowed.txt
++@@ -0,0 +1,13 @@
+++count 12
+++/* A negative skip count typed at a pause suppresses the echo of the clauses
+++   whose pauses it counts, NUMERIC's, DROP's and a label's among them. */
+++trace ?a
+++say 'c1'
+++numeric digits 9
+++drop q
+++call s
+++say 'c2'
+++say 'c3'
+++nop
+++exit
+++s: return
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md
+index 694a42552..1152446a8 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-6-report.md
+@@ -168,10 +168,87 @@ no-branch build with it there measured emptyloop +0.6442% (`cg3`), without it +0
+ 2. The oracle mishandles `=` at a zero-pass DO's pause: a later valid `END` raises 10.1 (`trace ?a`
+    / `do 0` / `say 'never'` / `end` / `do i = 1 to 2` / `nop` / `end`, stdin `=` then empty lines,
+    rc 246). Ours re-runs the DO and continues. Not witnessed.
+ 3. REPLY does not pause; the oracle pauses on the continuation's thread.
+ 4. A labelled block `DO` (`do lbl; ...; end`, the nested path) does not pause after its header; the
+    oracle does. Unchanged from base.
+ 5. The new pause read runs Rexx (the `.DebugInput` monitor) at every pause, which is why four
+    debug programs now collect under the stress mode.
+ 6. The incidental fixes (prompt inheritance, banner before a retrace) are single-threaded; their
+    crate tests assert the output, not switch points.
++
++## Fix round 1
++
++Commits `ca3a558b6` (fixes, witnesses, records) and `ac6cb27f6` (the LEAVE crate test counts the
++error report's echo). Review: `task-6-review.md`. Probes and runs under `/tmp/claude-1000/p61/t6/fr1/`.
++
++- **C1.** `run_debug_fragment` saves and restores `clause_state` around the typed line
++  (`run/interpret.rs:371`, `:398`), so a condition the paused clause queued keeps its SIGL and
++  handler indent. Every pause now precedes the boundary: the hot exit takes the cold exit under
++  interactive debug (`ir/drive.rs:1886`, `pending_traps.is_empty() && !$debugging`), so the hot
++  exit no longer calls the pause itself. The `|| self.debug_pause()` exemption in `enter_clause`
++  is gone; the tripwire now keys a waiting condition by activation **and fragment depth**
++  (`clause.rs:274`), as `deliver_pending_traps` keys a delivery. Without the depth key it fires on
++  every typed line at a pre-boundary pause, the paused clause's condition being in the enclosing
++  queue. `debug_pause_before_trap` is green on the debug gate with it.
++- **I1.** `pauses_after` answers false for `Call::Trap` (`run/interpret.rs:485`).
++- **I2, I5.** A `LEAVE` flow no longer pauses at the cold exit (`run/interpret.rs:224`). It pauses
++  in `flat_loop_step_escaped` once the loop has taken it, as ITERATE does (`ir/drive.rs:2472`). So a
++  LEAVE that reaches no loop raises 28.1/28.3 without a pause, and `=` runs the LEAVE again outside
++  the loop, raising 28.1 at rc 228. The re-run echo's indent differs from the oracle's (the KNOWN
++  GAP below), so I5's witness is the crate test `reexecuting_a_leave_raises_outside_its_loop`
++  (`src/tests.rs:492`). It fails on `2bde37127`'s code (`after 1`, rc 0).
++- **I3.**
++  - `raise_notready` queues a CALL ON condition against `trap_frame()`'s activation
++    (`run/condition.rs:130`). Under the monitor's non-continuing `FORWARD` the running activation is
++    a forwarding phantom, and delivery there looked for the label in the monitor's code (43.1).
++  - `debug_pause_in_region` delivers what the pause queued after a DO/LOOP header, which owes no
++    boundary of its own (`ir/drive.rs:2449`). The oracle runs the handler before the body's first
++    clause.
++- **I4.** Fixed by C1's restore (`current_value_indent`).
++
++Witnesses (`phase-6-1.txt`, `# Task 6 fix round 1`). Each was compared with `run.sh` against the
++oracle on the `2bde37127`-equivalent release binary (`bin-head4`) and on the fix build. Every one
++differs at the first and agrees at the second:
++
++| witness | review probe | old vs oracle |
++|---|---|---|
++| `debug_pause_sigl_notready` | tv1 | stdout |
++| `debug_pause_sigl_error` | tw1 (typed line made visible) | stdout, stderr |
++| `debug_pause_call_on` | con | stderr |
++| `debug_reexecute_call_on` | e7 | stdout, stderr |
++| `debug_leave_no_loop` | lv1 | stderr |
++| `debug_leave_unknown_label` | lv3 | stderr |
++| `debug_input_eof_call_on` | di4 | all three |
++| `debug_input_eof_call_on_loop` | eo3 | all three |
++| `debug_input_stdin_eof_call_on` | eo4 | stdout, stderr |
++| `debug_interpret_indent` | im | stderr |
++
++All earlier debug witnesses and probes still agree (`runs/w-*`, `runs/p-*`). Of the review's
++probes, only `e1` (the KNOWN GAP indent) and `dj2` (the oracle's SIGSEGV) differ.
++
++`debug_pause_sigl_notready`'s SOURCELINE expectation was captured with its own `.stdin` on the
++driver's stdin. With `/dev/null` the oracle ran the file's prolog under `.Package~new`, ran the
++handler, then died with SIGSEGV (one run, not filed).
++
++Records:
++- `rust/corpus/oracle-crashes.txt` entry 31: `.DebugInput~linein` answering no value (review's
++  `dj2`, 3 of 3).
++- `phase-4-exclusions.txt` Deviation 26: `=` at a zero-pass DO, owner none.
++- KNOWN GAP rows for the `=` echo indent after LEAVE/ITERATE, and for a labelled block DO with no
++  header pause.
++
++Perf (the hot exit changed):
++```
++memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o $T/cg-fr1 -p "emptyloop rexxcps" base=$T/target-base/release/rexx-run nobranch=$T/target-nb4/release/rexx-run head4=$T/bin-head4/rexx-run fr1=$T/bin-fr1/rexx-run
++```
++Exit 0, spreads 0.0001% at most. fr1 against base: emptyloop -0.0013%, rexxcps -0.0472%. No
++nobranch control was built for fr1; the total is inside the budget either way. Wall clock
++(`wallclock.sh -r 5`, `wall-fr1`): rexxcps +0.15%, emptyloop +2.97%, inside ±4%.
++
++Checks at `ac6cb27f6`:
++- `cargo fmt --all --check` exit 0; clippy `-D warnings` exit 0.
++- `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0: 3074 passed, 0 failed, 4 ignored.
++- Strict corpus + ir_recorded_oracle at `ca3a558b6` exit 0: 29 passed 1 ignored, and 21 passed.
++  `ac6cb27f6` changes only `src/tests.rs`.
++- At `ca3a558b6` the workspace run failed the new crate test only. It counted 2 `leave` echoes
++  where the error report adds a third; fixed in `ac6cb27f6`.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 691e3882d..b57dfb646 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -1829,20 +1829,38 @@ DEVIATIONS -- permanent, chosen
+      The answer is read as this crate's WHILE and UNTIL read theirs, so an
+      array answers by the lines it joins: .array~of(1) ends the loop,
+      .array~of(0) goes on (corpus/lang/do_object_compare_array.rex), and
+      .array~of(1, 2) raises, where the oracle's identity test goes on for
+      every one of them. WHILE raises 34.3 and UNTIL 34.4 on the same answer;
+      a DO header has no 34.x, so the loop raises 34.901.
+      LICENSED DIVERGENCE WITNESS: do-compare-computed-true
+      LICENSED DIVERGENCE WITNESS: do-compare-array-one
+      LICENSED DIVERGENCE WITNESS: do-compare-array-many
+ 
++ 26. `=` AT THE DEBUG PAUSE AFTER A DO WITH NO PASSES RUNS THE DO AGAIN
++     (Phase 6.1 Task 6). OWNER: none.
++
++     The oracle's RexxInstructionBaseLoop::execute calls terminate() for a
++     zero-pass loop and then handleDebugPause(context, OREF_NULL)
++     (interpreter/instructions/BaseDoInstruction.cpp:289-299); on `=`, that
++     runs removeBlockInstruction() a second time (:111-124), so a later loop's
++     valid END echoes one level too deep and raises 10.1, rc 246. Measured by
++     Phase 6.1 Task 6 (probe d0, one run) and its review (z1, 3 runs of 3),
++     no crash or block:
++
++       trace ?a / do 0 / say 'never' / end / do i = 1 to 2 / nop / end /
++       say 'end', stdin `=` then empty lines
++
++     This crate runs the DO again and continues; `=` after a DO with passes
++     agrees with the oracle. The block stack is an oracle defect, not a
++     specified observable. Not witnessed in the corpus.
++
+ EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
+ ---------------------------------------------------------------------
+ 
+ Criterion 5 requires every out-of-scope `ExprKind` variant to name an owning
+ phase, and that owner has to be one of the phases the split table names --
+ "4b", "4c", "Phase 5" or "Phase 7", spelled exactly as the table spells them,
+ because `coverage.rs` and `loud.rs` assert the set and compare the strings.
+ The set is the design document's and stays as that document wrote it; what is
+ in force is narrower, and `owners.rs` asserts it directly -- no instruction
+ tag names Phase 7 now, and no builtin exclusion may.
+@@ -3368,20 +3386,36 @@ above.
+   argument at the trap site). No build older than 72cb6d781 was run to confirm
+   that by measurement, so the attribution is an argument from the code and not
+   a bisection.
+ 
+   NO OWNER IS ASSIGNED. Closing it belongs to whichever task owns condition
+   delivery across a `::ROUTINE` activation boundary, which is not this phase's
+   and has no task here; it was found by a review of a Phase 5a fix round,
+   which owns no behaviour, so recording it was that review's whole
+   disposition.
+ 
++  KNOWN GAP: `=` AFTER A LEAVE OR ITERATE ECHOES THE CLAUSE AT ITS OWN
++  INDENT. The oracle echoes the re-run clause at the nesting its loop left
++  behind: `=` after `if i = 1 then iterate` in a loop echoes
++  `3 *-*   iterate` where this crate echoes `3 *-*       iterate`, and `=`
++  after a LEAVE echoes it outside the loop (`3 *-* leave`, this crate
++  `3 *-*   leave`). Everything else agrees, the 28.1 the re-run LEAVE raises
++  included (crate test reexecuting_a_leave_raises_outside_its_loop). Measured
++  by Phase 6.1 Task 6 and its review (probes e1, e2).
++
++  KNOWN GAP: A LABELLED BLOCK DO HAS NO DEBUG PAUSE AFTER ITS HEADER.
++  `do label lbl` under `trace ?a` pauses after its header in the oracle and
++  not here, where the labelled block runs on the nested path and answers its
++  Flow only after the body. An unlabelled block DO and every repeating loop
++  pause. Measured by Phase 6.1 Task 6's review (probe l1).
++
++
+ CLOSED DEFECTS -- measured wrong, measured again, now matching
+ -------------------------------------------------------------
+ 
+ A fourth status, and the reason it is a section rather than a deletion: a
+ divergence that was found, fixed and verified leaves nothing behind for a
+ reader to trip over EXCEPT the temptation to "simplify" the fix. Each row says
+ what the oracle does, what we used to do, and which test would go red if the
+ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
+ 
+   CLOSED, Phase 5a Task 20: ::ANNOTATE NAMING A TARGET WAS REFUSED WHATEVER
+diff --git a/rust/corpus/lang/debug_input_eof_call_on.rex b/rust/corpus/lang/debug_input_eof_call_on.rex
+new file mode 100644
+index 000000000..2355b7060
+--- /dev/null
++++ b/rust/corpus/lang/debug_input_eof_call_on.rex
+@@ -0,0 +1,8 @@
++/* At the end of standard input each debug pause raises NOTREADY, which a
++   CALL ON trap runs in the program with the paused clause as SIGL. */
++call on notready name nr
++trace ?a
++say 'a'
++say 'b'
++exit
++nr: say 'nr' sigl; return
+diff --git a/rust/corpus/lang/debug_input_eof_call_on_loop.rex b/rust/corpus/lang/debug_input_eof_call_on_loop.rex
+new file mode 100644
+index 000000000..4d58df48f
+--- /dev/null
++++ b/rust/corpus/lang/debug_input_eof_call_on_loop.rex
+@@ -0,0 +1,10 @@
++/* The NOTREADY a debug pause raises at the end of input is delivered after
++   the DO header that paused, before the body's first clause. */
++call on notready name nr
++trace ?a
++do i = 1 to 2
++  say i
++end
++'true'
++exit
++nr: say 'nr' sigl; return
+diff --git a/rust/corpus/lang/debug_input_stdin_eof_call_on.rex b/rust/corpus/lang/debug_input_stdin_eof_call_on.rex
+new file mode 100644
+index 000000000..461aafdbd
+--- /dev/null
++++ b/rust/corpus/lang/debug_input_stdin_eof_call_on.rex
+@@ -0,0 +1,9 @@
++/* With .DebugInput set to .stdin the NOTREADY of each pause runs its CALL ON
++   handler with the paused clause as SIGL. */
++.local~debuginput = .stdin
++call on notready name nr
++trace ?a
++say 'a'
++say 'b'
++exit
++nr: say 'nr' sigl; return
+diff --git a/rust/corpus/lang/debug_interpret_indent.rex b/rust/corpus/lang/debug_interpret_indent.rex
+new file mode 100644
+index 000000000..54006aeb6
+--- /dev/null
++++ b/rust/corpus/lang/debug_interpret_indent.rex
+@@ -0,0 +1,6 @@
++/* A line typed at INTERPRET's pause leaves the fragment's echo at its
++   indent. */
++trace ?a
++do i = 1 to 1
++  interpret 'nop'
++end
+diff --git a/rust/corpus/lang/debug_interpret_indent.stdin b/rust/corpus/lang/debug_interpret_indent.stdin
+new file mode 100644
+index 000000000..11e0bbc81
+--- /dev/null
++++ b/rust/corpus/lang/debug_interpret_indent.stdin
+@@ -0,0 +1,20 @@
++.stderr~lineout('p1')
++
++.stderr~lineout('p2')
++
++.stderr~lineout('p3')
++
++.stderr~lineout('p4')
++
++.stderr~lineout('p5')
++
++.stderr~lineout('p6')
++
++.stderr~lineout('p7')
++
++.stderr~lineout('p8')
++
++.stderr~lineout('p9')
++
++.stderr~lineout('p10')
++
+diff --git a/rust/corpus/lang/debug_leave_no_loop.rex b/rust/corpus/lang/debug_leave_no_loop.rex
+new file mode 100644
+index 000000000..5a65dd5c7
+--- /dev/null
++++ b/rust/corpus/lang/debug_leave_no_loop.rex
+@@ -0,0 +1,4 @@
++/* A LEAVE outside any loop raises 28.1 without a debug pause. */
++trace ?a
++say 1
++leave
+diff --git a/rust/corpus/lang/debug_leave_no_loop.stdin b/rust/corpus/lang/debug_leave_no_loop.stdin
+new file mode 100644
+index 000000000..11e0bbc81
+--- /dev/null
++++ b/rust/corpus/lang/debug_leave_no_loop.stdin
+@@ -0,0 +1,20 @@
++.stderr~lineout('p1')
++
++.stderr~lineout('p2')
++
++.stderr~lineout('p3')
++
++.stderr~lineout('p4')
++
++.stderr~lineout('p5')
++
++.stderr~lineout('p6')
++
++.stderr~lineout('p7')
++
++.stderr~lineout('p8')
++
++.stderr~lineout('p9')
++
++.stderr~lineout('p10')
++
+diff --git a/rust/corpus/lang/debug_leave_unknown_label.rex b/rust/corpus/lang/debug_leave_unknown_label.rex
+new file mode 100644
+index 000000000..01b9d503d
+--- /dev/null
++++ b/rust/corpus/lang/debug_leave_unknown_label.rex
+@@ -0,0 +1,5 @@
++/* A LEAVE naming no enclosing loop raises 28.3 without a debug pause. */
++trace ?a
++do i = 1 to 2
++  leave zz
++end
+diff --git a/rust/corpus/lang/debug_leave_unknown_label.stdin b/rust/corpus/lang/debug_leave_unknown_label.stdin
+new file mode 100644
+index 000000000..11e0bbc81
+--- /dev/null
++++ b/rust/corpus/lang/debug_leave_unknown_label.stdin
+@@ -0,0 +1,20 @@
++.stderr~lineout('p1')
++
++.stderr~lineout('p2')
++
++.stderr~lineout('p3')
++
++.stderr~lineout('p4')
++
++.stderr~lineout('p5')
++
++.stderr~lineout('p6')
++
++.stderr~lineout('p7')
++
++.stderr~lineout('p8')
++
++.stderr~lineout('p9')
++
++.stderr~lineout('p10')
++
+diff --git a/rust/corpus/lang/debug_pause_call_on.rex b/rust/corpus/lang/debug_pause_call_on.rex
+new file mode 100644
+index 000000000..5a1729565
+--- /dev/null
++++ b/rust/corpus/lang/debug_pause_call_on.rex
+@@ -0,0 +1,9 @@
++/* CALL ON and CALL OFF have no debug pause. */
++trace ?a
++call on error
++call off error
++call on halt name h
++signal off error
++say 1
++exit
++h: return
+diff --git a/rust/corpus/lang/debug_pause_call_on.stdin b/rust/corpus/lang/debug_pause_call_on.stdin
+new file mode 100644
+index 000000000..11e0bbc81
+--- /dev/null
++++ b/rust/corpus/lang/debug_pause_call_on.stdin
+@@ -0,0 +1,20 @@
++.stderr~lineout('p1')
++
++.stderr~lineout('p2')
++
++.stderr~lineout('p3')
++
++.stderr~lineout('p4')
++
++.stderr~lineout('p5')
++
++.stderr~lineout('p6')
++
++.stderr~lineout('p7')
++
++.stderr~lineout('p8')
++
++.stderr~lineout('p9')
++
++.stderr~lineout('p10')
++
+diff --git a/rust/corpus/lang/debug_pause_sigl_error.rex b/rust/corpus/lang/debug_pause_sigl_error.rex
+new file mode 100644
+index 000000000..5d253d799
+--- /dev/null
++++ b/rust/corpus/lang/debug_pause_sigl_error.rex
+@@ -0,0 +1,9 @@
++/* A line typed at the pause after a failing command leaves its CALL ON
++   ERROR handler the command's SIGL and indent. */
++call on error name h
++trace ?a
++do i = 1 to 1
++  'false'
++end
++exit
++h: say 'handler sigl' sigl; return
+diff --git a/rust/corpus/lang/debug_pause_sigl_error.stdin b/rust/corpus/lang/debug_pause_sigl_error.stdin
+new file mode 100644
+index 000000000..fe2272edf
+--- /dev/null
++++ b/rust/corpus/lang/debug_pause_sigl_error.stdin
+@@ -0,0 +1,9 @@
++
++.stderr~lineout('typed')
++
++
++
++
++
++
++
+diff --git a/rust/corpus/lang/debug_pause_sigl_notready.rex b/rust/corpus/lang/debug_pause_sigl_notready.rex
+new file mode 100644
+index 000000000..7545b2ded
+--- /dev/null
++++ b/rust/corpus/lang/debug_pause_sigl_notready.rex
+@@ -0,0 +1,8 @@
++/* A line typed at the pause after a clause that queued a CALL ON condition
++   leaves the handler the SIGL of that clause. */
++call on notready name h
++trace ?a
++x = linein('/nonexistent/zz')
++say 'after'
++exit
++h: say 'handler sigl' sigl; return
+diff --git a/rust/corpus/lang/debug_pause_sigl_notready.stdin b/rust/corpus/lang/debug_pause_sigl_notready.stdin
+new file mode 100644
+index 000000000..1363c9394
+--- /dev/null
++++ b/rust/corpus/lang/debug_pause_sigl_notready.stdin
+@@ -0,0 +1,8 @@
++nop
++
++
++
++
++
++
++
+diff --git a/rust/corpus/lang/debug_reexecute_call_on.rex b/rust/corpus/lang/debug_reexecute_call_on.rex
+new file mode 100644
+index 000000000..1d009c02e
+--- /dev/null
++++ b/rust/corpus/lang/debug_reexecute_call_on.rex
+@@ -0,0 +1,7 @@
++/* = at the pause after a command under CALL ON ERROR runs the command again,
++   since CALL ON took no pause of its own. */
++trace ?a
++call on error
++'false'
++exit
++error: say 'err'; return
+diff --git a/rust/corpus/lang/debug_reexecute_call_on.stdin b/rust/corpus/lang/debug_reexecute_call_on.stdin
+new file mode 100644
+index 000000000..81257a074
+--- /dev/null
++++ b/rust/corpus/lang/debug_reexecute_call_on.stdin
+@@ -0,0 +1,60 @@
++.stderr~lineout('p1')
++=
++.stderr~lineout('p2')
++
++.stderr~lineout('p3')
++
++.stderr~lineout('p4')
++
++.stderr~lineout('p5')
++
++.stderr~lineout('p6')
++
++.stderr~lineout('p7')
++
++.stderr~lineout('p8')
++
++.stderr~lineout('p9')
++
++.stderr~lineout('p10')
++
++.stderr~lineout('p11')
++
++.stderr~lineout('p12')
++
++.stderr~lineout('p13')
++
++.stderr~lineout('p14')
++
++.stderr~lineout('p15')
++
++.stderr~lineout('p16')
++
++.stderr~lineout('p17')
++
++.stderr~lineout('p18')
++
++.stderr~lineout('p19')
++
++.stderr~lineout('p20')
++
++.stderr~lineout('p21')
++
++.stderr~lineout('p22')
++
++.stderr~lineout('p23')
++
++.stderr~lineout('p24')
++
++.stderr~lineout('p25')
++
++.stderr~lineout('p26')
++
++.stderr~lineout('p27')
++
++.stderr~lineout('p28')
++
++.stderr~lineout('p29')
++
++.stderr~lineout('p30')
++
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index f877af07b..ed543affe 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1190,10 +1190,26 @@ ticket.
+     m = .method~new('m', .ba~new)
+     ::class ba
+     ::method makearray
+     return 'return "not an array"'
+ 
+ SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper (`Method~new`'s `processExecutableSource`
+ takes the answer of `requestArray` as an array). Measured 2026-10-08 by the review of Phase 6.1
+ Task 4 (its probe `e7_5`, which wraps the same `Method~new` in a trapping procedure). This crate
+ raises 93.961 (`requestArray` answered no array, and the class defines no `MAKESTRING`).
+ No upstream ticket.
++
++## 31. A `.DebugInput` whose `LINEIN` answers no value
++
++    .local~debuginput = .o~new
++    trace ?a
++    say 'x'
++    say 'y'
++    exit
++    ::class o
++    ::method linein
++      return
++
++SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper (`Activity::traceInput` casts the answer
++of `LINEIN` to `RexxString *` unchecked, `Activity.cpp:3252`). Measured 2026-10-09 by the review of
++Phase 6.1 Task 6 (its probe `dj2`). This crate reads an absent answer as the null string. No
++upstream ticket.
+diff --git a/rust/corpus/phase-6-1.txt b/rust/corpus/phase-6-1.txt
+index 30e654d2a..542399bdc 100644
+--- a/rust/corpus/phase-6-1.txt
++++ b/rust/corpus/phase-6-1.txt
+@@ -216,10 +216,25 @@ lang/debug_pause_command_error.rex
+ lang/debug_pause_before_trap.rex
+ lang/debug_call_return.rex
+ lang/debug_call_pause_caller.rex
+ lang/debug_reexecute.rex
+ lang/debug_reexecute_command.rex
+ lang/debug_skip_flowed.rex
+ lang/debug_input_object.rex
+ lang/debug_input_eof.rex
+ lang/debug_input_nil.rex
+ lang/debug_input_removed.rex
++
++# Task 6 fix round 1: a condition the paused clause queued keeps its SIGL and
++# indent across a typed line; CALL ON and CALL OFF do not pause; a LEAVE that
++# raises does not pause; NOTREADY from the debug read reaches CALL ON in the
++# program; INTERPRET's fragment keeps its indent.
++lang/debug_pause_sigl_notready.rex
++lang/debug_pause_sigl_error.rex
++lang/debug_pause_call_on.rex
++lang/debug_reexecute_call_on.rex
++lang/debug_leave_no_loop.rex
++lang/debug_leave_unknown_label.rex
++lang/debug_input_eof_call_on.rex
++lang/debug_input_eof_call_on_loop.rex
++lang/debug_input_stdin_eof_call_on.rex
++lang/debug_interpret_indent.rex
+diff --git a/rust/crates/rexx-exec/src/clause.rs b/rust/crates/rexx-exec/src/clause.rs
+index 4fd6be3bf..ee360e144 100644
+--- a/rust/crates/rexx-exec/src/clause.rs
++++ b/rust/crates/rexx-exec/src/clause.rs
+@@ -257,27 +257,28 @@ impl Interp {
+         // by 3.3 MB without it.
+         self.activity.value_buffer.clear();
+         // **The fourth-site tripwire** (fix round 4). A condition queued by
+         // this activation's clause at line L that is still waiting when a
+         // clause at a *different* line begins means some construct resolved
+         // an instruction inside its own `step` without ending its header
+         // clause first -- the defect behind re-review finding NEW-2's four
+         // sites and three rounds' worth before them, always silently. The
+         // handler will now report `SIGL` for the wrong clause, which is the
+         // half of the defect that has recurred every round.
+-        // A line typed at a debug pause runs ahead of the boundary that
+-        // delivers what the paused clause queued, as the oracle's pause does.
++        // Keyed as `deliver_pending_traps` keys a delivery: a condition queued
++        // in an enclosing fragment's queue waits for that fragment's boundary.
+         debug_assert!(
+             self.activity.clause_state.current_clause_line == line
+-                || self.debug_pause()
+                 || !self.activity.pending_traps.iter().any(|pending| {
+-                    !pending.queued_during_delivery && pending.activation == self.activation().id
++                    !pending.queued_during_delivery
++                        && pending.activation == self.activation().id
++                        && pending.fragment_depth == self.activity.fragment_depth
+                 }),
+             "a clause at line {} began while a condition queued by this activation's clause at \
+              line {} was still waiting: some construct ran an instruction inside its own step \
+              without ending its header clause first",
+             line,
+             self.activity.clause_state.current_clause_line
+         );
+         self.activity.clause_state.current_clause_line = line;
+         ClauseEntry(())
+     }
+diff --git a/rust/crates/rexx-exec/src/ir/drive.rs b/rust/crates/rexx-exec/src/ir/drive.rs
+index 35147d4af..1d0f026d3 100644
+--- a/rust/crates/rexx-exec/src/ir/drive.rs
++++ b/rust/crates/rexx-exec/src/ir/drive.rs
+@@ -1868,36 +1868,30 @@ macro_rules! clause_region {
+                             header, $end, ops, $from, $top, 'cold, 'region, 'park
+                         );
+                         $end
+                     };
+                     // **The hot exit, and the whole point of the split.**
+                     // `leave_clause`'s own fast path is this same question,
+                     // so asking it here reaches the same answer without
+                     // building the value that answer would travel in.
+                     // `finish_plain_clause` discharges what is left of the
+                     // boundary.
+-                    if $self.activity.pending_traps.is_empty() {
++                    // **Interactive debug takes the cold exit**, whose pause
++                    // comes before the boundary that delivers what the clause
++                    // queued. Asked of the setting and not of `stale`:
++                    // staleness heals -- the chunk is recompiled under the
++                    // setting now in force -- so a skip count set at a pause
++                    // would stop running down after the first clause.
++                    // Measured: `trace -2` then suppressed every later clause
++                    // instead of two.
++                    if $self.activity.pending_traps.is_empty() && !$debugging {
+                         $self.finish_plain_clause($entry);
+-                        // **Asked of the setting and not of `stale`.**
+-                        // Staleness heals -- the chunk is recompiled under
+-                        // the setting now in force -- so a skip count set
+-                        // at a pause would stop running down after the
+-                        // first clause. Measured: `trace -2` then suppressed
+-                        // every later clause instead of two.
+-                        if $debugging
+-                            && $self.debug_pause_after_clause(
+-                                $code, $index, $clause, $source, None,
+-                            )?
+-                        {
+-                            $pc = $clause_pc;
+-                            continue $ops_label;
+-                        }
+                         $pc = next;
+                         continue $ops_label;
+                     }
+                     Ok(RegionEnd::At(next))
+                 };
+                 let ran = if $debugging {
+                     $self.debug_pause_in_region(ran, $code, $index, $clause, $source, $clause_pc)
+                 } else {
+                     ran
+                 };
+@@ -2436,39 +2430,53 @@ impl Interp {
+         source: Option<&ProgramSource>,
+         clause_pc: u32,
+     ) -> Result<RegionEnd, Failure> {
+         let flow = match &ran {
+             Ok(RegionEnd::At(_)) => None,
+             Ok(RegionEnd::Flowed(flow)) => Some(flow),
+             Err(_) => return ran,
+         };
+         match self.debug_pause_after_clause(code, index, clause, source, flow) {
+             Ok(true) => Ok(RegionEnd::At(clause_pc)),
++            // A `DO`/`LOOP` header owes no boundary of its own, but the oracle
++            // checks its traps after the header's pause as after any clause,
++            // so a condition the pause's read queued is delivered here.
++            Ok(false)
++                if matches!(
++                    clause.kind,
++                    InstructionKind::Do(_) | InstructionKind::Loop(_)
++                ) && !self.activity.pending_traps.is_empty() =>
++            {
++                match self.deliver_pending_traps(code)? {
++                    Some(exit) => Ok(RegionEnd::Flowed(Flow::Exit(exit.value()))),
++                    None => ran,
++                }
++            }
+             Ok(false) => ran,
+             Err(failure) => Err(failure),
+         }
+     }
+ 
+     /// [`Interp::flat_loop_step_top`] for a flow that escaped to a flat
+-    /// loop's frame, with the pause an `ITERATE` owes once the loop has
+-    /// stepped (`RexxInstructionLeave::execute`). `=` runs the `ITERATE`
+-    /// again.
++    /// loop's frame, with the pause a `LEAVE` or an `ITERATE` owes once the
++    /// loop has taken it (`RexxInstructionLeave::execute`). `=` runs the
++    /// instruction again.
+     #[inline(never)]
+     fn flat_loop_step_escaped(
+         &mut self,
+         code: &Code<'_>,
+         chunk: &Chunk,
+         source: Option<&ProgramSource>,
+         arrival: Flow,
+     ) -> Result<crate::run::FlatStep, Failure> {
+         let iterated = match &arrival {
+-            Flow::Iterate(_, origin) => Some(origin.index),
++            Flow::Iterate(_, origin) | Flow::Leave(_, origin) => Some(origin.index),
+             _ => None,
+         };
+         let step = self.flat_loop_step_top(code, source, arrival, |it| {
+             it.count_clause_against_deadline(false)
+         })?;
+         let Some(index) = iterated else {
+             return Ok(step);
+         };
+         if !matches!(
+             step,
+diff --git a/rust/crates/rexx-exec/src/run/condition.rs b/rust/crates/rexx-exec/src/run/condition.rs
+index 053b9a3f4..57d83f618 100644
+--- a/rust/crates/rexx-exec/src/run/condition.rs
++++ b/rust/crates/rexx-exec/src/run/condition.rs
+@@ -112,26 +112,30 @@ impl Interp {
+             ..Raised::condition(Cow::Borrowed("NOTREADY"))
+         };
+         match self.trap_for(b"NOTREADY") {
+             Some(trap) if trap.call => {
+                 let object = self.build_condition_object(&raised, Some(true))?;
+                 self.activity.pending_traps.push_back(PendingTrap {
+                     condition: b"NOTREADY".as_slice().into(),
+                     rc: None,
+                     description: Some(name.to_vec()),
+                     object: Some(object),
+-                    // The **running** activation, not its caller: a native
+-                    // method raises inside the clause that sent to it, and
+-                    // that clause is still running. The routine-return path
+-                    // queues against the caller because its own activation is
+-                    // being popped; nothing is popped here.
+-                    activation: self.activation().id,
++                    // The activation whose table matched, not its caller: a
++                    // native method raises inside the clause that sent to it,
++                    // and that clause is still running. Under a non-continuing
++                    // `FORWARD` that is the frame beneath the forwarding
++                    // phantoms. The routine-return path queues against the
++                    // caller because its own activation is being popped;
++                    // nothing is popped here.
++                    activation: self
++                        .trap_frame()
++                        .map_or(self.activation().id, |activation| activation.id),
+                     queued_during_delivery: false,
+                     request: false,
+                     fragment_depth: self.activity.fragment_depth,
+                 });
+                 Ok(())
+             }
+             Some(_) => Err(Raised {
+                 description: Some(name.to_vec()),
+                 ..Raised::condition(Cow::Borrowed("NOTREADY"))
+             }
+diff --git a/rust/crates/rexx-exec/src/run/interpret.rs b/rust/crates/rexx-exec/src/run/interpret.rs
+index 70ea9de55..4cb2dc082 100644
+--- a/rust/crates/rexx-exec/src/run/interpret.rs
++++ b/rust/crates/rexx-exec/src/run/interpret.rs
+@@ -194,37 +194,42 @@ impl Interp {
+     ///
+     /// The oracle decides per instruction class (`pauseInstruction`,
+     /// `pauseLabel`) against flags `TraceSetting::setDebug` derives from the
+     /// letter: an instruction pauses under `A`, `R` and `I` and a label
+     /// wherever labels trace. A command pauses from
+     /// [`Interp::debug_pause_after_command`] instead. A negative skip count
+     /// suppresses the echo and not the pauses it counts, so the flags come
+     /// from the setting it saved. An `IF`, a `SELECT` or a block `DO` that
+     /// answers a `Flow` ran its whole construct; a repeating `DO` that answers
+     /// one ended before any pass, and pauses after its header. A flow that
+-    /// leaves the instruction for good owes no pause, and an `ITERATE` pauses
+-    /// once the loop it reaches has stepped.
++    /// leaves the instruction for good owes no pause, and a `LEAVE` or an
++    /// `ITERATE` pauses once the loop it reaches has taken it, so one that
++    /// reaches none raises first.
+     #[cold]
+     #[inline(never)]
+     pub(crate) fn debug_pause_after_clause(
+         &mut self,
+         code: &Code<'_>,
+         index: usize,
+         clause: &Instruction,
+         source: Option<&ProgramSource>,
+         flow: Option<&Flow>,
+     ) -> Result<bool, Failure> {
+         let kind = &clause.kind;
+         if let Some(flow) = flow
+             && (matches!(
+                 flow,
+-                Flow::Exit(_) | Flow::Return(_) | Flow::Signal(_) | Flow::Iterate(..)
++                Flow::Exit(_)
++                    | Flow::Return(_)
++                    | Flow::Signal(_)
++                    | Flow::Leave(..)
++                    | Flow::Iterate(..)
+             ) || matches!(
+                 kind,
+                 InstructionKind::If { .. } | InstructionKind::Select { .. }
+             ) || matches!(
+                 kind,
+                 InstructionKind::Do(body) | InstructionKind::Loop(body)
+                     if matches!(body.kind, rexx_parse::LoopKind::Simple)
+             ))
+         {
+             return Ok(false);
+@@ -237,22 +242,22 @@ impl Interp {
+             _ => mode.all && pauses_after(kind),
+         };
+         if !pausing {
+             return Ok(false);
+         }
+         self.debug_pause_now()
+             .inspect_err(|_| self.record_failure_site(code, index, source, clause))
+     }
+ 
+     /// `conditionalPauseInstruction`: the pause an instruction takes from
+-    /// inside its own work, `INTERPRET`'s before its fragment and `ITERATE`'s
+-    /// once the loop has stepped. Answers whether the instruction is to run again.
++    /// inside its own work: `INTERPRET`'s before its fragment, and `LEAVE`'s
++    /// and `ITERATE`'s once their loop has taken them. Answers whether the instruction is to run again.
+     pub(crate) fn debug_pause_instruction(&mut self) -> Result<bool, Failure> {
+         let mode = self.pausing_mode();
+         if !(mode.debug && mode.all) {
+             return Ok(false);
+         }
+         self.debug_pause_now()
+     }
+ 
+     /// The pause `RexxActivation::command` takes once a command it traced
+     /// has settled `RC` and raised its condition. Answers whether the command
+@@ -354,20 +359,23 @@ impl Interp {
+         })
+     }
+ 
+     /// One line typed at a pause, run as an `INTERPRET` fragment that traces
+     /// nothing. A SYNTAX condition inside it is reported under the two
+     /// `+++ Interactive trace.` lines and swallowed, and the pause goes on --
+     /// measured, `zz = 1/0` at a pause reports 42.3 and the next line still
+     /// runs.
+     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
+         let saved_pause = self.replace_debug_pause(true);
++        // The paused clause's line and indent, which a condition it queued
++        // reads at its boundary after the pause.
++        let saved_clause = self.save_clause_state();
+         // A `SELECT CASE` typed at the pause opens and closes inside the
+         // line; the construct the pause interrupted keeps its own value.
+         let saved_case = self.activation().current_case;
+         if let Some(case) = saved_case {
+             self.roots.activity_mut().push_temp(case);
+         }
+         self.activity.fragment_depth += 1;
+         let (line, indent) = (
+             self.activity.clause_state.line(),
+             self.activity.clause_state.current_value_indent,
+@@ -380,20 +388,21 @@ impl Interp {
+             self.run_fragment(text)
+         );
+         let depth = self.activity.fragment_depth;
+         self.activity
+             .pending_traps
+             .retain(|pending| pending.fragment_depth != depth);
+         self.activity.fragment_depth -= 1;
+         self.leave_fragment_level();
+         self.leave_fragment(saved_entry);
+         self.replace_debug_pause(saved_pause);
++        self.restore_clause_state(saved_clause);
+         self.activation_mut().current_case = saved_case;
+         match outcome {
+             Ok(_) => Ok(()),
+             Err(Failure::Raised(raised)) => {
+                 self.report_debug_error(&raised);
+                 self.clear_failure_levels();
+                 Ok(())
+             }
+             Err(other) => Err(other),
+         }
+@@ -449,28 +458,29 @@ impl Interp {
+     pub(super) fn leave_fragment(&mut self, enclosing: TraceEntry) {
+         if self.activation().trace_entry != TraceEntry::Done {
+             self.activation_mut().trace_entry = enclosing;
+         }
+     }
+ }
+ 
+ /// Whether a debug pause follows an instruction of `kind` once its own work
+ /// is done, as the oracle's `execute` ends in `pauseInstruction` or a block
+ /// header's in `conditionalPauseInstruction`. `INTERPRET` pauses before its
+-/// fragment instead. `REPLY` answers false: the oracle pauses on the
+-/// continuation's thread, and this crate does not pause there.
++/// fragment instead. `CALL ON` and `CALL OFF` do not pause
++/// (`RexxInstructionCallOn::execute`). `REPLY` answers false: the oracle
++/// pauses on the continuation's thread, and this crate does not pause there.
+ pub(crate) fn pauses_after(kind: &InstructionKind) -> bool {
+     !matches!(
+         kind,
+         InstructionKind::Then
+             | InstructionKind::Else { .. }
+             | InstructionKind::Otherwise
+             | InstructionKind::End { .. }
+             | InstructionKind::Return { .. }
+             | InstructionKind::Exit { .. }
+             | InstructionKind::Signal(_)
+             | InstructionKind::Raise(_)
+             | InstructionKind::Guard(_)
+             | InstructionKind::Interpret { .. }
+             | InstructionKind::Reply { .. }
+-    )
++    ) && !matches!(kind, InstructionKind::Call(call) if matches!(**call, rexx_parse::Call::Trap(_)))
+ }
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index 2f08de95c..6da9d3740 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -477,20 +477,41 @@ fn an_internal_call_does_not_prompt_again() {
+     );
+     assert_eq!(
+         stderr
+             .matches("+++ Interactive trace. \"Trace Off\"")
+             .count(),
+         1,
+         "{stderr}"
+     );
+ }
+ 
++/// `=` at the pause after a `LEAVE` runs the `LEAVE` again outside the loop
++/// it left, which raises 28.1 as the oracle does (rc 228). The echo of the
++/// second `LEAVE` is not compared: the oracle prints it at the indent outside
++/// the loop.
++#[test]
++fn reexecuting_a_leave_raises_outside_its_loop() {
++    let program = "trace ?a\ndo i = 1 to 3\n  leave\nend\nsay 'after' i\n";
++    let input = crate::ProgramInput::Bytes(b"\n=\n\n\n\n".to_vec());
++    let outcome = run_program(
++        TEST_PATH,
++        program.as_bytes().to_vec(),
++        crate::Invocation::none().with_input(input),
++    );
++    let stderr = String::from_utf8_lossy(&outcome.stderr);
++    // Its echo, the echo of the run `=` asked for, and the error report's.
++    assert_eq!(stderr.matches("*-*   leave").count(), 3, "{stderr}");
++    assert!(stderr.contains("Error 28.1:"), "{stderr}");
++    assert_eq!(outcome.exit_code, 228, "{stderr}");
++    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "");
++}
++
+ /// A failing command that only `TRACE ?E` traces prints the debug banner
+ /// ahead of its clause, as any first traced clause does.
+ #[test]
+ fn a_command_traced_for_its_error_prints_the_debug_banner() {
+     let program = "trace ?e\n'false'\nsay 'a'\n";
+     let input = crate::ProgramInput::Bytes(b"\n\n".to_vec());
+     let outcome = run_program(
+         TEST_PATH,
+         program.as_bytes().to_vec(),
+         crate::Invocation::none().with_input(input),
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof_call_on.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof_call_on.txt
+new file mode 100644
+index 000000000..73f5bbec4
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof_call_on.txt
+@@ -0,0 +1,9 @@
++count 8
++/* At the end of standard input each debug pause raises NOTREADY, which a
++   CALL ON trap runs in the program with the paused clause as SIGL. */
++call on notready name nr
++trace ?a
++say 'a'
++say 'b'
++exit
++nr: say 'nr' sigl; return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof_call_on_loop.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof_call_on_loop.txt
+new file mode 100644
+index 000000000..08b0de010
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_eof_call_on_loop.txt
+@@ -0,0 +1,11 @@
++count 10
++/* The NOTREADY a debug pause raises at the end of input is delivered after
++   the DO header that paused, before the body's first clause. */
++call on notready name nr
++trace ?a
++do i = 1 to 2
++  say i
++end
++'true'
++exit
++nr: say 'nr' sigl; return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_stdin_eof_call_on.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_stdin_eof_call_on.txt
+new file mode 100644
+index 000000000..27961d3dd
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_input_stdin_eof_call_on.txt
+@@ -0,0 +1,10 @@
++count 9
++/* With .DebugInput set to .stdin the NOTREADY of each pause runs its CALL ON
++   handler with the paused clause as SIGL. */
++.local~debuginput = .stdin
++call on notready name nr
++trace ?a
++say 'a'
++say 'b'
++exit
++nr: say 'nr' sigl; return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_interpret_indent.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_interpret_indent.txt
+new file mode 100644
+index 000000000..e41a85e47
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_interpret_indent.txt
+@@ -0,0 +1,7 @@
++count 6
++/* A line typed at INTERPRET's pause leaves the fragment's echo at its
++   indent. */
++trace ?a
++do i = 1 to 1
++  interpret 'nop'
++end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_leave_no_loop.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_leave_no_loop.txt
+new file mode 100644
+index 000000000..64d5d6733
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_leave_no_loop.txt
+@@ -0,0 +1,5 @@
++count 4
++/* A LEAVE outside any loop raises 28.1 without a debug pause. */
++trace ?a
++say 1
++leave
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_leave_unknown_label.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_leave_unknown_label.txt
+new file mode 100644
+index 000000000..cb98b4eff
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_leave_unknown_label.txt
+@@ -0,0 +1,6 @@
++count 5
++/* A LEAVE naming no enclosing loop raises 28.3 without a debug pause. */
++trace ?a
++do i = 1 to 2
++  leave zz
++end
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_call_on.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_call_on.txt
+new file mode 100644
+index 000000000..097bfa9a9
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_call_on.txt
+@@ -0,0 +1,10 @@
++count 9
++/* CALL ON and CALL OFF have no debug pause. */
++trace ?a
++call on error
++call off error
++call on halt name h
++signal off error
++say 1
++exit
++h: return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_sigl_error.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_sigl_error.txt
+new file mode 100644
+index 000000000..36bc8d063
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_sigl_error.txt
+@@ -0,0 +1,10 @@
++count 9
++/* A line typed at the pause after a failing command leaves its CALL ON
++   ERROR handler the command's SIGL and indent. */
++call on error name h
++trace ?a
++do i = 1 to 1
++  'false'
++end
++exit
++h: say 'handler sigl' sigl; return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_sigl_notready.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_sigl_notready.txt
+new file mode 100644
+index 000000000..aec96b53a
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_pause_sigl_notready.txt
+@@ -0,0 +1,9 @@
++count 8
++/* A line typed at the pause after a clause that queued a CALL ON condition
++   leaves the handler the SIGL of that clause. */
++call on notready name h
++trace ?a
++x = linein('/nonexistent/zz')
++say 'after'
++exit
++h: say 'handler sigl' sigl; return
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute_call_on.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute_call_on.txt
+new file mode 100644
+index 000000000..534a8d015
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/debug_reexecute_call_on.txt
+@@ -0,0 +1,8 @@
++count 7
++/* = at the pause after a command under CALL ON ERROR runs the command again,
++   since CALL ON took no pause of its own. */
++trace ?a
++call on error
++'false'
++exit
++error: say 'err'; return
