@@ -1896,6 +1896,11 @@ macro_rules! clause_region {
                     }
                     Ok(RegionEnd::At(next))
                 };
+                let ran = if $debugging {
+                    $self.debug_pause_in_region(ran, $code, $index, $clause, $source, $clause_pc)
+                } else {
+                    ran
+                };
                 break 'arm match $self
                     .leave_stepped_clause($entry, $code, $index, $clause, $source, ran)?
                 {
@@ -1912,16 +1917,7 @@ macro_rules! clause_region {
                         // region, which is where an absorbed `Flow::Next`
                         // continues -- the same position `pc + 1` is for an
                         // op that runs one clause and no more.
-                        RegionEnd::Flowed(flow) => {
-                            if $debugging
-                                && $self.debug_pause_after_clause(
-                                    $code, $index, $clause, $source, Some(&flow),
-                                )? {
-                                $pc = $clause_pc;
-                                continue $ops_label;
-                            }
-                            (flow, $end)
-                        }
+                        RegionEnd::Flowed(flow) => (flow, $end),
                     },
                     ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), $clause_pc),
                 };
@@ -2423,6 +2419,68 @@ impl Interp {
             self.trace_result(indent, &rendered);
         }
         Ok(())
+    }
+
+    /// The debug pause a clause region owes on its cold exit, ahead of the
+    /// clause boundary as the oracle's `execute` pauses ahead of its trap
+    /// check. `=` answers the region's own first op, and a failure the pause
+    /// raises is the clause's.
+    #[cold]
+    #[inline(never)]
+    fn debug_pause_in_region(
+        &mut self,
+        ran: Result<RegionEnd, Failure>,
+        code: &Code<'_>,
+        index: usize,
+        clause: &Instruction,
+        source: Option<&ProgramSource>,
+        clause_pc: u32,
+    ) -> Result<RegionEnd, Failure> {
+        let flow = match &ran {
+            Ok(RegionEnd::At(_)) => None,
+            Ok(RegionEnd::Flowed(flow)) => Some(flow),
+            Err(_) => return ran,
+        };
+        match self.debug_pause_after_clause(code, index, clause, source, flow) {
+            Ok(true) => Ok(RegionEnd::At(clause_pc)),
+            Ok(false) => ran,
+            Err(failure) => Err(failure),
+        }
+    }
+
+    /// [`Interp::flat_loop_step_top`] for a flow that escaped to a flat
+    /// loop's frame, with the pause an `ITERATE` owes once the loop has
+    /// stepped (`RexxInstructionLeave::execute`). `=` runs the `ITERATE`
+    /// again.
+    #[inline(never)]
+    fn flat_loop_step_escaped(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        source: Option<&ProgramSource>,
+        arrival: Flow,
+    ) -> Result<crate::run::FlatStep, Failure> {
+        let iterated = match &arrival {
+            Flow::Iterate(_, origin) => Some(origin.index),
+            _ => None,
+        };
+        let step = self.flat_loop_step_top(code, source, arrival, |it| {
+            it.count_clause_against_deadline(false)
+        })?;
+        let Some(index) = iterated else {
+            return Ok(step);
+        };
+        if !matches!(
+            step,
+            crate::run::FlatStep::Body(_) | crate::run::FlatStep::Done(Flow::Goto(_))
+        ) || !self.debug_pause_instruction()?
+        {
+            return Ok(step);
+        }
+        Ok(match step {
+            crate::run::FlatStep::Body(_) => crate::run::FlatStep::Body(op_at(chunk, index)?),
+            crate::run::FlatStep::Done(_) => crate::run::FlatStep::Done(Flow::Goto(index)),
+        })
     }
 
     /// Parks the clause region `park` stopped at, for its callee to run:
@@ -3224,24 +3282,16 @@ impl Interp {
         let Some(clause) = code.body.instructions.get(index) else {
             return Err(Loud::chunk_map_too_short().into());
         };
+        let ran = if debugging {
+            self.debug_pause_in_region(ran, code, index, clause, source, clause_pc)
+        } else {
+            ran
+        };
         let (flow, next) =
             match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
                 ClauseOutcome::Ran(region) => match region? {
                     RegionEnd::At(next) => return Ok(Exit::At(next)),
-                    RegionEnd::Flowed(flow) => {
-                        if debugging
-                            && self.debug_pause_after_clause(
-                                code,
-                                index,
-                                clause,
-                                source,
-                                Some(&flow),
-                            )?
-                        {
-                            return Ok(Exit::At(clause_pc));
-                        }
-                        (flow, end)
-                    }
+                    RegionEnd::Flowed(flow) => (flow, end),
                 },
                 ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), clause_pc),
             };
@@ -3808,33 +3858,14 @@ impl Interp {
                         // resumes at the body's first op -- the same place
                         // `Op::LoopNext` resumes a pass that fell through.
                         FrameKind::Loop => {
-                            let iterated = match &other {
-                                Flow::Iterate(_, origin) => Some(origin.index),
-                                _ => None,
-                            };
-                            let step = self.flat_loop_step_top(code, source, other, |it| {
-                                it.count_clause_against_deadline(false)
-                            })?;
-                            if let crate::run::FlatStep::Body(_) = step {
-                                self.activity.frames.push(Frame {
-                                    op_end: u32::MAX,
-                                    start: frame_start,
-                                    end: frame_end,
-                                    kind: FrameKind::Loop,
-                                });
-                            }
-                            if let Some(index) = iterated
-                                && matches!(
-                                    step,
-                                    crate::run::FlatStep::Body(_)
-                                        | crate::run::FlatStep::Done(Flow::Goto(_))
-                                )
-                                && self.debug_pause_instruction()?
-                            {
-                                return Ok(Settled::At(op_at(chunk, index)?));
-                            }
-                            match step {
+                            match self.flat_loop_step_escaped(code, chunk, source, other)? {
                                 crate::run::FlatStep::Body(op_body) => {
+                                    self.activity.frames.push(Frame {
+                                        op_end: u32::MAX,
+                                        start: frame_start,
+                                        end: frame_end,
+                                        kind: FrameKind::Loop,
+                                    });
                                     return Ok(Settled::At(op_body));
                                 }
                                 crate::run::FlatStep::Done(escape) => flow = escape,

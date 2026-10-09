@@ -213,6 +213,7 @@ lang/debug_pause_kinds.rex
 lang/debug_pause_loops.rex
 lang/debug_pause_commands.rex
 lang/debug_pause_command_error.rex
+lang/debug_pause_before_trap.rex
 lang/debug_call_return.rex
 lang/debug_call_pause_caller.rex
 lang/debug_reexecute.rex

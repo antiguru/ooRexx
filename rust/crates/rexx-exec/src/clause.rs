@@ -264,8 +264,11 @@ impl Interp {
         // sites and three rounds' worth before them, always silently. The
         // handler will now report `SIGL` for the wrong clause, which is the
         // half of the defect that has recurred every round.
+        // A line typed at a debug pause runs ahead of the boundary that
+        // delivers what the paused clause queued, as the oracle's pause does.
         debug_assert!(
             self.activity.clause_state.current_clause_line == line
+                || self.debug_pause()
                 || !self.activity.pending_traps.iter().any(|pending| {
                     !pending.queued_during_delivery && pending.activation == self.activation().id
                 }),

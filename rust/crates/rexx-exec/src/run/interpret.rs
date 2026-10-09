@@ -198,10 +198,11 @@ impl Interp {
     /// wherever labels trace. A command pauses from
     /// [`Interp::debug_pause_after_command`] instead. A negative skip count
     /// suppresses the echo and not the pauses it counts, so the flags come
-    /// from the setting it saved. A block header that answers a `Flow` ran
-    /// its whole construct, a flow that leaves the instruction for good owes
-    /// no pause, and an `ITERATE` pauses once the loop it reaches has
-    /// stepped.
+    /// from the setting it saved. An `IF`, a `SELECT` or a block `DO` that
+    /// answers a `Flow` ran its whole construct; a repeating `DO` that answers
+    /// one ended before any pass, and pauses after its header. A flow that
+    /// leaves the instruction for good owes no pause, and an `ITERATE` pauses
+    /// once the loop it reaches has stepped.
     #[cold]
     #[inline(never)]
     pub(crate) fn debug_pause_after_clause(
@@ -219,10 +220,11 @@ impl Interp {
                 Flow::Exit(_) | Flow::Return(_) | Flow::Signal(_) | Flow::Iterate(..)
             ) || matches!(
                 kind,
-                InstructionKind::Do(_)
-                    | InstructionKind::Loop(_)
-                    | InstructionKind::If { .. }
-                    | InstructionKind::Select { .. }
+                InstructionKind::If { .. } | InstructionKind::Select { .. }
+            ) || matches!(
+                kind,
+                InstructionKind::Do(body) | InstructionKind::Loop(body)
+                    if matches!(body.kind, rexx_parse::LoopKind::Simple)
             ))
         {
             return Ok(false);
@@ -242,9 +244,8 @@ impl Interp {
     }
 
     /// `conditionalPauseInstruction`: the pause an instruction takes from
-    /// inside its own work, `INTERPRET`'s before its fragment, a `DO` whose
-    /// header ends it before any pass, and `ITERATE`'s once the loop has
-    /// stepped. Answers whether the instruction is to run again.
+    /// inside its own work, `INTERPRET`'s before its fragment and `ITERATE`'s
+    /// once the loop has stepped. Answers whether the instruction is to run again.
     pub(crate) fn debug_pause_instruction(&mut self) -> Result<bool, Failure> {
         let mode = self.pausing_mode();
         if !(mode.debug && mode.all) {

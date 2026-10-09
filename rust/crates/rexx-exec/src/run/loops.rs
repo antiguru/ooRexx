@@ -1801,9 +1801,6 @@ impl Interp {
                 // allocator.
                 self.release_loop_objects(&boxed);
                 self.activity.flat_spares.push(boxed);
-                if matches!(flow, Flow::Goto(_)) && self.debug_pause_instruction()? {
-                    return Ok(FlatStart::Ended(Flow::Goto(index)));
-                }
                 Ok(FlatStart::Ended(flow))
             }
             None => {
