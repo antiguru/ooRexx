@@ -778,3 +778,61 @@ Commits `732c65404`, `58a558ff1`. At `58a558ff1`: clippy exit 0; workspace debug
 (3079 passed, 0 failed); gated corpus exit 0 (29 passed, 1 ignored; ir_recorded_oracle 21).
 Callgrind against `6860d4f80`, `-r 3`: rexxcps -0.0000%, dispatch +0.0727%, a Directory-read loop
 -0.0756% (+0.8013% before `#[cold]` on the receiver refusals). Details in the Task 7 report.
+
+## Task 8
+
+Commits `b7a050d6b` (the mode), `909d87b09` (a refused endless wait ends the program's end).
+
+### The oracle's per-clause time
+
+`rust/bench-rexxcps/rexxcps.rex` on the oracle (`build/`, RelWithDebInfo), five runs from a fresh
+directory, `( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout
+-k 5 60 /home/moritz/dev/repos/ooRexx/build/bin/rexx rexxcps.rex )`: 17,410,653, 17,187,757,
+17,229,378, 16,947,286 and 17,328,049 clauses per second, all rc 0. Median 17,229,378, which is
+58 ns per clause. The simulation's per-clause quantum is drawn once per run from 29 to 116 ns
+(half and twice; `QUANTUM_NANOS` in `rexx-exec/src/sim.rs`). At that rate the oracle's 24 ms
+slice is 413,793 clauses.
+
+### Performance
+
+`S` is `/tmp/claude-1000/p61/t8/perf`. Each binary from `git archive <sha> rust interpreter`, every
+file touched, built with `CARGO_TARGET_DIR=$S/target-NAME memcap 8G cargo build --release -j 4 -p
+rexx-exec --bin rexx-run`, one `Compiling rexx-exec` line each.
+
+| binary | source | sha256 |
+|---|---|---|
+| base | `0765d19ef` | `14bae372deb870ad0a7ec80910f929be55807327700df8f8ac98a5e27ebe2d6f` |
+| head2 | `909d87b09` | `8db9e19626471e2ae106bd14b2ecc753099cb15af65cb7191bc40a0b996d20cc` |
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 6 -o $S/cg2 -p "rexxcps emptyloop startup" base=$S/bin/base/rexx-run head=$S/bin/head2/rexx-run
+```
+
+Exit 0.
+
+| program | base | head | head % |
+|---|---:|---:|---:|
+| rexxcps | 17792490814 | 17792513774 | +0.0001 |
+| emptyloop | 7761204239 | 7761253168 | +0.0006 |
+| startup | 58250145 | 58250393 | +0.0004 |
+
+`b7a050d6b` measured the same way (`cg1`): +0.0001, +0.0006, +0.0001.
+
+```
+PROGRAMS="rexxcps emptyloop startup" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $S/wall3 base=$S/bin/base/rexx-run head=$S/bin/head2/rexx-run
+```
+
+Exit 0; load average 1.01 at start, 1.00 at end. rexxcps +1.32%, emptyloop -0.45%, startup
+-4.00% (25 ms against 24 ms, the timer's millisecond); inside ±4%. Two earlier runs against
+`b7a050d6b` at load average 5 to 15 (`wall1`, `wall2`) are not counted.
+
+One callgrind run of `bench-programs/pingpong/pingmsg.rex` per binary, glibc included: base
+7,585,612,504, head2 7,585,522,883 (-0.0012%).
+
+### Per-task check
+
+At `909d87b09`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 --workspace
+--all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
+(3094 passed, 0 failed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
+--test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle
+21 passed).
