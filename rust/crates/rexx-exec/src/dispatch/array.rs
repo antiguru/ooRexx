@@ -37,7 +37,7 @@ pub(super) fn array_slots(interp: &Interp, receiver: ObjRef) -> Result<&[Option<
 
 /// The array that actually holds `receiver`'s slots: the receiver itself when
 /// it carries a `Body::Array`, and otherwise the store its own pool holds.
-fn collection_store(interp: &Interp, receiver: ObjRef) -> ObjRef {
+pub(super) fn collection_store(interp: &Interp, receiver: ObjRef) -> ObjRef {
     if interp.array_slots(receiver).is_some() {
         return receiver;
     }

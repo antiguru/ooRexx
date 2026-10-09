@@ -325,6 +325,44 @@ fn run_source(source: &str) -> (i32, String, String) {
     )
 }
 
+/// A user `STRING` method's answer reads as `primitiveMakeString` reads it:
+/// an array (or an `Array` subclass) joins its items, a buffer is its text,
+/// and a `Queue`, `.nil` or any other object is refused (Deviation 30).
+#[test]
+fn a_string_answer_reads_as_primitive_make_string_reads_it() {
+    let program = |answer: &str| {
+        format!(
+            "say 'x' .k~new\n::class k\n::method string\n  return {answer}\n\
+             ::class sub subclass array\n"
+        )
+    };
+    for (answer, stdout) in [
+        (".array~of('a', 'b')", "x a\nb\n"),
+        (".sub~of('p')", "x p\n"),
+        (".mutablebuffer~new('buf')", "x buf\n"),
+        ("12 + 3", "x 15\n"),
+    ] {
+        assert_eq!(
+            run_source(&program(answer)),
+            (0, stdout.to_owned(), String::new()),
+            "{answer}"
+        );
+    }
+    for answer in [".directory~new", ".queue~of('a')", ".nil", ".object~new"] {
+        assert_eq!(
+            run_source(&program(answer)),
+            (
+                120,
+                String::new(),
+                "rexx-exec: a STRING method answering an object with no string value \
+                 is not implemented\n"
+                    .to_owned()
+            ),
+            "{answer}"
+        );
+    }
+}
+
 /// **D24's `SmallInt` behaviour arm is taken for a small integer
 /// receiver**, where the general path is what a receiver whose bytes are
 /// in the arena takes.

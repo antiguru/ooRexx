@@ -1,0 +1,28 @@
+/* A user STRING method answering an array is read as the array's items
+   joined by a newline, wherever a string value is required. */
+o = .k~new
+say o
+say 'x' o
+say length(o)
+say o || '!'
+if .t~new then say 'if true'; else say 'if false'
+if .f~new then say 'if true'; else say 'if false'
+say 'sub' .s~new
+signal on nostring name ns
+say 'n' o
+exit
+ns:
+say 'nostring' condition('D')
+::class k
+::method string
+  return .array~of('a', 'b', 'c')
+::class t
+::method string
+  return .array~of(1)
+::class f
+::method string
+  return .array~of(0)
+::class s
+::method string
+  return .myarr~of('p', 'q')
+::class myarr subclass array

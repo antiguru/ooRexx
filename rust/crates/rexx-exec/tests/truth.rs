@@ -28,6 +28,7 @@ const CASES: &str = "tests/truth";
 /// The classes a case's expression may name.
 const CLASSES: &str = "::class s1\n::method string; return 1\n\
                        ::class s0\n::method string; return 0\n\
+                       ::class sa\n::method string; return .array~of(1)\n\
                        ::class sd\n";
 
 /// Each context's name and program, `E` standing for the expression. Every

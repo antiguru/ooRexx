@@ -289,7 +289,7 @@ pub(super) fn queue_bound(
 }
 
 /// Whether `receiver` is a `Queue` or something deriving from one.
-fn is_queue(interp: &mut Interp, receiver: ObjRef) -> bool {
+pub(super) fn is_queue(interp: &mut Interp, receiver: ObjRef) -> bool {
     let Some(class) = interp.class_of_value(receiver) else {
         return false;
     };

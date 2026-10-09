@@ -12,7 +12,7 @@
 //! The required-string protocol: `request("STRING")`, `makeString`, and the
 //! fallbacks behind them.
 
-use super::{Body, Decoded, Failure, Interp, ObjRef, Primitive, Raised};
+use super::{Body, Decoded, Failure, Interp, Loud, ObjRef, Primitive, Raised};
 
 /// What the protocol's conversion limbs answered, before anything is built.
 enum RequiredString {
@@ -162,7 +162,7 @@ impl Interp {
                 crate::pinning::PinKind::Conversion,
                 self.send_message(value, STRING, None, &[], caller)
             )? {
-                Some(answered) => self.string_value_text(answered),
+                Some(answered) => self.string_answer_text(answered)?,
                 None => self.string_value_text(value),
             }
         } else {
@@ -187,6 +187,41 @@ impl Interp {
         let readable = self.text_built(readable);
         self.roots.activity_mut().push_temp(readable);
         Ok(readable)
+    }
+
+    /// What a user `STRING` method's answer reads as: `primitiveMakeString`
+    /// on it (`classes/ObjectClass.cpp:1285`). A string or a number is
+    /// itself, an array (not a queue) is its items joined by a newline, and a
+    /// buffer is its text. Any other object is `.nil` there, which the oracle
+    /// then reads as a string, so it is refused (Deviation 30).
+    fn string_answer_text(&mut self, answered: ObjRef) -> Result<Vec<u8>, Failure> {
+        let joined = match answered.decode() {
+            Decoded::SmallInt(_) | Decoded::Text(_) => None,
+            Decoded::Heap { .. } if !self.heap.is_class(answered) => {
+                if matches!(
+                    self.heap.get(answered).map(|object| &object.body),
+                    Some(Body::Text { .. } | Body::Num { .. })
+                ) || self.buffer(answered).is_some()
+                {
+                    None
+                } else {
+                    // An `Array` subclass instance's items live in a store
+                    // its pool holds; a `Queue` has no string value.
+                    let store = super::array::collection_store(self, answered);
+                    if self.array_slots(store).is_none()
+                        || super::collection::is_queue(self, answered)
+                    {
+                        return Err(Loud::string_answer_not_a_string().into());
+                    }
+                    Some(store)
+                }
+            }
+            _ => return Err(Loud::string_answer_not_a_string().into()),
+        };
+        Ok(match joined {
+            Some(store) => self.string_conversion_array_text(store),
+            None => self.to_text(answered).into_owned(),
+        })
     }
 
     /// Every supplied argument of one builtin call **except the positions

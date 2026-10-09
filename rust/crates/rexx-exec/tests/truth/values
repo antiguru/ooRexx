@@ -458,6 +458,31 @@ list-index: false
 table-hasitem: false
 table-index: false
 
+# a user object whose STRING answers an array is judged by the array's
+# items joined
+truth
+.sa~new
+----
+if: true
+when: true
+while: true
+until: true
+not: 97.1
+and: true
+list: true
+if-compare: true
+when-compare: true
+while-compare: true
+case: true
+do-to: true
+do-by: true
+array-hasitem: true
+array-index: true
+list-hasitem: true
+list-index: true
+table-hasitem: true
+table-index: true
+
 # a user object is judged by what its STRING answers
 truth
 .sd~new

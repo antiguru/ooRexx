@@ -507,6 +507,20 @@ impl Loud {
         }
     }
 
+    /// A user `STRING` method that answered an object with no string value of
+    /// its own: not a string, a number, an array or a buffer. The oracle's
+    /// `primitiveMakeString` answers `.nil` for it and reads that as a string
+    /// (Deviation 30).
+    #[cold]
+    fn string_answer_not_a_string() -> Loud {
+        Loud {
+            message: owned_message(
+                "a STRING method answering an object with no string value",
+                None,
+            ),
+        }
+    }
+
     /// A receiver or argument no program holds: a handle whose object is gone,
     /// a kind `receiver_kind` has no arm for, a `Method` object or routine
     /// context this crate did not build. Probes that tried, each answering or
