@@ -771,3 +771,15 @@ failed on the `Literals` rows and a `bif_assertions.rs` report string before the
 Dispositions, the `Literals` probes and the receiver split's probes are in
 `.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md`. No performance run (refusal paths and
 the `owed` owner type only).
+
+### Fix round 1
+
+Commits `732c65404`, `58a558ff1`. At `58a558ff1`: clippy exit 0; workspace debug test exit 0
+(3079 passed, 0 failed); gated corpus exit 0 (29 passed, 1 ignored; ir_recorded_oracle 21).
+Callgrind against `6860d4f80`, `-r 3`: rexxcps -0.0000
+### Fix round 1
+
+Commits `732c65404`, `58a558ff1`. At `58a558ff1`: clippy exit 0; workspace debug test exit 0
+(3079 passed, 0 failed); gated corpus exit 0 (29 passed, 1 ignored; ir_recorded_oracle 21).
+Callgrind against `6860d4f80`, `-r 3`: rexxcps -0.0000%, dispatch +0.0727%, a Directory-read loop
+-0.0756% (+0.8013% before `#[cold]` on the receiver refusals). Details in the Task 7 report.

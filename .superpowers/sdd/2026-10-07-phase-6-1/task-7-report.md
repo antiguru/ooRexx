@@ -144,3 +144,56 @@ All at `3b9a80364`, from `rust/`, each status read unpiped:
 5. GUARD records for the d-guard constructors cite the census's reason, not probes;
    `call_op_off_its_node` records its one known firing (a concatenated non-first argument), whose
    repro answers `ok` at `6860d4f80`.
+
+## Fix round 1
+
+Commits: `732c65404` (test, minors, records), `58a558ff1` (`#[cold]` on the receiver refusals,
+`refusal-sites.tsv` re-derived for the shifted lines).
+
+**Important 1.** `refusal_dispositions.rs` now reads a `-> Self` constructor inside `impl Loud`,
+every `message:` field of a constructor body (owned only when each one is), and a struct literal
+(`Loud {`, or `Self {` inside `impl Loud`) to its matching brace. The fabricated-source test gains
+all three shapes and asserts each is reported. On `git archive HEAD` copies with the new test file
+(`/tmp/claude-1000/p61/t7/mut1/{base,m5,m6,m7}`, compiled with `rustc --edition 2024 --test` and
+`CARGO_MANIFEST_DIR` set to the copy): `base` passes; `m5` (`fn mutant_self(what) -> Self` with
+owner `None`) fails `mutant_self (crates/rexx-exec/src/lib.rs:379): no owner and no disposition
+row`; `m6` (early return `Some("Phase 9")`, tail `what.to_string()`) fails `mutant_mixed (...): no
+owner and no disposition row`; `m7` (`Refused::Mutant => return Loud { message: String::new()
+}.into(),` above the `ClassicStyle` arm) fails `crates/rexx-exec/src/dispatch/library.rs:836: a
+`Loud` struct literal with no owner`. The copies are scratch, so nothing to revert.
+
+**Minors.**
+1. `refusal-sites.tsv`'s `receiver_class` witness is now `.t~new~go(.array~method('ITEMS'))`
+   (ours rc 120, the oracle a different number each run, Deviation 28).
+2. `context.rs`'s "a package table this crate did not build" is `unknown_receiver`:
+   `receiver_class` 40 sites, `unknown_receiver` 28.
+3. `open_owners`'s doc sentence about reading the phase up to the resolution is deleted, and the
+   `.filter_map(...).min()` is an `any`.
+4. ITEMS of Directory, StringTable, Stem, Set, Bag and Relation, MutableBuffer LENGTH and Message
+   SEND on an instance refuse naming Phase 9 (re-probed, `/tmp/claude-1000/p61/t7/rc6`). Listed in
+   Deviation 28 and queued: `.superpowers/sdd/queued/2026-10-09-wrong-type-native-rows-name-phase-9.md`.
+5. Deviation 28 says "installed on or run on" and cites the review's `enhanced` route.
+6. The `Literals` rows' harness half is queued
+   (`2026-10-09-literals-rows-need-a-test-case.md`), and the `EXEMPT` doc points at it.
+7. Measured, below.
+
+**Perf.** Callgrind, `callgrind.sh -r 3` from a scratch copy of `bench-programs/` with
+`dirread.rex` added (a `Directory` `~a`, `['A']` and a `.local` entry read, 200000 passes;
+`/tmp/claude-1000/p61/t7/perf/bench/bench-programs/dirread.rex`), each binary from `git archive`
+in its own target directory with one `Compiling rexx-exec` line. Base `6860d4f80`.
+
+| program | `732c65404` | `58a558ff1` (cold) |
+|---|---:|---:|
+| rexxcps | +0.0001% | -0.0000% |
+| dispatch | +0.0001% | +0.0727% |
+| dirread | +0.8013% | -0.0756% |
+
+Spreads 0.0000% throughout. At `732c65404` the cost was not `DirectoryEntry::Owed` (`view_get`
+and `memcmp` fell 1.6M Ir) but `array_slots`: the ownerless `receiver_class` inlined into it and
+its own lines rose from 12.0M to 32.0M Ir. `#[cold]` on `receiver_class` and `unknown_receiver`
+removes it.
+
+**Checks** at `732c65404`: `cargo fmt --all` clean; clippy exit 0; workspace debug test exit 0;
+gated corpus exit 0 (`/tmp/claude-1000/p61/t7/gates2/status`). At `58a558ff1`: clippy exit 0;
+`refusal_sites` 5, `refusal_dispositions` 3, `closed_phases` 8 passed; workspace debug test exit 0, 3079 passed, 0 failed; gated corpus exit 0, corpus 29
+passed and 1 ignored, ir_recorded_oracle 21 passed (`/tmp/claude-1000/p61/t7/gates3/status`).
