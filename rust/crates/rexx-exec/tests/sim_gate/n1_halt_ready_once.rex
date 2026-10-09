@@ -1,6 +1,7 @@
 /* A halt reaching main after its timed wait's deadline readied it leaves it
    ready once (the seeded gate's witness, run under halt@K). Main polls with
-   timed waits while a started activity runs a long loop. */
+   timed waits while a started activity runs a long loop. The gate judges
+   this program by the scheduler's invariants only: its stdout is not read. */
 call on halt name h
 s = .eventsemaphore~new
 o = .w~new~start('w')

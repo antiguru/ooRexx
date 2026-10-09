@@ -462,7 +462,9 @@ pub fn run_crate_within(
 }
 
 /// The environment a run of the group copy `run` gets here: the process's
-/// own without `LD_LIBRARY_PATH`, `PATH` and `REXX_SWITCH_MODE`, then the
+/// own without `LD_LIBRARY_PATH`, `PATH`, `REXX_SWITCH_MODE` and the
+/// `REXX_SIM_` variables (a sim child gets its own from the command that
+/// starts it), then the
 /// oracle's library directory and [`interpreter_bin`] ahead of `PATH`.
 fn crate_environment(run: &Path) -> Vec<(Vec<u8>, Vec<u8>)> {
     let lib = oracle::oracle_root().join("lib");
@@ -476,7 +478,7 @@ fn crate_environment(run: &Path) -> Vec<(Vec<u8>, Vec<u8>)> {
             !matches!(
                 name.as_str(),
                 "LD_LIBRARY_PATH" | "PATH" | "REXX_SWITCH_MODE"
-            )
+            ) && !name.starts_with("REXX_SIM_")
         })
         .map(|(name, value)| (name.into_bytes(), value.into_bytes()))
         .collect();
@@ -532,7 +534,8 @@ pub struct ProcessRun {
 
 /// Runs `rexx-run` on `words` (the program, then its arguments) from `cwd`
 /// with `REXX_SWITCH_MODE` set to `mode`, in a process group of its own that
-/// is killed at `deadline`, a child it started included. `environment`
+/// is killed at `deadline`; a command a simulation run starts runs in a group
+/// of its own, which that kill does not reach. `environment`
 /// replaces the process's own where given, else is inherited; `stdin` is
 /// written to its standard input, which is otherwise empty.
 #[expect(
@@ -586,9 +589,13 @@ pub fn run_crate_process(
     };
     if let Some(bytes) = stdin {
         let mut pipe = child.stdin.take().expect("stdin was piped");
+        let bytes = bytes.to_vec();
         // A program that stops reading early closes the pipe; what it read is
-        // the outcome.
-        let _ = pipe.write_all(bytes);
+        // the outcome. A thread of its own, so a program that never reads
+        // cannot hold the deadline off.
+        std::thread::spawn(move || {
+            let _ = pipe.write_all(&bytes);
+        });
     }
     let reader = |mut pipe: Box<dyn std::io::Read + Send>| {
         let (sender, receiver) = std::sync::mpsc::channel();
