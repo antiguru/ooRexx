@@ -191,3 +191,88 @@ and lint-enforced, and default-mode cost is nil. However, the spec's loud-refusa
 a native's own thread or a command's peer can end is not implemented: both shapes hang the process
 past the run deadline (I1), which needs a fix or an explicit ruling before the Task 10 gate depends on
 it. P1 is a pre-existing default-mode hang to record in the ledger.
+
+## Fix round 1
+
+Verified at `3ff074ab9` (code `95df78c16`): a `git archive` copy in `/tmp/claude-1000/p61/t8rev/fr1`,
+its own target directory, `timeout` inside `memcap`.
+
+**Verdict: I1(a) and I1(b) fixed; the four Minors fixed. One Important stays open: the stated gap is
+reachable with a shipped library (I2). Two new Minors. Task quality: Needs fixes, or a ruling on I2.**
+
+### Checks
+
+- **I1(a).** My scratch probe (one activity in `NAPLONG`, then main calls `SENDFROMANOTHERTHREAD`)
+  under `sim:1`, re-applied to the fix tree: rc 120, stdout `1`, stderr `rexx-exec: a callback from
+  another thread in the simulation mode is not implemented`, in 1.52 s on each of 3 runs. The 1.52 s
+  is the inline `NAPLONG` (1.5 s of real sleep), not a wait. In default mode with a free pool it still
+  answers `trapped 98.983`, `napped`, rc 0. The committed witness passes too.
+- **I1(b).** `p3/fifo.rex`:
+  - default mode: `hi`, `read done wrote`, rc 0, 0.15 s (unchanged);
+  - `sim:1`: rc 120 with `a command in the simulation mode that waits longer than its bound`, 2.06 s;
+  - `sim:1,block=0.3`: rc 120, 0.36 s.
+  `pgrep` found no `cat`, `sh` or `rexx-run` left after any run.
+- **Knob parsing.** `block=-1`, `block=x` and `block=inf` exit 2 with `block is a number of seconds
+  above 0`, and `block=0.5` round-trips (crate test). Exception: `block=1e30` (N2).
+- **LIMIT rows.** `sim_blocked_command` is reachable as stated. `sim_foreign_post`'s widened text
+  ("and a callback from a thread running none of the interpreter's native calls") is now reachable
+  from a program through a test native. `refusal_sites` 5 passed, `refusal_dispositions` 3 passed,
+  `sim_processes` 1 passed, and the `sim::`, `simulation_mode` and `callbacks::` lib tests 32 passed.
+- **Determinism set**, each run 10 times with stdout, stderr and rc folded into one file. Every case
+  gave 10/10 identical files:
+  - `conc.rex sim:5`
+  - `conc.rex sim:21,gc=0.2`
+  - `c2.rex sim:11`
+  - `u.rex sim:21,gc=0.2`
+  - `conc.rex sim:5,halt@150,gc=0.05` (rc 252)
+  - `ch.rex sim:8` (child `rexx-run` processes)
+  - `cmd.rex sim:1` (commands with and without `WITH` redirection, and stdin; these now wait on the
+    helper thread)
+
+  `conc.rex sim:5` is byte-identical to the round-0 output, so the watchdog never fired on a program
+  that finishes.
+- **Default mode.** `collect_on_baton` falls through to `collect` when `sim_block_bound` is `None`.
+  `refuses_foreign` answers `false` unless `SIM` is set, which only `start_sim` does. The gate record
+  quotes callgrind against `0765d19ef` with the command (rexxcps +0.0001%, emptyloop +0.0006%,
+  startup +0.0000%). I did not re-measure.
+- **Minors from round 0.**
+  - The `schedule` and `order` stream docs are gone.
+  - `clippy.toml` says workspace-wide and adds `Instant::elapsed`, `SystemTime::elapsed` and
+    `thread::sleep`.
+  - Every exemption is `#[expect]`.
+  - The recall re-drain is screened (`scheduler.rs:1288`).
+  - `tests/sim_processes.rs` compares two processes. All fixed.
+
+### Issues
+
+#### Important
+
+**I2. A native blocked inline on another activity, other than through a callback, still hangs sim with
+no refusal, and a shipped library reaches it.** The ruling asked for a watchdog for blocking inline
+commands and natives; the fix covers commands only, and the report names the native half as a gap.
+`p4/sock2.rex` uses `rxsock` from `build/lib`, declared as `::routine ... external "LIBRARY rxsock
+..."`. Main binds and listens, starts a server activity calling `SockAccept`, sleeps 0.1 s, then
+connects:
+
+- default mode: `bind 0 listen 0`, `connect 0`, `got 1`, rc 0, 0.19 s;
+- `sim:1`: `SockAccept` runs inline on the baton, and main never runs to connect. Killed by
+  `timeout 10`, rc 124.
+
+The run's deadline cannot fire here, for the same reason as in I1. The way out is in that run's own
+output: the SIGTERM made `SockAccept` return (EINTR), and the halt was then served normally. So a
+sim-only watchdog that interrupts the baton thread after `block=` (a `pthread_kill` with the
+handler's signal), plus a `sim_blocked_native` refusal, would end any native blocked in a system call.
+It would not end a native that retries on EINTR or spins; the LIMIT row can say that. Alternatively,
+rule the gap a LIMIT. Then the row should name the shape (a native waiting on another activity, e.g.
+an `rxsock` server and client in one program), and Task 10 must bound such runs externally.
+
+#### Minor
+
+- **N1.** `block=` refuses any command slower than the bound, not only one waiting on a peer.
+  `address system 'sleep 2.5'` is rc 0 in default mode and rc 120 under `sim:1` (rc 0 under
+  `block=5`). The LIMIT row says "timing-dependent", but it describes the refusal as one for "a wait
+  only a command's peer can end". It should also say that a command running longer than `block=`
+  is refused. Task 10's calibration should set `block=` from the slowest command its programs run.
+- **N2.** `block=1e30` parses and then panics at the first command (`cannot convert float seconds to
+  Duration`, rc 101, from `Duration::from_secs_f64` in `sim_block_bound`). Validate it in
+  `SimConfig::parse` with `Duration::try_from_secs_f64`.

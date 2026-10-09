@@ -109,13 +109,25 @@ fn a_config_reads_back_what_it_prints() {
         SimConfig::parse("sim:7").map(|c| c.to_string()),
         Ok("sim:7,fifo".into())
     );
+    assert_eq!(
+        SimConfig::parse("sim:7,block=0").map(|c| c.to_string()),
+        Ok("sim:7,fifo,block=0".into())
+    );
+    assert_eq!(
+        SimConfig::parse("sim:7,block=1e30"),
+        Err("`block=1e30`: block is a number of seconds from 0 to 86400".into())
+    );
     for wrong in [
         "sim:",
         "sim:x",
         "sim:1,gc=2",
         "sim:1,halt@0",
         "sim:1,fail=wait:",
-        "sim:1,block=0",
+        "sim:1,block=-1",
+        "sim:1,block=x",
+        "sim:1,block=inf",
+        "sim:1,block=NaN",
+        "sim:1,block=1e30",
         "sim:1,pre:1",
         "simx",
     ] {

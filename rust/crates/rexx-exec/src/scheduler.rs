@@ -646,9 +646,13 @@ impl Scheduler for Interp {
         }
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         self.activities.runs_below += 1;
+        let watch = self.sim_watch_native();
         let pending = call.run(frame, pending, self, &baton, &thread, |completion| {
             Self::post_completion(&inbox, activity, frame, completion);
         });
+        if let Some(watch) = watch {
+            self.sim_end_watch(watch);
+        }
         self.activities.runs_below -= 1;
         pin_leave!(self);
         if let Some(record) = self.activity.native_call.as_mut() {

@@ -287,6 +287,59 @@ fn a_native_call_in_the_simulation_mode_spawns_no_pool_thread() {
     assert_eq!(sim_run.spawned, 0);
 }
 
+/// A server activity blocks in `SockAccept`, which main's later connect
+/// ends. In the simulation mode the accept runs on the baton, main never
+/// connects, and the call is interrupted and refused after `block=`.
+#[test]
+fn a_native_call_only_another_activity_can_end_is_refused_after_its_bound() {
+    let port = 40_000 + std::process::id() % 10_000;
+    let source = format!(
+        "s = SockSocket('AF_INET', 'SOCK_STREAM', 0)\n\
+         addr.family = 'AF_INET'; addr.port = {port}; addr.addr = '127.0.0.1'\n\
+         call SockSetSockOpt s, 'SOL_SOCKET', 'SO_REUSEADDR', 1\n\
+         say 'bind' SockBind(s, 'addr.') 'listen' SockListen(s, 1)\n\
+         t = .srv~new~start('ACCEPT', s)\ncall SysSleep 0.1\n\
+         c = SockSocket('AF_INET', 'SOCK_STREAM', 0)\nsay 'connect' SockConnect(c, 'addr.')\n\
+         say 'got' t~result\ncall SockClose c; call SockClose s\n\
+         ::routine SockSocket public external \"LIBRARY rxsock SockSocket\"\n\
+         ::routine SockSetSockOpt public external \"LIBRARY rxsock SockSetSockOpt\"\n\
+         ::routine SockBind public external \"LIBRARY rxsock SockBind\"\n\
+         ::routine SockListen public external \"LIBRARY rxsock SockListen\"\n\
+         ::routine SockAccept public external \"LIBRARY rxsock SockAccept\"\n\
+         ::routine SockConnect public external \"LIBRARY rxsock SockConnect\"\n\
+         ::routine SockClose public external \"LIBRARY rxsock SockClose\"\n\
+         ::class srv\n::method accept\n  use arg s\n  a = SockAccept(s)\n  return a > 0\n"
+    );
+    let real = counted(&source, false, bounded());
+    assert_eq!(real.outcome.exit_code, 0, "{}", real.stderr());
+    assert_eq!(real.stdout(), "bind 0 listen 0\nconnect 0\ngot 1\n");
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let config = crate::SimConfig::parse("sim:1,block=0.5").expect("a sim spec");
+        let began = std::time::Instant::now();
+        let run = counted(
+            &source,
+            false,
+            bounded().with_switch_mode(SwitchMode::Sim(config)),
+        );
+        let _ = sender.send((run, began.elapsed()));
+    });
+    let (run, took) = receiver
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .expect("the run ended");
+    assert_eq!(run.outcome.exit_code, 120);
+    assert_eq!(run.stdout(), "bind 0 listen 0\n");
+    assert_eq!(
+        run.stderr(),
+        "rexx-exec: a native call in the simulation mode that runs longer than its bound is \
+         not implemented\n"
+    );
+    assert!(
+        took >= std::time::Duration::from_millis(500),
+        "took {took:?}"
+    );
+}
+
 /// A guarded library method whose send waited for its guard runs once the
 /// guard is granted, from the wait's continuation, which is outside every
 /// driver: the call keeps the baton there.

@@ -18,7 +18,7 @@
 //! sim:7,fifo,gc=0.01     a collection at each allocation with probability 0.01
 //! sim:7,halt@500         every activity halted at clause boundary 500
 //! sim:7,fail=wait:2      the second pinned wait fails with 11.1
-//! sim:7,block=5          a command's wait on the baton is refused after 5 s
+//! sim:7,block=5          a command or native call on the baton is refused after 5 s
 //! sim:7,clock=midnight   virtual time starts seconds before a local midnight
 //! sim:7,clock=real       virtual time starts at the wall clock
 //! ```
@@ -70,13 +70,17 @@ pub struct Knobs {
     /// waiting.
     pub fail_wait: Option<u64>,
     pub clock: ClockOrigin,
-    /// The seconds of real time a command's wait on the baton may take
-    /// before it is abandoned and refused.
+    /// The seconds of real time a command, or a native call made while
+    /// another activity lives, may take on the baton, from 0 to
+    /// [`BLOCK_LIMIT`].
     pub block: f64,
 }
 
 /// [`Knobs::block`] where `block=` does not set it.
 const BLOCK_SECONDS: f64 = 2.0;
+
+/// The largest `block=`: a day.
+const BLOCK_LIMIT: f64 = 86_400.0;
 
 /// Where virtual time starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,8 +151,10 @@ impl SimConfig {
                 knobs.block = seconds
                     .parse()
                     .ok()
-                    .filter(|seconds: &f64| seconds.is_finite() && *seconds > 0.0)
-                    .ok_or_else(|| format!("`{item}`: block is a number of seconds above 0"))?;
+                    .filter(|seconds: &f64| (0.0..=BLOCK_LIMIT).contains(seconds))
+                    .ok_or_else(|| {
+                        format!("`{item}`: block is a number of seconds from 0 to {BLOCK_LIMIT}")
+                    })?;
             } else if item == "clock=midnight" {
                 knobs.clock = ClockOrigin::Midnight;
             } else if item == "clock=real" {
@@ -381,6 +387,15 @@ pub(crate) struct Sim {
     /// What another thread posted, where it posted something other than a
     /// signal's halt.
     breach: Option<&'static str>,
+    /// Whether an inline native call outlasted `block=`.
+    blocked_native: bool,
+}
+
+/// The watch on an inline native call in the simulation mode: a thread that
+/// interrupts the interpreter's thread each `block=` the call outlasts.
+pub(crate) struct Watch {
+    stop: std::sync::mpsc::Sender<()>,
+    watcher: std::thread::JoinHandle<bool>,
 }
 
 impl Interp {
@@ -417,6 +432,7 @@ impl Interp {
             pinned_waits: 0,
             stuck: false,
             breach: None,
+            blocked_native: false,
         }));
         self.pool.set_bound(0);
         self.timer.requests().set(crate::timer::SIM);
@@ -450,6 +466,11 @@ impl Interp {
         if requests.pending(crate::timer::FOREIGN) {
             requests.clear(crate::timer::FOREIGN);
             return Err(Loud::sim_foreign_post("a callback").into());
+        }
+        if let Some(sim) = self.sim.as_deref_mut()
+            && std::mem::take(&mut sim.blocked_native)
+        {
+            return Err(Loud::sim_blocked_native().into());
         }
         match self.sim.as_deref_mut().and_then(|sim| sim.breach.take()) {
             Some(what) => Err(Loud::sim_foreign_post(what).into()),
@@ -564,6 +585,34 @@ impl Interp {
         Some(sim.config.child(seed).to_string())
     }
 
+    /// Starts the watch on an inline native call, in the simulation mode.
+    pub(crate) fn sim_watch_native(&self) -> Option<Watch> {
+        let bound = self.sim_block_bound()?;
+        let target = crate::signal::Interrupter::here();
+        let (stop, stopped) = std::sync::mpsc::channel();
+        let watcher = std::thread::spawn(move || {
+            crate::signal::block();
+            let mut fired = false;
+            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(bound)
+            {
+                target.interrupt();
+                fired = true;
+            }
+            fired
+        });
+        Some(Watch { stop, watcher })
+    }
+
+    /// Ends `watch` once its call has returned; a call that outlasted
+    /// `block=` is refused at the next boundary.
+    pub(crate) fn sim_end_watch(&mut self, watch: Watch) {
+        let _ = watch.stop.send(());
+        let fired = watch.watcher.join().unwrap_or(true);
+        if let Some(sim) = self.sim.as_deref_mut() {
+            sim.blocked_native |= fired;
+        }
+    }
+
     /// How long a command's wait on the baton may take, in the simulation
     /// mode.
     pub(crate) fn sim_block_bound(&self) -> Option<Duration> {
@@ -596,12 +645,23 @@ impl Loud {
         }
     }
 
-    /// A command whose wait on the baton outlasted `block=`'s real time: one
-    /// only another activity can end, such as a read of a pipe it writes.
+    /// A command whose wait on the baton outlasted `block=`'s real time,
+    /// whether only another activity could end it or it is only slow.
     pub(crate) fn sim_blocked_command() -> Loud {
         Loud {
             message: crate::owned_message(
                 "a command in the simulation mode that waits longer than its bound",
+                None,
+            ),
+        }
+    }
+
+    /// A native call on the baton in the simulation mode that outlasted
+    /// `block=`'s real time, while another activity lived.
+    pub(crate) fn sim_blocked_native() -> Loud {
+        Loud {
+            message: crate::owned_message(
+                "a native call in the simulation mode that runs longer than its bound",
                 None,
             ),
         }

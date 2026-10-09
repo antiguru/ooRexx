@@ -178,6 +178,65 @@ pub(crate) fn unblocked<R>(wait: impl FnOnce() -> R) -> R {
     wait()
 }
 
+/// The signal that interrupts the interpreter's thread inside an inline
+/// native call in the simulation mode: its handler does nothing, so a system
+/// call it interrupts returns `EINTR`, and it halts nothing.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn interrupting() -> libc::c_int {
+    libc::SIGRTMIN() + 3
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn interrupting() -> libc::c_int {
+    libc::SIGURG
+}
+
+static INTERRUPT_INSTALL: Once = Once::new();
+
+extern "C" fn interrupted(_: libc::c_int) {}
+
+/// A thread [`Interrupter::interrupt`] signals with [`interrupting`].
+pub(crate) struct Interrupter(libc::pthread_t);
+
+// SAFETY: a `pthread_t` is a handle, valid on any thread while the thread it
+// names lives; an `Interrupter`'s user signals only while that thread waits
+// for it.
+unsafe impl Send for Interrupter {}
+
+impl Interrupter {
+    /// This thread, with the do-nothing handler installed once per process
+    /// where the signal's action is the default.
+    pub(crate) fn here() -> Interrupter {
+        INTERRUPT_INSTALL.call_once(|| {
+            // SAFETY: as `install_where_unset`; the handler does nothing.
+            unsafe {
+                let mut previous: libc::sigaction = std::mem::zeroed();
+                if libc::sigaction(interrupting(), std::ptr::null(), &raw mut previous) != 0
+                    || previous.sa_sigaction != libc::SIG_DFL
+                {
+                    return;
+                }
+                let mut action: libc::sigaction = std::mem::zeroed();
+                action.sa_sigaction =
+                    interrupted as extern "C" fn(libc::c_int) as libc::sighandler_t;
+                libc::sigfillset(&raw mut action.sa_mask);
+                action.sa_flags = 0;
+                libc::sigaction(interrupting(), &raw const action, std::ptr::null_mut());
+            }
+        });
+        // SAFETY: `pthread_self` has no precondition.
+        Interrupter(unsafe { libc::pthread_self() })
+    }
+
+    /// Signals the thread, ending a system call it is blocked in.
+    pub(crate) fn interrupt(&self) {
+        // SAFETY: the thread is alive (see the `Send` impl).
+        unsafe {
+            libc::pthread_kill(self.0, interrupting());
+        }
+    }
+}
+
 /// Whether a signal arrived since the last call.
 pub(crate) fn take_pending() -> bool {
     PENDING
