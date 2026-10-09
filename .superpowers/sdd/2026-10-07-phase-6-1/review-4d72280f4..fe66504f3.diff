@@ -1,0 +1,713 @@
+# Review package: 4d72280f4..fe66504f3
+
+## Commits
+fe66504f3 Phase 6.1 Task 11: report and gate record
+8910306e5 Phase 6.1 Task 11: tests judging the unjudged scheduler mutants
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-11-report.md     | 144 +++++++++++++++
+ docs/superpowers/plans/phase-6-1-gate.md           |  22 +++
+ rust/crates/rexx-exec/src/environment.rs           |  20 +++
+ rust/crates/rexx-exec/src/guards.rs                |   6 +
+ rust/crates/rexx-exec/src/scheduler.rs             |  48 +++++
+ rust/crates/rexx-exec/src/scheduler/tests.rs       |   1 +
+ .../rexx-exec/src/scheduler/tests/mutants.rs       | 196 +++++++++++++++++++++
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   |  41 ++++-
+ 8 files changed, 477 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-11-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-11-report.md
+new file mode 100644
+index 000000000..f7001abb2
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-11-report.md
+@@ -0,0 +1,144 @@
++# Task 11 report: the unjudged mutants
++
++Base `118d78b5e`. Work commit `8910306e5`. Paths below are under `rust/crates/rexx-exec/`, and line
++numbers are at `8910306e5`.
++
++## Sites
++
++Each site was re-derived from scout C's mutant table (`scout-c-report.md` section 4). The edits are
++in `/tmp/claude-1000/p61/t11/bin/mutate.py`, one exact-text edit per mutant, asserted unique and
++reverted by the inverse edit.
++
++| mutant | edit | site |
++|---|---|---|
++| M6 | delete `self.timer.requests().clear(SLICE);` | `switch_to`, `src/scheduler.rs:1017` |
++| M7 | delete the `self.slice_deferred = false;` after it | `switch_to`, `:1018` |
++| M9 | delete `self.activity.when_parked = false;` | `cancel_wait`, `:1186` |
++| M10 | delete `self.activities.guards.withdraw(running);` | `cancel_wait` |
++| M11 | delete the `sleepers.retain` | `cancel_wait`, its last statement |
++| M12 | delete `out.extend(failed_sends.iter().copied());` | `Activity::object_roots`, `src/activity.rs:558` |
++
++The carry's two `sleepers.retain` candidates are not M11's. `:1361` is in the timer post path and
++`:1377` is in `wake_semaphore_waiter`. Scout C's M11 is "`cancel_wait` keeps the sleeper", the
++`retain` inside `cancel_wait`, which is also the one Task 10 reverted. `failed_sends` is still
++rooted, at `activity.rs:558`.
++
++## Instruments (`cfg(test)` only)
++
++* `Interp::note_cancelled_wait` (`src/scheduler.rs:1211`) is called first in `cancel_wait`. It counts
++  in the thread-local `CANCELLED_WAITS` what the cancelled wait finds to withdraw from: a `GUARD
++  WHEN` park, a guard lock's queue (`Guards::queues`, added in `src/guards.rs`) and the sleepers.
++  It reads its counts before any withdrawal, so a mutant deleting a withdrawal leaves the count
++  unchanged. Each count is a reach assertion, not the judge.
++* `set_native_entry` (`src/environment.rs:1245`) counts every write, and every write to a handle
++  `heap.get` resolves to nothing, in the thread-local `NATIVE_ENTRY_WRITES`.
++
++Each counter is a `#[cfg(test)]` statement or item. `cfg(test)` is set only when this crate's own
++unit tests are compiled, so no release or integration-test build contains the code.
++
++## Tests
++
++* `src/scheduler/tests/mutants.rs` is a new submodule of `scheduler/tests.rs`. Each run there is on
++  an interpreter thread of its own, so the thread-local counts belong to that run.
++  * `a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait` (M11) runs the seeded gate's own
++    `tests/sim_gate/m11_stale_sleeper.rex` through `include_str!`, under `sim:1,order=fifo,fail=wait:1`,
++    `sim:1,uniform:1,fail=wait:1` and `sim:2,uniform:1,fail=wait:1`. It asserts rc 0, stdout
++    `caught 11.1` / `result slow done after 1`, empty stderr, and `sleeps == 1`.
++  * `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` (M9): a `GUARD WHEN` reached through
++    `INTERPRET` fails under `fail=wait:1` and is trapped, then main parks on a started method's
++    result while `halt@K` halts both activities. It runs five specs (fifo, uniform:1 at two seeds,
++    `pre:2,k=40`, `uniform:0.3`) and asserts `caught 11.1` / `result slow halted` / `main halted`,
++    rc 0, and `when_parks == 1`.
++  * `a_failed_guard_lock_wait_leaves_no_place_in_the_queue` (M10): `hold` keeps `o`'s guard through a
++    2 s sleep, and main's `touch` through `INTERPRET` fails its guard-lock wait under `fail=wait:1`
++    and is trapped. After `hold` ends, a third activity sends `touch`. It runs three specs and
++    asserts `caught 11.1` / `held` / `later touched`, rc 0, and `guard_waits == 1`.
++  * `a_dropped_failed_send_is_written_while_alive` (M12): `.t~new~start('boom')` is dropped at once
++    and `boom` divides by zero, under `gc=1` and `gc=0.1` at seeds 1 to 3. It asserts that the failed
++    run makes exactly one write more than the same program with a succeeding `boom` (the condition
++    reached the message), and no write to a dead handle.
++* `tests/concurrency_tests.rs` `measured::a_slice_deferred_before_a_pinned_park_stays_with_its_activity`
++  (M7, `--features pinning`) runs under `EveryOpportunity` and needs no sim. One clause starts B
++  (`sortWith` on a 3-array with a one-clause comparator) and C (prints three lines), then sorts
++  main's array with a comparator whose only clause is `.m~result`. Main defers a slice there and
++  parks pinned, and B's first comparator boundary is pinned with C ready. The test asserts stdout
++  `c ran 1` / `done` / `c ran 2` / `c ran 3`, rc 0, and these counts:
++  * deferred `[TreeSend, Native("SORTWITH"), SortComparator]` 1, main's deferral, the reach;
++  * deferred `[Native("SORTWITH"), SortComparator]` 2;
++  * pinned yields `[Native("SORTWITH"), SortComparator]` 1.
++
++  With B's comparator at two clauses (scout C's shape) the per-key totals agreed under M7. Only
++  the output moved, by one clause. B makes an even number of pinned visits there, and they
++  alternate defer/yield in either phase. The one-clause comparator makes the number odd.
++
++## Mutant table
++
++Unmutated, the four lib tests passed, and the M7 test and the debug seeded gate (`sim_gate::`, 11
++tests) passed. Each mutant ran under the two commands below, with one `Compiling rexx-exec` line in
++each log and the edit reverted afterwards. `git status` was clean after the last revert.
++
++```
++REXX_CORPUS_GATE=1 memcap 8G timeout 1500 cargo test -j 4 -p rexx-exec --no-fail-fast --lib scheduler::tests::mutants
++REXX_CORPUS_GATE=1 memcap 8G timeout 1500 cargo test -j 4 -p rexx-exec --features pinning --no-fail-fast --test concurrency_tests -- measured::a_slice_deferred_before sim_gate::
++```
++
++Driver: `/tmp/claude-1000/p61/t11/bin/runmut.sh`. Logs: `/tmp/claude-1000/p61/t11/mut-<M>-{lib,conc}.txt`.
++
++| mutant | site | judge | unmutated | mutated | verdict |
++|---|---|---|---|---|---|
++| M6 | `switch_to`, SLICE kept | none (outcome judges) | all green | all green: lib 4/4, conc 11/11 | equivalent (below) |
++| M7 | `switch_to`, `slice_deferred` kept | `a_slice_deferred_before_a_pinned_park_stays_with_its_activity` | deferred 2, yields 1 | deferred `[SORTWITH, SortComparator]` 1 where 2 expected (yields 2), conc exit 101; lib green | killed |
++| M9 | `cancel_wait`, `when_parked` kept | `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` | `caught 11.1 / result slow halted / main halted`, rc 0 | `sim:1,uniform:1,fail=wait:1,halt@20`: rc 120, `the scheduler found a ready activity holding a park reason`; lib exit 101; seeded gate green | killed |
++| M10 | `cancel_wait`, guard-queue entry kept | `a_failed_guard_lock_wait_leaves_no_place_in_the_queue` | `caught 11.1 / held / later touched`, rc 0 | `sim:1,order=fifo,fail=wait:1`: rc 120, two 98.905 deadlocks, `the scheduler found a guard waiter with no wait recorded for its guard`; lib exit 101; seeded gate green | killed |
++| M11 | `cancel_wait`, sleeper kept | `a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait`; also `the_seeded_gate` | `result slow done after 1`, rc 0 | `result The NIL object after 0`, rc 0; lib exit 101; the seeded gate red (`sim gate: 1792 runs, ... 12 reds`) | killed |
++| M12 | `object_roots`, `failed_sends` dropped | `a_dropped_failed_send_is_written_while_alive` | writes to dead handles 0 at every seed and Q | `sim:1,gc=1`: 1 write to a dead handle, lib exit 101 (probe: 1 at every seed 1-3 and Q in 1, 0.5, 0.1) | killed |
++
++Probe runs before the final tests (`/tmp/claude-1000/p61/t11/probe-*.txt`) showed more:
++
++* M9 under `order=fifo` printed the unmutated output. The halt's stale unpark of main is undone
++  by `park_native`'s retest loop, which parks it again, and no switch sees main ready. Main is seen
++  ready, and the mutant is killed, only under preemption. At `sim:2,pre:2,k=40` and
++  `sim:3,uniform:0.3` (halt@20, halt@60) the mutant answered `result The NIL object` with rc 0 and
++  no invariant breach. At uniform:1 every seed was a refusal.
++* M10 was killed at every seed and policy tried, fifo included.
++
++### M6: equivalent
++
++The argument is scout C's. In every switch mode, `serve_requests` clears a fresh `SLICE` before it
++yields. A `SLICE` still pending at `switch_to` can therefore only come from the timer thread
++between countdown visits. The incoming activity then yields at its first visit, and that schedule
++is one the timer could produce anyway, so no outcome leaves the legal set. M6 was green under every judge above. Only a slice-accounting instrument could
++kill it, and none was built (recommendation 8).
++
++### M12: the UNINIT variant
++
++The brief's second program, a `Message` subclass with `UNINIT`, cannot be built in this crate. The
++oracle prints `main` / `end` / `uninit` and rc 0 for `.mymsg~new(.t~new, 'boom')`, where `mymsg`
++subclasses `Message` and defines `UNINIT`. This crate refuses it at rc 120: `method "NEW" of class
++"MYMSG" is not implemented (Phase 9)`. The other route, `.message~enhanced(d, .t~new, 'boom')`
++with `d['UNINIT']`, gets `uninit` from the oracle. Here it raises 93.902 from `Object`'s `INIT`,
++rc 163, which is the queued "`Class~enhanced` skipping `NEW`" item (spec T9 Close). `setMethod` on
++the message is 97.2 (private) on both. So M12 is judged on the plain dropped send, which the
++counter kills.
++
++## Defect found
++
++At base, `tests/concurrency_tests.rs` did not compile under `--features pinning`. `pinning_table`
++moved its `Option<SwitchMode>` into a rayon `Fn` closure (E0507 at `:1588`). Task 9 introduced it
++by removing `Copy` from `SwitchMode`, and neither the default test run nor clippy compiles that
++module. It was reported to the controller and fixed with `mode.clone()` in `8910306e5`. The
++module's 19 tests then passed (`REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --features
++pinning --no-fail-fast --test concurrency_tests measured::`, exit 0, 19 passed). The scheduler
++showed no defect: the unmutated runs answered as asserted under every spec tried.
++
++## Per-task check (at `8910306e5`'s tree)
++
++* `cargo fmt --all --check`: exit 0.
++* `memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings`: exit 0.
++* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets --features pinning,sharing -- -D warnings`
++  (the controller's added line): exit 0, no other breakage.
++* `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug): exit 0, 3126 passed, 0 failed, 4 ignored (`/tmp/claude-1000/p61/t11/ws.txt`).
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle`:
++  exit 0, corpus 29 passed 1 ignored, ir_recorded_oracle 21 passed
++  (`/tmp/claude-1000/p61/t11/gate.txt`).
++* No `Loud` constructor was added, so `refusal-sites.tsv` needs no re-derivation.
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index 0bed7a4d2..42baa425a 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -1059,10 +1059,32 @@ exempt TEST_SLEEP_DURATION); REPLY derived 29 and whole 14 (assertion counts aft
+ tests, P41/P86); MutexSemaphore single 20 and `message_notify.rex` 14 (the exempt deadlocks);
+ `guard_on_lock_passes_between_activities.rex` 16; Ticker derived 9 and whole 8;
+ `context_moved_by_reply.rex` 8; `main_ends_in_pinned_yield.rex` 3;
+ `ticker_fires_on_its_replied_activity.rex` 2; MethodArgs derived 1; STREAM derived 1.
+ 
+ ### `whole_groups`
+ 
+ At `b8bba37a2`, the command above: exit 0, 14 passed. At `902de404e` it was red on TRACE whole (both
+ modes): Task 6 (`f062f791e`, then `072e536ac`) had made the `?` tests and TEST_TRACE_NUMERIC_DEBUG pass; the two keys were
+ rewritten (report, "whole_groups: TRACE whole").
++
++## Task 11
++
++Mutants judged at `8910306e5`. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-11-report.md`.
++Tests: `src/scheduler/tests/mutants.rs` (M9, M10, M11, M12, in the simulation mode) and
++`tests/concurrency_tests.rs` `measured::a_slice_deferred_before_a_pinned_park_stays_with_its_activity`
++(M7, `--features pinning`). Commands: `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
++--no-fail-fast --lib scheduler::tests::mutants`, and `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4
++-p rexx-exec --features pinning --no-fail-fast --test concurrency_tests --
++measured::a_slice_deferred_before sim_gate::`.
++
++| mutant | site | verdict | judge |
++|---|---|---|---|
++| M6 | `switch_to` keeps `SLICE` | equivalent: a pending `SLICE` at `switch_to` only moves the incoming activity's first yield to one the timer could produce (scout C); green under every judge | none |
++| M7 | `switch_to` keeps `slice_deferred` | killed: deferred `[SORTWITH, SortComparator]` 1 where 2 | M7 pinning test |
++| M9 | `cancel_wait` keeps `when_parked` | killed: rc 120, a ready activity holding a park reason | `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` |
++| M10 | `cancel_wait` keeps the guard-queue entry | killed: 98.905 deadlocks, rc 120 | `a_failed_guard_lock_wait_leaves_no_place_in_the_queue` |
++| M11 | `cancel_wait` keeps the sleeper | killed: `result The NIL object after 0` | `a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait`, `the_seeded_gate` |
++| M12 | `object_roots` drops `failed_sends` | killed: 1 write to a dead handle | `a_dropped_failed_send_is_written_while_alive` |
++
++Found and fixed: `concurrency_tests` did not compile under `--features pinning` since Task 9
++(`pinning_table`, E0507).
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 08810448b..21fd4d19a 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -1236,20 +1236,25 @@ impl Interp {
+                 }
+                 None
+             }
+             _ => None,
+         }
+     }
+ 
+     /// Stores one entry on a `Body::Native`, and does nothing for a receiver
+     /// that is not one.
+     pub(crate) fn set_native_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
++        #[cfg(test)]
++        NATIVE_ENTRY_WRITES.with(|writes| {
++            let (all, dead) = writes.get();
++            writes.set((all + 1, dead + u64::from(self.heap.get(object).is_none())));
++        });
+         if let Some(held) = self.heap.get_mut(object)
+             && let Body::Native(native) = &mut held.body
+         {
+             native.set_entry(index, value);
+         }
+     }
+ 
+     /// Removes one entry from a `Body::Native`, and does nothing for a
+     /// receiver that is not one.
+     pub(crate) fn remove_native_entry(&mut self, object: ObjRef, index: &[u8]) {
+@@ -1433,12 +1438,27 @@ fn package_table_entries(
+ /// otherwise.
+ pub(crate) fn default_object_name(id: &str) -> String {
+     let vowel = id
+         .as_bytes()
+         .first()
+         .is_some_and(|byte| b"aeiouAEIOU".contains(byte));
+     let article = if vowel { "an " } else { "a " };
+     format!("{article}{id}")
+ }
+ 
++#[cfg(test)]
++thread_local! {
++    /// How many [`Interp::set_native_entry`] writes this thread made, and how
++    /// many of them to a handle naming no live object.
++    static NATIVE_ENTRY_WRITES: std::cell::Cell<(u64, u64)> =
++        const { std::cell::Cell::new((0, 0)) };
++}
++
++/// [`NATIVE_ENTRY_WRITES`]'s counts: every write, then those to a dead
++/// handle.
++#[cfg(test)]
++pub(crate) fn native_entry_writes() -> (u64, u64) {
++    NATIVE_ENTRY_WRITES.with(std::cell::Cell::get)
++}
++
+ #[cfg(test)]
+ mod tests;
+diff --git a/rust/crates/rexx-exec/src/guards.rs b/rust/crates/rexx-exec/src/guards.rs
+index c703cafc4..c60d2e2d5 100644
+--- a/rust/crates/rexx-exec/src/guards.rs
++++ b/rust/crates/rexx-exec/src/guards.rs
+@@ -228,20 +228,26 @@ impl GuardTable {
+     /// keeping its wait record.
+     #[cfg(test)]
+     pub(crate) fn corrupt_unqueue(&mut self) -> bool {
+         let lock = self
+             .locks
+             .values_mut()
+             .find(|lock| !lock.waiters.is_empty());
+         lock.map(|lock| lock.waiters.pop_front()).is_some()
+     }
+ 
++    /// Whether `activity` is queued for a guard lock.
++    #[cfg(test)]
++    pub(crate) fn queues(&self, activity: ActivityId) -> bool {
++        matches!(self.waiting.get(&activity), Some(Waiting::Guard(_)))
++    }
++
+     /// The first activity queued for a guard, if any.
+     #[cfg(test)]
+     pub(crate) fn first_queued(&self) -> Option<ActivityId> {
+         self.locks
+             .values()
+             .find_map(|lock| lock.waiters.front().copied())
+     }
+ 
+     /// Ends `activity`'s wait: its record, and its place in a lock's queue.
+     pub(crate) fn withdraw(&mut self, activity: ActivityId) {
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index 89e820a23..4118bf29a 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -1178,38 +1178,63 @@ impl Interp {
+         };
+         self.cancel_wait();
+         Some(failure)
+     }
+ 
+     /// Withdraws the running activity from every message's waiters, from the
+     /// guard queues, from the sleepers, from the timers and from the
+     /// semaphores.
+     fn cancel_wait(&mut self) {
+         let running = self.activities.running;
++        #[cfg(test)]
++        self.note_cancelled_wait();
+         self.activity.when_parked = false;
+         self.activities.guards.withdraw(running);
+         self.activity.guard_waits.retain(|wait| !wait.queued);
+         self.activity.guarded_send = None;
+         for waiters in self.activities.waiters.values_mut() {
+             waiters.retain(|waiter| *waiter != running);
+         }
+         self.activities.semaphores.withdraw(running);
+         self.activities.timers.retain(|_, timer| {
+             let before = timer.waiters.len();
+             timer.waiters.retain(|waiter| waiter.activity != running);
+             !(timer.ends_with_wait && timer.waiters.len() < before)
+         });
+         self.activities
+             .sleepers
+             .retain(|Reverse((_, _, sleeper))| *sleeper != running);
+     }
+ 
++    /// Counts in [`CANCELLED_WAITS`] what [`Interp::cancel_wait`] finds to
++    /// withdraw the running activity from.
++    #[cfg(test)]
++    fn note_cancelled_wait(&self) {
++        let running = self.activities.running;
++        let found = CancelledWaits {
++            when_parks: u64::from(self.activity.when_parked),
++            guard_waits: u64::from(self.activities.guards.queues(running)),
++            sleeps: u64::from(
++                (self.activities.sleepers.iter())
++                    .any(|Reverse((_, _, sleeper))| *sleeper == running),
++            ),
++        };
++        CANCELLED_WAITS.with(|cancelled| {
++            let counts = cancelled.get();
++            cancelled.set(CancelledWaits {
++                when_parks: counts.when_parks + found.when_parks,
++                guard_waits: counts.guard_waits + found.guard_waits,
++                sleeps: counts.sleeps + found.sleeps,
++            });
++        });
++    }
++
+     /// Measures this interpreter's Rust stack from `base`, an address near
+     /// the base of a thread stack of `bytes`.
+     ///
+     /// # Panics
+     ///
+     /// If `bytes` does not exceed the margin kept free below the deepest
+     /// point.
+     pub(crate) fn measure_stack(&mut self, base: usize, bytes: usize) {
+         assert!(
+             bytes > STACK_MARGIN,
+@@ -2489,20 +2514,43 @@ fn request_halt(target: &mut Activity, description: Option<Vec<u8>>) -> Option<b
+     Some(true)
+ }
+ 
+ #[cfg(test)]
+ thread_local! {
+     /// How many driver exits for a native call this thread has made.
+     static NATIVE_EXITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+     /// How many abandoned calls' frames the last run on this thread still
+     /// held at its end.
+     static ABANDONED_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
++    /// What the cancelled waits on this thread withdrew their activities
++    /// from.
++    static CANCELLED_WAITS: std::cell::Cell<CancelledWaits> =
++        const { std::cell::Cell::new(CancelledWaits { when_parks: 0, guard_waits: 0, sleeps: 0 }) };
++}
++
++/// How many cancelled waits found their activity in each wait
++/// [`Interp::cancel_wait`] withdraws it from.
++#[cfg(test)]
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub(crate) struct CancelledWaits {
++    /// A `GUARD WHEN` park.
++    pub(crate) when_parks: u64,
++    /// A guard lock's queue.
++    pub(crate) guard_waits: u64,
++    /// The sleepers.
++    pub(crate) sleeps: u64,
++}
++
++/// [`CANCELLED_WAITS`]'s counts.
++#[cfg(test)]
++pub(crate) fn cancelled_waits() -> CancelledWaits {
++    CANCELLED_WAITS.with(std::cell::Cell::get)
+ }
+ 
+ /// [`ABANDONED_HELD`]'s count.
+ #[cfg(test)]
+ pub(crate) fn abandoned_held() -> usize {
+     ABANDONED_HELD.with(std::cell::Cell::get)
+ }
+ 
+ /// Sets [`ABANDONED_HELD`] from `activities`.
+ #[cfg(test)]
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests.rs b/rust/crates/rexx-exec/src/scheduler/tests.rs
+index aed62e8db..e83e977a3 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests.rs
+@@ -1568,12 +1568,13 @@ fn uniform_1_in_fifo_order_runs_as_every_opportunity() {
+                 (simulated.exit_code, stdout(&simulated), stderr(&simulated)),
+                 (every.exit_code, stdout(&every), stderr(&every)),
+                 "{spec}: {program}"
+             );
+         }
+     }
+ }
+ 
+ mod callbacks;
+ mod lent;
++mod mutants;
+ mod native;
+ mod pool;
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs b/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs
+new file mode 100644
+index 000000000..29e3be8a5
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs
+@@ -0,0 +1,196 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! A wait that fails trappably and a send whose failure is settled after its
++//! last holder dropped it, run in the simulation mode: each leaves nothing
++//! behind that a later wait, a halt or a collection can reach.
++
++use crate::scheduler::CancelledWaits;
++use crate::{Invocation, Outcome, SimConfig, SwitchMode};
++
++/// A run with this thread's test counters read at its end.
++struct Counted {
++    outcome: Outcome,
++    cancelled: CancelledWaits,
++    /// Every `set_native_entry` write, then those to a dead handle.
++    writes: (u64, u64),
++}
++
++impl Counted {
++    fn stdout(&self) -> String {
++        String::from_utf8_lossy(&self.outcome.stdout).into_owned()
++    }
++
++    fn stderr(&self) -> String {
++        String::from_utf8_lossy(&self.outcome.stderr).into_owned()
++    }
++}
++
++/// Runs `source` under the simulation mode `spec` on an interpreter thread
++/// of its own.
++fn counted(source: &str, spec: &str) -> Counted {
++    let config = SimConfig::parse(spec).expect("a sim spec");
++    let invocation = Invocation::none()
++        .with_deadline(super::RUN_DEADLINE)
++        .with_switch_mode(SwitchMode::Sim(config));
++    let text = source.as_bytes().to_vec();
++    std::thread::Builder::new()
++        .stack_size(crate::INTERPRETER_STACK_BYTES)
++        .spawn(move || {
++            let outcome = crate::execute_on(
++                "/tmp/mutants.rex",
++                text,
++                false,
++                invocation,
++                Some(crate::INTERPRETER_STACK_BYTES),
++            );
++            Counted {
++                outcome,
++                cancelled: crate::scheduler::cancelled_waits(),
++                writes: crate::environment::native_entry_writes(),
++            }
++        })
++        .expect("the interpreter thread")
++        .join()
++        .expect("the run did not panic")
++}
++
++/// Asserts `run` ended at rc 0 with `stdout` and nothing on stderr.
++fn assert_answers(run: &Counted, spec: &str, stdout: &str) {
++    assert_eq!(
++        (
++            run.outcome.exit_code,
++            run.stdout().as_str(),
++            run.stderr().as_str()
++        ),
++        (0, stdout, ""),
++        "{spec}"
++    );
++}
++
++/// The seeded gate's program for a pinned sleep failing under `fail=wait:1`.
++const STALE_SLEEPER: &str = include_str!("../../../tests/sim_gate/m11_stale_sleeper.rex");
++
++/// A pinned `SysSleep` failed by `fail=wait:1` is trapped, and main then
++/// parks on a started method's result: the failed sleep's deadline does not
++/// end that park, so the result is the method's, after its 3 s.
++#[test]
++fn a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait() {
++    for spec in [
++        "sim:1,order=fifo,fail=wait:1",
++        "sim:1,uniform:1,fail=wait:1",
++        "sim:2,uniform:1,fail=wait:1",
++    ] {
++        let run = counted(STALE_SLEEPER, spec);
++        assert_answers(&run, spec, "caught 11.1\nresult slow done after 1\n");
++        assert_eq!(
++            run.cancelled.sleeps, 1,
++            "{spec}: the failed wait was not a sleep"
++        );
++    }
++}
++
++/// A `GUARD WHEN` reached through `INTERPRET` is a pinned wait.
++const STALE_WHEN: &str = "call waiter .g~new\nm = .w~new~start('slow')\n\
++                          signal on halt name mh\nsay 'result' m~result\nexit\n\
++                          mh:\nsay 'main halted'\nexit\n\
++                          waiter: procedure\n  use arg o\n  signal on syntax name caught\n  \
++                          interpret 'o~waitfor'\n  say 'woke'\n  return\n\
++                          caught:\n  say 'caught' condition('O')~code\n  return\n\
++                          ::class g\n::method waitfor\n  expose flag\n  flag = 0\n  \
++                          guard on when flag\n\
++                          ::class w\n::method slow\n  signal on halt name sh\n  \
++                          do i = 1 to 400\n    nop\n  end\n  return 'slow done'\n\
++                          sh:\n  return 'slow halted'\n";
++
++/// A `GUARD WHEN` failed by `fail=wait:1` is trapped, main then parks on a
++/// started method's result, and `halt@20` halts both activities while the
++/// method loops: the halt does not end main's park, so main takes its `HALT`
++/// once the method has answered.
++#[test]
++fn a_failed_guard_when_leaves_no_park_for_a_halt_to_end() {
++    for spec in [
++        "sim:1,order=fifo,fail=wait:1,halt@20",
++        "sim:1,uniform:1,fail=wait:1,halt@20",
++        "sim:2,uniform:1,fail=wait:1,halt@60",
++        "sim:2,pre:2,k=40,fail=wait:1,halt@20",
++        "sim:3,uniform:0.3,fail=wait:1,halt@20",
++    ] {
++        let run = counted(STALE_WHEN, spec);
++        assert_answers(&run, spec, "caught 11.1\nresult slow halted\nmain halted\n");
++        assert_eq!(
++            run.cancelled.when_parks, 1,
++            "{spec}: the failed wait was not a GUARD WHEN"
++        );
++    }
++}
++
++/// `hold` keeps `o`'s guard through a 2 s sleep while main's `touch`,
++/// reached through `INTERPRET`, waits for the lock.
++const STALE_GUARD_WAITER: &str = "o = .g~new\nh = o~start('hold')\ncall SysSleep 0.5\n\
++                                  call toucher o\nh~wait\n\
++                                  say 'later' o~start('touch')~result\nexit\n\
++                                  toucher: procedure\n  use arg o\n  \
++                                  signal on syntax name caught\n  interpret 'say o~touch'\n  \
++                                  return\ncaught:\n  say 'caught' condition('O')~code\n  \
++                                  return\n\
++                                  ::class g\n::method hold\n  call SysSleep 2\n  say 'held'\n  \
++                                  return\n::method touch\n  return 'touched'\n";
++
++/// A guard-lock wait failed by `fail=wait:1` while another activity holds
++/// the guard is trapped: the holder's release grants the lock to no one, so
++/// a later send from a third activity gets it.
++#[test]
++fn a_failed_guard_lock_wait_leaves_no_place_in_the_queue() {
++    for spec in [
++        "sim:1,order=fifo,fail=wait:1",
++        "sim:1,uniform:1,fail=wait:1",
++        "sim:2,pre:2,k=40,fail=wait:1",
++    ] {
++        let run = counted(STALE_GUARD_WAITER, spec);
++        assert_answers(&run, spec, "caught 11.1\nheld\nlater touched\n");
++        assert_eq!(
++            run.cancelled.guard_waits, 1,
++            "{spec}: the failed wait was not a guard lock's"
++        );
++    }
++}
++
++/// A started message main drops at once, whose method `body` runs.
++fn dropped_send(body: &str) -> String {
++    format!(".t~new~start('boom')\nsay 'main'\n::class t\n::method boom\n  {body}\n")
++}
++
++/// A started send main dropped at once fails after main has ended; the
++/// condition object is written to the message while the message is alive,
++/// under collections at every allocation and at a tenth of them.
++#[test]
++fn a_dropped_failed_send_is_written_while_alive() {
++    for seed in 1..=3 {
++        for q in ["1", "0.1"] {
++            let spec = format!("sim:{seed},gc={q}");
++            let failed = counted(&dropped_send("x = 1 / 0"), &spec);
++            let ended = counted(&dropped_send("x = 1"), &spec);
++            assert_eq!(failed.stdout(), "main\n", "{spec}");
++            assert!(
++                failed.stderr().contains("Error 42.3:"),
++                "{spec}: {}",
++                failed.stderr()
++            );
++            assert_eq!(
++                failed.writes.0,
++                ended.writes.0 + 1,
++                "{spec}: the failed send's condition was not written"
++            );
++            assert_eq!(failed.writes.1, 0, "{spec}: a write to a dead handle");
++        }
++    }
++}
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 7bcf76d1c..cff98b93a 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -933,20 +933,59 @@ mod measured {
+         );
+         let report =
+             report_of(".c~new~~m\nsay 'main'\n::class c\n::method m\n  reply\n  say 'rest'\n");
+         assert!(
+             report.immovable_replies.is_empty(),
+             "{:?}",
+             report.immovable_replies
+         );
+     }
+ 
++    /// Under every opportunity main defers a slice at its sort comparator's
++    /// first clause, whose `~result` then parks it pinned. The activity it
++    /// waits on sorts with a one-clause comparator while a third is ready:
++    /// its first slice is deferred and its second takes a pinned yield, so
++    /// the slice main deferred is not carried over to it.
++    #[test]
++    fn a_slice_deferred_before_a_pinned_park_stays_with_its_activity() {
++        let source = ".local['ARR'] = .array~of(2, 1)\n\
++                      .local~~put(.array~of(3, 1, 2)~start('sortWith', .cmpb~new), 'M')\
++                      ~~put(.t~new~start('run'), 'C')~at('ARR')~sortWith(.cmpa~new)\n\
++                      say 'done'\n\
++                      ::class cmpa\n::method compare\n  \
++                      return .m~result~items * 0 + arg(1) - arg(2)\n\
++                      ::class cmpb\n::method compare\n  return arg(1) - arg(2)\n\
++                      ::class t\n::method run\n  do i = 1 to 3\n    say 'c ran' i\n  end\n";
++        let outcome = run_program(
++            "probe.rex",
++            source.as_bytes().to_vec(),
++            Invocation::none()
++                .with_deadline(super::support::oracle::RUN_DEADLINE)
++                .with_switch_mode(SwitchMode::EveryOpportunity),
++        );
++        assert_eq!(
++            (
++                outcome.exit_code,
++                String::from_utf8_lossy(&outcome.stdout).as_ref(),
++                String::from_utf8_lossy(&outcome.stderr).as_ref()
++            ),
++            (0, "c ran 1\ndone\nc ran 2\nc ran 3\n", "")
++        );
++        let sorting = vec![PinKind::Native("SORTWITH".into()), PinKind::SortComparator];
++        let parking = [vec![PinKind::TreeSend], sorting.clone()].concat();
++        let deferred = &outcome.pinning.deferred_slices;
++        assert_eq!(deferred.get(&parking), Some(&1), "{deferred:?}");
++        assert_eq!(deferred.get(&sorting), Some(&2), "{deferred:?}");
++        let yields = &outcome.pinning.pinned_yields;
++        assert_eq!(yields.get(&sorting), Some(&1), "{yields:?}");
++    }
++
+     /// A busy-wait inside `INTERPRET` takes pinned yields, counted with the
+     /// `Interpret` frame, and no pinned yield is counted where nothing pins.
+     #[test]
+     fn a_pinned_busy_wait_counts_its_pinned_yields() {
+         let source = |wait: &str| {
+             format!(
+                 "f = .flag~new\na = f~start('waitForFlag')\nf~start('setFlag')\na~wait\n\
+                  ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
+                  done = 0\n::method waitForFlag unguarded\n  {wait}\n  say 'ended'\n\
+                  ::method setFlag unguarded\n  self~done = 1\n"
+@@ -1539,21 +1578,21 @@ mod measured {
+             file.trim_end_matches(".md")
+         ));
+         let rows: Vec<(String, String, PinReport)> = list
+             .par_iter()
+             .enumerate()
+             .map(|(at, row)| {
+                 let outcome = run_test(
+                     &base.join(at.to_string()),
+                     &row.group,
+                     Some(&row.test),
+-                    mode,
++                    mode.clone(),
+                 );
+                 (
+                     format!("{} {}", row.group, row.test),
+                     outcome_of(&outcome),
+                     outcome.pinning,
+                 )
+             })
+             .collect();
+ 
+         let mut per_test =
