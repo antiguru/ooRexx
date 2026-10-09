@@ -584,6 +584,12 @@ impl Heap {
         }
     }
 
+    /// The live object `r` names, for a caller that writes it. A caller that
+    /// changes what the body holds outside its slot ([`Body::held_bytes`]),
+    /// by growing, shrinking or replacing it, records the change with
+    /// [`Heap::hold_body_bytes`], [`Heap::release_body_bytes`] or
+    /// [`Heap::rehold_body_bytes`] before any step that can fail. The same
+    /// holds for [`Heap::peek_mut`].
     pub fn get_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
         let slot = self.resolve(r)?;
         #[cfg(feature = "sharing")]
