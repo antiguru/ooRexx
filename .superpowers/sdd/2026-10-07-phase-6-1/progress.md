@@ -160,3 +160,5 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 8 re-review 2: I2, N1, N2 fixed; rxsock test 10/10 sequential and 20/20 parallel; new I3 (block=0 livelock), N3 (row claims "while another activity lives"), N4 (pinned native unwatched; oracle hangs too). Fix round 3 sent to t8-impl.
 - Task 8 fix round 3: 1f7b73ac0, 007adb014; re-review approved 0/0/0 (block floor 0.001 s; one signal per call; livelock probe 60/60).
 - Task 8: complete (b7a050d6b..007adb014).
+- Task 9 dispatched: t9-impl (opus), BASE 6358ca7a6.
+- Task 9 implementer DONE_WITH_CONCERNS: 60f21ad1b, 296cac74f, 88e818648. Perf vs 6358ca7a6 worst alloc +0.36%; ping* gated (spread 0.0001%). Invariants: 6 injected, 8 uninjected. SysSleep TEST_SLEEP_DURATION fails under sim on 4/5 policies (Task 10 ruling). Used bash -c once (rule breach). Review t9-review dispatched.
