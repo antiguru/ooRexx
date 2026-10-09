@@ -162,3 +162,9 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 8: complete (b7a050d6b..007adb014).
 - Task 9 dispatched: t9-impl (opus), BASE 6358ca7a6.
 - Task 9 implementer DONE_WITH_CONCERNS: 60f21ad1b, 296cac74f, 88e818648. Perf vs 6358ca7a6 worst alloc +0.36%; ping* gated (spread 0.0001%). Invariants: 6 injected, 8 uninjected. SysSleep TEST_SLEEP_DURATION fails under sim on 4/5 policies (Task 10 ruling). Used bash -c once (rule breach). Review t9-review dispatched.
+
+## Controller state, 2026-10-09 ~17:20 (weekly limit near; resume here)
+
+- Complete: Tasks 1, 2, 3, 4, 4a, 5, 5a, 6, 7, 8. Task 9 implemented (60f21ad1b, 296cac74f, 88e818648) and in review: t9-review writes W/task-9-review.md; t9-impl idle for a fix round. If those agents are gone on resume, read task-9-review.md (if present) and dispatch a fresh fix agent, or re-dispatch the review from review-6358ca7a6..88e818648.diff.
+- Remaining: Task 10 (seeded gate; carry SysSleep TEST_SLEEP_DURATION ruling, process-level timeout, contended= for k, revert checks), Task 11 (mutants), Task 12 (close; queue items in this ledger's "Task 12 queue add" lines and .superpowers/sdd/queued/2026-10-09-*), then final whole-branch review.
+- Standing rules for every dispatch: global-constraints.md (memcap on every interpreter run with timeout inside; no rm of variable paths or globs; no bash -c; stage by path); check ~30 min; an idle agent with no processes usually means a pending approval or an ended-turn wait.
