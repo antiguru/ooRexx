@@ -333,3 +333,41 @@ fits the review's own finding that `occupied` moved from 0 to 32 mod 64. I did n
    That is one subtraction per insert or append, not a branch into the collector.
 3. Arrays charge on every allocation, argument arrays included (16 bytes per slot). For an
    argument-heavy program this moves the byte trigger only after 32 MiB of slots.
+
+## Fix round 2
+
+Review: `task-5a-rereview.md`. Code commit `72287a744`.
+
+- **`array_reshape`** (`dispatch/array.rs`, the multidimensional extend) replaces the slots with a
+  larger vector. It now charges the slot capacity after the store minus the capacity before, times
+  `SLOT_BYTES`, the `array_resize` pattern.
+- **Test.** `reshaped_arrays_are_collected_on_their_bytes`:
+  `do i = 1 to 60; a = .array~new(10, 10); a[1000, 1000] = i; end`, through
+  `assert_collected_on_bytes` with a value of 1000 x 1000 slots. With `dispatch/array.rs` as at
+  `17cbe8a9e` (the rest of the tree at `72287a744`) it fails `0 collections for 60 x 16000000
+  bytes`; with the fix it passes.
+- **Enumeration of slot mutations.** First command:
+  `grep -rn "slots\.\(push\|resize\|insert\|extend\|reserve\|try_reserve\|append\|splice\|clone_from\)\|slots = \|\*slots\b\|mem::take(slots\|mem::replace(slots" rexx-exec/src`,
+  outside tests. Second command, every `heap.get_mut` followed within two lines by a
+  `Body::Array` match: `grep -rn -A2 "get_mut(.*)" | grep -B1 "Body::Array"`. What they find:
+  - **Local vectors built before an `alloc_charged`:** charged when allocated.
+  - **Already charged:** `empty_slots`, charged by its allocation, and the three growth sites from
+    round 1 (`array_resize` `array.rs:336`, `array_splice_slot` `collection.rs:355`, `array_grow`
+    `collection.rs:396`).
+  - **This one:** `array.rs:410`.
+  - **Notify-list push,** `object_protocol.rs:1239`: the `~notify` party list on a Message. A
+    growth path, so it now charges its capacity delta too.
+  - **Writes and shrinks inside the existing length:** `array/surface.rs:208`, `:449`, `:551`
+    (pop); `array.rs:474`; `collection/queue.rs:148`; `collection/list.rs:253`, `:409` (clear);
+    `array/sort.rs:266`; `collection.rs:315` (remove), `:376`. None of these grows the capacity.
+- **Gate record.** The fix-round-1 sentence "arrays (creation and slot growth)" now names the three
+  growth sites and says the multidimensional extend was left uncharged until this round.
+- **Per-task check at `72287a744`:**
+  - `cargo fmt`, and clippy with `-D warnings`: clean.
+  - `refusal_sites` refresh: no change.
+  - `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: exit 0, 3071 passed, 0 failed,
+    4 ignored (`collect_stress` 37 passed).
+  - `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: exit 0, 50 passed,
+    1 ignored.
+- **Callgrind not run.** Neither changed path is on a benchmark's hot path: a multidimensional
+  extend, and a Message's notify registration.

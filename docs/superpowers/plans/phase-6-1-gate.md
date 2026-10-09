@@ -685,8 +685,9 @@ N = 1 000 000).
 
 ### Fix round 1
 
-Code `d0a3d5db3`: `~copy`, arrays (creation and slot growth) and MutableBuffers (creation and
-capacity growth) are charged; `Outcome::peak_body_bytes` is `#[cfg(test)]`. Per-task check exit 0
+Code `d0a3d5db3`: `~copy`, arrays (creation, and growth through `array_grow`,
+`array_splice_slot` and `array_resize`; a multidimensional extend was left uncharged until fix
+round 2) and MutableBuffers (creation and capacity growth) are charged; `Outcome::peak_body_bytes` is `#[cfg(test)]`. Per-task check exit 0
 (3070 passed, 4 ignored; corpus gate 50 passed, 1 ignored).
 
 ```
