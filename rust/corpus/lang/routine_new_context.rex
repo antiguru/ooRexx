@@ -1,0 +1,31 @@
+/* Routine~new and Method~new take a context as their third argument: a
+   Package, a Routine or Method, or "PROGRAMSCOPE". */
+r = .routine~new('a', 'return "pkg"', .context~package)
+say r[]
+r = .routine~new('b', 'return "scope"', 'programscope')
+say r[]
+r = .routine~new('c', 'return "rtn"', r)
+say r[]
+m = .method~new('d', 'return "meth"', .context~package)
+say m~source[1]
+r = .routine~new('e', .array~of('return helper()', '::routine other'), .context~package)
+say r[]
+say .t~new~go
+signal on syntax name bad
+r = .routine~new('f', 'return 1', 'xyz')
+say 'not reached'
+bad:
+say condition('O')~code condition('O')~message
+exit
+::routine helper public
+  return 'helper found'
+::class t
+::method go
+  tab = "09"x
+  return self~runDynamicSource("return" self~hex("41" || tab || "42"))
+::method hex
+  return '"' || arg(1) || '"x'
+::method runDynamicSource
+  use strict arg code, parentPackage = (self~class~package)
+  r = .routine~new(parentPackage~name, code, parentPackage)
+  return r[]

@@ -15,7 +15,7 @@
 use super::{
     Arity, ArrayArgument, Body, Cleared, Failure, Interp, Loud, MESSAGE_ARGUMENTS, MESSAGE_NAME,
     MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised, SourceTaker,
-    array_argument, class_receiver, compile_method_source, compile_routine_source,
+    array_argument, class_receiver, compile_method_source_in, compile_routine_source,
     decode_message_name, hash, native, native_new, new_instance, option_method_argument,
     optional_length_argument, required_string_argument, required_string_named_argument,
 };
@@ -153,8 +153,9 @@ pub(super) fn native_message_new(
     super::begin_init(interp, object, &[])
 }
 
-/// `Method~new(name, source, ...)` and `Routine~new(name, source, ...)`: both
-/// arguments are required -- `BaseExecutable::processNewExecutableArgs`
+/// `Method~new(name, source [, context])` and `Routine~new(name, source [,
+/// context])`: the first two are required, and the context is resolved as
+/// `newFile`'s is -- `BaseExecutable::processNewExecutableArgs`
 /// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
 /// `RoutineClass::newRexx` share.
 pub(super) fn native_executable_new(
@@ -169,14 +170,25 @@ pub(super) fn native_executable_new(
         return Err(Raised::missing_named_argument("source").into());
     };
     let routine = class == interp.routine_class();
-    if args.len() > 2 || !(routine || class == interp.method_class()) {
+    if args.len() > 3 || !(routine || class == interp.method_class()) {
         return Err(unbuilt_new(interp, class));
     }
+    let parent = match args.get(2).copied().flatten() {
+        Some(context) => executable_context(interp, context, b"NEW", 3)?,
+        None => None,
+    };
     let name = interp.to_text(name).to_vec();
     let object = if routine {
-        compile_routine_source(interp, &name, source, "source")?
+        compile_routine_source(interp, &name, source, "source", parent)?
     } else {
-        compile_method_source(interp, &name, source, "source", SourceTaker::Executable)?
+        compile_method_source_in(
+            interp,
+            &name,
+            source,
+            "source",
+            SourceTaker::Executable,
+            parent,
+        )?
     };
     Ok(Some(object))
 }
@@ -198,18 +210,24 @@ pub(super) fn native_new_file(
         return Err(unbuilt_new(interp, class));
     }
     let parent = match args.get(1).copied().flatten() {
-        Some(context) => new_file_context(interp, context)?,
+        Some(context) => executable_context(interp, context, b"NEWFILE", 2)?,
         None => None,
     };
     let name = interp.to_text(name).to_vec();
     interp.new_file_executable(&name, routine, parent).map(Some)
 }
 
-/// `newFile`'s context argument, resolved to the package the loaded file
-/// resolves names against. `None` is the caller's own package, which is what
-/// an absent argument and `"PROGRAMSCOPE"` both mean -- measured, the two
-/// answer the caller's `::ROUTINE` alike at rc 0.
-fn new_file_context(interp: &mut Interp, context: ObjRef) -> Result<Option<Package>, Failure> {
+/// `newFile`'s and `new`'s context argument, at `position` of `method`,
+/// resolved to the package the executable resolves names against. `None` is
+/// the caller's own package, which is what an absent argument and
+/// `"PROGRAMSCOPE"` both mean -- measured, the two answer the caller's
+/// `::ROUTINE` alike at rc 0.
+fn executable_context(
+    interp: &mut Interp,
+    context: ObjRef,
+    method: &[u8],
+    position: usize,
+) -> Result<Option<Package>, Failure> {
     let class = interp.class_of_value(context);
     let resolved = if class == Some(interp.package_class()) {
         interp.which_package(context)
@@ -232,8 +250,8 @@ fn new_file_context(interp: &mut Interp, context: ObjRef) -> Result<Option<Packa
         None => {
             let found = interp.to_text(context).to_vec();
             Err(Raised::argument_not_in_list(
-                b"NEWFILE",
-                2,
+                method,
+                position,
                 "\"PROGRAMSCOPE\", Method, Routine, or Package object",
                 &found,
             )

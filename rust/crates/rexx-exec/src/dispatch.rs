@@ -168,10 +168,10 @@ use method_arguments::{
 mod class_protocol;
 use class_protocol::{
     SourceTaker, begin_init, class_argument, class_receiver, compile_method_source,
-    compile_routine_source, is_enhanced_instance, method_name_argument, method_source_lines,
-    native_annotation, native_annotations, native_base_class, native_class_copy,
-    native_class_default_name, native_class_inherit, native_define, native_define_class_method,
-    native_define_methods, native_delete, native_enhanced, native_id,
+    compile_method_source_in, compile_routine_source, is_enhanced_instance, method_name_argument,
+    method_source_lines, native_annotation, native_annotations, native_base_class,
+    native_class_copy, native_class_default_name, native_class_inherit, native_define,
+    native_define_class_method, native_define_methods, native_delete, native_enhanced, native_id,
     native_inherit_instance_methods, native_is_subclass_of, native_metaclass, native_method,
     native_mixin_class_factory, native_new, native_new_class, native_package,
     native_package_add_class, native_package_add_public_class, native_scope, native_subclass,

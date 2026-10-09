@@ -1431,11 +1431,11 @@ fn replace_buffer_contents(state: &mut BufferState, built: &[u8]) {
 /// The receiver's state with room for `added` more bytes
 /// ([`BufferState::ensure_capacity`], whose refusal is the oracle's 5.1),
 /// the growth charged before the state is answered.
-fn grow_buffer<'a>(
-    interp: &'a mut Interp,
+fn grow_buffer(
+    interp: &mut Interp,
     receiver: ObjRef,
     added: usize,
-) -> Result<&'a mut BufferState, Failure> {
+) -> Result<&mut BufferState, Failure> {
     let state = buffer_state_mut(interp, receiver)?;
     let grown = state
         .ensure_capacity(added)

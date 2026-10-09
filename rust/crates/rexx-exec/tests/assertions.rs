@@ -88,14 +88,44 @@ fn form_keyword(form: Form) -> &'static str {
     }
 }
 
+/// The test case a row that sends to `self` runs in: `Literals.testGroup`'s
+/// `q`, `hex` and `bin`, and the framework's `runDynamicSource`
+/// (`ootest/framework/OOREXXUNIT.CLS`).
+const TEST_CASE: &str = "::class assertionCase\n\
+                         ::method q\n  return '\"' || arg(1) || '\"'\n\
+                         ::method hex\n  return '\"' || arg(1) || '\"x'\n\
+                         ::method bin\n  return '\"' || arg(1) || '\"b'\n\
+                         ::method runDynamicSource\n  \
+                         use strict arg code, parentPackage = (self~class~package)\n  \
+                         r = .routine~new(parentPackage~name, code, parentPackage)\n  \
+                         return r[]\n";
+
 /// Turns one row into a standalone program: the `DIGITS`/`FORM` in force,
-/// the method's assignment prelude verbatim, then `expr`.
+/// the method's assignment prelude verbatim, then `expr`. A row that sends
+/// to `self` runs as a method of [`TEST_CASE`] and says both values in hex.
 fn program_for(row: &AssertionRow) -> Vec<u8> {
+    let in_case = std::iter::once(&row.expr)
+        .chain([&row.expected])
+        .chain(&row.prelude)
+        .any(|text| text.contains("self~"));
     let mut text = String::new();
+    if in_case {
+        writeln!(text, ".assertionCase~new~row").unwrap();
+        writeln!(text, "exit").unwrap();
+        text.push_str(TEST_CASE);
+        writeln!(text, "::method row").unwrap();
+    }
     writeln!(text, "numeric digits {}", row.digits).unwrap();
     writeln!(text, "numeric form {}", form_keyword(row.form)).unwrap();
     for line in &row.prelude {
         writeln!(text, "{line}").unwrap();
+    }
+    // A test case's values are compared in hex: `test_string_range`'s are
+    // every byte, newlines included, which a `SAY` line cannot carry.
+    if in_case && row.expect_raise.is_none() {
+        writeln!(text, "say c2x({})", row.expr).unwrap();
+        writeln!(text, "say c2x({})", row.expected).unwrap();
+        return text.into_bytes();
     }
     writeln!(text, "say {}", row.expr).unwrap();
     if row.expect_raise.is_none() {
@@ -153,9 +183,7 @@ fn construct_from_stderr(stderr: &[u8]) -> Option<String> {
 }
 
 /// One row this harness cannot make pass through `rexx_exec`'s public entry
-/// point today, named explicitly. See the module doc's "The exempt set" for
-/// why this exists and how STRICT is allowed to use it without becoming an
-/// unpoliced escape hatch.
+/// point today, named explicitly.
 struct ExemptRow {
     group: &'static str,
     method: &'static str,
@@ -171,123 +199,13 @@ struct ExemptRow {
     /// The sub-phase whose delivery would actually make this row pass.
     /// **Not** the same question as "which construct does this row's
     /// program happen to hit first today" (`RowOutcome::RuntimeBlocked`'s
-    /// own `construct` field, reported separately) -- see the module doc's
-    /// "Rows this harness cannot run yet" for the two `test_string_range`
-    /// rows where the two answers differ.
+    /// own `construct` field, reported separately).
     unblocked_by: &'static str,
 }
 
-/// The committed exempt set: every row this harness measured as not
-/// passing at the time this list was written, with the sub-phase that
-/// would actually unblock it. Generated once from a real run and hand
-/// -verified against the source (`Literals.testGroup`), not hand-guessed --
-/// see `task-15b-report.md` for the method.
-///
-/// Every row is a `self~runDynamicSource(...)` of the ooTest framework, which
-/// builds `.routine~new(name, code, package)` (`OOREXXUNIT.CLS`). Run outside
-/// this harness inside a test-case class, the oracle answers each row and this
-/// crate refuses the package argument with `method "NEW" of class "Routine" is
-/// not implemented (Phase 9)`. In this harness the row also has no test case
-/// for `self`, so `self~hex` is 97.1 on both engines (queued
-/// `2026-10-09-literals-rows-need-a-test-case`).
-const EXEMPT: &[ExemptRow] = &[
-    ExemptRow {
-        group: "Literals",
-        method: "test_string_range",
-        occurrence: 1,
-        expr: "all",
-        expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_string_range",
-        occurrence: 2,
-        expr: "all",
-        expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 4,
-        expr: "\"AB\"",
-        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \"42\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 5,
-        expr: "\"AB\"",
-        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || \"42\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 6,
-        expr: "\"AB\"",
-        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || tab || \"42\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 7,
-        expr: "\"AB\"",
-        expected: "self~runDynamicSource(\"return\" self~hex(\"41 \" || tab || \"42\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_hexadecimal",
-        occurrence: 8,
-        expr: "\"AB\"",
-        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \" 42\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 4,
-        expr: "\"A\"",
-        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \"0001\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 5,
-        expr: "\"A\"",
-        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || \"0001\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 6,
-        expr: "\"A\"",
-        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || tab || \"0001\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 7,
-        expr: "\"A\"",
-        expected: "self~runDynamicSource(\"return\" self~bin(\"0100 \" || tab || \"0001\"))",
-        unblocked_by: "Phase 9",
-    },
-    ExemptRow {
-        group: "Literals",
-        method: "test_binary",
-        occurrence: 8,
-        expr: "\"A\"",
-        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \" 0001\"))",
-        unblocked_by: "Phase 9",
-    },
-];
+/// The committed exempt set: every row this harness measures as not passing,
+/// with the sub-phase that would unblock it.
+const EXEMPT: &[ExemptRow] = &[];
 
 /// `row`'s 1-based position among every row seen so far (including `row`
 /// itself) sharing its `group` and `method`, in the source order `rows`
@@ -497,9 +415,8 @@ fn describe(
         }
         // `construct` is the first-hit fact ("what did this row's program
         // actually run into"); `exempt.unblocked_by` is the separate,
-        // committed fact ("what would actually make this row pass") -- see
-        // the module doc's "Rows this harness cannot run yet" for the two
-        // rows where those differ. A `RuntimeBlocked` row with no exempt
+        // committed fact ("what would actually make this row pass"). A
+        // `RuntimeBlocked` row with no exempt
         // entry is not on the committed list at all, and says so plainly
         // rather than guessing a phase for it.
         RowOutcome::RuntimeBlocked { construct } => match exempt {

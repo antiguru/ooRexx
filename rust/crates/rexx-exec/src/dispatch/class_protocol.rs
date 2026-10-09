@@ -352,13 +352,26 @@ pub(super) fn compile_method_source(
     position: &'static str,
     taker: SourceTaker,
 ) -> Result<ObjRef, Failure> {
+    compile_method_source_in(interp, name, source, position, taker, None)
+}
+
+/// [`compile_method_source`] whose directives install into a package whose
+/// parent is `parent`, or the caller's where it is `None`.
+pub(super) fn compile_method_source_in(
+    interp: &mut Interp,
+    name: &[u8],
+    source: ObjRef,
+    position: &'static str,
+    taker: SourceTaker,
+    parent: Option<crate::plan::Package>,
+) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position, taker)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed = parse_source_lines(interp, name, &borrowed)?;
     // `generateMethod` installs them as `generateRoutine` does; see
     // [`compile_routine_source`].
     if !parsed.directives.is_empty() {
-        let parent = interp.running_program().map(crate::plan::Package::Program);
+        let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
         return interp.install_executable(parsed, name, false, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
         });
@@ -379,12 +392,13 @@ pub(super) fn compile_method_source(
 }
 
 /// `RoutineClass::newRexx`'s compiling arm (`classes/RoutineClass.cpp:379`):
-/// [`compile_method_source`] answering a `Routine` instead.
+/// [`compile_method_source_in`] answering a `Routine` instead.
 pub(super) fn compile_routine_source(
     interp: &mut Interp,
     name: &[u8],
     source: ObjRef,
     position: &'static str,
+    parent: Option<crate::plan::Package>,
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position, SourceTaker::Executable)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
@@ -394,7 +408,7 @@ pub(super) fn compile_routine_source(
     // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`
     // is `1`.
     if !parsed.directives.is_empty() {
-        let parent = interp.running_program().map(crate::plan::Package::Program);
+        let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
         return interp.install_executable(parsed, name, true, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
         });
