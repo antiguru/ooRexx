@@ -880,3 +880,66 @@ Commit `1f7b73ac0`, sim code only (the `block=` parse and the watcher), so no pe
 `block=0.001`, 20 runs alike) passed in 5 separate runs. Per-task check at `1f7b73ac0`: fmt exit 0;
 clippy exit 0; workspace debug test exit 0 (3099 passed, 0 failed, 4 ignored); gated corpus exit 0
 (29 passed, 1 ignored; ir_recorded_oracle 21 passed).
+
+## Task 9
+
+Commits `60f21ad1b` (policies, invariants, trace and replay), `296cac74f` (perf round 1: the `gc=`
+draw out of line).
+
+### Performance
+
+`S` is `/tmp/claude-1000/p61/t9/perf`. Each binary from `git archive <sha> rust interpreter`, every
+file touched, built with `CARGO_TARGET_DIR=$S/target-NAME memcap 8G cargo build --release -j 4 -p
+rexx-exec --bin rexx-run`, one `Compiling rexx-exec` line each. `callgrind.sh` now runs
+`pingpong/*.rex` as `pingmsg`, `pingguard`, `pingsem`.
+
+| binary | source | sha256 |
+|---|---|---|
+| base | `6358ca7a6` | `0e18eb55b6ba72406cbbf70e7078e97b278c7a29933b9929f3f483c9a6fe6706` |
+| head | `60f21ad1b` | `907123352a6d8e536f020f68bd594a4e83602fdb82fe23c49473fcb19a8a109e` |
+| head2 | `296cac74f` | `bef89dcd103d29a73a8bc9d341fe4bf5375700324b47ac1a126ec5bc52bf8356` |
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 6 -o $S/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base=$S/bin/base/rexx-run head=$S/bin/head/rexx-run
+memcap 8G bash rust/bench-programs/callgrind.sh -r 3 -j 6 -o $S/cg2 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base=$S/bin/base/rexx-run head2=$S/bin/head2/rexx-run
+```
+
+Both exit 0. The `pingpong` programs' run-to-run spread is at most 0.0001% on either binary in
+both runs, inside the budget, so they are gated like the others.
+
+| program | head % | head2 % | head2 spread % | verdict |
+|---|---:|---:|---:|---|
+| pingmsg | +0.5498 | +0.2005 | 0.0000 | inside |
+| pingguard | +0.2261 | +0.2259 | 0.0000 | inside |
+| pingsem | +0.1874 | +0.1872 | 0.0001 | inside |
+| alloc | +0.5330 | +0.3552 | 0.0000 | inside |
+| alloc4c | +0.4536 | +0.0663 | 0.0000 | inside |
+| heapshape | +0.6806 | +0.1280 | 0.0000 | inside |
+| rexxcps | +0.4839 | +0.0694 | 0.0001 | inside |
+| emptyloop | +0.0001 | +0.0000 | 0.0000 | inside |
+
+head was over on pingmsg, alloc and heapshape: `cgdiff.py` put the cost in `collect_if_due` (+92 M
+on rexxcps, +7.5 M on pingmsg), which had stopped being inlined into `alloc_with` once the grown
+`sim_declines_collection` was inlined into it. Round 1 makes that hook `#[cold] #[inline(never)]`.
+At head2 `alloc`'s remaining +0.36% is `core::str::converts::from_utf8` (+66,000,539) and
+`alloc_with` (+6,065,969), code this task does not touch; no layout control was run, so it is not
+attributed. `pingmsg`'s `message_completed` is +640,000 (eight instructions per completion: the
+ready-queue mark and the `sim` test).
+
+```
+PROGRAMS="rexxcps emptyloop alloc alloc4c pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o $S/wall1 base=$S/bin/base/rexx-run head2=$S/bin/head2/rexx-run
+```
+
+Exit 0; load average 1.81 at start, 3.47 at end. rexxcps -1.88%, emptyloop +0.22%, alloc +1.68%,
+alloc4c +0.18%, pingmsg -0.23%, pingsem +0.80%, pingguard +0.82%; inside ±4%. heapshape prints
+its own figures and was not timed.
+
+### Per-task check
+
+At `60f21ad1b`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 --workspace
+--all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
+(3105 passed, 0 failed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec
+--test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1 ignored; ir_recorded_oracle
+21 passed); `refusal_sites` 5 passed and `refusal_dispositions` 3 passed after
+`REXX_REFUSAL_SITES_REFRESH=1`. At `296cac74f`: fmt and clippy exit 0, the `sim::` and `uniform_1`
+lib tests 19 passed.
