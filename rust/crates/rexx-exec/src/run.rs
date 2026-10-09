@@ -2497,17 +2497,41 @@ impl Interp {
         // `:1413`. The bare form of either is legal after a reply and is
         // measured: `reply 'v'` then `say 'tail'` then `return` is rc 0 with
         // both lines printed and an empty stderr.
-        if value.is_some() && self.activation().reply != ReplyState::None {
-            return Err(match keyword {
-                ReturnKeyword::Return => Raised::return_after_reply(),
-                ReturnKeyword::Exit => Raised::exit_after_reply(),
+        match keyword {
+            ReturnKeyword::Return => {
+                if value.is_some() && self.activation().reply != ReplyState::None {
+                    return Err(Raised::return_after_reply().into());
+                }
+                Ok(Flow::Return(value))
             }
-            .into());
+            ReturnKeyword::Exit => {
+                self.exit_after_reply(value)?;
+                Ok(Flow::Exit(value))
+            }
         }
-        Ok(match keyword {
-            ReturnKeyword::Return => Flow::Return(value),
-            ReturnKeyword::Exit => Flow::Exit(value),
-        })
+    }
+
+    /// An `EXIT`'s reply check, made on the activation it ends: the innermost
+    /// that is not an internal call (`exitFrom` walks up to it,
+    /// `RexxActivation.cpp:1411`-`1440`). An `EXIT` in a `CALL ON` handler
+    /// run at the `REPLY` clause's end ends the method before its split, and
+    /// its result replaces the reply's (`exitFrom` sets `result`), so the
+    /// sender receives none.
+    #[cold]
+    fn exit_after_reply(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
+        let Some(ended) = self.top_level_activation_mut() else {
+            return Ok(());
+        };
+        if ended.reply == ReplyState::None {
+            return Ok(());
+        }
+        if value.is_some() {
+            return Err(Raised::exit_after_reply().into());
+        }
+        if let Some(replied) = ended.replied.as_mut() {
+            replied.value = None;
+        }
+        Ok(())
     }
 
     /// Everything a `PUSH` or a `QUEUE` does once its expression has been

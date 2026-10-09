@@ -1,0 +1,16 @@
+count 15
+/* EXIT with a value in a CALL ON handler after the REPLY's split is 98.937
+   on the continuation; the sender already has its result. */
+say 'got' .k~new~m
+call SysSleep 0.3
+say 'main end'
+::class k
+::method m
+  call on notready name nr
+  reply 'v'
+  x = linein('/nonexistent/file/x')
+  say 'rest'
+  return
+nr:
+  say 'handler'
+  exit 'x'
