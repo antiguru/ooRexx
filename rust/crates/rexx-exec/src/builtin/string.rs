@@ -722,8 +722,12 @@ pub(crate) fn copies_bytes(
         .checked_mul(count)
         .ok_or_else(|| Failure::from(Raised::system_resources()))?;
     let mut out = buffer(interp, total)?;
-    for _ in 0..count {
-        out.extend_from_slice(string);
+    // Doubled from what is already written: one copy per doubling rather
+    // than one per repeat.
+    out.extend_from_slice(string);
+    while out.len() < total {
+        let more = (total - out.len()).min(out.len());
+        out.extend_from_within(..more);
     }
     Ok(Some(out))
 }

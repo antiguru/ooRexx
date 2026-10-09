@@ -891,3 +891,17 @@ fn a_counted_answer_is_tagged_rather_than_a_heap_string() {
     );
     assert_eq!(bytes, b"012");
 }
+
+/// `COPIES` fills by doubling, so a count that is not a power of two ends
+/// with a partial doubling: every count up to 33 of a three-byte string is
+/// the string repeated.
+#[test]
+fn copies_fills_every_count_exactly() {
+    let interp = Interp::new();
+    for count in 2..=33 {
+        let out = super::copies_bytes(&interp, b"abc", count)
+            .expect("in range")
+            .expect("a count above 1 builds");
+        assert_eq!(out, b"abc".repeat(count), "count {count}");
+    }
+}
