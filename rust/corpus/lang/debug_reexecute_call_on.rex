@@ -1,0 +1,7 @@
+/* = at the pause after a command under CALL ON ERROR runs the command again,
+   since CALL ON took no pause of its own. */
+trace ?a
+call on error
+'false'
+exit
+error: say 'err'; return

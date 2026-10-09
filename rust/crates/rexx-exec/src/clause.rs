@@ -264,13 +264,14 @@ impl Interp {
         // sites and three rounds' worth before them, always silently. The
         // handler will now report `SIGL` for the wrong clause, which is the
         // half of the defect that has recurred every round.
-        // A line typed at a debug pause runs ahead of the boundary that
-        // delivers what the paused clause queued, as the oracle's pause does.
+        // Keyed as `deliver_pending_traps` keys a delivery: a condition queued
+        // in an enclosing fragment's queue waits for that fragment's boundary.
         debug_assert!(
             self.activity.clause_state.current_clause_line == line
-                || self.debug_pause()
                 || !self.activity.pending_traps.iter().any(|pending| {
-                    !pending.queued_during_delivery && pending.activation == self.activation().id
+                    !pending.queued_during_delivery
+                        && pending.activation == self.activation().id
+                        && pending.fragment_depth == self.activity.fragment_depth
                 }),
             "a clause at line {} began while a condition queued by this activation's clause at \
              line {} was still waiting: some construct ran an instruction inside its own step \

@@ -1,0 +1,8 @@
+/* A line typed at the pause after a clause that queued a CALL ON condition
+   leaves the handler the SIGL of that clause. */
+call on notready name h
+trace ?a
+x = linein('/nonexistent/zz')
+say 'after'
+exit
+h: say 'handler sigl' sigl; return

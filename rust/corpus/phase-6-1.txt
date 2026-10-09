@@ -223,3 +223,18 @@ lang/debug_input_object.rex
 lang/debug_input_eof.rex
 lang/debug_input_nil.rex
 lang/debug_input_removed.rex
+
+# Task 6 fix round 1: a condition the paused clause queued keeps its SIGL and
+# indent across a typed line; CALL ON and CALL OFF do not pause; a LEAVE that
+# raises does not pause; NOTREADY from the debug read reaches CALL ON in the
+# program; INTERPRET's fragment keeps its indent.
+lang/debug_pause_sigl_notready.rex
+lang/debug_pause_sigl_error.rex
+lang/debug_pause_call_on.rex
+lang/debug_reexecute_call_on.rex
+lang/debug_leave_no_loop.rex
+lang/debug_leave_unknown_label.rex
+lang/debug_input_eof_call_on.rex
+lang/debug_input_eof_call_on_loop.rex
+lang/debug_input_stdin_eof_call_on.rex
+lang/debug_interpret_indent.rex

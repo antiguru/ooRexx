@@ -484,6 +484,26 @@ fn an_internal_call_does_not_prompt_again() {
     );
 }
 
+/// `=` at the pause after a `LEAVE` runs the `LEAVE` again outside the loop
+/// it left, which raises 28.1 as the oracle does (rc 228). The echo of the
+/// second `LEAVE` is not compared: the oracle prints it at the indent outside
+/// the loop.
+#[test]
+fn reexecuting_a_leave_raises_outside_its_loop() {
+    let program = "trace ?a\ndo i = 1 to 3\n  leave\nend\nsay 'after' i\n";
+    let input = crate::ProgramInput::Bytes(b"\n=\n\n\n\n".to_vec());
+    let outcome = run_program(
+        TEST_PATH,
+        program.as_bytes().to_vec(),
+        crate::Invocation::none().with_input(input),
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    assert_eq!(stderr.matches("*-*   leave").count(), 2, "{stderr}");
+    assert!(stderr.contains("Error 28.1:"), "{stderr}");
+    assert_eq!(outcome.exit_code, 228, "{stderr}");
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "");
+}
+
 /// A failing command that only `TRACE ?E` traces prints the debug banner
 /// ahead of its clause, as any first traced clause does.
 #[test]

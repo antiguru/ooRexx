@@ -1836,6 +1836,24 @@ DEVIATIONS -- permanent, chosen
      LICENSED DIVERGENCE WITNESS: do-compare-array-one
      LICENSED DIVERGENCE WITNESS: do-compare-array-many
 
+ 26. `=` AT THE DEBUG PAUSE AFTER A DO WITH NO PASSES RUNS THE DO AGAIN
+     (Phase 6.1 Task 6). OWNER: none.
+
+     The oracle's RexxInstructionBaseLoop::execute calls terminate() for a
+     zero-pass loop and then handleDebugPause(context, OREF_NULL)
+     (interpreter/instructions/BaseDoInstruction.cpp:289-299); on `=`, that
+     runs removeBlockInstruction() a second time (:111-124), so a later loop's
+     valid END echoes one level too deep and raises 10.1, rc 246. Measured by
+     Phase 6.1 Task 6 (probe d0, one run) and its review (z1, 3 runs of 3),
+     no crash or block:
+
+       trace ?a / do 0 / say 'never' / end / do i = 1 to 2 / nop / end /
+       say 'end', stdin `=` then empty lines
+
+     This crate runs the DO again and continues; `=` after a DO with passes
+     agrees with the oracle. The block stack is an oracle defect, not a
+     specified observable. Not witnessed in the corpus.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -3374,6 +3392,22 @@ above.
   and has no task here; it was found by a review of a Phase 5a fix round,
   which owns no behaviour, so recording it was that review's whole
   disposition.
+
+  KNOWN GAP: `=` AFTER A LEAVE OR ITERATE ECHOES THE CLAUSE AT ITS OWN
+  INDENT. The oracle echoes the re-run clause at the nesting its loop left
+  behind: `=` after `if i = 1 then iterate` in a loop echoes
+  `3 *-*   iterate` where this crate echoes `3 *-*       iterate`, and `=`
+  after a LEAVE echoes it outside the loop (`3 *-* leave`, this crate
+  `3 *-*   leave`). Everything else agrees, the 28.1 the re-run LEAVE raises
+  included (crate test reexecuting_a_leave_raises_outside_its_loop). Measured
+  by Phase 6.1 Task 6 and its review (probes e1, e2).
+
+  KNOWN GAP: A LABELLED BLOCK DO HAS NO DEBUG PAUSE AFTER ITS HEADER.
+  `do label lbl` under `trace ?a` pauses after its header in the oracle and
+  not here, where the labelled block runs on the nested path and answers its
+  Flow only after the body. An unlabelled block DO and every repeating loop
+  pause. Measured by Phase 6.1 Task 6's review (probe l1).
+
 
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------

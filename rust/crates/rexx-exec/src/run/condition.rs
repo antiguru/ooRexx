@@ -119,12 +119,16 @@ impl Interp {
                     rc: None,
                     description: Some(name.to_vec()),
                     object: Some(object),
-                    // The **running** activation, not its caller: a native
-                    // method raises inside the clause that sent to it, and
-                    // that clause is still running. The routine-return path
-                    // queues against the caller because its own activation is
-                    // being popped; nothing is popped here.
-                    activation: self.activation().id,
+                    // The activation whose table matched, not its caller: a
+                    // native method raises inside the clause that sent to it,
+                    // and that clause is still running. Under a non-continuing
+                    // `FORWARD` that is the frame beneath the forwarding
+                    // phantoms. The routine-return path queues against the
+                    // caller because its own activation is being popped;
+                    // nothing is popped here.
+                    activation: self
+                        .trap_frame()
+                        .map_or(self.activation().id, |activation| activation.id),
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,

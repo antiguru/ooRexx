@@ -1,0 +1,9 @@
+/* A line typed at the pause after a failing command leaves its CALL ON
+   ERROR handler the command's SIGL and indent. */
+call on error name h
+trace ?a
+do i = 1 to 1
+  'false'
+end
+exit
+h: say 'handler sigl' sigl; return

@@ -1,0 +1,4 @@
+/* A LEAVE outside any loop raises 28.1 without a debug pause. */
+trace ?a
+say 1
+leave

@@ -1875,22 +1875,16 @@ macro_rules! clause_region {
                     // building the value that answer would travel in.
                     // `finish_plain_clause` discharges what is left of the
                     // boundary.
-                    if $self.activity.pending_traps.is_empty() {
+                    // **Interactive debug takes the cold exit**, whose pause
+                    // comes before the boundary that delivers what the clause
+                    // queued. Asked of the setting and not of `stale`:
+                    // staleness heals -- the chunk is recompiled under the
+                    // setting now in force -- so a skip count set at a pause
+                    // would stop running down after the first clause.
+                    // Measured: `trace -2` then suppressed every later clause
+                    // instead of two.
+                    if $self.activity.pending_traps.is_empty() && !$debugging {
                         $self.finish_plain_clause($entry);
-                        // **Asked of the setting and not of `stale`.**
-                        // Staleness heals -- the chunk is recompiled under
-                        // the setting now in force -- so a skip count set
-                        // at a pause would stop running down after the
-                        // first clause. Measured: `trace -2` then suppressed
-                        // every later clause instead of two.
-                        if $debugging
-                            && $self.debug_pause_after_clause(
-                                $code, $index, $clause, $source, None,
-                            )?
-                        {
-                            $pc = $clause_pc;
-                            continue $ops_label;
-                        }
                         $pc = next;
                         continue $ops_label;
                     }
@@ -2443,15 +2437,29 @@ impl Interp {
         };
         match self.debug_pause_after_clause(code, index, clause, source, flow) {
             Ok(true) => Ok(RegionEnd::At(clause_pc)),
+            // A `DO`/`LOOP` header owes no boundary of its own, but the oracle
+            // checks its traps after the header's pause as after any clause,
+            // so a condition the pause's read queued is delivered here.
+            Ok(false)
+                if matches!(
+                    clause.kind,
+                    InstructionKind::Do(_) | InstructionKind::Loop(_)
+                ) && !self.activity.pending_traps.is_empty() =>
+            {
+                match self.deliver_pending_traps(code)? {
+                    Some(exit) => Ok(RegionEnd::Flowed(Flow::Exit(exit.value()))),
+                    None => ran,
+                }
+            }
             Ok(false) => ran,
             Err(failure) => Err(failure),
         }
     }
 
     /// [`Interp::flat_loop_step_top`] for a flow that escaped to a flat
-    /// loop's frame, with the pause an `ITERATE` owes once the loop has
-    /// stepped (`RexxInstructionLeave::execute`). `=` runs the `ITERATE`
-    /// again.
+    /// loop's frame, with the pause a `LEAVE` or an `ITERATE` owes once the
+    /// loop has taken it (`RexxInstructionLeave::execute`). `=` runs the
+    /// instruction again.
     #[inline(never)]
     fn flat_loop_step_escaped(
         &mut self,
@@ -2461,7 +2469,7 @@ impl Interp {
         arrival: Flow,
     ) -> Result<crate::run::FlatStep, Failure> {
         let iterated = match &arrival {
-            Flow::Iterate(_, origin) => Some(origin.index),
+            Flow::Iterate(_, origin) | Flow::Leave(_, origin) => Some(origin.index),
             _ => None,
         };
         let step = self.flat_loop_step_top(code, source, arrival, |it| {

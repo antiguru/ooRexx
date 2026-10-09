@@ -1197,3 +1197,19 @@ takes the answer of `requestArray` as an array). Measured 2026-10-08 by the revi
 Task 4 (its probe `e7_5`, which wraps the same `Method~new` in a trapping procedure). This crate
 raises 93.961 (`requestArray` answered no array, and the class defines no `MAKESTRING`).
 No upstream ticket.
+
+## 31. A `.DebugInput` whose `LINEIN` answers no value
+
+    .local~debuginput = .o~new
+    trace ?a
+    say 'x'
+    say 'y'
+    exit
+    ::class o
+    ::method linein
+      return
+
+SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper (`Activity::traceInput` casts the answer
+of `LINEIN` to `RexxString *` unchecked, `Activity.cpp:3252`). Measured 2026-10-09 by the review of
+Phase 6.1 Task 6 (its probe `dj2`). This crate reads an absent answer as the null string. No
+upstream ticket.

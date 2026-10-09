@@ -201,8 +201,9 @@ impl Interp {
     /// from the setting it saved. An `IF`, a `SELECT` or a block `DO` that
     /// answers a `Flow` ran its whole construct; a repeating `DO` that answers
     /// one ended before any pass, and pauses after its header. A flow that
-    /// leaves the instruction for good owes no pause, and an `ITERATE` pauses
-    /// once the loop it reaches has stepped.
+    /// leaves the instruction for good owes no pause, and a `LEAVE` or an
+    /// `ITERATE` pauses once the loop it reaches has taken it, so one that
+    /// reaches none raises first.
     #[cold]
     #[inline(never)]
     pub(crate) fn debug_pause_after_clause(
@@ -217,7 +218,11 @@ impl Interp {
         if let Some(flow) = flow
             && (matches!(
                 flow,
-                Flow::Exit(_) | Flow::Return(_) | Flow::Signal(_) | Flow::Iterate(..)
+                Flow::Exit(_)
+                    | Flow::Return(_)
+                    | Flow::Signal(_)
+                    | Flow::Leave(..)
+                    | Flow::Iterate(..)
             ) || matches!(
                 kind,
                 InstructionKind::If { .. } | InstructionKind::Select { .. }
@@ -244,8 +249,8 @@ impl Interp {
     }
 
     /// `conditionalPauseInstruction`: the pause an instruction takes from
-    /// inside its own work, `INTERPRET`'s before its fragment and `ITERATE`'s
-    /// once the loop has stepped. Answers whether the instruction is to run again.
+    /// inside its own work: `INTERPRET`'s before its fragment, and `LEAVE`'s
+    /// and `ITERATE`'s once their loop has taken them. Answers whether the instruction is to run again.
     pub(crate) fn debug_pause_instruction(&mut self) -> Result<bool, Failure> {
         let mode = self.pausing_mode();
         if !(mode.debug && mode.all) {
@@ -361,6 +366,9 @@ impl Interp {
     /// runs.
     fn run_debug_fragment(&mut self, text: Vec<u8>) -> Result<(), Failure> {
         let saved_pause = self.replace_debug_pause(true);
+        // The paused clause's line and indent, which a condition it queued
+        // reads at its boundary after the pause.
+        let saved_clause = self.save_clause_state();
         // A `SELECT CASE` typed at the pause opens and closes inside the
         // line; the construct the pause interrupted keeps its own value.
         let saved_case = self.activation().current_case;
@@ -387,6 +395,7 @@ impl Interp {
         self.leave_fragment_level();
         self.leave_fragment(saved_entry);
         self.replace_debug_pause(saved_pause);
+        self.restore_clause_state(saved_clause);
         self.activation_mut().current_case = saved_case;
         match outcome {
             Ok(_) => Ok(()),
@@ -456,8 +465,9 @@ impl Interp {
 /// Whether a debug pause follows an instruction of `kind` once its own work
 /// is done, as the oracle's `execute` ends in `pauseInstruction` or a block
 /// header's in `conditionalPauseInstruction`. `INTERPRET` pauses before its
-/// fragment instead. `REPLY` answers false: the oracle pauses on the
-/// continuation's thread, and this crate does not pause there.
+/// fragment instead. `CALL ON` and `CALL OFF` do not pause
+/// (`RexxInstructionCallOn::execute`). `REPLY` answers false: the oracle
+/// pauses on the continuation's thread, and this crate does not pause there.
 pub(crate) fn pauses_after(kind: &InstructionKind) -> bool {
     !matches!(
         kind,
@@ -472,5 +482,5 @@ pub(crate) fn pauses_after(kind: &InstructionKind) -> bool {
             | InstructionKind::Guard(_)
             | InstructionKind::Interpret { .. }
             | InstructionKind::Reply { .. }
-    )
+    ) && !matches!(kind, InstructionKind::Call(call) if matches!(**call, rexx_parse::Call::Trap(_)))
 }
