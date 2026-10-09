@@ -168,3 +168,13 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Complete: Tasks 1, 2, 3, 4, 4a, 5, 5a, 6, 7, 8. Task 9 implemented (60f21ad1b, 296cac74f, 88e818648) and in review: t9-review writes W/task-9-review.md; t9-impl idle for a fix round. If those agents are gone on resume, read task-9-review.md (if present) and dispatch a fresh fix agent, or re-dispatch the review from review-6358ca7a6..88e818648.diff.
 - Remaining: Task 10 (seeded gate; carry SysSleep TEST_SLEEP_DURATION ruling, process-level timeout, contended= for k, revert checks), Task 11 (mutants), Task 12 (close; queue items in this ledger's "Task 12 queue add" lines and .superpowers/sdd/queued/2026-10-09-*), then final whole-branch review.
 - Standing rules for every dispatch: global-constraints.md (memcap on every interpreter run with timeout inside; no rm of variable paths or globs; no bash -c; stage by path); check ~30 min; an idle agent with no processes usually means a pending approval or an ended-turn wait.
+
+## Task 9 review verdict (2026-10-09)
+
+- t9-review: Needs fixes; 0 Critical, 3 Important, 5 Minor (W/task-9-review.md).
+  - I1: replay that diverges is silent (wrong program or damaged trace runs rc 0, different hash). Fix: refuse at first mismatching decision and on leftover decisions; at least compare hashes at end.
+  - I2: check_invariants quadratic per switch (n=2000 parked: 22.4 s vs 0.13 s; 97% in sim_check_switch). Fix: one pass, per-handle state vectors.
+  - I3: no running total vs 6.1 base e6af1198b; heapshape +1.1559% over the +0.5% budget, of which +1.0266% predates Task 9 (Tasks 1-8, no gate measured heapshape) and Task 9 adds +0.128%. Per the global constraint: add base61 column, bisect the 6.1 commits on heapshape, then take it to Moritz.
+  - Minor: M1 double refusals; M2 trace-path edges exit 0; M3 dead pub trace_hash; M4 exploration test asserts 2 of 3 interleavings; M5 implementer bash -c (self-reported).
+  - Confirmed by running: all policies match the brief; all nine uncovered invariant checks fire (closes report concern 1); 48/48 cross-process replays exact; SysSleep failure is the test's wall-time assumption, carried to Task 10.
+- Stopped here per Moritz ("Stop after the review comes back"). On resume: fix round 1 (t9-impl if alive, else fresh agent) for I1, I2, I3 records + bisect, minors; heapshape ruling goes to Moritz.
