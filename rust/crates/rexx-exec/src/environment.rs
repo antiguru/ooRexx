@@ -1246,7 +1246,7 @@ impl Interp {
         #[cfg(test)]
         NATIVE_ENTRY_WRITES.with(|writes| {
             let (all, dead) = writes.get();
-            writes.set((all + 1, dead + u64::from(self.heap.get(object).is_none())));
+            writes.set((all + 1, dead + u64::from(self.heap.peek(object).is_none())));
         });
         if let Some(held) = self.heap.get_mut(object)
             && let Body::Native(native) = &mut held.body

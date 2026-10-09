@@ -112,25 +112,39 @@ const STALE_WHEN: &str = "call waiter .g~new\nm = .w~new~start('slow')\n\
                           sh:\n  return 'slow halted'\n";
 
 /// A `GUARD WHEN` failed by `fail=wait:1` is trapped, main then parks on a
-/// started method's result, and `halt@20` halts both activities while the
+/// started method's result, and `halt@K` halts both activities while the
 /// method loops: the halt does not end main's park, so main takes its `HALT`
-/// once the method has answered.
+/// once the method has answered. Every spec runs before any is judged. A
+/// stale park reason fails `pre:2,k=40` and `uniform:0.3` through the halt
+/// alone (`result The NIL object`), and `uniform:1` without it.
 #[test]
 fn a_failed_guard_when_leaves_no_park_for_a_halt_to_end() {
+    let mut failures = Vec::new();
     for spec in [
+        "sim:2,pre:2,k=40,fail=wait:1,halt@20",
+        "sim:3,uniform:0.3,fail=wait:1,halt@20",
         "sim:1,order=fifo,fail=wait:1,halt@20",
         "sim:1,uniform:1,fail=wait:1,halt@20",
         "sim:2,uniform:1,fail=wait:1,halt@60",
-        "sim:2,pre:2,k=40,fail=wait:1,halt@20",
-        "sim:3,uniform:0.3,fail=wait:1,halt@20",
     ] {
         let run = counted(STALE_WHEN, spec);
-        assert_answers(&run, spec, "caught 11.1\nresult slow halted\nmain halted\n");
-        assert_eq!(
-            run.cancelled.when_parks, 1,
-            "{spec}: the failed wait was not a GUARD WHEN"
+        let answered = (
+            run.outcome.exit_code,
+            run.stdout(),
+            run.stderr(),
+            run.cancelled.when_parks,
         );
+        let expected = (
+            0,
+            "caught 11.1\nresult slow halted\nmain halted\n".to_owned(),
+            String::new(),
+            1,
+        );
+        if answered != expected {
+            failures.push(format!("{spec}: {answered:?}"));
+        }
     }
+    assert!(failures.is_empty(), "{failures:#?}");
 }
 
 /// `hold` keeps `o`'s guard through a 2 s sleep while main's `touch`,

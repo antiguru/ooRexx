@@ -944,7 +944,10 @@ mod measured {
     /// first clause, whose `~result` then parks it pinned. The activity it
     /// waits on sorts with a one-clause comparator while a third is ready:
     /// its first slice is deferred and its second takes a pinned yield, so
-    /// the slice main deferred is not carried over to it.
+    /// the slice main deferred is not carried over to it. The one-clause
+    /// comparator gives it an odd count of pinned visits, which per-key
+    /// totals need to see a carried slice: with an even count, the shift by
+    /// one visit leaves both totals unchanged.
     #[test]
     fn a_slice_deferred_before_a_pinned_park_stays_with_its_activity() {
         let source = ".local['ARR'] = .array~of(2, 1)\n\

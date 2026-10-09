@@ -46,9 +46,10 @@ unit tests are compiled, so no release or integration-test build contains the co
     `caught 11.1` / `result slow done after 1`, empty stderr, and `sleeps == 1`.
   * `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` (M9): a `GUARD WHEN` reached through
     `INTERPRET` fails under `fail=wait:1` and is trapped, then main parks on a started method's
-    result while `halt@K` halts both activities. It runs five specs (fifo, uniform:1 at two seeds,
-    `pre:2,k=40`, `uniform:0.3`) and asserts `caught 11.1` / `result slow halted` / `main halted`,
-    rc 0, and `when_parks == 1`.
+    result while `halt@K` halts both activities. It runs five specs (`pre:2,k=40`, `uniform:0.3`,
+    fifo, uniform:1 at two seeds), collects every spec's answer before judging, and asserts
+    `caught 11.1` / `result slow halted` / `main halted`, rc 0, and `when_parks == 1` for each
+    (spec order and collection changed in Task 11a Step 0).
   * `a_failed_guard_lock_wait_leaves_no_place_in_the_queue` (M10): `hold` keeps `o`'s guard through a
     2 s sleep, and main's `touch` through `INTERPRET` fails its guard-lock wait under `fail=wait:1`
     and is trapped. After `hold` ends, a third activity sends `touch`. It runs three specs and
@@ -88,7 +89,7 @@ Driver: `/tmp/claude-1000/p61/t11/bin/runmut.sh`. Logs: `/tmp/claude-1000/p61/t1
 |---|---|---|---|---|---|
 | M6 | `switch_to`, SLICE kept | none (outcome judges) | all green | all green: lib 4/4, conc 11/11 | equivalent (below) |
 | M7 | `switch_to`, `slice_deferred` kept | `a_slice_deferred_before_a_pinned_park_stays_with_its_activity` | deferred 2, yields 1 | deferred `[SORTWITH, SortComparator]` 1 where 2 expected (yields 2), conc exit 101; lib green | killed |
-| M9 | `cancel_wait`, `when_parked` kept | `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` | `caught 11.1 / result slow halted / main halted`, rc 0 | `sim:1,uniform:1,fail=wait:1,halt@20`: rc 120, `the scheduler found a ready activity holding a park reason`; lib exit 101; seeded gate green | killed |
+| M9 | `cancel_wait`, `when_parked` kept | `a_failed_guard_when_leaves_no_park_for_a_halt_to_end` | `caught 11.1 / result slow halted / main halted`, rc 0 | through the halt: `sim:2,pre:2,k=40,fail=wait:1,halt@20` and `sim:3,uniform:0.3,fail=wait:1,halt@20` answer `caught 11.1 / result The NIL object / main halted`, rc 0 (without the halt these answer `result slow done`). `sim:1,uniform:1` and `sim:2,uniform:1` refuse at rc 120 with `the scheduler found a ready activity holding a park reason`, and refuse without the halt too. Lib exit 101; seeded gate green. Re-run in Task 11a Step 0 (`/tmp/claude-1000/p61/t11a/s0-m9.txt`) | killed |
 | M10 | `cancel_wait`, guard-queue entry kept | `a_failed_guard_lock_wait_leaves_no_place_in_the_queue` | `caught 11.1 / held / later touched`, rc 0 | `sim:1,order=fifo,fail=wait:1`: rc 120, two 98.905 deadlocks, `the scheduler found a guard waiter with no wait recorded for its guard`; lib exit 101; seeded gate green | killed |
 | M11 | `cancel_wait`, sleeper kept | `a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait`; also `the_seeded_gate` | `result slow done after 1`, rc 0 | `result The NIL object after 0`, rc 0; lib exit 101; the seeded gate red (`sim gate: 1792 runs, ... 12 reds`) | killed |
 | M12 | `object_roots`, `failed_sends` dropped | `a_dropped_failed_send_is_written_while_alive` | writes to dead handles 0 at every seed and Q | `sim:1,gc=1`: 1 write to a dead handle, lib exit 101 (probe: 1 at every seed 1-3 and Q in 1, 0.5, 0.1) | killed |
