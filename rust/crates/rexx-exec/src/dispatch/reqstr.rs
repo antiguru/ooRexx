@@ -58,7 +58,7 @@ impl Interp {
     /// is the silent wrong answer the protocol exists to prevent.**
     #[inline]
     pub(crate) fn required_string_value(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
-        self.required_string_or::<false>(value)
+        self.required_string_or(value, || false)
     }
 
     /// [`Interp::required_string_value`] for a consumer that reads the answer
@@ -67,13 +67,33 @@ impl Interp {
     /// `primitiveMakeString` makes it, where the bytes consumers refuse it.
     #[inline]
     pub(crate) fn required_string_or_nil(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
-        self.required_string_or::<true>(value)
+        self.required_string_or(value, || true)
     }
 
-    /// The required-string protocol, with `NIL` saying whether a user
-    /// `STRING` answer with no string value is `.nil` or refused.
+    /// [`Interp::required_string_value`] for the right operand of `op`: a
+    /// logical operator judges it as [`Interp::required_string_or_nil`]
+    /// does, and every other operator reads its bytes.
     #[inline]
-    fn required_string_or<const NIL: bool>(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+    pub(crate) fn required_string_operand(
+        &mut self,
+        value: ObjRef,
+        op: rexx_parse::Operator,
+    ) -> Result<ObjRef, Failure> {
+        use rexx_parse::Operator;
+        self.required_string_or(value, || {
+            matches!(op, Operator::And | Operator::Or | Operator::Xor)
+        })
+    }
+
+    /// The required-string protocol, with `nil` saying whether a user
+    /// `STRING` answer with no string value is `.nil` or refused. It is asked
+    /// only where a `STRING` method runs.
+    #[inline]
+    fn required_string_or(
+        &mut self,
+        value: ObjRef,
+        nil: impl FnOnce() -> bool,
+    ) -> Result<ObjRef, Failure> {
         // **A string and a small integer are their own string value**, and
         // that is the answer whether the latch is armed or clear:
         // `classify_string_conversion`'s first arm returns
@@ -100,7 +120,7 @@ impl Interp {
                 self.roots.activity_mut().push_temp(value);
                 return Ok(value);
             }
-            return self.required_string_dispatch(value, NIL);
+            return self.required_string_dispatch(value, nil());
         }
         debug_assert!(
             unshared!(self, self.required_string_latch_holds(value)),
