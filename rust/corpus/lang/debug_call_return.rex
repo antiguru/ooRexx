@@ -1,0 +1,10 @@
+/* An internal routine called from a line typed at a pause pauses in its own
+   clauses without a second prompt. */
+trace ?r
+x = 1
+say 'main'
+exit
+s:
+  y = 2
+  say 'in s'
+  return

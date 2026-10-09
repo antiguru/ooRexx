@@ -257,6 +257,9 @@ pub(crate) struct LeaveOrigin {
     /// This `LEAVE`/`ITERATE` clause's own line, captured the same way and at
     /// the same moment as `site` and `indent`, and for the same reason.
     clause_line: usize,
+    /// The instruction's own index, which `=` at the pause after an
+    /// `ITERATE` runs again.
+    pub(crate) index: usize,
 }
 
 /// What `eval_condition` should do with the value it just computed, beyond
@@ -577,7 +580,7 @@ impl Interp {
             InstructionKind::Command { .. } | InstructionKind::Address(_)
                 if self.blocked_command_ended() =>
             {
-                self.end_blocked_command(instruction, source)
+                self.end_blocked_command(index, instruction, source)
                     .map(ExecOutcome::Done)
             }
             // A command clause: the string is evaluated, handed to the
@@ -598,7 +601,7 @@ impl Interp {
                 );
                 match expression {
                     Some(expression) => {
-                        self.exec_command(code, instruction, source, expression, None, None)
+                        self.exec_command(code, index, instruction, source, expression, None, None)
                     }
                     None => Ok(ExecOutcome::Done(Flow::Next)),
                 }
@@ -628,6 +631,7 @@ impl Interp {
                     // and the stem it filled keeps its one line.
                     return self.exec_command(
                         code,
+                        index,
                         instruction,
                         source,
                         command,
@@ -759,6 +763,9 @@ impl Interp {
                 //      3 *-* nop
                 // ```
                 self.trace_result(self.activity.clause_state.current_value_indent, &text);
+                if self.debug_pause_instruction()? {
+                    return Ok(Flow::Goto(index));
+                }
                 // **The fragment's level, with delta 0.** Measured: a
                 // fragment's clauses print at the enclosing `INTERPRET`
                 // clause's own absolute indent plus whatever nests them
@@ -3172,6 +3179,7 @@ impl Interp {
             // `in_clause` set it before dispatching this `step`, through the
             // same `clause_line` call `SIGL` reads.
             clause_line: self.activity.clause_state.line(),
+            index,
         }
     }
 

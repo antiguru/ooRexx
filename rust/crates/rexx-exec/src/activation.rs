@@ -764,7 +764,7 @@ impl Activation {
             settings: inherited.settings,
             condition_syntax: inherited.condition_syntax,
             trace_mode: inherited.trace_mode,
-            debug: DebugState::default(),
+            debug: inherited.debug,
             address: inherited.address,
             io_configs: inherited.io_configs,
             traps: inherited.traps,
@@ -1069,6 +1069,8 @@ pub(crate) struct Inherited {
     pub(crate) cached_clock: i64,
     pub(crate) elapsed_anchor: i64,
     pub(crate) elapsed_reset: bool,
+    /// `putSettings` copies the debug flags and the skip count with the rest.
+    pub(crate) debug: DebugState,
 }
 
 /// The code body a `(program, selector)` pair denotes: `None` is

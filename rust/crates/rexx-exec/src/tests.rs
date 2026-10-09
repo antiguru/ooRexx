@@ -459,6 +459,50 @@ fn a_failing_pause_line_leaves_no_traceback_level() {
     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1\n");
 }
 
+/// An internal call inherits its caller's debug state, so the prompt the
+/// caller printed is not printed again at the callee's first pause.
+#[test]
+fn an_internal_call_does_not_prompt_again() {
+    let program = "trace ?a\nsay 'a'\ncall s\nexit\ns: nop\n  return\n";
+    let input = crate::ProgramInput::Bytes(b"\n\n\n\n\n\n".to_vec());
+    let outcome = run_program(
+        TEST_PATH,
+        program.as_bytes().to_vec(),
+        crate::Invocation::none().with_input(input),
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    assert!(
+        stderr.contains("*-*   nop"),
+        "the callee's clause was not traced: {stderr}"
+    );
+    assert_eq!(
+        stderr
+            .matches("+++ Interactive trace. \"Trace Off\"")
+            .count(),
+        1,
+        "{stderr}"
+    );
+}
+
+/// A failing command that only `TRACE ?E` traces prints the debug banner
+/// ahead of its clause, as any first traced clause does.
+#[test]
+fn a_command_traced_for_its_error_prints_the_debug_banner() {
+    let program = "trace ?e\n'false'\nsay 'a'\n";
+    let input = crate::ProgramInput::Bytes(b"\n\n".to_vec());
+    let outcome = run_program(
+        TEST_PATH,
+        program.as_bytes().to_vec(),
+        crate::Invocation::none().with_input(input),
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    let banner = stderr.find("       +++ \"").expect("no debug banner");
+    let clause = stderr
+        .find("*-* 'false'")
+        .expect("the command was not traced");
+    assert!(banner < clause, "{stderr}");
+}
+
 /// The reported span comes from one call chain, so what else the program
 /// evaluated cannot change it.
 #[test]

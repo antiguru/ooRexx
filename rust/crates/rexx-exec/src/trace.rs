@@ -207,6 +207,7 @@ impl Interp {
         text: &[u8],
         value: &[u8],
     ) {
+        self.trace_debug_source();
         let start = self.trace.len();
         push_clause(&mut self.trace, line, indent, text);
         self.route_trace_line(start);

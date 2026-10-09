@@ -1892,11 +1892,14 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
 /// while it is not yet wired in, so that the commit that wires it in cannot
 /// be the one that discovers either.
 ///
-/// * A body nothing in which can change the setting has one answer at every
-///   clause, and it is the setting this chunk is keyed under -- so no such
-///   body loses the compile-time decision it already has.
+/// * A body nothing in which can change the setting, entered outside
+///   interactive debug, has one answer at every clause, and it is the setting
+///   this chunk is keyed under -- so no such body loses the compile-time
+///   decision it already has. Under debug a line typed at a pause can change
+///   the setting, and `trace_flow::analyse` answers `Unknown`.
 /// * No clause gains an echo the body-wide bool does not already carry, in
-///   either of the two questions those bools answer.
+///   either of the two questions those bools answer. A body entered in debug
+///   is answered `Unknown` throughout and asks nothing of either.
 #[cfg(debug_assertions)]
 fn assert_analysis_only_narrows(
     plan: &Plan,
@@ -1913,17 +1916,19 @@ fn assert_analysis_only_narrows(
     let echoes_keyword = trace.results() || !never_retraces;
     debug_assert!(
         !never_retraces
+            || trace.debugging()
             || settings
                 .iter()
                 .all(|setting| *setting == super::trace_flow::Setting::Known(trace)),
-        "nothing in this body can change the TRACE setting, so every clause runs under the one \
-         the chunk is keyed to: {settings:?}"
+        "nothing in this body can change the TRACE setting and it is not entered in debug, so \
+         every clause runs under the one the chunk is keyed to: {settings:?}"
     );
     debug_assert!(
-        settings
-            .iter()
-            .all(|setting| (!setting.echoes_values() || echoes_values)
-                && (!setting.echoes_keyword() || echoes_keyword)),
+        trace.debugging()
+            || settings
+                .iter()
+                .all(|setting| (!setting.echoes_values() || echoes_values)
+                    && (!setting.echoes_keyword() || echoes_keyword)),
         "a clause's own answer asks for an echo this chunk does not emit today: {settings:?}"
     );
 }

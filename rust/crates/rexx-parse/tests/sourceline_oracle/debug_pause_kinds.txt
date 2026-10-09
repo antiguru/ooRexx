@@ -1,0 +1,38 @@
+count 37
+/* Which clauses an interactive-debug pause follows. THEN, END and SIGNAL have
+   none, INTERPRET pauses before its fragment, and CALL pauses once the callee
+   returns. Each pause types a line to the trace stream. */
+trace ?a
+say 'c1'
+numeric digits 9
+say 'c2'
+address command
+say 'c3'
+drop zz
+say 'c4'
+say 'c5'
+push 'q'
+parse pull qq
+say 'c6'
+x = 1
+say 'c7'
+nop
+do i = 1 to 1
+  say 'c8'
+end
+if x = 1 then say 'c9'
+select
+  when x = 1 then say 'c10'
+  otherwise nop
+end
+call sub
+say 'c11'
+.nil~string
+say 'c12'
+interpret "say 'c13'"
+say 'c14'
+signal lbl
+lbl:
+say 'c15'
+exit
+sub: return

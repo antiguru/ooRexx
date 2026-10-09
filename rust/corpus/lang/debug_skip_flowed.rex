@@ -1,0 +1,12 @@
+/* A negative skip count typed at a pause suppresses the echo of the clauses
+   whose pauses it counts, NUMERIC's, DROP's and a label's among them. */
+trace ?a
+say 'c1'
+numeric digits 9
+drop q
+call s
+say 'c2'
+say 'c3'
+nop
+exit
+s: return

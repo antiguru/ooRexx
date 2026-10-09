@@ -899,6 +899,7 @@ impl Interp {
                     caller.elapsed_anchor,
                     caller.flags.elapsed_reset(),
                 );
+                let debug = caller.debug;
                 let mut callee = Activation::nested(
                     callee_id,
                     program,
@@ -923,6 +924,7 @@ impl Interp {
                         cached_clock,
                         elapsed_anchor,
                         elapsed_reset,
+                        debug,
                     },
                 );
                 callee.extra = extra;

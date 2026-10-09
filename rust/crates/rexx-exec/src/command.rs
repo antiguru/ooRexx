@@ -877,9 +877,14 @@ impl Interp {
     ///
     /// Where the child's wait leaves the baton, the clause parks its activity
     /// and [`Interp::end_blocked_command`] settles it once the child is done.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the clause's own index and node beside the command's parts, each one the caller holds"
+    )]
     pub(crate) fn exec_command(
         &mut self,
         code: &Code<'_>,
+        index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
         expression: &Expr,
@@ -945,7 +950,7 @@ impl Interp {
             self.reraise_failure_levels();
             return Err(kept);
         }
-        self.settle_command(instruction, source, &command, indent, &outcome)
+        self.settle_command(index, instruction, source, &command, indent, &outcome)
             .map(ExecOutcome::Done)
     }
 
@@ -962,6 +967,7 @@ impl Interp {
     /// [`Interp::exec_command`] settles one whose child it waited for.
     pub(crate) fn end_blocked_command(
         &mut self,
+        index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
@@ -983,13 +989,14 @@ impl Interp {
             .into());
         };
         let outcome = self.command_ended(&ended);
-        self.settle_command(instruction, source, &command, indent, &outcome)
+        self.settle_command(index, instruction, source, &command, indent, &outcome)
     }
 
-    /// `RC`, `.RS`, the trace lines and any condition of a command clause
-    /// that ran `command` to `outcome`.
+    /// `RC`, `.RS`, the trace lines, any condition and the debug pause of a
+    /// command clause, instruction `index`, that ran `command` to `outcome`.
     fn settle_command(
         &mut self,
+        index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
         command: &[u8],
@@ -1089,6 +1096,9 @@ impl Interp {
                     self.raise_command_condition(condition, command, outcome.rc)?;
                 }
             }
+        }
+        if self.debug_pause_after_command(outcome.status)? {
+            return Ok(Flow::Goto(index));
         }
         Ok(Flow::Next)
     }

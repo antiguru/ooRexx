@@ -1,0 +1,15 @@
+/* RETURN has no debug pause; the CALL that ran the routine pauses in the
+   caller, under the caller's setting. */
+call r
+say 'back'
+trace ?a
+call q
+say 'end'
+exit
+::routine r
+  trace ?a
+  say 'in r'
+  return
+::routine q
+  say 'in q'
+  return

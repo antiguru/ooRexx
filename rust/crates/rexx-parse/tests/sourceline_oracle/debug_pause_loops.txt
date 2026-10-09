@@ -1,0 +1,20 @@
+count 19
+/* LEAVE pauses, ITERATE pauses once its loop has stepped and echoed the DO
+   again, WHEN in a SELECT CASE pauses whether it matched or not, and a DO
+   with no passes pauses after its header. */
+trace ?a
+do i = 1 to 3
+  if i = 2 then leave
+  if i = 1 then iterate
+  say 'never'
+end
+select case i
+  when 1 then say 'one'
+  when 2 then say 'two'
+  otherwise nop
+end
+x = 0
+do 0
+  say 'zero'
+end
+say 'done'

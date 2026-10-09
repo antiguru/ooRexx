@@ -1,0 +1,12 @@
+count 11
+/* = at a pause runs the clause again: NUMERIC, a label, an assignment, and
+   INTERPRET, whose pause comes before its fragment. */
+n = 0
+trace ?a
+numeric digits 9
+call sub
+interpret "say 'frag' n"
+drop zz
+say 'end' n
+exit
+sub: n = n + 1; return

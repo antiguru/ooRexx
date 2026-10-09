@@ -203,3 +203,22 @@ lang/parse_error_nested_requires_mnf.rex
 lang/parse_error_nested_requires_pkg.rex
 lang/parse_error_nested_requires_lp.rex
 lang/package_new_prologue_raise.rex
+
+# Task 6: an interactive-debug pause follows each instruction the oracle's
+# own execute pauses after, a traced command, a CALL once it returns, and an
+# INTERPRET before its fragment; = runs the clause again; the line is read by
+# sending LINEIN to .DebugInput.
+lang/debug_pause_flowed.rex
+lang/debug_pause_kinds.rex
+lang/debug_pause_loops.rex
+lang/debug_pause_commands.rex
+lang/debug_pause_command_error.rex
+lang/debug_call_return.rex
+lang/debug_call_pause_caller.rex
+lang/debug_reexecute.rex
+lang/debug_reexecute_command.rex
+lang/debug_skip_flowed.rex
+lang/debug_input_object.rex
+lang/debug_input_eof.rex
+lang/debug_input_nil.rex
+lang/debug_input_removed.rex
