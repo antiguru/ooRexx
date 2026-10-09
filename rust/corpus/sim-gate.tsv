@@ -217,3 +217,5 @@ corpus/lang/ticker_fires_on_its_replied_activity.rex	program	27	70	14	25	30	-	-
 corpus/lang/call_argument_concatenates_a_rexx_string_method.rex	program	0	70	0	25	25	-	-
 corpus/lang/trace_debug_ignores_trace.rex	program	0	70	0	25	30	-	-
 crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex	program	1	70	14	25	25	fail=wait:1	-
+crates/rexx-exec/tests/sim_gate/n1_halt_ready_once.rex	program	90394	70	14	30	35	halt@30000	-
+crates/rexx-exec/tests/sim_gate/timer_post_wakes_every_waiter.rex	program	4	70	14	25	30	-	-

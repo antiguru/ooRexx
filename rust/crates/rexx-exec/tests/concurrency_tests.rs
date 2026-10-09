@@ -3532,6 +3532,12 @@ mod group_runs {
             /// The calibration's bound on one run.
             const CALIBRATION_DEADLINE: Duration = Duration::from_secs(600);
 
+            /// How a gate program's assertion line starts.
+            const ASSERTION: &str = "FAIL";
+
+            /// The directory of the gate's own programs, relative to `rust/`.
+            const PROGRAMS: &str = "crates/rexx-exec/tests/sim_gate/";
+
             /// The refusals naming a broken invariant of the scheduler.
             const INVARIANT: &str = "rexx-exec: the scheduler found ";
 
@@ -3617,13 +3623,13 @@ mod group_runs {
                     self.part == "program"
                 }
 
-                /// Whether the row's knobs inject failures (`fail=wait:K`): its
-                /// program's own checks are not judged and its outcomes are not
-                /// compared with the oracle.
+                /// Whether the row's knobs inject failures or halts
+                /// (`fail=wait:K`, `halt@K`): its program's own checks are not
+                /// judged and its outcomes are not compared with the oracle.
                 fn injects(&self) -> bool {
                     self.knobs
                         .as_deref()
-                        .is_some_and(|knobs| knobs.contains("fail="))
+                        .is_some_and(|knobs| knobs.contains("fail=") || knobs.contains("halt@"))
                 }
 
                 fn seeds(&self) -> u64 {
@@ -4141,8 +4147,19 @@ mod group_runs {
                 if sim_line(&run.stderr).is_none() {
                     return red(Kind::NoReport, "no rexx-sim line ends stderr");
                 }
-                if row.program() || row.injects() || policy.starts_with("pct:") {
+                if row.injects() || policy.starts_with("pct:") {
                     return Vec::new();
+                }
+                if row.program() {
+                    return String::from_utf8_lossy(&run.stdout)
+                        .lines()
+                        .filter(|line| line.starts_with(ASSERTION))
+                        .map(|line| Red {
+                            kind: Kind::Check,
+                            test: test.clone(),
+                            line: line.to_string(),
+                        })
+                        .collect();
                 }
                 let mut known: BTreeSet<String> = seen
                     .unwrap_or_default()
@@ -4265,10 +4282,25 @@ mod group_runs {
                     .join("run")
             }
 
+            /// The scratch directory of `unit` below the run `name`, named by
+            /// the unit alone: a program may read its own path, so a replay
+            /// runs where the gate ran.
+            fn unit_dir(name: &str, unit: &Unit) -> PathBuf {
+                PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                    .join(name)
+                    .join(format!("{:016x}", fnv(unit.name().as_bytes())))
+                    .join("run")
+            }
+
+            /// Removes the item directory a [`scratch`] directory `dir` is in,
+            /// and the run's directory once it is empty.
             fn remove(dir: &Path) {
-                if dir.exists() {
-                    std::fs::remove_dir_all(dir).expect("cannot remove a run");
+                let item = dir.parent().expect("an item directory");
+                if item.exists() {
+                    std::fs::remove_dir_all(item).expect("cannot remove a run");
                 }
+                // Fails while another item of the run is still there.
+                let _ = std::fs::remove_dir(item.parent().expect("a run directory"));
             }
 
             /// What one unit found.
@@ -4359,8 +4391,8 @@ mod group_runs {
                 let units = units(&rows);
                 assert!(!units.is_empty(), "the gate has no run in this build");
                 let start = std::time::Instant::now();
-                let found = in_jobs(&units, |at, unit| {
-                    run_unit(unit, &derived, &scratch("sim-gate", at))
+                let found = in_jobs(&units, |_, unit| {
+                    run_unit(unit, &derived, &unit_dir("sim-gate", unit))
                 });
                 let wall = start.elapsed();
                 let mut report = format!(
@@ -4471,9 +4503,9 @@ mod group_runs {
                     })
                     .collect();
                 assert!(!sample.is_empty(), "no row has debug seeds");
-                let pairs = in_jobs(&sample, |at, unit| {
-                    [0, 1].map(|again| {
-                        let dir = scratch("sim-self", at * 2 + again);
+                let pairs = in_jobs(&sample, |_, unit| {
+                    [0, 1].map(|_| {
+                        let dir = unit_dir("sim-self", unit);
                         let ran =
                             run_here(&unit.row, &derived, &dir, &unit.mode(), unit.row.deadline());
                         remove(&dir);
@@ -4620,11 +4652,13 @@ mod group_runs {
                         rows.push(blank(&format!("corpus/{line}"), "program", None));
                     }
                 }
-                rows.push(blank(
-                    "crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex",
-                    "program",
-                    Some("fail=wait:1"),
-                ));
+                for (program, knobs) in [
+                    ("m11_stale_sleeper.rex", Some("fail=wait:1")),
+                    ("n1_halt_ready_once.rex", Some("halt@30000")),
+                    ("timer_post_wakes_every_waiter.rex", None),
+                ] {
+                    rows.push(blank(&format!("{PROGRAMS}{program}"), "program", knobs));
+                }
                 let lines = in_jobs(&rows, |at, row| {
                     let mut row = row.clone();
                     let mut out = String::new();
@@ -4739,15 +4773,18 @@ mod group_runs {
 
             /// Every row of the table is a part the gate names: each group
             /// file of the derived list whole and derived, each program of
-            /// `corpus/phase-6.txt`, and the rows injecting failures; a rest
-            /// or single row names a group with a whole row. Every other row has an
+            /// `corpus/phase-6.txt`, and the gate's own programs; a rest or
+            /// single row names a group with a whole row. Every other row has an
             /// oracle set, and every exempt row names a table row.
             #[test]
             fn the_table_holds_the_parts_the_spec_names() {
                 let rows = read_table();
                 let have: BTreeSet<(String, String)> = rows
                     .iter()
-                    .filter(|row| !matches!(row.part.as_str(), "rest" | "single") && !row.injects())
+                    .filter(|row| {
+                        !matches!(row.part.as_str(), "rest" | "single")
+                            && !row.group.starts_with(PROGRAMS)
+                    })
                     .map(|row| (row.group.clone(), row.part.clone()))
                     .collect();
                 let mut want = BTreeSet::new();
