@@ -754,3 +754,20 @@ At `004312db8`: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 8 -
 --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4 --workspace --no-fail-fast` exit 0
 (3073 passed, 4 ignored); `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test corpus
 --test ir_recorded_oracle` exit 0 (50 passed, 1 ignored).
+
+## Task 7
+
+Commit `3b9a80364`. Per-task check at that commit: `cargo fmt --all` clean; `memcap 8G cargo
+clippy -j 4 --workspace --all-targets -- -D warnings` exit 0; `memcap 8G cargo test -j 4
+--workspace --no-fail-fast` exit 0 (3079 passed, 0 failed); `REXX_CORPUS_GATE=1 memcap 8G cargo
+test -j 4 -p rexx-exec --test corpus --test ir_recorded_oracle` exit 0 (corpus 29 passed, 1
+ignored; ir_recorded_oracle 21 passed). `git grep -n '"Phase 5"' -- rust/crates` prints only
+`closed_phases.rs`'s `CLOSED`.
+
+The disposition test failed first at `6860d4f80` with no table, listing 25 ownerless
+constructors and two ownerless `Loud` struct literals; it passes at `3b9a80364`, and the table
+without its `receiver_class` row fails naming that constructor. `no_owner_table_names_a_closed_phase`
+failed on the `Literals` rows and a `bif_assertions.rs` report string before they were re-homed.
+Dispositions, the `Literals` probes and the receiver split's probes are in
+`.superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md`. No performance run (refusal paths and
+the `owed` owner type only).
