@@ -48,6 +48,13 @@ pub(crate) enum ExecOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ActivityId(u32);
 
+impl ActivityId {
+    /// The handle's offset in the activity table.
+    pub(crate) fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 #[cfg(test)]
 impl ActivityId {
     pub(crate) fn test(index: u32) -> ActivityId {
@@ -247,7 +254,7 @@ pub(crate) struct Activities {
     idle: Vec<Option<Box<Idle>>>,
     free: Vec<u32>,
     /// Woken and spawned activities, in arrival order.
-    ready: VecDeque<ActivityId>,
+    pub(crate) ready: VecDeque<ActivityId>,
     /// Sleeping activities, earliest deadline first, then in the order they
     /// parked.
     sleepers: BinaryHeap<Reverse<(Instant, u64, ActivityId)>>,
@@ -305,6 +312,9 @@ pub(crate) struct Activities {
     pub(crate) semaphores: crate::semaphores::Semaphores,
     /// The switches from one activity to another.
     switches: u64,
+    /// Whether main's program has ended, so main waits for the others as an
+    /// activity that has finished.
+    main_finished: bool,
 }
 
 /// The oracle's `msecInADay`: a timer's wait is whole days of this, then a
@@ -356,12 +366,23 @@ impl Activities {
             guards: crate::guards::GuardTable::default(),
             semaphores: crate::semaphores::Semaphores::default(),
             switches: 0,
+            main_finished: false,
         }
     }
 
     /// The switches from one activity to another so far.
     pub(crate) fn switches(&self) -> u64 {
         self.switches
+    }
+
+    /// The handles the table has made, free ones included.
+    pub(crate) fn handles(&self) -> usize {
+        self.idle.len()
+    }
+
+    /// The running activity's offset in the table.
+    pub(crate) fn running_index(&self) -> usize {
+        self.running.index()
     }
 
     /// Puts `activity` at the back of the ready queue unless it is ready
@@ -517,6 +538,9 @@ impl Scheduler for Interp {
         };
         table.idle[id.0 as usize] = Some(idle);
         table.ready.push_back(id);
+        if self.sim.is_some() {
+            self.sim_spawned(id.index());
+        }
         id
     }
 
@@ -957,8 +981,12 @@ impl Interp {
         let Some(id) = self.activities.message_ids.remove(&message) else {
             return;
         };
+        let mark = self.activities.ready.len();
         for waiter in self.activities.waiters.remove(&id).unwrap_or_default() {
             self.unpark(waiter);
+        }
+        if self.sim.is_some() {
+            self.sim_order_event(mark);
         }
     }
 
@@ -994,6 +1022,110 @@ impl Interp {
         if self.stress_collect {
             self.collect_now();
         }
+        if self.sim.is_some() {
+            self.sim_check_switch();
+        }
+    }
+
+    /// The scheduler's invariants (spec 2026-10-07 section 4), which the
+    /// simulation mode checks at every switch: this thread holds the baton;
+    /// each activity is running, ready, parked or finished, and one only; a
+    /// ready activity holds no park reason and a parked one has a wake
+    /// source; the guard queues agree with the waits recorded.
+    pub(crate) fn check_invariants(&self) -> Result<(), Loud> {
+        let fail = |what| Err(Loud::scheduler_inconsistency(what));
+        #[cfg(test)]
+        let held = self.baton.held_here() && !BATON_ELSEWHERE.with(std::cell::Cell::get);
+        #[cfg(not(test))]
+        let held = self.baton.held_here();
+        if !held {
+            return fail("a switch on a thread not holding the baton");
+        }
+        let table = &self.activities;
+        let running = table.running;
+        let filed =
+            |activity: ActivityId| matches!(table.idle.get(activity.index()), Some(Some(_)));
+        if filed(running) {
+            return fail("a running activity filed as idle");
+        }
+        if let Some(what) = table
+            .guards
+            .inconsistency(|activity| activity == running || filed(activity))
+        {
+            return fail(what);
+        }
+        let readied: Vec<ActivityId> = (table.ready.iter().copied())
+            .chain(table.set_aside.iter().map(|(activity, _)| *activity))
+            .collect();
+        for (at, &activity) in readied.iter().enumerate() {
+            if activity == running {
+                return fail("an activity both running and ready");
+            }
+            if readied[..at].contains(&activity) {
+                return fail("an activity ready twice");
+            }
+            if !filed(activity) {
+                return fail("a ready handle naming no idle activity");
+            }
+            if self.holds_park_reason(activity) {
+                return fail("a ready activity holding a park reason");
+            }
+        }
+        for (index, slot) in table.idle.iter().enumerate() {
+            let activity = ActivityId(u32::try_from(index).expect("handles fit u32"));
+            let free = table.free.contains(&activity.0);
+            match slot {
+                _ if activity == running => {
+                    if free {
+                        return fail("a running activity's handle free");
+                    }
+                }
+                None if !free => return fail("a handle neither free nor filed"),
+                None => {}
+                Some(_) if free => return fail("a free handle naming an activity"),
+                Some(idle) => {
+                    let finished =
+                        idle.activity.root_end.is_some() || activity == MAIN && table.main_finished;
+                    if !readied.contains(&activity)
+                        && !finished
+                        && !self.has_wake_source(activity, &idle.activity)
+                    {
+                        return fail("a parked activity with no wake source");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `activity`, not running, is still recorded as waiting: a
+    /// sleeper, a message's waiter, a guard's waiter or a `GUARD WHEN`.
+    fn holds_park_reason(&self, activity: ActivityId) -> bool {
+        let table = &self.activities;
+        table
+            .sleepers
+            .iter()
+            .any(|Reverse((_, _, sleeper))| *sleeper == activity)
+            || table
+                .waiters
+                .values()
+                .any(|waiters| waiters.contains(&activity))
+            || table.guards.waiting(activity).is_some()
+            || matches!(
+                table.idle.get(activity.index()),
+                Some(Some(idle)) if idle.activity.when_parked
+            )
+    }
+
+    /// Whether something can wake `activity`, parked with `record`: a
+    /// deadline, a post (a message's completion, a semaphore's post or
+    /// release, a native call's or a command's end), a guard (its release,
+    /// a store a `GUARD WHEN` watches), or a halt, which ends each of these.
+    fn has_wake_source(&self, activity: ActivityId, record: &Activity) -> bool {
+        self.holds_park_reason(activity)
+            || self.activities.semaphores.queues(activity)
+            || record.native_call.is_some()
+            || record.blocked.is_some()
     }
 
     /// Runs other activities until the running one, parked, is woken. The
@@ -1171,6 +1303,16 @@ impl Interp {
     /// If `cancelled` does not hold one flag per waiter.
     pub(crate) fn post_timer(&mut self, id: TimerId, cancelled: &[bool]) {
         let now = self.now();
+        let mark = self.activities.ready.len();
+        self.post_timer_at(id, cancelled, now);
+        if self.sim.is_some() {
+            self.sim_order_event(mark);
+        }
+    }
+
+    /// [`Interp::post_timer`] at `now`, before the order of the waiters it
+    /// readies is settled.
+    fn post_timer_at(&mut self, id: TimerId, cancelled: &[bool], now: Instant) {
         let table = &mut self.activities;
         let Some(timer) = table.timers.get_mut(&id) else {
             return;
@@ -1480,6 +1622,7 @@ impl Interp {
     /// `runtime/InterpreterInstance.cpp:562`), until the run's deadline or
     /// a signal's halt wakes it.
     pub(crate) fn run_started_activities(&mut self) -> Result<(), Failure> {
+        self.activities.main_finished = true;
         self.cancel_wait();
         loop {
             self.run_others(false)?;
@@ -1627,7 +1770,12 @@ impl Interp {
             if !self.activities.sleepers.is_empty() {
                 self.wake_due_sleepers();
             }
-            let Some(ready) = self.activities.ready.pop_front() else {
+            let next = if self.sim.is_some() {
+                self.sim_pick()
+            } else {
+                self.activities.ready.pop_front()
+            };
+            let Some(ready) = next else {
                 let Some(Reverse((due, _, _))) = self.activities.sleepers.peek().copied() else {
                     if self.activities.in_flight == self.activities.runs_below {
                         return Ok(None);
@@ -1987,8 +2135,8 @@ impl Interp {
 
     /// Switches activities as `mode` says, and never on the timer's word.
     pub(crate) fn set_switch_mode(&mut self, mode: SwitchMode) {
-        if let SwitchMode::Sim(config) = mode {
-            self.start_sim(config);
+        if let SwitchMode::Sim(config) = &mode {
+            self.start_sim(config.clone());
         }
         self.switch = Some(Switch { mode, clauses: 0 });
         self.timer.disarm();
@@ -2026,13 +2174,12 @@ impl Interp {
         if let Some(switch) = &mut self.switch {
             self.clause_countdown = 1;
             switch.clauses += 1;
-            let due = match switch.mode {
+            let due = match &switch.mode {
                 SwitchMode::EveryOpportunity => true,
-                SwitchMode::AtClause(clause) => switch.clauses == clause,
+                SwitchMode::AtClause(clause) => switch.clauses == *clause,
                 SwitchMode::Sim(_) => {
                     let clauses = switch.clauses;
-                    self.sim_clause(clauses)?;
-                    false
+                    self.sim_clause(clauses)?
                 }
             };
             if due {
@@ -2189,6 +2336,16 @@ impl Interp {
     /// `SysSleep`, a `GUARD WHEN`, a semaphore wait or a command's wait is
     /// woken to take it (rulings P59, P60), in handle order.
     pub(crate) fn halt_all(&mut self) {
+        let mark = self.activities.ready.len();
+        self.halt_each();
+        if self.sim.is_some() {
+            self.sim_order_event(mark);
+        }
+    }
+
+    /// [`Interp::halt_all`] before the order of the activities it readies is
+    /// settled.
+    fn halt_each(&mut self) {
         let running = self.activities.running;
         for index in 0..self.activities.idle.len() {
             let activity = ActivityId(u32::try_from(index).expect("handles fit u32"));
@@ -2362,6 +2519,92 @@ pub(crate) fn native_exits() -> u64 {
 pub(crate) enum Scripted {
     /// `Park` for a sleep already due, without running the instruction.
     Park,
+}
+
+/// A state the next switch in the simulation mode breaks before it checks
+/// the invariants, where the run has what it needs.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Corruption {
+    /// The first ready activity queued again.
+    ReadyTwice,
+    /// The running activity queued.
+    RunningReady,
+    /// The first ready activity recorded as a message's waiter.
+    ReadyParked,
+    /// A sleeper taken off the sleepers, readied by nothing.
+    NoWakeSource,
+    /// A guard waiter's wait record dropped.
+    GuardQueue,
+    /// The baton read as held by another thread.
+    Baton,
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static CORRUPTION: std::cell::Cell<Option<Corruption>> =
+        const { std::cell::Cell::new(None) };
+    static BATON_ELSEWHERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+impl Interp {
+    /// Applies the [`Corruption`] this thread asked for, once the run has a
+    /// state it applies to.
+    pub(crate) fn sim_corrupt(&mut self) {
+        let Some(corruption) = CORRUPTION.with(std::cell::Cell::take) else {
+            return;
+        };
+        let table = &mut self.activities;
+        let running = table.running;
+        let first = table.ready.front().copied();
+        let applied = match (corruption, first) {
+            (Corruption::ReadyTwice, Some(first)) => {
+                table.ready.push_back(first);
+                true
+            }
+            (Corruption::RunningReady, _) => {
+                table.ready.push_back(running);
+                true
+            }
+            (Corruption::ReadyParked, Some(first)) => {
+                table
+                    .waiters
+                    .entry(MessageId(u32::MAX))
+                    .or_default()
+                    .push(first);
+                true
+            }
+            (Corruption::NoWakeSource, _) => {
+                let sleeper = table
+                    .sleepers
+                    .iter()
+                    .map(|Reverse((_, _, sleeper))| *sleeper)
+                    .find(|sleeper| *sleeper != running);
+                if let Some(sleeper) = sleeper {
+                    table
+                        .sleepers
+                        .retain(|Reverse((_, _, other))| *other != sleeper);
+                }
+                sleeper.is_some()
+            }
+            (Corruption::GuardQueue, _) => match table.guards.first_queued() {
+                Some(waiter) => {
+                    table.guards.woken(waiter);
+                    true
+                }
+                None => false,
+            },
+            (Corruption::Baton, _) => {
+                BATON_ELSEWHERE.with(|elsewhere| elsewhere.set(true));
+                true
+            }
+            (Corruption::ReadyTwice | Corruption::ReadyParked, None) => false,
+        };
+        if !applied {
+            CORRUPTION.with(|asked| asked.set(Some(corruption)));
+        }
+    }
 }
 
 #[cfg(test)]

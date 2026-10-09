@@ -101,6 +101,9 @@ fn a_config_reads_back_what_it_prints() {
         "sim:7,fifo",
         "sim:18446744073709551615,fifo,gc=0.25,halt@3,fail=wait:2,block=0.5,clock=midnight",
         "sim:0,fifo,clock=real",
+        "sim:7,pre:2,k=40",
+        "sim:7,uniform:0.2,order=fifo",
+        "sim:7,pct:3,k=40,gc=0.5,floor=1000,trace=/tmp/x",
     ] {
         let config = SimConfig::parse(text).expect("a sim spec");
         assert_eq!(config.to_string(), text);
@@ -131,6 +134,14 @@ fn a_config_reads_back_what_it_prints() {
         "sim:1,block=NaN",
         "sim:1,block=1e30",
         "sim:1,pre:1",
+        "sim:1,pre:0,k=3",
+        "sim:1,pct:1",
+        "sim:1,pct:1,k=0",
+        "sim:1,uniform:2",
+        "sim:1,k=3",
+        "sim:1,floor=0",
+        "sim:1,order=one",
+        "sim:replay=/nonexistent/trace",
         "simx",
     ] {
         assert!(SimConfig::parse(wrong).is_err(), "{wrong} parsed");
@@ -343,4 +354,184 @@ fn a_command_only_another_activity_can_end_is_refused_after_its_bound() {
         "took {took:?}"
     );
     assert!(took < std::time::Duration::from_secs(5), "took {took:?}");
+}
+
+/// Main prints two lines while a started activity waits to print one: with
+/// no preemption the started line comes last, and one preemption at a
+/// contended step drawn among the first three puts it earlier.
+const TWO_ACTIVITIES: &str = "t = .t~new~start('run')\nsay 'm1'\nsay 'm2'\nt~wait\n\
+     ::class t\n::method run\n  say 't'\n";
+
+#[test]
+fn pre_1_reaches_both_interleavings_over_a_seed_range() {
+    let unpreempted = run_in(TWO_ACTIVITIES, Some(sim("sim:1")));
+    assert_eq!(stdout(&unpreempted), "m1\nm2\nt\n");
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 1..=20 {
+        let outcome = run_in(TWO_ACTIVITIES, Some(sim(&format!("sim:{seed},pre:1,k=3"))));
+        assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+        seen.insert(stdout(&outcome));
+    }
+    assert!(seen.contains("t\nm1\nm2\n"), "{seen:?}");
+    assert!(seen.contains("m1\nm2\nt\n"), "{seen:?}");
+}
+
+/// A started activity polls a flag with no park point in its loop while the
+/// activity that sets it is ready.
+const POLLING: &str = "f = .flag~new\na = f~start('waitForFlag')\nf~start('setFlag')\n\
+     say a~result\n::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
+     done = 0\n::method waitForFlag unguarded\n  do while \\self~done\n  end\n  \
+     return 'A ended'\n::method setFlag unguarded\n  self~done = 1\n";
+
+/// No policy below preempts the poller in time, so each run ends because
+/// the fairness floor forced a preemption, after at least that many steps.
+#[test]
+fn a_polling_activity_ends_by_the_floor_under_every_policy() {
+    for policy in ["fifo", "pre:1,k=1", "uniform:0", "pct:1,k=1"] {
+        let spec = format!("sim:5,{policy}");
+        let outcome = run_in(POLLING, Some(sim(&spec)));
+        assert_eq!(outcome.exit_code, 0, "{spec}: {}", stderr(&outcome));
+        assert_eq!(stdout(&outcome), "A ended\n", "{spec}");
+        let report = outcome.sim.as_ref().expect("a report");
+        assert!(report.steps >= super::FAIRNESS_FLOOR, "{spec}: {report:?}");
+    }
+    let small = run_in(POLLING, Some(sim("sim:5,floor=50")));
+    assert_eq!(stdout(&small), "A ended\n");
+    let report = small.sim.as_ref().expect("a report");
+    assert!(report.steps < 1000, "{report:?}");
+}
+
+/// Waiters one completion wakes, two activities preempted at random and
+/// collections at random: every decision kind, written and replayed.
+const DECIDING: &str = "m = .message~new('abc', 'length')\n\
+     a = .w~new~start('WAITON', m, 'a')\nb = .w~new~start('WAITON', m, 'b')\n\
+     c = .w~new~start('WAITON', m, 'c')\nd = .w~new~start('SEND', m)\n\
+     do i = 1 to 50\n  s = 'a long string' i\nend\n\
+     say a~result b~result c~result d~result\n\
+     ::class w\n::method waiton\n  use arg m, name\n  say name 'waits'\n  r = m~result\n  \
+     say name 'woke'\n  do i = 1 to 20\n    s = 'another long string' i\n  end\n  return r\n\
+     ::method send\n  use arg m\n  m~send\n  say 'sent'\n  return 'd'\n";
+
+#[test]
+fn a_recorded_trace_replays_to_the_same_output_and_hash() {
+    let dir = std::env::temp_dir().join(format!("rexx-sim-trace-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let file = dir.join("trace.txt");
+    let spec = format!("sim:3,uniform:0.2,gc=0.05,trace={}", file.display());
+    let recorded = run_in(DECIDING, Some(sim(&spec)));
+    assert_eq!(recorded.exit_code, 0, "{}", stderr(&recorded));
+    let written = std::fs::read_to_string(&file).expect("the trace written");
+    let mut lines = written.lines();
+    assert_eq!(lines.next(), Some("sim:3,uniform:0.2,gc=0.05"));
+    for kind in ["preempt ", "pick ", "collect "] {
+        assert!(written.contains(kind), "no {kind}in {written}");
+    }
+    let replayed = run_in(
+        DECIDING,
+        Some(sim(&format!("sim:replay={}", file.display()))),
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        (replayed.exit_code, stdout(&replayed), stderr(&replayed)),
+        (recorded.exit_code, stdout(&recorded), stderr(&recorded))
+    );
+    assert_eq!(recorded.collections, replayed.collections);
+    let hash = |outcome: &Outcome| outcome.sim.as_ref().and_then(|sim| sim.trace_hash);
+    assert!(hash(&recorded).is_some());
+    assert_eq!(hash(&recorded), hash(&replayed));
+    let other = run_in(DECIDING, Some(sim("sim:4,uniform:0.2,gc=0.05")));
+    assert_ne!(hash(&recorded), hash(&other));
+}
+
+/// Runs `source` under `spec` with `corruption` asked of the first switch
+/// that has what it breaks.
+fn corrupted(
+    source: &'static str,
+    spec: &str,
+    corruption: Option<crate::scheduler::Corruption>,
+) -> Outcome {
+    let invocation = Invocation::none()
+        .with_deadline(RUN_DEADLINE)
+        .with_switch_mode(sim(spec));
+    crate::on_interpreter_thread(move || {
+        crate::scheduler::CORRUPTION.with(|asked| asked.set(corruption));
+        crate::execute_on(
+            "/tmp/sim.rex",
+            source.as_bytes().to_vec(),
+            false,
+            invocation,
+            Some(crate::INTERPRETER_STACK_BYTES),
+        )
+    })
+}
+
+/// Two started activities, so a switch to one leaves the other ready.
+const THREE_ACTIVITIES: &str = "a = .t~new~start('run', 'a')\nb = .t~new~start('run', 'b')\n\
+     say a~result b~result\n::class t\n::method run\n  use arg tag\n  do i = 1 to 3\n  end\n  \
+     return tag\n";
+
+/// Main asleep while a started activity runs.
+const SLEEPING: &str = "t = .t~new~start('nap')\ncall SysSleep 0.5\nsay t~result\n\
+     ::class t\n::method nap\n  call SysSleep 1\n  return 'woke'\n";
+
+/// Two activities in one guarded method of one object, the first asleep
+/// holding its guard and the second queued for it.
+const GUARDED: &str = "o = .g~new\na = o~start('hold', 'a')\nb = o~start('hold', 'b')\n\
+     say a~result b~result\n::class g\n::method hold\n  use arg tag\n  call SysSleep 1\n  \
+     return tag\n";
+
+/// Each invariant fires on the state that breaks it, through the refusal
+/// the next boundary raises; the same runs unbroken end normally.
+#[test]
+fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
+    use crate::scheduler::Corruption;
+    for (source, corruption, expected, answer) in [
+        (
+            THREE_ACTIVITIES,
+            Corruption::ReadyTwice,
+            "an activity ready twice",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::RunningReady,
+            "an activity both running and ready",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::ReadyParked,
+            "a ready activity holding a park reason",
+            "a b\n",
+        ),
+        (
+            SLEEPING,
+            Corruption::NoWakeSource,
+            "a parked activity with no wake source",
+            "woke\n",
+        ),
+        (
+            GUARDED,
+            Corruption::GuardQueue,
+            "a guard waiter with no wait recorded for its guard",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::Baton,
+            "a switch on a thread not holding the baton",
+            "a b\n",
+        ),
+    ] {
+        let sound = corrupted(source, "sim:1", None);
+        assert_eq!(sound.exit_code, 0, "{corruption:?}: {}", stderr(&sound));
+        assert_eq!(stdout(&sound), answer, "{corruption:?}");
+        let broken = corrupted(source, "sim:1", Some(corruption));
+        assert_eq!(broken.exit_code, 120, "{corruption:?}: {}", stderr(&broken));
+        assert!(
+            stderr(&broken).contains(&format!("rexx-exec: the scheduler found {expected}\n")),
+            "{corruption:?}: {}",
+            stderr(&broken)
+        );
+    }
 }

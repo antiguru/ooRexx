@@ -21,9 +21,18 @@
 //! sim:7,block=5          a command or native call on the baton is refused after 5 s
 //! sim:7,clock=midnight   virtual time starts seconds before a local midnight
 //! sim:7,clock=real       virtual time starts at the wall clock
+//! sim:7,pre:2,k=40       two preemptions among the first 40 contended steps
+//! sim:7,uniform:0.2      a preemption at each contended step with probability 0.2
+//! sim:7,pct:3,k=40       PCT of depth 3 over the first 40 contended steps
+//! sim:7,order=fifo       the activities one event readies run in the order readied
+//! sim:7,floor=1000       a preemption forced after 1000 contended steps
+//! sim:7,trace=FILE       the decision trace written to FILE
+//! sim:replay=FILE        the decisions FILE holds taken in place of drawn
 //! ```
 
 use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::error::Failure;
@@ -42,20 +51,65 @@ const EPOCH_SECONDS: u64 = 1_767_225_600;
 const DAY_SECONDS: u64 = 86_400;
 
 /// How a run in the simulation mode is driven: its seed, its policy and its
-/// knobs.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// knobs, and where its decision trace is written or read from.
+#[derive(Clone, Debug, PartialEq)]
 pub struct SimConfig {
     pub seed: u64,
     pub policy: Policy,
+    pub order: Order,
     pub knobs: Knobs,
+    /// The file the run's decision trace is written to.
+    pub trace: Option<PathBuf>,
+    /// The trace the run takes its decisions from in place of drawing them.
+    pub replay: Option<Replay>,
 }
 
-/// When the running activity is preempted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// When the running activity is preempted at a contended step, a clause
+/// boundary where another activity is ready. Every policy also preempts
+/// where the fairness floor forces it.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Policy {
-    /// Never: an activity runs until it parks or ends, and the ready queue
-    /// is first in, first out.
+    /// Only where the floor forces it.
     Fifo,
+    /// At `d` contended steps drawn uniformly among the first `k`.
+    Pre { d: u32, k: u64 },
+    /// At each contended step with probability `p`.
+    Uniform { p: f64 },
+    /// PCT (spec ruling R5): seeded priorities at spawn, `d - 1` change
+    /// points drawn among the first `k` contended steps that lower the
+    /// running activity's priority, and the ready activity of the highest
+    /// priority runs. The floor lowers the activity it preempts below every
+    /// other.
+    Pct { d: u32, k: u64 },
+}
+
+/// The order of the activities one event readied: a post, a release, a
+/// halt or a timer's end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Order {
+    /// The order they were readied in.
+    Fifo,
+    /// A seeded shuffle.
+    OneEvent,
+}
+
+/// One decision a run took, in the order it took them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decision {
+    /// A preemption at this contended step, counting from 1.
+    Preempt(u64),
+    /// An index into the ready queue: a step of a one-event shuffle, or the
+    /// activity a priority pick took.
+    Pick(u64),
+    /// A collection at this allocation `gc=` drew for, counting from 1.
+    Collect(u64),
+}
+
+/// A trace read back for a replay.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Replay {
+    pub path: PathBuf,
+    pub decisions: Arc<[Decision]>,
 }
 
 /// The simulation's knobs, each off by default.
@@ -73,6 +127,8 @@ pub struct Knobs {
     /// The seconds of real time a command or a native call may take on the
     /// baton, from [`BLOCK_FLOOR`] to [`BLOCK_LIMIT`].
     pub block: f64,
+    /// The contended steps an activity runs before a preemption is forced.
+    pub floor: u64,
 }
 
 /// The smallest `block=`: a millisecond.
@@ -83,6 +139,10 @@ const BLOCK_SECONDS: f64 = 2.0;
 
 /// The largest `block=`: a day.
 const BLOCK_LIMIT: f64 = 86_400.0;
+
+/// [`Knobs::floor`] where `floor=` does not set it: the oracle's 24 ms slice
+/// (`SLICE_LENGTH`) at its measured 58 ns per clause.
+pub(crate) const FAIRNESS_FLOOR: u64 = 24_000_000 / 58;
 
 /// Where virtual time starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,25 +162,32 @@ pub struct SimReport {
     pub policy: Policy,
     /// The clause boundaries counted.
     pub steps: u64,
+    /// The contended steps among them.
+    pub contended: u64,
     /// The switches from one activity to another.
     pub switches: u64,
+    /// [`trace_hash`] of the decisions the run took.
     pub trace_hash: Option<u64>,
 }
 
 impl SimConfig {
-    /// Reads `sim` or `sim:SEED[,item...]`; `sim` alone takes its seed from
-    /// the clock.
+    /// Reads `sim`, `sim:SEED[,item...]` or `sim:replay=FILE[,trace=FILE]`;
+    /// `sim` alone takes its seed from the clock. A path holds no comma.
     pub fn parse(text: &str) -> Result<SimConfig, String> {
         let mut config = SimConfig {
             seed: 0,
             policy: Policy::Fifo,
+            order: Order::OneEvent,
             knobs: Knobs {
                 gc: None,
                 halt_at: None,
                 fail_wait: None,
                 clock: ClockOrigin::Seeded,
                 block: BLOCK_SECONDS,
+                floor: FAIRNESS_FLOOR,
             },
+            trace: None,
+            replay: None,
         };
         if text == "sim" {
             config.seed = clock_seed();
@@ -130,25 +197,45 @@ impl SimConfig {
             return Err(format!("`{text}` is not `sim` or `sim:SEED[,...]`"));
         };
         let mut items = rest.split(',');
-        let seed = items.next().unwrap_or_default();
-        config.seed = seed
+        let first = items.next().unwrap_or_default();
+        if let Some(path) = first.strip_prefix("replay=") {
+            config = read_replay(Path::new(path))?;
+            for item in items {
+                let Some(path) = item.strip_prefix("trace=") else {
+                    return Err(format!("`{item}`: a replay takes `trace=FILE` alone"));
+                };
+                config.trace = Some(PathBuf::from(path));
+            }
+            return Ok(config);
+        }
+        config.seed = first
             .parse()
-            .map_err(|_| format!("`{seed}` is not a seed: a whole number below 2**64"))?;
-        for item in items {
+            .map_err(|_| format!("`{first}` is not a seed: a whole number below 2**64"))?;
+        let mut items = items.peekable();
+        while let Some(item) = items.next() {
             let knobs = &mut config.knobs;
             if item == "fifo" {
                 config.policy = Policy::Fifo;
+            } else if let Some(d) = item.strip_prefix("pre:") {
+                let (d, k) = depth_and_steps(item, d, items.next())?;
+                config.policy = Policy::Pre { d, k };
+            } else if let Some(d) = item.strip_prefix("pct:") {
+                let (d, k) = depth_and_steps(item, d, items.next())?;
+                config.policy = Policy::Pct { d, k };
+            } else if let Some(p) = item.strip_prefix("uniform:") {
+                config.policy = Policy::Uniform {
+                    p: probability(item, p)?,
+                };
+            } else if item == "order=fifo" {
+                config.order = Order::Fifo;
             } else if let Some(q) = item.strip_prefix("gc=") {
-                let q: f64 = q
-                    .parse()
-                    .ok()
-                    .filter(|q| (0.0..=1.0).contains(q))
-                    .ok_or_else(|| format!("`{item}`: gc is a probability from 0 to 1"))?;
-                knobs.gc = Some(q);
+                knobs.gc = Some(probability(item, q)?);
             } else if let Some(k) = item.strip_prefix("halt@") {
                 knobs.halt_at = Some(count(item, k)?);
             } else if let Some(k) = item.strip_prefix("fail=wait:") {
                 knobs.fail_wait = Some(count(item, k)?);
+            } else if let Some(f) = item.strip_prefix("floor=") {
+                knobs.floor = count(item, f)?;
             } else if let Some(seconds) = item.strip_prefix("block=") {
                 knobs.block = seconds
                     .parse()
@@ -164,10 +251,13 @@ impl SimConfig {
                 knobs.clock = ClockOrigin::Midnight;
             } else if item == "clock=real" {
                 knobs.clock = ClockOrigin::Real;
+            } else if let Some(path) = item.strip_prefix("trace=") {
+                config.trace = Some(PathBuf::from(path));
             } else {
                 return Err(format!(
-                    "`{item}` is not a policy (`fifo`) or a knob (`gc=Q`, `halt@K`, \
-                     `fail=wait:K`, `block=S`, `clock=midnight`, `clock=real`)"
+                    "`{item}` is not a policy (`fifo`, `pre:D,k=N`, `uniform:P`, `pct:D,k=N`) \
+                     or a knob (`order=fifo`, `gc=Q`, `halt@K`, `fail=wait:K`, `block=S`, \
+                     `floor=F`, `clock=midnight`, `clock=real`, `trace=FILE`)"
                 ));
             }
         }
@@ -175,8 +265,9 @@ impl SimConfig {
     }
 
     /// The configuration a child `rexx` runs under: `seed`, this policy, and
-    /// the knobs that are not scripted against this run's own clauses.
-    fn child(self, seed: u64) -> SimConfig {
+    /// the knobs that are not scripted against this run's own clauses or
+    /// files.
+    fn child(&self, seed: u64) -> SimConfig {
         SimConfig {
             seed,
             knobs: Knobs {
@@ -184,12 +275,45 @@ impl SimConfig {
                 fail_wait: None,
                 ..self.knobs
             },
-            ..self
+            trace: None,
+            replay: None,
+            ..self.clone()
+        }
+    }
+
+    /// This configuration without its trace file and replay: the first line
+    /// of a trace file.
+    fn header(&self) -> SimConfig {
+        SimConfig {
+            trace: None,
+            replay: None,
+            ..self.clone()
         }
     }
 }
 
-/// `K` of `halt@K` or `fail=wait:K`, counting from 1.
+/// `D` and the `k=N` item after it, of `pre:D,k=N` or `pct:D,k=N`.
+fn depth_and_steps(item: &str, d: &str, next: Option<&str>) -> Result<(u32, u64), String> {
+    let d = d
+        .parse()
+        .ok()
+        .filter(|d| *d > 0)
+        .ok_or_else(|| format!("`{item}`: a depth from 1"))?;
+    let Some(k) = next.and_then(|next| next.strip_prefix("k=")) else {
+        return Err(format!("`{item}` needs `k=N` after it"));
+    };
+    Ok((d, count(item, k)?))
+}
+
+/// A probability from 0 to 1.
+fn probability(item: &str, p: &str) -> Result<f64, String> {
+    p.parse()
+        .ok()
+        .filter(|p| (0.0..=1.0).contains(p))
+        .ok_or_else(|| format!("`{item}`: a probability from 0 to 1"))
+}
+
+/// `K` of `halt@K`, `fail=wait:K`, `floor=F` or `k=N`, counting from 1.
 fn count(item: &str, k: &str) -> Result<u64, String> {
     k.parse()
         .ok()
@@ -197,10 +321,58 @@ fn count(item: &str, k: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("`{item}`: a count from 1"))
 }
 
+/// The configuration a trace file's first line holds, replaying the
+/// decisions on its other lines.
+fn read_replay(path: &Path) -> Result<SimConfig, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("`{}`: {error}", path.display()))?;
+    let mut lines = text.lines();
+    let header = lines.next().unwrap_or_default();
+    let mut config = SimConfig::parse(header)?;
+    if config.trace.is_some() || config.replay.is_some() || header == "sim" {
+        return Err(format!(
+            "`{}`: `{header}` is not a trace's configuration",
+            path.display()
+        ));
+    }
+    let decisions = lines
+        .map(|line| {
+            let (kind, value) = line.split_once(' ').unwrap_or((line, ""));
+            let value: u64 = value
+                .parse()
+                .map_err(|_| format!("`{}`: `{line}` is not a decision", path.display()))?;
+            match kind {
+                "preempt" => Ok(Decision::Preempt(value)),
+                "pick" => Ok(Decision::Pick(value)),
+                "collect" => Ok(Decision::Collect(value)),
+                _ => Err(format!("`{}`: `{line}` is not a decision", path.display())),
+            }
+        })
+        .collect::<Result<Arc<[Decision]>, String>>()?;
+    config.replay = Some(Replay {
+        path: path.to_path_buf(),
+        decisions,
+    });
+    Ok(config)
+}
+
 impl std::fmt::Display for Policy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Policy::Fifo => f.write_str("fifo"),
+            Policy::Pre { d, k } => write!(f, "pre:{d},k={k}"),
+            Policy::Uniform { p } => write!(f, "uniform:{p}"),
+            Policy::Pct { d, k } => write!(f, "pct:{d},k={k}"),
+        }
+    }
+}
+
+impl std::fmt::Display for Decision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Decision::Preempt(step) => write!(f, "preempt {step}"),
+            Decision::Pick(index) => write!(f, "pick {index}"),
+            Decision::Collect(at) => write!(f, "collect {at}"),
         }
     }
 }
@@ -208,7 +380,17 @@ impl std::fmt::Display for Policy {
 impl std::fmt::Display for SimConfig {
     /// The text [`SimConfig::parse`] reads back.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(replay) = &self.replay {
+            write!(f, "sim:replay={}", replay.path.display())?;
+            if let Some(path) = &self.trace {
+                write!(f, ",trace={}", path.display())?;
+            }
+            return Ok(());
+        }
         write!(f, "sim:{},{}", self.seed, self.policy)?;
+        if self.order == Order::Fifo {
+            f.write_str(",order=fifo")?;
+        }
         let knobs = &self.knobs;
         if let Some(q) = knobs.gc {
             write!(f, ",gc={q}")?;
@@ -222,12 +404,29 @@ impl std::fmt::Display for SimConfig {
         if knobs.block != BLOCK_SECONDS {
             write!(f, ",block={}", knobs.block)?;
         }
-        match knobs.clock {
-            ClockOrigin::Seeded => Ok(()),
-            ClockOrigin::Midnight => f.write_str(",clock=midnight"),
-            ClockOrigin::Real => f.write_str(",clock=real"),
+        if knobs.floor != FAIRNESS_FLOOR {
+            write!(f, ",floor={}", knobs.floor)?;
         }
+        match knobs.clock {
+            ClockOrigin::Seeded => {}
+            ClockOrigin::Midnight => f.write_str(",clock=midnight")?,
+            ClockOrigin::Real => f.write_str(",clock=real")?,
+        }
+        if let Some(path) = &self.trace {
+            write!(f, ",trace={}", path.display())?;
+        }
+        Ok(())
     }
+}
+
+/// FNV-1a over each decision's tag byte and its value's eight bytes, little
+/// endian: the same on every build and platform.
+pub fn trace_hash(decisions: &[Decision]) -> u64 {
+    let mut trace = Trace::new(false);
+    for decision in decisions {
+        trace.record(*decision);
+    }
+    trace.hash
 }
 
 /// A seed for `sim` alone.
@@ -285,12 +484,10 @@ impl Rng {
 
 /// One stream per decision kind, each seeded from consecutive splitmix64
 /// outputs of the seed, in this order.
-#[expect(
-    dead_code,
-    reason = "`fifo` draws neither `schedule` nor `order`; both are split so the later streams keep their seeds"
-)]
 pub(crate) struct Streams {
+    /// Preemptions, `pre:`'s and `pct:`'s points, and `pct:`'s priorities.
     pub(crate) schedule: Rng,
+    /// One-event shuffles.
     pub(crate) order: Rng,
     /// The clock's origin and quantum.
     pub(crate) clock: Rng,
@@ -380,11 +577,159 @@ impl Clock {
     }
 }
 
+/// The decisions a run took: their hash, and the decisions themselves where
+/// a trace file is written.
+struct Trace {
+    hash: u64,
+    kept: Option<Vec<Decision>>,
+}
+
+impl Trace {
+    const OFFSET: u64 = 0xCBF2_9CE4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01B3;
+
+    fn new(keep: bool) -> Trace {
+        Trace {
+            hash: Trace::OFFSET,
+            kept: keep.then(Vec::new),
+        }
+    }
+
+    fn record(&mut self, decision: Decision) {
+        let (tag, value) = match decision {
+            Decision::Preempt(step) => (1u8, step),
+            Decision::Pick(index) => (2, index),
+            Decision::Collect(at) => (3, at),
+        };
+        for byte in std::iter::once(tag).chain(value.to_le_bytes()) {
+            self.hash = (self.hash ^ u64::from(byte)).wrapping_mul(Trace::PRIME);
+        }
+        if let Some(kept) = &mut self.kept {
+            kept.push(decision);
+        }
+    }
+}
+
+/// A replay's place in each kind of decision it reads back.
+struct Replaying {
+    preempts: Vec<u64>,
+    picks: Vec<u64>,
+    collects: Vec<u64>,
+    next_preempt: usize,
+    next_pick: usize,
+    next_collect: usize,
+}
+
+impl Replaying {
+    fn new(decisions: &[Decision]) -> Replaying {
+        let mut replaying = Replaying {
+            preempts: Vec::new(),
+            picks: Vec::new(),
+            collects: Vec::new(),
+            next_preempt: 0,
+            next_pick: 0,
+            next_collect: 0,
+        };
+        for decision in decisions {
+            match *decision {
+                Decision::Preempt(step) => replaying.preempts.push(step),
+                Decision::Pick(index) => replaying.picks.push(index),
+                Decision::Collect(at) => replaying.collects.push(at),
+            }
+        }
+        replaying.preempts.sort_unstable();
+        replaying.collects.sort_unstable();
+        replaying
+    }
+
+    /// Whether the trace preempts at contended step `step`; steps come in
+    /// increasing order.
+    fn preempts_at(&mut self, step: u64) -> bool {
+        reached(&self.preempts, &mut self.next_preempt, step)
+    }
+
+    /// Whether the trace collects at allocation `at`; allocations come in
+    /// increasing order.
+    fn collects_at(&mut self, at: u64) -> bool {
+        reached(&self.collects, &mut self.next_collect, at)
+    }
+
+    /// The next pick, at most `last`; the front where the trace has no more.
+    fn pick(&mut self, last: u64) -> u64 {
+        let pick = self.picks.get(self.next_pick).copied().unwrap_or(0);
+        self.next_pick += 1;
+        pick.min(last)
+    }
+}
+
+/// Whether the sorted `points` hold `at`, moving `next` past every point up
+/// to it.
+fn reached(points: &[u64], next: &mut usize, at: u64) -> bool {
+    while points.get(*next).is_some_and(|point| *point < at) {
+        *next += 1;
+    }
+    if points.get(*next) == Some(&at) {
+        *next += 1;
+        return true;
+    }
+    false
+}
+
+/// `count` distinct contended steps drawn uniformly from `1..=k`, sorted.
+fn draw_points(stream: &mut Rng, count: u64, k: u64) -> Vec<u64> {
+    if count >= k {
+        return (1..=k).collect();
+    }
+    let mut points = Vec::new();
+    while (points.len() as u64) < count {
+        let point = stream.within(1..=k);
+        if !points.contains(&point) {
+            points.push(point);
+        }
+    }
+    points.sort_unstable();
+    points
+}
+
+/// Sets `pct:`'s priority of the activity under `handle`.
+fn set_priority(priorities: &mut Vec<i64>, handle: usize, priority: i64) {
+    if priorities.len() <= handle {
+        priorities.resize(handle + 1, PRIORITY_BASE);
+    }
+    priorities[handle] = priority;
+}
+
+/// Above every priority a change point sets, which counts down from `d - 1`.
+const PRIORITY_BASE: i64 = 1 << 33;
+
+/// The policy's state: the contended steps counted, and the points and
+/// priorities `pre:` and `pct:` drew.
+struct Schedule {
+    contended: u64,
+    /// The running activity's contended steps since it began running or
+    /// the floor last preempted it.
+    run_contended: u64,
+    /// The switch count when `run_contended` last began.
+    seen_switches: u64,
+    /// `pre:`'s preemptions or `pct:`'s change points.
+    points: Vec<u64>,
+    next_point: usize,
+    /// `pct:`'s change points passed.
+    changes: i64,
+    /// `pct:`'s priorities, by activity handle.
+    priorities: Vec<i64>,
+}
+
 /// A run's simulation state.
 pub(crate) struct Sim {
     config: SimConfig,
     streams: Streams,
     clock: Clock,
+    schedule: Schedule,
+    trace: Trace,
+    replaying: Option<Replaying>,
+    /// The allocations `gc=` drew for.
+    allocations: u64,
     /// The pinned waits begun.
     pinned_waits: u64,
     /// Whether a wait nothing in the simulation can end was refused.
@@ -394,6 +739,8 @@ pub(crate) struct Sim {
     breach: Option<&'static str>,
     /// Whether an inline native call outlasted `block=`.
     blocked_native: bool,
+    /// The first invariant a switch found broken.
+    inconsistent: Option<Loud>,
 }
 
 /// The watch on an inline native call in the simulation mode: a thread that
@@ -426,34 +773,80 @@ impl Interp {
         }
     }
 
-    /// Enters the simulation mode for the rest of the run.
+    /// Enters the simulation mode for the rest of the run: `pre:` and `pct:`
+    /// draw their points, and `pct:` the priorities of the activities there
+    /// are.
     pub(crate) fn start_sim(&mut self, config: SimConfig) {
         let mut streams = Streams::new(config.seed);
         let clock = Clock::new(config.knobs.clock, &mut streams.clock);
+        let points = match config.policy {
+            Policy::Pre { d, k } => draw_points(&mut streams.schedule, u64::from(d), k),
+            Policy::Pct { d, k } => draw_points(&mut streams.schedule, u64::from(d) - 1, k),
+            Policy::Fifo | Policy::Uniform { .. } => Vec::new(),
+        };
+        let replaying = config
+            .replay
+            .as_ref()
+            .map(|replay| Replaying::new(&replay.decisions));
+        let collecting = config.knobs.gc.is_some();
         self.sim = Some(Box::new(Sim {
+            trace: Trace::new(config.trace.is_some()),
             config,
             streams,
             clock,
+            schedule: Schedule {
+                contended: 0,
+                run_contended: 0,
+                seen_switches: self.activities.switches(),
+                points,
+                next_point: 0,
+                changes: 0,
+                priorities: Vec::new(),
+            },
+            replaying,
+            allocations: 0,
             pinned_waits: 0,
             stuck: false,
             breach: None,
             blocked_native: false,
+            inconsistent: None,
         }));
+        for handle in 0..self.activities.handles() {
+            self.sim_spawned(handle);
+        }
         self.pool.set_bound(0);
         self.timer.requests().set(crate::timer::SIM);
         self.activity.random_source = None;
-        if config.knobs.gc.is_some() {
+        if collecting {
             self.collect_due = true;
         }
     }
 
+    /// Gives the activity under `handle` its seeded priority, under `pct:`.
+    pub(crate) fn sim_spawned(&mut self, handle: usize) {
+        let Some(sim) = self.sim.as_deref_mut() else {
+            return;
+        };
+        if !matches!(sim.config.policy, Policy::Pct { .. }) {
+            return;
+        }
+        let priorities = &mut sim.schedule.priorities;
+        if priorities.len() <= handle {
+            priorities.resize(handle + 1, PRIORITY_BASE);
+        }
+        priorities[handle] =
+            PRIORITY_BASE + sim.streams.schedule.within(0..=u64::from(u32::MAX)) as i64;
+    }
+
     /// A clause boundary in the simulation mode, the `clauses`-th: virtual
-    /// time moves on a quantum, and `halt@K` halts at its boundary.
+    /// time moves on a quantum, `halt@K` halts at its boundary, and where
+    /// another activity is ready the step is contended and the policy
+    /// answers whether the running activity is preempted.
     #[cold]
     #[inline(never)]
-    pub(crate) fn sim_clause(&mut self, clauses: u64) -> Result<(), Failure> {
+    pub(crate) fn sim_clause(&mut self, clauses: u64) -> Result<bool, Failure> {
         let Some(sim) = self.sim.as_deref_mut() else {
-            return Ok(());
+            return Ok(false);
         };
         sim.clock.elapsed += sim.clock.quantum;
         let halt = sim.config.knobs.halt_at == Some(clauses);
@@ -461,7 +854,117 @@ impl Interp {
         if halt {
             self.halt_all();
         }
-        Ok(())
+        if self.activities.ready.is_empty() {
+            return Ok(false);
+        }
+        Ok(self.sim_preempts())
+    }
+
+    /// The policy's answer at a contended step, recorded where it preempts.
+    fn sim_preempts(&mut self) -> bool {
+        let switches = self.activities.switches();
+        let running = self.activities.running_index();
+        let ready = &self.activities.ready;
+        let Some(sim) = self.sim.as_deref_mut() else {
+            return false;
+        };
+        let schedule = &mut sim.schedule;
+        schedule.contended += 1;
+        let step = schedule.contended;
+        if schedule.seen_switches != switches {
+            schedule.seen_switches = switches;
+            schedule.run_contended = 0;
+        }
+        schedule.run_contended += 1;
+        let forced = schedule.run_contended >= sim.config.knobs.floor;
+        if forced {
+            schedule.run_contended = 0;
+        }
+        let chosen = match (&mut sim.replaying, sim.config.policy) {
+            (Some(replaying), _) => replaying.preempts_at(step),
+            (None, Policy::Fifo) => false,
+            (None, Policy::Pre { .. }) => reached(&schedule.points, &mut schedule.next_point, step),
+            (None, Policy::Uniform { p }) => sim.streams.schedule.unit() < p,
+            (None, Policy::Pct { d, .. }) => {
+                let priority = |handle: usize, priorities: &[i64]| {
+                    priorities.get(handle).copied().unwrap_or(PRIORITY_BASE)
+                };
+                if reached(&schedule.points, &mut schedule.next_point, step) {
+                    schedule.changes += 1;
+                    set_priority(
+                        &mut schedule.priorities,
+                        running,
+                        i64::from(d) - schedule.changes,
+                    );
+                }
+                if forced {
+                    let lowest = schedule.priorities.iter().copied().min().unwrap_or(0);
+                    set_priority(&mut schedule.priorities, running, lowest - 1);
+                }
+                let mine = priority(running, &schedule.priorities);
+                ready
+                    .iter()
+                    .any(|other| priority(other.index(), &schedule.priorities) > mine)
+            }
+        };
+        let preempt = chosen || forced;
+        if preempt {
+            sim.trace.record(Decision::Preempt(step));
+        }
+        preempt
+    }
+
+    /// The ready activity the next switch takes: under `pct:` the first of
+    /// the highest priority, else the front.
+    pub(crate) fn sim_pick(&mut self) -> Option<crate::scheduler::ActivityId> {
+        let ready = &mut self.activities.ready;
+        let Some(sim) = self.sim.as_deref_mut() else {
+            return ready.pop_front();
+        };
+        if ready.is_empty() || !matches!(sim.config.policy, Policy::Pct { .. }) {
+            return ready.pop_front();
+        }
+        let last = ready.len() as u64 - 1;
+        let index = match &mut sim.replaying {
+            Some(replaying) => replaying.pick(last),
+            None => {
+                let priorities = &sim.schedule.priorities;
+                let priority =
+                    |handle: usize| priorities.get(handle).copied().unwrap_or(PRIORITY_BASE);
+                let mut best = 0;
+                for (at, activity) in ready.iter().enumerate() {
+                    if priority(activity.index()) > priority(ready[best].index()) {
+                        best = at;
+                    }
+                }
+                best as u64
+            }
+        };
+        sim.trace.record(Decision::Pick(index));
+        ready.remove(index as usize)
+    }
+
+    /// Shuffles the activities one event readied, those from `mark` on in
+    /// the ready queue, unless `order=fifo` or `pct:` orders them.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn sim_order_event(&mut self, mark: usize) {
+        let ready = &mut self.activities.ready;
+        let Some(sim) = self.sim.as_deref_mut() else {
+            return;
+        };
+        if sim.config.order == Order::Fifo || matches!(sim.config.policy, Policy::Pct { .. }) {
+            return;
+        }
+        let readied = ready.len().saturating_sub(mark);
+        for i in (1..readied).rev() {
+            let j = match &mut sim.replaying {
+                Some(replaying) => replaying.pick(i as u64),
+                None => sim.streams.order.within(0..=i as u64),
+            };
+            sim.trace.record(Decision::Pick(j));
+            ready.swap(mark + i, mark + j as usize);
+        }
     }
 
     /// Fails with the refusal for a post or a callback another thread made,
@@ -476,6 +979,13 @@ impl Interp {
             && std::mem::take(&mut sim.blocked_native)
         {
             return Err(Loud::sim_blocked_native().into());
+        }
+        if let Some(loud) = self
+            .sim
+            .as_deref_mut()
+            .and_then(|sim| sim.inconsistent.take())
+        {
+            return Err(loud.into());
         }
         match self.sim.as_deref_mut().and_then(|sim| sim.breach.take()) {
             Some(what) => Err(Loud::sim_foreign_post(what).into()),
@@ -541,7 +1051,14 @@ impl Interp {
         let Some(q) = sim.config.knobs.gc else {
             return false;
         };
-        if sim.streams.gc.unit() < q {
+        sim.allocations += 1;
+        let at = sim.allocations;
+        let collects = match &mut sim.replaying {
+            Some(replaying) => replaying.collects_at(at),
+            None => sim.streams.gc.unit() < q,
+        };
+        if collects {
+            sim.trace.record(Decision::Collect(at));
             return false;
         }
         self.heap.bytes_since() < self.bytes_due
@@ -634,9 +1151,47 @@ impl Interp {
             seed: sim.config.seed,
             policy: sim.config.policy,
             steps: self.switch_clauses(),
+            contended: sim.schedule.contended,
             switches: self.activities.switches(),
-            trace_hash: None,
+            trace_hash: Some(sim.trace.hash),
         })
+    }
+
+    /// Writes the decision trace to `trace=`'s file: the configuration that
+    /// replays it, then one decision a line. A failure to write is reported
+    /// on the trace sink.
+    pub(crate) fn sim_write_trace(&mut self) {
+        let Some(sim) = self.sim.as_deref() else {
+            return;
+        };
+        let (Some(path), Some(kept)) = (&sim.config.trace, &sim.trace.kept) else {
+            return;
+        };
+        let mut text = format!("{}\n", sim.config.header());
+        for decision in kept {
+            text.push_str(&format!("{decision}\n"));
+        }
+        if let Err(error) = std::fs::write(path, text) {
+            let line = format!("rexx-sim: the trace `{}`: {error}\n", path.display());
+            self.trace.extend_from_slice(line.as_bytes());
+        }
+    }
+
+    /// Checks the scheduler's invariants at a switch; the first broken one is
+    /// refused at the next boundary, and ends the program's wait for its
+    /// activities.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn sim_check_switch(&mut self) {
+        #[cfg(test)]
+        self.sim_corrupt();
+        let Err(loud) = self.check_invariants() else {
+            return;
+        };
+        if let Some(sim) = self.sim.as_deref_mut() {
+            sim.stuck = true;
+            sim.inconsistent.get_or_insert(loud);
+        }
     }
 }
 

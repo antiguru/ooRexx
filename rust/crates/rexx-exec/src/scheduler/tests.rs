@@ -424,24 +424,26 @@ fn a_slice_inside_a_sort_comparator_waits_for_the_sort() {
     );
 }
 
+const HALT_START: &str = "m = .message~new(.t~new, 'delayValueReturn')\nsay m~halt\nm~start\nsay m~halt\n\
+     m~wait\nsay m~hasResult m~hasError m~completed\nc = m~errorCondition\n\
+     say c~code '['c~description']'\n\
+     m = .message~new(.t~new, 'delayValueReturn')\nm~start\nsay m~halt('HALT Test')\n\
+     m~wait\nsay m~hasResult m~hasError m~completed\nc = m~errorCondition\n\
+     say c~code '['c~description']'\n\
+     m = .message~new(.t~new, 'delayHaltReturn')\nm~start\nsay m~halt('HALT Test')\n\
+     m~wait\nsay m~hasResult m~hasError m~completed\nc = m~result\n\
+     say c~condition '['c~description']'\n\
+     ::class t\n::method delayValueReturn\n  do i = 1 to 50\n  end\n  return arg(1)\n\
+     ::method delayHaltReturn\n  signal on halt\n  do i = 1 to 50\n  end\n  x = 123\n\
+     \x20 return .nil\n  halt:\n  return condition('o')\n";
+
 /// Message.testGroup's `test_halt_start` (`:643`), its sleeps replaced by
 /// loops so that the switch mode, not time, decides that the started
 /// activity is running when the halt is asked.
 #[test]
 fn message_halt_in_the_shape_of_test_halt_start() {
     let outcome = run_with(
-        "m = .message~new(.t~new, 'delayValueReturn')\nsay m~halt\nm~start\nsay m~halt\n\
-         m~wait\nsay m~hasResult m~hasError m~completed\nc = m~errorCondition\n\
-         say c~code '['c~description']'\n\
-         m = .message~new(.t~new, 'delayValueReturn')\nm~start\nsay m~halt('HALT Test')\n\
-         m~wait\nsay m~hasResult m~hasError m~completed\nc = m~errorCondition\n\
-         say c~code '['c~description']'\n\
-         m = .message~new(.t~new, 'delayHaltReturn')\nm~start\nsay m~halt('HALT Test')\n\
-         m~wait\nsay m~hasResult m~hasError m~completed\nc = m~result\n\
-         say c~condition '['c~description']'\n\
-         ::class t\n::method delayValueReturn\n  do i = 1 to 50\n  end\n  return arg(1)\n\
-         ::method delayHaltReturn\n  signal on halt\n  do i = 1 to 50\n  end\n  x = 123\n\
-         \x20 return .nil\n  halt:\n  return condition('o')\n",
+        HALT_START,
         Invocation::none()
             .with_deadline(RUN_DEADLINE)
             .with_switch_mode(SwitchMode::EveryOpportunity),
@@ -592,17 +594,19 @@ fn a_pinned_busy_wait_yields_to_the_activity_that_ends_it() {
     }
 }
 
+const TWO_PINNED_WAITERS: &str = "g = .flag~new\na = g~start('wait', 'A')\nb = g~start('wait', 'B')\n\
+    g~start('setFlag')\na~wait\nb~wait\nsay 'main ended'\n\
+    ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
+    done = 0\n::method wait unguarded\n  use arg tag\n  \
+    interpret \"do while \\self~done; end\"\n  say tag 'ended'\n\
+    ::method setFlag unguarded\n  say 'set'\n  self~done = 1\n";
+
 /// Two pinned busy-waiters on a flag a third activity sets: the second runs
 /// on the first's stack and, pinned in turn, runs the setter on its own; both
 /// end, the inner first, with no livelock between their yields.
 #[test]
 fn two_pinned_busy_waiters_both_end() {
-    let source = "g = .flag~new\na = g~start('wait', 'A')\nb = g~start('wait', 'B')\n\
-                  g~start('setFlag')\na~wait\nb~wait\nsay 'main ended'\n\
-                  ::class flag\n::attribute done unguarded\n::method init\n  expose done\n  \
-                  done = 0\n::method wait unguarded\n  use arg tag\n  \
-                  interpret \"do while \\self~done; end\"\n  say tag 'ended'\n\
-                  ::method setFlag unguarded\n  say 'set'\n  self~done = 1\n";
+    let source = TWO_PINNED_WAITERS;
     for invocation in [
         Invocation::none()
             .with_switch_mode(SwitchMode::EveryOpportunity)
@@ -641,17 +645,19 @@ fn the_timer_disarms_when_no_other_activity_is_ready() {
     assert!(!armed, "the timer is still armed with one activity left");
 }
 
+const MAIN_ENDS_PINNED: &str = "g = .flag~new\ng~start('spin')\ndo while g~started == 0\nend\n\
+    say 'main sets'\ng~done = 1\nsay 'main ends'\nexit 3\n\
+    ::class flag\n::attribute started unguarded\n::attribute done unguarded\n\
+    ::method init\n  expose started done\n  started = 0\n  done = 0\n\
+    ::method spin unguarded\n  self~started = 1\n  \
+    interpret \"do while \\self~done; end\"\n  say 'spin ended'\n";
+
 /// Main is not buried by its own root loop: a started activity's pinned
 /// yields run it, and where its body ends there, the program ends with its
 /// status once the pinned activity has (ruling P30).
 #[test]
 fn main_ends_inside_a_pinned_yield() {
-    let source = "g = .flag~new\ng~start('spin')\ndo while g~started == 0\nend\n\
-                  say 'main sets'\ng~done = 1\nsay 'main ends'\nexit 3\n\
-                  ::class flag\n::attribute started unguarded\n::attribute done unguarded\n\
-                  ::method init\n  expose started done\n  started = 0\n  done = 0\n\
-                  ::method spin unguarded\n  self~started = 1\n  \
-                  interpret \"do while \\self~done; end\"\n  say 'spin ended'\n";
+    let source = MAIN_ENDS_PINNED;
     for invocation in [
         Invocation::none()
             .with_switch_mode(SwitchMode::EveryOpportunity)
@@ -915,7 +921,7 @@ fn a_reply_continuation_interleaves_with_its_sender_under_the_switch_mode() {
             REPLIED,
             Invocation::none()
                 .with_deadline(RUN_DEADLINE)
-                .with_switch_mode(mode),
+                .with_switch_mode(mode.clone()),
         );
         let out = stdout(&outcome);
         assert_eq!(outcome.exit_code, 0, "{mode:?}: {}", stderr(&outcome));
@@ -1527,6 +1533,44 @@ fn a_post_from_another_thread_ends_an_idle() {
     taken.extend(inbox.drain());
     poster.join().expect("the poster");
     assert_eq!(taken, [7]);
+}
+
+/// `uniform:1` in FIFO order preempts at every contended step, which is what
+/// `EveryOpportunity` does: on the switch-mode programs here whose output
+/// reads no clock, both modes answer alike under any seed.
+#[test]
+fn uniform_1_in_fifo_order_runs_as_every_opportunity() {
+    let inverted = HIDDEN_INVERSION.replace("$MAIN", "interpret \"say 'main got' m0~result\"");
+    let rooted = HIDDEN_INVERSION.replace("$MAIN", "say 'main got' m0~result");
+    let programs = [
+        INTERLEAVED,
+        SORTED,
+        REPLIED,
+        SLEEPERS,
+        HALT_START,
+        TWO_PINNED_WAITERS,
+        MAIN_ENDS_PINNED,
+        &inverted,
+        &rooted,
+    ];
+    let mode = |mode: SwitchMode| {
+        Invocation::none()
+            .with_deadline(RUN_DEADLINE)
+            .with_switch_mode(mode)
+    };
+    for program in programs {
+        let every = run_with(program, mode(SwitchMode::EveryOpportunity));
+        for seed in [1, 2] {
+            let spec = format!("sim:{seed},uniform:1,order=fifo");
+            let config = crate::SimConfig::parse(&spec).expect("a sim spec");
+            let simulated = run_with(program, mode(SwitchMode::Sim(config)));
+            assert_eq!(
+                (simulated.exit_code, stdout(&simulated), stderr(&simulated)),
+                (every.exit_code, stdout(&every), stderr(&every)),
+                "{spec}: {program}"
+            );
+        }
+    }
 }
 
 mod callbacks;

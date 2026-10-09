@@ -173,6 +173,45 @@ impl GuardTable {
         self.waiting.get(&activity).copied()
     }
 
+    /// The first way the locks and the waits recorded disagree, where
+    /// `alive` answers which handles name an activity.
+    pub(crate) fn inconsistency(&self, alive: impl Fn(ActivityId) -> bool) -> Option<&'static str> {
+        for (key, lock) in &self.locks {
+            if !alive(lock.owner) {
+                return Some("a guard held by no activity");
+            }
+            for (at, waiter) in lock.waiters.iter().enumerate() {
+                if *waiter == lock.owner || lock.waiters.iter().take(at).any(|w| w == waiter) {
+                    return Some("a guard waiter queued twice or behind itself");
+                }
+                if self.waiting.get(waiter) != Some(&Waiting::Guard(*key)) {
+                    return Some("a guard waiter with no wait recorded for its guard");
+                }
+            }
+        }
+        let queued = |activity: &ActivityId, key: &GuardKey| {
+            self.locks
+                .get(key)
+                .is_some_and(|lock| lock.waiters.contains(activity))
+        };
+        for (activity, waiting) in &self.waiting {
+            if let Waiting::Guard(key) = waiting
+                && !queued(activity, key)
+            {
+                return Some("a guard wait missing from its guard's queue");
+            }
+        }
+        None
+    }
+
+    /// The first activity queued for a guard, if any.
+    #[cfg(test)]
+    pub(crate) fn first_queued(&self) -> Option<ActivityId> {
+        self.locks
+            .values()
+            .find_map(|lock| lock.waiters.front().copied())
+    }
+
     /// Ends `activity`'s wait: its record, and its place in a lock's queue.
     pub(crate) fn withdraw(&mut self, activity: ActivityId) {
         if let Some(Waiting::Guard(key)) = self.waiting.remove(&activity)

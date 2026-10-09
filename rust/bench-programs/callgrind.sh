@@ -36,11 +36,12 @@ lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 
-# Every *.rex here plus rexxcps; checked against the directory.
+# Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
+PINGPONG="pingguard pingmsg pingsem"
 PROGRAMS="alloc alloc4c arith assign compound decloop decrender dispatch
 dispatchclass emptyloop extcall fibcall fibfunc heapshape nop parse sayloop
-sendloop startup strings textnum varlookup rexxcps"
-on_disk=$(cd "$here" && ls ./*.rex | sed 's|^\./||; s|\.rex$||' | sort)
+sendloop startup strings textnum varlookup rexxcps $PINGPONG"
+on_disk=$(cd "$here" && ls ./*.rex pingpong/*.rex | sed 's|^\./||; s|^pingpong/||; s|\.rex$||' | sort)
 listed=$(echo $PROGRAMS | tr ' ' '\n' | grep -vx rexxcps | sort)
 if [ "$on_disk" != "$listed" ]; then
     echo "PROGRAMS and $here/*.rex disagree:" >&2
@@ -55,7 +56,9 @@ if [ -n "$sel" ]; then
 fi
 TIMED="heapshape rexxcps"
 prog() {
-    if [ "$1" = rexxcps ]; then echo "$here/../bench-rexxcps/rexxcps.rex"; else echo "$here/$1.rex"; fi
+    if [ "$1" = rexxcps ]; then echo "$here/../bench-rexxcps/rexxcps.rex"
+    elif [[ " $PINGPONG " == *" $1 "* ]]; then echo "$here/pingpong/$1.rex"
+    else echo "$here/$1.rex"; fi
 }
 
 names=() bins=()

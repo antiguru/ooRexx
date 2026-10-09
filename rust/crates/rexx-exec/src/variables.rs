@@ -272,8 +272,12 @@ impl Interp {
             None => pools.clear(scope, name),
         }
         let watchers = self.activities.guards.watchers(owner, scope, name).to_vec();
+        let mark = self.activities.ready.len();
         for watcher in watchers {
             self.post_guard(watcher);
+        }
+        if self.sim.is_some() {
+            self.sim_order_event(mark);
         }
     }
 

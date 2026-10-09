@@ -166,6 +166,11 @@ impl Semaphores {
         });
     }
 
+    /// Whether `activity` is queued on a semaphore.
+    pub(crate) fn queues(&self, activity: ActivityId) -> bool {
+        self.parked.contains_key(&activity)
+    }
+
     fn take_waiters(&mut self, key: SemaphoreKey) -> Vec<Waiter> {
         self.table
             .get_mut(&key)
@@ -192,6 +197,7 @@ impl Interp {
     /// Readies the waiters on `key` still parked, every one where `all`,
     /// else the first.
     fn wake_waiters(&mut self, key: SemaphoreKey, all: bool) {
+        let mark = self.activities.ready.len();
         let mut waiters = self.activities.semaphores.take_waiters(key);
         let mut woken = false;
         waiters.retain(|waiter| {
@@ -203,6 +209,9 @@ impl Interp {
             false
         });
         self.activities.semaphores.put_waiters(key, waiters);
+        if self.sim.is_some() {
+            self.sim_order_event(mark);
+        }
     }
 
     /// The re-test a woken wait makes when it resumes: `Some` wait to park

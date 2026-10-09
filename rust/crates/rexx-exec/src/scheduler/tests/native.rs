@@ -354,7 +354,7 @@ fn quick_native_calls_at_the_smallest_bound_run_alike() {
     let first = counted(
         source,
         false,
-        bounded().with_switch_mode(SwitchMode::Sim(config)),
+        bounded().with_switch_mode(SwitchMode::Sim(config.clone())),
     );
     assert_eq!(first.outcome.exit_code, 0, "{}", first.stderr());
     assert_eq!(first.exits, 50);
@@ -363,7 +363,7 @@ fn quick_native_calls_at_the_smallest_bound_run_alike() {
         let run = counted(
             source,
             false,
-            bounded().with_switch_mode(SwitchMode::Sim(config)),
+            bounded().with_switch_mode(SwitchMode::Sim(config.clone())),
         );
         assert_eq!(
             (run.outcome.exit_code, run.stdout(), run.stderr()),

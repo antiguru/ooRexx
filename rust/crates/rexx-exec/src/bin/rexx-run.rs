@@ -59,7 +59,7 @@ fn main() -> ExitCode {
 
     // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:
     // `every`, `at:K` for the program's K-th clause, or the simulation mode,
-    // `sim` or `sim:SEED[,...]`.
+    // `sim`, `sim:SEED[,...]` or `sim:replay=FILE[,trace=FILE]`.
     let invocation = match std::env::var("REXX_SWITCH_MODE").as_deref() {
         Ok("every") => invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
         Ok(mode) if mode == "sim" || mode.starts_with("sim:") => {
@@ -126,10 +126,12 @@ fn main() -> ExitCode {
             "release"
         };
         eprintln!(
-            "rexx-sim: seed={} policy={} steps={} switches={}{trace} profile={profile} stack={}",
+            "rexx-sim: seed={} policy={} steps={} contended={} switches={}{trace} profile={profile} \
+             stack={}",
             sim.seed,
             sim.policy,
             sim.steps,
+            sim.contended,
             sim.switches,
             rexx_exec::INTERPRETER_STACK_BYTES
         );

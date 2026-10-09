@@ -54,3 +54,46 @@ fn a_seed_gives_one_output_in_two_processes() {
     );
     assert_ne!(first.stdout, other.stdout);
 }
+
+/// The timed program of the mode's first test (`sim/tests.rs`, `TIMED`) with
+/// a native routine call, under a policy that preempts.
+const TIMED_NATIVE: &str = "call time 'R'\ncall SysSleep 5\ne = time('E')\n\
+     say 'slept' (e >= 5) (e < 6)\nalarm = .Alarm~new(1, .Message~new(.ringer, 'RING'))\n\
+     call SysSleep 2\nsay 'rang' .ringer~rung\nsem = .EventSemaphore~new\n\
+     say 'waited' sem~wait(1)\ne = time('E')\nsay 'elapsed' (e >= 8) (e < 9)\n\
+     say 'root' RxCalcSqrt(16)\n\
+     ::requires 'rxmath' LIBRARY\n\
+     ::class ringer\n::attribute rung class\n::method init class\n  self~rung = 0\n\
+     ::method ring class\n  self~rung = 1\n";
+
+#[test]
+fn a_seed_gives_one_trace_hash_in_two_processes() {
+    let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../build/lib")
+        .canonicalize()
+        .expect("the worktree's build/lib");
+    let dir = std::env::temp_dir().join(format!("rexx-sim-hash-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory");
+    std::fs::write(dir.join("p.rex"), TIMED_NATIVE).expect("the program written");
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+            .arg(dir.join("p.rex"))
+            .env("REXX_SWITCH_MODE", "sim:1,uniform:0.3")
+            .env("LD_LIBRARY_PATH", &lib)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .expect("rexx-run runs")
+    };
+    let first = run();
+    let second = run();
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&first.stderr).into_owned();
+    assert!(first.status.success(), "{stderr}");
+    assert_eq!(
+        String::from_utf8_lossy(&first.stdout),
+        "slept 1 1\nrang 1\nwaited 0\nelapsed 1 1\nroot 4\n"
+    );
+    assert!(stderr.contains(" trace="), "{stderr}");
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+}

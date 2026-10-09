@@ -25,9 +25,9 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | `sendloop.rex` | An empty `::METHOD` sent 5,000,000 times |
 | `extcall.rex` | `liborxfunction`'s `TestIntArg` called 3,000,000 times; needs the library's directory on `LD_LIBRARY_PATH` |
 | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
-| `pingpong/pingmsg.rex` | Message round trip: `~start` on a new activity and its `~result` awaited, 80,000 times. Criterion 7 of Phase 6, recorded against the oracle; in a subdirectory, so neither `callgrind.sh` nor the criterion harness runs it |
-| `pingpong/pingsem.rex` | Semaphore post/wait: two activities hand a turn back and forth through two `EventSemaphore`s, 100,000 times each way. Criterion 7, as `pingmsg.rex` |
-| `pingpong/pingguard.rex` | GUARD WHEN handoff: two activities pass a turn through one object's variable, each in `GUARD ON WHEN`, 100,000 times each. Criterion 7, as `pingmsg.rex` |
+| `pingpong/pingmsg.rex` | Message round trip: `~start` on a new activity and its `~result` awaited, 80,000 times. Criterion 7 of Phase 6, recorded against the oracle; in a subdirectory, so the criterion harness does not run it; `callgrind.sh` runs it as `pingmsg` |
+| `pingpong/pingsem.rex` | Semaphore post/wait: two activities hand a turn back and forth through two `EventSemaphore`s, 100,000 times each way. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
+| `pingpong/pingguard.rex` | GUARD WHEN handoff: two activities pass a turn through one object's variable, each in `GUARD ON WHEN`, 100,000 times each. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
 | `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
 
 ## Determinism
@@ -58,8 +58,8 @@ unexposed; `.rexxinfo` is an instance, not a class). None of these programs refe
 
 ## Instruction counts: `callgrind.sh`
 
-`callgrind.sh NAME=BINARY NAME=BINARY...` runs every program here and `../bench-rexxcps/rexxcps.rex`
-under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
+`callgrind.sh NAME=BINARY NAME=BINARY...` runs every program here, `pingpong/*.rex` (named
+`pingmsg`, `pingsem`, `pingguard`) and `../bench-rexxcps/rexxcps.rex` under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
 (`cgsum.py`). `layout-pad.py TREE COUNT` adds never-called functions to a tree's IR driver.
 `wallclock.sh NAME=BINARY...` times the same programs, interleaved, or those `PROGRAMS` names
 (`PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard"`).
