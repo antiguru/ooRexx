@@ -276,3 +276,128 @@ an `rxsock` server and client in one program), and Task 10 must bound such runs 
 - **N2.** `block=1e30` parses and then panics at the first command (`cannot convert float seconds to
   Duration`, rc 101, from `Duration::from_secs_f64` in `sim_block_bound`). Validate it in
   `SimConfig::parse` with `Duration::try_from_secs_f64`.
+
+## Fix round 2
+
+Verified at `c0e1865ee` (code `27cbe2510`, `da89562a3`): a `git archive` copy in
+`/tmp/claude-1000/p61/t8rev/fr2`, its own target directory, `timeout` inside `memcap`.
+
+**Verdict: I2, N1 and N2 are fixed for every `block=` value above 0. Fix round 2 adds one new
+Important (I3: `block=0`, which this round started accepting, hangs the run) and two Minors (N3, N4).
+The rxsock test is not flaky. Task quality: Needs fixes (I3 is a one-line parse change).**
+
+### Checks
+
+- **I2, `p4/sock2.rex`** (a fresh port for each run):
+  - default mode: `bind 0 listen 0`, `connect 0`, `got 1`, rc 0, 0.16 s;
+  - `sim:1`: rc 120, `a native call in the simulation mode that runs longer than its bound`, 2.06 s;
+  - `sim:1,block=0.5`: the same refusal in 0.56 s.
+  No `rexx-run` was left afterwards, and `ss` showed only a TIME-WAIT from the default run's connect.
+- **N1.** `address system 'sleep 2.5'` gives rc 120 under `sim:1` and rc 0 under `block=5`. Both
+  LIMIT rows now say that any slower command or call is refused. True.
+- **N2.** `block=-1`, `block=x`, `block=inf`, `block=NaN` and `block=1e30` each exit 2 with `block is
+  a number of seconds from 0 to 86400`. `block=86400` runs (rc 0).
+- **Fifo.** `p3/fifo.rex` in default mode: 0.15 s, rc 0. Under `sim:1`: rc 120 in 2.06 s, no
+  leftovers.
+- **SENDFROMANOTHERTHREAD.** My scratch probe under `sim:1` gives rc 120 with the callback refusal
+  on 3 of 3 runs. It still answers `trapped 98.983`, `napped` in default mode with a free pool.
+- **Determinism set**, each run 10 times: 10/10 identical every time (`conc.rex sim:5`, `sim:21,gc=0.2`,
+  `sim:5,halt@150,gc=0.05`; `c2.rex sim:11`; `u.rex sim:21,gc=0.2`; `ch.rex sim:8`; `cmd.rex sim:1`).
+  The hashes are equal to fix round 1's, so the watch fires on none of these programs.
+  `rxmath` called 50 times in a loop: 100 runs at default `block`, and 150 at `block=0.001`, all rc 0.
+- **The rxsock crate test** (`a_native_call_only_another_activity_can_end_is_refused_after_its_bound`):
+  10 runs in a row, 10/10 passed; 10 rounds of two processes at once, 20/20 passed; 3 runs of the
+  `sim::`, `simulation_mode`, `scheduler::tests::native::` and `callbacks::` tests together (42
+  tests) on the default thread count, all passed. No `bind -1` and no flake.
+- **The signal handler.** `interrupted` is an empty `extern "C" fn`, so it is async-signal-safe. It is
+  installed with `sa_flags = 0` (no `SA_RESTART`, so a blocked system call answers EINTR) and a full
+  mask. `INTERRUPT_INSTALL` runs only from `Interrupter::here`, which only `sim_watch_native` calls,
+  and only where the action is still `SIG_DFL`, so it is installed in sim only. The watcher blocks
+  signals itself and is joined before the call returns, so the `pthread_t` it signals is live, as
+  the `Send` comment says.
+- **Default mode.** `sim_watch_native` is `self.sim_block_bound()?`, which returns `None` at
+  once, on `exit_for_native`'s inline branch. Default mode takes that branch only when the pool has
+  no thread to give. The gate record quotes callgrind against `0765d19ef` with sha256s: rexxcps
+  +0.0001%, emptyloop +0.0006%, startup +0.0009%. Cheap.
+- `refusal_sites` 5 passed, `refusal_dispositions` 3 passed.
+
+### Issues
+
+#### Important
+
+**I3. `block=0` livelocks the interpreter.** This round widened the accepted range from "above 0" to
+"from 0", and `a_config_reads_back_what_it_prints` now asserts that `sim:7,block=0` round-trips. With
+a zero bound, `recv_timeout(Duration::ZERO)` in `sim_watch_native` (`sim.rs`) times out at once on
+every pass, so the watcher sends `pthread_kill` in a tight loop. The signal is a real-time one, so
+each send is queued, not merged.
+
+Probe `p4/m50.rex` calls `RxCalcSqrt` 50 times in a loop. Under `sim:1,block=0`, through a Python
+runner (`/tmp/claude-1000/p61/t8rev/runmany.py`):
+- one batch: 8 rc 0, 6 rc 120 (refused after 32 to 100 steps, varying), 1 hang at run 14;
+- another batch: 16 rc 0, 1 hang at run 16.
+
+Under `memcap ... timeout -k 2 20`, 3 of 60 runs ended rc 137: the hang, with SIGTERM caught as a
+halt that never runs, then KILL. A `gdb` backtrace of a hang (saved to
+`/tmp/claude-1000/p61/t8rev/hang-bt.txt`) shows:
+- the interpreter thread inside `pthread_create`, called from `sim_watch_native` (`sim.rs:593`,
+  from `scheduler.rs:649`);
+- the new watcher thread, already running, inside `Interrupter::interrupt` at `signal.rs:235`;
+- main joining.
+
+The watcher starts flooding before its creator's `pthread_create` has returned, and the creator
+makes no further progress. Even when it does not hang, `block=0` refuses or not depending on whether
+the watcher is scheduled before a microsecond call returns.
+
+Fix: reject `block=0` again (`(0.0..=BLOCK_LIMIT)` becomes a range that excludes 0) and move
+`sim:7,block=0` back to the wrong list. A floor such as 1 ms also works; 150 runs at
+`block=0.001` were clean.
+
+#### Minor
+
+- **N3.** The `sim_blocked_native` LIMIT row and the `Knobs::block` doc both say the bound covers "a
+  native call made while another activity lives". That is false. `leaves_driver`
+  (`dispatch/library.rs:318-322`) is true whenever `switch` is set, and sim sets it, so a lone
+  activity's call is watched too. `p4/sel.rex` (a `SockSelect` with a 3 s timeout on a listening
+  socket, no other activity) gives `switches=0` and is refused at 2.05 s under `sim:1`; default mode
+  answers `select 0` in 3.07 s. Delete the clause. A false sentence is deleted, not reworded.
+- **N4.** A native call that does not leave its driver is not watched, and the row does not say so.
+  Those are calls under a pin (`pin_depth > 0`) or while resuming. `p4/pin.rex`: the server
+  activity's `SockAccept` runs inside a `sortWith` comparator. It hangs in sim until `timeout 10`
+  (rc 124), with no refusal. It also hangs in default mode, on HEAD and on base `0765d19ef` (a pinned
+  call runs on the interpreter's thread in both modes). The oracle hangs too: 5 of 5 runs printed
+  `connect 0` and never `got`, until `timeout 20`. So this is no divergence, only an unbounded
+  case. The row's list of what "stays unbounded" should add "a native call under a pin".
+
+## Fix round 3
+
+Verified at `007adb014` (code `1f7b73ac0`): a `git archive` copy in `/tmp/claude-1000/p61/t8rev/fr3`,
+its own target directory, `timeout` inside `memcap`.
+
+**Verdict: I3, N3 and N4 are fixed. No new findings. Task quality: Approved.**
+
+- **Parse floor.** `block=0`, `block=0.0009`, `block=-1`, `block=x`, `block=NaN` and `block=1e30` each
+  exit 2 with `block is a number of seconds from 0.001 to 86400`. `block=0.001` runs.
+- **The livelock probe** at `block=0.001`, 60 runs each through the Python runner, all rc 0, with no
+  hang and no refusal:
+  - `p4/m50.rex` (`RxCalcSqrt` 50 times, one activity);
+  - `p4/m50b.rex` (the same with a started activity alive).
+- **At most one signal per watched call.** The watcher now waits on `recv_timeout(bound)` once, calls
+  `interrupt` once on timeout, then blocks on `stopped.recv()` until the call ends (`sim.rs`,
+  `sim_watch_native`). `strace -f -e trace=tgkill,tkill,rt_tgsigqueueinfo` on `p4/sel2.rex` (a 3 s
+  `SockSelect` on a listening socket) under `sim:1,block=0.2` and under `block=0.05` shows exactly
+  one `tgkill(..., SIGRT_5)` each. `SIGRT_5` is strace's name for libc's `SIGRTMIN()+3`, signal 37.
+  The run is refused with rc 120 after the call returns `-1` (EINTR).
+- **N3.** The row now reads "a native call that leaves its driver", and the `Knobs::block` doc is
+  "a command or a native call". Both true: a lone activity's call leaves its driver in sim
+  (`leaves_driver`, `switch` set), and `sel2.rex` (no other activity) is refused.
+- **N4.** The row names "a native call under a pin, which does not leave its driver (it hangs on the
+  oracle too)", which matches my `p4/pin.rex` runs in fix round 2.
+- **Unchanged behaviour.**
+  - `p4/sock2.rex`: default `bind 0 listen 0`, `connect 0`, `got 1`, rc 0, 0.16 s; under `sim:1`
+    rc 120 with the native refusal in 2.05 s.
+  - `p3/fifo.rex`: default `hi`, `read done wrote`, rc 0, 0.15 s; under `sim:1` rc 120 with the
+    command refusal in 2.06 s.
+  - No `rexx-run` or fifo child was left afterwards.
+- **Tests.** The `sim::`, `simulation_mode`, `scheduler::tests::native::` and `callbacks::` lib
+  tests (with the new `quick_native_calls_at_the_smallest_bound_run_alike`) 115 passed under the
+  filter, `refusal_sites` 5 passed, `refusal_dispositions` 3 passed.
