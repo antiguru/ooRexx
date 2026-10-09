@@ -97,3 +97,38 @@ fn a_seed_gives_one_trace_hash_in_two_processes() {
     assert_eq!(first.stdout, second.stdout);
     assert_eq!(first.stderr, second.stderr);
 }
+
+/// A trace whose header's hash does not match its decisions is refused
+/// before the program runs, and the file as written replays.
+#[test]
+fn a_damaged_trace_is_refused_before_the_run() {
+    let dir = std::env::temp_dir().join(format!("rexx-sim-damaged-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory");
+    std::fs::write(dir.join("p.rex"), PROGRAM).expect("the program written");
+    let file = dir.join("t.txt");
+    let recorded = run(&dir, &format!("sim:1,uniform:0.3,trace={}", file.display()));
+    let written = std::fs::read_to_string(&file).expect("the trace written");
+    let replayed = run(&dir, &format!("sim:replay={}", file.display()));
+    let (header, rest) = written.split_once('\n').expect("a header");
+    let (configuration, hash) = header.rsplit_once(" hash=").expect("a hash");
+    std::fs::write(
+        &file,
+        format!("{configuration} hash=0123456789abcdef\n{rest}"),
+    )
+    .expect("the trace damaged");
+    let damaged = run(&dir, &format!("sim:replay={}", file.display()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(recorded.status.success());
+    assert!(replayed.status.success());
+    assert_eq!(recorded.stdout, replayed.stdout);
+    assert_eq!(damaged.status.code(), Some(2));
+    assert_eq!(damaged.stdout, b"");
+    assert_eq!(
+        String::from_utf8_lossy(&damaged.stderr),
+        format!(
+            "rexx-run: REXX_SWITCH_MODE: `{}`: the decisions hash to {hash}, the header holds \
+             0123456789abcdef\n",
+            file.display()
+        )
+    );
+}

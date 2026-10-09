@@ -64,9 +64,7 @@ use queue::Queue;
 mod invocation;
 pub use invocation::{Invocation, ProgramInput, Sinks, SwitchMode, join_command_line};
 pub use rexx_core::FrameBlock;
-pub use sim::{
-    ClockOrigin, Decision, Knobs, Order, Policy, Replay, SimConfig, SimReport, trace_hash,
-};
+pub use sim::{ClockOrigin, Decision, Knobs, Order, Policy, Replay, SimConfig, SimReport};
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
@@ -3501,9 +3499,7 @@ fn execute_on(
     // 214, and one ending `exit 7` prints it and exits 7.
     // An activity those `UNINIT`s start is not waited for (ruling P39).
     refused.extend(interp.terminate());
-    if let Err(Failure::Loud(loud)) = interp.sim_breached() {
-        refused.push(*loud);
-    }
+    refused.extend(interp.sim_finish());
     for loud in refused {
         interp
             .trace
@@ -3528,7 +3524,6 @@ fn execute_on(
     // Read after the activities above, so a collection or a refused chunk
     // inside one is counted: `run_program_collect_every_alloc` decides that its
     // mode ran from `collections`.
-    interp.sim_write_trace();
     let stack = interp.stack_span();
     let collections = interp.heap.collections_performed() - interp.collections_before_program;
     let chunks_refused = interp.chunks_refused;

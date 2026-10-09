@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 
 use rexx_core::ObjRef;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::Interp;
 use crate::activation::{Activation, ActivationId};
@@ -173,15 +173,22 @@ impl GuardTable {
         self.waiting.get(&activity).copied()
     }
 
+    /// Every activity with a wait recorded, on a guard or a message.
+    pub(crate) fn waiters(&self) -> impl Iterator<Item = ActivityId> + '_ {
+        self.waiting.keys().copied()
+    }
+
     /// The first way the locks and the waits recorded disagree, where
-    /// `alive` answers which handles name an activity.
+    /// `alive` answers which handles name an activity. Linear in the locks
+    /// and the waits.
     pub(crate) fn inconsistency(&self, alive: impl Fn(ActivityId) -> bool) -> Option<&'static str> {
+        let mut queued = FxHashSet::default();
         for (key, lock) in &self.locks {
             if !alive(lock.owner) {
                 return Some("a guard held by no activity");
             }
-            for (at, waiter) in lock.waiters.iter().enumerate() {
-                if *waiter == lock.owner || lock.waiters.iter().take(at).any(|w| w == waiter) {
+            for waiter in &lock.waiters {
+                if *waiter == lock.owner || !queued.insert((*waiter, *key)) {
                     return Some("a guard waiter queued twice or behind itself");
                 }
                 if self.waiting.get(waiter) != Some(&Waiting::Guard(*key)) {
@@ -189,19 +196,43 @@ impl GuardTable {
                 }
             }
         }
-        let queued = |activity: &ActivityId, key: &GuardKey| {
-            self.locks
-                .get(key)
-                .is_some_and(|lock| lock.waiters.contains(activity))
-        };
         for (activity, waiting) in &self.waiting {
             if let Waiting::Guard(key) = waiting
-                && !queued(activity, key)
+                && !queued.contains(&(*activity, *key))
             {
                 return Some("a guard wait missing from its guard's queue");
             }
         }
         None
+    }
+
+    /// Sets the first lock's owner to `owner`, if there is a lock.
+    #[cfg(test)]
+    pub(crate) fn corrupt_owner(&mut self, owner: ActivityId) -> bool {
+        let lock = self.locks.values_mut().next();
+        lock.map(|lock| lock.owner = owner).is_some()
+    }
+
+    /// Queues the first waiter of the first lock with one again.
+    #[cfg(test)]
+    pub(crate) fn corrupt_queue_twice(&mut self) -> bool {
+        let lock = self
+            .locks
+            .values_mut()
+            .find(|lock| !lock.waiters.is_empty());
+        lock.map(|lock| lock.waiters.push_back(lock.waiters[0]))
+            .is_some()
+    }
+
+    /// Takes the first waiter of the first lock with one off its queue,
+    /// keeping its wait record.
+    #[cfg(test)]
+    pub(crate) fn corrupt_unqueue(&mut self) -> bool {
+        let lock = self
+            .locks
+            .values_mut()
+            .find(|lock| !lock.waiters.is_empty());
+        lock.map(|lock| lock.waiters.pop_front()).is_some()
     }
 
     /// The first activity queued for a guard, if any.

@@ -1031,7 +1031,8 @@ impl Interp {
     /// simulation mode checks at every switch: this thread holds the baton;
     /// each activity is running, ready, parked or finished, and one only; a
     /// ready activity holds no park reason and a parked one has a wake
-    /// source; the guard queues agree with the waits recorded.
+    /// source; the guard queues agree with the waits recorded. One pass over
+    /// the table's queues marks each handle, then each handle is checked.
     pub(crate) fn check_invariants(&self) -> Result<(), Loud> {
         let fail = |what| Err(Loud::scheduler_inconsistency(what));
         #[cfg(test)]
@@ -1054,78 +1055,81 @@ impl Interp {
         {
             return fail(what);
         }
-        let readied: Vec<ActivityId> = (table.ready.iter().copied())
-            .chain(table.set_aside.iter().map(|(activity, _)| *activity))
-            .collect();
-        for (at, &activity) in readied.iter().enumerate() {
+        let handles = table.idle.len();
+        // A sleeper, a message's waiter or a guard's waiter; a `GUARD WHEN`
+        // is the other park reason, kept on the activity's own record.
+        let mut parked = vec![false; handles];
+        let sleepers = table
+            .sleepers
+            .iter()
+            .map(|Reverse((_, _, sleeper))| *sleeper);
+        let waiters = table.waiters.values().flatten().copied();
+        for activity in sleepers.chain(waiters).chain(table.guards.waiters()) {
+            if let Some(mark) = parked.get_mut(activity.index()) {
+                *mark = true;
+            }
+        }
+        let when_parked = |activity: ActivityId| {
+            matches!(
+                table.idle.get(activity.index()),
+                Some(Some(idle)) if idle.activity.when_parked
+            )
+        };
+        let mut ready = vec![false; handles];
+        let readied = (table.ready.iter().copied())
+            .chain(table.set_aside.iter().map(|(activity, _)| *activity));
+        for activity in readied {
             if activity == running {
                 return fail("an activity both running and ready");
             }
-            if readied[..at].contains(&activity) {
+            if ready.get(activity.index()) == Some(&true) {
                 return fail("an activity ready twice");
             }
             if !filed(activity) {
                 return fail("a ready handle naming no idle activity");
             }
-            if self.holds_park_reason(activity) {
+            if parked[activity.index()] || when_parked(activity) {
                 return fail("a ready activity holding a park reason");
+            }
+            ready[activity.index()] = true;
+        }
+        let mut free = vec![false; handles];
+        for &handle in &table.free {
+            if let Some(mark) = free.get_mut(handle as usize) {
+                *mark = true;
             }
         }
         for (index, slot) in table.idle.iter().enumerate() {
             let activity = ActivityId(u32::try_from(index).expect("handles fit u32"));
-            let free = table.free.contains(&activity.0);
             match slot {
                 _ if activity == running => {
-                    if free {
+                    if free[index] {
                         return fail("a running activity's handle free");
                     }
                 }
-                None if !free => return fail("a handle neither free nor filed"),
+                None if !free[index] => return fail("a handle neither free nor filed"),
                 None => {}
-                Some(_) if free => return fail("a free handle naming an activity"),
+                Some(_) if free[index] => return fail("a free handle naming an activity"),
                 Some(idle) => {
+                    let record = &idle.activity;
                     let finished =
-                        idle.activity.root_end.is_some() || activity == MAIN && table.main_finished;
-                    if !readied.contains(&activity)
-                        && !finished
-                        && !self.has_wake_source(activity, &idle.activity)
-                    {
+                        record.root_end.is_some() || activity == MAIN && table.main_finished;
+                    // A deadline, a post (a message's completion, a
+                    // semaphore's post or release, a native call's or a
+                    // command's end) or a guard (its release, a store a
+                    // `GUARD WHEN` watches); a halt ends each of these.
+                    let wakes = parked[index]
+                        || record.when_parked
+                        || table.semaphores.queues(activity)
+                        || record.native_call.is_some()
+                        || record.blocked.is_some();
+                    if !ready[index] && !finished && !wakes {
                         return fail("a parked activity with no wake source");
                     }
                 }
             }
         }
         Ok(())
-    }
-
-    /// Whether `activity`, not running, is still recorded as waiting: a
-    /// sleeper, a message's waiter, a guard's waiter or a `GUARD WHEN`.
-    fn holds_park_reason(&self, activity: ActivityId) -> bool {
-        let table = &self.activities;
-        table
-            .sleepers
-            .iter()
-            .any(|Reverse((_, _, sleeper))| *sleeper == activity)
-            || table
-                .waiters
-                .values()
-                .any(|waiters| waiters.contains(&activity))
-            || table.guards.waiting(activity).is_some()
-            || matches!(
-                table.idle.get(activity.index()),
-                Some(Some(idle)) if idle.activity.when_parked
-            )
-    }
-
-    /// Whether something can wake `activity`, parked with `record`: a
-    /// deadline, a post (a message's completion, a semaphore's post or
-    /// release, a native call's or a command's end), a guard (its release,
-    /// a store a `GUARD WHEN` watches), or a halt, which ends each of these.
-    fn has_wake_source(&self, activity: ActivityId, record: &Activity) -> bool {
-        self.holds_park_reason(activity)
-            || self.activities.semaphores.queues(activity)
-            || record.native_call.is_some()
-            || record.blocked.is_some()
     }
 
     /// Runs other activities until the running one, parked, is woken. The
@@ -2538,6 +2542,24 @@ pub(crate) enum Corruption {
     GuardQueue,
     /// The baton read as held by another thread.
     Baton,
+    /// A handle past the table's end queued as ready.
+    BogusReady,
+    /// A handle neither free nor naming an activity.
+    UnfiledHandle,
+    /// The first ready activity's handle also freed.
+    FreeFiled,
+    /// The running activity's handle freed.
+    RunningFree,
+    /// The first ready activity's record moved into the running slot.
+    RunningFiled,
+    /// A lock's owner set to a handle naming no activity.
+    GuardOwnerDead,
+    /// A lock's first waiter queued again.
+    GuardWaiterTwice,
+    /// A lock's first waiter taken off its queue, its wait record kept.
+    GuardWaitUnqueued,
+    /// The baton released for the check, and taken again after it.
+    BatonReleased,
 }
 
 #[cfg(test)]
@@ -2545,6 +2567,7 @@ thread_local! {
     pub(crate) static CORRUPTION: std::cell::Cell<Option<Corruption>> =
         const { std::cell::Cell::new(None) };
     static BATON_ELSEWHERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static BATON_RELEASED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
@@ -2599,10 +2622,52 @@ impl Interp {
                 BATON_ELSEWHERE.with(|elsewhere| elsewhere.set(true));
                 true
             }
-            (Corruption::ReadyTwice | Corruption::ReadyParked, None) => false,
+            (Corruption::BogusReady, _) => {
+                table.ready.push_back(ActivityId(9999));
+                true
+            }
+            (Corruption::UnfiledHandle, _) => {
+                table.idle.push(None);
+                true
+            }
+            (Corruption::FreeFiled, Some(first)) => {
+                table.free.push(first.0);
+                true
+            }
+            (Corruption::RunningFree, _) => {
+                table.free.push(running.0);
+                true
+            }
+            (Corruption::RunningFiled, Some(first)) => {
+                let moved = table.idle[first.index()].take();
+                table.idle[running.index()] = moved;
+                true
+            }
+            (Corruption::GuardOwnerDead, _) => table.guards.corrupt_owner(ActivityId(9999)),
+            (Corruption::GuardWaiterTwice, _) => table.guards.corrupt_queue_twice(),
+            (Corruption::GuardWaitUnqueued, _) => table.guards.corrupt_unqueue(),
+            (Corruption::BatonReleased, _) => {
+                self.baton.release();
+                BATON_RELEASED.with(|released| released.set(true));
+                true
+            }
+            (
+                Corruption::ReadyTwice
+                | Corruption::ReadyParked
+                | Corruption::FreeFiled
+                | Corruption::RunningFiled,
+                None,
+            ) => false,
         };
         if !applied {
             CORRUPTION.with(|asked| asked.set(Some(corruption)));
+        }
+    }
+
+    /// Takes the baton back where [`Corruption::BatonReleased`] released it.
+    pub(crate) fn sim_uncorrupt(&self) {
+        if BATON_RELEASED.with(std::cell::Cell::take) {
+            self.baton.acquire();
         }
     }
 }

@@ -148,6 +148,37 @@ fn a_config_reads_back_what_it_prints() {
     }
 }
 
+/// An empty path, a second `trace=` or `replay=`, and a path cut at a comma
+/// are refused, each naming what it refuses.
+#[test]
+fn a_trace_path_is_refused_where_it_cannot_be_the_file_meant() {
+    for (wrong, refusal) in [
+        ("sim:1,trace=", "`trace=`: an empty path"),
+        ("sim:replay=", "`replay=`: an empty path"),
+        ("sim:replay=/t,trace=", "`trace=`: an empty path"),
+        ("sim:1,trace=/a,trace=/b", "`trace=/b`: a second `trace=`"),
+        (
+            "sim:replay=/a,trace=/b,trace=/c",
+            "`trace=/c`: a second `trace=`",
+        ),
+        ("sim:replay=/a,replay=/b", "`replay=/b`: a second `replay=`"),
+        (
+            "sim:1,trace=/tmp/a,b.txt",
+            "`trace=/tmp/a,b.txt`: a path may not contain a comma",
+        ),
+        (
+            "sim:replay=/tmp/c,d.txt",
+            "`replay=/tmp/c,d.txt`: a path may not contain a comma",
+        ),
+        (
+            "sim:replay=/tmp/c,trace=/tmp/e,f",
+            "`trace=/tmp/e,f`: a path may not contain a comma",
+        ),
+    ] {
+        assert_eq!(SimConfig::parse(wrong), Err(refusal.into()), "{wrong}");
+    }
+}
+
 /// splitmix64 from 0, and xoshiro256** from `[1, 2, 3, 4]`, against their
 /// reference outputs.
 #[test]
@@ -363,17 +394,19 @@ const TWO_ACTIVITIES: &str = "t = .t~new~start('run')\nsay 'm1'\nsay 'm2'\nt~wai
      ::class t\n::method run\n  say 't'\n";
 
 #[test]
-fn pre_1_reaches_both_interleavings_over_a_seed_range() {
+fn pre_1_reaches_every_interleaving_over_a_seed_range() {
     let unpreempted = run_in(TWO_ACTIVITIES, Some(sim("sim:1")));
     assert_eq!(stdout(&unpreempted), "m1\nm2\nt\n");
     let mut seen = std::collections::BTreeSet::new();
-    for seed in 1..=20 {
+    for seed in 1..=40 {
         let outcome = run_in(TWO_ACTIVITIES, Some(sim(&format!("sim:{seed},pre:1,k=3"))));
         assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
         seen.insert(stdout(&outcome));
     }
-    assert!(seen.contains("t\nm1\nm2\n"), "{seen:?}");
-    assert!(seen.contains("m1\nm2\nt\n"), "{seen:?}");
+    let every: std::collections::BTreeSet<String> = ["t\nm1\nm2\n", "m1\nt\nm2\n", "m1\nm2\nt\n"]
+        .map(String::from)
+        .into();
+    assert_eq!(seen, every);
 }
 
 /// A started activity polls a flag with no park point in its loop while the
@@ -422,7 +455,12 @@ fn a_recorded_trace_replays_to_the_same_output_and_hash() {
     assert_eq!(recorded.exit_code, 0, "{}", stderr(&recorded));
     let written = std::fs::read_to_string(&file).expect("the trace written");
     let mut lines = written.lines();
-    assert_eq!(lines.next(), Some("sim:3,uniform:0.2,gc=0.05"));
+    let hash = |outcome: &Outcome| outcome.sim.as_ref().and_then(|sim| sim.trace_hash);
+    let header = format!(
+        "sim:3,uniform:0.2,gc=0.05 hash={:016x}",
+        hash(&recorded).expect("a hash")
+    );
+    assert_eq!(lines.next(), Some(header.as_str()));
     for kind in ["preempt ", "pick ", "collect "] {
         assert!(written.contains(kind), "no {kind}in {written}");
     }
@@ -436,11 +474,206 @@ fn a_recorded_trace_replays_to_the_same_output_and_hash() {
         (recorded.exit_code, stdout(&recorded), stderr(&recorded))
     );
     assert_eq!(recorded.collections, replayed.collections);
-    let hash = |outcome: &Outcome| outcome.sim.as_ref().and_then(|sim| sim.trace_hash);
-    assert!(hash(&recorded).is_some());
     assert_eq!(hash(&recorded), hash(&replayed));
     let other = run_in(DECIDING, Some(sim("sim:4,uniform:0.2,gc=0.05")));
     assert_ne!(hash(&recorded), hash(&other));
+}
+
+/// A directory of its own for a test's trace files.
+fn trace_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("rexx-sim-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory");
+    dir
+}
+
+/// Records `DECIDING` under `sim:3,uniform:0.3` to `file`, and answers the
+/// decision lines.
+fn record_deciding(file: &std::path::Path) -> Vec<String> {
+    let recorded = run_in(
+        DECIDING,
+        Some(sim(&format!("sim:3,uniform:0.3,trace={}", file.display()))),
+    );
+    assert_eq!(recorded.exit_code, 0, "{}", stderr(&recorded));
+    let written = std::fs::read_to_string(file).expect("the trace written");
+    written.lines().skip(1).map(String::from).collect()
+}
+
+/// Writes `decisions` to `file` under `DECIDING`'s header with their own hash,
+/// so that the file loads and only the run can tell it from the recording.
+fn write_rehashed(file: &std::path::Path, decisions: &[String]) {
+    let parsed: Vec<super::Decision> = decisions
+        .iter()
+        .map(|line| {
+            let (kind, value) = line.split_once(' ').expect("a decision");
+            let value = value.parse().expect("a value");
+            match kind {
+                "preempt" => super::Decision::Preempt(value),
+                "pick" => super::Decision::Pick(value),
+                _ => super::Decision::Collect(value),
+            }
+        })
+        .collect();
+    let mut text = format!(
+        "sim:3,uniform:0.3 hash={:016x}\n",
+        super::trace_hash(&parsed)
+    );
+    for line in decisions {
+        text.push_str(line);
+        text.push('\n');
+    }
+    std::fs::write(file, text).expect("the trace rewritten");
+}
+
+/// Replays `file` on `source`.
+fn replay(source: &str, file: &std::path::Path) -> Outcome {
+    run_in(source, Some(sim(&format!("sim:replay={}", file.display()))))
+}
+
+/// A replay that takes a decision its file does not hold, or ends with
+/// decisions left, is refused naming the file, the decision's place and
+/// what the run did; the same file replays on its own program.
+#[test]
+fn a_replay_that_diverges_is_refused() {
+    let dir = trace_dir("diverge");
+    let file = dir.join("t.txt");
+    let decisions = record_deciding(&file);
+    let path = file.display().to_string();
+    let same = replay(DECIDING, &file);
+    assert_eq!(same.exit_code, 0, "{}", stderr(&same));
+    let refusal = |at: usize, held: &str, did: &str| {
+        format!(
+            "rexx-exec: the replay of `{path}` diverged at decision {at}: the file holds {held}, \
+             the run {did}\n"
+        )
+    };
+    let other = replay(THREE_ACTIVITIES, &file);
+    let first_pick = decisions
+        .iter()
+        .position(|line| line.starts_with("pick "))
+        .expect("a pick");
+    let out_of_range = {
+        let mut edited = decisions.clone();
+        edited[first_pick] = "pick 999".into();
+        write_rehashed(&file, &edited);
+        replay(DECIDING, &file)
+    };
+    let truncated = {
+        write_rehashed(&file, &decisions[..first_pick]);
+        replay(DECIDING, &file)
+    };
+    let extra = {
+        let mut edited = decisions.clone();
+        edited.push("preempt 999999".into());
+        write_rehashed(&file, &edited);
+        replay(DECIDING, &file)
+    };
+    let kind = {
+        let mut edited = decisions.clone();
+        edited.insert(0, "pick 0".into());
+        write_rehashed(&file, &edited);
+        replay(DECIDING, &file)
+    };
+    let passed = {
+        let mut edited = decisions.clone();
+        edited.swap(0, 1);
+        write_rehashed(&file, &edited);
+        replay(DECIDING, &file)
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(decisions[..2], ["preempt 3", "preempt 7"]);
+    for (name, outcome, expected) in [
+        ("other", &other, refusal(4, "`preempt 16`", "ends")),
+        (
+            "out of range",
+            &out_of_range,
+            refusal(first_pick + 1, "`pick 999`", "picks from 0 to 2"),
+        ),
+        (
+            "truncated",
+            &truncated,
+            refusal(first_pick + 1, "no more", "picks from 0 to 2"),
+        ),
+        (
+            "extra",
+            &extra,
+            refusal(decisions.len() + 1, "`preempt 999999`", "ends"),
+        ),
+        (
+            "kind",
+            &kind,
+            refusal(1, "`pick 0`", "preempts at contended step 3"),
+        ),
+        (
+            "passed",
+            &passed,
+            refusal(
+                2,
+                "`preempt 3`",
+                "reaches contended step 8 without preempting at 3",
+            ),
+        ),
+    ] {
+        assert_eq!(
+            (outcome.exit_code, stderr(outcome)),
+            (120, expected),
+            "{name}"
+        );
+    }
+}
+
+/// A trace whose decisions do not hash to its header's hash is refused
+/// before the run, and so is a header without one; the file as written
+/// loads.
+#[test]
+fn a_damaged_trace_is_refused_before_the_run() {
+    let dir = trace_dir("damaged");
+    let file = dir.join("t.txt");
+    let decisions = record_deciding(&file);
+    let written = std::fs::read_to_string(&file).expect("the trace written");
+    let loads = SimConfig::parse(&format!("sim:replay={}", file.display())).is_ok();
+    let (header, rest) = written.split_once('\n').expect("a header");
+    let (configuration, hash) = header.rsplit_once(" hash=").expect("a hash");
+    let damaged = format!("{configuration} hash=0123456789abcdef\n{rest}");
+    std::fs::write(&file, damaged).expect("the trace damaged");
+    let wrong_hash = SimConfig::parse(&format!("sim:replay={}", file.display()));
+    std::fs::write(&file, format!("{configuration}\n{rest}")).expect("the hash dropped");
+    let no_hash = SimConfig::parse(&format!("sim:replay={}", file.display()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(loads);
+    assert!(!decisions.is_empty());
+    let path = file.display();
+    assert_eq!(
+        wrong_hash,
+        Err(format!(
+            "`{path}`: the decisions hash to {hash}, the header holds 0123456789abcdef"
+        ))
+    );
+    assert_eq!(
+        no_hash,
+        Err(format!(
+            "`{path}`: `{configuration}` is not a trace's header, `CONFIG hash=H`"
+        ))
+    );
+}
+
+/// A trace file that cannot be written is refused, and the run's status
+/// says so.
+#[test]
+fn a_trace_that_cannot_be_written_is_refused() {
+    let outcome = run_in(
+        "say 'ran'\n",
+        Some(sim("sim:1,trace=/nonexistent/dir/t.txt")),
+    );
+    assert_eq!(
+        (outcome.exit_code, stdout(&outcome), stderr(&outcome)),
+        (
+            120,
+            "ran\n".into(),
+            "rexx-exec: the trace `/nonexistent/dir/t.txt` could not be written: No such file or \
+             directory (os error 2)\n"
+                .into()
+        )
+    );
 }
 
 /// Runs `source` under `spec` with `corruption` asked of the first switch
@@ -480,8 +713,8 @@ const GUARDED: &str = "o = .g~new\na = o~start('hold', 'a')\nb = o~start('hold',
      say a~result b~result\n::class g\n::method hold\n  use arg tag\n  call SysSleep 1\n  \
      return tag\n";
 
-/// Each invariant fires on the state that breaks it, through the refusal
-/// the next boundary raises; the same runs unbroken end normally.
+/// Each invariant fires on the state that breaks it, through the one
+/// refusal the next boundary raises; the same runs unbroken end normally.
 #[test]
 fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
     use crate::scheduler::Corruption;
@@ -522,16 +755,69 @@ fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
             "a switch on a thread not holding the baton",
             "a b\n",
         ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::BogusReady,
+            "a ready handle naming no idle activity",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::UnfiledHandle,
+            "a handle neither free nor filed",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::FreeFiled,
+            "a free handle naming an activity",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::RunningFree,
+            "a running activity's handle free",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::RunningFiled,
+            "a running activity filed as idle",
+            "a b\n",
+        ),
+        (
+            GUARDED,
+            Corruption::GuardOwnerDead,
+            "a guard held by no activity",
+            "a b\n",
+        ),
+        (
+            GUARDED,
+            Corruption::GuardWaiterTwice,
+            "a guard waiter queued twice or behind itself",
+            "a b\n",
+        ),
+        (
+            GUARDED,
+            Corruption::GuardWaitUnqueued,
+            "a guard wait missing from its guard's queue",
+            "a b\n",
+        ),
+        (
+            THREE_ACTIVITIES,
+            Corruption::BatonReleased,
+            "a switch on a thread not holding the baton",
+            "a b\n",
+        ),
     ] {
         let sound = corrupted(source, "sim:1", None);
         assert_eq!(sound.exit_code, 0, "{corruption:?}: {}", stderr(&sound));
         assert_eq!(stdout(&sound), answer, "{corruption:?}");
         let broken = corrupted(source, "sim:1", Some(corruption));
-        assert_eq!(broken.exit_code, 120, "{corruption:?}: {}", stderr(&broken));
-        assert!(
-            stderr(&broken).contains(&format!("rexx-exec: the scheduler found {expected}\n")),
-            "{corruption:?}: {}",
-            stderr(&broken)
+        assert_eq!(
+            (broken.exit_code, stderr(&broken)),
+            (120, format!("rexx-exec: the scheduler found {expected}\n")),
+            "{corruption:?}"
         );
     }
 }

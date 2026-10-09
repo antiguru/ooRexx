@@ -166,7 +166,8 @@ pub struct SimReport {
     pub contended: u64,
     /// The switches from one activity to another.
     pub switches: u64,
-    /// [`trace_hash`] of the decisions the run took.
+    /// The hash of the decisions the run took, FNV-1a over each one's tag
+    /// byte and its value's eight bytes, little endian.
     pub trace_hash: Option<u64>,
 }
 
@@ -199,19 +200,31 @@ impl SimConfig {
         let mut items = rest.split(',');
         let first = items.next().unwrap_or_default();
         if let Some(path) = first.strip_prefix("replay=") {
-            config = read_replay(Path::new(path))?;
+            let replay = nonempty_path(first, path)?;
+            let mut trace = None;
+            let mut previous = first;
             for item in items {
+                if item.starts_with("replay=") {
+                    return Err(format!("`{item}`: a second `replay=`"));
+                }
                 let Some(path) = item.strip_prefix("trace=") else {
-                    return Err(format!("`{item}`: a replay takes `trace=FILE` alone"));
+                    return Err(comma_in_path(previous, item));
                 };
-                config.trace = Some(PathBuf::from(path));
+                if trace.is_some() {
+                    return Err(format!("`{item}`: a second `trace=`"));
+                }
+                trace = Some(nonempty_path(item, path)?);
+                previous = item;
             }
+            config = read_replay(&replay)?;
+            config.trace = trace;
             return Ok(config);
         }
         config.seed = first
             .parse()
             .map_err(|_| format!("`{first}` is not a seed: a whole number below 2**64"))?;
         let mut items = items.peekable();
+        let mut previous = first;
         while let Some(item) = items.next() {
             let knobs = &mut config.knobs;
             if item == "fifo" {
@@ -252,7 +265,12 @@ impl SimConfig {
             } else if item == "clock=real" {
                 knobs.clock = ClockOrigin::Real;
             } else if let Some(path) = item.strip_prefix("trace=") {
-                config.trace = Some(PathBuf::from(path));
+                if config.trace.is_some() {
+                    return Err(format!("`{item}`: a second `trace=`"));
+                }
+                config.trace = Some(nonempty_path(item, path)?);
+            } else if previous.starts_with("trace=") {
+                return Err(comma_in_path(previous, item));
             } else {
                 return Err(format!(
                     "`{item}` is not a policy (`fifo`, `pre:D,k=N`, `uniform:P`, `pct:D,k=N`) \
@@ -260,6 +278,7 @@ impl SimConfig {
                      `floor=F`, `clock=midnight`, `clock=real`, `trace=FILE`)"
                 ));
             }
+            previous = item;
         }
         Ok(config)
     }
@@ -305,6 +324,20 @@ fn depth_and_steps(item: &str, d: &str, next: Option<&str>) -> Result<(u32, u64)
     Ok((d, count(item, k)?))
 }
 
+/// The path of `trace=FILE` or `replay=FILE`, refused where empty.
+fn nonempty_path(item: &str, path: &str) -> Result<PathBuf, String> {
+    if path.is_empty() {
+        return Err(format!("`{item}`: an empty path"));
+    }
+    Ok(PathBuf::from(path))
+}
+
+/// The refusal of `item`, which follows the path item `path_item` and is no
+/// item there: the path's tail, cut at a comma.
+fn comma_in_path(path_item: &str, item: &str) -> String {
+    format!("`{path_item},{item}`: a path may not contain a comma")
+}
+
 /// A probability from 0 to 1.
 fn probability(item: &str, p: &str) -> Result<f64, String> {
     p.parse()
@@ -322,18 +355,28 @@ fn count(item: &str, k: &str) -> Result<u64, String> {
 }
 
 /// The configuration a trace file's first line holds, replaying the
-/// decisions on its other lines.
+/// decisions on its other lines. The first line is `CONFIG hash=H`, `H` the
+/// decisions' [`trace_hash`] in 16 hex digits; a file whose decisions do not
+/// hash to `H` is refused.
 fn read_replay(path: &Path) -> Result<SimConfig, String> {
     let text =
         std::fs::read_to_string(path).map_err(|error| format!("`{}`: {error}", path.display()))?;
     let mut lines = text.lines();
     let header = lines.next().unwrap_or_default();
-    let mut config = SimConfig::parse(header)?;
-    if config.trace.is_some() || config.replay.is_some() || header == "sim" {
-        return Err(format!(
-            "`{}`: `{header}` is not a trace's configuration",
+    let not_a_header = || {
+        format!(
+            "`{}`: `{header}` is not a trace's header, `CONFIG hash=H`",
             path.display()
-        ));
+        )
+    };
+    let (configuration, hash) = header.rsplit_once(" hash=").ok_or_else(not_a_header)?;
+    let hash = (hash.len() == 16)
+        .then(|| u64::from_str_radix(hash, 16).ok())
+        .flatten()
+        .ok_or_else(not_a_header)?;
+    let mut config = SimConfig::parse(configuration)?;
+    if config.trace.is_some() || config.replay.is_some() || configuration == "sim" {
+        return Err(not_a_header());
     }
     let decisions = lines
         .map(|line| {
@@ -349,6 +392,13 @@ fn read_replay(path: &Path) -> Result<SimConfig, String> {
             }
         })
         .collect::<Result<Arc<[Decision]>, String>>()?;
+    let held = trace_hash(&decisions);
+    if held != hash {
+        return Err(format!(
+            "`{}`: the decisions hash to {held:016x}, the header holds {hash:016x}",
+            path.display()
+        ));
+    }
     config.replay = Some(Replay {
         path: path.to_path_buf(),
         decisions,
@@ -421,7 +471,7 @@ impl std::fmt::Display for SimConfig {
 
 /// FNV-1a over each decision's tag byte and its value's eight bytes, little
 /// endian: the same on every build and platform.
-pub fn trace_hash(decisions: &[Decision]) -> u64 {
+fn trace_hash(decisions: &[Decision]) -> u64 {
     let mut trace = Trace::new(false);
     for decision in decisions {
         trace.record(*decision);
@@ -610,55 +660,138 @@ impl Trace {
     }
 }
 
-/// A replay's place in each kind of decision it reads back.
+/// A replay's place in the decisions it reads back, taken in the order the
+/// file holds them. The first decision the run takes otherwise is refused,
+/// and after it the run takes no decision from the file.
 struct Replaying {
-    preempts: Vec<u64>,
-    picks: Vec<u64>,
-    collects: Vec<u64>,
+    path: PathBuf,
+    decisions: Arc<[Decision]>,
+    /// The next decision to take.
+    next: usize,
+    /// The positions in `decisions` of the preemptions and of the
+    /// collections, each with the next one not yet taken.
+    preempts: Vec<usize>,
+    collects: Vec<usize>,
     next_preempt: usize,
-    next_pick: usize,
     next_collect: usize,
+    /// Whether the run took a decision the file does not hold.
+    diverged: bool,
+    /// That divergence's refusal, until a boundary raises it.
+    refusal: Option<Loud>,
+}
+
+/// A decision keyed to a position the run counts: a contended step or an
+/// allocation.
+#[derive(Clone, Copy)]
+enum Point {
+    Preempt,
+    Collect,
 }
 
 impl Replaying {
-    fn new(decisions: &[Decision]) -> Replaying {
-        let mut replaying = Replaying {
-            preempts: Vec::new(),
-            picks: Vec::new(),
-            collects: Vec::new(),
-            next_preempt: 0,
-            next_pick: 0,
-            next_collect: 0,
+    fn new(replay: &Replay) -> Replaying {
+        let at = |wanted: fn(&Decision) -> bool| {
+            (replay.decisions.iter().enumerate())
+                .filter(|(_, decision)| wanted(decision))
+                .map(|(at, _)| at)
+                .collect()
         };
-        for decision in decisions {
-            match *decision {
-                Decision::Preempt(step) => replaying.preempts.push(step),
-                Decision::Pick(index) => replaying.picks.push(index),
-                Decision::Collect(at) => replaying.collects.push(at),
+        Replaying {
+            path: replay.path.clone(),
+            decisions: Arc::clone(&replay.decisions),
+            next: 0,
+            preempts: at(|decision| matches!(decision, Decision::Preempt(_))),
+            collects: at(|decision| matches!(decision, Decision::Collect(_))),
+            next_preempt: 0,
+            next_collect: 0,
+            diverged: false,
+            refusal: None,
+        }
+    }
+
+    /// Whether the trace takes `kind`'s decision at position `at`; positions
+    /// come in increasing order, one at a time. `forced` is a preemption the
+    /// floor takes whatever the trace holds.
+    fn point(&mut self, kind: Point, at: u64, forced: bool) -> bool {
+        if self.diverged {
+            return forced;
+        }
+        let (positions, cursor, did, without) = match kind {
+            Point::Preempt => (
+                &self.preempts,
+                &mut self.next_preempt,
+                format!("preempts at contended step {at}"),
+                format!("reaches contended step {at} without preempting at"),
+            ),
+            Point::Collect => (
+                &self.collects,
+                &mut self.next_collect,
+                format!("collects at allocation {at}"),
+                format!("reaches allocation {at} without collecting at"),
+            ),
+        };
+        if let Some(&position) = positions.get(*cursor) {
+            let point = match self.decisions[position] {
+                Decision::Preempt(point) | Decision::Collect(point) | Decision::Pick(point) => {
+                    point
+                }
+            };
+            if point < at {
+                self.diverge(position, format!("{without} {point}"));
+                return forced;
+            }
+            if point == at {
+                if position != self.next {
+                    self.diverge(self.next, did);
+                    return forced;
+                }
+                *cursor += 1;
+                self.next += 1;
+                return true;
             }
         }
-        replaying.preempts.sort_unstable();
-        replaying.collects.sort_unstable();
-        replaying
+        if forced {
+            self.diverge(self.next, did);
+        }
+        forced
     }
 
-    /// Whether the trace preempts at contended step `step`; steps come in
-    /// increasing order.
-    fn preempts_at(&mut self, step: u64) -> bool {
-        reached(&self.preempts, &mut self.next_preempt, step)
-    }
-
-    /// Whether the trace collects at allocation `at`; allocations come in
-    /// increasing order.
-    fn collects_at(&mut self, at: u64) -> bool {
-        reached(&self.collects, &mut self.next_collect, at)
-    }
-
-    /// The next pick, at most `last`; the front where the trace has no more.
+    /// The next pick, from 0 to `last`.
     fn pick(&mut self, last: u64) -> u64 {
-        let pick = self.picks.get(self.next_pick).copied().unwrap_or(0);
-        self.next_pick += 1;
-        pick.min(last)
+        if self.diverged {
+            return 0;
+        }
+        match self.decisions.get(self.next) {
+            Some(Decision::Pick(index)) if *index <= last => {
+                self.next += 1;
+                *index
+            }
+            _ => {
+                self.diverge(self.next, format!("picks from 0 to {last}"));
+                0
+            }
+        }
+    }
+
+    /// Refuses the decisions left where the run has ended.
+    fn finish(&mut self) {
+        if !self.diverged && self.next < self.decisions.len() {
+            self.diverge(self.next, "ends".into());
+        }
+    }
+
+    /// Notes that the run, at the decision at `at` in the file, did `did`.
+    fn diverge(&mut self, at: usize, did: String) {
+        let held = match self.decisions.get(at) {
+            Some(decision) => format!("`{decision}`"),
+            None => "no more".into(),
+        };
+        self.diverged = true;
+        self.refusal = Some(Loud::sim_replay_diverged(format!(
+            "the replay of `{}` diverged at decision {}: the file holds {held}, the run {did}",
+            self.path.display(),
+            at + 1
+        )));
     }
 }
 
@@ -739,8 +872,11 @@ pub(crate) struct Sim {
     breach: Option<&'static str>,
     /// Whether an inline native call outlasted `block=`.
     blocked_native: bool,
-    /// The first invariant a switch found broken.
+    /// The first invariant a switch found broken, until a boundary refuses
+    /// it.
     inconsistent: Option<Loud>,
+    /// Whether a switch found an invariant broken.
+    invariant_broken: bool,
 }
 
 /// The watch on an inline native call in the simulation mode: a thread that
@@ -784,10 +920,7 @@ impl Interp {
             Policy::Pct { d, k } => draw_points(&mut streams.schedule, u64::from(d) - 1, k),
             Policy::Fifo | Policy::Uniform { .. } => Vec::new(),
         };
-        let replaying = config
-            .replay
-            .as_ref()
-            .map(|replay| Replaying::new(&replay.decisions));
+        let replaying = config.replay.as_ref().map(Replaying::new);
         let collecting = config.knobs.gc.is_some();
         self.sim = Some(Box::new(Sim {
             trace: Trace::new(config.trace.is_some()),
@@ -810,6 +943,7 @@ impl Interp {
             breach: None,
             blocked_native: false,
             inconsistent: None,
+            invariant_broken: false,
         }));
         for handle in 0..self.activities.handles() {
             self.sim_spawned(handle);
@@ -881,7 +1015,7 @@ impl Interp {
             schedule.run_contended = 0;
         }
         let chosen = match (&mut sim.replaying, sim.config.policy) {
-            (Some(replaying), _) => replaying.preempts_at(step),
+            (Some(replaying), _) => replaying.point(Point::Preempt, step, forced),
             (None, Policy::Fifo) => false,
             (None, Policy::Pre { .. }) => reached(&schedule.points, &mut schedule.next_point, step),
             (None, Policy::Uniform { p }) => sim.streams.schedule.unit() < p,
@@ -987,6 +1121,9 @@ impl Interp {
         {
             return Err(loud.into());
         }
+        if let Some(loud) = self.sim_replay_refusal() {
+            return Err(loud.into());
+        }
         match self.sim.as_deref_mut().and_then(|sim| sim.breach.take()) {
             Some(what) => Err(Loud::sim_foreign_post(what).into()),
             None => Ok(()),
@@ -1027,10 +1164,18 @@ impl Interp {
         loud.into()
     }
 
-    /// Whether a wait nothing in the simulation can end was refused, which
-    /// ends the program's wait for its activities.
+    /// Whether a wait nothing in the simulation can end was refused, or a
+    /// replay diverged, which ends the program's wait for its activities.
     pub(crate) fn sim_is_stuck(&self) -> bool {
-        self.sim.as_ref().is_some_and(|sim| sim.stuck)
+        self.sim.as_ref().is_some_and(|sim| {
+            sim.stuck || sim.replaying.as_ref().is_some_and(|replay| replay.diverged)
+        })
+    }
+
+    /// The refusal of a replay's divergence, once.
+    fn sim_replay_refusal(&mut self) -> Option<Loud> {
+        let sim = self.sim.as_deref_mut()?;
+        sim.replaying.as_mut()?.refusal.take()
     }
 
     /// Whether the pinned wait now beginning is the one `fail=wait:K` fails.
@@ -1056,7 +1201,7 @@ impl Interp {
         sim.allocations += 1;
         let at = sim.allocations;
         let collects = match &mut sim.replaying {
-            Some(replaying) => replaying.collects_at(at),
+            Some(replaying) => replaying.point(Point::Collect, at, false),
             None => sim.streams.gc.unit() < q,
         };
         if collects {
@@ -1159,40 +1304,59 @@ impl Interp {
         })
     }
 
-    /// Writes the decision trace to `trace=`'s file: the configuration that
-    /// replays it, then one decision a line. A failure to write is reported
-    /// on the trace sink.
-    pub(crate) fn sim_write_trace(&mut self) {
+    /// The refusals a run in the simulation mode ends with: the one a
+    /// boundary has not raised yet, a replay's decisions left, and a trace
+    /// file not written. The decision trace goes to `trace=`'s file: its
+    /// header, `CONFIG hash=H`, then one decision a line.
+    pub(crate) fn sim_finish(&mut self) -> Vec<Loud> {
+        let mut refused = Vec::new();
+        let Some(sim) = self.sim.as_deref_mut() else {
+            return refused;
+        };
+        if let Some(replaying) = &mut sim.replaying {
+            replaying.finish();
+        }
+        if let Err(Failure::Loud(loud)) = self.sim_breached() {
+            refused.push(*loud);
+        }
+        refused.extend(self.sim_replay_refusal());
         let Some(sim) = self.sim.as_deref() else {
-            return;
+            return refused;
         };
         let (Some(path), Some(kept)) = (&sim.config.trace, &sim.trace.kept) else {
-            return;
+            return refused;
         };
-        let mut text = format!("{}\n", sim.config.header());
+        let mut text = format!("{} hash={:016x}\n", sim.config.header(), sim.trace.hash);
         for decision in kept {
             text.push_str(&format!("{decision}\n"));
         }
         if let Err(error) = std::fs::write(path, text) {
-            let line = format!("rexx-sim: the trace `{}`: {error}\n", path.display());
-            self.trace.extend_from_slice(line.as_bytes());
+            refused.push(Loud::sim_trace_unwritten(path, &error));
         }
+        refused
     }
 
     /// Checks the scheduler's invariants at a switch; the first broken one is
     /// refused at the next boundary, and ends the program's wait for its
-    /// activities.
+    /// activities. No switch after it is checked.
     #[cold]
     #[inline(never)]
     pub(crate) fn sim_check_switch(&mut self) {
+        if self.sim.as_deref().is_some_and(|sim| sim.invariant_broken) {
+            return;
+        }
         #[cfg(test)]
         self.sim_corrupt();
-        let Err(loud) = self.check_invariants() else {
+        let checked = self.check_invariants();
+        #[cfg(test)]
+        self.sim_uncorrupt();
+        let Err(loud) = checked else {
             return;
         };
         if let Some(sim) = self.sim.as_deref_mut() {
             sim.stuck = true;
-            sim.inconsistent.get_or_insert(loud);
+            sim.invariant_broken = true;
+            sim.inconsistent = Some(loud);
         }
     }
 }
@@ -1227,6 +1391,22 @@ impl Loud {
             message: crate::owned_message(
                 "a native call in the simulation mode that runs longer than its bound",
                 None,
+            ),
+        }
+    }
+
+    /// A replay that took a decision its trace file does not hold; `what`
+    /// names the file, the decision and what the run did.
+    pub(crate) fn sim_replay_diverged(what: String) -> Loud {
+        Loud { message: what }
+    }
+
+    /// A decision trace that could not be written to `path`.
+    pub(crate) fn sim_trace_unwritten(path: &Path, error: &std::io::Error) -> Loud {
+        Loud {
+            message: format!(
+                "the trace `{}` could not be written: {error}",
+                path.display()
             ),
         }
     }
