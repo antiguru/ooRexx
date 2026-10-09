@@ -120,20 +120,13 @@ impl Interp {
 
     /// `traceSourceString` (`RexxActivation.cpp:4007`-`4029`): the banner
     /// interactive debug prints once per activation, ahead of the first
-    /// clause it traces.
+    /// clause it traces, unless the activation announced itself with `>I>`
+    /// (`traceEntryOrExit`, `RexxActivation.cpp:3683`).
     ///
     /// Seven blanks, `+++`, a blank and the `PARSE SOURCE` string in double
     /// quotes -- measured, `       +++ "LINUX COMMAND /abs/t.rex"`.
     pub(crate) fn trace_debug_source(&mut self) {
         if !self.traced_mode().debug || self.activation().debug.source_traced {
-            return;
-        }
-        // **The outermost activation's, and no other's.**
-        // `traceSourceString`'s caller is guarded by `isTopLevelCall()`, and
-        // a called program under `RXTRACE=ON` announces itself instead --
-        // measured, the oracle gives it `>I>` and `<I<` and no banner.
-        if self.activation_depth() > 1 {
-            self.activation_mut().debug.source_traced = true;
             return;
         }
         self.activation_mut().debug.source_traced = true;

@@ -1854,17 +1854,18 @@ DEVIATIONS -- permanent, chosen
      agrees with the oracle. The block stack is an oracle defect, not a
      specified observable. Not witnessed in the corpus.
 
- 27. A `.DebugInput` ANSWER THAT IS NOT A STRING IS READ BY ITS STRING VALUE
-     (Phase 6.1 Task 6). OWNER: none.
+ 27. A `.DebugInput` ANSWER THAT IS NOT A STRING IS READ AS `to_text` RENDERS
+     IT: AN ARRAY AS ITS LINES, ANY OTHER OBJECT AS ITS DEFAULT STRING, A
+     `STRING` METHOD OF ITS OWN NOT SENT (Phase 6.1 Task 6). OWNER: none.
 
      `Activity::traceInput` casts whatever `LINEIN` answers to `RexxString *`
      unchecked (interpreter/concurrency/Activity.cpp:3252), so a non-string
      answer is read through another object's layout: an Array answering
      `say 'arr'` ran as the command `AN ...` (probe dj1), and no answer at all
      is a SIGSEGV (corpus/oracle-crashes.txt entry 31). This crate reads the
-     answer's string value: the Array runs `say 'arr'`, and an object whose
-     STRING method answers a line runs its default string, as `to_text` gives
-     it. The oracle's answer is a type confusion, not a specified observable.
+     answer through `to_text`: the Array runs `say 'arr'`, and an object whose
+     STRING method answers a line runs its default string (`a S`, run as the
+     command `A S`) instead. The oracle's answer is a type confusion, not a specified observable.
      Measured by Phase 6.1 Task 6's review (probes dj1, di3). Not witnessed in
      the corpus.
 

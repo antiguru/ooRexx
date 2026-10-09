@@ -143,6 +143,7 @@ impl Interp {
             return;
         }
         self.activation_mut().trace_entry = TraceEntry::Done;
+        self.activation_mut().debug.source_traced = true;
         let package = self
             .package_path(self.activation().program_id)
             .as_bytes()
@@ -160,6 +161,7 @@ impl Interp {
             return;
         };
         self.activation_mut().trace_entry = TraceEntry::Done;
+        self.activation_mut().debug.source_traced = true;
         let package = self
             .package_path(self.activation().program_id)
             .as_bytes()
