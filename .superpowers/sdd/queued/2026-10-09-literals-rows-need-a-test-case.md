@@ -1,6 +1,6 @@
 # The `Literals` assertion rows need a test case for `self`
 
-`rust/crates/rexx-exec/tests/assertions.rs`'s twelve `Literals` EXEMPT rows name
+`rust/crates/rexx-exec/tests/assertions.rs`'s `Literals` EXEMPT rows name
 `unblocked_by: "Phase 9"`: `runDynamicSource` builds `.routine~new(name, code, package)`, whose
 package argument this crate refuses (`method "NEW" of class "Routine" ... (Phase 9)`). That is
 the interpreter half. The harness half: `program_for` runs a row at top level, where `self` has

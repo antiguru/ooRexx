@@ -8,7 +8,8 @@ to wait for work no phase owes. Measured at 6860d4f80+fix round 1 of Phase 6.1 T
 (probes `/tmp/claude-1000/p61/t7/rc6`), each rc 120:
 
 - `ITEMS` of Directory, StringTable, Stem, Set, Bag, Relation and Table: `method "ITEMS" of
-  class "T" is not implemented (Phase 9)` (`dispatch/hash.rs` `not_this_task`).
+  class "T" is not implemented (Phase 9)` (`dispatch/hash.rs` `not_this_task`; Stem through
+  `stem_refusal`, `dispatch/hash/stem.rs:528`; Relation at `relation.rs:123`).
 - MutableBuffer `LENGTH`: `method "LENGTH" of class "MutableBuffer" ... (Phase 9)`.
 - Message `SEND`: `method "SEND" of class "Message" ... (Phase 9)`.
 

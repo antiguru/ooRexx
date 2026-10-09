@@ -72,7 +72,7 @@ disposition row`.
 `CLOSED` is `["Phase 5", "Phase 6", "Phase 7", "Phase 8"]`; the debt paragraph is gone.
 `no_owner_table_names_a_closed_phase` scans `tests/{owners,assertions,bif_assertions,keyword_assertions}.rs`
 with the literal scan. Before the vocabulary prune and the `Literals` re-home it failed on the
-twelve `assertions.rs` rows and `bif_assertions.rs:610` (a report string naming Phase 5 and
+the `assertions.rs` `Literals` rows and `bif_assertions.rs:610` (a report string naming Phase 5 and
 Phase 7). `"Phase 5"` and `"Phase 7"` are pruned from `SPLIT_TABLE_PHASES` and both `PHASES`
 vocabularies (Phase 7 is closed too and the widened scan names it); `owners.rs`'s zero counts for
 `Phase 5` and `Phase 7` tags are deleted, since the vocabulary test rejects such a tag; the
@@ -96,7 +96,7 @@ Each `runDynamicSource` case run outside the harness inside a test-case class wi
 the oracle prints `1 1 AB AB AB AB AB A A A A A`, rc 0; ours refuses rc 120, `method "NEW" of
 class "Routine" is not implemented (Phase 9)`. `lit2`: `.routine~new(n, src)` answers and
 `.routine~new(n, src, .context~package)` refuses (`native_executable_new`, `args.len() > 2`). So
-the interpreter does not run them, and the twelve rows are re-homed to `Phase 9` with that
+the interpreter does not run them, and the rows are re-homed to `Phase 9` with that
 reason above `EXEMPT`. In the harness itself (`lit3`) the row has no test case for `self`, and
 both engines raise 97.1 on `self~hex`.
 
