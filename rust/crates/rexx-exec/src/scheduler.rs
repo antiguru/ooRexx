@@ -1185,6 +1185,8 @@ impl Interp {
     /// semaphores.
     fn cancel_wait(&mut self) {
         let running = self.activities.running;
+        #[cfg(test)]
+        self.note_cancelled_wait();
         self.activity.when_parked = false;
         self.activities.guards.withdraw(running);
         self.activity.guard_waits.retain(|wait| !wait.queued);
@@ -1201,6 +1203,29 @@ impl Interp {
         self.activities
             .sleepers
             .retain(|Reverse((_, _, sleeper))| *sleeper != running);
+    }
+
+    /// Counts in [`CANCELLED_WAITS`] what [`Interp::cancel_wait`] finds to
+    /// withdraw the running activity from.
+    #[cfg(test)]
+    fn note_cancelled_wait(&self) {
+        let running = self.activities.running;
+        let found = CancelledWaits {
+            when_parks: u64::from(self.activity.when_parked),
+            guard_waits: u64::from(self.activities.guards.queues(running)),
+            sleeps: u64::from(
+                (self.activities.sleepers.iter())
+                    .any(|Reverse((_, _, sleeper))| *sleeper == running),
+            ),
+        };
+        CANCELLED_WAITS.with(|cancelled| {
+            let counts = cancelled.get();
+            cancelled.set(CancelledWaits {
+                when_parks: counts.when_parks + found.when_parks,
+                guard_waits: counts.guard_waits + found.guard_waits,
+                sleeps: counts.sleeps + found.sleeps,
+            });
+        });
     }
 
     /// Measures this interpreter's Rust stack from `base`, an address near
@@ -2496,6 +2521,29 @@ thread_local! {
     /// How many abandoned calls' frames the last run on this thread still
     /// held at its end.
     static ABANDONED_HELD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// What the cancelled waits on this thread withdrew their activities
+    /// from.
+    static CANCELLED_WAITS: std::cell::Cell<CancelledWaits> =
+        const { std::cell::Cell::new(CancelledWaits { when_parks: 0, guard_waits: 0, sleeps: 0 }) };
+}
+
+/// How many cancelled waits found their activity in each wait
+/// [`Interp::cancel_wait`] withdraws it from.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CancelledWaits {
+    /// A `GUARD WHEN` park.
+    pub(crate) when_parks: u64,
+    /// A guard lock's queue.
+    pub(crate) guard_waits: u64,
+    /// The sleepers.
+    pub(crate) sleeps: u64,
+}
+
+/// [`CANCELLED_WAITS`]'s counts.
+#[cfg(test)]
+pub(crate) fn cancelled_waits() -> CancelledWaits {
+    CANCELLED_WAITS.with(std::cell::Cell::get)
 }
 
 /// [`ABANDONED_HELD`]'s count.

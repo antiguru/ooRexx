@@ -940,6 +940,45 @@ mod measured {
         );
     }
 
+    /// Under every opportunity main defers a slice at its sort comparator's
+    /// first clause, whose `~result` then parks it pinned. The activity it
+    /// waits on sorts with a one-clause comparator while a third is ready:
+    /// its first slice is deferred and its second takes a pinned yield, so
+    /// the slice main deferred is not carried over to it.
+    #[test]
+    fn a_slice_deferred_before_a_pinned_park_stays_with_its_activity() {
+        let source = ".local['ARR'] = .array~of(2, 1)\n\
+                      .local~~put(.array~of(3, 1, 2)~start('sortWith', .cmpb~new), 'M')\
+                      ~~put(.t~new~start('run'), 'C')~at('ARR')~sortWith(.cmpa~new)\n\
+                      say 'done'\n\
+                      ::class cmpa\n::method compare\n  \
+                      return .m~result~items * 0 + arg(1) - arg(2)\n\
+                      ::class cmpb\n::method compare\n  return arg(1) - arg(2)\n\
+                      ::class t\n::method run\n  do i = 1 to 3\n    say 'c ran' i\n  end\n";
+        let outcome = run_program(
+            "probe.rex",
+            source.as_bytes().to_vec(),
+            Invocation::none()
+                .with_deadline(super::support::oracle::RUN_DEADLINE)
+                .with_switch_mode(SwitchMode::EveryOpportunity),
+        );
+        assert_eq!(
+            (
+                outcome.exit_code,
+                String::from_utf8_lossy(&outcome.stdout).as_ref(),
+                String::from_utf8_lossy(&outcome.stderr).as_ref()
+            ),
+            (0, "c ran 1\ndone\nc ran 2\nc ran 3\n", "")
+        );
+        let sorting = vec![PinKind::Native("SORTWITH".into()), PinKind::SortComparator];
+        let parking = [vec![PinKind::TreeSend], sorting.clone()].concat();
+        let deferred = &outcome.pinning.deferred_slices;
+        assert_eq!(deferred.get(&parking), Some(&1), "{deferred:?}");
+        assert_eq!(deferred.get(&sorting), Some(&2), "{deferred:?}");
+        let yields = &outcome.pinning.pinned_yields;
+        assert_eq!(yields.get(&sorting), Some(&1), "{yields:?}");
+    }
+
     /// A busy-wait inside `INTERPRET` takes pinned yields, counted with the
     /// `Interpret` frame, and no pinned yield is counted where nothing pins.
     #[test]
@@ -1546,7 +1585,7 @@ mod measured {
                     &base.join(at.to_string()),
                     &row.group,
                     Some(&row.test),
-                    mode,
+                    mode.clone(),
                 );
                 (
                     format!("{} {}", row.group, row.test),

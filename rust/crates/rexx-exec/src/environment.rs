@@ -1243,6 +1243,11 @@ impl Interp {
     /// Stores one entry on a `Body::Native`, and does nothing for a receiver
     /// that is not one.
     pub(crate) fn set_native_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
+        #[cfg(test)]
+        NATIVE_ENTRY_WRITES.with(|writes| {
+            let (all, dead) = writes.get();
+            writes.set((all + 1, dead + u64::from(self.heap.get(object).is_none())));
+        });
         if let Some(held) = self.heap.get_mut(object)
             && let Body::Native(native) = &mut held.body
         {
@@ -1438,6 +1443,21 @@ pub(crate) fn default_object_name(id: &str) -> String {
         .is_some_and(|byte| b"aeiouAEIOU".contains(byte));
     let article = if vowel { "an " } else { "a " };
     format!("{article}{id}")
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many [`Interp::set_native_entry`] writes this thread made, and how
+    /// many of them to a handle naming no live object.
+    static NATIVE_ENTRY_WRITES: std::cell::Cell<(u64, u64)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+
+/// [`NATIVE_ENTRY_WRITES`]'s counts: every write, then those to a dead
+/// handle.
+#[cfg(test)]
+pub(crate) fn native_entry_writes() -> (u64, u64) {
+    NATIVE_ENTRY_WRITES.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

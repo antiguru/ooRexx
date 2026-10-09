@@ -1575,5 +1575,6 @@ fn uniform_1_in_fifo_order_runs_as_every_opportunity() {
 
 mod callbacks;
 mod lent;
+mod mutants;
 mod native;
 mod pool;

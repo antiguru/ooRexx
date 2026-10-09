@@ -235,6 +235,12 @@ impl GuardTable {
         lock.map(|lock| lock.waiters.pop_front()).is_some()
     }
 
+    /// Whether `activity` is queued for a guard lock.
+    #[cfg(test)]
+    pub(crate) fn queues(&self, activity: ActivityId) -> bool {
+        matches!(self.waiting.get(&activity), Some(Waiting::Guard(_)))
+    }
+
     /// The first activity queued for a guard, if any.
     #[cfg(test)]
     pub(crate) fn first_queued(&self) -> Option<ActivityId> {
