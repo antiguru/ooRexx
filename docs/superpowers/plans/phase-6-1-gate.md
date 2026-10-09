@@ -974,3 +974,43 @@ Exit 0, every spread at most 0.0017%. Percentages are against base61 except the 
 
 heapshape is +1.16% against the 6.1 base, +1.03% of it present before Task 9 (base, `6358ca7a6`).
 It is being bisected separately and goes to Moritz for a ruling; this round does not change it.
+
+## Task 10
+
+The seeded gate: `concurrency_tests.rs` `group_runs::whole_groups::sim_gate`, parts and seed counts
+in `rust/corpus/sim-gate.tsv`, exemptions in `rust/corpus/sim-exempt.tsv`, oracle sets in
+`rust/corpus/sim-oracle/`. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-10-report.md`.
+
+### Calibration and budget
+
+Seed 0 of each part under `fifo`, both builds (`REXX_SIM_CALIBRATION=FILE ... cargo test
+[--release] -p rexx-exec --test concurrency_tests sim_gate::calibration`, 8 jobs): 196 rows, k and
+both wall times per row in `sim-gate.tsv`; summed wall time 14.2 s release, 19.5 s debug; the largest
+row DateTime whole, 5.0 s and 8.1 s. Seeds: 70 per row in release; 14 per row in debug on the 128
+rows that are derived parts, programs with k at least 1, the gate's own programs and MutexSemaphore
+single. Run deadline: calibrated time x 10, at least 60 s.
+
+Budget: release 10 min, debug 2 min. Measured at `b8bba37a2`: release 13720 runs in 126 s (inside
+the `whole_groups` filter run, `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 1 --release -p rexx-exec
+--test concurrency_tests whole_groups`, exit 0, 14 passed, 5:20 wall); debug at `902de404e` 1792
+runs in 12 s (`REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests
+sim_gate::`, exit 0, 8 passed).
+
+### Oracle differences at the close run
+
+Reported, not failed (`/tmp/claude-1000/p61/t10/gate-final.txt`), runs per part: every seed of the
+parts whose normal-mode run is listed in `DIFFERING` (70 each: Section1, TRACE_TraceObject whole and
+derived, TRACE, RAISE whole and derived, METHOD whole, rest and derived, CONSTANT whole and rest,
+ATTRIBUTE whole and derived, RexxContext whole and rest, Object whole and rest, Method whole and
+rest, Message whole and derived, Class whole, STREAM whole); SysSleep whole 61 and derived 55 (the
+exempt TEST_SLEEP_DURATION); REPLY derived 29 and whole 14 (assertion counts after the replying
+tests, P41/P86); MutexSemaphore single 20 and `message_notify.rex` 14 (the exempt deadlocks);
+`guard_on_lock_passes_between_activities.rex` 16; Ticker derived 9 and whole 8;
+`context_moved_by_reply.rex` 8; `main_ends_in_pinned_yield.rex` 3;
+`ticker_fires_on_its_replied_activity.rex` 2; MethodArgs derived 1; STREAM derived 1.
+
+### `whole_groups`
+
+At `b8bba37a2`, the command above: exit 0, 14 passed. At `902de404e` it was red on TRACE whole (both
+modes): Task 6 (`f062f791e`, then `072e536ac`) had made the `?` tests and TEST_TRACE_NUMERIC_DEBUG pass; the two keys were
+rewritten (report, "whole_groups: TRACE whole").
