@@ -2737,6 +2737,7 @@ impl Interp {
     /// collects.
     #[inline]
     pub(crate) fn charge_body_bytes(&mut self, bytes: usize) {
+        self.heap.hold_body_bytes(bytes);
         let since = self.heap.charge_body_bytes(bytes);
         self.collect_due |= since >= self.bytes_due;
     }

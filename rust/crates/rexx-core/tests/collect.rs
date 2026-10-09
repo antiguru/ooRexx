@@ -1,4 +1,4 @@
-use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, RootSet};
+use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, Object, RootSet};
 
 #[test]
 fn unreachable_objects_are_swept() {
@@ -50,12 +50,18 @@ fn transitively_reachable_objects_survive() {
 fn reference_cycles_are_collected() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    let a = heap.alloc(Body::array(vec![]));
+    let a = heap.alloc(Body::array(vec![None]));
     let b = heap.alloc(Body::array(vec![Some(a)]));
-    let Some(obj) = heap.get_mut(a) else {
+    // Written in place: a replaced body would hold bytes the heap was never
+    // told of.
+    let Some(Object {
+        body: Body::Array { slots, .. },
+        ..
+    }) = heap.get_mut(a)
+    else {
         panic!("a exists")
     };
-    obj.body = Body::array(vec![Some(b)]);
+    slots[0] = Some(b);
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
 }

@@ -198,11 +198,14 @@ impl Surface for Interp {
     }
 
     fn finish_string(&mut self, string: ObjRef, made: &[u8], length: usize) {
-        if let Some(Body::Text { bytes, num }) =
-            self.heap.get_mut(string).map(|held| &mut held.body)
-        {
-            *bytes = Bytes::from_slice(&made[..length]);
-            *num = None;
+        if let Some(body) = self.heap.get_mut(string).map(|held| &mut held.body) {
+            let before = body.held_bytes();
+            if let Body::Text { bytes, num } = body {
+                *bytes = Bytes::from_slice(&made[..length]);
+                *num = None;
+            }
+            let after = body.held_bytes();
+            self.heap.rehold_body_bytes(before, after);
         }
         // Rewritten where it lies, as the oracle's string data is: a call
         // may hold the address `StringData` answered for the unfinished
@@ -251,8 +254,12 @@ impl Surface for Interp {
 
     fn mutable_buffer(&mut self, buffer: ObjRef) -> Option<(POINTER, usize, usize)> {
         let state = self.lent_buffer(buffer)?;
+        let before = state.capacity;
         let (address, capacity) = state.writable();
-        Some((address.cast(), state.bytes.len(), capacity))
+        let length = state.bytes.len();
+        // A failed reservation drops the capacity to what the storage holds.
+        self.heap.rehold_body_bytes(before, capacity);
+        Some((address.cast(), length, capacity))
     }
 
     fn set_mutable_buffer_length(&mut self, buffer: ObjRef, length: usize) -> Option<usize> {
@@ -274,8 +281,12 @@ impl Surface for Interp {
             let added = capacity - state.capacity;
             grown = state.ensure_capacity(added).unwrap_or(0);
         }
+        let reserved = state.capacity;
         let address = state.writable().0.cast();
+        let shrunk = reserved - state.capacity;
         self.charge_growth(grown);
+        // A failed reservation drops the capacity to what the storage holds.
+        self.heap.release_body_bytes(shrunk);
         Some(address)
     }
 

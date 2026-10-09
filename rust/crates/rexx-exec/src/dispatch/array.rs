@@ -401,7 +401,7 @@ fn array_reshape(
             grown[offset] = *item;
         }
     }
-    let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+    let (before, after) = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array {
             slots,
             dimensions: held,
@@ -409,11 +409,15 @@ fn array_reshape(
             let before = slots.capacity();
             *slots = grown;
             *held = Some(dimensions.into());
-            slots.capacity().saturating_sub(before)
+            (before, slots.capacity())
         }
         _ => return Err(Loud::receiver_class("a value that is not an array").into()),
     };
-    interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+    // The replacement can hold fewer slots than the extended original did.
+    interp.charge_growth(after.saturating_sub(before) * rexx_core::SLOT_BYTES);
+    interp
+        .heap
+        .release_body_bytes(before.saturating_sub(after) * rexx_core::SLOT_BYTES);
     Ok(())
 }
 

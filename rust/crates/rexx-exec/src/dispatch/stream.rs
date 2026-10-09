@@ -126,10 +126,14 @@ pub(super) fn init(
     let Some(object) = interp.heap.get_mut(receiver) else {
         unreachable!("a live receiver")
     };
+    // The receiver may hold a state of another class's, a buffer's among
+    // them, where this method was run against it.
+    let before = object.body.held_bytes();
     let Body::Instance { native, .. } = &mut object.body else {
         unreachable!("Stream is allocated as Body::Instance")
     };
     *native = Some(Box::new(NativeState::Stream(state)));
+    interp.heap.release_body_bytes(before);
     Ok(None)
 }
 
@@ -1916,10 +1920,13 @@ pub(super) fn uninit(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if let Some(object) = interp.heap.get_mut(receiver)
-        && let Body::Instance { native, .. } = &mut object.body
-    {
-        *native = None;
+    if let Some(object) = interp.heap.get_mut(receiver) {
+        let before = object.body.held_bytes();
+        if let Body::Instance { native, .. } = &mut object.body {
+            *native = None;
+        }
+        let after = object.body.held_bytes();
+        interp.heap.rehold_body_bytes(before, after);
     }
     Ok(None)
 }

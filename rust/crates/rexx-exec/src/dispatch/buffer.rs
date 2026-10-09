@@ -566,10 +566,13 @@ fn native_mutable_buffer_setbuffersize(
 ) -> Result<Option<ObjRef>, Failure> {
     let size = required_length_argument(interp, args, 0)?;
     let state = buffer_state_mut(interp, receiver, b"SETBUFFERSIZE")?;
+    let before = state.capacity;
     let grown = state
         .set_buffer_size(size)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
+    let shrunk = before.saturating_sub(state.capacity);
     interp.charge_growth(grown);
+    interp.heap.release_body_bytes(shrunk);
     Ok(Some(receiver))
 }
 

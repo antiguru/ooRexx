@@ -71,8 +71,11 @@ pub struct Heap {
     /// Body bytes charged by [`Heap::charge_body_bytes`] since the last
     /// collection.
     bytes_since: usize,
-    /// The survivors' body bytes as the last collection summed them.
+    /// The body bytes the last collection found live.
     live_bytes: usize,
+    /// The body bytes every live object holds now: what was charged or held
+    /// less what was released and what the sweeps freed.
+    held_bytes: usize,
     /// The most body bytes held at once as of the last collection.
     peak_bytes: usize,
     #[cfg(feature = "sharing")]
@@ -126,6 +129,7 @@ impl Heap {
             collections: 0,
             bytes_since: 0,
             live_bytes: 0,
+            held_bytes: 0,
             peak_bytes: 0,
             #[cfg(feature = "sharing")]
             sharing: Sharing::default(),
@@ -142,12 +146,42 @@ impl Heap {
         self.collections
     }
 
-    /// Records `bytes` of body allocated outside the slot, and answers the
-    /// bytes charged since the last collection.
+    /// Records `bytes` of body allocated outside the slot toward the next
+    /// collection, and answers the bytes charged since the last one. What a
+    /// live object holds is recorded apart, by [`Heap::hold_body_bytes`].
     #[inline]
     pub fn charge_body_bytes(&mut self, bytes: usize) -> usize {
         self.bytes_since += bytes;
         self.bytes_since
+    }
+
+    /// Records `bytes` of body a live object holds outside its slot.
+    #[inline]
+    pub fn hold_body_bytes(&mut self, bytes: usize) {
+        self.held_bytes += bytes;
+    }
+
+    /// Records that a live object no longer holds `bytes` of body outside
+    /// its slot.
+    #[inline]
+    pub fn release_body_bytes(&mut self, bytes: usize) {
+        debug_assert!(
+            bytes <= self.held_bytes,
+            "{bytes} body bytes released of {} held",
+            self.held_bytes
+        );
+        self.held_bytes = self.held_bytes.saturating_sub(bytes);
+    }
+
+    /// Records that a live object's body went from holding `before` bytes
+    /// outside its slot to holding `after`.
+    #[inline]
+    pub fn rehold_body_bytes(&mut self, before: usize, after: usize) {
+        if after >= before {
+            self.hold_body_bytes(after - before);
+        } else {
+            self.release_body_bytes(before - after);
+        }
     }
 
     /// The body bytes charged since the last collection.
@@ -183,7 +217,10 @@ impl Heap {
         // read of every slot in the table. Whether a *target* survived cannot
         // be decided here, so the decision waits for the loop to finish.
         let mut weak_marked: Vec<u32> = Vec::new();
-        let mut live_bytes = 0;
+        // The survivors' body bytes, summed only to check the running figure
+        // the sweep leaves in `held_bytes`.
+        #[cfg(debug_assertions)]
+        let mut survivor_bytes = 0;
         while let Some(r) = work.pop() {
             let Some(slot) = self.resolve(r) else {
                 continue;
@@ -197,7 +234,10 @@ impl Heap {
             if matches!(object.body, Body::WeakRef(_)) {
                 weak_marked.push(slot as u32);
             }
-            live_bytes += object.body.held_bytes();
+            #[cfg(debug_assertions)]
+            {
+                survivor_bytes += object.body.held_bytes();
+            }
             reached.clear();
             object.body.trace(&mut reached);
             work.extend(reached.iter().copied());
@@ -274,32 +314,31 @@ impl Heap {
             let Slot::Live { object, .. } = &self.slots[slot] else {
                 unreachable!("resolve rejects free slots")
             };
-            live_bytes += object.body.held_bytes();
+            #[cfg(debug_assertions)]
+            {
+                survivor_bytes += object.body.held_bytes();
+            }
             reached.clear();
             object.body.trace(&mut reached);
             resurrect.extend(reached.iter().copied());
         }
 
         let mut swept = 0;
+        let mut freed_bytes = 0;
         let mut freed_classes = Vec::new();
         for slot in 0..self.slots.len() {
-            if self.marks[slot] || matches!(self.slots[slot], Slot::Free { .. }) {
+            if self.marks[slot] {
                 continue;
             }
-            let generation = self.slots[slot].generation();
+            let Slot::Live { object, generation } = &self.slots[slot] else {
+                continue;
+            };
+            let generation = *generation;
+            freed_bytes += object.body.held_bytes();
             // Reported so the caller can drop the rows it keys by this class.
             // The handle is still the live one here; after the assignment
             // below its generation has moved on and it would name nothing.
-            if matches!(
-                self.slots[slot],
-                Slot::Live {
-                    object: Object {
-                        body: Body::Class { .. },
-                        ..
-                    },
-                    ..
-                }
-            ) {
+            if matches!(object.body, Body::Class { .. }) {
                 freed_classes.push(ObjRef::heap(slot as u32, generation));
             }
             swept += 1;
@@ -322,19 +361,28 @@ impl Heap {
                 },
             };
         }
+        self.release_body_bytes(freed_bytes);
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            survivor_bytes, self.held_bytes,
+            "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
+            self.held_bytes
+        );
         self.peak_bytes = self.peak_body_bytes();
-        self.live_bytes = live_bytes;
+        self.live_bytes = self.held_bytes;
         self.bytes_since = 0;
         CollectStats {
             swept,
             live: self.live,
             pending_uninit,
             freed_classes,
-            live_bytes,
+            live_bytes: self.held_bytes,
         }
     }
 
+    /// Allocates `body` and holds the bytes it holds outside its slot.
     pub fn alloc(&mut self, body: Body) -> ObjRef {
+        self.hold_body_bytes(body.held_bytes());
         self.alloc_with_uncollected(BehaviourId::OBJECT, body)
     }
 
@@ -343,7 +391,10 @@ impl Heap {
         self.alloc_immortal(BehaviourId::OBJECT, Body::Class { owned: Vec::new() })
     }
 
+    /// Allocates an object this heap will never sweep, and holds the bytes
+    /// its body holds outside its slot.
     pub fn alloc_immortal(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
+        self.hold_body_bytes(body.held_bytes());
         let handle = self.alloc_with_uncollected(behaviour, body);
         self.immortal.push(handle);
         handle
@@ -417,7 +468,9 @@ impl Heap {
         self.immortal.len()
     }
 
-    /// Allocates without ever collecting, whatever else is enabled.
+    /// Allocates without ever collecting, whatever else is enabled. The
+    /// caller holds the bytes the body holds outside its slot
+    /// ([`Heap::hold_body_bytes`]).
     #[inline]
     pub fn alloc_with_uncollected(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
         self.live += 1;
@@ -753,8 +806,8 @@ mod body_bytes_tests {
         })
     }
 
-    /// The survivors are summed from both mark loops, a resurrected
-    /// `UNINIT` object included, and an inline body holds no bytes.
+    /// The survivors' bytes include a resurrected `UNINIT` object's, and an
+    /// inline body holds no bytes.
     #[test]
     fn a_collection_sums_the_survivors_body_bytes() {
         let mut heap = Heap::new();

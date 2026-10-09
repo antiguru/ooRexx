@@ -1202,3 +1202,24 @@ fn short_strings_keep_the_slot_cadence() {
         outcome.peak_body_bytes
     );
 }
+
+/// The bytes a body stops holding between collections leave the live figure
+/// the next collection starts from: a 40 MB buffer cut to one byte, then a
+/// 40 MB string dropped, each followed by a loop of dead 1 MB copies. The
+/// count is the one a survivor sum at each collection gives, measured on the
+/// commit before the live figure became a running one.
+#[test]
+fn bytes_a_body_stops_holding_leave_the_live_figure() {
+    let program = b"s = copies('x', 1000000)\n\
+          b = .mutableBuffer~new(, 40000000)\n\
+          do i = 1 to 100; x = s~copy; end\n\
+          b~setBufferSize(1)\n\
+          do i = 1 to 100; x = s~copy; end\n\
+          t = copies('y', 40000000)\n\
+          do i = 1 to 100; x = s~copy; end\n\
+          drop t\n\
+          do i = 1 to 100; x = s~copy; end\n";
+    let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(outcome.collections, 12, "the trigger point moved");
+}
