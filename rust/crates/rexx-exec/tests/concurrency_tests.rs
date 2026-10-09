@@ -2834,14 +2834,14 @@ mod group_runs {
                 "base/keyword/TRACE.testGroup",
                 "whole",
                 "normal",
-                "error, assertions 120, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+                "error, assertions 129, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt); TEST_TRACE_LABEL_WITH_FORWARD's FORWARD/REPLY trace lines, measured alone 2026-10-07",
             ),
             (
                 "base/keyword/TRACE.testGroup",
                 "whole",
                 "every",
-                "error, assertions 120, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_? TEST_TRACE_?A TEST_TRACE_?I TEST_TRACE_?R TEST_TRACE_?_OPTION TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_NUMERIC_DEBUG TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
+                "error, assertions 129, rc 2, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing [TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt); TEST_TRACE_LABEL_WITH_FORWARD's FORWARD/REPLY trace lines, measured alone 2026-10-07",
             ),
             (
