@@ -350,13 +350,8 @@ impl Interp {
     /// Blocks this thread until something is posted to the inbox, whose
     /// completions it files, or fails where the run's deadline comes first.
     pub(crate) fn idle_for_posts(&mut self) -> Result<(), Failure> {
-        // With a pool of bound 0 every completion is posted by this thread
-        // before it is waited for.
         if self.sim.is_some() {
-            return Err(crate::Loud::scheduler_inconsistency(
-                "a wait for another thread's post in the simulation mode",
-            )
-            .into());
+            return Err(self.sim_unpostable_wait());
         }
         if let Some(deadline) = &self.deadline {
             return self.idle_until(deadline.at);

@@ -361,6 +361,8 @@ pub(crate) struct Sim {
     clock: Clock,
     /// The pinned waits begun.
     pinned_waits: u64,
+    /// Whether a wait nothing in the simulation can end was refused.
+    stuck: bool,
     /// What another thread posted, where it posted something other than a
     /// signal's halt.
     breach: Option<&'static str>,
@@ -398,6 +400,7 @@ impl Interp {
             streams,
             clock,
             pinned_waits: 0,
+            stuck: false,
             breach: None,
         }));
         self.pool.set_bound(0);
@@ -443,6 +446,33 @@ impl Interp {
         }
         self.drain_completions();
         self.sim_breached()
+    }
+
+    /// The refusal for a wait that only a signal can end.
+    pub(crate) fn sim_endless_wait(&mut self) -> Failure {
+        self.sim_stuck(Loud::sim_endless_wait())
+    }
+
+    /// The refusal for a wait for another thread's post, which a pool of
+    /// bound 0 leaves none to make: every completion is posted by this
+    /// thread before it is waited for.
+    pub(crate) fn sim_unpostable_wait(&mut self) -> Failure {
+        self.sim_stuck(Loud::scheduler_inconsistency(
+            "a wait for another thread's post in the simulation mode",
+        ))
+    }
+
+    fn sim_stuck(&mut self, loud: Loud) -> Failure {
+        if let Some(sim) = self.sim.as_deref_mut() {
+            sim.stuck = true;
+        }
+        loud.into()
+    }
+
+    /// Whether a wait nothing in the simulation can end was refused, which
+    /// ends the program's wait for its activities.
+    pub(crate) fn sim_is_stuck(&self) -> bool {
+        self.sim.as_ref().is_some_and(|sim| sim.stuck)
     }
 
     /// Whether the pinned wait now beginning is the one `fail=wait:K` fails.

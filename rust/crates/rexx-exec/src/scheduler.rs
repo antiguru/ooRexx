@@ -1429,9 +1429,9 @@ impl Interp {
     pub(crate) fn run_started_to_end(&mut self) -> Vec<(Failure, Vec<crate::FailureSite>)> {
         let mut failures = self.take_late_failures();
         while let Err(failure) = self.run_started_activities() {
-            let deadline = matches!(failure, Failure::Deadline);
+            let last = matches!(failure, Failure::Deadline) || self.sim_is_stuck();
             failures.push((failure, Vec::new()));
-            if deadline {
+            if last {
                 break;
             }
         }
@@ -1496,7 +1496,7 @@ impl Interp {
     /// signal's halt; the run's deadline ends it.
     fn idle_for_good(&mut self) -> Result<(), Failure> {
         if self.sim.is_some() {
-            return Err(Loud::sim_endless_wait().into());
+            return Err(self.sim_endless_wait());
         }
         while self.activities.ready.is_empty() {
             self.idle_until(self.now() + TIMER_DAY)?;
