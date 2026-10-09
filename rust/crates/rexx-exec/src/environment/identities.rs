@@ -201,7 +201,7 @@ impl Interp {
                 };
                 Ok(self.method_object(scope, name, scope, record))
             }
-            _ => Err(crate::Loud::receiver_class(
+            _ => Err(crate::Loud::unknown_receiver(
                 "a method context whose scope no longer defines it",
             )
             .into()),

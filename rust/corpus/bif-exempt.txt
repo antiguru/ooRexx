@@ -33,10 +33,6 @@
 #     reappearing means a name reached `unresolved_call` again. Read the owner
 #     off the run's own "first construct hit" breakdown, not off this file.
 #
-#   Phase 5  The row's own operands send a message: `XRANGE`'s hex-pair bodies
-#       write `'41'x~c2d` and `D2C::test10` writes a method call. Needs
-#       dispatch.
-#
 #   ANOMALY  Not an attribution at all: the harness's own word for "exited
 #       non-zero and named no construct". No row carries it today. The three
 #       that did were all BEEP, which is not a builtin function but a routine

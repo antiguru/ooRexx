@@ -664,7 +664,7 @@ fn an_assertion_inside_a_loop_is_checked_on_every_pass() {
 /// then happily matches against itself.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_defect() {
-    const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
+    const PHASES: &[&str] = &["4b", "4c"];
     const DERIVED: &[&str] = &["RAISED", "NO-ASSERTION-EXECUTED"];
     for (key, attribution) in committed_exempt() {
         assert!(

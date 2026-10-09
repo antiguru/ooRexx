@@ -2112,7 +2112,7 @@ impl Interp {
             // from one answers.
             Ok(Primitive::Class(_)) => self.pool_owner(receiver)?,
             Ok(_) => return Err(Loud::object_method("a receiver with no scope of its own").into()),
-            Err(kind) => return Err(Loud::receiver_class(kind).into()),
+            Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
         };
         let Some(Object {
             body: Body::Instance { own, .. },
@@ -3538,7 +3538,7 @@ impl Interp {
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let behaviour = match self.receiver_behaviour(receiver) {
             Ok(behaviour) => behaviour,
-            Err(kind) => return Err(Loud::receiver_class(kind).into()),
+            Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
         };
         match self.resolve_in(receiver, behaviour, name, start_scope, caller) {
             Ok(resolution) => self.begin_invoke(resolution, Some(behaviour), receiver, name, args),

@@ -183,7 +183,7 @@ pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
 fn not_this_task(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
     match interp.receiver_class_id(receiver) {
         Some(id) => Loud::native_method(method, &id).into(),
-        None => Loud::receiver_class("a value that is not a hash collection").into(),
+        None => Loud::unknown_receiver("a value that is not a hash collection").into(),
     }
 }
 
@@ -1597,9 +1597,9 @@ pub(crate) fn directory_put_method_value(
 /// What `DirectoryClass::get` finds for a name.
 pub(crate) enum DirectoryEntry {
     Found(ObjRef),
-    /// An entry the oracle holds and this crate does not build, with the
-    /// phase owing it.
-    Owed(&'static str),
+    /// An entry the oracle holds and this crate does not build, with its
+    /// owner.
+    Owed(Option<&'static str>),
     Absent,
 }
 
@@ -1717,9 +1717,9 @@ fn text_slot(interp: &mut Interp, store: &Store, key: Key<'_>) -> Result<Option<
     Ok(None)
 }
 
-/// The phase owing an entry `table` still holds and this crate does not
-/// build, or `None` when it holds none.
-pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<&'static str> {
+/// The owner of an entry `table` still holds and this crate does not build,
+/// or `None` when it holds none.
+pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<Option<&'static str>> {
     let store = read_store(interp, table, CONTENTS).ok()??;
     let order = walk_in(interp, &store).ok()?;
     order.into_iter().find_map(|slot| {

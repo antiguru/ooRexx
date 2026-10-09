@@ -36,7 +36,7 @@ pub(super) fn class_receiver(interp: &Interp, receiver: ObjRef) -> Result<ObjRef
     match interp.receiver_kind(receiver) {
         Ok(Primitive::Class(class)) => Ok(class),
         Ok(_) => Err(Loud::receiver_class("a value that is not a class object").into()),
-        Err(kind) => Err(Loud::receiver_class(kind).into()),
+        Err(kind) => Err(Loud::unknown_receiver(kind).into()),
     }
 }
 
@@ -416,7 +416,7 @@ pub(super) fn scoped_method(
     scope: ObjRef,
 ) -> Result<(ObjRef, rexx_core::MethodId), Failure> {
     interp.scoped_method(method, scope).ok_or_else(|| {
-        Failure::from(Loud::receiver_class(
+        Failure::from(Loud::unknown_receiver(
             "a method object this crate did not build",
         ))
     })
@@ -481,7 +481,7 @@ pub(super) fn native_define(
             interp
                 .define_method_object(class, &name, source)
                 .ok_or_else(|| {
-                    Failure::from(Loud::receiver_class(
+                    Failure::from(Loud::unknown_receiver(
                         "a method object this crate did not build",
                     ))
                 })?;
@@ -535,7 +535,7 @@ pub(super) fn native_define_methods(
         entries.push((name, Some(value)));
     }
     interp.define_method_table(class, &entries).ok_or_else(|| {
-        Failure::from(Loud::receiver_class(
+        Failure::from(Loud::unknown_receiver(
             "a method object this crate did not build",
         ))
     })?;
@@ -838,7 +838,7 @@ fn install_enhancing_class_methods(
         interp
             .define_class_method_object(class, name, value)
             .ok_or_else(|| {
-                Failure::from(Loud::receiver_class(
+                Failure::from(Loud::unknown_receiver(
                     "a method object this crate did not build",
                 ))
             })?;

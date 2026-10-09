@@ -666,7 +666,7 @@ pub(super) fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef
 pub(super) fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
     match interp.receiver_class_id(value) {
         Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
-        None => Loud::receiver_class("a value this phase builds no class for").into(),
+        None => Loud::unknown_receiver("a value this phase builds no class for").into(),
     }
 }
 

@@ -355,10 +355,7 @@ impl Interp {
                 // this crate's own rule against aborting on a shape the
                 // grammar rules out but the type does not.
                 let Some(expression) = expression else {
-                    return Err(Loud {
-                        message: "NUMERIC FORM VALUE with no expression".to_string(),
-                    }
-                    .into());
+                    return Err(Loud::numeric_form_without_expression().into());
                 };
                 // `set_form_str`'s own doc comment: the runtime `VALUE` path
                 // does no uppercasing, no trimming and no abbreviation, unlike

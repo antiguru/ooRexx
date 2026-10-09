@@ -1,13 +1,9 @@
 /* Allocation-churn dimension, restricted to the 4c surface (no message sends).
 
    `alloc.rex` allocates a fresh `.array` and `.string` every iteration via
-   `.array~of`, `.string~new`, `~size` and `~length`. Measured 2026-09-02 on
-   both engines, this crate refuses `.array~of(1,2,3)` with `rexx-exec:
-   method "OF" of class "Array" is not implemented (Phase 5)` and
-   `.string~new("item")` with the same message for `"NEW"` of class
-   `"String"`. Allocation throughput does not need the object model, so this
-   program covers the same dimension with constructs this crate has: `||`
-   concatenation and compound-variable creation.
+   `.array~of`, `.string~new`, `~size` and `~length`. Allocation throughput
+   does not need the object model, so this program covers the same dimension
+   with no message send: `||` concatenation and compound-variable creation.
 
    What this preserves from alloc.rex: two heap-allocating operations per
    iteration (there, one array plus one string; here, one new compound

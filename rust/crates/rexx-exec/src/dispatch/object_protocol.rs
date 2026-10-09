@@ -66,7 +66,7 @@ pub(super) fn native_has_method(
     // class behaviour and not about `.Class`'s instances.
     let behaviour = match interp.receiver_behaviour(receiver) {
         Ok(behaviour) => behaviour,
-        Err(kind) => return Err(Loud::receiver_class(kind).into()),
+        Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
     };
     let classes = &interp.object_model().classes;
     let answers = match behaviour {
@@ -86,7 +86,7 @@ pub(super) fn native_default_name(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let Some(class) = native_class(interp, cleared, receiver, &[])? else {
-        return Err(Loud::receiver_class("a value with no class of its own").into());
+        return Err(Loud::unknown_receiver("a value with no class of its own").into());
     };
     // **An enhanced object takes no article**, returning before the `a`/`an`
     // choice -- `RexxObject::defaultName` (`classes/ObjectClass.cpp:1763`).
@@ -113,7 +113,7 @@ pub(super) fn native_class(
 ) -> Result<Option<ObjRef>, Failure> {
     let kind = match interp.receiver_kind(receiver) {
         Ok(kind) => kind,
-        Err(gap) => return Err(Loud::receiver_class(gap).into()),
+        Err(gap) => return Err(Loud::unknown_receiver(gap).into()),
     };
     let model = interp.object_model();
     Ok(Some(match kind {
@@ -152,7 +152,7 @@ pub(super) fn native_is_a(
     // a refusal rather than an `expect`, this crate's rule for an internal
     // inconsistency.
     let Some(own) = native_class(interp, cleared, receiver, &[])? else {
-        return Err(Loud::receiver_class("a value with no class of its own").into());
+        return Err(Loud::unknown_receiver("a value with no class of its own").into());
     };
     let answer = interp.classes().is_a(own, other);
     Ok(Some(interp.counted(usize::from(answer))))
@@ -337,7 +337,7 @@ pub(super) fn native_object_name(
 ) -> Result<Option<ObjRef>, Failure> {
     let kind = interp
         .receiver_kind(receiver)
-        .map_err(|kind| Failure::from(Loud::receiver_class(kind)))?;
+        .map_err(|kind| Failure::from(Loud::unknown_receiver(kind)))?;
     let name = match kind {
         // `defaultName` from `.String`'s own id, which no object of this kind
         // carries a stored name for -- there is nowhere on a string to put
@@ -419,7 +419,7 @@ pub(super) fn native_object_name_set(
     let name = interp.to_text(argument).into_owned();
     let kind = interp
         .receiver_kind(receiver)
-        .map_err(|kind| Failure::from(Loud::receiver_class(kind)))?;
+        .map_err(|kind| Failure::from(Loud::unknown_receiver(kind)))?;
     match kind {
         Primitive::Class(class) => {
             let name = String::from_utf8_lossy(&name).into_owned();
@@ -427,7 +427,9 @@ pub(super) fn native_object_name_set(
         }
         Primitive::Instance { .. } => {
             let Some(object) = interp.heap.get_mut(receiver) else {
-                return Err(Loud::receiver_class("a value whose object is no longer live").into());
+                return Err(
+                    Loud::unknown_receiver("a value whose object is no longer live").into(),
+                );
             };
             match &mut object.body {
                 Body::Instance { name: held, .. } => *held = Some(name.as_slice().into()),
@@ -444,7 +446,9 @@ pub(super) fn native_object_name_set(
         | Primitive::RexxInfo
         | Primitive::Message => {
             let Some(object) = interp.heap.get_mut(receiver) else {
-                return Err(Loud::receiver_class("a value whose object is no longer live").into());
+                return Err(
+                    Loud::unknown_receiver("a value whose object is no longer live").into(),
+                );
             };
             match &mut object.body {
                 Body::Native(native) => native.set_rendered(&name),
@@ -543,7 +547,7 @@ fn set_method_scope(
     if text.eq_ignore_ascii_case(b"OBJECT") {
         return interp
             .class_of_value(receiver)
-            .ok_or_else(|| Loud::receiver_class("a value with no class of its own").into());
+            .ok_or_else(|| Loud::unknown_receiver("a value with no class of its own").into());
     }
     if text.eq_ignore_ascii_case(b"FLOAT") {
         return Ok(ObjRef::NIL);
@@ -615,14 +619,14 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         }
         Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
-        Err(kind) => return Err(Loud::receiver_class(kind).into()),
+        Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
     };
     // The allocation below collects first, and while the cloned body is a
     // local the collector does not walk, every value in it is reachable from
     // the receiver and from nowhere else.
     interp.roots.activity_mut().push_temp(receiver);
     let Some(source) = interp.heap.get(receiver) else {
-        return Err(Loud::receiver_class("a value whose object is no longer live").into());
+        return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
     };
     let mut body = source.body.clone();
     // `CompoundVariableTable::copyFrom` copies each tail's own value, so an

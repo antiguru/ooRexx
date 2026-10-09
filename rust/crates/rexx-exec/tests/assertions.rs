@@ -182,6 +182,13 @@ struct ExemptRow {
 /// would actually unblock it. Generated once from a real run and hand
 /// -verified against the source (`Literals.testGroup`), not hand-guessed --
 /// see `task-15b-report.md` for the method.
+///
+/// Every row is a `self~runDynamicSource(...)` of the ooTest framework, which
+/// builds `.routine~new(name, code, package)` (`OOREXXUNIT.CLS`). Run outside
+/// this harness inside a test-case class, the oracle answers each row and this
+/// crate refuses the package argument with `method "NEW" of class "Routine" is
+/// not implemented (Phase 9)`. In this harness the row also has no test case
+/// for `self`, so `self~hex` is 97.1 on both engines.
 const EXEMPT: &[ExemptRow] = &[
     ExemptRow {
         group: "Literals",
@@ -189,7 +196,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 1,
         expr: "all",
         expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -197,7 +204,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 2,
         expr: "all",
         expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -205,7 +212,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 4,
         expr: "\"AB\"",
         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \"42\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -213,7 +220,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 5,
         expr: "\"AB\"",
         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || \"42\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -221,7 +228,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 6,
         expr: "\"AB\"",
         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || tab || \"42\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -229,7 +236,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 7,
         expr: "\"AB\"",
         expected: "self~runDynamicSource(\"return\" self~hex(\"41 \" || tab || \"42\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -237,7 +244,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 8,
         expr: "\"AB\"",
         expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \" 42\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -245,7 +252,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 4,
         expr: "\"A\"",
         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \"0001\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -253,7 +260,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 5,
         expr: "\"A\"",
         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || \"0001\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -261,7 +268,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 6,
         expr: "\"A\"",
         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || tab || \"0001\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -269,7 +276,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 7,
         expr: "\"A\"",
         expected: "self~runDynamicSource(\"return\" self~bin(\"0100 \" || tab || \"0001\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
     ExemptRow {
         group: "Literals",
@@ -277,7 +284,7 @@ const EXEMPT: &[ExemptRow] = &[
         occurrence: 8,
         expr: "\"A\"",
         expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \" 0001\"))",
-        unblocked_by: "Phase 5",
+        unblocked_by: "Phase 9",
     },
 ];
 

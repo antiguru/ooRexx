@@ -1,0 +1,60 @@
+# Why no phase owes each loud refusal that names none.
+#
+# crates/rexx-exec/tests/refusal_dispositions.rs reads every `Loud` constructor in
+# crates/rexx-exec/src and requires a row here for each one that can build a message with
+# no owner; it fails on such a constructor with no row, on a row whose constructor is gone,
+# on a row for a constructor that names a phase (REHOME aside), and on a citation that does
+# not resolve.
+#
+# Columns, tab-separated: constructor, kind, phase, record.
+#
+# kind:
+#   GUARD      no program reaches it; the record names the probes that tried, or the
+#              invariant that keeps it out of reach.
+#   DEVIATION  matching the oracle is wrong; the record cites an oracle-crashes.txt entry, a
+#              numbered Deviation in docs/superpowers/plans/phase-4-exclusions.txt, or quotes
+#              an exclusions row.
+#   LIMIT      a design limit; the record cites the Deviation or design document licensing it.
+#   REHOME     a remaining phase owes it; `phase` names it, the constructor carries it, and
+#              the record quotes the roadmap row text naming the work.
+# phase is `-` for every kind but REHOME.
+#
+# Probe names: scout A's are in .superpowers/sdd/2026-10-07-phase-6-1/scout-a-report.md,
+# Appendix B; Task 4's in docs/superpowers/plans/phase-6-1-gate.md, "## Task 4"; Task 7's in
+# .superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md.
+array_index_hole	DEVIATION	-	oracle-crashes.txt entry 6 (SF 2085): the oracle dies on an array subscript that is an empty slot
+binary_operator	GUARD	-	internal inconsistency: every Operator belongs to a family of Interp::apply_binary (census class d-guard)
+call_op_off_its_node	GUARD	-	compiler invariant (census d-guard). Reached once, by a concatenation in a non-first call argument (phase-6-gate.md, Task 13 notes); that repro answers `ok` at 6860d4f80 (Task 7 probe cop/s.rex)
+chunk_map_too_short	GUARD	-	compiler invariant: a chunk maps every instruction of its body (census d-guard)
+chunk_refused	LIMIT	-	the compiled stream's index widths, docs/superpowers/plans/2026-08-09-phase-4e-ir.md (ChunkTooLarge: u16 registers, slots and arguments, u32 ops); no second engine since the tree-walker's removal
+constant_out_of_range	GUARD	-	compiler invariant: a Const op names a constant of its own chunk (census d-guard)
+conversion_raised	GUARD	-	scout A c7: c_native_raised raises the callee's condition on both engines (rc 163); both callers of Interp::refusal answer Refused::Raised before reaching it
+entry_method_without_a_value	DEVIATION	-	Deviation 29: the oracle stores its evaluation stack for a value-less NAME= send
+environment_entry	GUARD	-	scout A b18: envx_* (every .environment and .local index in its own program), env_new_activity, env_reply_activity: with no owner it is an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
+environment_symbol	GUARD	-	scout A b16 and b18: c2_stream_first_clause, c2_address_with_stream_first (.STREAM before StreamClasses.orx), envx_*, env_new_activity, env_reply_activity; only STDQUE (Phase 10) refused
+expose_receiver	GUARD	-	Task 4 report, "Kept with owner None": EXPOSE from methods of Directory, .local, .environment and a Directory subclass, a borrowed Object RUN row on an instance; all answer, oracle-identical
+expression	GUARD	-	every ExprKind evaluates (expr_owner answers None for each); each site is a match arm for a form its caller routes elsewhere (census d-guard)
+immovable_reply	LIMIT	-	Deviation 15 (spec 2026-09-29 section 5)
+instruction	GUARD	-	every InstructionKind executes (instruction_owner answers None for each); each site is a match arm for a kind its caller routes elsewhere (census d-guard)
+inverted_wait	LIMIT	-	Deviation 14 (spec 2026-09-29 section 2.6)
+jump_out_of_range	GUARD	-	compiler invariant: a jump stays inside its range (census d-guard)
+library_procedure_gone	GUARD	-	a held library is never released (refusal-sites.tsv: library_method_package_blame.rex, library_routine_package_blame.rex agree)
+library_source	GUARD	-	scout A b17: rexx-lib pins each embedded .orx by sha256, and every probe in scout A's Appendix C ran past the library bootstrap
+loop_op_off_its_node	GUARD	-	compiler invariant: a DO/LOOP op names its own loop (census d-guard)
+missing_body	GUARD	-	every body selector names a directive index the parser fills (refusal-sites.tsv: an instance reading a generated accessor agrees)
+numeric_form_without_expression	GUARD	-	parser guarantee: NUMERIC FORM VALUE with no expression is 35.917 at parse time
+object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .string~inherit (98.985), SETMETHOD to an Array or String (97.2), setMethod, unsetMethod and setMethod OBJECT from methods of Directory, .local, .environment and a Directory subclass; all answer or raise, oracle-identical
+op_not_driven	GUARD	-	driver invariant: every op the compiler emits has a driver arm (census d-guard)
+operator_operand	GUARD	-	scout A b12: spec-op.txt, every dyadic and prefix operator on nine left operands, refused none
+parse_trigger_operand	GUARD	-	parser guarantee: a PARSE trigger that needs an operand carries one (census d-guard)
+receiver_class	DEVIATION	-	oracle-crashes.txt entry 33 and Deviation 28: a primitive's native method run on an object of another class crashes the oracle or answers an accident of memory; Task 4 probes b2_run_*_on_inst, Task 7 probes rc2, rc3
+register_not_logical	GUARD	-	compiler invariant: a branch reads a register holding a logical (census d-guard)
+scheduler_inconsistency	GUARD	-	scheduler invariant (refusal-sites.tsv: guarded_getter_waits_for_reply.rex agrees)
+select_op_off_its_node	GUARD	-	compiler invariant: a SELECT op names its own SELECT (census d-guard)
+setup_method	GUARD	-	scout A b15: b_define_class_method_setup, b_inherit_instance_methods are 97.1 on both engines
+signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNAL's form (census d-guard)
+stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
+store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
+unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probes rc4 (a Method copy refuses at COPY first); the rest are handles whose object is gone or kinds receiver_kind has no arm for
+unreadable_collection	GUARD	-	scout A b18: env_supplier; with no owner it is a directory holding an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
+unsatisfiable_wait	LIMIT	-	Deviation 20 (rulings P27, P65, P77)

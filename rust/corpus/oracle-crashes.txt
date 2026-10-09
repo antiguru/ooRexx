@@ -1231,3 +1231,28 @@ SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper: each pause in `LINEIN` 
 line by calling `LINEIN` again, so the recursion has no bottom. Measured 2026-10-09 by the review
 of Phase 6.1 Task 6 (its probe `di6`) and again by its fix round 2. This crate recurses the same
 way and stops at Error 11.1 (control stack full), rc 245. No upstream ticket.
+
+## 33. A primitive's native method run on an object of another class
+
+    say .t~new~go(.list~method('ITEMS'))
+    ::class t
+    ::method go
+    use arg m
+    return self~run(m)
+
+SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr, for each of
+these in place of `.list~method('ITEMS')`: `.supplier~method('ITEM')`, `.package~method('NAME')`,
+`.VariableReference~method('NAME')`, `.StackFrame~method('NAME')` and `.routine~method('CALL')`.
+The same in a subclass of `Supplier` whose `INIT` does not forward to its superclass:
+
+    s = .s~new(.array~of(1), .array~of('i'))
+    say s~item s~index
+    ::class s subclass supplier
+    ::method init
+
+SIGSEGV, rc 139, 5 runs of 5. The native method reads its receiver through the layout of the class
+it was written for. Measured 2026-10-07 by Phase 6.1's scout A (probes `b2_run_*_on_inst`,
+`b4_subclass_supplier`) and again for `List~ITEMS` and `Routine~CALL` by its Task 4. This crate
+refuses each with `Loud::receiver_class` (`a message send to a value that is not a list is not
+implemented`, and the like); the shapes that answer garbage instead of crashing are Deviation 28
+in `docs/superpowers/plans/phase-4-exclusions.txt`. No upstream ticket.

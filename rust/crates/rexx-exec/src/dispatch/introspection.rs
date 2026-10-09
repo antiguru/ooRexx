@@ -191,7 +191,7 @@ enum Selection {
 fn receiver_selection(interp: &mut Interp, receiver: ObjRef) -> Result<Selection, Failure> {
     let behaviour = interp
         .receiver_behaviour(receiver)
-        .map_err(|kind| Failure::from(super::Loud::receiver_class(kind)))?;
+        .map_err(|kind| Failure::from(super::Loud::unknown_receiver(kind)))?;
     Ok(match behaviour {
         Behaviour::Instance { methods, .. } => Selection::Behaviour(methods),
         Behaviour::ClassSide(class) => Selection::ClassSide(class),

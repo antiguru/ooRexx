@@ -308,10 +308,11 @@ impl Coverage {
 /// `match` edit.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[];
 
-/// Every phase name the split table names, spelled exactly as it spells them.
+/// The phase names the split table names, spelled exactly as it spells them,
+/// less the phases that have closed, which `closed_phases.rs` polices.
 /// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
 /// split" table and its "assigned elsewhere" paragraph.
-pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
+pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c"];
 
 /// The phases a *builtin* exclusion may name. `phase-4-exclusions.txt` gives
 /// its remaining rows to Phase 10 and to nothing else -- a builtin owned by a
@@ -446,23 +447,6 @@ fn variant_counts_match_the_audited_split() {
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4c"))
-            .count(),
-        0
-    );
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
-            .count(),
-        0
-    );
-    // Zero, and asserted rather than dropped: no instruction is owed to Phase
-    // 7 now that `ADDRESS`'s redirections are dispatched, and this is what
-    // keeps a later task from quietly re-owing one.
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::Phase("Phase 7"))
             .count(),
         0
     );

@@ -449,11 +449,11 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             let name = routine_entry_name(interp, program, directive)?;
             let table = interp
                 .package_string_table(program, crate::environment::PackageTable::Routines)
-                .ok_or_else(|| Loud::receiver_class("a routine whose package has no table"))?;
+                .ok_or_else(|| Loud::unknown_receiver("a routine whose package has no table"))?;
             match interp.heap.get(table).map(|held| &held.body) {
-                Some(Body::Native(native)) => native
-                    .entry(&name)
-                    .ok_or_else(|| Loud::receiver_class("a routine with no package entry").into()),
+                Some(Body::Native(native)) => native.entry(&name).ok_or_else(|| {
+                    Loud::unknown_receiver("a routine with no package entry").into()
+                }),
                 _ => Err(Loud::receiver_class("a package table this crate did not build").into()),
             }
         }
@@ -479,13 +479,12 @@ fn routine_entry_name(
     program: ProgramId,
     directive: usize,
 ) -> Result<Vec<u8>, Failure> {
-    let source = interp
-        .programs
-        .get(program.0)
-        .ok_or_else(|| Failure::from(Loud::receiver_class("a program this crate did not load")))?;
+    let source = interp.programs.get(program.0).ok_or_else(|| {
+        Failure::from(Loud::unknown_receiver("a program this crate did not load"))
+    })?;
     match source.directives.get(directive).map(|found| &found.kind) {
         Some(rexx_parse::DirectiveKind::Routine(routine)) => Ok(routine.name.to_ascii_uppercase()),
-        _ => Err(Loud::receiver_class("a routine activation with no directive").into()),
+        _ => Err(Loud::unknown_receiver("a routine activation with no directive").into()),
     }
 }
 

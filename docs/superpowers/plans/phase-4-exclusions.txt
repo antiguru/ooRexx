@@ -1869,6 +1869,41 @@ DEVIATIONS -- permanent, chosen
      Measured by Phase 6.1 Task 6's review (probes dj1, di3). Not witnessed in
      the corpus.
 
+ 28. A PRIMITIVE'S NATIVE METHOD RUN ON AN OBJECT OF ANOTHER CLASS IS REFUSED
+     WHERE THE ORACLE ANSWERS AN ACCIDENT OF MEMORY (Phase 6.1 Task 7).
+     OWNER: none.
+
+     `self~run(m)` with `m` a primitive's own method object, from a method of
+     a plain `::class t`, has the native read the instance through the layout
+     of the class it was written for. Measured by Phase 6.1's scout A (probes
+     `b2_run_*_on_inst`, 5 runs each where it says so):
+
+       .array~method('ITEMS'), .queue~method('ITEMS')   rc 0, a number that
+                                                         differs every run
+       .table~method('ITEMS')                            rc 0, `0`
+       .method~method('SCOPE')                           rc 0, an empty line
+       .class~method('ID')                               rc 165, 91.999
+
+     This crate refuses each, rc 120, with `a message send to a value that
+     is not an array` (Array, Queue), `... that carries no method scope`,
+     `... that is not a class object`, and for Table with `method "ITEMS" of
+     class "T" is not implemented (Phase 9)`. The oracle's answer is a read
+     through the wrong layout, not a specified observable; where the same
+     read crashes, the shape is corpus/oracle-crashes.txt entry 33. Not
+     witnessed in the corpus.
+
+ 29. A VALUE-LESS ENTRY-METHOD ASSIGNMENT IS REFUSED (Phase 6.1 Task 7).
+     OWNER: none.
+
+     `d~"A="()` on a Directory: the oracle's `StringHashCollection::unknown`
+     stores `arguments[0]` without reading its count
+     (interpreter/classes/support/HashCollection.cpp:1015-1026), so the entry
+     holds the value of the expression evaluated before the send, rc 0
+     (docs/superpowers/records/2026-08-17-phase-5a/upstream-tickets.md, three
+     runs of three). This crate refuses, rc 120, "an entry-method
+     assignment to "A" with no value is not implemented", and the same for
+     `sendWith('A=', .array~new(1))`. Not witnessed in the corpus.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

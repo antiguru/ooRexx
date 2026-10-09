@@ -853,12 +853,8 @@ impl Interp {
             // (`NativeActivation::createLocalReference`,
             // `interpreter/execution/NativeActivation.cpp:1179-1185`), so an
             // extension using one past that call is outside the API.
-            Refused::StaleHandle | Refused::Raised => {
-                return Loud {
-                    message: crate::owned_message(&format!("{refused}"), None),
-                }
-                .into();
-            }
+            Refused::StaleHandle => return Loud::stale_handle().into(),
+            Refused::Raised => return Loud::conversion_raised().into(),
         };
         if !packaged {
             raised.delivery.lineless = false;

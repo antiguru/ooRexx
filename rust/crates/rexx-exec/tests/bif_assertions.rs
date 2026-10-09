@@ -608,7 +608,7 @@ fn build_report(
     writeln!(
         w,
         "THIS HEADLINE IS A MEASUREMENT, NOT A THRESHOLD -- base/bif covers the whole builtin \
-         surface, including the names D4 excludes and everything Phase 5 and Phase 7 own."
+         surface, including the names D4 excludes and the builtins later phases own."
     )
     .unwrap();
     writeln!(
@@ -777,7 +777,7 @@ fn a_raise_row_needs_the_sub_number_too() {
 /// category that the set-equality test then happily matches against itself.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
-    const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7", "Phase 10"];
+    const PHASES: &[&str] = &["4b", "4c", "Phase 10"];
 
     // The count is the whole point of this table, not decoration on it.
     // `ANOMALY` moved 3 -> 0 on 2026-09-12: all three were `BEEP`, and Phase 7

@@ -254,9 +254,10 @@ fn minted_local_name(name: &[u8]) -> bool {
 pub(crate) struct EnvironmentModel {
     directories: env_seam::Directories,
     /// The item standing in for an entry the oracle's directory holds and this
-    /// crate does not build, one per phase owing such entries. A write
-    /// replaces one in place, which keeps the oracle's order.
-    owed: [(ObjRef, &'static str); 2],
+    /// crate does not build, one per owner. A write replaces one in place,
+    /// which keeps the oracle's order. The owner is `None` for the entries the
+    /// library bootstrap fills, which no program reads unfilled.
+    owed: [(ObjRef, Option<&'static str>); 2],
     /// A reading of `.local`'s pool and of `.environment`'s, in that order,
     /// from an earlier lookup; one that is not current is read again.
     views: [Option<hash::StoreView>; 2],
@@ -359,13 +360,17 @@ impl Interp {
         // Every object below is rooted the instant it exists and before the
         // next allocation, which can collect.
         let frame = self.roots.activity_mut().push_frame();
-        let mut owed = [(ObjRef::NIL, "Phase 5"), (ObjRef::NIL, "Phase 10")];
+        let mut owed = [(ObjRef::NIL, None), (ObjRef::NIL, Some("Phase 10"))];
         for (at, (held, owner)) in owed.iter_mut().enumerate() {
+            let rendered = match owner {
+                Some(owner) => format!("an entry owed by {owner}"),
+                None => "an entry the library bootstrap fills".to_string(),
+            };
             *held = self.alloc_with(
                 BehaviourId::OBJECT,
                 Body::Native(Box::new(NativeObject::new(
                     object_class,
-                    format!("an entry owed by {owner}").as_bytes(),
+                    rendered.as_bytes(),
                 ))),
             );
             self.roots.add_global(&format!(".owed{at}"), *held);
@@ -483,9 +488,9 @@ impl Interp {
             .expect("a string-keyed store accepts a string index");
     }
 
-    /// The phase owing `item`, when it stands in for an entry the oracle's
+    /// The owner of `item`, when it stands in for an entry the oracle's
     /// directory holds and this crate does not build.
-    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<&'static str> {
+    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<Option<&'static str>> {
         let model = self.environment.as_ref()?;
         model
             .owed
@@ -1176,7 +1181,7 @@ impl Interp {
         item: ObjRef,
     ) -> Result<(), Failure> {
         let Some(object) = self.heap.get_mut(receiver) else {
-            return Err(Loud::receiver_class("a value whose object is no longer live").into());
+            return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
         };
         let Body::Native(native) = &mut object.body else {
             return Err(Loud::receiver_class("a value that is not a hash collection").into());
@@ -1262,10 +1267,13 @@ impl Interp {
         env_seam::which(&model.directories, directory)
     }
 
-    /// The phase owing an entry `object` holds and this crate does not build,
-    /// or `None` for a collection whose entries it fills. Only `.environment`
-    /// and `.local` hold such entries.
-    pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<&'static str> {
+    /// The owner of an entry `object` holds and this crate does not build, or
+    /// `None` for a collection whose entries it fills. Only `.environment` and
+    /// `.local` hold such entries.
+    pub(crate) fn unbuilt_collection_owner(
+        &mut self,
+        object: ObjRef,
+    ) -> Option<Option<&'static str>> {
         self.directory_scope(object)?;
         hash::owed_table_owner(self, object)
     }

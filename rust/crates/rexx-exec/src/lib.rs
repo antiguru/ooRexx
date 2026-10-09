@@ -376,9 +376,11 @@ struct Loud {
 }
 
 impl Loud {
-    /// An instruction this crate does not execute. `keyword()` is `None` for the four
-    /// clause shapes no keyword introduces, and their names come from the
-    /// shape rather than from a keyword table.
+    /// An instruction handed to a site its caller routes elsewhere -- an
+    /// internal inconsistency, never a program error: every variant executes,
+    /// and [`instruction_owner`] answers `None` for each. `keyword()` is `None`
+    /// for the clause shapes no keyword introduces, and their names come from
+    /// the shape rather than from a keyword table.
     fn instruction(kind: &InstructionKind) -> Loud {
         let name = match kind {
             // The four clause shapes no keyword introduces.
@@ -429,7 +431,9 @@ impl Loud {
         }
     }
 
-    /// An expression form this crate does not evaluate.
+    /// An expression form handed to a site its caller routes elsewhere -- an
+    /// internal inconsistency, never a program error: every form evaluates, and
+    /// [`expr_owner`] answers `None` for each.
     fn expression(kind: &ExprKind) -> Loud {
         Loud {
             message: owned_message(&form_name(kind), expr_owner(kind)),
@@ -483,11 +487,28 @@ impl Loud {
         }
     }
 
-    /// A message sent to a value whose class this phase does not build, so
-    /// there is no behaviour to resolve the name against at all.
+    /// A native method whose receiver is not of the type the method reads,
+    /// reached by running a primitive's own row on an object of another class.
+    /// The oracle reads such a receiver through the wrong layout: it crashes
+    /// (`corpus/oracle-crashes.txt` entry 33) or answers an accident of memory
+    /// (Deviation 28).
     fn receiver_class(kind: &str) -> Loud {
         Loud {
-            message: owned_message(&format!("a message send to {kind}"), Some("Phase 5")),
+            message: owned_message(&format!("a message send to {kind}"), None),
+        }
+    }
+
+    /// A receiver or argument no program holds: a handle whose object is gone,
+    /// a kind `receiver_kind` has no arm for, a `Method` object or routine
+    /// context this crate did not build. Probes that tried, each answering or
+    /// refusing elsewhere: scout A's `b11_ctx_exec_*` (a routine's
+    /// `.context~executable` by every route a routine is made) and weak
+    /// reference sends (`b_weakref_*`, `b2_run_hasmethod_on_weakref`), and a
+    /// `Method` copy passed to `define`, `setMethod` and `run`, which refuses
+    /// at `COPY` first.
+    fn unknown_receiver(kind: &str) -> Loud {
+        Loud {
+            message: owned_message(&format!("a message send to {kind}"), None),
         }
     }
 
@@ -501,33 +522,41 @@ impl Loud {
         }
     }
 
-    /// An operator whose **left** operand is an object this phase can build
-    /// but send no message to: a class object, or one of the interpreter's
-    /// own (`.environment`, `.local`, `.methods`, `.context`).
+    /// An operator whose **left** operand is an object that answers no
+    /// operator message. No program reaches it: scout A's `spec-op.txt`
+    /// probes, every dyadic and prefix operator on `.array`, `.local`,
+    /// `.context`, `.methods`, an instance, an array, a variable reference, a
+    /// stem holding an array and `.stdout`, refused none.
     fn operator_operand(op: &str, kind: &str) -> Loud {
         Loud {
-            message: owned_message(
-                &format!("the operator `{op}` applied to {kind}"),
-                Some("Phase 5"),
-            ),
+            message: owned_message(&format!("the operator `{op}` applied to {kind}"), None),
         }
     }
 
     /// A `.NAME` the oracle's `.environment` or `.local` answers and this
-    /// crate builds nothing for.
-    fn environment_symbol(name: &[u8], owner: &'static str) -> Loud {
+    /// crate builds nothing for. With no owner it is an entry the library
+    /// bootstrap fills, or `.STREAM` before `StreamClasses.orx` installs, and
+    /// no program reaches it: each `.environment` and `.local` index read in
+    /// its own program (scout A's `envx_*`), from a started activity and a
+    /// REPLY continuation (`env_new_activity`, `env_reply_activity`), and a
+    /// stream as the first clause (`c2_stream_first_clause`,
+    /// `c2_address_with_stream_first`) refused only `STDQUE`, which is Phase
+    /// 10's.
+    fn environment_symbol(name: &[u8], owner: Option<&'static str>) -> Loud {
         let shown = String::from_utf8_lossy(name);
         Loud {
-            message: owned_message(&format!("environment symbol \"{shown}\""), Some(owner)),
+            message: owned_message(&format!("environment symbol \"{shown}\""), owner),
         }
     }
 
     /// A directory index the oracle's own `.environment` or `.local` has an
-    /// entry for and this crate builds nothing for.
-    fn environment_entry(index: &[u8], owner: &'static str) -> Loud {
+    /// entry for and this crate builds nothing for. With no owner it is an
+    /// entry the library bootstrap fills, which no program reaches, by the
+    /// probes [`Loud::environment_symbol`] names.
+    fn environment_entry(index: &[u8], owner: Option<&'static str>) -> Loud {
         let shown = String::from_utf8_lossy(index);
         Loud {
-            message: owned_message(&format!("directory entry \"{shown}\""), Some(owner)),
+            message: owned_message(&format!("directory entry \"{shown}\""), owner),
         }
     }
 
@@ -544,14 +573,16 @@ impl Loud {
     }
 
     /// An array subscript list whose only element is an empty slot, which the
-    /// oracle answers by dying.
+    /// oracle answers by dying (`corpus/oracle-crashes.txt` entry 6).
     fn array_index_hole() -> Loud {
         Loud {
             message: owned_message("an array subscript that is an empty slot", None),
         }
     }
 
-    /// A `receiver~NAME=` entry-method send that carried no value argument.
+    /// A `receiver~NAME=` entry-method send that carried no value argument,
+    /// which the oracle stores whatever its evaluation stack holds for
+    /// (Deviation 29).
     fn entry_method_without_a_value(index: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(index);
         Loud {
@@ -564,13 +595,12 @@ impl Loud {
 
     /// A collection this crate can name but cannot read: one whose entries
     /// the oracle has and this crate answers per name through
-    /// [`Loud::environment_entry`] instead of building.
-    fn unreadable_collection(owner: &'static str) -> Loud {
+    /// [`Loud::environment_entry`] instead of building. With no owner it is
+    /// one holding an entry the library bootstrap fills, which no program
+    /// reaches (`env_supplier` refused only `STDQUE`, Phase 10's).
+    fn unreadable_collection(owner: Option<&'static str>) -> Loud {
         Loud {
-            message: owned_message(
-                "a directory whose entries this crate does not fill",
-                Some(owner),
-            ),
+            message: owned_message("a directory whose entries this crate does not fill", owner),
         }
     }
 
@@ -607,21 +637,21 @@ impl Loud {
     }
 
     /// One of the interpreter's own embedded `.orx` sources will not parse.
+    /// No program reaches it: `rexx-lib` pins each file's sha256, and every
+    /// probe runs past the library bootstrap.
     fn library_source(name: &str, error: &str) -> Loud {
         Loud {
-            message: owned_message(
-                &format!("{name} does not parse here: {error}"),
-                Some("Phase 5"),
-            ),
+            message: owned_message(&format!("{name} does not parse here: {error}"), None),
         }
     }
 
     /// One of the two methods `Setup.cpp` puts on `.Class` for the image
     /// build and `removeSetupMethods` deletes, given something it cannot
-    /// use.
+    /// use. No program reaches it: `b_define_class_method_setup` and
+    /// `b_inherit_instance_methods` are 97.1 on both engines.
     fn setup_method(what: &str) -> Loud {
         Loud {
-            message: owned_message(what, Some("Phase 5")),
+            message: owned_message(what, None),
         }
     }
 
@@ -636,7 +666,35 @@ impl Loud {
         }
     }
 
-    /// A `PARSE` template trigger that needs an operand and has none.
+    /// `NUMERIC FORM VALUE` with no expression, which the parser rejects
+    /// (35.917) -- an internal inconsistency, never a program error.
+    fn numeric_form_without_expression() -> Loud {
+        Loud {
+            message: "NUMERIC FORM VALUE with no expression".to_string(),
+        }
+    }
+
+    /// A native conversion that raised, which both callers of
+    /// `Interp::refusal` answer before reaching it. No program reaches it:
+    /// `c_native_raised` (an argument whose `STRING` raises, passed to
+    /// `RxCalcSqrt`) raises the callee's condition on both engines.
+    fn conversion_raised() -> Loud {
+        Loud {
+            message: owned_message("the interpreter raised a condition while converting", None),
+        }
+    }
+
+    /// An extension's local handle used after the call that made it ended,
+    /// which the API does not define (the exclusions row "A LOCAL HANDLE KEPT
+    /// FROM AN EARLIER CALL IS STILL REFUSED").
+    fn stale_handle() -> Loud {
+        Loud {
+            message: owned_message("the handle is no longer held by this activation", None),
+        }
+    }
+
+    /// A `PARSE` template trigger that needs an operand and has none -- a
+    /// parser guarantee, never a program error.
     fn parse_trigger_operand() -> Loud {
         Loud {
             message: "a PARSE template trigger carries no position operand".to_string(),
@@ -659,7 +717,9 @@ impl Loud {
         }
     }
 
-    /// A body the compiler refused.
+    /// A body the compiler refused: one needing more registers, slots or call
+    /// arguments than a `u16` indexes, or more ops than a `u32` does
+    /// (`docs/superpowers/plans/2026-08-09-phase-4e-ir.md`, `ChunkTooLarge`).
     fn chunk_refused() -> Loud {
         Loud {
             message: "a body does not fit the compiled stream's index widths, and there is no \
@@ -742,7 +802,7 @@ impl Loud {
     }
 
     /// A wait that nothing left to run can end. The oracle blocks for ever
-    /// (`corpus/oracle-crashes.txt`, the unsent-message block).
+    /// (`corpus/oracle-crashes.txt`, the unsent-message block; Deviation 20).
     fn unsatisfiable_wait() -> Loud {
         Loud {
             message: owned_message("a wait that nothing left to run can end", None),
@@ -758,7 +818,7 @@ impl Loud {
     }
 
     /// A pinned wait for `what` that only an activity pinned below it can end
-    /// (spec 2026-09-29 section 2.6, an inverted wait).
+    /// (spec 2026-09-29 section 2.6, an inverted wait; Deviation 14).
     fn inverted_wait(what: &str) -> Loud {
         Loud {
             message: owned_message(
@@ -770,7 +830,7 @@ impl Loud {
 
     /// A `REPLY` with Rust frames between its method body's driver and
     /// itself, which cannot move to a new activity (spec 2026-09-29 section
-    /// 5).
+    /// 5; Deviation 15).
     fn immovable_reply() -> Loud {
         Loud {
             message: owned_message("a REPLY its method body runs on a nested Rust frame", None),
