@@ -14,7 +14,7 @@
 //! `docs/superpowers/plans/phase-6-pinning.md`; with the `pinning` feature, the
 //! would-be park points each of those tests reaches.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

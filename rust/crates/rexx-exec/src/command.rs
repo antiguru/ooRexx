@@ -437,11 +437,6 @@ pub(crate) struct Block {
 }
 
 impl Block {
-    /// Waits for the child, collecting what it wrote.
-    pub(crate) fn wait(self) -> Waited {
-        collect(self.running, None, None, None)
-    }
-
     /// Waits for the child, handing each piece it writes to `written`, with
     /// whether it went to standard error, as it arrives; the answer holds
     /// the return code alone.
@@ -565,6 +560,8 @@ fn start(
     }
     if let Some(mode) = switch_mode {
         builder.env("REXX_SWITCH_MODE", mode);
+        // A group of its own, which a refused wait kills whole.
+        std::os::unix::process::CommandExt::process_group(&mut builder, 0);
     }
     builder.current_dir(interp.cwd_text());
     let input = io.and_then(IoContext::input_bytes);
@@ -716,14 +713,14 @@ impl Interp {
             Child::Running { running, .. } if io.is_none() && !self.activity.resuming => {
                 match self.exit_for_block(Block { running }) {
                     Ok(token) => return Ok(Commanded::Left(token)),
-                    Err(block) => block.wait(),
+                    Err(block) => self.collect_on_baton(block.running, None, None)?,
                 }
             }
             Child::Running {
                 running,
                 input,
                 merged,
-            } => collect(running, input, merged, None),
+            } => self.collect_on_baton(running, input, merged)?,
         };
         if let Some(context) = io {
             context.finish(self, &spawned.out, &spawned.err)?;
@@ -737,6 +734,40 @@ impl Interp {
             self.write_err(&spawned.err);
         }
         Ok(Commanded::Done(CommandOutcome::of(spawned.rc)))
+    }
+
+    /// [`collect`] on the baton. In the simulation mode no other activity
+    /// runs meanwhile, so a wait past [`Interp::sim_block_bound`]'s real time
+    /// is abandoned, its child's process group killed, and refused.
+    fn collect_on_baton(
+        &self,
+        running: std::process::Child,
+        input: Option<Vec<u8>>,
+        merged: Option<std::io::PipeReader>,
+    ) -> Result<Waited, Failure> {
+        let Some(bound) = self.sim_block_bound() else {
+            return Ok(collect(running, input, merged, None));
+        };
+        let pid = running.id();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            crate::signal::block();
+            let waited = crate::signal::unblocked(|| collect(running, input, merged, None));
+            let _ = sender.send(waited);
+        });
+        match receiver.recv_timeout(bound) {
+            Ok(waited) => Ok(waited),
+            Err(_) => {
+                let group = i32::try_from(pid)
+                    .ok()
+                    .and_then(rustix::process::Pid::from_raw);
+                if let Some(group) = group {
+                    let _ =
+                        rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+                }
+                Err(crate::Loud::sim_blocked_command().into())
+            }
+        }
     }
 
     /// What a command whose child waited off the baton answers: its streams

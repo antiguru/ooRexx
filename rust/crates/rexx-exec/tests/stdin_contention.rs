@@ -15,7 +15,7 @@
 //! descriptors with the oracle's, 30 runs each. Every case depends on a
 //! wall-clock boundary (ruling P48), so a mismatch is run again once.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

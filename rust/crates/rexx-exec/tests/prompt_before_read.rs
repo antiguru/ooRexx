@@ -19,7 +19,7 @@
 //! property of `rexx-run`'s own descriptors and is only observable by
 //! spawning it.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

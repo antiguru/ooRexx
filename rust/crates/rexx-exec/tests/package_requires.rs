@@ -12,7 +12,7 @@
 //! The `::REQUIRES` search, the cycle report and `::OPTIONS NOPROLOG`, each
 //! against the oracle.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

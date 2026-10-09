@@ -186,6 +186,7 @@ pub(crate) fn take_pending() -> bool {
 }
 
 #[cfg(test)]
+#[expect(clippy::disallowed_methods, reason = "these tests time real signals")]
 mod tests {
     /// Running a program installs no handler: only a process entry point
     /// does (ruling P62), so this test binary keeps its dispositions.

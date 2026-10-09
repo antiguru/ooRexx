@@ -14,7 +14,7 @@
 //! `rexx-run`, with main's output written and without spinning. Each test
 //! kills the process once it has seen that.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

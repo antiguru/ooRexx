@@ -12,7 +12,7 @@
 //! The crate-side watchdog: a run that does not terminate ends as a bounded,
 //! distinguishable outcome instead of running for ever.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

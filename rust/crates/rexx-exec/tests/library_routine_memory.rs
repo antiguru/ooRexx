@@ -18,7 +18,7 @@
 //! [`support::oracle::locate`], as `licensed_divergences.rs` and
 //! `datetime_zone.rs` do, and checks the library the same way.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

@@ -18,6 +18,7 @@
 //! sim:7,fifo,gc=0.01     a collection at each allocation with probability 0.01
 //! sim:7,halt@500         every activity halted at clause boundary 500
 //! sim:7,fail=wait:2      the second pinned wait fails with 11.1
+//! sim:7,block=5          a command's wait on the baton is refused after 5 s
 //! sim:7,clock=midnight   virtual time starts seconds before a local midnight
 //! sim:7,clock=real       virtual time starts at the wall clock
 //! ```
@@ -69,7 +70,13 @@ pub struct Knobs {
     /// waiting.
     pub fail_wait: Option<u64>,
     pub clock: ClockOrigin,
+    /// The seconds of real time a command's wait on the baton may take
+    /// before it is abandoned and refused.
+    pub block: f64,
 }
+
+/// [`Knobs::block`] where `block=` does not set it.
+const BLOCK_SECONDS: f64 = 2.0;
 
 /// Where virtual time starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,6 +113,7 @@ impl SimConfig {
                 halt_at: None,
                 fail_wait: None,
                 clock: ClockOrigin::Seeded,
+                block: BLOCK_SECONDS,
             },
         };
         if text == "sim" {
@@ -135,6 +143,12 @@ impl SimConfig {
                 knobs.halt_at = Some(count(item, k)?);
             } else if let Some(k) = item.strip_prefix("fail=wait:") {
                 knobs.fail_wait = Some(count(item, k)?);
+            } else if let Some(seconds) = item.strip_prefix("block=") {
+                knobs.block = seconds
+                    .parse()
+                    .ok()
+                    .filter(|seconds: &f64| seconds.is_finite() && *seconds > 0.0)
+                    .ok_or_else(|| format!("`{item}`: block is a number of seconds above 0"))?;
             } else if item == "clock=midnight" {
                 knobs.clock = ClockOrigin::Midnight;
             } else if item == "clock=real" {
@@ -142,7 +156,7 @@ impl SimConfig {
             } else {
                 return Err(format!(
                     "`{item}` is not a policy (`fifo`) or a knob (`gc=Q`, `halt@K`, \
-                     `fail=wait:K`, `clock=midnight`, `clock=real`)"
+                     `fail=wait:K`, `block=S`, `clock=midnight`, `clock=real`)"
                 ));
             }
         }
@@ -194,6 +208,9 @@ impl std::fmt::Display for SimConfig {
         if let Some(k) = knobs.fail_wait {
             write!(f, ",fail=wait:{k}")?;
         }
+        if knobs.block != BLOCK_SECONDS {
+            write!(f, ",block={}", knobs.block)?;
+        }
         match knobs.clock {
             ClockOrigin::Seeded => Ok(()),
             ClockOrigin::Midnight => f.write_str(",clock=midnight"),
@@ -204,7 +221,7 @@ impl std::fmt::Display for SimConfig {
 
 /// A seed for `sim` alone.
 fn clock_seed() -> u64 {
-    #[allow(clippy::disallowed_methods, reason = "the seed of `sim` alone")]
+    #[expect(clippy::disallowed_methods, reason = "the seed of `sim` alone")]
     let since = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
@@ -262,9 +279,7 @@ impl Rng {
     reason = "`fifo` draws neither `schedule` nor `order`; both are split so the later streams keep their seeds"
 )]
 pub(crate) struct Streams {
-    /// Preemption decisions.
     pub(crate) schedule: Rng,
-    /// The pick among the activities one event readied.
     pub(crate) order: Rng,
     /// The clock's origin and quantum.
     pub(crate) clock: Rng,
@@ -319,13 +334,13 @@ impl Clock {
             }
             ClockOrigin::Real =>
             {
-                #[allow(clippy::disallowed_methods, reason = "`clock=real`'s origin")]
+                #[expect(clippy::disallowed_methods, reason = "`clock=real`'s origin")]
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap_or_default()
             }
         };
-        #[allow(
+        #[expect(
             clippy::disallowed_methods,
             reason = "virtual instants count from here"
         )]
@@ -375,7 +390,7 @@ impl Interp {
     pub(crate) fn now(&self) -> Instant {
         match &self.sim {
             Some(sim) => sim.clock.now(),
-            #[allow(clippy::disallowed_methods, reason = "the seam")]
+            #[expect(clippy::disallowed_methods, reason = "the seam")]
             None => Instant::now(),
         }
     }
@@ -386,7 +401,7 @@ impl Interp {
     pub(crate) fn wall_now(&self) -> SystemTime {
         match &self.sim {
             Some(sim) => sim.clock.wall_now(),
-            #[allow(clippy::disallowed_methods, reason = "the seam")]
+            #[expect(clippy::disallowed_methods, reason = "the seam")]
             None => SystemTime::now(),
         }
     }
@@ -404,6 +419,7 @@ impl Interp {
             breach: None,
         }));
         self.pool.set_bound(0);
+        self.timer.requests().set(crate::timer::SIM);
         self.activity.random_source = None;
         if config.knobs.gc.is_some() {
             self.collect_due = true;
@@ -427,8 +443,14 @@ impl Interp {
         Ok(())
     }
 
-    /// Fails with the refusal for a post another thread made, if one did.
+    /// Fails with the refusal for a post or a callback another thread made,
+    /// if one did.
     pub(crate) fn sim_breached(&mut self) -> Result<(), Failure> {
+        let requests = self.timer.requests();
+        if requests.pending(crate::timer::FOREIGN) {
+            requests.clear(crate::timer::FOREIGN);
+            return Err(Loud::sim_foreign_post("a callback").into());
+        }
         match self.sim.as_deref_mut().and_then(|sim| sim.breach.take()) {
             Some(what) => Err(Loud::sim_foreign_post(what).into()),
             None => Ok(()),
@@ -542,6 +564,13 @@ impl Interp {
         Some(sim.config.child(seed).to_string())
     }
 
+    /// How long a command's wait on the baton may take, in the simulation
+    /// mode.
+    pub(crate) fn sim_block_bound(&self) -> Option<Duration> {
+        let sim = self.sim.as_deref()?;
+        Some(Duration::from_secs_f64(sim.config.knobs.block))
+    }
+
     /// The report a run in the simulation mode ends with.
     pub(crate) fn sim_report(&self) -> Option<SimReport> {
         let sim = self.sim.as_deref()?;
@@ -556,13 +585,23 @@ impl Interp {
 }
 
 impl Loud {
-    /// A post in the simulation mode from a thread other than this one, other
-    /// than a signal's halt: a native's own thread or a pool thread, whose
-    /// timing is real.
+    /// A post or a callback in the simulation mode from a thread other than
+    /// this one, other than a signal's halt, whose timing is real.
     pub(crate) fn sim_foreign_post(what: &str) -> Loud {
         Loud {
             message: crate::owned_message(
-                &format!("{what} posted by another thread in the simulation mode"),
+                &format!("{what} from another thread in the simulation mode"),
+                None,
+            ),
+        }
+    }
+
+    /// A command whose wait on the baton outlasted `block=`'s real time: one
+    /// only another activity can end, such as a read of a pipe it writes.
+    pub(crate) fn sim_blocked_command() -> Loud {
+        Loud {
+            message: crate::owned_message(
+                "a command in the simulation mode that waits longer than its bound",
                 None,
             ),
         }
@@ -580,5 +619,5 @@ impl Loud {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
+#[expect(clippy::disallowed_methods, reason = "these tests time real runs")]
 mod tests;

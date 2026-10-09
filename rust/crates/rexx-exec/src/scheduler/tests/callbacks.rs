@@ -142,6 +142,41 @@ fn a_callback_from_another_thread_takes_the_baton_and_raises_98_983() {
     assert_eq!(ran.takes, 1, "the other thread took the baton once");
 }
 
+/// In the simulation mode the same callback, made while the call runs on
+/// the baton, is refused at once: the call's own thread does nothing, the
+/// call returns, and the run is refused at the next clause boundary rather
+/// than waiting on a thread whose timing is real.
+#[test]
+fn a_callback_from_another_thread_is_refused_in_the_simulation_mode() {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let ran = run_shaped(
+            "signal on syntax\nsay SENDFROMANOTHERTHREAD(.loud~new, 'SPEAK')\nsay 'after'\n\
+             exit\nsyntax:\nsay 'trapped' condition('o')~code\n\
+             ::requires 'callbacktest' LIBRARY\n::class loud\n::method speak\n  say 'spoke'\n  \
+             return 1\n",
+            Shape {
+                library: (b"callbacktest", library),
+                switch: Some(crate::SwitchMode::Sim(
+                    crate::SimConfig::parse("sim:1").expect("a sim spec"),
+                )),
+                ..SHAPE
+            },
+        )
+        .expect("the run did not panic");
+        let _ = sender.send(ran);
+    });
+    let ran = receiver
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the run ended");
+    assert_eq!(ran.outcome.exit_code, 120);
+    assert_eq!(ran.stdout(), "1\n");
+    assert_eq!(
+        ran.stderr(),
+        "rexx-exec: a callback from another thread in the simulation mode is not implemented\n"
+    );
+}
+
 /// A thread context kept from a call on one pool thread, used from another
 /// activity's call on another pool thread while the first call runs outside
 /// any callback, does nothing and gives the user's own call 98.983.

@@ -13,7 +13,7 @@
 //! each documented introspection method, whether that scope's body is C++ or
 //! Rexx, and for a C++ body the `Setup.cpp` token and arity operand.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

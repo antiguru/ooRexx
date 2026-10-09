@@ -1285,6 +1285,9 @@ impl Interp {
                     self.timer.requeue(std::mem::take(&mut posted));
                     self.serve_recall(recall);
                     posted = self.timer.drain();
+                    if self.sim.is_some() {
+                        self.sim_screen_posts(&posted);
+                    }
                 }
                 Posted::Output {
                     error: false,
@@ -2384,5 +2387,5 @@ pub(crate) use pool::threads_spawned;
 pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
 
 #[cfg(test)]
-#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
+#[expect(clippy::disallowed_methods, reason = "these tests time real runs")]
 mod tests;

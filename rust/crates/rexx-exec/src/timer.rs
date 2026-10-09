@@ -33,6 +33,13 @@ pub(crate) const INBOX: u32 = 2;
 /// A signal's halt was posted to the inbox, beside `INBOX`.
 pub(crate) const HALT: u32 = 4;
 
+/// The interpreter runs in the simulation mode, where a callback from a
+/// thread running none of its native calls is refused.
+pub(crate) const SIM: u32 = 8;
+
+/// A callback from another thread was refused under `SIM`.
+pub(crate) const FOREIGN: u32 = 16;
+
 /// `ActivityManager::timeSliceLength` (`concurrency/ActivityManager.hpp:359`).
 const SLICE_LENGTH: Duration = Duration::from_millis(24);
 

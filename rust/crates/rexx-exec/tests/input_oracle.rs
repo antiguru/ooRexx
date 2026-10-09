@@ -12,7 +12,7 @@
 //! Command-line arguments and a non-empty console, compared against the
 //! running oracle.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

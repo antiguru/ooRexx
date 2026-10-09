@@ -1,9 +1,13 @@
-# Every clock read in rexx-exec goes through `Interp::now` and `Interp::wall_now`
-# (`crates/rexx-exec/src/sim.rs`), which the simulation mode answers with virtual
-# time. Each other read carries an `#[allow]` with its reason.
+# Every clock read and every sleep goes through the clock seam, `Interp::now` and
+# `Interp::wall_now` (`crates/rexx-exec/src/sim.rs`), which the simulation mode
+# answers with virtual time. The rule is workspace-wide; each other site carries
+# an `#[expect]` with its reason.
 disallowed-methods = [
     { path = "std::time::Instant::now", reason = "read the clock through Interp::now" },
+    { path = "std::time::Instant::elapsed", reason = "read the clock through Interp::now" },
     { path = "std::time::SystemTime::now", reason = "read the clock through Interp::wall_now" },
+    { path = "std::time::SystemTime::elapsed", reason = "read the clock through Interp::wall_now" },
+    { path = "std::thread::sleep", reason = "a wait parks on a deadline from Interp::now" },
     { path = "chrono::Local::now", reason = "read the clock through Interp::wall_now" },
     { path = "chrono::Utc::now", reason = "read the clock through Interp::wall_now" },
 ]

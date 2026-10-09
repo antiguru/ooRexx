@@ -172,6 +172,7 @@ pub(super) struct Shape {
     pub(super) interpreter_stack: usize,
     pub(super) panic_at_call_end: Option<std::path::PathBuf>,
     pub(super) fail_native_wait: bool,
+    pub(super) switch: Option<crate::SwitchMode>,
 }
 
 pub(super) const SHAPE: Shape = Shape {
@@ -182,6 +183,7 @@ pub(super) const SHAPE: Shape = Shape {
     interpreter_stack: crate::INTERPRETER_STACK_BYTES,
     panic_at_call_end: None,
     fail_native_wait: false,
+    switch: None,
 };
 
 /// A run: its outcome, its driver exits, the interpreter's thread, how many
@@ -235,6 +237,10 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
             ),
             (b"PATH".to_vec(), b"/usr/bin:/bin".to_vec()),
         ]);
+    let invocation = match shape.switch {
+        Some(mode) => invocation.with_switch_mode(mode),
+        None => invocation,
+    };
     let text = source.as_bytes().to_vec();
     std::thread::Builder::new()
         .stack_size(shape.interpreter_stack)

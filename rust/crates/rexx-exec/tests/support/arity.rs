@@ -13,7 +13,7 @@
 //! list it could accept, measured against the oracle.
 
 #![allow(dead_code)]
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

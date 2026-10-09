@@ -99,7 +99,7 @@ fn two_seeds_draw_different_randoms() {
 fn a_config_reads_back_what_it_prints() {
     for text in [
         "sim:7,fifo",
-        "sim:18446744073709551615,fifo,gc=0.25,halt@3,fail=wait:2,clock=midnight",
+        "sim:18446744073709551615,fifo,gc=0.25,halt@3,fail=wait:2,block=0.5,clock=midnight",
         "sim:0,fifo,clock=real",
     ] {
         let config = SimConfig::parse(text).expect("a sim spec");
@@ -115,6 +115,7 @@ fn a_config_reads_back_what_it_prints() {
         "sim:1,gc=2",
         "sim:1,halt@0",
         "sim:1,fail=wait:",
+        "sim:1,block=0",
         "sim:1,pre:1",
         "simx",
     ] {
@@ -276,10 +277,56 @@ fn a_post_from_another_thread_is_refused() {
             bytes: b"x".to_vec(),
         }),
         Some(
-            "a command's output posted by another thread in the simulation mode is not \
-             implemented"
+            "a command's output from another thread in the simulation mode is not implemented"
                 .into()
         )
     );
     assert_eq!(post(crate::scheduler::Posted::Halt), None);
+}
+
+/// Main reads a fifo with a command another activity's command writes. On
+/// real time the reader's wait leaves the baton and the writer runs; in the
+/// simulation mode the wait is on the baton, and `block=`'s real-time bound
+/// abandons and refuses it.
+#[test]
+fn a_command_only_another_activity_can_end_is_refused_after_its_bound() {
+    let fifo = std::env::temp_dir().join(format!("rexx-sim-fifo-{}", std::process::id()));
+    let made = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("mkfifo runs");
+    assert!(made.success());
+    let fifo_text = fifo.to_string_lossy().into_owned();
+    let source = format!(
+        "w = .w~new~start('WRITE')\naddress system 'cat {fifo_text}'\nsay 'read done' w~result\n\
+         ::class w\n::method write\n  call SysSleep 0.1\n  \
+         address system 'echo hi > {fifo_text}'\n  return 'wrote'\n"
+    );
+    let real = run_in(&source, None);
+    assert_eq!(real.exit_code, 0, "{}", stderr(&real));
+    assert_eq!(stdout(&real), "hi\nread done wrote\n");
+    let began = std::time::Instant::now();
+    let simulated = run_in(&source, Some(sim("sim:1,block=0.5")));
+    let took = began.elapsed();
+    // Ends a reader the kill left behind, if any.
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let _ = std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(&fifo);
+    }
+    let _ = std::fs::remove_file(&fifo);
+    assert_eq!(simulated.exit_code, 120);
+    assert_eq!(stdout(&simulated), "");
+    assert_eq!(
+        stderr(&simulated),
+        "rexx-exec: a command in the simulation mode that waits longer than its bound is not \
+         implemented\n"
+    );
+    assert!(
+        took >= std::time::Duration::from_millis(500),
+        "took {took:?}"
+    );
+    assert!(took < std::time::Duration::from_secs(5), "took {took:?}");
 }

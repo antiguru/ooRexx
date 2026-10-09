@@ -12,7 +12,7 @@
 //! A program that never finishes reddens the oracle harness at its
 //! deadline, rather than hanging it.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

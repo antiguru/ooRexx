@@ -12,7 +12,7 @@
 //! The directive halves of `CoreClasses.orx` and `StreamClasses.orx`,
 //! installed and then questioned, against the oracle.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

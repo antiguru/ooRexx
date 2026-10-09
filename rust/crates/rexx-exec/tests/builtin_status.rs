@@ -12,7 +12,7 @@
 //! Where the builtin implemented/not-implemented boundary sits, measured
 //! rather than described, and committed as `rust/corpus/builtin-status.txt`.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

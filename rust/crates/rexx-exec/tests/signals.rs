@@ -24,7 +24,7 @@
 //! run once, since the thread that takes a terminal's signal is the one
 //! that waits on the command (ruling P67).
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

@@ -300,5 +300,5 @@ fn whole_number_argument(
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_methods, reason = "these tests time real runs")]
+#[expect(clippy::disallowed_methods, reason = "these tests time real runs")]
 mod tests;

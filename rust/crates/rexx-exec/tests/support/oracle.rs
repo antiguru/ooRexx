@@ -19,7 +19,7 @@
 // rather than about this code. `tests/owners.rs` carries the same attribute
 // for the same reason.
 #![allow(dead_code)]
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

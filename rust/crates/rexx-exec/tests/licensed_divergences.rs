@@ -14,7 +14,7 @@
 //! both of this crate's engines, with all three descriptors asserted on every
 //! side.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

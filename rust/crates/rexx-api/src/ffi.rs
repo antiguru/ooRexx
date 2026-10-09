@@ -1115,6 +1115,10 @@ enum Addressed<'a> {
     /// (`Activity::validateThread`, `concurrency/Activity.cpp:3620`): the
     /// call to be given 98.983, and the host frame of the context's call.
     Elsewhere(Reached<'a>, Option<u64>),
+    /// A context reached from a thread running no native call, whose callback
+    /// the host refuses ([`crate::values::Baton::refuses_foreign`]): the
+    /// member does nothing.
+    Refused,
 }
 
 /// What `context` addresses.
@@ -1147,6 +1151,7 @@ unsafe fn addressed<'a, C: CallLinked>(context: *mut C) -> Addressed<'a> {
     match unsafe { reached(C::thread_of(context), "nested call") } {
         Addressed::Here(reached, _) => Addressed::Here(reached, own.frame()),
         Addressed::Elsewhere(reached, _) => Addressed::Elsewhere(reached, own.frame()),
+        Addressed::Refused => Addressed::Refused,
     }
 }
 
@@ -1164,6 +1169,7 @@ unsafe fn activation_of<'a, C: CallLinked>(context: *mut C) -> Option<Reached<'a
             raise_invalid_thread(&running);
             None
         }
+        Addressed::Refused => None,
     }
 }
 
@@ -1181,6 +1187,7 @@ unsafe fn variables_of<'a, C: CallLinked>(context: *mut C) -> Option<(Reached<'a
             raise_invalid_thread(&running);
             None
         }
+        Addressed::Refused => None,
     }
 }
 
@@ -1212,6 +1219,7 @@ unsafe fn innermost_activation<'a>(
             raise_invalid_thread(&running);
             None
         }
+        Addressed::Refused => None,
     }
 }
 
@@ -1302,6 +1310,7 @@ unsafe fn reached<'a>(context: *mut RexxThreadContext_, slot: &str) -> Addressed
             unsafe { &*calling.activation.cast::<Activation<'a>>() }.hold_baton()
         }
         None => match &cell.1 {
+            Some(requester) if requester.refuses_foreign() => return Addressed::Refused,
             Some(requester) => crate::values::BatonHold::take_for(&**requester, context as usize),
             None => crate::values::BatonHold::none(),
         },
@@ -1504,6 +1513,11 @@ unsafe fn numeric_of(context: *mut RexxCallContext_) -> crate::values::Numeric {
                     engineering: false,
                 }
             }),
+        Addressed::Refused => crate::values::Numeric {
+            digits: 0,
+            fuzz: 0,
+            engineering: false,
+        },
     }
 }
 
@@ -3804,6 +3818,7 @@ mod messages {
                     },
                     <*mut _>::cast,
                 ),
+            super::Addressed::Refused => std::ptr::null_mut(),
         }
     }
 

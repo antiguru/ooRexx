@@ -66,7 +66,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 # set; and `uname`, for `SysVersion`. `event` and `time` are the timer
 # thread's `poll` and Linux `timerfd`. Each feature is a leaf here --
 # they gate their modules and pull no further crate.
-rustix = { version = "1.1.4", features = ["event", "fs", "system", "time"] }
+rustix = { version = "1.1.4", features = ["event", "fs", "process", "system", "time"] }
 # `sigaction` and the async-signal-safe `write` the signal module needs
 # (D-U3, `src/signal.rs`). Already in the graph through `std`'s users.
 libc = "0.2.186"

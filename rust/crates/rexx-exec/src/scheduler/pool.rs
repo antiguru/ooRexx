@@ -40,6 +40,10 @@ pub(crate) fn posting_panics(
         // Widens the window a lend given back while the panic unwinds would
         // open, for a test to see.
         #[cfg(test)]
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "a pool thread, which sim does not run"
+        )]
         std::thread::sleep(std::time::Duration::from_millis(100));
         inbox.post(super::Posted::Panicked(payload));
         if baton.lent().is_some() {

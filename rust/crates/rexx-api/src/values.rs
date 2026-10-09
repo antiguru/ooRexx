@@ -750,6 +750,12 @@ pub trait Baton {
         let _ = context;
         self.take_unless_held()
     }
+
+    /// Whether the host refuses a callback from a thread running none of its
+    /// native calls, which then does nothing and takes no baton.
+    fn refuses_foreign(&self) -> bool {
+        false
+    }
 }
 
 pub use crate::ffi::HostRef;

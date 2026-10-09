@@ -12,7 +12,7 @@
 //! Timing one subprocess, summarising a set of such timings, and putting a
 //! distribution-free confidence interval around the median of them.
 
-#![allow(clippy::disallowed_methods, reason = "a benchmark times real runs")]
+#![expect(clippy::disallowed_methods, reason = "a benchmark times real runs")]
 
 use std::io;
 use std::process::{Command, Stdio};

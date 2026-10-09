@@ -31,7 +31,7 @@ impl Deadline {
     pub(crate) const CLAUSES_PER_CHECK: u32 = 1024;
 
     /// A bound `limit` from now.
-    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+    #[expect(clippy::disallowed_methods, reason = "the run's deadline")]
     pub(crate) fn starting_now(limit: Duration) -> Deadline {
         Deadline {
             at: Instant::now() + limit,
@@ -303,7 +303,7 @@ impl Interp {
     /// serves the requests pending.
     #[cold]
     #[inline(never)]
-    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+    #[expect(clippy::disallowed_methods, reason = "the run's deadline")]
     fn countdown_reached(&mut self, yields: bool) -> Result<(), Failure> {
         if let Some(deadline) = &mut self.deadline
             && (deadline.expired || Instant::now() >= deadline.at)
@@ -321,7 +321,7 @@ impl Interp {
 
     /// Blocks this thread until `due` or a post to the inbox, whose
     /// completions it files, or fails where the run's deadline comes first.
-    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+    #[expect(clippy::disallowed_methods, reason = "the run's deadline")]
     pub(crate) fn idle_until(&mut self, due: Instant) -> Result<(), Failure> {
         if self.sim.is_some() {
             return self.sim_idle_until(due);
@@ -364,7 +364,7 @@ impl Interp {
 
     /// Whether the run's deadline, which is real time in every mode, has
     /// passed.
-    #[allow(clippy::disallowed_methods, reason = "the run's deadline")]
+    #[expect(clippy::disallowed_methods, reason = "the run's deadline")]
     pub(crate) fn deadline_passed(&self) -> bool {
         self.deadline
             .as_ref()

@@ -12,7 +12,7 @@
 //! The method-body table (D76): whether each documented method **works**,
 //! where gate table C only asks whether `hasMethod` answers for it.
 
-#![allow(
+#![expect(
     clippy::disallowed_methods,
     reason = "this harness times or bounds real runs"
 )]

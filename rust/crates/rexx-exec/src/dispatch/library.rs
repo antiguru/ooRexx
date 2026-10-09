@@ -1243,6 +1243,17 @@ impl rexx_api::values::Baton for Requester {
     fn host(&self) -> Option<std::ptr::NonNull<dyn rexx_api::values::Host>> {
         self.baton.lent().map(crate::island::Island::host)
     }
+
+    /// In the simulation mode, where the callback's timing is real, noting
+    /// it for the baton's holder to refuse at its next clause boundary.
+    fn refuses_foreign(&self) -> bool {
+        let requests = self.inbox.requests();
+        if !requests.pending(crate::timer::SIM) {
+            return false;
+        }
+        requests.set(crate::timer::FOREIGN);
+        true
+    }
 }
 
 impl rexx_api::values::Baton for Recalling<'_> {
