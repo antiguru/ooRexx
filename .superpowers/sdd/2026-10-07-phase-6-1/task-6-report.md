@@ -252,3 +252,69 @@ Checks at `ac6cb27f6`:
   `ac6cb27f6` changes only `src/tests.rs`.
 - At `ca3a558b6` the workspace run failed the new crate test only. It counted 2 `leave` echoes
   where the error report adds a third; fixed in `ac6cb27f6`.
+
+## Fix round 2
+
+Commit `5495d5a08`. Re-review: `task-6-rereview.md`. Probes and runs are under
+`/tmp/claude-1000/p61/t6/fr2/`.
+
+**I3 at the ITERATE/LEAVE pause, and the LEAVE regression.** `flat_loop_step_escaped`
+(`ir/drive.rs`) now delivers what the pause's read queued right after the pause, as
+`debug_pause_in_region`'s DO/LOOP arm does.
+- The delivery runs with the LEAVE/ITERATE clause's state, saved before the loop step, so SIGL is
+  that clause's.
+- Its indent is the loop's: the body's for a pass that goes on, the DO's for a loop that ended
+  (`FlatLoop::do_indent` and `loop_indent`, now `pub(crate)`). Measured: the handler echo
+  otherwise sat at the LEAVE's or ITERATE's own indent.
+- After the delivery the step's clause state is put back.
+- A handler that ends the program, with the pass going on, closes the flat loop first
+  (`close_flat_top`, `run/loops.rs`). That path is not witnessed.
+
+The re-review's `dh4`, `dh5`, `dh6`, `dh7b` and `dh8` all agree with the oracle on stdout, stderr
+and rc.
+
+**Typed-line conditions.** `trap_for` and `trap_at_depth` (`run/condition.rs`) answer no trap
+for any condition but SYNTAX when the frame they read is running a line typed at a pause
+(`ignored_in_debug_pause`, `RexxActivation.cpp:2475`, `:2600`). `settle_command` (`command.rs`)
+returns before RC, `.RS`, the error/failure traces and the condition when the command was typed
+at a pause (`RexxActivation.cpp:4442`). Without the second change, `c2re` still differed: it
+printed `rc now 3`, which the re-review lists as pre-existing.
+
+**Non-debug fix from round 1.** The `trap_frame` change in `raise_notready` also fixed CALL ON
+NOTREADY for any read of standard input at its end (`linein()`, `.stdin~linein`, `charin()`). The
+standard input monitors reach `.STDIN` through a non-continuing FORWARD, and the condition was
+delivered inside the monitor's `UNKNOWN`, ending in Error 43.1, rc 213, at base and at
+`2bde37127`. Witnessed now.
+
+Witnesses (`phase-6-1.txt`, `# Task 6 fix round 2`), each compared once per binary with `run.sh`:
+
+| witness | probe | c1938dfa2 code (`bin-fr1`) | 2bde37127 code (`bin-head4`) | head |
+|---|---|---|---|---|
+| `debug_input_eof_iterate` | dh5 | stdout, stderr | all three | same |
+| `debug_input_eof_leave` | dh7b | stdout, stderr | stdout, stderr | same |
+| `debug_input_eof_iterate_outer` | dh8 | stdout, stderr | all three | same |
+| `debug_typed_condition_ignored` | c2rn | stdout, stderr | stdout, stderr | same |
+| `debug_typed_command_quiet` | c2re | stdout, stderr | stdout, stderr | same |
+| `notready_call_on_stdin` | n1 | same | all three | same |
+| `notready_call_on_stdin_loop` | n8 (stdin `line1`) | same | all three | same |
+
+The last two pin round 1's non-debug fix, so they agree at `c1938dfa2` and fail before it. Every
+earlier debug witness and the round-1 probes still agree. The exceptions are `e1` (KNOWN GAP) and
+`dj2` (oracle crash 31).
+
+Records:
+- `oracle-crashes.txt` entry 32: `di6`, SIGSEGV 3 of 3, this crate 11.1 at rc 245.
+- `phase-4-exclusions.txt` Deviation 27: a non-string `.DebugInput` answer is read by its string
+  value.
+- A KNOWN GAP row for REPLY under debug: no pause at the REPLY, and the prompt at the
+  continuation's first pause.
+- The LEAVE KNOWN GAP row now names the error report's echo.
+
+Perf: no change on the driver's hot path. One round of
+`memcap 8G bash rust/bench-programs/callgrind.sh -r 1 -j 2 -o $T/cg-fr2 -p "emptyloop rexxcps" base=$T/target-base/release/rexx-run fr2=$T/bin-fr2/rexx-run`
+measured emptyloop -0.0013% and rexxcps +0.0441% against fe4956b36.
+
+Checks at `5495d5a08`:
+- `cargo fmt --all --check` exit 0; clippy `-D warnings` exit 0.
+- Workspace debug run exit 0: 3074 passed, 0 failed, 4 ignored.
+- Strict corpus + ir_recorded_oracle exit 0: 29 passed 1 ignored, and 21 passed.
