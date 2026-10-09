@@ -1044,6 +1044,8 @@ impl Interp {
 
     /// Whether `gc=q`'s draw declines the collection due at an allocation,
     /// where neither the slot nor the byte trigger makes it due.
+    #[cold]
+    #[inline(never)]
     pub(crate) fn sim_declines_collection(&mut self) -> bool {
         let Some(sim) = self.sim.as_deref_mut() else {
             return false;
