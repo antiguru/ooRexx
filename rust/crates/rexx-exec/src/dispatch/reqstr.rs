@@ -201,11 +201,12 @@ impl Interp {
             )? {
                 Some(answered) => match self.string_answer_text(answered) {
                     Some(text) => text,
-                    None if nil => {
+                    // `.nil`, raised as NOSTRING's description before any
+                    // consumer reads it (`ObjectClass.cpp:1259-1287`).
+                    None => {
                         no_string = true;
                         self.string_value_text(ObjRef::NIL)
                     }
-                    None => return Err(Loud::string_answer_not_a_string().into()),
                 },
                 None => self.string_value_text(value),
             }
@@ -229,7 +230,11 @@ impl Interp {
             return Err(Raised::nostring_syntax(&readable).into());
         }
         if no_string {
-            return Ok(ObjRef::NIL);
+            return if nil {
+                Ok(ObjRef::NIL)
+            } else {
+                Err(Loud::string_answer_not_a_string().into())
+            };
         }
         let readable = self.text_built(readable);
         self.roots.activity_mut().push_temp(readable);
