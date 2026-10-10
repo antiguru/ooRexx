@@ -1356,7 +1356,7 @@ change only a table and a test. The pad2 control is 0.0000% everywhere, so the b
 | pingmsg | 1676421012 | -0.0190 | -0.0421 | +0.0000 |
 | pingsem | 1181250699 | -0.4694 | -0.4863 | +0.0000 |
 
-**`parse` is over budget, +1.1979%; every other program is inside +0.5%.** Attribution and the round
+**`parse` was over budget here, +1.1979%; every other program is inside +0.5%. `## Parse round 2` (`23d78ec1b`) brings parse to +0.4824%, and criterion 7 holds.** Attribution and the round
 are in the report's "Parse attribution" and "Parse perf round": the residual is the freed-body byte
 accounting in `collect_now` (heapshape round 1, `5214a2089`, on Task 5a's charge), the Task 4a driver
 codegen and the Task 8-10 allocation codegen (both accepted under the l.103 precedent), and Task 5a's
@@ -1433,3 +1433,47 @@ Nothing newly exceeds +0.5%. parse is +1.1983%. Every program carries a fixed ~7
 * alloc +0.46 points:
   * `.array~of` finding its last item, +27M.
   * `from_utf8` +66M and memcmp +24M at unchanged call counts. Their per-line Ir moves between the aligned word loop and the byte loop, which depends on where the name buffers are allocated.
+
+## Parse round 2
+
+Commit `23d78ec1b`: the collector sums the survivors' held bytes in the mark loop in release, as the debug build already did, and sets the running figure to that sum after the sweep. The sweep no longer reads a freed body's bytes in release. A string survivor reaches nothing, so the mark loop reads its length and skips the call to `Body::trace`. The debug build still sums the freed bytes and asserts that the running figure less them equals the survivors' sum. The resurrect loop sums resurrected UNINIT bodies, and `body_bytes_tests::a_collection_sums_the_survivors_body_bytes` now checks that sum in release. Report: `.superpowers/sdd/2026-10-07-phase-6-1/parse-round2-report.md`.
+
+Perf, `callgrind.sh -r 2` over all programs with base61, `cf167fba1` (`cur`) and `23d78ec1b` (`fin`) in one run, exit 0, spreads 0.0001% at most. `fin` was built from `git archive 23d78ec1b` with its own target directory and one `Compiling rexx-exec` line, sha256 `2d56a4e252de765c168a9adde9b18a8c581a774abf6dc947363043b091f61729`. d% is against base61:
+
+| program | base61 Ir | cf167fba1 d% | 23d78ec1b d% |
+|---|---:|---:|---:|
+| alloc | 20345537302 | +0.4253 | +0.2515 |
+| alloc4c | 3140684449 | -0.0651 | -1.2531 |
+| arith | 11488858262 | +0.2725 | -0.0899 |
+| assign | 18983599250 | -3.1650 | -3.1650 |
+| compound | 8937498228 | -1.1171 | -1.1171 |
+| decloop | 2469010841 | -2.2377 | -2.8106 |
+| decrender | 4228326880 | -1.0607 | -1.3952 |
+| dirread | 2644857003 | +0.1582 | +0.0690 |
+| dispatch | 20809503043 | -0.3596 | -0.3596 |
+| dispatchclass | 15794935302 | -0.6321 | -0.6321 |
+| emptyloop | 7786100004 | -0.6401 | -0.6401 |
+| extcall | 7552641533 | +0.0022 | +0.0022 |
+| fibcall | 8413280478 | +0.4413 | +0.4413 |
+| fibfunc | 8228290864 | +0.4304 | +0.4304 |
+| heapshape | 2334068375 | +0.1852 | -1.8518 |
+| nop | 9283340619 | -1.0862 | -1.0862 |
+| parse | 1536336771 | +1.1983 | +0.4824 |
+| sayloop | 109048299 | -0.4004 | -0.4004 |
+| sendloop | 14013810686 | -0.4983 | -0.4983 |
+| startup | 58097187 | +0.2809 | +0.2809 |
+| strings | 17537481400 | +0.3735 | -0.1020 |
+| textnum | 1155145953 | -0.5399 | -0.5399 |
+| varlookup | 13437530430 | -2.2611 | -2.2611 |
+| rexxcps | 17788420667 | +0.2694 | -0.1931 |
+| pingguard | 1159017374 | -0.7107 | -0.7106 |
+| pingmsg | 1676421124 | +0.0537 | -0.2971 |
+| pingsem | 1181250540 | -0.4857 | -0.4857 |
+
+parse is +0.4824%, inside +0.5%. Nothing newly exceeds +0.5%, and no program rises: every program falls or moves by fewer than 1,000 Ir. cgdiff `cf167fba1` to `23d78ec1b`: `collect_now` falls on every collecting program (parse -10.98M, strings -83.29M, rexxcps -82.14M, alloc4c -37.29M), and heapshape's `Body::trace` falls by 41.61M.
+
+Gates, `bggates.sh 23d78ec1b` (`.superpowers/sdd/2026-10-07-phase-6-1/bg/23d78ec1b/status.txt`, finished 2026-10-10T21:03:14+02:00):
+* G1 fmt, G2 clippy, G3 release build, G5 debug build, G7 clippy pinning, G8 pinning self-tests and G9 loom: exit 0.
+* G4 release test: exit 0, 3149 passed, 0 failed, 4 ignored.
+* G6 debug test: exit 0, 3153 passed, 0 failed, 4 ignored.
+* P48 reruns 0.
