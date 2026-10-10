@@ -956,7 +956,7 @@ impl Interp {
         // `new_file_executable` records its own parent early: the prologue
         // resolves routines, and must already reach the context.
         if let Some(parent) = parent {
-            self.package_parents.insert(id, parent);
+            self.set_package_parent(id, parent);
         }
         self.run_loaded(parsed, id, CallType::Requires, None, None)?;
         Ok(id)
@@ -1679,7 +1679,7 @@ impl Interp {
         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
         // which its routine and class lookups walk.
         if let Some(parent) = parent {
-            self.package_parents.insert(program_id, parent);
+            self.set_package_parent(program_id, parent);
         }
         let method = self.mint_unattached_body(
             object,
@@ -1813,7 +1813,7 @@ impl Interp {
         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
         // which its routine and class lookups walk.
         if let Some(parent) = parent {
-            self.package_parents.insert(program_id, parent);
+            self.set_package_parent(program_id, parent);
         }
         self.executable_sources.insert(
             object,
@@ -1918,7 +1918,7 @@ impl Interp {
         // executable. `load_requires` caches ahead of its own prologue for
         // the same reason.
         if let Some(parent) = parent {
-            self.package_parents.insert(id, parent);
+            self.set_package_parent(id, parent);
         }
         if let Err(failure) = self.install_directives(id, &program) {
             self.seal_package_level(&failure, id);

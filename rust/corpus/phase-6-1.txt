@@ -270,3 +270,4 @@ lang/reply_handler_exit_after_split.rex
 lang/string_answer_array.rex
 lang/routine_new_context.rex
 lang/routine_new_package_parent.rex
+lang/package_find_through_parent.rex

@@ -697,10 +697,20 @@ impl Interp {
             }
             return self.classes().lookup_upper(upper);
         };
-        self.package_classes.get(&program)?.get(upper).copied()
+        if let Some(found) = self
+            .package_classes
+            .get(&program)
+            .and_then(|held| held.get(upper))
+        {
+            return Some(*found);
+        }
+        if self.has_package_parent(program) {
+            return self.parent_installed_class(program, upper);
+        }
+        None
     }
 
-    /// `PackageClass::findPublicClass`'s three steps, as an `Option`.
+    /// `PackageClass::findPublicClass`'s steps, as an `Option`.
     fn package_public_class_of(
         &mut self,
         package: Option<ProgramId>,
@@ -723,6 +733,11 @@ impl Interp {
         {
             return Some(*found);
         }
+        if self.has_package_parent(program)
+            && let Some(found) = self.parent_public_class(program, upper)
+        {
+            return Some(found);
+        }
         self.rexx_package_class(upper)
     }
 
@@ -740,6 +755,55 @@ impl Interp {
             Some(merged) => self.merged_routine_object(merged).unwrap_or(ObjRef::NIL),
             None => ObjRef::NIL,
         }
+    }
+
+    /// Records `parent` as `program`'s parent package.
+    pub(crate) fn set_package_parent(&mut self, program: ProgramId, parent: Package) {
+        self.package_parents.insert(program, parent);
+        if self.parented.len() <= program.0 {
+            self.parented.resize(program.0 + 1, false);
+        }
+        self.parented[program.0] = true;
+    }
+
+    /// Whether `program` has a parent package to walk.
+    #[inline]
+    pub(crate) fn has_package_parent(&self, program: ProgramId) -> bool {
+        self.parented.get(program.0).copied().unwrap_or(false)
+    }
+
+    /// A class installed in a package up `program`'s parent chain, past
+    /// `program` itself: `findInstalledClass`'s recursion to `parentPackage`
+    /// after a local miss (`classes/PackageClass.cpp:982-1003`).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn parent_installed_class(
+        &self,
+        program: ProgramId,
+        upper: &[u8],
+    ) -> Option<ObjRef> {
+        self.package_lineage(program)
+            .skip(1)
+            .find_map(|package| self.package_classes.get(&package)?.get(upper).copied())
+    }
+
+    /// A public class of a package up `program`'s parent chain, past
+    /// `program` itself: each package's installed public classes, then its
+    /// merged ones, then its parent's (`classes/PackageClass.cpp:1014-1049`).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn parent_public_class(&self, program: ProgramId, upper: &[u8]) -> Option<ObjRef> {
+        self.package_lineage(program).skip(1).find_map(|package| {
+            self.package_public_classes
+                .get(&package)
+                .and_then(|held| held.get(upper))
+                .or_else(|| {
+                    self.merged_public_classes
+                        .get(&package)
+                        .and_then(|held| held.get(upper))
+                })
+                .copied()
+        })
     }
 
     /// `program`, then each package up its parent chain

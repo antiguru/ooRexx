@@ -393,6 +393,26 @@ fn a_compiled_source_resolves_through_its_package_parent() {
     );
 }
 
+/// A compiled source's package object finds classes and routines through
+/// its parent package, as the `.NAME` lookup does.
+#[test]
+fn a_compiled_sources_package_finds_through_its_parent() {
+    assert_eq!(
+        run_source(include_str!(
+            "../../../../corpus/lang/package_find_through_parent.rex"
+        )),
+        (
+            0,
+            "none    1 1 1 1 ClassPublic RoutinePublic Class Routine\n\
+             this    1 1 1 1 ClassPublic RoutinePublic Class Routine\n\
+             routine 1 1 1 1 ClassPublic RoutinePublic Class Routine\n\
+             imp     0 0\n"
+                .to_owned(),
+            String::new()
+        )
+    );
+}
+
 /// A primitive's native method run on an instance of a plain class refuses
 /// as a receiver of the wrong type, owner none (Deviation 28), where a
 /// `Directory` with no store keeps its own method's refusal and a

@@ -1357,6 +1357,10 @@ struct Interp {
     /// `Package~new`'s parent context. A routine lookup that misses a
     /// program's own table and its imports walks this.
     package_parents: FxHashMap<ProgramId, Package>,
+    /// Whether each program, by [`ProgramId`], has an entry in
+    /// [`Interp::package_parents`]: the one test a class lookup that missed
+    /// the program's own tables makes before walking parents.
+    parented: Vec<bool>,
     /// The value each `::CONSTANT` accessor answers, keyed by the directive
     /// that declared it.
     constant_values: FxHashMap<(ProgramId, usize), ObjRef>,
@@ -2056,6 +2060,7 @@ impl Interp {
             library_routine_objects: FxHashMap::default(),
             package_imports: FxHashMap::default(),
             package_parents: FxHashMap::default(),
+            parented: Vec::new(),
             constant_values: FxHashMap::default(),
             annotations: FxHashMap::default(),
             compiled_methods: 0,
@@ -2854,6 +2859,7 @@ impl Interp {
             package_imports: _,
             // Program identities and nothing else.
             package_parents: _,
+            parented: _,
             // `RootSet::add_global`, under `constant_root_key`.
             constant_values: _,
             // A lookup index. A class-owned site's table is held by that

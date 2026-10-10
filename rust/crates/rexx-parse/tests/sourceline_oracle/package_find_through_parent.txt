@@ -1,0 +1,16 @@
+count 15
+/* Package~findClass, findPublicClass, findRoutine and findPublicRoutine on a
+   compiled source's package look through its parent package. */
+src = 'p = .context~package; return (p~findPublicClass("TSTCLASSPUBLIC") \= .nil) (p~findPublicRoutine("TSTROUTINEPUBLIC") \= .nil) (p~findClass("TSTCLASS") \= .nil) (p~findRoutine("TSTROUTINE") \= .nil) .TstClassPublic~TstMethod TstRoutinePublic() .TstClass~TstMethod TstRoutine()'
+say 'none   ' .routine~new('a', src)~call
+say 'this   ' .routine~new('a', src, .context~package)~call
+say 'routine' .routine~new('a', src, .routines['TSTROUTINE'])~call
+say 'imp    ' .routine~new('a', 'p = .context~package; return (p~findPublicClass("TSTCLASSPUBLIC") \= .nil) (p~findClass("TSTCLASS") \= .nil)', .rexxcontext~package)~call
+::class TstClassPublic public
+  ::constant TstMethod "ClassPublic"
+::routine TstRoutinePublic public
+  return "RoutinePublic"
+::class TstClass
+  ::constant TstMethod "Class"
+::routine TstRoutine
+  return "Routine"
