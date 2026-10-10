@@ -831,15 +831,41 @@ static NIL_ARGUMENT_POSITIONS: &[(&[u8], &[(usize, NilArgument)])] = {
 /// builtin calls this after its own argument checks and before the method's
 /// other checks, which is where the oracle's method reads its string
 /// arguments.
+#[inline]
 fn method_string_arguments(name: &[u8], args: Args<'_>) -> Result<(), Failure> {
+    if args.unconverted() {
+        return Ok(());
+    }
+    converted_method_string_arguments(name, args)
+}
+
+/// [`method_string_arguments`] over arguments the protocol converted.
+#[cold]
+#[inline(never)]
+fn converted_method_string_arguments(name: &[u8], args: Args<'_>) -> Result<(), Failure> {
     nil_argument_positions(name)
         .iter()
-        .try_for_each(|(position, _)| method_string_argument(name, args, *position))
+        .try_for_each(|(position, _)| converted_method_string_argument(name, args, *position))
 }
 
 /// [`method_string_arguments`] for the one builtin `position`, for a method
 /// that checks something else between its string arguments.
+#[inline]
 fn method_string_argument(name: &[u8], args: Args<'_>, position: usize) -> Result<(), Failure> {
+    if args.unconverted() {
+        return Ok(());
+    }
+    converted_method_string_argument(name, args, position)
+}
+
+/// [`method_string_argument`] over arguments the protocol converted.
+#[cold]
+#[inline(never)]
+fn converted_method_string_argument(
+    name: &[u8],
+    args: Args<'_>,
+    position: usize,
+) -> Result<(), Failure> {
     let reading = nil_argument_positions(name)
         .iter()
         .find(|(at, _)| *at == position);
@@ -873,6 +899,13 @@ impl<'a> Args<'a> {
     /// message names.
     fn object(self, position: usize) -> Option<ObjRef> {
         self.objects.get(position - 1).copied().flatten()
+    }
+
+    /// Whether the protocol left every argument as it was, which [`run`]
+    /// says by handing the same slice as both readings.
+    #[inline]
+    fn unconverted(self) -> bool {
+        std::ptr::eq(self.values, self.objects)
     }
 
     /// Whether the protocol converted the object at 1-based `position` to
