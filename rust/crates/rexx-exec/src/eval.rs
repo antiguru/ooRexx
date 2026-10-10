@@ -1581,7 +1581,7 @@ fn is_comparison(op: Operator) -> bool {
 
 /// Whether `op` asks whether two values are the same, as against how they
 /// order.
-fn is_equality(op: Operator) -> bool {
+pub(crate) fn is_equality(op: Operator) -> bool {
     use Operator::*;
     matches!(
         op,

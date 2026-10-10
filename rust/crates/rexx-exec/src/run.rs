@@ -1198,7 +1198,7 @@ impl Interp {
             InstructionKind::Options { expression } => {
                 let value = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(value);
-                let value = self.required_string_or_nil(value)?;
+                let value = self.required_string_value(value)?;
                 let text = self.to_text(value).to_vec();
                 self.trace_result(self.activity.clause_state.current_value_indent, &text);
                 Ok(Flow::Next)

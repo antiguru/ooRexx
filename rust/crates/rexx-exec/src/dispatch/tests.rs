@@ -503,6 +503,24 @@ fn a_string_answer_reads_as_primitive_make_string_reads_it() {
             (120, String::new(), refusal.to_owned()),
             "{answer}"
         );
+        // The ordering operators, PARSE and OPTIONS read `.nil` through the
+        // oracle's string layout, so they refuse with the bytes consumers.
+        for statement in [
+            "say '' << .k~new",
+            "say 'abc' < .k~new",
+            "parse value .k~new with p",
+            "parse value .k~new with p q",
+            "call r .k~new\nexit\nr: parse arg p\nreturn",
+            "options .k~new",
+        ] {
+            let program =
+                format!("{statement}\nexit\n::class k\n::method string\n  return {answer}\n");
+            assert_eq!(
+                run_source(&program),
+                (120, String::new(), refusal.to_owned()),
+                "{statement} over {answer}"
+            );
+        }
         let length = format!("say length(.k~new)\n::class k\n::method string\n  return {answer}\n");
         assert_eq!(
             run_source(&length),
