@@ -420,3 +420,73 @@ against base61, t11a = `438f90b9e` (`cg19`, every spread 0.0000%):
 * Oracle SIGSEGV shapes, not in `oracle-crashes.txt`: `expose (v)` (`c11_expose`) and `procedure
   expose (v)` (`c05_procexpose`) with `v` an object whose STRING answers a Directory. They join the
   reviewer's `drop (v)`.
+
+## Fix round 2
+
+Brief `task-11a-fix2-brief.md`, re-review 1 in `task-11a-review.md`, probes
+`/tmp/claude-1000/p61/t11ar/probes/r1/`. Head `e0f1aba1f`. N1, N2 and N3 share one witness and one
+crate test, so they land in one commit (`a0fd7c952`). N4 is `e0f1aba1f`.
+
+* **N1:** `src/dispatch/reqstr.rs` `required_string_operand` takes the `.nil` path only for
+  `& | &&` and the equality operators (`eval.rs` `is_equality`, now `pub(crate)`). The ordering
+  operators refuse.
+* **N2:** `src/parse_template.rs` `argument_text` and `parse_strings` call `required_string_value`
+  again, and every PARSE VALUE or ARG template refuses. The one-variable template, where the oracle
+  assigns the `.nil` object, is refused too. Assigning the object would need a new source kind in
+  the template walk (`SourceText`, `exec_parse`), which is more than the one site the ruling allows.
+* **N3:** OPTIONS (`src/run.rs`) calls `required_string_value` again.
+* **N4:** Deviation 30 lists the ordering operators, PARSE and OPTIONS with their oracle answers.
+  It says equality is a read of `.nil` through the string layout whose answer, over varied inputs,
+  is that `.nil` equals no string, and the crate pins that answer. R11's line in the spec is updated
+  to match.
+
+Corrections to round 1's classification table:
+
+| site | consumer | class | oracle | probe |
+|---|---|---|---|---|
+| `run.rs:1201` | OPTIONS | refused, nothing observable | rc 0 whatever it reads | `f1c/c03_options` |
+| `eval.rs:1324` | ordering operators | refused-garbage | `"" < o` 0 and `"" << o` 1; `"The NIL object" <= o` 0 | `r1/order.rex`, `r1/empty.rex` |
+| `eval.rs:1324` | equality operators | .nil-set (layout read, answer pinned) | `.nil` equals no string, including `""` and `1` | `r1/empty.rex`, witness |
+| `parse_template.rs:445` | PARSE ARG | refused-garbage | Error 5 when split; a one-variable template assigns `.nil` | `r1/pa_words`, `pa_upper`, `pa_isnil` |
+| `parse_template.rs:631` | PARSE VALUE | refused-garbage | Error 5 for words, position, literal and UPPER; `p .` varies per run; one variable assigns `.nil` | `r1/pv_*` |
+
+Oracle runs, 3 each, crate rc 120 on every probe:
+* `pv_words`, `pv_pos`, `pv_lit`, `pa_words` and `pa_upper` give rc 251 with Error 5.
+* `pv_dot` gave a different stdout in each of its 3 runs.
+* `pv_one`, `pv_isnil` and `pa_isnil` give rc 0 (`p == .nil` is 1).
+* `order.rex` gives rc 159 with the reviewer's values.
+* `empty.rex`: the crate prints the equality line, then refuses at the ordering line.
+
+Tests:
+* `corpus/lang/string_answer_nil_consumers.rex` drops the ordering, PARSE and OPTIONS rows, and its
+  equality line now also covers `""` and `1` (`0 0 0 1 1 0 0 1 0 1`). It matches the oracle 3/3.
+* `dispatch::tests::a_string_answer_reads_as_primitive_make_string_reads_it` adds refusal rows for
+  `'' << o`, `'abc' < o`, PARSE VALUE with one and with two variables, PARSE ARG and OPTIONS, over
+  each of a Directory, a Queue, `.nil` and an Object answer.
+* At `438f90b9e`, `say '' << o` prints `1` and `parse value o with p q` prints `The NIL object`.
+  At `e0f1aba1f` both refuse.
+
+Checks at `e0f1aba1f` (status file `ws8-status.txt`):
+* `cargo fmt --all --check`: 0.
+* `cargo clippy --workspace --all-targets -- -D warnings`: 0.
+* The feature clippy: 0.
+* `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: 0.
+* `REXX_CORPUS_GATE=1` corpus and ir_recorded_oracle: 0.
+* `whole_groups` with the seeded gate in release: 0.
+
+Perf: `callgrind.sh -r 2 -j 3` on all eight programs against base61, t11a = `e0f1aba1f` (`cg20`,
+every spread 0.0001% or less):
+
+| program | t11a % |
+|---|---:|
+| pingmsg | +0.0001 |
+| pingguard | -0.3835 |
+| pingsem | -0.2662 |
+| alloc | +0.0118 |
+| alloc4c | +0.0607 |
+| heapshape | +0.0520 |
+| rexxcps | +0.4268 |
+| emptyloop | -0.3191 |
+
+Concern: the one-variable PARSE form refuses where the oracle answers by assigning `.nil`. This is
+by ruling, because building it takes more than one site.
