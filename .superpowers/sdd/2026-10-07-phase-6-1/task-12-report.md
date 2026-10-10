@@ -46,10 +46,10 @@ new file.
 | 17 | truth tests ignore a user STRING method (ledger l.83, l.84) | fixed by `d27a9d441` (Task 4a) | `w_ustr1.rex` at `6a87cd616`: `while 3` on both |
 | 18 | WHILE blames a later-pass 34.3 on the DO line (ledger l.84) | existing file `2026-10-02-while-condition-failure-traceback.md` | `abc_while.rex` at `6a87cd616` still differs (ours line 3, oracle line 6 `end`) |
 | 19 | a trapped error in a user `>` during the header's first comparison holds the TO object (ledger l.84) | new file `2026-10-10-trapped-header-comparison-holds-to-object.md` | `lkJ.rex`: oracle `uninit J` before `gc1`, ours after `gc4` |
-| 20 | rooting of other `ActivationCold` fields (auto_expose owner/scope) unchecked (ledger l.101) | resolved by `5251a8984` and `108bc81fa` (Task 11b) | `Activation::object_roots` destructures `ActivationCold` and `AutoExpose` exhaustively and `Activity::object_roots` calls it; no program probe exists |
+| 20 | rooting of other `ActivationCold` fields (auto_expose owner/scope) unchecked (ledger l.101) | no probe; resolved by inspection, `5251a8984` and `108bc81fa` (Task 11b) | `Activation::object_roots` destructures `ActivationCold` and `AutoExpose` exhaustively, and `Activity::object_roots` calls it; no program probe was run |
 | 21 | enhanced object name in 97.x (ledger l.101; Task 4 concern 3) | new file `2026-10-10-enhanced-object-name-in-messages.md` | `t4b.rex`: oracle `enhanced Object`, ours `an Object` |
 | 22 | compiled method package in `>I>` (ledger l.101) | new file `2026-10-10-compiled-method-package-in-trace.md` | `t4c.rex`: oracle `in package "M"`, ours the program file |
-| 23 | setMethod/run code cannot see caller classes (ledger l.101) | fixed in Task 11a Step 6b | `t4d.rex` answers `U` on both at `6a87cd616`; base61 97.1 on `.U` |
+| 23 | setMethod/run code cannot see caller classes (ledger l.101) | fixed by `8b95afe79` (Task 11a Step 6b) | `t4d.rex`: `U` on both at `6a87cd616`; at `8b95afe79` `U`, at its code parent `98d0d4ccd` rc 159 (each built from `git archive`, own target, `Compiling rexx-exec`); base61 97.1 on `.U` |
 | 24 | Directory~setMethod extra UNKNOWN traceback line (ledger l.101) | new file `2026-10-10-directory-setmethod-unknown-traceback-line.md` | `t4e.rex`: ours adds `Compiled method "UNKNOWN" with scope "Directory"` |
 | 25 | `.context~executable` in a method's internal routine (ledger l.101) | existing file `2026-10-02-frame-executable-invocation-and-native-levels.md` | `t4f.rex` at `6a87cd616`: oracle `Method`, ours `Routine` |
 | 26 | a user STRING answering an Array or another object (ledger l.108) | fixed by `5bb6510af` (Task 11a Step 4) and its fix rounds | `i7a.rex` identical on both at `6a87cd616` |
@@ -59,14 +59,14 @@ new file.
 | 30 | CALL whole passes TEST_4 but the rest run failed it (ledger l.121) | same new file as row 29 | CALL whole and derived agree with the oracle at `97cb37712`; CALL has no rest part since Task 5 I2, so the rest run cannot be repeated |
 | 31 | prologue stack frames also miss nested/newFile intermediate frames (ledger l.121) | new file `2026-10-10-prologue-frames-missing-loading-levels.md` | `frames.rex`, `frames2.rex`: oracle `METHOD NEW` and `ROUTINE mid2.cls` frames, ours neither |
 | 32 | pending UNINIT never finalized mid-run (ledger l.127) | fixed by `595ba08ef` and `be020a36d` (Task 11b) | `uninit.rex` at `6a87cd616`: `done 950`, peak 69 MB (scout E1 measured 356 MB at its HEAD); oracle `done 995`, 16 MB |
-| 33 | Array~append quadratic (ledger l.127) | fixed by `e8a19b2e6` (Task 11a Step 7) | `append.rex` (1e5 appends): 0.03 s here, 0.02 s oracle (scout E2: 5.4 s) |
-| 34 | COPIES fills byte by byte (ledger l.129) | fixed by `e4064dac0` (Task 11a Step 8) | `copies.rex` (loop999, N = 1e6): 0.44 s here (scout E2: 1.00-1.12 s), oracle 0.77 s |
+| 33 | Array~append quadratic (ledger l.127) | fixed by `e8a19b2e6` (Task 11a Step 7) | `append.rex` (1e5 appends), 5 interleaved runs at `97cb37712`: 0.03 s each here, 0.01-0.02 s on the oracle (scout E2: 5.4 s) |
+| 34 | COPIES fills byte by byte (ledger l.129) | fixed by `e4064dac0` (Task 11a Step 8) | `copies.rex` (loop999, N = 1e6), 5 interleaved runs at `97cb37712`: 0.43-0.44 s here (scout E2: 1.00-1.12 s), 0.76-0.77 s on the oracle |
 | 35 | `=` after ITERATE indent (ledger l.135) | new file `2026-10-10-debug-equals-after-iterate-indent.md` | `e2.rex`: `3 *-*       iterate` against `3 *-*   iterate` |
 | 36 | REPLY no pause (ledger l.135) and REPLY reprints the banner (ledger l.138) | new file `2026-10-10-debug-reply-pause-and-banner.md` | `k3.rex`, 5 runs each, one outcome per engine |
 | 37 | labelled block DO header pause (ledger l.135) | new file `2026-10-10-debug-labelled-block-header-pause.md` | `g1.rex`: oracle pauses after `do label lbl`, ours after `nop` |
 | 38 | oracle defect: `=` at a zero-pass DO pause, then END 10.1 (ledger l.135) | new file `2026-10-10-upstream-zero-pass-do-reexecute.md` (upstream candidate; Deviation 26) | `z26.rex`: oracle 10.1 rc 246, ours `end` rc 0 |
 | 39 | 28.x from LEAVE/ITERATE not trappable by SIGNAL ON SYNTAX (ledger l.138) | new file `2026-10-10-leave-iterate-error-not-trappable.md` | `lv4o.rex`: oracle `trapped 4` rc 0, ours 28.3 rc 228 |
-| 40 | 10.x and 24.1 messages print `&n` unsubstituted (ledger l.138) | neither: ruling R3 (parse-error inserts not reproduced; roadmap row 3's 2026-07-28 decision) | `cs.rex` (24.1) and `e103.rex` (10.2) are translation errors; both unsubstituted here, filled on the oracle. No file: R3 decides it; flagged for Moritz |
+| 40 | 10.x and 24.1 messages print `&n` unsubstituted (ledger l.138) | new file `2026-10-10-translation-error-inserts.md` (fix round 1); the work ruling R3 defers | `cs.rex` (24.1) and `e103.rex` (10.2) are translation errors: unsubstituted here, filled on the oracle |
 | 41 | `trace c` drops the echo of a failing ADDRESS command (ledger l.138) | new file `2026-10-10-trace-c-command-echo.md` | `cc2.rex`: ours lacks `3 *-* address command 'false'` |
 | 42 | `>I>` missing when EXPOSE precedes TRACE (ledger l.138) | existing file `2026-10-02-trace-entry-after-expose.md` | `k2n.rex` at `6a87cd616` still lacks `>I> Method "M"` |
 | 43 | typed SIGNAL at a pause (ledger l.142) | new file `2026-10-10-debug-typed-signal.md` | `c1sig.rex`: oracle `at lbl 7`, ours `handler sigl 1`, `after` |
@@ -75,7 +75,7 @@ new file.
 | 46 | LEAVE-ends-program-at-pause path (`close_flat_top`) unwitnessed (ledger l.142) | fixed by `072e536ac` (Task 6 last touch) | witness `corpus/lang/debug_handler_exit_at_iterate.rex` (the re-review's `x8`); `x8.rex` identical on both at `6a87cd616` |
 | 47 | typed untrapped RAISE USER then more typed lines (ledger l.144) | new file `2026-10-10-debug-typed-raise-untrapped.md` | `t4.rex`: oracle runs no further typed line; ours prints `mid`, 40.1, `mid2` |
 | 48 | method/function `+++` header class (ledger l.144) | fixed by `072e536ac` (banner per activation) | `x4.rex`, `x8.rex`, `x9.rex`, `c2proc.rex` identical on both at `6a87cd616` |
-| 49 | rexxcps +0.09% between Task 6 rounds 1 and 2 unexplained (ledger l.144) | neither: no file | rexxcps is +0.2694% against base61 at `ab4bc780e` (all-program table), inside the budget |
+| 49 | rexxcps +0.09% between Task 6 rounds 1 and 2 unexplained (ledger l.144) | new file `2026-10-10-rexxcps-task-6-round-2-delta.md` (fix round 1) | rexxcps is +0.2694% against base61 at `ab4bc780e`, inside the budget; the round-2 delta itself stays unattributed |
 | 50 | commit `dirread.rex` as a bench program (ledger l.151) | done, `6a87cd616` | `callgrind.sh`, the criterion list and the suite's axis list name it |
 
 
@@ -248,8 +248,9 @@ close round.
 
 ## Wall clock
 
-The gate record has the table. pingsem and pingguard: the same code with a layout pad moves cycles
-by up to 4.1 points at equal instructions and context switches, so their drift is layout. emptyloop:
+The gate record has the table. pingsem and pingguard: a pad alone moves the same code's cycles by
+up to 4.1 points at equal instructions and context switches, as large as the drift, so the drift
+is not attributable to code. emptyloop:
 cycles are +4.4 to 4.6% on `close` and both of its pads, against +0.07% for base61's pad2. Its
 instructions are 0.63% fewer and its context switches equal, so layout alone does not move it. It is
 unattributed beyond the loop's own cycles, as at Task 2.
@@ -283,6 +284,19 @@ Pointers are `progress.md` line numbers (`l.N`) at `5c83d9250`, or files.
 * `2026-10-10-oracle-judged-seeded-gate.md`: R1 frames the end state as a stand-alone crate; close the item as not wanted, or keep it.
 
 ### Rulings made on your behalf (controller)
+
+Task 12's own, from `progress.md` at `9512f083c`:
+
+* l.256: the GUARD pass list rewritten after a bisect (all nine flips at `59eb57f37`, each oracle 2 of 2); the self-test skips `clock=real` rows (R6), which narrows its row pool; no perf while a gate runs.
+* l.258-260: SysSleep's zero elapsed reading is a 6.1 regression to fix; every SysSleep delay, 0 included, parks at least 1 µs (`0f159f674`), and its sim-exempt row goes.
+* l.263, l.265: the parse round runs in Task 12, widened to next_template, exec_parse and collect_now's remainder; items (1) driver codegen and (4) allocation codegen stay accepted under the l.103 precedent.
+* l.268: parse's residual goes to you at close as an open overrun; no "holds bytes" redesign in 6.1.
+* l.269: `23f4b609f` reverted (`ab4bc780e`) after the all-program table put call paths over budget.
+* l.270: `refusal-sites.tsv` refreshed as its own commit (`13bbff35f`), line numbers only.
+* l.271: the seeded-gate harness keeps its shared run directory (`97cb37712`), which leaves an empty directory behind in the target's tmp.
+* l.273: `quick_native_calls_at_the_smallest_bound_run_alike` is excluded under TSan only, through the 6.1 copy of `tsan.sh`; one sim-bound native test goes unchecked under TSan.
+
+Earlier tasks', at `5c83d9250`:
 
 * l.30: per-task check without full gates; `whole_groups` only at Tasks 3, 5, 10, 12.
 * l.31: scheduler tests' inline programs stay out of the seeded gate.
@@ -337,4 +351,25 @@ Pointers are `progress.md` line numbers (`l.N`) at `5c83d9250`, or files.
 * l.245: one-variable PARSE VALUE/ARG over a non-string STRING answer refuses where the oracle assigns `.nil`.
 * l.252: uncapped pool growth (`2026-10-10-failed-spawn-runs-inline.md`).
 * `2026-10-10-uninit-drain-signal-interpret-and-trace.md` (11b re-review R1, R2).
+* `2026-10-10-call-on-nostring-insert.md` (Task 11a review, ledger l.238).
+* `2026-10-10-security-manager-command-rc-requires.md` (Task 11a, queued with `857a01931`).
+* Ledger l.44 (`current_case_text` never cleared): `2026-10-10-select-case-value-outlives-construct.md`, mapping row 13.
 * Every new queue file in the mapping table above.
+
+## Fix round 1
+
+Review `task-12-review.md`: spec 2 Important, 5 Minor; quality 3 Minor. Every finding is addressed.
+
+| finding | change | commit |
+|---|---|---|
+| S-I1 criteria 1-4 missing | gate record `### Criteria 1-4`: closed_phases, refusal_dispositions, refusal_sites, the gated corpus `991 of 991 matching`, ir_recorded_oracle, the two REPLY crate tests, with log lines at `97cb37712`; the two concurrent scope witnesses rerun 5 times per engine, one outcome each, identical | `2db517c4b` |
+| S-I2 Task 12 rulings missing | "For Moritz" lists l.256-l.273 | the commit carrying this section |
+| S-m1 rows 40, 49 had no file | `2026-10-10-translation-error-inserts.md`, `2026-10-10-rexxcps-task-6-round-2-delta.md` | `7e7ba0f72` |
+| S-m2 row 23 had no commit | `8b95afe79`: built with its code parent `98d0d4ccd` from `git archive` (own target, `Compiling rexx-exec`); `t4d.rex` answers `U` at `8b95afe79`, rc 159 at `98d0d4ccd` | this section |
+| S-m3 row 20 "resolved" | now "no probe; resolved by inspection" | this section |
+| S-m4 parked list | the two Task 11a queue files and the l.44 pointer added | this section |
+| S-m5 roadmap row 9 | the third-argument item removed; the false exclusions row and the two Routine~new rows leaning on it are CLOSED with their probes rerun (2 runs per engine, alike: `a Method` / `43`; `main 16`; `new mainr`) | `12b77b215` |
+| Q-m1 wall-clock wording | "not attributable to code", in the gate record and here | `2db517c4b`, this section |
+| Q-m2 Class arm assumption | a comment at the arm and `debug_assert_eq!(object.body.held_bytes(), 0)` inside it: release builds compile it out, and classes are never collected (D59), so the arm is not hot. fmt, `clippy --workspace --all-targets` and `clippy -p rexx-exec --features pinning,sharing` clean; `cargo test -p rexx-exec --lib` 1077 passed, `-p rexx-core` green | `6d8aa2b0a` |
+| Q-m3 rows 33, 34 run counts | rerun 5 interleaved times each at `97cb37712`, counts and ranges in the rows | this section |
+
