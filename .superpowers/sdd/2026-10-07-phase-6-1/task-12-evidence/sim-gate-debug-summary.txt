@@ -1,0 +1,30 @@
+# sim gate: 1792 runs in 12 s, profile debug, stack 536870912
+differences 89
+  base/class/Message.testGroup derived: 14
+  base/class/MutexSemaphore.testGroup single: 4
+  base/class/Ticker.testGroup derived: 2
+  base/directives/ATTRIBUTE.testGroup derived: 14
+  base/directives/METHOD.testGroup derived: 14
+  base/keyword/RAISE.testGroup derived: 14
+  base/keyword/REPLY.testGroup derived: 5
+  base/keyword/TRACE_TraceObject.testGroup derived: 14
+  corpus/lang/context_moved_by_reply.rex program: 1
+  corpus/lang/guard_on_lock_passes_between_activities.rex program: 4
+  corpus/lang/message_notify.rex program: 3
+Wall-clock reruns (ruling P48) 0
+Reds 0
+Exempted reds 14
+    design-limit base/class/MutexSemaphore.testGroup:single:12327214604993803168:uniform:1 in TEST_EXCLUSION: rexx-exec: a wait in the simulation mode that only a signal can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='base/class/MutexSemaphore.testGroup:single:12327214604993803168:uniform:1' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate -
+    design-limit base/class/MutexSemaphore.testGroup:single:8612948131185784834:pre:2,k=21 in TEST_EXCLUSION: rexx-exec: a wait in the simulation mode that only a signal can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='base/class/MutexSemaphore.testGroup:single:8612948131185784834:pre:2,k=21' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate -
+    design-limit base/class/MutexSemaphore.testGroup:single:7594838439943427749:pct:3,k=21 in TEST_EXCLUSION: rexx-exec: a wait in the simulation mode that only a signal can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='base/class/MutexSemaphore.testGroup:single:7594838439943427749:pct:3,k=21' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate -
+    design-limit base/class/MutexSemaphore.testGroup:single:6156252794275886734:uniform:1 in TEST_EXCLUSION: rexx-exec: a wait in the simulation mode that only a signal can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='base/class/MutexSemaphore.testGroup:single:6156252794275886734:uniform:1' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate --
+    design-limit corpus/lang/message_notify.rex:program:1293537187515384856:pre:3,k=12 in -: rexx-exec: a wait that nothing left to run can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='corpus/lang/message_notify.rex:program:1293537187515384856:pre:3,k=12' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate -- --
+    design-limit corpus/lang/message_notify.rex:program:11946169623404229269:uniform:0.2 in -: rexx-exec: a wait that nothing left to run can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='corpus/lang/message_notify.rex:program:11946169623404229269:uniform:0.2' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate -- 
+    design-limit corpus/lang/message_notify.rex:program:460057235543780317:pct:3,k=12 in -: rexx-exec: a wait that nothing left to run can end is not implemented
+      replay: REXX_CORPUS_GATE=1 REXX_SIM_ONLY='corpus/lang/message_notify.rex:program:460057235543780317:pct:3,k=12' memcap 8G cargo test -j 4 -p rexx-exec --test concurrency_tests the_seeded_gate -- --n

@@ -1,0 +1,4 @@
+program	base median	pad1 median	pad2 median	pad3 median	close median	oracle median	pad1 d%	pad2 d%	pad3 d%	close d%	oracle d%
+emptyloop	0.428	0.429	0.430	0.432	0.449	-	+0.23	+0.47	+0.93	+4.91	-
+pingpong/pingsem	0.125	0.122	0.125	0.121	0.127	-	-2.40	+0.00	-3.20	+1.60	-
+pingpong/pingguard	0.120	0.120	0.121	0.121	0.123	-	+0.00	+0.83	+0.83	+2.50	-

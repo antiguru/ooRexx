@@ -1,0 +1,100 @@
+test tests::an_installed_class_does_not_displace_the_environments_own_entry ... ok
+test dispatch::tests::a_string_answer_reads_as_primitive_make_string_reads_it ... ok
+test tests::an_abstract_accessor_pair_is_abstract_on_both_halves ... ok
+test sim::tests::fail_wait_k_fails_the_kth_pinned_wait ... ok
+test tests::a_raise_inside_a_fragment_reports_both_clauses ... ok
+test scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike ... FAILED
+test tests::a_when_scan_inside_a_fragment_echoes_at_the_fragments_own_indent ... ok
+test sync::tests::a_timed_wait_ends_close_to_its_timeout ... ok
+test tests::an_exit_inside_a_fragment_ends_the_program ... ok
+test tests::method_bodies_names_each_directive_by_its_minted_identity ... ok
+test tests::every_class_the_library_declares_carries_the_rexx_defined_flag ... ok
+test eval::object_operand_tests::an_operator_on_an_instance_is_the_send_the_oracle_makes ... ok
+test tests::an_internal_call_does_not_prompt_again ... ok
+test signal::tests::a_halt_readies_a_set_aside_activity_once ... ok
+test tests::a_fragment_that_does_not_parse_raises_the_oracles_condition ... ok
+test tests::the_ir_render_compiles_under_the_setting_it_is_given ... ok
+test tests::the_ir_render_covers_every_body_and_only_the_ones_that_exist ... ok
+test tests::the_ir_render_names_the_clause_a_region_opens_and_not_its_inner_ops ... ok
+test tests::the_ir_render_refuses_a_setting_that_is_not_one ... ok
+test tests::the_two_formatting_arms_do_not_grow_with_the_subtree ... ok
+test tests::interpret_binds_a_name_the_enclosing_body_never_mentions ... ok
+test trace::tests::a_digit_string_is_a_whole_number_and_a_letter_is_not ... ok
+test trace::tests::every_completed_trace_line_is_made_displayable ... ok
+test trace::tests::every_formatter_matches_its_own_oracle_transcript ... ok
+test trace::tests::every_recognised_letter_classifies_and_unrecognised_ones_report_the_byte ... ok
+test trace::tests::off_refuses_the_debug_flag_from_either_side ... ok
+test sim::tests::halt_at_k_halts_at_its_boundary ... ok
+test sim::tests::gc_q_collects_at_random_allocations_the_seed_chooses ... ok
+test value::tests::a_numbers_rendering_is_fixed_when_it_is_created ... ok
+test value::tests::a_remembered_parse_answers_what_a_fresh_one_does ... ok
+test value::tests::a_second_tagged_read_does_not_show_the_first_ones_tail ... ok
+test value::tests::a_short_value_holds_its_bytes_in_the_slot_and_a_long_one_does_not ... ok
+test value::tests::a_small_int_is_only_admissible_within_the_digits_of_its_own_operation ... ok
+test value::tests::a_tagged_integer_renders_as_its_own_display_does ... ok
+test value::tests::a_value_short_enough_is_the_handle_and_has_no_slot ... ok
+test value::tests::nil_has_a_string_value_and_the_booleans_are_plain_strings ... ok
+test value::tests::nonnumeric_text_and_nil_both_collapse_to_not_numeric ... ok
+test value::tests::numeric_form_is_captured_at_creation_too ... ok
+test value::tests::small_int_admissibility_is_checked_once_against_the_producing_operations_digits ... ok
+test value::tests::text_keeps_its_own_spelling_and_caches_an_exact_parse ... ok
+test tests::the_uninit_flags_are_set_for_the_classes_a_file_declares ... ok
+test value::tests::text_owned_takes_the_buffer_rather_than_copying_it ... ok
+test value::tests::the_borrowing_accessor_answers_what_to_text_answers ... ok
+test value::tests::the_tag_decision_is_the_rendering_read_back ... ok
+test value::tests::the_tag_test_agrees_with_parsing_the_same_bytes ... ok
+test value::tests::the_text_cache_holds_the_exact_parse_not_a_rounded_one ... ok
+test value::tests::to_number_on_a_defaultless_stem_parses_its_own_name_and_fails ... ok
+test value::tests::to_number_on_a_stem_aliasing_another_stem_chases_through_both ... ok
+test value::tests::to_number_on_a_stem_redirects_through_its_numeric_default ... ok
+test trace::tests::the_three_gates_fire_under_exactly_the_modes_that_should_show_them ... ok
+test value::tests::two_spellings_sharing_a_slot_each_keep_their_own_answer ... ok
+test value::tests::write_text_writes_what_to_text_renders ... ok
+test value::tests::text_len_agrees_with_to_text ... ok
+test scheduler::tests::mutants::a_dropped_failed_send_is_written_while_alive ... ok
+test value::tests::try_text_answers_only_where_the_bytes_already_exist ... ok
+test tests::reexecuting_a_leave_raises_outside_its_loop ... ok
+test tests::a_fragments_activation_base_survives_every_indent_writer_inside_it ... ok
+test trace::tests::the_two_argument_prefixes_are_intermediates_and_the_alias_prefix_is_results ... ok
+test tests::no_written_directive_has_an_empty_clause_span ... ok
+test sim::tests::a_replay_that_diverges_is_refused ... ok
+test run::tests::loops::counter_and_with_passes_do_not_accumulate_temps ... ok
+test semaphores::tests::a_timed_wait_tests_the_post_again_after_a_pulse ... ok
+test scheduler::tests::sleepers_wake_in_deadline_order_and_overlap ... ok
+test tests::grown_arrays_are_collected_on_their_bytes ... ok
+test tests::copied_strings_are_collected_on_their_bytes ... ok
+test tests::sized_arrays_are_collected_on_their_bytes ... ok
+test tests::large_dead_strings_are_collected_on_their_bytes ... ok
+test tests::grown_buffers_are_collected_on_their_bytes ... ok
+test tests::bytes_a_body_stops_holding_leave_the_live_figure ... ok
+test tests::short_strings_keep_the_slot_cadence ... ok
+test tests::pending_uninits_run_as_a_method_returns ... ok
+test tests::pending_uninits_run_as_a_label_returns ... ok
+test tests::pending_uninits_run_as_say_writes ... ok
+test tests::pending_uninits_run_as_a_native_method_returns ... ok
+test tests::pending_uninits_run_as_an_interpret_ends ... ok
+test tests::reshaped_arrays_are_collected_on_their_bytes ... ok
+test sim::tests::time_e_after_any_sleep_is_never_zero ... ok
+test sim::tests::a_timed_program_runs_on_virtual_time_and_prints_what_it_prints_on_real_time ... ok
+test scheduler::tests::notifier_failures_too_many_to_nest_are_each_reported ... ok
+test scheduler::tests::uniform_1_in_fifo_order_runs_as_every_opportunity ... ok
+test sim::tests::each_invariant_is_refused_where_a_switch_finds_it_broken ... ok
+test sim::tests::pre_1_reaches_every_interleaving_over_a_seed_range ... ok
+test sim::tests::a_polling_activity_ends_by_the_floor_under_every_policy ... ok
+
+failures:
+
+---- scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike stdout ----
+
+thread 'scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike' (3043356) panicked at crates/rexx-exec/src/scheduler/tests/native.rs:368:9:
+assertion `left == right` failed
+  left: (120, "", "rexx-exec: a native call in the simulation mode that runs longer than its bound is not implemented\n")
+ right: (0, "239.036 idle\n", "")
+
+
+failures:
+    scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike
+
+test result: FAILED. 1063 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 27.89s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`

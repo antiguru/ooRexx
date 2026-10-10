@@ -1,0 +1,16 @@
+0f159f674 started 2026-10-10T08:26:02+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 14.73 10.83 6.24 1/1125 1524356 2026-10-10T08:29:28+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 14.68 6.13 5.22 3/1110 1774582 2026-10-10T08:48:13+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/logs/g4-test-release.txt:0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/logs/g6-test-debug.txt:0
+P48 reruns: 1
+finished 2026-10-10T09:12:09+02:00

@@ -1,0 +1,5 @@
+# 2026-10-10T08:39:45Z rounds=1 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
+# valgrind-3.27.1
+# base /tmp/claude-1000/p61/t1/bin/base/rexx-run 2ea19b3ea2875fada8718eaf5b89f828d5ae07587a74feaf9b34681c879c891e
+# r3 /tmp/claude-1000/p61/t12/bin/r3/rexx-run 9adaf2a41cfed7223fa4f2f398aa7f2b5b155e3dfa387e1f5ac3aff0f99a63c2
+# r4 /tmp/claude-1000/p61/t12/bin/r4/rexx-run 4cb4bafcc9f2e410c22a1b9965834179be478a6e35556bade8c9f23f690c2182

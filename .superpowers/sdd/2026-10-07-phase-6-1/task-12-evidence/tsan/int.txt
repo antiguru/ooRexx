@@ -1,0 +1,113 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.07s
+     Running tests/concurrency_tests.rs (/tmp/claude-1000/p61/t12/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-exec/e07ee4292d9c5dec/out/concurrency_tests-e07ee4292d9c5dec)
+
+running 49 tests
+test group_runs::the_alarm_and_ticker_groups_pass_in_both_modes ... ok
+test group_runs::the_message_start_tests_under_every_opportunity ... ok
+test group_runs::the_outcome_table_of_the_guard_group_in_both_modes ... ok
+test group_runs::the_outcome_table_of_the_message_group ... ok
+test group_runs::the_outcome_table_of_the_object_group ... ok
+test group_runs::the_outcome_table_of_the_trace_object_group ... ok
+test group_runs::the_runner_passes_a_passing_group_and_reports_an_altered_test_as_differing ... ok
+test group_runs::the_s2_rows_of_the_derived_list_in_both_modes ... ok
+test group_runs::the_s3_rows_of_the_derived_list_in_both_modes ... ok
+test group_runs::whole_groups::a_run_agrees_but_for_the_count_only_when_the_rest_agrees ... ok
+test group_runs::whole_groups::each_group_of_the_derived_list_in_one_run_in_both_modes ... ok
+test group_runs::whole_groups::one_oracle_outcome_is_not_counted_only ... ok
+test group_runs::whole_groups::outcomes_differing_in_count_and_status_are_not_counted_only ... ok
+test group_runs::whole_groups::outcomes_differing_only_in_the_count_are_counted_only ... ok
+test group_runs::whole_groups::outcomes_differing_in_stderr_alone_are_not_counted_only ... ok
+test group_runs::whole_groups::sim_gate::a_key_names_its_failing_tests ... ok
+test group_runs::whole_groups::sim_gate::a_passing_rerun_is_a_determinism_red_outside_the_real_clock ... ok
+test group_runs::whole_groups::sim_gate::a_run_is_compared_without_its_sim_lines ... ok
+test group_runs::whole_groups::sim_gate::a_seeded_run_repeats_in_a_fresh_process ... ok
+test group_runs::whole_groups::sim_gate::a_seed_is_derived_by_rule_and_the_mix_repeats_every_seven ... ok
+test group_runs::whole_groups::sim_gate::calibration ... ok
+test group_runs::whole_groups::sim_gate::the_oracle_sets_grow_only_under_refresh ... ok
+test group_runs::whole_groups::sim_gate::the_seeded_gate ... ok
+test group_runs::whole_groups::sim_gate::a_run_ending_where_no_listed_outcome_ends_is_red ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test group_runs::whole_groups::sim_gate::the_self_test_runs_only_virtual_clock_rows ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one ... ok
+test the_derived_list_is_the_committed_one ... ok
+test group_runs::whole_groups::sim_gate::the_table_holds_the_parts_the_spec_names ... ok
+test the_derived_list_holds_the_groups_the_spec_names ... ok
+
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.87s
+
+     Running tests/program_end.rs (/tmp/claude-1000/p61/t12/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-exec/e4c144407a5fe3a0/out/program_end-e4c144407a5fe3a0)
+
+running 2 tests
+test a_started_message_waiting_on_itself_keeps_the_process_alive ... ok
+test an_uncancelled_timer_keeps_the_process_alive ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+
+     Running tests/signals.rs (/tmp/claude-1000/p61/t12/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-exec/fad6b4bf223594d4/out/signals-fad6b4bf223594d4)
+
+running 36 tests
+test ctrl_c_halts_a_script_running_commands ... ok
+test sighup_halts_a_sleep ... ok
+test call_on_halt_takes_a_signal ... ok
+test call_on_halt_sees_a_withdrawn_semaphore_wait ... ok
+test sigint_ignored_at_start_still_halts ... ok
+test sigint_halts_a_sleep ... ok
+test sigint_ends_a_semaphore_wait ... ok
+test signal_on_halt_takes_a_signal ... ok
+test sigterm_halts_a_sleep ... ok
+test under_nohup_sigint_still_halts ... ok
+test sigint_ends_a_program_waiting_on_a_guard_when ... ok
+test sigint_reaches_a_parked_guard_when ... ok
+test ctrl_c_halts_a_redirected_command ... ok
+test a_halted_read_loses_no_input ... ok
+test sigint_halts_a_busy_loop ... ok
+test a_second_signal_ends_a_handlers_sleep ... ok
+test call_on_halt_sees_an_interrupted_read ... ok
+test sigint_ends_a_parse_pull ... ok
+test sigint_ends_a_charin ... ok
+test sigint_ends_a_command_wait ... ok
+test sigint_ends_a_linein ... ok
+test call_on_halt_sees_an_abandoned_command ... ok
+test sigint_ends_a_stdin_linein ... ok
+test sigint_halts_a_last_clause_command ... ok
+test an_abandoned_command_ends_no_shorter_later_one ... ok
+test sigint_halts_after_a_long_method ... ok
+test sigint_halts_after_a_long_builtin ... ok
+test a_second_signal_in_a_call_on_halt_handler_is_dropped ... ok
+test a_second_signal_in_a_call_on_any_handler_is_dropped ... ok
+test a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_wait ... ok
+test a_halt_leaves_a_deadline_woken_wait_ready_once_for_a_sleep ... ok
+test an_abandoned_command_ends_no_later_one ... ok
+test no_activity_runs_while_main_reads ... ok
+test under_nohup_sighup_stays_ignored ... ok
+test a_stdin_read_waits_without_spinning ... ok
+test a_halt_during_a_read_misses_an_activity_that_has_not_run ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 3.04s
+
+     Running tests/stdin_contention.rs (/tmp/claude-1000/p61/t12/target-tsan/x86_64-unknown-linux-gnu/debug/build/rexx-exec/cd7a171fc6108d37/out/stdin_contention-cd7a171fc6108d37)
+
+running 1 test
+test readers_of_standard_input_are_served_as_the_oracles_are ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.38s
+

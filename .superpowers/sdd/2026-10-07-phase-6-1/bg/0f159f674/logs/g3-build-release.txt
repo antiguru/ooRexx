@@ -1,0 +1,226 @@
+   Compiling memchr v2.8.3
+   Compiling cfg-if v1.0.4
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.186
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v2.0.1
+   Compiling autocfg v1.5.1
+   Compiling crossbeam-utils v0.8.21
+   Compiling crossbeam-epoch v0.9.20
+   Compiling regex-syntax v0.8.11
+   Compiling either v1.16.0
+   Compiling rayon-core v1.13.0
+   Compiling rustc-hash v2.1.2
+   Compiling rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-extract)
+   Compiling rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-classes)
+   Compiling rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-lib)
+   Compiling rustversion v1.0.22
+   Compiling once_cell v1.21.4
+   Compiling rustix v1.1.4
+   Compiling linux-raw-sys v0.12.1
+   Compiling log v0.4.34
+   Compiling bitflags v2.13.1
+   Compiling iana-time-zone v0.1.65
+   Compiling pin-project-lite v0.2.17
+   Compiling thiserror v1.0.69
+   Compiling lazy_static v1.5.1
+   Compiling smallvec v1.16.2
+   Compiling nu-ansi-term v0.50.3
+   Compiling scoped-tls v1.0.1
+   Compiling serde_core v1.0.229
+   Compiling libloading v0.8.9
+   Compiling thread_local v1.1.10
+   Compiling sharded-slab v0.1.7
+   Compiling zerocopy v0.8.52
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.151
+   Compiling cc v1.3.0
+   Compiling plotters-backend v0.3.7
+   Compiling clap_lex v1.1.0
+   Compiling tracing-core v0.1.36
+   Compiling itoa v1.0.18
+   Compiling anstyle v1.0.14
+   Compiling ciborium-io v0.2.2
+   Compiling itertools v0.13.0
+   Compiling cast v0.3.0
+   Compiling same-file v1.0.6
+   Compiling oorandom v11.1.0
+   Compiling anes v0.1.6
+   Compiling rexx-oracle v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-oracle)
+   Compiling walkdir v2.5.0
+   Compiling num-traits v0.2.19
+   Compiling plotters-svg v0.3.7
+   Compiling clap_builder v4.6.2
+   Compiling rexx-bench v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-bench)
+   Compiling quick-xml v0.37.5
+   Compiling tracing v0.1.44
+   Compiling tracing-log v0.2.0
+   Compiling syn v2.0.119
+   Compiling syn v3.0.2
+   Compiling crossbeam-deque v0.8.6
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-inventory)
+   Compiling chrono v0.4.45
+   Compiling plotters v0.3.7
+   Compiling generator v0.8.10
+   Compiling alloca v0.4.0
+   Compiling page_size v0.6.0
+   Compiling rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-num)
+   Compiling regex-automata v0.4.14
+   Compiling rayon v1.12.0
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-core)
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-parse)
+   Compiling criterion-plot v0.8.2
+   Compiling serde_derive v1.0.229
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-api)
+   Compiling clap v4.6.2
+   Compiling thiserror-impl v1.0.69
+   Compiling zerocopy-derive v0.8.52
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/0f159f674/tree/rust/crates/rexx-exec)
+   Compiling datadriven v0.9.0
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling regex v1.12.4
+   Compiling tinytemplate v1.1.0
+   Compiling loom v0.7.2
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling criterion v0.8.2
+    Finished `release` profile [optimized + debuginfo] target(s) in 3m 12s
+  Executable unittests src/lib.rs (target/release/deps/rexx_api-297b3e0df631bf99)
+  Executable tests/context.rs (target/release/deps/context-dfb8a64cc7ac5091)
+  Executable tests/handles.rs (target/release/deps/handles-5c16b1a3c803aae4)
+  Executable tests/invoke.rs (target/release/deps/invoke-3e8673e1960b42a2)
+  Executable tests/layout.rs (target/release/deps/layout-b31cee325446dcad)
+  Executable tests/load.rs (target/release/deps/load-fbcd1a5250b57767)
+  Executable tests/values.rs (target/release/deps/values-e5648fd2976fa7b4)
+  Executable unittests src/lib.rs (target/release/deps/rexx_bench-23c1b38e726231ce)
+  Executable unittests src/bin/rexx-arms.rs (target/release/deps/rexx_arms-02f84083744df6ac)
+  Executable unittests src/bin/rexx-bench-band.rs (target/release/deps/rexx_bench_band-11c5ccc550e974a9)
+  Executable unittests src/bin/rexx-bench-suite.rs (target/release/deps/rexx_bench_suite-25a0008826cfc01c)
+  Executable unittests src/bin/rexx-time.rs (target/release/deps/rexx_time-1027c25d6adf8e48)
+  Executable unittests src/lib.rs (target/release/deps/rexx_classes-2b11f70a3c6ceffb)
+  Executable tests/behaviour_wiring.rs (target/release/deps/behaviour_wiring-fe5581eab5ebaada)
+  Executable tests/native_classes_wiring.rs (target/release/deps/native_classes_wiring-9b10ab8010342c4f)
+  Executable tests/uninit_sweep_order.rs (target/release/deps/uninit_sweep_order-55ff728fc7e4a0ff)
+  Executable unittests src/lib.rs (target/release/deps/rexx_core-88b664d71453c22c)
+  Executable tests/behaviour.rs (target/release/deps/behaviour-40df5700b20f3ed2)
+  Executable tests/buffer_bytes.rs (target/release/deps/buffer_bytes-f4ed06e58cd6b94d)
+  Executable tests/collect.rs (target/release/deps/collect-a84dca2e551a1900)
+  Executable tests/handle.rs (target/release/deps/handle-25ed7b10357e15b3)
+  Executable tests/heap.rs (target/release/deps/heap-b7798d192dcda0af)
+  Executable tests/roots.rs (target/release/deps/roots-7001dce35bc31677)
+  Executable tests/scope_pools.rs (target/release/deps/scope_pools-6c4fce1b7e413f3f)
+  Executable tests/trace.rs (target/release/deps/trace-b335e2d261076f41)
+  Executable tests/uninit.rs (target/release/deps/uninit-e331dc4db70e727e)
+  Executable tests/unsafe_sites.rs (target/release/deps/unsafe_sites-da77c86c653b8488)
+  Executable unittests src/lib.rs (target/release/deps/rexx_exec-fab846fe6d579a2f)
+  Executable unittests src/bin/rexx-ir.rs (target/release/deps/rexx_ir-2eea5bd8e8cdc05f)
+  Executable unittests src/bin/rexx-run.rs (target/release/deps/rexx_run-cdf496de6496569f)
+  Executable tests/api_group_partition.rs (target/release/deps/api_group_partition-2fbae240ab3a2a86)
+  Executable tests/api_group_tests.rs (target/release/deps/api_group_tests-48a0cd881e1dd63a)
+  Executable tests/assertions.rs (target/release/deps/assertions-60c9ba22229b9354)
+  Executable tests/bif_assertions.rs (target/release/deps/bif_assertions-65b9d478a205a4c4)
+  Executable tests/bootstrap_install_oracle.rs (target/release/deps/bootstrap_install_oracle-7e60bcd35d392d30)
+  Executable tests/buffer_growth_error_exit.rs (target/release/deps/buffer_growth_error_exit-dee92f79820cf09a)
+  Executable tests/builtin_status.rs (target/release/deps/builtin_status-66545158b9cceb15)
+  Executable tests/class_lifetime.rs (target/release/deps/class_lifetime-e127fa408db01099)
+  Executable tests/class_weak_reference.rs (target/release/deps/class_weak_reference-e73a0aa3fd6762bd)
+  Executable tests/closed_phases.rs (target/release/deps/closed_phases-aabc7c35a9919547)
+  Executable tests/collect_policy.rs (target/release/deps/collect_policy-5f8598c38b8a3978)
+  Executable tests/collect_stress.rs (target/release/deps/collect_stress-7a0d6d1c1773b2f2)
+  Executable tests/collection_arity.rs (target/release/deps/collection_arity-7bc8607348250fc0)
+  Executable tests/collection_scopes.rs (target/release/deps/collection_scopes-cdb40f31f371f9d3)
+  Executable tests/concurrency_tests.rs (target/release/deps/concurrency_tests-4b511318526d70f8)
+  Executable tests/corpus.rs (target/release/deps/corpus-e2e3dfcb681d17fb)
+  Executable tests/coverage.rs (target/release/deps/coverage-77ee347431c0be35)
+  Executable tests/datetime_zone.rs (target/release/deps/datetime_zone-55da42752a786673)
+  Executable tests/deadline.rs (target/release/deps/deadline-fe1a6dd3f8fa352e)
+  Executable tests/directive_options.rs (target/release/deps/directive_options-2d6f6fe582a9a5cb)
+  Executable tests/dispatch_seam.rs (target/release/deps/dispatch_seam-538635764f990326)
+  Executable tests/environment_seam.rs (target/release/deps/environment_seam-eaf79786c4338045)
+  Executable tests/frame_block.rs (target/release/deps/frame_block-216bd97f96425c8e)
+  Executable tests/gate_table_c.rs (target/release/deps/gate_table_c-5e930e0ef970dfc6)
+  Executable tests/gate_table_d.rs (target/release/deps/gate_table_d-1e4fac14bdbede14)
+  Executable tests/input_oracle.rs (target/release/deps/input_oracle-473764fd635d6783)
+  Executable tests/internal_routines.rs (target/release/deps/internal_routines-598db906168cf53d)
+  Executable tests/introspection_arity.rs (target/release/deps/introspection_arity-dc435b515ef21801)
+  Executable tests/introspection_scopes.rs (target/release/deps/introspection_scopes-c533189f7bd1c190)
+  Executable tests/ir_recorded.rs (target/release/deps/ir_recorded-f066b2223ca61d0c)
+  Executable tests/ir_recorded_oracle.rs (target/release/deps/ir_recorded_oracle-a9cb21314701a935)
+  Executable tests/keyword_assertions.rs (target/release/deps/keyword_assertions-3d78b60056a76887)
+  Executable tests/library_routine_memory.rs (target/release/deps/library_routine_memory-5b3b67853d855b72)
+  Executable tests/licensed_divergences.rs (target/release/deps/licensed_divergences-d3cbb19006e3ce6b)
+  Executable tests/loom.rs (target/release/deps/loom-ecc89f2e431aa9a4)
+  Executable tests/loud.rs (target/release/deps/loud-699608567980bdc6)
+  Executable tests/method_bodies.rs (target/release/deps/method_bodies-b3356eb98a295382)
+  Executable tests/native_entries.rs (target/release/deps/native_entries-22c24a16d21cc1ae)
+  Executable tests/no_process_state.rs (target/release/deps/no_process_state-537b500c808a6faf)
+  Executable tests/oracle_deadline.rs (target/release/deps/oracle_deadline-72d39ab5d8d058ae)
+  Executable tests/outer_context.rs (target/release/deps/outer_context-ffb99989fcd3c5a0)
+  Executable tests/owners.rs (target/release/deps/owners-65d0b1b050426795)
+  Executable tests/package_requires.rs (target/release/deps/package_requires-d07037efc55b9d06)
+  Executable tests/parse_version_oracle.rs (target/release/deps/parse_version_oracle-230877f7fe5a75b9)
+  Executable tests/program_end.rs (target/release/deps/program_end-c00a81a6eae588a6)
+  Executable tests/prompt_before_read.rs (target/release/deps/prompt_before_read-9a343c0c65081552)
+  Executable tests/refusal_dispositions.rs (target/release/deps/refusal_dispositions-7a31a0f2cb8e1e85)
+  Executable tests/refusal_sites.rs (target/release/deps/refusal_sites-5d104284859c5527)
+  Executable tests/signals.rs (target/release/deps/signals-929480c5bca8145a)
+  Executable tests/sim_processes.rs (target/release/deps/sim_processes-8c6c1990407f23f8)
+  Executable tests/spike.rs (target/release/deps/spike-d6275f6e6a80c1ad)
+  Executable tests/state_builtin_oracle.rs (target/release/deps/state_builtin_oracle-7a96d640ef01489b)
+  Executable tests/stdin_contention.rs (target/release/deps/stdin_contention-8de36821f7a0a862)
+  Executable tests/trace_indent.rs (target/release/deps/trace_indent-9a42fba429772759)
+  Executable tests/trace_oracle.rs (target/release/deps/trace_oracle-33d8c12a81dbbe36)
+  Executable tests/truth.rs (target/release/deps/truth-adcc1931fd23c82d)
+  Executable tests/unreachable_classes.rs (target/release/deps/unreachable_classes-1472e10f9e72d438)
+  Executable unittests src/lib.rs (target/release/deps/rexx_extract-ed5fcc3c2ef68529)
+  Executable unittests src/bin/rexx-extract.rs (target/release/deps/rexx_extract-fcdda5ad6e26dcdf)
+  Executable unittests src/bin/rexx-extract-assertions.rs (target/release/deps/rexx_extract_assertions-26db375625d56570)
+  Executable unittests src/bin/rexx-extract-docs.rs (target/release/deps/rexx_extract_docs-b3fb93c9d7a93b9b)
+  Executable tests/extract.rs (target/release/deps/extract-56b05072f4947bd9)
+  Executable tests/extract_assertions.rs (target/release/deps/extract_assertions-e2aa00c65a2d6527)
+  Executable tests/extract_bif.rs (target/release/deps/extract_bif-3c4b26cdd12080b7)
+  Executable tests/extract_docs.rs (target/release/deps/extract_docs-5c988aacdfac1297)
+  Executable tests/extract_keyword.rs (target/release/deps/extract_keyword-e5ecc369bc9f645e)
+  Executable unittests src/lib.rs (target/release/deps/rexx_inventory-eb8e2576864b61a5)
+  Executable tests/builtins.rs (target/release/deps/builtins-81cd1f5299bb53e8)
+  Executable tests/errors.rs (target/release/deps/errors-8acd356283346712)
+  Executable tests/oracle_agreement.rs (target/release/deps/oracle_agreement-dfcf4580a5ce873b)
+  Executable unittests src/lib.rs (target/release/deps/rexx_lib-f707e6d83690b01a)
+  Executable unittests src/lib.rs (target/release/deps/rexx_num-be143acce7f87bd3)
+  Executable unittests src/bin/addsub.rs (target/release/deps/addsub-33e283bc51c50f5e)
+  Executable unittests src/bin/canon.rs (target/release/deps/canon-319733ad5caddca6)
+  Executable unittests src/bin/fmt-check.rs (target/release/deps/fmt_check-86c25cbbef5d76f6)
+  Executable unittests src/bin/gen-cases.rs (target/release/deps/gen_cases-512461ee84dea545)
+  Executable unittests src/bin/muldiv.rs (target/release/deps/muldiv-15c4b03c056b9c92)
+  Executable tests/addsub.rs (target/release/deps/addsub-e436d7da21fed171)
+  Executable tests/compare.rs (target/release/deps/compare-e316ef862e5e7839)
+  Executable tests/errors.rs (target/release/deps/errors-c0db53a2ed6e144d)
+  Executable tests/format.rs (target/release/deps/format-9e76c6c125df8ab3)
+  Executable tests/int64.rs (target/release/deps/int64-9960cefe93d0b543)
+  Executable tests/muldiv.rs (target/release/deps/muldiv-b5dc5513f1a41436)
+  Executable tests/parse.rs (target/release/deps/parse-29803a9854d48098)
+  Executable tests/pow.rs (target/release/deps/pow-da71747267b6b1d6)
+  Executable tests/rendered.rs (target/release/deps/rendered-4b10a707ac5ab653)
+  Executable tests/rounding.rs (target/release/deps/rounding-0ecd40fb684f7914)
+  Executable tests/settings.rs (target/release/deps/settings-11e3d7bd57b90c86)
+  Executable tests/whole.rs (target/release/deps/whole-5e2840cb1a3d997c)
+  Executable unittests src/lib.rs (target/release/deps/rexx_oracle-98e53bc9237cdaad)
+  Executable unittests src/bin/rexx-diff.rs (target/release/deps/rexx_diff-6d88c48e328c74ce)
+  Executable tests/normalize.rs (target/release/deps/normalize-7354bf6f7bc111a2)
+  Executable unittests src/lib.rs (target/release/deps/rexx_parse-31b6f3ed816ca3dc)
+  Executable unittests src/bin/scan-check.rs (target/release/deps/scan_check-e49ca425d62cf9b7)
+  Executable tests/deep.rs (target/release/deps/deep-9944c6063bc82c66)
+  Executable tests/errors.rs (target/release/deps/errors-cb64503d3a817e9c)
+  Executable tests/program.rs (target/release/deps/program-be4d8a28f9013f92)
+  Executable tests/samples.rs (target/release/deps/samples-ad853549b2ab3b59)
+  Executable tests/scanner.rs (target/release/deps/scanner-37c7382a53b0b623)
+  Executable tests/sourceline.rs (target/release/deps/sourceline-04bb5f93881a3555)
+  Executable tests/sourceline_oracle.rs (target/release/deps/sourceline_oracle-c6503744ebea3b5b)
+  Executable tests/tiling.rs (target/release/deps/tiling-e778df9ab285b39f)
+  Executable tests/tokens.rs (target/release/deps/tokens-88120a0a24f2fec8)
+  Executable tests/variants.rs (target/release/deps/variants-35c95ca444a66e25)

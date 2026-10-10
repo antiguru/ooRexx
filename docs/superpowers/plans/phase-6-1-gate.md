@@ -1187,3 +1187,160 @@ Per-task check at `595ba08ef` (`/tmp/claude-1000/p61/t11b/tools/gates.sh`, statu
 `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle` 0; `REXX_CORPUS_GATE=1 ... --release
 --test concurrency_tests whole_groups` 0, 16 passed, the seeded gate among them. No committed outcome
 changed.
+
+## Task 12
+
+Phase close. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-12-report.md`; evidence files in
+`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/`. Code commits: `6a87cd616` (dirread bench program), `e075f1d36` and `a68c735fd` (G4 test
+fixes), `0f159f674` (SysSleep floor), `01c7d7a85`, `fce0bd4c1`, `23f4b609f`, `ab4bc780e` (parse
+round; the last reverts the third), `13bbff35f` (refusal-sites re-derived), `97cb37712` (seeded-gate
+harness race). Queue: `84aa32a62`.
+
+### Gates
+
+`.superpowers/sdd/2026-10-07-phase-6-1/p61-gates/bggates.sh` (`-j 4`), each run alone on a frozen
+`git archive` of the commit; statuses and logs in `bg/<sha>/`.
+
+| commit | G1 | G2 | G3 | G4 | G5 | G6 | G7 | G8 | G9 | reds |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `6a87cd616` | 0 | 0 | 0 | 101 | 0 | 101 | 0 | 0 | 0 | GUARD pass list stale; SysSleep TEST_SLEEP_DURATION between modes; the determinism self-test on a `clock=real` row |
+| `0f159f674` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | none (one P48 rerun, TEST_SLEEP_DURATION, passed) |
+| `f85ea20cd` | 0 | 0 | 0 | 101 | 0 | 101 | 0 | 0 | 0 | `refusal_sites` line drift (`01c7d7a85`); G6 seeded gate harness race |
+| `97cb37712` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | none, 0 P48 reruns |
+
+At `97cb37712`: G4 3141 passed, 0 failed, 4 ignored; G6 3145 passed, 0 failed, 4 ignored; G8 16
+passed; G9 15 passed. Fixes: the GUARD list (`a68c735fd`; nine tests flip at `59eb57f37`, parse
+errors as SYNTAX, each passing the oracle 2 of 2); the self-test picks virtual-clock rows only
+(`e075f1d36`, R6); SysSleep sleeps at least a microsecond (`0f159f674`: alone on a quiet machine,
+interleaved, `6a87cd616` failed TEST_SLEEP_DURATION 10 of 40 and base61 1 of 40; the fix 0 of 40,
+base61 0 of 40 in that round; every failure `SysSleep(0.00000001) took 0`); the seeded gate keeps its
+shared run directory (`97cb37712`: `remove()` deleted `sim-gate-<profile>` with `remove_dir` while
+another job's `create_dir_all` was between creating it and creating its item, ENOENT at
+`sidecar.rs:128`).
+
+### Criterion 8: TSan
+
+`.superpowers/sdd/2026-10-07-phase-6-1/p61-gates/tsan.sh` is Phase 6's script with one more skip,
+`scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike`: it bounds 50
+RxCalcSqrt calls by the simulation's `block=` floor of 1 ms, and TSan's slowdown carries one past it.
+First run with Phase 6's script at `97cb37712`: `api exit 0`, `lib exit 101`, `int exit 0`, `no tsan
+log`; the one failure, `native.rs:368`, rc 120 "a native call in the simulation mode that runs longer
+than its bound is not implemented" where the first run gave rc 0 `239.036 idle`
+(`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/tsan-first/lib-failure-excerpt.txt`). The test passes in G4 and G6 at `97cb37712`
+(`g4-test-release.txt:1513`, `g6-test-debug.txt:1524`). Rerun with the copy,
+`CARGO_BUILD_JOBS=4 memcap 8G bash .../p61-gates/tsan.sh <target> <logs>` from `rust/`:
+
+```
+api exit 0
+lib exit 0
+int exit 0
+no tsan log
+```
+
+rexx-api lib 70 passed; rexx-exec lib 1063 passed, 14 filtered out; `concurrency_tests` 49 passed,
+`program_end` 2, `signals` 36 (1 filtered out), `stdin_contention` 1 (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/tsan/`).
+
+### Criterion 5: `whole_groups`
+
+`REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_TABLE=... REXX_SIM_REPORT=... memcap 8G /usr/bin/time -v cargo
+test -j 1 --release -p rexx-exec --test concurrency_tests whole_groups` at `97cb37712`: exit 0, 17
+passed, 6:50, max RSS 2,585,996 KB. Table: `.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/whole-groups-table.tsv`. Listed as differing and
+agreeing in this run: TIME whole and derived (both modes), CALL derived (both), REPLY whole and
+derived (every).
+
+| row (spec section 8, criterion 5) | outcome at `97cb37712` |
+|---|---|
+| TIME TEST_4, TEST_10, the `_R` pair; TEST_5, TEST_11 | pass: TIME whole and derived agree with the oracle (524 and 81 assertions) in both modes |
+| CALL TEST_4 | pass: CALL whole and derived agree |
+| RexxContext TESTCONDITION01 | pass: RexxContext derived agrees; the rest part fails only TESTRS01 |
+| GUARD TEST_WHEN_USE_LOCAL_NO_WAIT | pass: GUARD whole and derived agree |
+| TRACE_TraceObject `test_object_and_scope`, TEST_CALLER_STACK_FRAME_REPLY_START | fail; cause outside 6.1: both read `.TraceObject~collector` with option `P`, and this crate builds a TraceObject only for a routed `.TRACEOUTPUT` (queued `2026-10-02-traceobject-variable-and-collector`, Phase 6 S2-S5) |
+| Method whole and derived | derived agrees; whole refuses at TEST_NEW_FOUR_ARGS, Method NEW with an INIT argument (Phase 9, roadmap row 9) |
+| MethodArgs TEST_REQUEST_STRING_* | pass: MethodArgs whole and derived agree |
+| TRACE TEST_TRACE_LABEL_WITH_FORWARD | fail; cause outside 6.1: a REPLY continuation run to its end is not announced (queued `2026-10-10-reply-continuation-trace-entry`, ruled not 6.1's at Task 2) |
+| DateTime TEST_BRUTE_FORCE | pass: DateTime agrees |
+| Class TEST_CLASS_DEFINE | pass: Class whole fails only TEST_ACTIVATE and TEST_METHODS |
+| scout A's parse-error rows (ATTRIBUTE TESTABSTRACTTWICE, CONSTANT TEST_BAD_NEGATIVE, METHOD TESTABSTRACTEXTERNAL, CALL TEST_INVALID, GUARD TEST_INVALID_OPTION_ONOFF) | pass: none is in its part's failing set; CALL and GUARD agree |
+| TRACE `.DebugInput` rows | pass: TRACE whole's failing set holds none of the `?` tests |
+
+### Criterion 6: the seeded gate
+
+Release, inside the `whole_groups` run above: 13720 runs in 131 s, 0 reds, 34 exempted (20
+MutexSemaphore single TEST_EXCLUSION, 14 `message_notify.rex`, both design-limit), 0 P48 reruns.
+Debug, `REXX_CORPUS_GATE=1 REXX_SIM_REPORT=... memcap 8G cargo test -j 4 -p rexx-exec --test
+concurrency_tests sim_gate::`: exit 0, 11 passed, 1792 runs in 12 s, 0 reds, 7 exempted. Seed counts
+and the debug subset are Task 10's (`rust/corpus/sim-gate.tsv`: 70 seeds per row in release; 14 per row
+in debug on 128 rows). The determinism self-test passes in both builds; the gate's reds on the
+re-introduced defects and the mutant verdicts are Task 10's and Task 11's records above. Oracle
+differences, by part, release (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/sim-gate-release-summary.txt`): 70 each for STREAM whole, Class
+whole, Message whole and derived, Method whole and rest, Object whole and rest, RexxContext whole and
+rest, ATTRIBUTE whole and derived, CONSTANT whole and rest, METHOD whole, rest and derived, RAISE whole
+and derived, TRACE whole, TRACE_TraceObject whole and derived, Section1 whole (each a part whose
+normal-mode run is in `DIFFERING`); REPLY derived 29 and whole 14; MutexSemaphore single 20 and
+`message_notify.rex` 14 (the exempt deadlocks); `guard_on_lock_passes_between_activities.rex` 16;
+Ticker derived 9 and whole 8; `context_moved_by_reply.rex` 8; `main_ends_in_pinned_yield.rex` 3;
+`ticker_fires_on_its_replied_activity.rex` 2; MethodArgs derived 1. SysSleep whole and derived, which
+Task 10 listed (61 and 55), are gone with `0f159f674`, and so is their `sim-exempt.tsv` row.
+
+### Criterion 7: performance
+
+Every program, `bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o ... base=<base61> pad2=<base61 +
+layout-pad 48> before=<0f159f674> close=<ab4bc780e>`, exit 0, no gate running
+(`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/cg-close2/`). base61's sha256 matches `## Task 1`; `close` from `git archive ab4bc780e`, own
+target directory, one `Compiling rexx-exec` line, sha256
+`4e8ab4c7d5d1c2daa5c97bfb9f1873431faebbad777c89830c87d58fe14b5b10`; `13bbff35f` and `97cb37712`
+change only a table and a test. The pad2 control is 0.0000% everywhere, so the band is 0.
+
+| program | base61 Ir | before (`0f159f674`) % | after (`ab4bc780e`) % | pad2 % |
+|---|---:|---:|---:|---:|
+| alloc | 20345537514 | +0.0118 | -0.0318 | -0.0000 |
+| alloc4c | 3140684485 | +0.0607 | -0.0654 | +0.0000 |
+| arith | 11488858265 | +0.2861 | +0.2724 | -0.0000 |
+| assign | 18983599254 | -3.1598 | -3.1651 | -0.0000 |
+| compound | 8937498030 | -1.0053 | -1.1172 | +0.0000 |
+| decloop | 2469010741 | -2.3171 | -2.2380 | +0.0000 |
+| decrender | 4228326951 | -1.1070 | -1.0609 | -0.0000 |
+| dirread | 2644856962 | +0.1273 | +0.1049 | +0.0000 |
+| dispatch | 20809502845 | -0.5038 | -0.3597 | +0.0000 |
+| dispatchclass | 15794935187 | -0.7841 | -0.6321 | +0.0000 |
+| emptyloop | 7786099871 | -0.3191 | -0.6402 | +0.0000 |
+| extcall | 7552641451 | +0.0418 | +0.0021 | +0.0000 |
+| fibcall | 8413280378 | +0.4617 | +0.4412 | -0.0000 |
+| fibfunc | 8228290764 | +0.4721 | +0.4303 | +0.0000 |
+| heapshape | 2334068378 | +0.0520 | +0.0093 | +0.0000 |
+| nop | 9283340655 | -1.0755 | -1.0863 | -0.0000 |
+| parse | 1536336774 | +1.7815 | +1.1979 | -0.0000 |
+| sayloop | 109048217 | +0.1425 | -0.4071 | +0.0001 |
+| sendloop | 14013810691 | -0.7125 | -0.4984 | +0.0000 |
+| startup | 58097223 | +0.2670 | +0.2680 | +0.0000 |
+| strings | 17537481300 | +0.4584 | +0.3735 | -0.0000 |
+| textnum | 1155145989 | -0.5233 | -0.5405 | +0.0000 |
+| varlookup | 13437530297 | -2.1198 | -2.2612 | +0.0000 |
+| rexxcps | 17788421071 | +0.4268 | +0.2694 | -0.0000 |
+| pingguard | 1159017714 | -0.5905 | -0.7113 | +0.0000 |
+| pingmsg | 1676421012 | -0.0190 | -0.0421 | +0.0000 |
+| pingsem | 1181250699 | -0.4694 | -0.4863 | +0.0000 |
+
+**`parse` is over budget, +1.1979%; every other program is inside +0.5%.** Attribution and the round
+are in the report's "Parse attribution" and "Parse perf round": the residual is the freed-body byte
+accounting in `collect_now` (heapshape round 1, `5214a2089`, on Task 5a's charge), the Task 4a driver
+codegen and the Task 8-10 allocation codegen (both accepted under the l.103 precedent), and Task 5a's
+byte charge per PARSE piece. It goes to Moritz.
+
+Wall clock, `PROGRAMS="emptyloop pingpong/pingsem pingpong/pingguard" bash
+rust/bench-programs/wallclock.sh -r 5` with base61, its three pads and `close`: emptyloop +4.91%
+(pads +0.23 to +0.93), pingsem +1.60% (pads -3.20 to 0.00), pingguard +2.50% (pads 0.00 to +0.83).
+`perf stat -e cycles:u,instructions:u,software/context-switches/,software/cpu-migrations/`, 5
+interleaved runs per binary, medians (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/perf-stat.txt`), with `close` built twice more with
+`layout-pad.py` 8 and 48 (`cpad8`, `cpad48`, same instruction counts as `close`):
+
+| program | close cycles | cpad8 | cpad48 | base61 pad2 | instructions close vs base61 | context switches |
+|---|---:|---:|---:|---:|---:|---|
+| emptyloop | +4.62% | +4.38% | +4.46% | +0.07% | -0.63% | 6-12 on every binary |
+| pingsem | +4.64% | +0.56% | +4.19% | +1.00% | +0.50% | 785-786 |
+| pingguard | +4.53% | +1.75% | +2.27% | +1.85% | -0.63% | 785-788 |
+
+pingsem and pingguard: the same code moves by up to 4.1 points with layout alone (cpad8 against
+close) at equal instructions and context switches, so their drift is attributed to layout. emptyloop:
+no pad moves it (4.38-4.62%), instructions are fewer and context switches equal, so the cycles are spent
+in the loop itself; unattributed beyond that, as at Task 2 (`loop_advance`, Moritz's ruling there).

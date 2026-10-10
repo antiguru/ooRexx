@@ -1,0 +1,16 @@
+97cb37712 started 2026-10-10T13:28:57+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 14.55 11.05 6.53 1/1130 2518931 2026-10-10T13:32:22+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 9.66 5.62 5.07 2/1116 2768971 2026-10-10T13:52:16+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/97cb37712/logs/g4-test-release.txt:0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/97cb37712/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-10T14:18:09+02:00

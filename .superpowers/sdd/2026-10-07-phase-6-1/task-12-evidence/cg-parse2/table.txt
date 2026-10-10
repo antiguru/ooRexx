@@ -1,0 +1,2 @@
+program	base	t7	t10	hs1	t11	hsfix	s6d	t11a	fix	t7 d%	t10 d%	hs1 d%	t11 d%	hsfix d%	s6d d%	t11a d%	fix d%	base spread%	t7 spread%	t10 spread%	hs1 spread%	t11 spread%	hsfix spread%	s6d spread%	t11a spread%	fix spread%
+parse	1536336638	1552632488	1554300594	1563705521	1563705515	1563705662	1563704905	1563704186	1563707367	+1.0607	+1.1693	+1.7814	+1.7814	+1.7814	+1.7814	+1.7814	+1.7816	0.0000	0.0000	0.0000	0.0000	0.0000	0.0000	0.0000	0.0000	0.0000
