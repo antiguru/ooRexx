@@ -248,9 +248,10 @@ close round.
 
 ## Wall clock
 
-The gate record has the table. pingsem and pingguard: a pad alone moves the same code's cycles by
-up to 4.1 points at equal instructions and context switches, as large as the drift, so the drift
-is not attributable to code. emptyloop:
+The gate record has the table. pingsem: a pad alone moves the same code's cycles by 4.08 points at
+equal instructions and context switches, as large as its drift, so the drift is not attributable to
+code. pingguard: the largest pad move is 2.78 points, below its +4.53% drift, so its drift is
+unattributed. emptyloop:
 cycles are +4.4 to 4.6% on `close` and both of its pads, against +0.07% for base61's pad2. Its
 instructions are 0.63% fewer and its context switches equal, so layout alone does not move it. It is
 unattributed beyond the loop's own cycles, as at Task 2.
@@ -289,6 +290,7 @@ Task 12's own, from `progress.md` at `9512f083c`:
 
 * l.256: the GUARD pass list rewritten after a bisect (all nine flips at `59eb57f37`, each oracle 2 of 2); the self-test skips `clock=real` rows (R6), which narrows its row pool; no perf while a gate runs.
 * l.258-260: SysSleep's zero elapsed reading is a 6.1 regression to fix; every SysSleep delay, 0 included, parks at least 1 µs (`0f159f674`), and its sim-exempt row goes.
+* l.257: the parse overrun blocks the close, attributed per step first; superseded by l.263 and l.268, which let the close proceed with the overrun open.
 * l.263, l.265: the parse round runs in Task 12, widened to next_template, exec_parse and collect_now's remainder; items (1) driver codegen and (4) allocation codegen stay accepted under the l.103 precedent.
 * l.268: parse's residual goes to you at close as an open overrun; no "holds bytes" redesign in 6.1.
 * l.269: `23f4b609f` reverted (`ab4bc780e`) after the all-program table put call paths over budget.
@@ -370,6 +372,17 @@ Review `task-12-review.md`: spec 2 Important, 5 Minor; quality 3 Minor. Every fi
 | S-m4 parked list | the two Task 11a queue files and the l.44 pointer added | this section |
 | S-m5 roadmap row 9 | the third-argument item removed; the false exclusions row and the two Routine~new rows leaning on it are CLOSED with their probes rerun (2 runs per engine, alike: `a Method` / `43`; `main 16`; `new mainr`) | `12b77b215` |
 | Q-m1 wall-clock wording | "not attributable to code", in the gate record and here | `2db517c4b`, this section |
-| Q-m2 Class arm assumption | a comment at the arm and `debug_assert_eq!(object.body.held_bytes(), 0)` inside it: release builds compile it out, and classes are never collected (D59), so the arm is not hot. fmt, `clippy --workspace --all-targets` and `clippy -p rexx-exec --features pinning,sharing` clean; `cargo test -p rexx-exec --lib` 1077 passed, `-p rexx-core` green | `6d8aa2b0a` |
+| Q-m2 Class arm assumption | a comment at the arm and `debug_assert_eq!(object.body.held_bytes(), 0)` inside it: the assertion is debug-only, so release builds pay nothing for it. fmt, `clippy --workspace --all-targets` and `clippy -p rexx-exec --features pinning,sharing` clean; `cargo test -p rexx-exec --lib` 1077 passed, `-p rexx-core` green | `6d8aa2b0a` |
 | Q-m3 rows 33, 34 run counts | rerun 5 interleaved times each at `97cb37712`, counts and ranges in the rows | this section |
+
+## Fix round 2
+
+Re-review 1 (`task-12-review.md`): four Minors, each fixed.
+
+| finding | change | commit |
+|---|---|---|
+| n1 `heap.rs` comment and message | they now say `held_bytes` charges nothing for a Class body (`Body::Class` owns a separate `Vec`); fmt, `clippy -p rexx-exec --features pinning,sharing` clean, `cargo test -p rexx-exec --lib` 1077 passed | the `heap.rs` commit of this round |
+| n2 report Q-m2 row | the "never collected (D59)" reason is deleted; the row gives the true one, a debug-only assertion | this section |
+| n3 wall clock per program | pingsem: the pad move (4.08 points) is as large as its drift, not attributable to code. pingguard: largest pad move 2.78 points against +4.53%, unattributed. emptyloop stays unattributed. Gate record and report both | the gate-record commit of this round, this section |
+| n4 ledger l.257 | added to "Rulings made on your behalf" | this section |
 
