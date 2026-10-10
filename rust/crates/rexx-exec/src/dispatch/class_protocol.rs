@@ -370,8 +370,8 @@ pub(super) fn compile_method_source_in(
     let parsed = parse_source_lines(interp, name, &borrowed)?;
     // `generateMethod` installs them as `generateRoutine` does; see
     // [`compile_routine_source`].
+    let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
     if !parsed.directives.is_empty() {
-        let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
         return interp.install_executable(parsed, name, false, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
         });
@@ -387,7 +387,7 @@ pub(super) fn compile_method_source_in(
     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
     interp.compiled_methods += 1;
     interp.attach_annotations(object, site);
-    interp.record_compiled_body(object, name, parsed);
+    interp.record_compiled_body(object, name, parsed, parent);
     Ok(object)
 }
 
@@ -407,8 +407,8 @@ pub(super) fn compile_routine_source(
     // parent is the caller's: measured, oracle rc 0,
     // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`
     // is `1`.
+    let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
     if !parsed.directives.is_empty() {
-        let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
         return interp.install_executable(parsed, name, true, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
         });
@@ -418,7 +418,7 @@ pub(super) fn compile_routine_source(
     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
     interp.compiled_methods += 1;
     interp.attach_annotations(object, site);
-    interp.record_compiled_routine(object, name, parsed);
+    interp.record_compiled_routine(object, name, parsed, parent);
     Ok(object)
 }
 

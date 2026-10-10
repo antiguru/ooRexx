@@ -1,0 +1,34 @@
+/* A Routine or Method compiled from source resolves routines and classes
+   through its own package's parent: the caller's package, or the context
+   given to NEW. */
+r = .routine~new('g', 'return helper()')
+say 'routine, no context:' r[]
+r = .routine~new('g', 'return helper()', .context~package)
+say 'routine, context:' r[]
+r = .routine~new('g', 'return .hidden~new~name')
+say 'class, no context:' r[]
+m = .method~new('m', 'return helper() .hidden~new~name')
+say 'method, no context:' .t~new~go(m)
+m = .method~new('m', 'return helper() .hidden~new~name', .context~package)
+say 'method, context:' .t~new~go(m)
+src = .array~of('return .pub~new~name .hidden~new~name .own~new~name helper()', '::class own', '::method name', '  return "own"')
+say 'directives, context:' .routine~new('d', src, .context~package)~call
+say 'directives, no context:' .routine~new('d', src)~call
+r = .routine~new('g', 'return helper()', .rexxcontext~package)
+signal on syntax name s
+say 'rexx context:' r[]
+exit
+s: say 'rexx context:' condition('O')~code
+exit
+::routine helper
+  return 'helper'
+::class hidden
+::method name
+  return 'hidden'
+::class pub public
+::method name
+  return 'pub'
+::class t
+::method go
+  use arg m
+  return self~run(m)

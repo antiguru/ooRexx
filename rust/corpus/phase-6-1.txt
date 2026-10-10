@@ -259,7 +259,8 @@ lang/debug_handler_exit_at_iterate.rex
 # time per pass; Message~halt asks the activity a message was sent from; an
 # EXIT in a handler checks and replaces the reply of the activation it ends; a
 # user STRING answering an array is the array's items joined; Routine~new and
-# Method~new take a context.
+# Method~new take a context, and a compiled source resolves through its
+# package's parent.
 lang/time_elapsed_empty_loop.rex
 lang/message_halt_after_send.rex
 lang/message_halt_sender_ended.rex
@@ -268,3 +269,4 @@ lang/reply_handler_exit_value.rex
 lang/reply_handler_exit_after_split.rex
 lang/string_answer_array.rex
 lang/routine_new_context.rex
+lang/routine_new_package_parent.rex

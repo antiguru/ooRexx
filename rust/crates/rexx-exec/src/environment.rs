@@ -675,23 +675,28 @@ impl Interp {
         Ok(hash::DirectoryEntry::Absent)
     }
 
-    /// A class the running package's own directives installed, under its
-    /// uppercased name -- `PackageClass::findInstalledClass`, the first step of
-    /// the order.
+    /// A class the running package's own directives installed, or a package
+    /// up its parent chain, under its uppercased name --
+    /// `PackageClass::findInstalledClass` (`classes/PackageClass.cpp:982`),
+    /// the first step of the order.
     fn installed_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
-        self.package_classes.get(&program)?.get(upper).copied()
+        self.package_lineage(program)
+            .find_map(|package| self.package_classes.get(&package)?.get(upper).copied())
     }
 
-    /// A public class the running package's own `::REQUIRES` directives
-    /// imported -- `PackageClass::findPublicClass`, the step between the
-    /// package's own installed classes and the directories.
+    /// A public class the running package's `::REQUIRES` directives, or a
+    /// package's up its parent chain, imported -- `PackageClass::findPublicClass`
+    /// (`classes/PackageClass.cpp:1014`), the step between the installed
+    /// classes and the directories.
     fn imported_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
-        self.merged_public_classes
-            .get(&program)?
-            .get(upper)
-            .copied()
+        self.package_lineage(program).find_map(|package| {
+            self.merged_public_classes
+                .get(&package)?
+                .get(upper)
+                .copied()
+        })
     }
 
     /// The running package's own local environment directory entry for `bare`

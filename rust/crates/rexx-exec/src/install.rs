@@ -1639,7 +1639,13 @@ impl Interp {
 
     /// Files a body compiled from method source text as a program of its own
     /// and hangs it on the `Method` object, so a send can enter it.
-    pub(super) fn record_compiled_body(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
+    pub(super) fn record_compiled_body(
+        &mut self,
+        object: ObjRef,
+        name: &[u8],
+        parsed: Program,
+        parent: Option<Package>,
+    ) {
         let Program {
             source,
             main,
@@ -1669,6 +1675,12 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
+        // `generateMethod` and `generateRoutine` give the executable's own
+        // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+        // which its routine and class lookups walk.
+        if let Some(parent) = parent {
+            self.package_parents.insert(program_id, parent);
+        }
         let method = self.mint_unattached_body(
             object,
             InstalledMethodBody {
@@ -1767,7 +1779,13 @@ impl Interp {
 
     /// [`Interp::record_compiled_body`] for a `Routine`: the same program of
     /// its own, carrying a `::ROUTINE` rather than a `::METHOD`.
-    pub(super) fn record_compiled_routine(&mut self, object: ObjRef, name: &[u8], parsed: Program) {
+    pub(super) fn record_compiled_routine(
+        &mut self,
+        object: ObjRef,
+        name: &[u8],
+        parsed: Program,
+        parent: Option<Package>,
+    ) {
         let Program {
             source,
             main,
@@ -1791,6 +1809,12 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
+        // `generateMethod` and `generateRoutine` give the executable's own
+        // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+        // which its routine and class lookups walk.
+        if let Some(parent) = parent {
+            self.package_parents.insert(program_id, parent);
+        }
         self.executable_sources.insert(
             object,
             ExecutableRecord {

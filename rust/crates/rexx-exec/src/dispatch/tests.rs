@@ -371,6 +371,28 @@ fn appends_and_reads_copy_slots_linearly() {
     );
 }
 
+/// A `Routine` or `Method` compiled from source resolves routines and
+/// classes, private ones included, through its package's parent: the
+/// caller's package, or the context given to `NEW`; a source with
+/// directives does too.
+#[test]
+fn a_compiled_source_resolves_through_its_package_parent() {
+    assert_eq!(
+        run_source(include_str!(
+            "../../../../corpus/lang/routine_new_package_parent.rex"
+        )),
+        (
+            0,
+            "routine, no context: helper\nroutine, context: helper\n\
+             class, no context: hidden\nmethod, no context: helper hidden\n\
+             method, context: helper hidden\ndirectives, context: pub hidden own helper\n\
+             directives, no context: pub hidden own helper\nrexx context: 43.1\n"
+                .to_owned(),
+            String::new()
+        )
+    );
+}
+
 /// A primitive's native method run on an instance of a plain class refuses
 /// as a receiver of the wrong type, owner none (Deviation 28), where a
 /// `Directory` with no store keeps its own method's refusal and a

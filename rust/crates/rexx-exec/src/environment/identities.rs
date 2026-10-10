@@ -742,6 +742,24 @@ impl Interp {
         }
     }
 
+    /// `program`, then each package up its parent chain
+    /// (`PackageClass::parentPackage`).
+    pub(crate) fn package_lineage(
+        &self,
+        program: ProgramId,
+    ) -> impl Iterator<Item = ProgramId> + '_ {
+        // Bounded rather than argued safe: a parent is always a program
+        // that already existed when its child was built, so the chain
+        // cannot close -- and the bound costs less than that sentence.
+        std::iter::successors(Some(program), |child| {
+            match self.package_parents.get(child) {
+                Some(crate::plan::Package::Program(parent)) => Some(*parent),
+                _ => None,
+            }
+        })
+        .take(self.programs.len() + 1)
+    }
+
     /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:822-911`) for
     /// the upcased `upper`: `findLocalRoutine`, every `routines` table up the
     /// parent chain, and only then `findPublicRoutine`, every merged table up
@@ -752,18 +770,7 @@ impl Interp {
         program: ProgramId,
         upper: &[u8],
     ) -> Option<crate::MergedRoutine> {
-        let chain = || {
-            // Bounded rather than argued safe: a parent is always a program
-            // that already existed when its child was built, so the chain
-            // cannot close -- and the bound costs less than that sentence.
-            std::iter::successors(Some(program), |child| {
-                match self.package_parents.get(child) {
-                    Some(crate::plan::Package::Program(parent)) => Some(*parent),
-                    _ => None,
-                }
-            })
-            .take(self.programs.len() + 1)
-        };
+        let chain = || self.package_lineage(program);
         chain()
             .find_map(|package| self.routines.get(&package)?.get(upper).copied())
             .map(crate::MergedRoutine::Installed)
