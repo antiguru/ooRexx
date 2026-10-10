@@ -1,0 +1,1579 @@
+# Review package: 32d2f4925..HEAD
+
+## Commits
+5ac42f73a Phase 6.1 Task 11b: report, gate record, queued item resolved
+595ba08ef Phase 6.1 Task 11b Step 2: pending UNINITs run at activation return
+5251a8984 Phase 6.1 Task 11b: root every activation's own objects
+f807ca33e Phase 6.1 ledger: Task 11b rooting ruling
+51782fcb8 Phase 6.1 Task 11b Step 1: a full pool grows past its bound
+
+## Files changed
+ .superpowers/sdd/2026-10-07-phase-6-1/progress.md  |   1 +
+ .../sdd/2026-10-07-phase-6-1/task-11b-report.md    | 147 +++++++++++++++++++++
+ .../2026-10-09-full-pool-inline-command-hang.md    |   2 +
+ docs/superpowers/plans/phase-6-1-gate.md           |  43 ++++++
+ .../specs/2026-09-29-phase-6-concurrency-design.md |   5 +-
+ rust/corpus/refusal-sites.tsv                      |  86 ++++++------
+ rust/crates/rexx-exec/src/activity.rs              |  49 ++-----
+ rust/crates/rexx-exec/src/dispatch.rs              |  20 ++-
+ rust/crates/rexx-exec/src/lib.rs                   |  26 +++-
+ rust/crates/rexx-exec/src/run/call.rs              |  11 ++
+ rust/crates/rexx-exec/src/scheduler.rs             |  19 +--
+ rust/crates/rexx-exec/src/scheduler/pool.rs        |  73 +++++++---
+ .../rexx-exec/src/scheduler/tests/callbacks.rs     |   3 +-
+ rust/crates/rexx-exec/src/scheduler/tests/pool.rs  | 110 ++++++++++++++-
+ rust/crates/rexx-exec/src/tests.rs                 |  60 +++++++++
+ 15 files changed, 538 insertions(+), 117 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/progress.md b/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
+index 6cfbf592d..bba1545b7 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/progress.md
+@@ -238,10 +238,11 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
+ - Queue add: .superpowers/sdd/queued/2026-10-10-call-on-nostring-insert.md (pre-existing 25.1 insert).
+ - Task 11a fix round 1 dispatched to t11a-impl, brief task-11a-fix1-brief.md.
+ - Ruling (fix round 1, I3 widened): comparisons (right operand, keeping primitiveIsEqual's .nil equality rule) and `parse value` join the .nil set. Why: the oracle's answers are defined (2/2), and this is the same R11-narrowed principle. Cost if wrong: two more witnessed rows. Callgrind on all eight programs is required because eval.rs comparisons sit on rexxcps's path.
+ - Task 11a re-review 1: I1, I2, I3 (ruled sites) and I4 are fixed. New: N1 Critical (the ordering operators compare against the text where the oracle reads garbage: `"" < o` gives 0 and `"" << o` gives 1); N2 Critical (PARSE splitting templates give Error 5 on the oracle, and a single-variable template assigns .nil itself); N3 Minor (OPTIONS has no observable answer); N4 Minor (table). My comparison ruling rested on the implementer's two inputs; that was my error.
+ - Ruling (fix round 2): ordering operators refuse; equality stays. PARSE assigns .nil for a single-variable template and refuses every other template. OPTIONS refuses. A site joins the .nil set only when its oracle answer is witnessed over varied inputs and no input could tell it from a garbage read. Cost if wrong: more refusals; each one is loud.
+ - Task 11a fix round 2 dispatched to t11a-impl, brief task-11a-fix2-brief.md.
+ - Task 11a fix round 2: a0fd7c952, e0f1aba1f, 9c47d845b. Re-review 2: spec ✅, quality ✅, N1-N4 closed.
+ - Parked for Moritz: one-variable PARSE VALUE/ARG over a non-string STRING answer refuses where the oracle assigns .nil itself. Matching it needs more than one parse_template.rs site. Cost: a loud refusal, not a wrong answer.
+ - Task 11a: complete (fbdf615e8..9c47d845b).
+ - Task 11b dispatched: t11b-impl (opus), brief task-11b-brief.md, carry task-11b-carry.md.
++- Task 11b Step 1 committed (51782fcb8). Ruling: the pre-existing rooting defect (an activation's stream table is not a GC root, because Activity::object_roots never calls Activation::object_roots) is fixed in 11b before Step 2. Prefer reusing Activation::object_roots, after a field diff that names every missed root. Why: the UNINIT drain makes it observable (Error 48.1 under gc=1), so Step 2 cannot land without it. Cost if wrong: a separate commit with its own test.
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md
+new file mode 100644
+index 000000000..626e0457e
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md
+@@ -0,0 +1,147 @@
++# Phase 6.1 Task 11b report: deferred items, scheduling and finalization
++
++Base `32d2f4925`. Head `595ba08ef` (code). Paths are under `rust/crates/rexx-exec/` unless they say
++otherwise. Scratch: `/tmp/claude-1000/p61/t11b/`. Probes in `probes/`, runs from fresh `mktemp -d`
++directories under `runs/`. Crate runs use `memcap 2G timeout -k 5 N`.
++
++## Step 1: a full pool grows past its bound (`51782fcb8`)
++
++* Design: "the pool grows", not a park. `Pool::reserve` (`src/scheduler/pool.rs`) spawns a thread
++  beyond the bound when every thread is busy, and `work` ends a thread after its job while the pool
++  holds more threads than its bound. The bound moved into the pool's shared state, so `set_bound`
++  applies to threads already spawned. The command (`command.rs`), native (`exit_for_native`) and
++  stdin (`input.rs`) sites are unchanged: `reserve` now answers `None` only for a bound of 0 or a
++  failed spawn, and those still run inline. Reason for growth over a park: a park needs a
++  worker-freed post and a retry of an idle activity's native exit with the baton lend from the
++  inbox drain, while a thread beyond the bound needs neither; the oracle has a thread per activity.
++* Simulation mode: it sets the bound to 0 (`sim.rs`), so it still runs every blocking call inline,
++  bounded by `sim_block_bound`. No new scheduling event exists, so the trace and replay are
++  unchanged. The seeded gate is green (Step 3).
++* Tests (`src/scheduler/tests/pool.rs`, explicit switch points via `SwitchMode::AtClause(1_000_000)`):
++  * `a_command_at_a_full_pool_runs_beyond_the_bound`: bound 2, two `sleep 2` nappers, a `timeout 5
++    cat` on a fifo whose writer is a started activity. Expect `hi / read 0 / wrote 0` and at least one
++    thread beyond the bound (test counter `threads_beyond_bound`).
++  * `a_native_call_at_a_full_pool_runs_beyond_the_bound`: bound 1, NAP holds the thread, two
++    `MEETATFULLPOOL` calls (patience 2 s). Expect meeting outcome (2, 0).
++  * Mutation (growth disabled: the test-only `fixed` check made unconditional): the command test gave
++    `read 124 / wrote 124`, the native test (0, 2). Both are red. Restored by exact edit.
++  * The inline fallback stays covered. A test-only `set_pool_fixed` stops a pool at its bound, and
++    `a_call_on_a_pool_thread_with_no_thread_free_runs_on_its_lend` (now asserting `beyond == 0`) and
++    `callbacks::recalls_drained_together_are_each_served` run with it. Their docs say so.
++* Scout probe `full.rex` (64 nappers, fifo path `/tmp/claude-1000/p61/t11b/ff`), crate at the Step 1
++  tree: 5/5 `hi / read done wrote`, rc 0, stderr empty, about 3.1 s. Oracle, run with the scout's
++  stated deviation (`LD_LIBRARY_PATH=... memcap 2G timeout -k 5 20 .../rexx full.rex`, no `ulimit -v`,
++  since 64 oracle thread stacks do not fit in 1 GB): 5/5 the same, rc 0.
++* `docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md` 2.7 said a release leaves ready
++  activities to the next baton holder "when a spawn fails or the bound is reached". The second half is
++  false now and has been rewritten.
++
++## Rooting fix: every activation's own objects (`5251a8984`)
++
++Found in Step 2 and approved by the controller.
++
++* Defect: `Activity::object_roots` (`src/activity.rs`) rooted the context object, `replied`,
++  `executable` and the trapped condition's object of each running and suspended activation. It never
++  called `Activation::object_roots`, whose only caller was `spawn_continuation`. A stream a builtin
++  opened by name, held only in its activation's table, reached no collection's roots. It survived only
++  because `Stream` defines `UNINIT`: the collector resurrected it and readied its finalizer.
++  `GC('force')` at base then closes a stream still in use.
++* Root-set diff command, at base:
++  `git show 32d2f4925:rust/crates/rexx-exec/src/activation.rs | sed -n '946,1041p'` against
++  `git show 32d2f4925:rust/crates/rexx-exec/src/activity.rs | sed -n '612,652p'`.
++  Fields `Activation::object_roots` roots that `Activity::object_roots` missed: `current_case`,
++  `notify_message`, `cold.auto_expose` (owner, scope), `streams`, `call_arguments`, `method_identity`
++  (scope, receiver), `exposed` (owner, scope). Both roots cover `context_object`, `replied`,
++  `cold.condition` object and `cold.executable`.
++* Fix: the reuse route. `Activity::object_roots` calls `Activation::object_roots` for each running
++  and suspended activation, in place of the four per-field extracts. It roots a superset, and a
++  repeated root costs one more pop of the mark loop's work stack. The collector depends on no root
++  order: the mark loop dedupes, and `pending_uninit` follows the `uninit` registry's order.
++* Other missed fields: under `REXX_SWITCH_MODE=sim:1,gc=1` (a collection at every allocation), these
++  base-binary probes all answered correctly: a heap-sized `SELECT CASE` value compared across
++  allocating `WHEN`s (`case.rex`), heap-sized routine and method arguments read back after
++  allocations (`args.rex`), and an exposed variable read after allocations (`expose.rex`). Those
++  fields are rooted on other routes as well, so no failing case exists for them. Only the streams
++  rooting has a red test.
++* Test: `tests::a_builtins_stream_survives_collections_while_its_table_holds_it`
++  (`say linein(f) / call gc 'force' / say linein(f)` on a two-line file). At base it is red: rc 208,
++  Error 48.1 "Stream not initialized". Fixed, it prints `one / two`. Witness `probes/streamroot.rex`,
++  5 runs per engine: crate and oracle identical, `one / two`, rc 0, stderr empty.
++* The collect_stress subset that went red in Step 2's first workspace run
++  (`the_l0_subset_passes_again_under_collect_on_every_allocation`: stream_builtins,
++  stream_table_sharing, security_manager; `a_stream_builtins_values_survive_a_pinned_yield`):
++  `cargo test -p rexx-exec --test collect_stress` gives 37 passed, both with the drain and without it.
++
++## Step 2: pending UNINITs run at activation return (`595ba08ef`)
++
++* Change: `Interp::run_uninits_at_return` (`src/dispatch.rs`, `#[cold] #[inline(never)]`) roots the
++  returning value, runs `run_ending_uninits` (refusals route as at an activity's end: the first is
++  answered, the rest kept for the program's end), then releases the value.
++  * A label or routine return calls it at the end of `finish_call` (`src/run/call.rs`), on `Ok` only
++    (the oracle's check sits on the RETURNED path).
++  * A method return calls it at the end of `finish_send`, after `finish_native_tails`. The first
++    version drained inside `finish_call` for methods too, and the probe failed with 91.999
++    `Message "NEW" did not return a result`: an `UNINIT`'s own send, run there, found NEW's native
++    tail at its call-tail depth and finished NEW with the `UNINIT`'s result.
++  * The common path is one `uninit_ready.is_empty()` test at each site. Re-entrancy is
++    `processing_uninits`.
++* `collect_now`'s comment had a false premise and now names where `runUninits` is reached:
++  `GC('force')`, activation return (`RexxActivation.cpp:705`, `NativeActivation.cpp:1361`), the
++  activity's dispatch loop (`Activity.cpp:249`) and termination.
++* Byte accounting: a drain only clears the uninit flags (`clear_uninit_all`), and the next collection
++  sweeps the bodies and releases their bytes through the running figure. The tests below collect
++  after a drain in a debug build, so `Heap::collect`'s survivor-sum assertion runs there.
++* Tests (`src/tests.rs`, debug assertions on): `pending_uninits_run_as_a_method_returns` (objects
++  made by `.f~new`, so `INIT` returns through a send) and `pending_uninits_run_as_a_label_returns`
++  (`.g~new` with no `INIT`, attribute setter, `call tick`). Each runs two rounds of 300 finalizable
++  objects holding 300 KB strings. It asserts `1 1` (UNINITs ran before the first round ended, and
++  more in the second, which needs a collection after a drain) and a peak of at most twice
++  `COLLECT_BYTES_FLOOR`. Mutations: deleting the `finish_call` drain turns the label test red (`0 0`).
++  Deleting the `finish_send` drain turns the method test red (152,715,185 body bytes at the peak).
++  Both were restored from copies.
++* Scout probes, head release binary, 3 runs each, `/usr/bin/time -f "%M KB"`:
++
++| probe | crate stdout | crate peak RSS (KB) | oracle stdout | oracle peak RSS (KB) |
++|---|---|---|---|---|
++| uninit (1000) | `done 950` | 69 036, 69 592, 69 296 | `done 995` | 14 660, 16 472, 16 664 |
++| uninit3k (3000) | `done 2966` | 69 448, 69 976, 69 608 | `done 2995` | 20 908, 20 236, 21 084 |
++| nouninit (1000) | `done 0` | 52 972, 53 100, 53 368 | `done 0` | 14 408, 14 136, 14 132 |
++
++  The crate's peak is 1.3 times its no-UNINIT control. Before the change: 355 MB and 1.16 GB. The
++  count differs from the oracle's (collection timing, licensed).
++* Corpus output order: `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle` is green
++  with no expectation changed. No corpus program's output changed, so none needed an oracle witness.
++* `corpus/refusal-sites.tsv` is re-derived in the same commit. Step 1's `lib.rs` insertions moved the
++  `lib.rs` rows' line numbers, so Step 1's commit leaves `refusal_sites` red until `595ba08ef`. The
++  diff is line numbers only. Every changed row is in `lib.rs`, and each appears once removed and once
++  added once the line number is stripped.
++
++## Step 3: gates and performance
++
++* `cargo fmt`. `cargo clippy --workspace --all-targets -- -D warnings`: 0.
++  `cargo clippy -p rexx-exec --all-targets --features pinning,sharing -- -D warnings`: 0. Both ran
++  on the Step 2 tree before commit.
++* `tools/gates.sh` at `595ba08ef` (status file `gates-status.txt`, first line the sha, ends
++  `finished`):
++  * `memcap 8G cargo test -j 4 --workspace --no-fail-fast` (debug): 0, 3139 passed, 0 failed.
++  * `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle`: 0 (29 passed, 1 ignored; 21
++    passed).
++  * `REXX_CORPUS_GATE=1 ... --release --test concurrency_tests whole_groups`: 0, 16 passed, including
++    `sim_gate::the_seeded_gate`. No `whole_groups` line or sim table needed a change.
++* Callgrind (command and table in `docs/superpowers/plans/phase-6-1-gate.md` `## Task 11b`), against
++  base61. The worst is rexxcps at +0.4268%, equal to base. The drain check costs rexxcps 12,608 Ir
++  over base. The other programs are at most +0.0607% (alloc4c).
++* Wall clock, 5 interleaved runs, against base61: rexxcps +0.15%, emptyloop +5.84% (base +4.67%),
++  pingsem +1.61%, pingmsg +1.00%, the rest at most 0. emptyloop's Ir equals base, so its gap is
++  Task 12's question.
++* Queued item `2026-10-09-full-pool-inline-command-hang.md` has its `RESOLVED by` line.
++
++## Concerns
++
++* A failed thread spawn still runs a blocking call inline and can still hang, as before. The oracle
++  raises Error 48.1 at `START` in that state.
++* The pool has no upper limit under load. Each thread beyond the bound reserves `POOL_STACK_BYTES` of
++  address space until its job ends.
++* No drain at a native activation's return (`NativeActivation.cpp:1361`) beyond the send path through
++  `finish_send`, and none inside `INTERPRET`. The probes reach the drain through `INIT`'s and a
++  label's returns.
+diff --git a/.superpowers/sdd/queued/2026-10-09-full-pool-inline-command-hang.md b/.superpowers/sdd/queued/2026-10-09-full-pool-inline-command-hang.md
+index 41f04cbe3..ca73f1741 100644
+--- a/.superpowers/sdd/queued/2026-10-09-full-pool-inline-command-hang.md
++++ b/.superpowers/sdd/queued/2026-10-09-full-pool-inline-command-hang.md
+@@ -1,12 +1,14 @@
+ # A full native pool runs a blocking command inline and can hang the process
+ 
++RESOLVED by 51782fcb8 (Phase 6.1 Task 11b Step 1): a pool with every thread busy spawns a thread beyond its bound, which ends once the pool is back within it; the probe below ends 5/5 with the oracle's output (`hi` / `read done wrote`, rc 0). A bound of 0 (the simulation mode) and a failed spawn still run inline. Tests `scheduler::tests::pool::a_command_at_a_full_pool_runs_beyond_the_bound` and `a_native_call_at_a_full_pool_runs_beyond_the_bound`.
++
+ Default mode, pre-existing (hangs the same at 0765d19ef). When every pool thread is busy, a command
+ or native call runs inline on the baton thread. If what it blocks on needs another activity to run
+ (a peer on the baton), the process hangs: the run deadline cannot fire because the baton thread is
+ outside the clause loop.
+ 
+ Probe (Phase 6.1 Task 8 review, scratchpad `p3/full.rex`): start 64 activities that each run
+ `address system 'sleep 3'` to fill the pool, then run `cat` on a fifo whose writer is a started
+ activity. Default mode hangs until killed. The native form (SENDFROMANOTHERTHREAD with pool bound 1)
+ hangs on base and head alike.
+ 
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index 7d7f093ac..f8f68182e 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -1137,10 +1137,53 @@ which is 8 Ir for each of 6M `.NAME` lookups that miss the program's own tables:
+ tests that gate the parent walks (Step 6b).
+ 
+ ```
+ PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o /tmp/claude-1000/p61/t11a/wall base61=... base=... t11a=...
+ ```
+ 
+ Exit 0, load average 1.04 at the end. t11a against base61: rexxcps -1.27%, emptyloop +5.12%
+ (base +3.72%), alloc -2.44%, alloc4c -0.88%, heapshape -1.62%, pingmsg +1.46%, pingsem -1.61%,
+ pingguard +3.39% (base +5.08%). emptyloop retires the same instructions as base (-0.0000%), as at the
+ heapshape round (+4.43% there with Ir flat), so its wall clock gap is not added work.
++
++## Task 11b
++
++Deferred items, scheduling and finalization. Report:
++`.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md`. Base `32d2f4925`, head `595ba08ef`, each
++`rexx-run` built from `git archive <sha> rust interpreter` in its own target directory
++(`/tmp/claude-1000/p61/t11b/targetb`, `/tmp/claude-1000/p61/t11b/target`) with one `Compiling
++rexx-exec` line. sha256 base `f8925d342f6571d625c59e4ab48faee4545c3aaa7eeba0704deda12fedc243fc`, head
++`64d770432bbcaff95899c4ec345a400a9ba33befab9db08437fc81506cff6b5a`.
++
++```
++memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 3 -o /tmp/claude-1000/p61/t11b/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run base=/tmp/claude-1000/p61/t11b/bin/base/rexx-run t11b=/tmp/claude-1000/p61/t11b/bin/head/rexx-run
++```
++
++Exit 0, every spread at most 0.0001%. Percentages are against base61.
++
++| program | base % | t11b (running total) % | verdict |
++|---|---:|---:|---|
++| pingmsg | +0.0001 | -0.0190 | inside |
++| pingguard | -0.3835 | -0.5906 | inside |
++| pingsem | -0.2662 | -0.4694 | inside |
++| alloc | +0.0118 | +0.0118 | inside |
++| alloc4c | +0.0607 | +0.0607 | inside |
++| heapshape | +0.0520 | +0.0520 | inside |
++| rexxcps | +0.4268 | +0.4268 | inside |
++| emptyloop | -0.3191 | -0.3191 | inside |
++
++The emptiness test of `uninit_ready` at each return costs rexxcps 12,608 Ir over base
++(17,864,347,751 against 17,864,335,143).
++
++```
++PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o /tmp/claude-1000/p61/t11b/wall base61=... base=... t11b=...
++```
++
++Exit 0, load average 1.01 at the end. t11b against base61: rexxcps +0.15%, emptyloop +5.84% (base
+++4.67%), alloc -2.74%, alloc4c -0.36%, heapshape +0.00%, pingmsg +1.00%, pingsem +1.61%, pingguard
+++0.00%.
++
++Per-task check at `595ba08ef` (`/tmp/claude-1000/p61/t11b/tools/gates.sh`, statuses in
++`gates-status.txt`): debug `cargo test --workspace --no-fail-fast` 0 (3139 passed, 0 failed);
++`REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle` 0; `REXX_CORPUS_GATE=1 ... --release
++--test concurrency_tests whole_groups` 0, 16 passed, the seeded gate among them. No committed outcome
++changed.
+diff --git a/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md b/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
+index 4d5179fb2..5c69a0dfe 100644
+--- a/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
++++ b/docs/superpowers/specs/2026-09-29-phase-6-concurrency-design.md
+@@ -222,22 +222,23 @@ waiting, and a targeted HALT of an enclosing activity waits until the inner regi
+ known divergences from the oracle (whose every activity has its own OS thread), recorded with an
+ owner of none and bounded by exit criterion 9.
+ 
+ ### 2.7 Driver threads
+ 
+ The interpreter's first thread keeps today's large reservation (`INTERPRETER_STACK_BYTES`,
+ `lib.rs:183`, `:3180`). Pooled driver threads get a smaller stack (the oracle's activity threads are
+ 512 KiB, `common/platform/unix/SysThread.hpp:67`; reservations count against the `ulimit -v` the
+ oracle wrapper applies). On a pool thread, Error 11 is raised when the remaining stack falls below a
+ margin, as the oracle's `stackLimit` does, besides the depth cap; pinned recursion is the only
+-native-stack recursion left after S1. The pool has a bound; when a spawn fails or the bound is
+-reached, a release with ready activities leaves them for the next thread that takes the baton.
++native-stack recursion left after S1. The pool keeps at most its bound of threads; a job that finds
++every thread busy gets a thread beyond the bound (Phase 6.1 Task 11b). When a spawn fails, a
++release with ready activities leaves them for the next thread that takes the baton.
+ 
+ ---
+ 
+ ## 3. Scheduling
+ 
+ * **A ready queue and a sleeper queue.** Ready activities are served in arrival order (the uniform
+   allocation policy); timed sleepers (SysSleep, timers, timed waits) sit in a deadline min-heap and
+   move to the ready queue when due.
+ * **Wait queues.** Guard-scope reservations are FIFO, as the oracle's are
+   (`execution/VariableDictionary.cpp:547-553`, `:585-590`). GUARD WHEN watchers wake FIFO; the
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index b47a1b135..7ec5f72a2 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -81,174 +81,174 @@ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	o
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1813	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:601	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:619	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1197	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+-Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:453	off-send-surface	-	-	-
++Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:471	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:814	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:738	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:747	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:832	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:765	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1542	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:822	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:840	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:705	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:723	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:735	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:610	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:580	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:628	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:598	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1807	off-send-surface	-	-	-
+-Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:569	off-send-surface	-	-	-
++Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:587	off-send-surface	-	-	-
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1748	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:687	off-send-surface	-	-	-
+-Loud	expression	body	crates/rexx-exec/src/lib.rs:445	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:705	off-send-surface	-	-	-
++Loud	expression	body	crates/rexx-exec/src/lib.rs:463	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1855	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1753	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:858	off-send-surface	-	-	-
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:876	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1147	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+-Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:392	off-send-surface	-	-	-
++Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:410	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+-Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:479	off-send-surface	-	-	-
++Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:497	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:846	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:764	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:864	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:782	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:634	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:666	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:652	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:684	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:788	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:806	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1516	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1678	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1248	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1115	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1694	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:730	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:748	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1262	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1476	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1469	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+-Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:488	off-send-surface	-	-	-
++Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:506	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1327	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1337	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1275	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1453	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1421	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1402	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1350	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1279	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1300	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:589	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:607	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1523	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1180	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1619	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1553	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1564	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1573	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1083	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1733	off-send-surface	-	-	-
+ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1606	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:695	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:657	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:713	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:675	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:554	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:644	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:774	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:572	off-send-surface	-	-	-
++Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:662	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -265,68 +265,68 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:493	off-send-surface	-	-	-
+ Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+ Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+-Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:504	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
++Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:522	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+-Loud	redirection	body	crates/rexx-exec/src/lib.rs:543	off-send-surface	-	-	-
++Loud	redirection	body	crates/rexx-exec/src/lib.rs:561	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:772	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:790	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1785	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:838	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:856	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1213	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1219	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:780	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:798	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:676	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:797	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:694	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:815	off-send-surface	-	-	-
+ Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1383	off-send-surface	-	-	-
+ Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1394	off-send-surface	-	-	-
+ Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1420	off-send-surface	-	-	-
+ Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1372	off-send-surface	-	-	-
+ Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1410	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:714	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:732	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:806	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:824	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+-Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:515	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
++Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:533	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
+-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:533	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:625	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+-Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:462	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:830	off-send-surface	-	-	-
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:551	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:643	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:848	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/activity.rs b/rust/crates/rexx-exec/src/activity.rs
+index a6e87b067..59ed748fc 100644
+--- a/rust/crates/rexx-exec/src/activity.rs
++++ b/rust/crates/rexx-exec/src/activity.rs
+@@ -602,53 +602,32 @@ impl Activity {
+             description: _,
+             object,
+             activation: _,
+             queued_during_delivery: _,
+             request: _,
+             fragment_depth: _,
+         } in pending_traps
+         {
+             out.extend(*object);
+         }
+-        // The context objects of the activations on the stack. **The one
+-        // object an activation owns outright**: everything else it holds is
+-        // rooted by its slot frame, by `Interp::class_variables`, or -- a
+-        // send's receiver -- by the temporary `Interp::message_term` takes
+-        // over the sending clause. A `RexxContext` is created by
+-        // `Interp::context_object` and stored on the activation, and nothing
+-        // else refers to it. Handed over here rather than kept rooted per
+-        // activation because the alternative is a global root whose key has
+-        // to be minted, replaced and retired as activations come and go, and
+-        // this pays only when a collection actually happens.
+-        out.extend(
+-            running
+-                .iter()
+-                .map(std::ops::Deref::deref)
+-                .chain(suspended.iter().map(Box::as_ref))
+-                .filter_map(|activation| activation.context_object),
+-        );
+-        // A `REPLY`'s value and moved continuation, until its activation ends;
+-        // and the `Method` object a method no dictionary entry names runs
+-        // for, which a method that took its own entry back holds nowhere
+-        // else.
++        // Everything each activation on the stack holds
++        // (`Activation::object_roots`). Among it: the context object, which
++        // `Interp::context_object` creates and nothing else refers to; a
++        // `REPLY`'s value and moved continuation, until its activation ends;
++        // the `Method` object a method no dictionary entry names runs for,
++        // which a method that took its own entry back holds nowhere else; the
++        // trapped condition's object, which a `CALL ON` handler's activation
++        // and every callee that inherits its `CONDITION()` hold once the queue
++        // has handed it over; and the streams the builtins opened by name,
++        // which only the table holds. Handed over here rather than kept
++        // rooted per activation because the alternative is a global root
++        // whose key has to be minted, replaced and retired as activations come
++        // and go, and this pays only when a collection actually happens.
+         for activation in running
+             .iter()
+             .map(std::ops::Deref::deref)
+             .chain(suspended.iter().map(Box::as_ref))
+         {
+-            if let Some(replied) = &activation.replied {
+-                replied.object_roots(out);
+-            }
+-            out.extend(activation.cold.as_deref().and_then(|cold| cold.executable));
++            activation.object_roots(out);
+         }
+-        // The trapped condition's object, which a `CALL ON` handler's
+-        // activation and every callee that inherits its `CONDITION()` hold
+-        // once the queue has handed it over.
+-        out.extend(
+-            running
+-                .iter()
+-                .map(std::ops::Deref::deref)
+-                .chain(suspended.iter().map(Box::as_ref))
+-                .filter_map(|activation| activation.condition()?.object),
+-        );
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index 72784255d..0366ba988 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -2899,28 +2899,33 @@ impl Interp {
+     }
+ 
+     /// A send's value once the Rexx body it entered has ended `ended`: the
+     /// sender's level state back, and the work of every primitive method
+     /// between the sender and that body.
+     pub(crate) fn finish_send(
+         &mut self,
+         ended: Result<crate::run::Ended, Failure>,
+     ) -> Result<Option<ObjRef>, Failure> {
+         let depth = self.activity.call_tails.len();
+-        let sent = self.finish_call(ended).map(crate::run::Ended::value);
++        let mut sent = self.finish_call(ended).map(crate::run::Ended::value);
+         if self
+             .activity
+             .native_tails
+             .last()
+             .is_some_and(|tail| tail.depth == depth)
+         {
+-            return self.finish_native_tails(depth, sent);
++            sent = self.finish_native_tails(depth, sent);
++        }
++        if !self.uninit_ready.is_empty()
++            && let Ok(value) = sent
++        {
++            self.run_uninits_at_return(value)?;
+         }
+         sent
+     }
+ 
+     /// [`Interp::finish_send`]'s primitive methods, innermost first.
+     #[cold]
+     #[inline(never)]
+     fn finish_native_tails(
+         &mut self,
+         depth: usize,
+@@ -3481,20 +3486,31 @@ impl Interp {
+         }
+         self.processing_uninits = true;
+         let mut loud = Vec::new();
+         let ready = std::mem::take(&mut self.uninit_ready);
+         self.heap.clear_uninit_all(&ready);
+         self.run_uninit_batch(ready, &mut loud);
+         self.processing_uninits = false;
+         loud
+     }
+ 
++    /// [`Interp::run_ending_uninits`] for an activation returning `value`,
++    /// which stays rooted while they run.
++    #[cold]
++    #[inline(never)]
++    pub(crate) fn run_uninits_at_return(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
++        let parked = self.roots.activity_mut().park(value.into_iter().collect());
++        let drained = self.run_ending_uninits();
++        self.roots.activity_mut().release(parked);
++        drained
++    }
++
+     /// The termination sweep: every live object still carrying the flag
+     /// (D69), then every class object with a class-side `UNINIT` (D60) in the
+     /// order [`ClassRegistry::take_uninit_classes_in_sweep_order`] gives,
+     /// and then the same again once.
+     pub(crate) fn run_termination_uninits(&mut self) -> Vec<Loud> {
+         if self.processing_uninits {
+             return Vec::new();
+         }
+         self.processing_uninits = true;
+         let mut loud = Vec::new();
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 57f210583..e78c28081 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -247,24 +247,42 @@ fn new_pool() -> crate::scheduler::Pool {
+ thread_local! {
+     /// The pool stack size and bound a test sets for the interpreters this
+     /// thread makes.
+     static POOL_SHAPE: std::cell::Cell<(Option<usize>, Option<usize>)> =
+         const { std::cell::Cell::new((None, None)) };
+ }
+ 
+ #[cfg(test)]
+ fn new_pool() -> crate::scheduler::Pool {
+     let (stack, bound) = POOL_SHAPE.with(std::cell::Cell::get);
+-    crate::scheduler::Pool::new(
++    let pool = crate::scheduler::Pool::new(
+         stack.unwrap_or(crate::scheduler::POOL_STACK_BYTES),
+         bound.unwrap_or(crate::scheduler::POOL_BOUND),
+-    )
++    );
++    if POOL_FIXED.with(std::cell::Cell::get) {
++        pool.fix_at_bound();
++    }
++    pool
++}
++
++#[cfg(test)]
++thread_local! {
++    /// Whether the pools of interpreters this thread makes stop at their
++    /// bound.
++    static POOL_FIXED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++}
++
++/// Has the pools of interpreters this thread makes spawn no thread beyond
++/// their bound, so a call that finds every thread busy runs on the baton.
++#[cfg(test)]
++pub(crate) fn set_pool_fixed() {
++    POOL_FIXED.with(|fixed| fixed.set(true));
+ }
+ 
+ /// Gives the pool threads of interpreters this thread makes `bytes` of stack.
+ #[cfg(test)]
+ pub(crate) fn set_pool_stack(bytes: usize) {
+     POOL_SHAPE.with(|shape| shape.set((Some(bytes), shape.get().1)));
+ }
+ 
+ /// Bounds the pools of interpreters this thread makes at `threads`.
+ #[cfg(test)]
+@@ -3028,21 +3046,23 @@ impl Interp {
+         });
+         self.activities
+             .prune_senders(|message| heap.peek(message).is_some());
+         // A sweep can free a class the registry named, which unlinks its row
+         // and leaves any `.NAME` answer derived from it naming nothing.
+         self.invalidate_rexx_class_cache();
+         // `pending_uninit` is what the collector resurrected so a finalizer
+         // could run against a whole graph. The finalizer is not sent from
+         // here: the oracle's collector only marks
+         // (`MemoryObject::checkUninit`), and `runUninits` is reached from
+-        // `GC('force')` and from the termination sweep.
++        // `GC('force')`, an activation's return (`RexxActivation.cpp:705`,
++        // `NativeActivation.cpp:1361`), an activity's dispatch loop
++        // (`Activity.cpp:249`) and the termination sweep.
+         self.uninit_ready.extend(stats.pending_uninit);
+         // The rows `rexx-classes` keys by a class go with the class. Done
+         // here rather than in a pass of its own: the sweeper already knows
+         // which slots it freed, and a scan of the registry per collection
+         // would cost the whole class population to find the few that died.
+         if !stats.freed_classes.is_empty() {
+             let dead = stats.freed_classes;
+             self.classes().expunge(&dead);
+             for class in &dead {
+                 self.class_variables.remove(class);
+diff --git a/rust/crates/rexx-exec/src/run/call.rs b/rust/crates/rexx-exec/src/run/call.rs
+index dd8c1c33d..51d7f337d 100644
+--- a/rust/crates/rexx-exec/src/run/call.rs
++++ b/rust/crates/rexx-exec/src/run/call.rs
+@@ -1096,20 +1096,31 @@ impl Interp {
+         }
+         self.activity.activation_indent = saved_base;
+         self.activity.indent_offset = saved_offset;
+         self.activity.clause_line_override = saved_line;
+         self.restore_clause_state(saved_clause_state);
+         match stack {
+             LentStack::Kept => {}
+             LentStack::Emptied => self.activity.value_buffer.clear(),
+             LentStack::Lent(values) => self.activity.value_buffer = values,
+         }
++        // A returning activation runs the `UNINIT`s a collection readied
++        // (`memoryObject.checkUninitQueue()`, `RexxActivation.cpp:705`). A
++        // method's run in `Interp::finish_send`, once the primitive methods
++        // waiting on it have finished, since an `UNINIT`'s own send would
++        // otherwise find their tails at its depth.
++        if !self.uninit_ready.is_empty()
++            && kind != TailKind::Method
++            && let Ok(Ended::Returned(value) | Ended::Exited(value)) = &ended
++        {
++            self.run_uninits_at_return(*value)?;
++        }
+ 
+         // **`EXIT` inside a `::ROUTINE` ends the routine, not the program**,
+         // where `EXIT` inside a `CALL`ed label ends the program. The C++'s
+         // `implicitExit` sets `RETURNED` outright for an `isProgramLevelCall`
+         // activation and only otherwise walks up through `exitFrom`
+         // (`RexxActivation.cpp:1455`-`1469`), and a routine invocation is one
+         // of those. Measured on the oracle, rc 0 every time, and the shapes
+         // matter because the exit arrives here by three different routes:
+         // ```text
+         // call rtn / say result       ::routine rtn ; exit 5      ->  5, and main runs on
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index 909f1958f..e2a854f20 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -503,27 +503,28 @@ pub(crate) trait Scheduler {
+     fn unpark(&mut self, activity: ActivityId);
+     /// Puts the running activity, whose slice is over, at the back of the
+     /// ready queue.
+     fn yield_at_slice(&mut self);
+     /// Stops every activity's driver for a collection (spec 2026-09-29
+     /// section 5): with the one thread holding the baton running a driver,
+     /// that is holding the baton.
+     fn stop_the_world(&self);
+     /// Runs the native call the running activity, parked for it, prepared,
+     /// off the baton (spec 2026-09-29 P6-3): on a pool thread, which this
+-    /// thread lends the baton to while it enters the call, or, where no pool
+-    /// thread is free, here on the baton. Its completion is posted.
++    /// thread lends the baton to while it enters the call, or, where the pool
++    /// is off or no thread can be spawned, here on the baton. Its completion
++    /// is posted.
+     fn exit_for_native(&mut self);
+     /// Runs `block`, a blocking operation of the running activity's that
+     /// touches no island value, on a pool thread, which posts what it ended
+-    /// with under the token answered; `Err(block)` where no pool thread is
+-    /// free.
++    /// with under the token answered; `Err(block)` where the pool is off or
++    /// no thread can be spawned.
+     fn exit_for_block(
+         &mut self,
+         block: crate::command::Block,
+     ) -> Result<u64, crate::command::Block>;
+     /// Posts `completion`, of `activity`'s native call in the native frame
+     /// `frame`, to `inbox` for the baton's holder to drain; it touches
+     /// nothing else.
+     fn post_completion(
+         inbox: &crate::timer::Inbox<crate::timer::Posted>,
+         activity: ActivityId,
+@@ -1621,23 +1622,23 @@ impl Interp {
+             let last = matches!(failure, Failure::Deadline) || self.sim_is_stuck();
+             failures.push((failure, Vec::new()));
+             if last {
+                 break;
+             }
+         }
+         failures
+     }
+ 
+     /// The `UNINIT`s a collection readied, run on an activity whose dispatch
+-    /// has ended (`Activity::runThread`, `concurrency/Activity.cpp:249`). The
+-    /// first refusal they meet is answered; the later ones are kept for the
+-    /// program's end, in order.
++    /// has ended (`Activity::runThread`, `concurrency/Activity.cpp:249`) or
++    /// whose activation returns. The first refusal they meet is answered; the
++    /// later ones are kept for the program's end, in order.
+     pub(crate) fn run_ending_uninits(&mut self) -> Result<(), Failure> {
+         let mut refused = self.run_ready_uninits().into_iter();
+         let Some(first) = refused.next() else {
+             return Ok(());
+         };
+         for loud in refused {
+             self.keep_late_failure(loud.into());
+         }
+         Err(first.into())
+     }
+@@ -2768,17 +2769,17 @@ pub(crate) fn script(outcomes: &[Scripted]) {
+ /// The next queued outcome, outside the library bootstrap.
+ #[cfg(test)]
+ pub(crate) fn take_scripted() -> Option<Scripted> {
+     if !crate::ir::drive::counting() {
+         return None;
+     }
+     SCRIPT.with(|script| script.borrow_mut().pop_front())
+ }
+ 
+ mod pool;
+-#[cfg(test)]
+-pub(crate) use pool::threads_spawned;
+ pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
++#[cfg(test)]
++pub(crate) use pool::{threads_beyond_bound, threads_spawned};
+ 
+ #[cfg(test)]
+ #[expect(clippy::disallowed_methods, reason = "these tests time real runs")]
+ mod tests;
+diff --git a/rust/crates/rexx-exec/src/scheduler/pool.rs b/rust/crates/rexx-exec/src/scheduler/pool.rs
+index 8f46c0747..c29ee9681 100644
+--- a/rust/crates/rexx-exec/src/scheduler/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/pool.rs
+@@ -14,21 +14,23 @@
+ //! 2026-09-29 2.7).
+ 
+ use std::sync::{Arc, Condvar, Mutex, PoisonError};
+ use std::thread::{JoinHandle, ThreadId};
+ 
+ /// A pool thread's stack: the interpreter thread's, since a callback runs
+ /// Rexx code there, and the translator's and the collector's depth limits
+ /// are measured against that size.
+ pub(crate) const POOL_STACK_BYTES: usize = crate::INTERPRETER_STACK_BYTES;
+ 
+-/// The most threads an interpreter's pool runs.
++/// The most threads an interpreter's pool keeps. A job that finds every
++/// thread busy gets a thread beyond the bound, which ends once the pool is
++/// back within it, so a blocking call never waits for a busy thread.
+ pub(crate) const POOL_BOUND: usize = 64;
+ 
+ /// What a pool thread runs.
+ pub(crate) type Job = Box<dyn FnOnce() + Send>;
+ 
+ /// Runs `job`, posting a panic it ends in to `inbox` for the baton's holder
+ /// to panic with, before the baton lent to this thread goes back: a lend
+ /// is not given back as a panic unwinds ([`crate::island::Lent`]), and the
+ /// lender drains the inbox before it runs a clause.
+ pub(crate) fn posting_panics(
+@@ -48,31 +50,34 @@ pub(crate) fn posting_panics(
+         inbox.post(super::Posted::Panicked(payload));
+         if baton.lent().is_some() {
+             baton.give_back();
+         }
+     }
+ }
+ 
+ pub(crate) struct Pool {
+     shared: Arc<Shared>,
+     stack: usize,
+-    bound: usize,
+ }
+ 
+ struct Shared {
+     state: Mutex<State>,
+ }
+ 
+ struct State {
+     idle: Vec<Worker>,
+     threads: Vec<(ThreadId, JoinHandle<()>)>,
+     closed: bool,
++    bound: usize,
++    /// Whether no thread is spawned beyond the bound.
++    #[cfg(test)]
++    fixed: bool,
+ }
+ 
+ /// A pool thread, idle or reserved for one job.
+ pub(crate) struct Worker {
+     thread: ThreadId,
+     mailbox: Arc<Mailbox>,
+ }
+ 
+ struct Mailbox {
+     mail: Mutex<Option<Mail>>,
+@@ -82,75 +87,92 @@ struct Mailbox {
+ enum Mail {
+     Run(Job),
+     End,
+ }
+ 
+ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+ }
+ 
+ impl Pool {
+-    /// An empty pool of at most `bound` threads, each with `stack` bytes of
+-    /// stack.
++    /// An empty pool that keeps at most `bound` threads, each with `stack`
++    /// bytes of stack.
+     pub(crate) fn new(stack: usize, bound: usize) -> Pool {
+         Pool {
+             shared: Arc::new(Shared {
+                 state: Mutex::new(State {
+                     idle: Vec::new(),
+                     threads: Vec::new(),
+                     closed: false,
++                    bound,
++                    #[cfg(test)]
++                    fixed: false,
+                 }),
+             }),
+             stack,
+-            bound,
+         }
+     }
+ 
+     /// The stack each thread gets.
+     pub(crate) fn stack(&self) -> usize {
+         self.stack
+     }
+ 
+-    /// Bounds the pool at `bound` threads from now on; at 0 no thread, idle
+-    /// or new, is reserved.
+-    pub(crate) fn set_bound(&mut self, bound: usize) {
+-        self.bound = bound;
++    /// Bounds the pool at `bound` threads kept from now on; at 0 no thread,
++    /// idle or new, is reserved.
++    pub(crate) fn set_bound(&self, bound: usize) {
++        lock(&self.shared.state).bound = bound;
+     }
+ 
+-    /// An idle thread, or a new one, for one job; `None` where the bound is
+-    /// reached or the spawn fails.
++    /// Spawns no thread beyond the bound from now on, so a job that finds
++    /// every thread busy gets none.
++    #[cfg(test)]
++    pub(crate) fn fix_at_bound(&self) {
++        lock(&self.shared.state).fixed = true;
++    }
++
++    /// An idle thread, or a new one, for one job: beyond the bound where
++    /// every thread is busy. `None` where the bound is 0 or the spawn fails.
+     pub(crate) fn reserve(&self) -> Option<Worker> {
+-        if self.bound == 0 {
++        let mut state = lock(&self.shared.state);
++        if state.bound == 0 {
+             return None;
+         }
+-        let mut state = lock(&self.shared.state);
+         if let Some(worker) = state.idle.pop() {
+             return Some(worker);
+         }
+-        if state.threads.len() >= self.bound {
++        // Every thread busy: a new one beyond the bound, since a command or
++        // native call run inline instead holds the baton while it waits, and
++        // what it waits for may be another activity's to do.
++        #[cfg(test)]
++        if state.fixed && state.threads.len() >= state.bound {
+             return None;
+         }
+         let mailbox = Arc::new(Mailbox {
+             mail: Mutex::new(None),
+             arrived: Condvar::new(),
+         });
+         let spawned = std::thread::Builder::new()
+             .name("rexx-pool".to_string())
+             .stack_size(self.stack)
+             .spawn({
+                 let (shared, mailbox) = (Arc::clone(&self.shared), Arc::clone(&mailbox));
+                 move || work(&shared, &mailbox)
+             })
+             .ok()?;
+         let thread = spawned.thread().id();
+         #[cfg(test)]
+         SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
++        #[cfg(test)]
++        if state.threads.len() >= state.bound {
++            BEYOND.with(|beyond| beyond.set(beyond.get() + 1));
++        }
+         state.threads.push((thread, spawned));
+         Some(Worker { thread, mailbox })
+     }
+ }
+ 
+ impl Drop for Pool {
+     /// Ends the idle threads and waits for them; a thread still running a
+     /// job ends once it has run it.
+     fn drop(&mut self) {
+         let (idle, mut threads) = {
+@@ -193,21 +215,34 @@ thread_local! {
+     /// How many pool threads this thread has spawned.
+     static SPAWNED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+ }
+ 
+ /// [`SPAWNED`]'s count.
+ #[cfg(test)]
+ pub(crate) fn threads_spawned() -> u64 {
+     SPAWNED.with(std::cell::Cell::get)
+ }
+ 
+-/// A pool thread: runs each job it is sent, then waits idle for the next.
++#[cfg(test)]
++thread_local! {
++    /// How many threads this thread has spawned beyond its pool's bound.
++    static BEYOND: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
++}
++
++/// [`BEYOND`]'s count.
++#[cfg(test)]
++pub(crate) fn threads_beyond_bound() -> u64 {
++    BEYOND.with(std::cell::Cell::get)
++}
++
++/// A pool thread: runs each job it is sent, then waits idle for the next,
++/// or ends where the pool holds more threads than its bound.
+ fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
+     crate::signal::block();
+     loop {
+         let mail = {
+             let mut mail = lock(&mailbox.mail);
+             loop {
+                 if let Some(arrived) = mail.take() {
+                     break arrived;
+                 }
+                 mail = mailbox
+@@ -217,16 +252,24 @@ fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
+             }
+         };
+         let Mail::Run(job) = mail else {
+             return;
+         };
+         job();
+         let mut state = lock(&shared.state);
+         if state.closed {
+             return;
+         }
++        if state.threads.len() > state.bound {
++            let me = std::thread::current().id();
++            if let Some(at) = state.threads.iter().position(|(id, _)| *id == me) {
++                // Dropping the handle detaches this thread, which ends here.
++                state.threads.swap_remove(at);
++            }
++            return;
++        }
+         state.idle.push(Worker {
+             thread: std::thread::current().id(),
+             mailbox: Arc::clone(mailbox),
+         });
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs b/rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs
+index 9f7f82658..3d8b826e4 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs
+@@ -329,21 +329,21 @@ fn a_callback_is_served_at_a_pinned_holders_next_cold_visit() {
+          ::method mark unguarded\n  expose set\n  set = 1\n  return 'marked'\n\
+          ::class c\n::method init\n  expose f\n  use arg f\n\
+          ::method compare\n  expose f\n  use arg l, r\n  do while f~set == 0\n  end\n  \
+          return l - r\n",
+     );
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "sorted 1,2 marked\n");
+ }
+ 
+ /// Recalls that reach the holder together, while it keeps the baton for a
+-/// call at the pool's bound, are each served: the first callback waits for
++/// call at a pool that spawns no thread beyond its bound, are each served: the first callback waits for
+ /// the second, which its own thread's nested loop finds in the inbox rather
+ /// than behind the holder's lend.
+ #[test]
+ fn recalls_drained_together_are_each_served() {
+     let path = std::env::temp_dir().join(format!("rexx-batched-{}", std::process::id()));
+     let _ = std::fs::remove_file(&path);
+     let ran = run_shaped(
+         &format!(
+             "m = .meet~new\na = .t~new~start('go', .side~new(m, 'A'))\n\
+              b = .t~new~start('go', .side~new(m, 'B'))\ncall SysSleep 0.1\n\
+@@ -355,20 +355,21 @@ fn recalls_drained_together_are_each_served() {
+              ::class side\n::method init\n  expose m who\n  use arg m, who\n\
+              ::method first\n  expose m who\n  m~arrive\n  return who'1'\n\
+              ::method second\n  expose who\n  return who'2'\n\
+              ::class meet\n::method init\n  expose n\n  n = 0\n\
+              ::method arrive\n  expose n\n  n += 1\n  guard on when n >= 2\n",
+             path = path.display()
+         ),
+         Shape {
+             library: (b"callbacktest", library),
+             bound: Some(2),
++            fixed: true,
+             deadline: Duration::from_secs(20),
+             ..SHAPE
+         },
+     )
+     .expect("the run did not panic");
+     let _ = std::fs::remove_file(&path);
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "A2 B2\n");
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+index 3af541e10..6cdc1cbf8 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+@@ -64,24 +64,28 @@ impl Meeting {
+         counts.1 += 1;
+     }
+ 
+     /// How many met and how many gave up.
+     fn outcome(&self) -> (usize, usize) {
+         let counts = self.counts.lock().expect("unpoisoned");
+         (counts.1, counts.2)
+     }
+ }
+ 
+-static MEETINGS: [Meeting; 2] = [Meeting::new(), Meeting::new()];
++static MEETINGS: [Meeting; 3] = [Meeting::new(), Meeting::new(), Meeting::new()];
+ 
+ /// How long the meeting in each slot waits for its second call.
+-const PATIENCE: [Duration; 2] = [Duration::from_secs(10), Duration::from_millis(300)];
++const PATIENCE: [Duration; 3] = [
++    Duration::from_secs(10),
++    Duration::from_millis(300),
++    Duration::from_secs(2),
++];
+ 
+ extern "C-unwind" fn meet<const SLOT: usize>(
+     _context: *mut RexxCallContext_,
+     arguments: *mut ValueDescriptor,
+ ) -> *mut u16 {
+     if arguments.is_null() {
+         return SIGNATURE.as_ptr().cast_mut();
+     }
+     MEETINGS[SLOT].arrive(PATIENCE[SLOT]);
+     std::ptr::null_mut()
+@@ -117,20 +121,21 @@ extern "C-unwind" fn here(
+         .lock()
+         .expect("unpoisoned")
+         .push(("here", std::thread::current().id()));
+     std::ptr::null_mut()
+ }
+ 
+ fn library() -> rexx_api::load::Library {
+     rexx_api::load::routines_only(&[
+         ("MEET", meet::<0>),
+         ("MEETBRIEFLY", meet::<1>),
++        ("MEETATFULLPOOL", meet::<2>),
+         ("NAP", nap),
+         ("HERE", here),
+         ("SENDTHENAWAIT", rexx_api::load::send_then_await),
+         ("BOOM", boom),
+         ("BOOMMARKED", boom_marked),
+     ])
+ }
+ 
+ /// The file [`boom_marked`] reads, and how many lines it had then.
+ static BOOM_MARK: Mutex<(Option<std::path::PathBuf>, usize)> = Mutex::new((None, 0));
+@@ -153,52 +158,56 @@ extern "C-unwind" fn boom_marked(
+ extern "C-unwind" fn boom(
+     _context: *mut RexxCallContext_,
+     arguments: *mut ValueDescriptor,
+ ) -> *mut u16 {
+     if arguments.is_null() {
+         return SIGNATURE.as_ptr().cast_mut();
+     }
+     panic!("a native panicked");
+ }
+ 
+-/// The pool a run gets, where a test sets it, the run's deadline, the
++/// The pool a run gets, where a test sets it, and whether it stops at its
++/// bound, the run's deadline, the
+ /// library offered, by name, the interpreter thread's stack, the file
+ /// [`crate::set_panic_at_call_end`] names, and whether
+ /// [`crate::set_fail_native_wait`] is set.
+ pub(super) struct Shape {
+     pub(super) stack: Option<usize>,
+     pub(super) bound: Option<usize>,
++    pub(super) fixed: bool,
+     pub(super) deadline: Duration,
+     pub(super) library: (&'static [u8], fn() -> rexx_api::load::Library),
+     pub(super) interpreter_stack: usize,
+     pub(super) panic_at_call_end: Option<std::path::PathBuf>,
+     pub(super) fail_native_wait: bool,
+     pub(super) switch: Option<crate::SwitchMode>,
+ }
+ 
+ pub(super) const SHAPE: Shape = Shape {
+     stack: None,
+     bound: None,
++    fixed: false,
+     deadline: Duration::from_secs(60),
+     library: (b"pooltest", library),
+     interpreter_stack: crate::INTERPRETER_STACK_BYTES,
+     panic_at_call_end: None,
+     fail_native_wait: false,
+     switch: None,
+ };
+ 
+-/// A run: its outcome, its driver exits, the interpreter's thread, how many
+-/// times a callback took the baton, and how many abandoned calls' frames it
+-/// still held at its end.
++/// A run: its outcome, its driver exits, the pool threads it spawned beyond
++/// the bound, the interpreter's thread, how many times a callback took the
++/// baton, and how many abandoned calls' frames it still held at its end.
+ pub(super) struct Ran {
+     pub(super) outcome: Outcome,
+     pub(super) exits: u64,
++    pub(super) beyond: u64,
+     pub(super) thread: ThreadId,
+     pub(super) takes: u64,
+     pub(super) abandoned: usize,
+ }
+ 
+ impl Ran {
+     pub(super) fn stdout(&self) -> String {
+         String::from_utf8_lossy(&self.outcome.stdout).into_owned()
+     }
+ 
+@@ -246,36 +255,40 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
+         .stack_size(shape.interpreter_stack)
+         .spawn(move || {
+             let (name, library) = shape.library;
+             crate::install::offer_library(name, library);
+             if let Some(bytes) = shape.stack {
+                 crate::set_pool_stack(bytes);
+             }
+             if let Some(threads) = shape.bound {
+                 crate::set_pool_bound(threads);
+             }
++            if shape.fixed {
++                crate::set_pool_fixed();
++            }
+             if let Some(path) = shape.panic_at_call_end {
+                 crate::set_panic_at_call_end(path);
+             }
+             if shape.fail_native_wait {
+                 crate::set_fail_native_wait();
+             }
+             let outcome = crate::execute_on(
+                 "/tmp/pool.rex",
+                 text,
+                 false,
+                 invocation,
+                 Some(shape.interpreter_stack),
+             );
+             Ran {
+                 outcome,
+                 exits: crate::scheduler::native_exits(),
++                beyond: crate::scheduler::threads_beyond_bound(),
+                 thread: std::thread::current().id(),
+                 takes: crate::dispatch::library::callback_takes(),
+                 abandoned: crate::scheduler::abandoned_held(),
+             }
+         })
+         .expect("the interpreter thread")
+         .join()
+ }
+ 
+ const MEETING: &str = "m = .t~new~start('other')\ncall MEET\nsay 'main'\nsay m~result\n\
+@@ -375,37 +388,120 @@ fn the_translator_on_a_pool_thread_has_the_interpreter_threads_stack() {
+          interpret 'y =' copies('1+', 5000)'1'\n  return x y\n\
+          ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
+         None,
+     );
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "1 5001\n");
+     assert_eq!(ran.exits, 1);
+ }
+ 
+ /// A pool thread whose callback's nested loop starts another call when no
+-/// pool thread is free runs that call on the baton it holds by a lend.
++/// pool thread is free and none can be spawned runs that call on the baton
++/// it holds by a lend.
+ #[test]
+ fn a_call_on_a_pool_thread_with_no_thread_free_runs_on_its_lend() {
+     let ran = run_shaped(
+         "n = 4\ndo i = 1 to n\n  a.i = .w~new~start('go')\nend\ns = 0\n\
+          do i = 1 to n\n  s = s + a.i~result\nend\nsay 'ok' s\n\
+          ::class w\n::method go\n  return .k~new~send0(.r~new, 'cb')\n\
+          ::class r\n::method cb\n  call SysSleep 0.3\n  return 1\n\
+          ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
+         Shape {
+             bound: Some(2),
++            fixed: true,
+             ..SHAPE
+         },
+     )
+     .expect("the run did not panic");
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "ok 4\n");
++    assert_eq!(ran.beyond, 0);
++}
++
++/// With every pool thread busy, a command whose child waits for another
++/// activity's command runs on a thread beyond the bound, so the other
++/// activity runs and the two children meet at the fifo. Run on the baton,
++/// the reader's `timeout` ends it first and the writer's ends it after.
++#[test]
++fn a_command_at_a_full_pool_runs_beyond_the_bound() {
++    let path = std::env::temp_dir().join(format!("rexx-full-pool-{}", std::process::id()));
++    let _ = std::fs::remove_file(&path);
++    let path = path.to_string_lossy().into_owned();
++    let ran = run_shaped(
++        &format!(
++            "address system 'mkfifo {path}'
++do i = 1 to 2
++  s.i = .s~new~start('nap')
++end
++             call SysSleep 0.3
++w = .w~new~start('write')
++             address system 'timeout 5 cat {path}'
++say 'read' rc
++say w~result
++             ::class s
++::method nap
++  address system 'sleep 2'
++             ::class w
++::method write
++  call SysSleep 0.1
++               address system 'timeout 5 sh -c \"echo hi > {path}\"'
++  return 'wrote' rc
++"
++        ),
++        Shape {
++            bound: Some(2),
++            deadline: Duration::from_secs(30),
++            switch: Some(crate::SwitchMode::AtClause(1_000_000)),
++            ..SHAPE
++        },
++    )
++    .expect("the run did not panic");
++    let _ = std::fs::remove_file(&path);
++    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
++    assert_eq!(ran.stdout(), "hi\nread 0\nwrote 0\n");
++    assert!(ran.beyond >= 1, "{} threads beyond the bound", ran.beyond);
++}
++
++/// With the pool's one thread busy, a native call that waits for another
++/// activity's call runs on a thread beyond the bound, so the other activity
++/// runs and the two calls meet. Run on the baton, each gives up in turn.
++#[test]
++fn a_native_call_at_a_full_pool_runs_beyond_the_bound() {
++    MEETINGS[2].reset();
++    let ran = run_shaped(
++        "n = .t~new~start('nap')
++o = .t~new~start('other')
++call SysSleep 0.05
++         call MEETATFULLPOOL
++say 'main'
++say o~result
++         ::requires 'pooltest' LIBRARY
++::class t
++::method nap
++  call NAP
++         ::method other
++  call SysSleep 0.1
++  call MEETATFULLPOOL
++  return 'other'
++",
++        Shape {
++            bound: Some(1),
++            deadline: Duration::from_secs(30),
++            switch: Some(crate::SwitchMode::AtClause(1_000_000)),
++            ..SHAPE
++        },
++    )
++    .expect("the run did not panic");
++    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
++    assert_eq!(ran.stdout(), "main\nother\n");
++    assert_eq!(MEETINGS[2].outcome(), (2, 0));
++    assert!(ran.beyond >= 1, "{} threads beyond the bound", ran.beyond);
+ }
+ 
+ /// What a command's child writes off the baton reaches the output as it
+ /// arrives, ahead of what another activity says later.
+ #[test]
+ fn an_off_baton_commands_output_keeps_its_place() {
+     let ran = run(
+         "m = .t~new~start('tick')\n'echo child; sleep 0.3'\nsay m~result\n\
+          ::class t\n::method tick\n  call SysSleep 0.1\n  say 'tick'\n  return 'done'\n",
+         None,
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index afaa8b211..c2d34852d 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -1196,20 +1196,80 @@ fn short_strings_keep_the_slot_cadence() {
+     let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
+     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+     assert_eq!(outcome.collections, 6);
+     assert!(
+         outcome.peak_body_bytes < 1 << 18,
+         "{} body bytes held at once",
+         outcome.peak_body_bytes
+     );
+ }
+ 
++/// Runs two rounds of 300 finalizable objects, each holding a 300,000-byte
++/// string, made by `make` in a loop of a label `round`, and answers the
++/// outcome. It prints `1 1` where `UNINIT`s ran before the first round ended
++/// and again in the second, which needs a collection after a drain.
++fn uninit_rounds(make: &str) -> crate::Outcome {
++    let program = format!(
++        ".local~n = 0\ncall round\nmid = .local~n\ncall round\n\
++         say (mid > 0) (.local~n > mid)\nexit\n\
++         round:\n  do i = 1 to 300\n{make}  end\n  return\ntick:\n  return\n\
++         ::class f\n::attribute s\n::method init\n  expose s\n  use arg s\n\
++         ::method uninit\n  .local~n = .local~n + 1\n\
++         ::class g\n::attribute s\n::method uninit\n  .local~n = .local~n + 1\n"
++    );
++    let outcome = run_program(TEST_PATH, program.into_bytes(), crate::Invocation::none());
++    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
++    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1 1\n");
++    assert!(
++        outcome.peak_body_bytes <= 2 * crate::COLLECT_BYTES_FLOOR,
++        "{} body bytes held at once",
++        outcome.peak_body_bytes
++    );
++    outcome
++}
++
++/// Pending `UNINIT`s run as a method's activation returns
++/// (`RexxActivation.cpp:705`): here `INIT`'s, through the send `NEW` made.
++#[test]
++fn pending_uninits_run_as_a_method_returns() {
++    uninit_rounds("    o = .f~new(copies('x', 300000) || i)\n");
++}
++
++/// The same at a label's return, with no Rexx method run in the loop.
++#[test]
++fn pending_uninits_run_as_a_label_returns() {
++    uninit_rounds("    o = .g~new\n    o~s = copies('x', 300000) || i\n    call tick\n");
++}
++
++/// A stream a builtin opened by name is rooted by its activation's table: a
++/// forced collection runs the `UNINIT`s it readies, and the second `LINEIN`
++/// reads on from the table's stream (`two`), where a stream readied as
++/// unreachable is closed by its `UNINIT` and answers Error 48.1.
++#[test]
++fn a_builtins_stream_survives_collections_while_its_table_holds_it() {
++    let path = std::env::temp_dir().join(format!("rexx-stream-root-{}", std::process::id()));
++    std::fs::write(&path, "one\ntwo\n").expect("the file");
++    let program = format!(
++        "f = '{}'\nsay linein(f)\ncall gc 'force'\nsay linein(f)\n",
++        path.display()
++    );
++    let outcome = run_program(TEST_PATH, program.into_bytes(), crate::Invocation::none());
++    let _ = std::fs::remove_file(&path);
++    assert_eq!(
++        outcome.exit_code,
++        0,
++        "stderr: {:?}",
++        String::from_utf8_lossy(&outcome.stderr)
++    );
++    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "one\ntwo\n");
++}
++
+ /// The bytes a body stops holding between collections leave the live figure
+ /// the next collection starts from: a 40 MB buffer cut to one byte, then a
+ /// 40 MB string dropped, each followed by a loop of dead 1 MB copies. The
+ /// count is the one a survivor sum at each collection gives, measured on the
+ /// commit before the live figure became a running one.
+ #[test]
+ fn bytes_a_body_stops_holding_leave_the_live_figure() {
+     let program = b"s = copies('x', 1000000)\n\
+           b = .mutableBuffer~new(, 40000000)\n\
+           do i = 1 to 100; x = s~copy; end\n\
