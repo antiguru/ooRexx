@@ -1203,6 +1203,43 @@ fn short_strings_keep_the_slot_cadence() {
     );
 }
 
+/// Runs two rounds of 300 finalizable objects, each holding a 300,000-byte
+/// string, made by `make` in a loop of a label `round`, and answers the
+/// outcome. It prints `1 1` where `UNINIT`s ran before the first round ended
+/// and again in the second, which needs a collection after a drain.
+fn uninit_rounds(make: &str) -> crate::Outcome {
+    let program = format!(
+        ".local~n = 0\ncall round\nmid = .local~n\ncall round\n\
+         say (mid > 0) (.local~n > mid)\nexit\n\
+         round:\n  do i = 1 to 300\n{make}  end\n  return\ntick:\n  return\n\
+         ::class f\n::attribute s\n::method init\n  expose s\n  use arg s\n\
+         ::method uninit\n  .local~n = .local~n + 1\n\
+         ::class g\n::attribute s\n::method uninit\n  .local~n = .local~n + 1\n"
+    );
+    let outcome = run_program(TEST_PATH, program.into_bytes(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1 1\n");
+    assert!(
+        outcome.peak_body_bytes <= 2 * crate::COLLECT_BYTES_FLOOR,
+        "{} body bytes held at once",
+        outcome.peak_body_bytes
+    );
+    outcome
+}
+
+/// Pending `UNINIT`s run as a method's activation returns
+/// (`RexxActivation.cpp:705`): here `INIT`'s, through the send `NEW` made.
+#[test]
+fn pending_uninits_run_as_a_method_returns() {
+    uninit_rounds("    o = .f~new(copies('x', 300000) || i)\n");
+}
+
+/// The same at a label's return, with no Rexx method run in the loop.
+#[test]
+fn pending_uninits_run_as_a_label_returns() {
+    uninit_rounds("    o = .g~new\n    o~s = copies('x', 300000) || i\n    call tick\n");
+}
+
 /// A stream a builtin opened by name is rooted by its activation's table: a
 /// forced collection runs the `UNINIT`s it readies, and the second `LINEIN`
 /// reads on from the table's stream (`two`), where a stream readied as

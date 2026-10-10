@@ -3053,7 +3053,9 @@ impl Interp {
         // could run against a whole graph. The finalizer is not sent from
         // here: the oracle's collector only marks
         // (`MemoryObject::checkUninit`), and `runUninits` is reached from
-        // `GC('force')` and from the termination sweep.
+        // `GC('force')`, an activation's return (`RexxActivation.cpp:705`,
+        // `NativeActivation.cpp:1361`), an activity's dispatch loop
+        // (`Activity.cpp:249`) and the termination sweep.
         self.uninit_ready.extend(stats.pending_uninit);
         // The rows `rexx-classes` keys by a class go with the class. Done
         // here rather than in a pass of its own: the sweeper already knows

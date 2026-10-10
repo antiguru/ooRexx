@@ -1629,9 +1629,9 @@ impl Interp {
     }
 
     /// The `UNINIT`s a collection readied, run on an activity whose dispatch
-    /// has ended (`Activity::runThread`, `concurrency/Activity.cpp:249`). The
-    /// first refusal they meet is answered; the later ones are kept for the
-    /// program's end, in order.
+    /// has ended (`Activity::runThread`, `concurrency/Activity.cpp:249`) or
+    /// whose activation returns. The first refusal they meet is answered; the
+    /// later ones are kept for the program's end, in order.
     pub(crate) fn run_ending_uninits(&mut self) -> Result<(), Failure> {
         let mut refused = self.run_ready_uninits().into_iter();
         let Some(first) = refused.next() else {

@@ -2906,14 +2906,19 @@ impl Interp {
         ended: Result<crate::run::Ended, Failure>,
     ) -> Result<Option<ObjRef>, Failure> {
         let depth = self.activity.call_tails.len();
-        let sent = self.finish_call(ended).map(crate::run::Ended::value);
+        let mut sent = self.finish_call(ended).map(crate::run::Ended::value);
         if self
             .activity
             .native_tails
             .last()
             .is_some_and(|tail| tail.depth == depth)
         {
-            return self.finish_native_tails(depth, sent);
+            sent = self.finish_native_tails(depth, sent);
+        }
+        if !self.uninit_ready.is_empty()
+            && let Ok(value) = sent
+        {
+            self.run_uninits_at_return(value)?;
         }
         sent
     }
@@ -3486,6 +3491,17 @@ impl Interp {
         self.run_uninit_batch(ready, &mut loud);
         self.processing_uninits = false;
         loud
+    }
+
+    /// [`Interp::run_ending_uninits`] for an activation returning `value`,
+    /// which stays rooted while they run.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn run_uninits_at_return(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
+        let parked = self.roots.activity_mut().park(value.into_iter().collect());
+        let drained = self.run_ending_uninits();
+        self.roots.activity_mut().release(parked);
+        drained
     }
 
     /// The termination sweep: every live object still carrying the flag

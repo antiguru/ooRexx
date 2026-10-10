@@ -1103,6 +1103,17 @@ impl Interp {
             LentStack::Emptied => self.activity.value_buffer.clear(),
             LentStack::Lent(values) => self.activity.value_buffer = values,
         }
+        // A returning activation runs the `UNINIT`s a collection readied
+        // (`memoryObject.checkUninitQueue()`, `RexxActivation.cpp:705`). A
+        // method's run in `Interp::finish_send`, once the primitive methods
+        // waiting on it have finished, since an `UNINIT`'s own send would
+        // otherwise find their tails at its depth.
+        if !self.uninit_ready.is_empty()
+            && kind != TailKind::Method
+            && let Ok(Ended::Returned(value) | Ended::Exited(value)) = &ended
+        {
+            self.run_uninits_at_return(*value)?;
+        }
 
         // **`EXIT` inside a `::ROUTINE` ends the routine, not the program**,
         // where `EXIT` inside a `CALL`ed label ends the program. The C++'s
