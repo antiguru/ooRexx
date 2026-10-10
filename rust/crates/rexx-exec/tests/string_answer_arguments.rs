@@ -10,11 +10,11 @@
 /*----------------------------------------------------------------------------*/
 
 //! A builtin argument whose user `STRING` method answers an object with no
-//! string value (Deviation 30). Each `call` case runs `say <call>` with `o`
-//! an instance whose `STRING` answers the `string=` object, and records the
-//! oracle's rc, stdout and stderr. `program` runs its input as the whole
-//! program. `refuses` cases are target positions, where the oracle reads
-//! `.nil` through the string layout and this crate refuses.
+//! string value (Deviation 30). Each `call` and `refuses` case runs
+//! `say <call>` with `o` an instance whose `STRING` answers the `string=`
+//! object; `program` runs its input as the whole program. A `call` or
+//! `program` case records the oracle's rc, stdout and stderr. A `refuses`
+//! case records this crate's refusal, and its comment the oracle's answer.
 
 use rexx_exec::Invocation;
 

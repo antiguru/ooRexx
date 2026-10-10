@@ -287,9 +287,8 @@ impl Interp {
     pub(crate) fn required_string_arguments(
         &mut self,
         name: &'static [u8],
-        nil: &[(usize, crate::builtin::NilArgument)],
         args: &[Option<ObjRef>],
-    ) -> Result<Option<(Vec<Option<ObjRef>>, bool)>, Failure> {
+    ) -> Result<Option<Vec<Option<ObjRef>>>, Failure> {
         if !self.reqstr_armed {
             return Ok(None);
         }
@@ -312,26 +311,16 @@ impl Interp {
         }) {
             return Ok(None);
         }
-        let mut substituted = false;
         let mut converted = Vec::with_capacity(args.len());
         for (index, argument) in args.iter().enumerate() {
             let position = index + 1;
             converted.push(match argument {
                 None => None,
                 Some(value) if raw.contains(&position) => Some(*value),
-                Some(value) => {
-                    // The positions are asked only where a `STRING` method
-                    // ran, so a string argument costs no scan of them.
-                    let read = self
-                        .required_string_or(*value, || nil.iter().any(|(at, _)| *at == position))?;
-                    // Only a substituted answer reads as `.nil`: a `.nil`
-                    // the program passed reads as its own string value.
-                    substituted |= read == ObjRef::NIL && *value != ObjRef::NIL;
-                    Some(read)
-                }
+                Some(value) => Some(self.required_string_value(*value)?),
             });
         }
-        Ok(Some((converted, substituted)))
+        Ok(Some(converted))
     }
 
     /// The protocol's conversion limbs, answered without building anything --

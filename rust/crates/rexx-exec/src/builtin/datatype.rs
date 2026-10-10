@@ -15,7 +15,7 @@
 use rexx_core::ObjRef;
 use rexx_num::Number;
 
-use super::{Args, arg, method_string_arguments, optional_string, required_string};
+use super::{Args, arg, optional_string, required_string};
 use crate::error::{Failure, Raised};
 use crate::{Interp, Novalue};
 
@@ -206,7 +206,6 @@ pub(crate) fn datatype(
     let Some(option) = optional_string(interp, args, 2) else {
         return Ok(interp.text(datatype_kind(&text)));
     };
-    method_string_arguments(args)?;
     // An empty option's first byte is `0x00`, which matches none of the
     // thirteen letters below and falls straight to the `None` arm -- the same
     // path a bad letter takes, and the byte `error.rs`'s `displayable`

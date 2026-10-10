@@ -1934,15 +1934,18 @@ DEVIATIONS -- permanent, chosen
      both naming the original object, and a native method's numeric and
      stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
      (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
-     string_answer_nil_native.rex. A builtin argument position that is not
-     the string the builtin operates on answers the oracle's error at the
-     program's own line: 88.909 numbered as the `String` method the builtin
-     forwards to numbers it, 40.12 and 93.904 naming the original object,
-     and 40.19, 40.23, 40.28 and 40.904 naming "The NIL object"
-     (`crate::builtin::nil_argument_positions`, one row per position the
-     Phase 6.1 final review measured;
-     crates/rexx-exec/tests/string_answer_arguments/positions). The target
-     position, and any builtin position that table does not list, refuses.
+     string_answer_nil_native.rex. Every builtin argument position refuses.
+     At a position that is not the string the builtin operates on the
+     oracle's answer is defined, at the program's own line: 88.909 numbered
+     as the `String` method the builtin forwards to numbers it, 40.12 and
+     93.904 naming the original object, and 40.19, 40.23, 40.28 and 40.904
+     naming "The NIL object" (the Phase 6.1 final review's finding 1 table,
+     .superpowers/sdd/2026-10-07-phase-6-1/final-review.md).
+     crates/rexx-exec/tests/string_answer_arguments/positions holds one
+     refusal per position with the oracle's answer beside it. Raising those
+     errors in the oracle's order cost builtin calls under an armed latch
+     2.8% to 32.5% of bench-programs/strings.rex's instructions across the
+     designs the Phase 6.1 final fix measured.
      Where it
      reads `.nil` through the string layout, the answer is garbage or a
      crash. Measured by Phase 6.1's scout E (probes i7b, i7e, i7f, i7h),

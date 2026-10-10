@@ -27,8 +27,8 @@
 use rexx_core::ObjRef;
 
 use super::{
-    Args, arg, buffer, fresh_buffer, length_of, method_string_arguments, optional_string, pad_byte,
-    required_string, whole_number,
+    Args, arg, buffer, fresh_buffer, length_of, optional_string, pad_byte, required_string,
+    whole_number,
 };
 use crate::Interp;
 use crate::error::{Failure, Notation, Raised};
@@ -161,7 +161,6 @@ fn bit_operation(
     // the pad path and the default pad leaves it alone.
     let second = optional_string(interp, args, 2).unwrap_or_default();
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(default_pad);
-    method_string_arguments(args)?;
     let out = bit_operation_over(interp, &first, &second, pad, operation)?;
     Ok(interp.text_built(out))
 }

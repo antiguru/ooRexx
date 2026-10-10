@@ -71,14 +71,6 @@ struct Builtin {
     max: Option<usize>,
     /// The code, taking this row's own [`name`] as its second argument.
     run: Run,
-    /// The 1-based argument positions where a user `STRING` answer with no
-    /// string value reads as `.nil` (Deviation 30), each with what reads it.
-    /// A position not listed refuses such an answer. Every listed position
-    /// is one the oracle answers with an error at the program's own line,
-    /// measured twice (`tests/string_answer_arguments`). The string a
-    /// builtin operates on is never listed: the oracle reads `.nil` there
-    /// through the string layout.
-    nil: &'static [(usize, NilArgument)],
 }
 
 /// Every builtin this crate runs, with the arity `check_arity` enforces
@@ -89,14 +81,12 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: string::abbrev,
-        nil: &[(2, NilArgument::MethodString(1)), (3, NilArgument::Checked)],
     },
     Builtin {
         name: b"ABS",
         min: 1,
         max: Some(1),
         run: numeric::abs,
-        nil: &[],
     },
     Builtin {
         // Zero arguments, not one: `check_args` with a maximum of 0, so
@@ -106,7 +96,6 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(0),
         run: state::address,
-        nil: &[],
     },
     Builtin {
         // Measured: `endlocal()` with nothing outstanding answers 0, and
@@ -115,28 +104,24 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(0),
         run: platform::endlocal,
-        nil: &[],
     },
     Builtin {
         name: b"QUALIFY",
         min: 1,
         max: Some(1),
         run: platform::qualify,
-        nil: &[],
     },
     Builtin {
         name: b"SETLOCAL",
         min: 0,
         max: Some(0),
         run: platform::setlocal,
-        nil: &[],
     },
     Builtin {
         name: b"USERID",
         min: 0,
         max: Some(0),
         run: platform::userid,
-        nil: &[],
     },
     // **`min: 0` for the six readers, measured.** An omitted name is the
     // default input or output rather than an error: `chars()` and `lines()`
@@ -147,42 +132,36 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(3),
         run: stream::charin,
-        nil: &[],
     },
     Builtin {
         name: b"CHAROUT",
         min: 0,
         max: Some(3),
         run: stream::charout,
-        nil: &[],
     },
     Builtin {
         name: b"CHARS",
         min: 0,
         max: Some(1),
         run: stream::chars,
-        nil: &[],
     },
     Builtin {
         name: b"LINEIN",
         min: 0,
         max: Some(3),
         run: stream::linein,
-        nil: &[],
     },
     Builtin {
         name: b"LINEOUT",
         min: 0,
         max: Some(3),
         run: stream::lineout,
-        nil: &[],
     },
     Builtin {
         name: b"LINES",
         min: 0,
         max: Some(2),
         run: stream::lines,
-        nil: &[],
     },
     // The arity depends on the operation, so the row is the outer bound
     // and the body applies the rest: `S`/`D` refuse a third argument
@@ -192,21 +171,18 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(3),
         run: stream::stream,
-        nil: &[],
     },
     Builtin {
         name: b"ARG",
         min: 0,
         max: Some(2),
         run: state::arg,
-        nil: &[(1, NilArgument::Checked)],
     },
     Builtin {
         name: b"B2X",
         min: 1,
         max: Some(1),
         run: convert::b2x,
-        nil: &[],
     },
     Builtin {
         // A minimum of 1, not 2: the second string is optional and the pad
@@ -216,35 +192,30 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(3),
         run: convert::bitand,
-        nil: &[(2, NilArgument::MethodString(1))],
     },
     Builtin {
         name: b"BITOR",
         min: 1,
         max: Some(3),
         run: convert::bitor,
-        nil: &[],
     },
     Builtin {
         name: b"BITXOR",
         min: 1,
         max: Some(3),
         run: convert::bitxor,
-        nil: &[],
     },
     Builtin {
         name: b"C2D",
         min: 1,
         max: Some(2),
         run: convert::c2d,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"C2X",
         min: 1,
         max: Some(1),
         run: convert::c2x,
-        nil: &[],
     },
     Builtin {
         // Two rows, one implementation: see `Builtin::run` for why the name
@@ -254,32 +225,24 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: string::center,
-        nil: &[(3, NilArgument::Checked)],
     },
     Builtin {
         name: b"CENTRE",
         min: 2,
         max: Some(3),
         run: string::center,
-        nil: &[],
     },
     Builtin {
         name: b"CHANGESTR",
         min: 3,
         max: Some(4),
         run: string::changestr,
-        nil: &[
-            (1, NilArgument::MethodString(1)),
-            (3, NilArgument::MethodString(2)),
-            (4, NilArgument::Checked),
-        ],
     },
     Builtin {
         name: b"COMPARE",
         min: 2,
         max: Some(3),
         run: string::compare,
-        nil: &[(2, NilArgument::MethodString(1)), (3, NilArgument::Checked)],
     },
     Builtin {
         // A minimum of 0 and a maximum of 1: the bare form is
@@ -289,21 +252,18 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(1),
         run: state::condition,
-        nil: &[(1, NilArgument::Checked)],
     },
     Builtin {
         name: b"COPIES",
         min: 2,
         max: Some(2),
         run: string::copies,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"COUNTSTR",
         min: 2,
         max: Some(2),
         run: string::countstr,
-        nil: &[(1, NilArgument::MethodString(1))],
     },
     Builtin {
         // A minimum of 1, not 2: the second argument is the type option,
@@ -314,7 +274,6 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(2),
         run: datatype::datatype,
-        nil: &[(2, NilArgument::MethodString(1))],
     },
     Builtin {
         // A minimum of 0 and a maximum of 5: `date()` and `date('S')` both
@@ -330,7 +289,6 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(5),
         run: datetime::date,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         // A minimum of 1, not 2: `DELSTR`'s start position is optional and
@@ -340,28 +298,24 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(3),
         run: string::delstr,
-        nil: &[],
     },
     Builtin {
         name: b"D2C",
         min: 1,
         max: Some(2),
         run: convert::d2c,
-        nil: &[],
     },
     Builtin {
         name: b"D2X",
         min: 1,
         max: Some(2),
         run: convert::d2x,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"DIGITS",
         min: 0,
         max: Some(0),
         run: state::digits,
-        nil: &[],
     },
     Builtin {
         // A minimum of 2 where `DELSTR`'s is 1: `DELWORD`'s start word is
@@ -371,35 +325,30 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: word::delword,
-        nil: &[],
     },
     Builtin {
         name: b"ERRORTEXT",
         min: 1,
         max: Some(1),
         run: state::errortext,
-        nil: &[(1, NilArgument::Checked)],
     },
     Builtin {
         name: b"FORM",
         min: 0,
         max: Some(0),
         run: state::form,
-        nil: &[],
     },
     Builtin {
         name: b"FORMAT",
         min: 1,
         max: Some(5),
         run: numeric::format,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"FUZZ",
         min: 0,
         max: Some(0),
         run: state::fuzz,
-        nil: &[],
     },
     Builtin {
         // A maximum of 1 where its four neighbours here take none: the
@@ -409,28 +358,24 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(1),
         run: state::gc,
-        nil: &[],
     },
     Builtin {
         name: b"INSERT",
         min: 2,
         max: Some(5),
         run: string::insert,
-        nil: &[(1, NilArgument::MethodString(1)), (3, NilArgument::Checked)],
     },
     Builtin {
         name: b"LASTPOS",
         min: 2,
         max: Some(4),
         run: string::lastpos,
-        nil: &[(1, NilArgument::MethodString(1))],
     },
     Builtin {
         name: b"LEFT",
         min: 2,
         max: Some(3),
         run: string::left,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         // `say length()` is 40.3 with a minimum of 1 and `say
@@ -440,14 +385,12 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(1),
         run: string::length,
-        nil: &[],
     },
     Builtin {
         name: b"LOWER",
         min: 1,
         max: Some(3),
         run: string::lower,
-        nil: &[],
     },
     Builtin {
         // `max: None` for the same reason `XRANGE`'s row gives -- `MAX_Max`
@@ -457,39 +400,30 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: None,
         run: numeric::max,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"MIN",
         min: 1,
         max: None,
         run: numeric::min,
-        nil: &[],
     },
     Builtin {
         name: b"OVERLAY",
         min: 2,
         max: Some(5),
         run: string::overlay,
-        nil: &[(1, NilArgument::MethodString(1)), (3, NilArgument::Checked)],
     },
     Builtin {
         name: b"POS",
         min: 2,
         max: Some(4),
         run: string::pos,
-        nil: &[
-            (1, NilArgument::MethodString(1)),
-            (3, NilArgument::Checked),
-            (4, NilArgument::Checked),
-        ],
     },
     Builtin {
         name: b"QUEUED",
         min: 0,
         max: Some(0),
         run: state::queued,
-        nil: &[],
     },
     Builtin {
         // A minimum of 0: `random()` is a call with no arguments at all and
@@ -498,77 +432,60 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(3),
         run: numeric::random,
-        nil: &[
-            (1, NilArgument::Checked),
-            (2, NilArgument::Checked),
-            (3, NilArgument::Checked),
-        ],
     },
     Builtin {
         name: b"REVERSE",
         min: 1,
         max: Some(1),
         run: string::reverse,
-        nil: &[],
     },
     Builtin {
         name: b"RIGHT",
         min: 2,
         max: Some(3),
         run: string::right,
-        nil: &[],
     },
     Builtin {
         name: b"SIGN",
         min: 1,
         max: Some(1),
         run: numeric::sign,
-        nil: &[],
     },
     Builtin {
         name: b"SOURCELINE",
         min: 0,
         max: Some(1),
         run: state::sourceline,
-        nil: &[(1, NilArgument::Checked)],
     },
     Builtin {
         name: b"SPACE",
         min: 1,
         max: Some(3),
         run: string::space,
-        nil: &[(2, NilArgument::Checked), (3, NilArgument::Checked)],
     },
     Builtin {
         name: b"STRIP",
         min: 1,
         max: Some(3),
         run: string::strip,
-        nil: &[
-            (2, NilArgument::MethodString(1)),
-            (3, NilArgument::MethodString(2)),
-        ],
     },
     Builtin {
         name: b"SUBSTR",
         min: 2,
         max: Some(4),
         run: string::substr,
-        nil: &[(2, NilArgument::Checked), (4, NilArgument::Checked)],
     },
     Builtin {
         name: b"SUBWORD",
         min: 2,
         max: Some(3),
         run: word::subword,
-        nil: &[],
     },
     Builtin {
         name: b"SYMBOL",
         min: 1,
         max: Some(1),
         run: datatype::symbol,
-        nil: &[],
     },
     Builtin {
         // A minimum of 0 and a maximum of 3: `TIME_Min`/`TIME_Max`
@@ -580,7 +497,6 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(3),
         run: datetime::time,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         // A maximum of 1, and the argument *sets* the mode while the answer
@@ -590,7 +506,6 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: Some(1),
         run: state::trace,
-        nil: &[],
     },
     Builtin {
         // Six, not four: `start` and `range` are ooRexx's own extension to
@@ -600,21 +515,18 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(6),
         run: string::translate,
-        nil: &[(2, NilArgument::MethodString(1)), (4, NilArgument::Checked)],
     },
     Builtin {
         name: b"TRUNC",
         min: 1,
         max: Some(2),
         run: numeric::trunc,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"UPPER",
         min: 1,
         max: Some(3),
         run: string::upper,
-        nil: &[],
     },
     Builtin {
         // `VALUE_Min`/`VALUE_Max`, `BuiltinFunctions.cpp:1812`-`1813`: the
@@ -624,45 +536,36 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(3),
         run: datatype::value,
-        nil: &[],
     },
     Builtin {
         name: b"VAR",
         min: 1,
         max: Some(1),
         run: datatype::var,
-        nil: &[],
     },
     Builtin {
         name: b"VERIFY",
         min: 2,
         max: Some(5),
         run: string::verify,
-        nil: &[
-            (2, NilArgument::MethodString(1)),
-            (3, NilArgument::MethodString(2)),
-        ],
     },
     Builtin {
         name: b"WORD",
         min: 2,
         max: Some(2),
         run: word::word,
-        nil: &[],
     },
     Builtin {
         name: b"WORDINDEX",
         min: 2,
         max: Some(2),
         run: word::word_index,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         name: b"WORDLENGTH",
         min: 2,
         max: Some(2),
         run: word::word_length,
-        nil: &[(2, NilArgument::Checked)],
     },
     Builtin {
         // The search phrase is argument 1 and the string searched is argument
@@ -674,35 +577,30 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: word::word_pos,
-        nil: &[(1, NilArgument::MethodString(1))],
     },
     Builtin {
         name: b"WORDS",
         min: 1,
         max: Some(1),
         run: word::words,
-        nil: &[],
     },
     Builtin {
         name: b"X2B",
         min: 1,
         max: Some(1),
         run: convert::x2b,
-        nil: &[],
     },
     Builtin {
         name: b"X2C",
         min: 1,
         max: Some(1),
         run: convert::x2c,
-        nil: &[],
     },
     Builtin {
         name: b"X2D",
         min: 1,
         max: Some(2),
         run: convert::x2d,
-        nil: &[],
     },
     Builtin {
         // `max: None` because `XRANGE_Max` is `argcount` itself
@@ -714,7 +612,6 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 0,
         max: None,
         run: convert::xrange,
-        nil: &[(1, NilArgument::Checked)],
     },
 ];
 
@@ -825,15 +722,13 @@ pub(crate) fn run(
     // `Interp::required_string_arguments` put it. The row's own name goes
     // with it, because which positions are exempt is a fact about the
     // builtin.
-    let answer = match interp.required_string_arguments(builtin.name, builtin.nil, args)? {
-        Some((converted, substituted)) => (builtin.run)(
+    let answer = match interp.required_string_arguments(builtin.name, args)? {
+        Some(converted) => (builtin.run)(
             interp,
             builtin.name,
             Args {
                 values: &converted,
                 objects: args,
-                nil: builtin.nil,
-                substituted,
             },
         ),
         None => (builtin.run)(
@@ -842,8 +737,6 @@ pub(crate) fn run(
             Args {
                 values: args,
                 objects: args,
-                nil: builtin.nil,
-                substituted: false,
             },
         ),
     };
@@ -864,62 +757,6 @@ pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
 /// second builtin joining it is one row rather than a second branch.
 static RAW_ARGUMENT_POSITIONS: &[(&[u8], &[usize])] = &[(b"VALUE", &[2])];
 
-/// What reads a `.nil` that a user `STRING` method's answer with no string
-/// value converted to, at a position a row's `nil` lists.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) enum NilArgument {
-    /// The builtin's own argument check, which raises its 40.x or 93.x.
-    Checked,
-    /// The `String` method the builtin forwards to, which raises 88.909
-    /// naming this position of its own.
-    MethodString(usize),
-}
-
-/// The 88.909 the `String` method the builtin forwards to raises for the
-/// first [`NilArgument::MethodString`] position holding a substituted
-/// `.nil`. A builtin calls this after its own argument checks and before the
-/// method's others, which is where the oracle's method reads its string
-/// arguments.
-#[inline]
-fn method_string_arguments(args: Args<'_>) -> Result<(), Failure> {
-    if !args.substituted {
-        return Ok(());
-    }
-    substituted_method_string_arguments(args)
-}
-
-/// [`method_string_arguments`] once the protocol substituted a `.nil`.
-#[cold]
-#[inline(never)]
-fn substituted_method_string_arguments(args: Args<'_>) -> Result<(), Failure> {
-    args.nil
-        .iter()
-        .try_for_each(|(position, _)| substituted_method_string_argument(args, *position))
-}
-
-/// [`method_string_arguments`] for the one builtin `position`, for a method
-/// that checks something else between its string arguments.
-#[inline]
-fn method_string_argument(args: Args<'_>, position: usize) -> Result<(), Failure> {
-    if !args.substituted {
-        return Ok(());
-    }
-    substituted_method_string_argument(args, position)
-}
-
-/// [`method_string_argument`] once the protocol substituted a `.nil`.
-#[cold]
-#[inline(never)]
-fn substituted_method_string_argument(args: Args<'_>, position: usize) -> Result<(), Failure> {
-    let reading = args.nil.iter().find(|(at, _)| *at == position);
-    if let Some((_, NilArgument::MethodString(method_position))) = reading
-        && args.no_string_value(position)
-    {
-        return Err(Raised::argument_needs_a_string_value(*method_position).into());
-    }
-    Ok(())
-}
-
 /// One builtin call's arguments, in each of the readings a builtin needs of
 /// them.
 #[derive(Copy, Clone)]
@@ -929,11 +766,6 @@ pub(crate) struct Args<'a> {
     values: &'a [Option<ObjRef>],
     /// The objects the argument expressions produced.
     objects: &'a [Option<ObjRef>],
-    /// The row's [`Builtin::nil`] positions.
-    nil: &'static [(usize, NilArgument)],
-    /// Whether the protocol substituted `.nil` for a `STRING` answer with no
-    /// string value at one of those positions.
-    substituted: bool,
 }
 
 impl<'a> Args<'a> {
@@ -947,14 +779,6 @@ impl<'a> Args<'a> {
     /// message names.
     fn object(self, position: usize) -> Option<ObjRef> {
         self.objects.get(position - 1).copied().flatten()
-    }
-
-    /// Whether the protocol converted the object at 1-based `position` to
-    /// `.nil`, which only a user `STRING` answer with no string value does.
-    fn no_string_value(self, position: usize) -> bool {
-        // A `.nil` the program passed itself converts to its own string
-        // value, or stays `.nil` in both readings when nothing ran.
-        arg(self, position) == Some(ObjRef::NIL) && self.object(position) != Some(ObjRef::NIL)
     }
 
     /// Every position from 1-based `from` onwards, converted -- what a
