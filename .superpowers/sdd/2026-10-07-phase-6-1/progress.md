@@ -295,3 +295,4 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Parse round 2 fix round 1: 6538a2afc (held_bytes contract, debug assert compares two computations, Text trace arm cross-reference, evidence committed in parse-round2-evidence/). Controller read the diff: comments and debug-only lines, release code unchanged. Task 12 report's two parse-overrun lines restated as resolved.
 - Phase 6.1: complete. All section 8 criteria hold (criterion 7: parse +0.4824% at 23d78ec1b). Last gated code 23d78ec1b (G1-G9 green); final review approved. Not pushed.
 - Moritz 2026-10-10: emptyloop/pingguard wall clock and the two upstream candidates are recorded, not decided. Queued 2026-10-10-emptyloop-wall-clock.md; the upstream files (2026-10-10-upstream-do-to-identity.md, 2026-10-10-upstream-zero-pass-do-reexecute.md) stay queued, unfiled.
+- Moritz 2026-10-10: 2026-10-10-oracle-judged-seeded-gate.md closed as not wanted.
