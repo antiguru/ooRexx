@@ -1927,9 +1927,10 @@ DEVIATIONS -- permanent, chosen
      NIL object"), a stem tail, arithmetic (41.1 and 26.8 naming the
      original object), NUMERIC DIGITS and FUZZ and a DO count or FOR (26.x
      naming the original object), a host command and INTERPRET (both run
-     "The NIL object"), a comparison (`.nil` is equal to no string, and the
-     ordering operators compare "The NIL object"), PARSE VALUE and ARG,
-     OPTIONS, NUMERIC FORM VALUE (25.11) and a semaphore timeout (88.902),
+     "The NIL object"), an equality operator (`=`, `==`, `\=`, `\==`: the
+     oracle's `primitiveIsEqual` reads `.nil` through the string layout too,
+     and its answer over varied inputs is that `.nil` equals no string, which
+     the crate pins), NUMERIC FORM VALUE (25.11) and a semaphore timeout (88.902),
      both naming the original object, and a native method's numeric and
      stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
      (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
@@ -1953,10 +1954,17 @@ DEVIATIONS -- permanent, chosen
        `procedure expose (v)`         SIGSEGV, rc 139
        `call (o)`, `address (o) cmd`  rc 251, Error 5
        `... with output stream (o)`   rc 158, 98.920 on the file ""
+       `"" << o`, `"" < o`, `<=`, ...  0 or 1 by no rule a string could give
+                                      (`"" < o` 0, `"" << o` 1)
+       PARSE VALUE, PARSE ARG         rc 251, Error 5 for a splitting
+                                      template or UPPER; a one-variable
+                                      template assigns the `.nil` object
+       OPTIONS o                      nothing observable
        `queue o`, `lineout`, `charout` rc 168, 88.909 through REXX frames
 
      This crate refuses each, rc 120, with `a STRING method answering an
-     object with no string value is not implemented`, after a trapped
+     object with no string value is not implemented` (a one-variable PARSE
+     template too, since assigning the `.nil` object is not built), after a trapped
      NOSTRING (which the oracle raises first, with "The NIL object"); the
      88.909 consumers are refused too, since this crate builds no frames for
      the REXX package's methods. The oracle's other answers are reads of
