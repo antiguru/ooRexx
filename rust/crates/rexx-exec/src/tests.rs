@@ -1240,6 +1240,51 @@ fn pending_uninits_run_as_a_label_returns() {
     uninit_rounds("    o = .g~new\n    o~s = copies('x', 300000) || i\n    call tick\n");
 }
 
+/// [`uninit_rounds`] with the rounds inline, so that `stmt`, the loop body's
+/// last clause, is the only return in the loop. The result is stdout's last
+/// line.
+fn inline_uninit_rounds(stmt: &str) {
+    let round =
+        format!("do i = 1 to 300\n  o = .g~new\n  o~s = copies('x', 300000) || i\n  {stmt}\nend\n");
+    let program = format!(
+        ".local~n = 0\n{round}mid = .local~n\n{round}\
+         say (mid > 0) (.local~n > mid)\nexit\n\
+         ::class g\n::attribute s\n::method uninit\n  .local~n = .local~n + 1\n"
+    );
+    let outcome = run_program(TEST_PATH, program.into_bytes(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert!(
+        String::from_utf8_lossy(&outcome.stdout).lines().last() == Some("1 1"),
+        "stdout: {:?}",
+        String::from_utf8_lossy(&outcome.stdout)
+    );
+    assert!(
+        outcome.peak_body_bytes <= 2 * crate::COLLECT_BYTES_FLOOR,
+        "{} body bytes held at once",
+        outcome.peak_body_bytes
+    );
+}
+
+/// Pending `UNINIT`s run as a native method returns
+/// (`NativeActivation.cpp:1361`): here `LINEOUT`'s, a `Stream` method.
+#[test]
+fn pending_uninits_run_as_a_native_method_returns() {
+    inline_uninit_rounds("call lineout '/dev/null', 'x'");
+}
+
+/// The same at `SAY`, whose direct write stands in for `.STDOUT`'s
+/// `LINEOUT`.
+#[test]
+fn pending_uninits_run_as_say_writes() {
+    inline_uninit_rounds("say ''");
+}
+
+/// The same as an `INTERPRET` ends (`RexxActivation.cpp:676-705`).
+#[test]
+fn pending_uninits_run_as_an_interpret_ends() {
+    inline_uninit_rounds("interpret 'nop'");
+}
+
 /// A stream a builtin opened by name is rooted by its activation's table: a
 /// forced collection runs the `UNINIT`s it readies, and the second `LINEIN`
 /// reads on from the table's stream (`two`), where a stream readied as

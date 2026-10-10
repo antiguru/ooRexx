@@ -2663,6 +2663,7 @@ impl Interp {
         args: &[Option<ObjRef>],
         reserved: bool,
     ) -> Result<Started<Option<ObjRef>>, Failure> {
+        let native = !matches!(invocable, Invocable::Generated(_));
         let outcome = match invocable {
             // **The refusal is the ordinary outcome here**, so unlike the
             // `Native` arm of `begin_invoke` this one does not blame the
@@ -2736,6 +2737,14 @@ impl Interp {
                 }
             },
         };
+        // A native method's return runs the `UNINIT`s a collection readied
+        // (`NativeActivation::run`, `NativeActivation.cpp:1361`).
+        if native
+            && !self.uninit_ready.is_empty()
+            && let Ok(value) = outcome
+        {
+            self.run_uninits_at_return(value)?;
+        }
         outcome.map(Started::Ran)
     }
 

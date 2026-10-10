@@ -120,7 +120,22 @@ impl Interp {
                 self.seal_site_level();
                 Err(failure)
             }
-            other => Ok(other),
+            other => {
+                // An `INTERPRET` activation leaves through the `RETURNED` block
+                // that runs the `UNINIT`s a collection readied
+                // (`RexxActivation.cpp:676-705`).
+                if !self.uninit_ready.is_empty() {
+                    let returned = match &other {
+                        Flow::Next => Some(None),
+                        Flow::Return(value) | Flow::Exit(value) => Some(*value),
+                        _ => None,
+                    };
+                    if let Some(value) = returned {
+                        self.run_uninits_at_return(value)?;
+                    }
+                }
+                Ok(other)
+            }
         }
     }
 
