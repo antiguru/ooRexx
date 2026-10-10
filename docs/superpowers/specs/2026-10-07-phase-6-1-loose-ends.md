@@ -48,12 +48,13 @@ oldest entry (`:1494-1500`).
 | `current_case_text` | none | none | INTERPRET: shared; a typed debug line: saved and restored around it (the oracle runs it on its own block stack) | moves; held inline, in the space `condition` leaves |
 | `debug_pause` | false | false | INTERPRET: shared, false; a typed debug line: true for its duration | n/a |
 
-`size_of::<Activation>() == 472` holds (`activation.rs:502`, since `d27a9d441`). Adding an `i64` anchor gives 520 and an
+When this spec was written, `size_of::<Activation>() == 512` held. Adding an `i64` anchor gives 520 and an
 `i64` plus a cold box 528 (plan review I1, a `cargo check` with the probe fields). So T1 shrinks what
 it adds: `cached_clock: Option<i64>` becomes an `i64` with a sentinel (saves 8), the flags become bits
 in `ActivationFlags`, the propagated condition reuses the existing `condition: Option<TrappedCondition>`
 field where T1 shows them equivalent, and the seed and SETLOCAL list go in one cold box allocated on
-first use. Ruling R4 keeps 512: the existing `condition` field joins the cold box.
+first use. Ruling R4 keeps 512: the existing `condition` field joins the cold box. Task 1 brought the
+size to 480 (`66b0f6854`) and Task 4a to 472 (`d27a9d441`), which `activation.rs:502` asserts.
 
 Witnesses: each scout B probe, rewritten as a predicate where it prints a time (as `c2` is), becomes a
 corpus program where it is single-activity, and a crate test where it is concurrent (`reply`, `sl2`).
@@ -211,7 +212,7 @@ Moritz, 2026-10-07, on the open items the spec reviews left (R5-R8 after the fin
 | R1 | D7's scope | Sim and invariants; oracle differences reported, never gating. "Treat it as a tool for as long as we're building the implementation, but eventually we'll be stand alone ideally." |
 | R2 | b14 cannot be rehomed with a true reason (D4) | Into 6.1 with subclass `NEW` on String, Stem, Method, Routine and Message (and VariableReference's 93.967), if a scout sizes `NEW` at M or less; else Phase 9's row is amended to name these refusals as its work. |
 | R3 | Parse-error message inserts | Not in 6.1. The 2026-07-28 decision stands; 6.1 lands the traceback line for all three paths. A later reversal goes through a raising API that cannot be called without the inserts its message needs. |
-| R4 | `size_of::<Activation>() == 512` | Kept. The existing `condition` field, the seed and the SETLOCAL list go in one cold box allocated on first use, measured on the T1 programs. |
+| R4 | `size_of::<Activation>() == 512` | Kept, and since lowered to 472 (`d27a9d441`). The existing `condition` field, the seed and the SETLOCAL list go in one cold box allocated on first use, measured on the T1 programs. |
 | R5 | PCT (the row's wording) | Built as an opt-in policy `pct:d,k=N`, in the gate mix, judged by invariants only; random bounded preemption stays the main policy. |
 | R6 | A program's own failed check under R1 | Red where no committed oracle outcome has it; then decided case by case. |
 | R7 | D6 with no branch-free design | Pay the ~0.5%: correct debug pauses are worth it. A branch-free design is still tried first. |
