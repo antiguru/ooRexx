@@ -1256,3 +1256,22 @@ it was written for. Measured 2026-10-07 by Phase 6.1's scout A (probes `b2_run_*
 refuses each with `Loud::receiver_class` (`a message send to a value that is not a list is not
 implemented`, and the like); the shapes that answer garbage instead of crashing are Deviation 28
 in `docs/superpowers/plans/phase-4-exclusions.txt`. No upstream ticket.
+
+A variable reference list, `(v)` in `DROP`, `EXPOSE` or `PROCEDURE EXPOSE`, whose variable holds an
+object with a `STRING` method that answers a non-string object:
+
+    o = .sn~new
+    v = o; call r
+    say 'end'
+    exit
+    r: procedure expose (v)
+      return
+    ::class sn
+    ::method string
+      return .directory~new
+
+SIGSEGV, rc 139. `expose v (v)` inside a method and `drop (v)` crash the same way. The oracle's
+`primitiveMakeString` turns the answer into `.nil`, and the list is then read through the string
+layout. This was measured 2026-10-10 by Phase 6.1's Task 11a review and fix round 1. The probes are
+`b08_drop`, `f1c/c11_expose` and `f1c/c05_procexpose`, and were run 2 times on the oracle. This crate
+refuses each with the R11 loud refusal (Deviation 30). No upstream ticket.
