@@ -258,7 +258,7 @@ unattributed beyond the loop's own cycles, as at Task 2.
 
 ## Concerns
 
-* parse over budget (above); criterion 7 is not met.
+* parse over budget at this task's close (above). Parse round 2 (`23d78ec1b`, `parse-round2-report.md`) brought it to +0.4824%, so criterion 7 holds.
 * The parse-round commits were first measured on a subset of programs. `23f4b609f` shipped and was
   reverted after the all-program table.
 * `01c7d7a85` left `refusal-sites.tsv` stale, and G4/G6 caught it. Per-commit checks should include
@@ -277,7 +277,7 @@ Pointers are `progress.md` line numbers (`l.N`) at `5c83d9250`, or files.
 
 ### Open questions
 
-* **parse is +1.1979% Ir against base61, over the +0.5% budget** (criterion 7). The residual and its attribution are under "Parse perf round". Reaching the budget needs the freed-body byte accounting at about a third of its cost (a per-object "holds bytes" bit set at every charge and growth site), or acceptance. Roadmap row 6.1 is marked closed with this one exception.
+* Resolved after this report: parse round 2 (`23d78ec1b`) sums survivor bytes in the mark loop instead of reading every freed body, and parse is +0.4824% Ir against base61 (`parse-round2-report.md`, gate record `## Parse round 2`). Criterion 7 holds.
 * emptyloop's wall clock is +4.6% in cycles at -0.63% instructions, and layout pads do not move it (Wall clock). Task 2 accepted it. Re-accept, or open an item.
 * The upstream candidates `2026-10-10-upstream-do-to-identity.md` and `2026-10-10-upstream-zero-pass-do-reexecute.md`: file them on SourceForge or not.
 * Mapping row 40: 10.x and 24.1 messages print `&n` at translation time. Ruling R3 keeps parse-error inserts out of 6.1, so no file was written. Say if you want one.
