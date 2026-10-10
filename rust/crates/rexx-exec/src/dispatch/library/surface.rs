@@ -146,7 +146,7 @@ impl Surface for Interp {
     }
 
     fn request_string(&mut self, object: ObjRef) -> Option<ObjRef> {
-        let string = match self.required_string_value(object) {
+        let string = match self.required_string_or_nil(object) {
             Ok(string) => string,
             Err(failure) => {
                 self.hold_native_condition(failure);

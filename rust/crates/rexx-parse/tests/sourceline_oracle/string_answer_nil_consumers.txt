@@ -1,0 +1,55 @@
+count 54
+/* A STRING answer with no string value is .nil, and the consumers that read
+   .nil as an object answer as the oracle does: SIGNAL VALUE, a stem tail,
+   arithmetic, NUMERIC DIGITS and FUZZ, a DO count and FOR, a host command,
+   INTERPRET, a comparison, PARSE VALUE and ARG, OPTIONS, NUMERIC FORM VALUE
+   and a semaphore timeout. The errors that name the operand name the original
+   object, and .nil is equal to no string. */
+o = .sn~new
+signal on syntax name s1
+signal value o
+s1: say 'signal value' condition('O')~code condition('O')~message
+x.o = 1
+say 'tail' x.o x.['The NIL object']
+signal on syntax name s2
+say 1 + o
+s2: say 'arithmetic' condition('O')~code condition('O')~message
+signal on syntax name s3
+say 2 ** o
+s3: say 'power' condition('O')~code condition('O')~message
+signal on syntax name s4
+numeric digits o
+s4: say 'digits' condition('O')~code condition('O')~message
+signal on syntax name s5
+numeric fuzz o
+s5: say 'fuzz' condition('O')~code condition('O')~message
+signal on syntax name s6
+do o; end
+s6: say 'do count' condition('O')~code condition('O')~message
+signal on syntax name s7
+do i = 1 for o; end
+s7: say 'do for' condition('O')~code condition('O')~message
+signal on syntax name s8
+numeric form value o
+s8: say 'form' condition('O')~code condition('O')~message
+signal on syntax name s9
+say .eventsemaphore~new~wait(o)
+s9: say 'timeout' condition('O')~code condition('O')~message
+options o
+say 'options done'
+say 'equal' ("abc" = o) ("The NIL object" = o) ("The NIL object" == o) ("abc" \= o) ("abc" \== o)
+say 'ordered' ("abc" < o) ("abc" >> o) ("Z" > o)
+parse value o with pv
+say 'parse value' pv
+call pa o
+address system o
+say 'command rc' rc
+interpret o
+say 'interpret rc' rc
+exit
+pa: parse arg pa1
+say 'parse arg' pa1
+return
+::class sn
+::method string
+  return .directory~new

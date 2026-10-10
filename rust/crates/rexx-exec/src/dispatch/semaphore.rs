@@ -194,9 +194,16 @@ fn timeout_seconds(
     let text = pinned!(
         interp,
         crate::pinning::PinKind::native(method),
-        interp.required_string_value(seconds)
+        interp.required_string_or_nil(seconds)
     )?;
-    let bytes = interp.to_text(text).into_owned();
+    // A `STRING` answer with no string value is `.nil` here, and the
+    // refusal names the object: measured, oracle rc 168, 88.902 `found "a
+    // SN"`.
+    let bytes = if text == ObjRef::NIL && seconds != ObjRef::NIL {
+        interp.string_value_text(seconds)
+    } else {
+        interp.to_text(text).into_owned()
+    };
     if let Some(number) = Number::parse_bytes(&bytes) {
         return Ok(super::library::double_of(&number));
     }

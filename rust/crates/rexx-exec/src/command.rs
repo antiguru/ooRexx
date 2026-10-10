@@ -933,7 +933,7 @@ impl Interp {
         let indent = self.activity.clause_state.current_value_indent;
         let value = self.eval(code, expression)?;
         self.roots.activity_mut().push_temp(value);
-        let value = self.required_string_value(value)?;
+        let value = self.required_string_or_nil(value)?;
         let command = self.to_text(value).into_owned();
         // Before the command runs, and observably so: under `TRACE C` a
         // command writing to its own standard error shows this line first.

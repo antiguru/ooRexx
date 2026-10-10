@@ -682,7 +682,7 @@ impl Interp {
             // and is 97.1 rather than a conversion -- `eval.rs`'s
             // `object_operand_tests` is that half.
             HeaderRole::For | HeaderRole::OverFor => {
-                let converted = self.required_string_value(value)?;
+                let converted = self.required_string_or_nil(value)?;
                 values.for_remaining = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
@@ -692,7 +692,7 @@ impl Interp {
                 });
             }
             HeaderRole::Count => {
-                let converted = self.required_string_value(value)?;
+                let converted = self.required_string_or_nil(value)?;
                 values.count = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {

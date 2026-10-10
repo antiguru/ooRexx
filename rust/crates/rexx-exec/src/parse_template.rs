@@ -442,7 +442,7 @@ impl Interp {
             // `ParseTarget::init` the other sources reach, and traces no
             // `>K>` of its own to disagree with.
             Some(value) => {
-                let value = self.required_string_value(value)?;
+                let value = self.required_string_or_nil(value)?;
                 Ok(self.source_text(value, parse))
             }
             None => Ok(SourceText::Owned(self.take_parse_buffer())),
@@ -628,7 +628,7 @@ impl Interp {
                     self.trace_keyword(indent, keyword, &traced);
                     self.give_parse_buffer(traced);
                 }
-                let converted = self.required_string_value(value)?;
+                let converted = self.required_string_or_nil(value)?;
                 self.source_text(converted, parse)
             }
         };

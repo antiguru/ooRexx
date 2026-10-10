@@ -279,3 +279,5 @@ lang/package_new_directive_subclass.rex
 lang/external_directive_subclass.rex
 lang/routine_new_parent_required.rex
 lang/string_answer_nostring_trapped.rex
+lang/string_answer_nil_consumers.rex
+lang/string_answer_nil_native.rex

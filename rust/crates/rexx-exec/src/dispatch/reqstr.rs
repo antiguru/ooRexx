@@ -71,8 +71,9 @@ impl Interp {
     }
 
     /// [`Interp::required_string_value`] for the right operand of `op`: a
-    /// logical operator judges it as [`Interp::required_string_or_nil`]
-    /// does, and every other operator reads its bytes.
+    /// logical operator and a comparison read it as
+    /// [`Interp::required_string_or_nil`] does, and concatenation reads its
+    /// bytes.
     #[inline]
     pub(crate) fn required_string_operand(
         &mut self,
@@ -81,7 +82,10 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         use rexx_parse::Operator;
         self.required_string_or(value, || {
-            matches!(op, Operator::And | Operator::Or | Operator::Xor)
+            !matches!(
+                op,
+                Operator::Concatenate | Operator::Abuttal | Operator::Blank
+            )
         })
     }
 

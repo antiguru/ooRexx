@@ -1085,7 +1085,7 @@ impl Interp {
             "VALUE",
             &text,
         );
-        let converted = self.required_string_value(value)?;
+        let converted = self.required_string_or_nil(value)?;
         if converted == value {
             return self.signal_to_label(&text);
         }

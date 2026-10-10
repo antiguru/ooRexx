@@ -1920,14 +1920,25 @@ DEVIATIONS -- permanent, chosen
      `primitiveMakeString` (interpreter/classes/ObjectClass.cpp:1285). A
      string, a number, an Array (its items joined by a newline) and a
      MutableBuffer convert, and this crate reads them the same way. Any other
-     object converts to `.nil`. A truth value (every condition context), the
-     logical operators and a native logical argument judge `.nil` as an
-     object, and this crate answers as the oracle does: 34.x with found
-     "The NIL object". A consumer of the string's bytes reads `.nil` through
-     the string layout. Measured by Phase 6.1's scout E (probes i7b, i7e,
-     i7f, i7h) and Task 11a (probes bytes_dir, bytes_nil, bytes_queue,
-     bytes_obj, s4_nil, s4_queue), STRING answering a Directory, `.nil`, a
-     Queue or an Object:
+     object converts to `.nil`. Where the oracle's consumer then answers a
+     defined result, this crate answers it too: a truth value (every
+     condition context), the logical operators and a native logical argument
+     (34.x, found "The NIL object"), SIGNAL VALUE (16.1 on the label "The
+     NIL object"), a stem tail, arithmetic (41.1 and 26.8 naming the
+     original object), NUMERIC DIGITS and FUZZ and a DO count or FOR (26.x
+     naming the original object), a host command and INTERPRET (both run
+     "The NIL object"), a comparison (`.nil` is equal to no string, and the
+     ordering operators compare "The NIL object"), PARSE VALUE and ARG,
+     OPTIONS, NUMERIC FORM VALUE (25.11) and a semaphore timeout (88.902),
+     both naming the original object, and a native method's numeric and
+     stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
+     (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
+     string_answer_nil_native.rex. Where it
+     reads `.nil` through the string layout, the answer is garbage or a
+     crash. Measured by Phase 6.1's scout E (probes i7b, i7e, i7f, i7h),
+     Task 11a (probes bytes_dir, bytes_nil, bytes_queue, bytes_obj, s4_nil,
+     s4_queue) and the Task 11a review (probes b02 to b40), STRING
+     answering a Directory, `.nil`, a Queue or an Object:
 
        `say length(o)`                rc 0, a pointer-sized number that
                                       differed in each of two runs
@@ -1935,12 +1946,22 @@ DEVIATIONS -- permanent, chosen
        `say o`                        rc 168, 88.909, with a traceback
                                       through the REXX package's
                                       `Stream~SAY` and `Monitor~UNKNOWN`
+       `value(o)`, `upper(o)`         rc 251, Error 5
+       `address value o`              rc 227, 29.1
+       `trace value o`                rc 232, 24.1 found "?"
+       `v = o; drop (v)`, `expose (v)`,
+       `procedure expose (v)`         SIGSEGV, rc 139
+       `call (o)`, `address (o) cmd`  rc 251, Error 5
+       `... with output stream (o)`   rc 158, 98.920 on the file ""
+       `queue o`, `lineout`, `charout` rc 168, 88.909 through REXX frames
 
      This crate refuses each, rc 120, with `a STRING method answering an
-     object with no string value is not implemented`; `say` is refused too,
-     since this crate builds no frames for the REXX package's methods. The
-     oracle's answer to the first two is a read of `.nil` through the string
-     layout, not a specified observable. Not witnessed in the corpus.
+     object with no string value is not implemented`, after a trapped
+     NOSTRING (which the oracle raises first, with "The NIL object"); the
+     88.909 consumers are refused too, since this crate builds no frames for
+     the REXX package's methods. The oracle's other answers are reads of
+     `.nil` through the string layout, not specified observables. Not
+     witnessed in the corpus.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

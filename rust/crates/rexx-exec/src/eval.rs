@@ -782,7 +782,7 @@ impl Interp {
         // numeric. Measured, rc 215: `'2' + .K` with a class-side
         // `makeString` returning `'xx'` is 41.1 `Nonnumeric value ("The K
         // class")`.
-        let converted = self.required_string_value(right_value)?;
+        let converted = self.required_string_or_nil(right_value)?;
 
         let result = if op == Operator::Power {
             let exponent = match self.to_number(converted) {
@@ -1322,6 +1322,11 @@ impl Interp {
             return Ok(logical(is_inequality(op)));
         }
         let right = self.required_string_operand(right, op)?;
+        // A `STRING` answer with no string value converts to `.nil`, which
+        // the same rule judges.
+        if right == ObjRef::NIL && is_equality(op) {
+            return Ok(logical(is_inequality(op)));
+        }
         match op {
             Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, None),
             Operator::Blank => self.concat_values(left, right, Some(b' ')),

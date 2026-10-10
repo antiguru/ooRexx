@@ -748,7 +748,7 @@ impl Interp {
                 // conversion, measured: `trace r` over `interpret .K` with a
                 // class-side `makeString` returning `'nop'` prints
                 // `>>>   "nop"` and then the fragment's own `*-* nop`.
-                let value = self.required_string_value(value)?;
+                let value = self.required_string_or_nil(value)?;
                 let text = self.to_text(value).to_vec();
                 // `>>>` on the interpreted text itself, before the fragment
                 // runs -- the same `trace_result` every other value-producing
@@ -1198,7 +1198,7 @@ impl Interp {
             InstructionKind::Options { expression } => {
                 let value = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(value);
-                let value = self.required_string_value(value)?;
+                let value = self.required_string_or_nil(value)?;
                 let text = self.to_text(value).to_vec();
                 self.trace_result(self.activity.clause_state.current_value_indent, &text);
                 Ok(Flow::Next)
