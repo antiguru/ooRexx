@@ -128,3 +128,45 @@ TSan exclusion, the SysSleep floor, the R6 self-test filter and the harness-race
 * **Q-m3. The report's queue rows 33 and 34 use timing from single runs** (`append.rex` 0.03 s against
   0.02 s, `copies.rex` 0.44 s against 0.77 s) with no run count. The gap to the scout figures (5.4 s,
   1.0 s) is large enough that the conclusion holds. The run count should still be stated.
+
+## Re-review 1
+
+Scope: `81b6b103b..27f3de7fa` (`review-t12-fix1.diff`) and the report's "## Fix round 1".
+
+**Verdict: spec compliance passes, and task quality is approved with Minors.** 0 Critical, 0
+Important. Q-m1 is only partly addressed. The fixes add 3 new Minor issues.
+
+### Findings from the first review
+
+| finding | status | checked |
+|---|---|---|
+| S-I1 criteria 1-4 | addressed | Each cited log line in `bg/97cb37712/logs/` reads as stated. In g4, `:1963` and `:1967` are the two closed_phases tests `ok` and `:1969` is their 8 passed, inside the `closed_phases.rs` section at `:1957`. `:2183` reads `991 of 991 matching` and `:2187` 29 passed / 1 ignored. `:2964` is ir_recorded_oracle's 21 passed. `:3441` and `:3443` are refusal_dispositions and `:3454` is refusal_sites' 5 passed. `:1498` and `:1540` are the two REPLY crate tests `ok`. g6 has `:1501`, `:1545`, `:1973`, `:2190` and `:3446`. Every corpus program named for criteria 3 and 4 exists under `rust/corpus/lang/` and is listed in `phase-6-1.txt`. `ir_recorded_cases/parse-errors-main` exists. `c3reply.txt` and `c3sl2.txt` each hold 5 runs per engine, all rc 0, and each engine gives one outcome. The c3reply output matches the record line for line. |
+| S-I2 Task 12 rulings | addressed | The l.256-l.273 pointers match `progress.md` at `9512f083c`. See n4. |
+| S-m1 rows 40, 49 | addressed | Both files exist in the house style. The translation-error file quotes my run-time `trace value` control correctly. |
+| S-m2 row 23 commit | addressed | `8b95afe79`, with a build of the parent as control. |
+| S-m3 row 20 | addressed | |
+| S-m4 parked list | addressed | Both 11a files and the l.44 pointer are present. |
+| S-m5 roadmap row 9 | addressed | The `native_method` re-home is removed from row 9. The three exclusions rows are CLOSED. I re-ran the probe from a fresh directory under memcap and timeout, oracle against the `close` binary (sha256 `4e8ab4c7…`, code equal to `97cb37712`), twice. `.Method~new(…, .context~package)`, `.Routine~new(…, .context~package)~call` and context-less `.Routine~new('x', 'return mainr()')~call` gave `a Method`, `43` and `new mainr`, rc 0, on both engines. |
+| Q-m1 wall-clock wording | **partly addressed** | See n3. |
+| Q-m2 Class arm | addressed in code | The `debug_assert_eq!` is in place. The comment and the report row each add a false sentence: n1 and n2. |
+| Q-m3 run counts | addressed | |
+
+### New findings (all Minor)
+
+* **n1. The new comment in `heap.rs` is false.** "A Class body holds no bytes outside its slot" does
+  not hold, because `Body::Class { owned: Vec<ObjRef> }` owns a separate `Vec` allocation. What is
+  true is that `held_bytes` charges none for a Class, so the running figure never counted any. Reword
+  to that, and reword the assertion message ("a Class body holds bytes") the same way.
+* **n2. The report's Q-m2 row says "classes are never collected (D59)".** That is false. Phase 5j
+  reopened D59 (`docs/superpowers/specs/2026-09-09-phase-5j-class-lifetime.md:12`), and user classes
+  are collected: `class_lifetime.rs` `a_class_nothing_refers_to_is_collected`, and the sweep's own
+  `freed_classes`. The conclusion still holds, because a debug-only assertion costs nothing in
+  release. The reason given for it is wrong.
+* **n3. "As large as the drift" is false for pingguard,** in the gate record (Criterion 7, wall clock)
+  and in the report's "Wall clock". The 4.1-point pad move is pingsem's: close +4.64 against cpad8
+  +0.56. For pingguard the largest pad move is 2.78 points (close +4.53 against cpad8 +1.75), below
+  its +4.53 drift. So "not attributable to code" is supported for pingsem only. For pingguard the
+  statement should be that the drift exceeds the largest pad move seen and is unattributed.
+* **n4. The "Rulings made on your behalf" list skips l.257.** That ruling held that the parse overrun
+  blocks the close. l.263 and l.268 superseded it, but it is the ruling that says why the close was
+  allowed to proceed, so it belongs beside l.268.
