@@ -338,8 +338,12 @@ impl Heap {
                 // Reported so the caller can drop the rows it keys by this
                 // class. The handle is still the live one here; after the
                 // assignment below its generation has moved on and it would
-                // name nothing.
-                Body::Class { .. } => freed_classes.push(ObjRef::heap(slot as u32, generation)),
+                // name nothing. A Class body holds no bytes outside its
+                // slot, so this arm adds none to `freed_bytes`.
+                Body::Class { .. } => {
+                    debug_assert_eq!(object.body.held_bytes(), 0, "a Class body holds bytes");
+                    freed_classes.push(ObjRef::heap(slot as u32, generation));
+                }
                 body => freed_bytes += body.held_bytes(),
             }
             swept += 1;
