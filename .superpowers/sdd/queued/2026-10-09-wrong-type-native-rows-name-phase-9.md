@@ -1,5 +1,7 @@
 # Wrong-type native rows that refuse naming Phase 9
 
+RESOLVED by ae86f4d04 (Phase 6.1 Task 11a Step 5): the wrong-type case refuses through `Loud::receiver_class`; test `dispatch::tests::a_native_row_on_a_receiver_of_another_class_refuses_its_type`.
+
 A primitive's native method run on an instance of another class (`self~run(.X~method('M'))`
 from a `::class t` method, or installed through `enhanced`) is Deviation 28: the oracle reads
 the receiver through the wrong layout. Most such rows refuse through `Loud::receiver_class`

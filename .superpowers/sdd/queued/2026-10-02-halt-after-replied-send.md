@@ -1,5 +1,7 @@
 # Message~halt after a ~send whose method replied
 
+RESOLVED by 23716a5ec (Phase 6.1 Task 11a Step 2): `Message~send` records its sending activity and `Message~halt` asks it; witnesses `rust/corpus/lang/message_halt_after_send.rex`, `message_halt_sender_ended.rex`.
+
 Found by the Task 6 re-review (O3), present before Task 6's fixes (939fdace1 behaves the same).
 A `Message~send` whose method replies leaves the message's activity as the sender's on the
 oracle, so `m~halt` answers `1` and halts the sending activity (main) with 4.1 at `say m~halt`.

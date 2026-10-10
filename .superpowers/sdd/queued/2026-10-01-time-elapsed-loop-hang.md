@@ -1,5 +1,7 @@
 # 2026-10-01-time-elapsed-loop-hang
 
+RESOLVED by e25925ad8 and a8593f6e6 (Phase 6.1 Task 11a Step 1): a WHILE re-test after the first pass and an UNTIL test read a fresh clock, so a loop with no body clause ends; witness `rust/corpus/lang/time_elapsed_empty_loop.rex`.
+
 Found by the Phase 6 S2-S5 Task 4 review (M5), ruled not that task's (queued 2026-10-01). Not fixed;
 present at dcf9fd554 (the Task 4 base) as well as after Task 4.
 

@@ -1107,3 +1107,40 @@ measured::a_slice_deferred_before sim_gate::`.
 
 Found and fixed: `concurrency_tests` did not compile under `--features pinning` since Task 9
 (`pinning_table`, E0507).
+
+## Task 11a
+
+Deferred items, small. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md`. Base
+`fbdf615e8`, whose code is `cc21b5ae3` (`fr1` above). Head `849f3dfb0`, `rexx-run` built from `git
+archive 849f3dfb0 rust interpreter` in `/tmp/claude-1000/p61/t11a/target` with one `Compiling
+rexx-exec` line, sha256 `b4157677b855ab8d3414d57efdf37712aac052e4846f7887102f96855b31a6db`.
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 3 -o /tmp/claude-1000/p61/t11a/cg17 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run base=/tmp/claude-1000/p61/hsr/bin/fr1/rexx-run t11a=/tmp/claude-1000/p61/t11a/bin/s6d/rexx-run
+```
+
+Exit 0, every spread 0.0000%. Percentages are against base61.
+
+| program | base % | t11a (running total) % | verdict |
+|---|---:|---:|---|
+| pingmsg | +0.0096 | -0.0000 | inside |
+| pingguard | -0.3663 | -0.3836 | inside |
+| pingsem | -0.2494 | -0.2664 | inside |
+| alloc | +0.2330 | +0.3362 | inside |
+| alloc4c | +0.0607 | +0.0606 | inside |
+| heapshape | +0.0525 | +0.0524 | inside |
+| rexxcps | +0.4409 | +0.4394 | inside |
+| emptyloop | -0.3191 | -0.3191 | inside |
+
+alloc's +0.10% over base is in `Interp::dot_variable`, +48,000,696 Ir against `0517efbfb` (`cgdiff.py`),
+which is 8 Ir for each of 6M `.NAME` lookups that miss the program's own tables: the two `parented`
+tests that gate the parent walks (Step 6b).
+
+```
+PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o /tmp/claude-1000/p61/t11a/wall base61=... base=... t11a=...
+```
+
+Exit 0, load average 1.04 at the end. t11a against base61: rexxcps -1.27%, emptyloop +5.12%
+(base +3.72%), alloc -2.44%, alloc4c -0.88%, heapshape -1.62%, pingmsg +1.46%, pingsem -1.61%,
+pingguard +3.39% (base +5.08%). emptyloop retires the same instructions as base (-0.0000%), as at the
+heapshape round (+4.43% there with Ir flat), so its wall clock gap is not added work.

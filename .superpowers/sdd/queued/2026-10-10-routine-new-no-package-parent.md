@@ -1,5 +1,7 @@
 # Routine~new without directives cannot find the caller's routines
 
+RESOLVED by 8b95afe79 (Phase 6.1 Task 11a Step 6b): a compiled source with no directives records its package parent (the caller's, or the NEW context), and class lookup walks the parent chain as findInstalledClass and findPublicClass do; witness `rust/corpus/lang/routine_new_package_parent.rex`, test `dispatch::tests::a_compiled_source_resolves_through_its_package_parent`.
+
 Found by Task 11a's implementer (Phase 6.1) on 2026-10-10. It is outside Task 11a's items, and it reproduces at `fbdf615e8`.
 
 Probe (`/tmp/claude-1000/p61/t11a/probes/s6/ctx3.rex`; `ctx2.rex` is a variant of it):

@@ -1,5 +1,7 @@
 # EXIT in a CALL ON handler run at the REPLY clause's end
 
+RESOLVED by 04c46cb3b (Phase 6.1 Task 11a Step 3): EXIT makes its reply check on the activation it ends and replaces the reply value; witnesses `rust/corpus/lang/reply_handler_exit.rex`, `reply_handler_exit_value.rex`, `reply_handler_exit_after_split.rex`.
+
 Found by the Task 6 re-review (O2), present before Task 6's fixes (939fdace1 behaves the same).
 A `CALL ON` handler that the REPLY clause's end runs, and that ends with `EXIT`, ends the method
 before its split on the oracle, which then reports that the method returned no result to the

@@ -1,5 +1,7 @@
 # The `Literals` assertion rows need a test case for `self`
 
+RESOLVED by 98caea3de (Phase 6.1 Task 11a Step 6): `Routine~new` and `Method~new` take a context, and `tests/assertions.rs` runs a row that sends to `self` in a test case; EXEMPT is empty.
+
 `rust/crates/rexx-exec/tests/assertions.rs`'s `Literals` EXEMPT rows name
 `unblocked_by: "Phase 9"`: `runDynamicSource` builds `.routine~new(name, code, package)`, whose
 package argument this crate refuses (`method "NEW" of class "Routine" ... (Phase 9)`). That is
