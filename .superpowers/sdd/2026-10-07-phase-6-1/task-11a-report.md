@@ -277,3 +277,146 @@ RESOLVED lines are added to `2026-10-01-time-elapsed-loop-hang`, `2026-10-02-hal
   counts, and base shows the same pattern (+3.72% and +5.08%).
 * The Routine~new caller-routine lookup, deferred to Task 12 by an earlier ruling, was fixed here as
   Step 6b by a later ruling. Its probes `probes/s6/ctx2.rex` and `ctx3.rex` are left in place.
+
+## Fix round 1
+
+Brief `task-11a-fix1-brief.md`, review `task-11a-review.md`. Head `2021f173f`. Probes:
+`/tmp/claude-1000/p61/t11ar/probes/` (reviewer), `/tmp/claude-1000/p61/t11a/probes/{f1,f1c,f1d}/` (mine).
+`N/N` is matching runs per engine, through `tools/both.sh`.
+
+### I1: a `::CLASS` superclass resolves through the installing package (`8af5344dd`)
+
+* Change: `src/environment.rs` `directive_class` is `findClass` on the installing package
+  (`ClassResolver::lookup`, `ClassDirective.cpp:185`). It checks `installing`'s installed classes,
+  then `parent_installed_class`, then `installing`'s merged public classes, then
+  `parent_public_class`. Only after those does `.environment` come, as before. It used to read the
+  running program's installed classes and walk no parent.
+* The one site covers all three routes, and each has a witness that fails at `849f3dfb0` and
+  matches 3/3 now:
+  * `corpus/lang/routine_new_directive_subclass.rex` (reviewer `a4/routsub.rex`);
+  * `package_new_directive_subclass.rex` (`a6/pkgsub.rex`);
+  * `external_directive_subclass.rex`, with `external_directive_subclass.d/lib2.rex` (`a8`): at
+    `849f3dfb0` it prints `loaded`, and the oracle and now the crate give `error 98.909`.
+* The reviewer's `a1/shadow`, `a2/req` and `a3/pkgctx` still match 3/3.
+
+### I2: a test for the parent's required public classes (`9bb5f3603`)
+
+* Witness: `corpus/lang/routine_new_parent_required.rex` with fixture `.d/lib.rex`, which is the
+  reviewer's `a2/req.rex`. Oracle and crate print the same four lines (1/1 by hand; 3/3 in the
+  review's run of `req.rex`).
+* Mutation: M2 (`if false && self.has_package_parent(program)` in `imported_class`), run as
+  `REXX_CORPUS_GATE=1 ... --test corpus corpus_differential`. It goes red: `[UNCLASSIFIED]
+  lang/routine_new_parent_required.rex: stdout, stderr, exit code differ`. The file was restored
+  from a copy, and `git diff` was empty afterwards.
+
+### I4: a trapped NOSTRING comes before the refusal (`807913226`)
+
+* Change: `src/dispatch/reqstr.rs` takes a STRING answer with no string value through the NOSTRING
+  checks first, with "The NIL object" as the readable. It refuses (bytes consumer) only after them.
+* Witness: `corpus/lang/string_answer_nostring_trapped.rex` (reviewer `b3/ns_sigbytes.rex`) prints
+  `h NOSTRING [The NIL object] 3`, 2/2. At `849f3dfb0` it gives rc 120. `ns_sig.rex` still matches
+  2/2. `ns_call.rex` (`call on nostring`) differs on the `&1` insert, the reviewer's pre-existing
+  item.
+
+### I3: `.nil` wherever the oracle's answer is defined (`438f90b9e`, `2021f173f`)
+
+* Change: the sites marked `.nil-set` below call `required_string_or_nil`. `apply_binary` passes the
+  operator into the cold path (`required_string_operand`): every operator except concatenation is
+  in the `.nil` set. After the conversion, `.nil` gets the equality rule (`primitiveIsEqual`). Where
+  the oracle's error names the operand, the crate keeps naming the original object: `numeric_operand`
+  keeps the original text when the conversion is `.nil`, and the semaphore timeout names
+  `string_value_text` of the original. The other sites already rendered the original for the
+  error. Deviation 30 and R11's line in the spec are corrected.
+* Witnesses, each failing at `849f3dfb0` (rc 120) and matching the oracle 2/2:
+  * `corpus/lang/string_answer_nil_consumers.rex`: SIGNAL VALUE, stem tail, arithmetic, `**`,
+    DIGITS, FUZZ, DO count, DO FOR, FORM VALUE, semaphore timeout, OPTIONS, equality, ordering,
+    PARSE VALUE, PARSE ARG, a host command and INTERPRET;
+  * `string_answer_nil_native.rex`, with a `.env` sidecar for the oracle's libraries: native int,
+    double, size, stem and ObjectToString.
+* `2021f173f` adds that sidecar. Without it the workspace run (`438f90b9e`) failed
+  `collect_stress` (the zero-collection list), `ir_recorded` (98.903 loading orxmethod) and the
+  corpus gate on this one program.
+* Enumeration command, from `rust/crates/rexx-exec/src`:
+  `grep -rn "required_string_value(\|required_string_arguments(\|required_string_or_nil(\|required_string_operand(" --include=*.rs . | grep -v "fn required_string\|/tests\|tests.rs"`.
+  Each site is classified below. "Probe" names the file. Oracle answers are 2/2 unless noted.
+
+| site | consumer | class | oracle | probe |
+|---|---|---|---|---|
+| `install.rs:715` | security manager's REQUIRES `NAME` answer | n/a | the oracle never consults the manager here: the control (`NAME` a string) also differs, 43.901 against `in f` | `f1d/main.rex`, `main2.rex` |
+| `redirect.rs:630` | ADDRESS ... WITH stream name | refused-garbage | 98.920 on the file "" | `f1c/c07_redirect` |
+| `stem.rs:146` | compound tail | .nil-set | tail "The NIL object" | `b/b14_tail` |
+| `run.rs:622` | `address (o) cmd` | refused-garbage | Error 5 | `f1c/c01_addrdyn` |
+| `run.rs:751` | INTERPRET | .nil-set | interprets "The NIL object" | `b/b09_interp` |
+| `run.rs:1031` | `call (o)` | refused-garbage | Error 5 | `f1c/c02_calldyn` |
+| `run.rs:1201` | OPTIONS | .nil-set | rc 0 | `f1c/c03_options` |
+| `run.rs:1458` | `expose (v)` | refused-garbage | SIGSEGV rc 139 | `f1c/c11_expose` |
+| `run.rs:1595` | `procedure expose (v)` | refused-garbage | SIGSEGV rc 139 | `f1c/c05_procexpose` |
+| `run.rs:1964` | SAY | refused-88.909 | 88.909 through `Stream~SAY` | `b/b02_say` |
+| `run.rs:2203` | FORWARD MESSAGE (expr) | refused-garbage | Error 5 | `f1c/c19_forward` |
+| `run.rs:2552` | QUEUE/PUSH | refused-88.909 | 88.909 | `b/b11_queue` |
+| `eval.rs:785` | arithmetic right operand | .nil-set | 41.1, 26.8 naming "a SN" | `b/b12_arith`, `f1/p_say_2____o_` |
+| `eval.rs:1324` | `& \| &&`, comparisons | .nil-set | 34.901; 0/1 | `b/b38_xor`, `b/b26`-`b28`, `f1/c_*` |
+| `eval.rs:1324` | concatenation (`\|\|`, abuttal, blank) | refused-garbage | Error 5 | `b/b04_concr` |
+| `eval.rs:1484` | truth value | .nil-set | 34.x found "The NIL object" | `s4c/truth_*` (5/5) |
+| `builtin.rs:725` | builtin arguments | refused-garbage | Error 5 (`value()`, `upper()`) | `b/b21_value`, `b/b39_upper` |
+| `dispatch/reqstr.rs:321` | the same, through `required_string_arguments` | refused-garbage | as above | as above |
+| `dispatch/object_protocol.rs:284` | `"abc"~"\|\|"(o)` | refused-garbage | Error 5 | `b/b20_strcat` |
+| `run/condition.rs:1088` | SIGNAL VALUE | .nil-set | 16.1 "The NIL object" | `b/b01_signal` |
+| `command.rs:895` | security manager's command `RC` answer | n/a | the oracle runs the command and does not consult the manager: the control (`RC` 5) also differs | `f1c/c16_secrc`, `c18_secrc5` |
+| `command.rs:936` | host command | .nil-set | runs "The NIL object", RC 127 | `b/b15_cmd` |
+| `run/settings.rs:109` | TRACE VALUE | refused-garbage | 24.1 found "?" | `b/b07_trace` |
+| `run/settings.rs:264` | ADDRESS VALUE | refused-garbage | 29.1 | `b/b05_address` |
+| `run/settings.rs:386` | NUMERIC FORM VALUE | .nil-set | 25.11 naming "a SN" | `f1c/c06_form` |
+| `run/settings.rs:426` | NUMERIC DIGITS, FUZZ | .nil-set | 26.5, 26.6 naming "a SN" | `b/b06_numeric`, `f1/p_numeric_fuzz_o_` |
+| `parse_template.rs:445` | PARSE ARG | .nil-set | "The NIL object" | `f1/parsearg` |
+| `parse_template.rs:631` | PARSE VALUE | .nil-set | "The NIL object" | `b/b10_parse` |
+| `dispatch/semaphore.rs:197` | semaphore timeout | .nil-set | 88.902 naming "a SN" | `f1c/c08_sem` |
+| `run/interpret.rs:155` | `drop (v)` | refused-garbage | SIGSEGV rc 139 | `b/b08_drop` |
+| `run/loops.rs:685` | DO ... FOR | .nil-set | 26.3 naming "a SN" | `f1/p_do_i___1_for_o__en` |
+| `run/loops.rs:695` | DO count | .nil-set | 26.2 naming "a SN" | `b/b13_docount` |
+| `dispatch/library.rs:1503` | native logical argument | .nil-set | 34.901 found "The NIL object" | `s4c/found_nil` (5/5) |
+| `dispatch/library.rs:1733` | native numeric and stem arguments | .nil-set | 88.907, 88.921, 93.969 naming "a SN" | `f1c/c15_*` |
+| `dispatch/library/surface.rs:149` | API ObjectToString | .nil-set | `.nil` | `f1c/c14_objtostr` |
+
+The report's earlier sentence in Step 4, "Every other site reads bytes", is false. The table
+replaces it.
+
+### Checks at `438f90b9e`, and `2021f173f` for the three it failed
+
+* `cargo fmt --all --check`: 0
+* `cargo clippy --workspace --all-targets -- -D warnings`: 0
+* `cargo clippy -p rexx-exec --all-targets --features pinning,sharing -- -D warnings`: 0
+* `memcap 8G cargo test -j 4 --workspace --no-fail-fast` at `438f90b9e`: 3132 passed, 2 failed
+  (`collect_stress` and `ir_recorded`, both on the missing sidecar). At `2021f173f`,
+  `cargo test -p rexx-exec --test collect_stress` passes 37 and `--test ir_recorded` passes 28.
+* `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle` at `2021f173f`: 29 passed and 28
+  passed (`f1-c2.txt`). At `438f90b9e` the result was 28/29, the same program.
+* `REXX_CORPUS_GATE=1 ... --release --test concurrency_tests whole_groups`, which includes the seeded
+  gate: 0, 16 passed.
+
+### Perf
+
+`callgrind.sh -r 2 -j 3 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop"`
+against base61, t11a = `438f90b9e` (`cg19`, every spread 0.0000%):
+
+| program | t11a % |
+|---:|---:|
+| pingmsg | +0.0001 |
+| pingguard | -0.3835 |
+| pingsem | -0.2662 |
+| alloc | +0.0118 |
+| alloc4c | +0.0607 |
+| heapshape | +0.0520 |
+| rexxcps | +0.4267 |
+| emptyloop | -0.3191 |
+
+`2021f173f` adds only a sidecar file.
+
+### Concerns
+
+* Pre-existing, outside the task: with `.context~package~setSecurityManager`, the oracle consults
+  the manager neither for a host command's `RC` nor for an external call's `::REQUIRES`, and the
+  crate does both. The controls differ: `c18_secrc5` (`RC` 5) and `f1d/main2.rex`.
+* Oracle SIGSEGV shapes, not in `oracle-crashes.txt`: `expose (v)` (`c11_expose`) and `procedure
+  expose (v)` (`c05_procexpose`) with `v` an object whose STRING answers a Directory. They join the
+  reviewer's `drop (v)`.
