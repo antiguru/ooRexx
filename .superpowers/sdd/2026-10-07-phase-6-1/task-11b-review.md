@@ -225,3 +225,116 @@ pingmsg     1676421116   1676102651  -0.0190
 
 These are identical to the gate record. emptyloop's wall-clock gap therefore comes with flat Ir. It
 belongs to Task 12, as the carry rules.
+
+## Re-review 1
+
+Scope: `616fdc513..46ad893aa` (`be020a36d` I1, `bec5fe4a7` M1, `108bc81fa` M3, `46ad893aa` report). HEAD
+was archived into `/tmp/claude-1000/p61/t11br/src`, touched, and built with its own target. The log has
+one `Compiling rexx-exec` line.
+
+### Verdicts
+
+* **Spec compliance: met.** I1 is closed at the brief's named sites. M1 and M3 are closed. M2 is queued
+  by the controller.
+* **Quality: approve.** No Critical or Important findings are open. Two new Minors (R1, R2) are niche
+  drain gaps, and they can go to the Task 12 queue.
+
+### Closure of I1, M1 and M3
+
+I re-ran the I1 probes with `run1.sh`, one run per engine. All rc 0, and stderr was empty except for
+the trace probe.
+
+| probe | crate | oracle |
+|---|---|---|
+| attronly (control) | `done 0`, 356,012 KB | `done 0`, 372,396 KB |
+| rtncall | `done 951`, 68,912 KB | `done 999`, 14,952 KB |
+| b_say | `done 951`, 69,148 KB | `done 998`, 16,456 KB |
+| b_callline | `done 951`, 68,884 KB | `done 996`, 14,388 KB |
+| b_xlineind | `done 951`, 68,868 KB | `done 998`, 19,036 KB |
+| streamsend | `done 951`, 69,192 KB | `done 999`, 14,824 KB |
+| interp | `done 951`, 69,120 KB | `done 998`, 24,432 KB |
+| sysslp (control) | `done 0`, 355,796 KB | `done 0`, 370,184 KB |
+
+Every I1 row is now bounded. The remaining gap between 951 and 995-999 is collection cadence, a
+licensed divergence (`cadence.rex` above). Both controls still agree with the oracle.
+
+Mutations were applied in the scratch copy, run on the debug test binary, and restored. Afterwards,
+`cmp` against `git show 46ad893aa:<file>` matched both files.
+* `dispatch.rs:2742`, `if native && false`: `pending_uninits_run_as_a_native_method_returns` goes
+  red. The other four uninit tests stay green.
+* `pool.rs:268`, shrink disabled: `threads_beyond_the_bound_end_after_their_jobs` goes red with
+  `left: 3, right: 1`.
+
+On the unmutated tree, the task's tests pass: 10 passed, 0 failed. They are the five `pending_uninits_*`
+tests, the stream-rooting test, the three pool tests, and `bytes_a_body_stops_holding_leave_the_live_figure`.
+
+M3: `ActivationCold` and `AutoExpose` are now destructured without `..`. The fields read are the same
+as before, and only at a collection.
+
+### Placement against the oracle
+
+* **INTERPRET** (`run/interpret.rs`, on `Flow::Next`, `Return` or `Exit`). This matches the `RETURNED`
+  block at `RexxActivation.cpp:676-705`. The oracle also leaves an INTERPRET as `RETURNED` on a SIGNAL
+  out of it (`signalTo`, `RexxActivation.cpp:2096-2099`), and the crate does not drain there (R1).
+* **Native method** (`dispatch.rs` `run_other`, every arm except `Generated`, on `Ok`). The `Rexx` and
+  `Native` arms of `run_other` only return the missing-body refusal, so in effect this covers
+  `External` and `Library`, which are the oracle's `NativeMethod`s (`NativeActivation.cpp:1361`).
+  Native routines and attribute methods do not drain on either engine; the `sysslp` and `attronly`
+  controls confirm this.
+* **SAY after its direct write** (`run.rs`). In the oracle, `Activity::sayOutput`
+  (`Activity.cpp:3214-3229`) sends `SAY` to `.OUTPUT`, and `.OUTPUT` is always set in a normal run.
+  That send ends in the Stream native method, whose return drains after the line is written. So the
+  crate's placement is the oracle's effective behaviour, and `b_say` confirms it (998 on the oracle,
+  951 on the crate, both bounded). When `.OUTPUT` is redirected, SAY goes through a send, and the
+  `run_other` and `finish_send` sites cover it.
+
+### Rooting at the new sites
+
+The probe is `probes/roots2.rex`. Each case keeps a finalizable object alive across a drain at one of
+the new sites:
+* an argument pending across `.stdout~charout('')`, an INTERPRET'd `nop`, and a SAY inside a function;
+* a value passed out by `RETURN` from inside an INTERPRET;
+* a fresh array returned by `.stream~new(f)~arrayin`;
+* a variable bound inside an INTERPRET;
+* a variable used across a SAY.
+
+I ran it under `REXX_SWITCH_MODE=sim:S,gc=1` with seeds 1 to 5, which collects at every allocation. In
+every seed, each `U name` line came after that name's last use.
+
+Two differences from the oracle on this probe are my own probe's artefacts, not crate defects:
+* The `arrayin` counts differ because the probe appends to its own file on every run.
+* The final `.stdout~lineout(object)` gives an 88.909 traceback whose header reads
+  `running <file> line 1` in the crate and `running REXX` in the oracle. This already happens on the
+  base61 binary (`probes/lo.rex`), so it predates the task and is not a regression.
+
+### Regressions
+
+* The 30 `corpus/lang` programs and 4 `gate-tables` programs that mention UNINIT
+  (`grep -rli uninit --include=*.rex lang gate-tables`) ran with `cmp5lib.sh`, 5 runs per engine. The
+  crate's and the oracle's run signatures are identical for every program.
+* I did not re-run callgrind. The implementer's table is unchanged from Task 11b on all eight programs:
+  rexxcps fr1 is 17,864,345,882 Ir, against 17,864,340,314 measured here at `5ac42f73a`.
+
+### Minor (new)
+
+#### R1. An INTERPRET left by SIGNAL does not drain
+
+`run/interpret.rs` drains only on `Flow::Next`, `Return` or `Exit`. `probes/isignal.rex` is a loop
+driven by `interpret 'signal top'`, with no other return in it:
+* crate: `done 0`, 356,576 KB;
+* oracle: `done 998`, 24,340 KB.
+
+This is real but niche: a loop whose only exit from INTERPRET is a SIGNAL. Fix: also drain on the
+SIGNAL flow, which is where `signalTo` stops the activation as `RETURNED`.
+
+#### R2. Trace lines do not drain
+
+`probes/traced.rex` runs the attronly loop with `trace r` around the attribute assignment. Both engines
+write 65,000 stderr bytes.
+* crate: `done 0`, 356,408 KB;
+* oracle: `done 998`, 24,496 KB.
+
+The oracle's trace output goes to the `.TRACEOUTPUT` stream's native method, so it drains, and the
+crate's direct trace write does not. This only affects memory while a loop is being traced, and the
+trace output itself is the same. Fix: the same cold check after the direct trace write, mirroring the
+SAY site.

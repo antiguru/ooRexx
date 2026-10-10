@@ -1,0 +1,468 @@
+# Review package: 616fdc513..HEAD
+
+## Commits
+46ad893aa Phase 6.1 Task 11b fix round 1: report
+108bc81fa Phase 6.1 Task 11b fix round 1, M3: destructure the cold part's roots
+bec5fe4a7 Phase 6.1 Task 11b fix round 1, M1: a test for the pool's shrink
+be020a36d Phase 6.1 Task 11b fix round 1, I1: UNINITs at INTERPRET and native returns
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-11b-report.md    | 84 ++++++++++++++++++++++
+ rust/crates/rexx-exec/src/activation.rs            | 52 +++++++++-----
+ rust/crates/rexx-exec/src/dispatch.rs              |  9 +++
+ rust/crates/rexx-exec/src/run.rs                   |  5 ++
+ rust/crates/rexx-exec/src/run/interpret.rs         | 17 ++++-
+ rust/crates/rexx-exec/src/scheduler/pool.rs        |  6 ++
+ rust/crates/rexx-exec/src/scheduler/tests/pool.rs  | 27 +++++++
+ rust/crates/rexx-exec/src/tests.rs                 | 45 ++++++++++++
+ 8 files changed, 226 insertions(+), 19 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md
+index 626e0457e..58c69eebb 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md
+@@ -138,10 +138,94 @@ Found in Step 2 and approved by the controller.
+ 
+ ## Concerns
+ 
+ * A failed thread spawn still runs a blocking call inline and can still hang, as before. The oracle
+   raises Error 48.1 at `START` in that state.
+ * The pool has no upper limit under load. Each thread beyond the bound reserves `POOL_STACK_BYTES` of
+   address space until its job ends.
+ * No drain at a native activation's return (`NativeActivation.cpp:1361`) beyond the send path through
+   `finish_send`, and none inside `INTERPRET`. The probes reach the drain through `INIT`'s and a
+   label's returns.
++
++## Fix round 1
++
++Brief `task-11b-fix1-brief.md`, review `task-11b-review.md`. Head `108bc81fa`.
++
++### I1: drains at an INTERPRET's end and at a native method's return (`be020a36d`)
++
++* `run/interpret.rs` `run_fragment`: at a fragment's normal end (`Flow::Next`, `Return`, `Exit`),
++  the `RETURNED` block an `INTERPRET` activation leaves through (`RexxActivation.cpp:676-705`).
++  `LEAVE`/`ITERATE` failures and `SIGNAL` out of the fragment do not drain.
++* `dispatch.rs` `run_other`: at the return of an `External` (`LIBRARY REXX`, for example the
++  `Stream` methods) or `Library` method, which are the oracle's `NativeMethod`s
++  (`NativeActivation::run`, `NativeActivation.cpp:1361`). The drain runs on `Ok` only. A generated
++  attribute method does not drain, which matches the reviewer's `attronly` control, and neither do
++  primitive (`Invocable::Native`) methods or native routines (`sysslp` control).
++* `run.rs` SAY: after the direct write that stands in for `.STDOUT`'s `LINEOUT` when `.OUTPUT` is not
++  redirected. A routed SAY reaches the `run_other` site through the monitor's send.
++* Each site is one `uninit_ready.is_empty()` test before the out-of-line `#[cold]`
++  `run_uninits_at_return`. A trace line's direct write does not drain.
++* Tests (`src/tests.rs`, `inline_uninit_rounds`: two inline rounds of 300 objects, with no label,
++  routine or Rexx method returning in the loop): `pending_uninits_run_as_a_native_method_returns`
++  (`call lineout '/dev/null', 'x'`), `pending_uninits_run_as_say_writes` (`say ''`) and
++  `pending_uninits_run_as_an_interpret_ends` (`interpret 'nop'`). Each asserts `1 1` as stdout's last
++  line and a peak of at most twice `COLLECT_BYTES_FLOOR`. Disabling each site (`if false && ...`)
++  turns only its own test red. Restored from copies.
++* The reviewer's probes (`/tmp/claude-1000/p61/t11br/probes/`), 1 run per engine, head binary
++  `bin/fr1` (sha256 `f82d21a13b024925ef1d4eefc4c180b4c8e9d0edb692df75c987f576b1cb9333`):
++
++| probe | crate | oracle |
++|---|---|---|
++| attronly (control) | `done 0`, 356,372 KB | `done 0`, 376,028 KB |
++| rtncall | `done 951`, 69,284 KB | `done 999`, 16,180 KB |
++| b_say | `done 951`, 69,444 KB | `done 998`, 16,328 KB |
++| b_callline | `done 951`, 68,532 KB | `done 996`, 14,648 KB |
++| b_xlineind | `done 951`, 69,248 KB | `done 998`, 18,272 KB |
++| streamsend | `done 951`, 69,164 KB | `done 999`, 15,136 KB |
++| interp | `done 951`, 68,720 KB | `done 998`, 24,336 KB |
++| sysslp (control) | `done 0`, 355,928 KB | `done 0`, 370,284 KB |
++
++All runs rc 0 with empty stderr. The remaining gap (951 against 995-999) is collection cadence, as
++the review's `cadence.rex` shows.
++
++### M1: the pool's shrink has a test (`bec5fe4a7`)
++
++`scheduler::tests::pool::threads_beyond_the_bound_end_after_their_jobs`: a bound-1 pool runs three
++held jobs (3 threads), and once they are released it is back at 1 thread within 10 s (test accessor
++`Pool::threads`). With the shrink disabled (`if false && state.threads.len() > state.bound`), it is
++red: left 3, right 1.
++
++### M2
++
++No change. Controller queues it.
++
++### M3: `ActivationCold` destructured (`108bc81fa`)
++
++`Activation::object_roots` destructures `ActivationCold` and `AutoExpose` exhaustively, naming
++`active_condition`, `random_seed`, `locals` and `local` as holding no `ObjRef`. A dummy field added
++to `ActivationCold` fails `cargo check` with E0027 at the pattern. It reads the same fields as before,
++and only at a collection.
++
++### Checks and perf
++
++* `cargo fmt --all --check` 0. `clippy --workspace --all-targets -D warnings` 0. `clippy -p rexx-exec
++  --all-targets --features pinning,sharing -D warnings` 0. `refusal-sites.tsv` re-derived with no
++  change.
++* `tools/gates-fr1.sh` at `108bc81fa` (status `gates-fr1-status.txt`, `finished`): debug workspace 0
++  (3143 passed, 0 failed). Corpus pair 0. `whole_groups` 0, 16 passed, the seeded gate among them.
++* Callgrind, `-r 2`, base61 against `bin/head` (`595ba08ef`) and `bin/fr1` (`be020a36d`), output
++  `/tmp/claude-1000/p61/t11b/cg2`:
++
++| program | t11b % | fr1 % |
++|---|---:|---:|
++| pingmsg | -0.0190 | -0.0190 |
++| pingguard | -0.5906 | -0.5906 |
++| pingsem | -0.4694 | -0.4694 |
++| alloc | +0.0118 | +0.0118 |
++| alloc4c | +0.0607 | +0.0607 |
++| heapshape | +0.0520 | +0.0520 |
++| rexxcps | +0.4268 | +0.4268 |
++| emptyloop | -0.3191 | -0.3191 |
++
++  rexxcps fr1 is 17,864,345,882 Ir against t11b's 17,864,348,575. M1 and M3 change no non-test
++  code on these programs' paths, except `object_roots` at a collection, so they were not measured
++  apart.
+diff --git a/rust/crates/rexx-exec/src/activation.rs b/rust/crates/rexx-exec/src/activation.rs
+index 09e516c48..891d89072 100644
+--- a/rust/crates/rexx-exec/src/activation.rs
++++ b/rust/crates/rexx-exec/src/activation.rs
+@@ -989,40 +989,56 @@ impl Activation {
+             call_name: _,
+             call_arguments,
+             streams,
+         } = self;
+         out.extend(*context_object);
+         out.extend(*current_case);
+         out.extend(*notify_message);
+         if let Some(replied) = replied {
+             replied.object_roots(out);
+         }
+-        // The trapped condition's own object, destructured rather than
+-        // reached through a field: the exhaustive match above guards this
+-        // struct's fields, and an `ObjRef` added to `TrappedCondition` would
+-        // otherwise arrive unrooted with nothing to say so.
+-        if let Some(TrappedCondition {
+-            name: _,
+-            code_sub: _,
+-            call: _,
+-            description: _,
+-            object,
+-        }) = cold.as_deref().and_then(|cold| cold.condition.as_ref())
++        // The cold part and the trapped condition's own object, destructured
++        // rather than reached through a field: the exhaustive match above
++        // guards this struct's fields, and an `ObjRef` added to
++        // `ActivationCold`, `TrappedCondition` or `AutoExpose` would otherwise
++        // arrive unrooted with nothing to say so.
++        if let Some(ActivationCold {
++            condition,
++            // A `Raised` and its failure sites: bytes and numbers.
++            active_condition: _,
++            random_seed: _,
++            // Paths and environment bytes.
++            locals: _,
++            auto_expose,
++            executable,
++        }) = cold.as_deref()
+         {
+-            out.extend(*object);
++            if let Some(TrappedCondition {
++                name: _,
++                code_sub: _,
++                call: _,
++                description: _,
++                object,
++            }) = condition
++            {
++                out.extend(*object);
++            }
++            if let Some(AutoExpose {
++                owner,
++                scope,
++                local: _,
++            }) = auto_expose
++            {
++                out.extend([*owner, *scope]);
++            }
++            out.extend(*executable);
+         }
+-        if let Some(AutoExpose { owner, scope, .. }) =
+-            cold.as_deref().and_then(|cold| cold.auto_expose.as_ref())
+-        {
+-            out.extend([*owner, *scope]);
+-        }
+-        out.extend(cold.as_deref().and_then(|cold| cold.executable));
+         // The table's streams. An activation is a root, and a stream only
+         // the table holds is reachable through nothing else.
+         out.extend(streams.values().copied());
+         // The convention's own values, which a moved `REPLY` continuation
+         // also roots from its `CallContext`: this activation holds a
+         // refcount clone of the same slice.
+         out.extend(
+             call_arguments
+                 .iter()
+                 .flat_map(|args| args.iter().flatten().copied()),
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index 0366ba988..dcf0bd3fe 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -2656,20 +2656,21 @@ impl Interp {
+     fn run_other(
+         &mut self,
+         invocable: Invocable,
+         cleared: Cleared,
+         resolution: Resolution,
+         receiver: ObjRef,
+         name: &[u8],
+         args: &[Option<ObjRef>],
+         reserved: bool,
+     ) -> Result<Started<Option<ObjRef>>, Failure> {
++        let native = !matches!(invocable, Invocable::Generated(_));
+         let outcome = match invocable {
+             // **The refusal is the ordinary outcome here**, so unlike the
+             // `Native` arm of `begin_invoke` this one does not blame the
+             // method for it:
+             // a `Loud` is a report about this crate and carries no traceback
+             // at all. The implemented arm does blame, because its refusals
+             // are the oracle's own -- measured, `.k~sep(1)` on a class method
+             // bound to `file_separator` is `88.922 Too many arguments in
+             // invocation; 0 expected.` at rc 168, under a `Compiled method
+             // "SEP" with scope "K".` line.
+@@ -2729,20 +2730,28 @@ impl Interp {
+                 }
+                 crate::GeneratedKind::Abstract => Err(Raised::abstract_method(name).into()),
+                 crate::GeneratedKind::Constant => {
+                     self.read_constant(cleared, generated, receiver, args)
+                 }
+                 crate::GeneratedKind::Delegate => {
+                     self.send_to_delegate(cleared, generated, resolution, receiver, name, args)
+                 }
+             },
+         };
++        // A native method's return runs the `UNINIT`s a collection readied
++        // (`NativeActivation::run`, `NativeActivation.cpp:1361`).
++        if native
++            && !self.uninit_ready.is_empty()
++            && let Ok(value) = outcome
++        {
++            self.run_uninits_at_return(value)?;
++        }
+         outcome.map(Started::Ran)
+     }
+ 
+     /// A `LIBRARY REXX` entry's `run` after the arity check `CPPCode`-style
+     /// externals make, with the method blamed for a failure.
+     fn run_external<T>(
+         &mut self,
+         arity: Arity,
+         resolution: Resolution,
+         receiver: ObjRef,
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index dd80a2e82..21988776e 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -1993,20 +1993,25 @@ impl Interp {
+                 let caller = self.caller();
+                 pinned!(
+                     self,
+                     crate::pinning::PinKind::OutputWrapper,
+                     self.send_message(route, crate::dispatch::SAY, None, &[Some(argument)], caller)
+                 )?;
+             }
+             _ => {
+                 self.out.extend_from_slice(&line);
+                 self.out.push(b'\n');
++                // The write the `Stream` native method's return would have
++                // ended with (`NativeActivation.cpp:1361`).
++                if !self.uninit_ready.is_empty() {
++                    self.run_uninits_at_return(None)?;
++                }
+             }
+         }
+         Ok(())
+     }
+ 
+     /// `GUARD ON`/`GUARD OFF`, with or without a `WHEN` expression
+     /// (`RexxInstructionGuard::execute`, `instructions/GuardInstruction.cpp`).
+     /// A reserve another activity holds the lock for, and a `WHEN` that is
+     /// false, answer a park; the instruction's op runs it again once woken,
+     /// and it goes on from the wait.
+diff --git a/rust/crates/rexx-exec/src/run/interpret.rs b/rust/crates/rexx-exec/src/run/interpret.rs
+index 4cb2dc082..4c8af9ebf 100644
+--- a/rust/crates/rexx-exec/src/run/interpret.rs
++++ b/rust/crates/rexx-exec/src/run/interpret.rs
+@@ -113,21 +113,36 @@ impl Interp {
+                 self.record_leave_failure(&origin);
+                 let failure = match name {
+                     None => raised_iterate_no_loop(),
+                     Some(id) => raised_iterate_no_match(fragment.symbols.name(id).as_bytes()),
+                 }
+                 .into();
+                 self.capture_fragment_frame(&failure);
+                 self.seal_site_level();
+                 Err(failure)
+             }
+-            other => Ok(other),
++            other => {
++                // An `INTERPRET` activation leaves through the `RETURNED` block
++                // that runs the `UNINIT`s a collection readied
++                // (`RexxActivation.cpp:676-705`).
++                if !self.uninit_ready.is_empty() {
++                    let returned = match &other {
++                        Flow::Next => Some(None),
++                        Flow::Return(value) | Flow::Exit(value) => Some(*value),
++                        _ => None,
++                    };
++                    if let Some(value) = returned {
++                        self.run_uninits_at_return(value)?;
++                    }
++                }
++                Ok(other)
++            }
+         }
+     }
+ 
+     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
+     /// the `(v)` indirect form.
+     /// ```text
+     /// a=1; b=2; v='a b'      ; drop (v); say a; say b   ->  A / B  (both dropped)
+     /// x=1;      v=' x '      ; drop (v); say x           ->  X      (trimmed)
+     /// v='9'                  ; drop (v)                  ->  Error 31.2
+     /// v='.x'                 ; drop (v)                  ->  Error 31.3
+diff --git a/rust/crates/rexx-exec/src/scheduler/pool.rs b/rust/crates/rexx-exec/src/scheduler/pool.rs
+index c29ee9681..18b293a48 100644
+--- a/rust/crates/rexx-exec/src/scheduler/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/pool.rs
+@@ -116,20 +116,26 @@ impl Pool {
+     pub(crate) fn stack(&self) -> usize {
+         self.stack
+     }
+ 
+     /// Bounds the pool at `bound` threads kept from now on; at 0 no thread,
+     /// idle or new, is reserved.
+     pub(crate) fn set_bound(&self, bound: usize) {
+         lock(&self.shared.state).bound = bound;
+     }
+ 
++    /// How many threads the pool holds, idle or running a job.
++    #[cfg(test)]
++    pub(crate) fn threads(&self) -> usize {
++        lock(&self.shared.state).threads.len()
++    }
++
+     /// Spawns no thread beyond the bound from now on, so a job that finds
+     /// every thread busy gets none.
+     #[cfg(test)]
+     pub(crate) fn fix_at_bound(&self) {
+         lock(&self.shared.state).fixed = true;
+     }
+ 
+     /// An idle thread, or a new one, for one job: beyond the bound where
+     /// every thread is busy. `None` where the bound is 0 or the spawn fails.
+     pub(crate) fn reserve(&self) -> Option<Worker> {
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+index 6cdc1cbf8..30323dc50 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+@@ -668,10 +668,37 @@ fn a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity() {
+              ::class k\n::method kick\n  self~start('w')\n\
+              ::method w\n  call lineout '{path}', 'w'\n  call lineout '{path}'\n  say 'w'\n"
+         ),
+         None,
+     );
+     let _ = std::fs::remove_file(&path);
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "0\nw\n");
+     assert_eq!(ran.exits, 0);
+ }
++
++/// Threads spawned beyond the bound end once their jobs have run, leaving
++/// the pool at its bound.
++#[test]
++fn threads_beyond_the_bound_end_after_their_jobs() {
++    let pool = crate::scheduler::Pool::new(1 << 20, 1);
++    let gate = std::sync::Arc::new((Mutex::new(false), Condvar::new()));
++    for _ in 0..3 {
++        let worker = pool.reserve().expect("a thread");
++        let gate = std::sync::Arc::clone(&gate);
++        worker.run(Box::new(move || {
++            let (open, opened) = &*gate;
++            let mut open = open.lock().expect("unpoisoned");
++            while !*open {
++                open = opened.wait(open).expect("unpoisoned");
++            }
++        }));
++    }
++    assert_eq!(pool.threads(), 3);
++    *gate.0.lock().expect("unpoisoned") = true;
++    gate.1.notify_all();
++    let end = Instant::now() + Duration::from_secs(10);
++    while pool.threads() > 1 && Instant::now() < end {
++        std::thread::sleep(Duration::from_millis(10));
++    }
++    assert_eq!(pool.threads(), 1);
++}
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index c2d34852d..1383fa9d9 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -1233,20 +1233,65 @@ fn uninit_rounds(make: &str) -> crate::Outcome {
+ fn pending_uninits_run_as_a_method_returns() {
+     uninit_rounds("    o = .f~new(copies('x', 300000) || i)\n");
+ }
+ 
+ /// The same at a label's return, with no Rexx method run in the loop.
+ #[test]
+ fn pending_uninits_run_as_a_label_returns() {
+     uninit_rounds("    o = .g~new\n    o~s = copies('x', 300000) || i\n    call tick\n");
+ }
+ 
++/// [`uninit_rounds`] with the rounds inline, so that `stmt`, the loop body's
++/// last clause, is the only return in the loop. The result is stdout's last
++/// line.
++fn inline_uninit_rounds(stmt: &str) {
++    let round =
++        format!("do i = 1 to 300\n  o = .g~new\n  o~s = copies('x', 300000) || i\n  {stmt}\nend\n");
++    let program = format!(
++        ".local~n = 0\n{round}mid = .local~n\n{round}\
++         say (mid > 0) (.local~n > mid)\nexit\n\
++         ::class g\n::attribute s\n::method uninit\n  .local~n = .local~n + 1\n"
++    );
++    let outcome = run_program(TEST_PATH, program.into_bytes(), crate::Invocation::none());
++    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
++    assert!(
++        String::from_utf8_lossy(&outcome.stdout).lines().last() == Some("1 1"),
++        "stdout: {:?}",
++        String::from_utf8_lossy(&outcome.stdout)
++    );
++    assert!(
++        outcome.peak_body_bytes <= 2 * crate::COLLECT_BYTES_FLOOR,
++        "{} body bytes held at once",
++        outcome.peak_body_bytes
++    );
++}
++
++/// Pending `UNINIT`s run as a native method returns
++/// (`NativeActivation.cpp:1361`): here `LINEOUT`'s, a `Stream` method.
++#[test]
++fn pending_uninits_run_as_a_native_method_returns() {
++    inline_uninit_rounds("call lineout '/dev/null', 'x'");
++}
++
++/// The same at `SAY`, whose direct write stands in for `.STDOUT`'s
++/// `LINEOUT`.
++#[test]
++fn pending_uninits_run_as_say_writes() {
++    inline_uninit_rounds("say ''");
++}
++
++/// The same as an `INTERPRET` ends (`RexxActivation.cpp:676-705`).
++#[test]
++fn pending_uninits_run_as_an_interpret_ends() {
++    inline_uninit_rounds("interpret 'nop'");
++}
++
+ /// A stream a builtin opened by name is rooted by its activation's table: a
+ /// forced collection runs the `UNINIT`s it readies, and the second `LINEIN`
+ /// reads on from the table's stream (`two`), where a stream readied as
+ /// unreachable is closed by its `UNINIT` and answers Error 48.1.
+ #[test]
+ fn a_builtins_stream_survives_collections_while_its_table_holds_it() {
+     let path = std::env::temp_dir().join(format!("rexx-stream-root-{}", std::process::id()));
+     std::fs::write(&path, "one\ntwo\n").expect("the file");
+     let program = format!(
+         "f = '{}'\nsay linein(f)\ncall gc 'force'\nsay linein(f)\n",
