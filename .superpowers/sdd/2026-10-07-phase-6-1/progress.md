@@ -276,3 +276,4 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 12 fix round 1: 6d8aa2b0a, 12b77b215, 7e7ba0f72, 2db517c4b, 27f3de7fa. Re-review 1: all spec findings addressed; 4 Minors open (pingguard wall-clock claim, heap.rs Class comment false, D59 reason false, ledger l.257 missing from rulings). Fix round 2 sent.
 - Task 12 fix round 2: d05f7c7d0, 53b296806, 99c98f60f. Controller checked the diff: per-program wall-clock wording matches the table, heap.rs comment says what held_bytes charges. No re-review 2 (three Minor prose fixes, read directly).
 - Task 12: complete (67dafe88a..99c98f60f). Open for Moritz: parse +1.1979% Ir against base61 (criterion 7).
+- Final whole-branch review dispatched (fable), range e6af1198b..b46ee119d, package final-review-code.diff (rust/crates), report final-review.md. Scoped as a mutation hunt plus R11 consumer sweep plus record truth.
