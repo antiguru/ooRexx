@@ -1,0 +1,60 @@
+--- oracle run 1 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- ours run 1 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- oracle run 2 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- ours run 2 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- oracle run 3 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- ours run 3 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- oracle run 4 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- ours run 4 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- oracle run 5 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]
+--- ours run 5 rc 0
+[stdout]
+got 1
+cont endlocal 1
+main endlocal 0
+[stderr]

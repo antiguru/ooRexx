@@ -1,0 +1,80 @@
+--- oracle run 1 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- ours run 1 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- oracle run 2 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- ours run 2 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- oracle run 3 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- ours run 3 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- oracle run 4 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- ours run 4 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- oracle run 5 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]
+--- ours run 5 rc 0
+[stdout]
+m before zero 1
+main got 7
+main elapsed 1
+m after 1 1
+m after below main 1
+[stderr]

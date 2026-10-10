@@ -1218,6 +1218,41 @@ shared run directory (`97cb37712`: `remove()` deleted `sim-gate-<profile>` with 
 another job's `create_dir_all` was between creating it and creating its item, ENOENT at
 `sidecar.rs:128`).
 
+### Criteria 1-4
+
+All at `97cb37712`, from the gate logs in `.superpowers/sdd/2026-10-07-phase-6-1/bg/97cb37712/logs/`.
+
+* **Criterion 1.** `closed_phases` (Phase 5 in `CLOSED`, scanning `src/` and the `tests/` owner
+  tables): `no_refusal_names_a_closed_phase ... ok`, `no_owner_table_names_a_closed_phase ... ok`
+  (`g4-test-release.txt:1963`, `:1967`), 8 passed (`g4-test-release.txt:1969`,
+  `g6-test-debug.txt:1973`). `refusal_dispositions`: `every_ownerless_refusal_has_a_disposition ...
+  ok` (`g4-test-release.txt:3441`), 3 passed (`:3443`, `g6-test-debug.txt:3446`). `refusal_sites` 5
+  passed (`g4-test-release.txt:3454`).
+* **Criterion 2.** The IMPLEMENT groups' corpus programs are in `rust/corpus/phase-6-1.txt`, which
+  `corpus.rs` lists (`corpus.rs:582`). The gated corpus differential, `REXX_CORPUS_GATE=1`, prints
+  `991 of 991 matching` (`g4-test-release.txt:2183`) and passes 29, ignores 1, fails 0 (`:2187`;
+  debug `g6-test-debug.txt:2190`). `ir_recorded_oracle` passes 21 (`g4-test-release.txt:2964`).
+* **Criterion 3.** The scope witnesses are corpus programs inside that 991 of 991 (Task 1's mapping):
+  `scope_clock_routine` (c2), `scope_clock_external` (c5), `scope_clock_internal` (int),
+  `scope_random_seed` (rnd), `scope_setlocal_method` (sl1), `scope_setlocal_routine` (sl6),
+  `scope_propagate_routine` (cond1), `scope_propagate_after_routine` (cond2),
+  `scope_case_text_absorbed` (ct2), `scope_case_text_absorbed_other` (ct4) and
+  `scope_debug_pause_routine` (the `debug_pause` witness). The concurrent two are crate tests:
+  `a_method_starts_its_own_elapsed_clock_across_a_reply` (`reply`, as predicates) and
+  `a_reply_continuation_keeps_its_methods_setlocal_list` (`sl2`). They are `ok` at
+  `g4-test-release.txt:1540` and `:1498` and at `g6-test-debug.txt:1545` and `:1501`. The same two
+  programs run alone (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/c3reply.rex`,
+  `c3sl2.rex`), 5 runs per engine, rexx-run at `97cb37712`, one outcome per engine, the same on both:
+  `m before zero 1`, `main got 7`, `main elapsed 1`, `m after 1 1`, `m after below main 1`, rc 0; and
+  `got 1`, `cont endlocal 1`, `main endlocal 0`, rc 0 (`c3reply.txt`, `c3sl2.txt`).
+* **Criterion 4.** Scout B's probes are corpus programs in the same 991 of 991: `parse_error_interpret`
+  (i2 1-8), `parse_error_interpret_reply` (interpreply) and `parse_error_interpret_untrapped`
+  (interp), from Task 5's report; `debug_pause_flowed` (pa), `debug_pause_kinds` (pakinds),
+  `debug_input_object` (di), `debug_input_eof` (eof) and `debug_call_return` (dbgcall), from Task 6's
+  report. Stdin comes from `corpus/lang/*.stdin`, and second files from `.d` directories. The main
+  program's parse error (c8) is `tests/ir_recorded_cases/parse-errors-main` in `ir_recorded_oracle`'s
+  21 passed.
+
 ### Criterion 8: TSan
 
 `.superpowers/sdd/2026-10-07-phase-6-1/p61-gates/tsan.sh` is Phase 6's script with one more skip,
@@ -1340,7 +1375,8 @@ interleaved runs per binary, medians (`.superpowers/sdd/2026-10-07-phase-6-1/tas
 | pingsem | +4.64% | +0.56% | +4.19% | +1.00% | +0.50% | 785-786 |
 | pingguard | +4.53% | +1.75% | +2.27% | +1.85% | -0.63% | 785-788 |
 
-pingsem and pingguard: the same code moves by up to 4.1 points with layout alone (cpad8 against
-close) at equal instructions and context switches, so their drift is attributed to layout. emptyloop:
+pingsem and pingguard: a pad alone moves the same code's cycles by up to 4.1 points (cpad8 against
+close) at equal instructions and context switches, as large as the drift, so the drift cannot be
+told apart from layout and is not attributable to code. emptyloop:
 no pad moves it (4.38-4.62%), instructions are fewer and context switches equal, so the cycles are spent
 in the loop itself; unattributed beyond that, as at Task 2 (`loop_advance`, Moritz's ruling there).
