@@ -199,14 +199,14 @@ pub(crate) const DATATYPE_OPTIONS: &str = "ABILMNOSUVWX9";
 /// holds, or whether it matches one named type.
 pub(crate) fn datatype(
     interp: &mut Interp,
-    name: &[u8],
+    _name: &[u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
     let Some(option) = optional_string(interp, args, 2) else {
         return Ok(interp.text(datatype_kind(&text)));
     };
-    method_string_arguments(name, args)?;
+    method_string_arguments(args)?;
     // An empty option's first byte is `0x00`, which matches none of the
     // thirteen letters below and falls straight to the `None` arm -- the same
     // path a bad letter takes, and the byte `error.rs`'s `displayable`

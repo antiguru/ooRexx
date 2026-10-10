@@ -161,7 +161,7 @@ fn bit_operation(
     // the pad path and the default pad leaves it alone.
     let second = optional_string(interp, args, 2).unwrap_or_default();
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(default_pad);
-    method_string_arguments(name, args)?;
+    method_string_arguments(args)?;
     let out = bit_operation_over(interp, &first, &second, pad, operation)?;
     Ok(interp.text_built(out))
 }

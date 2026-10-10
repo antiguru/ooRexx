@@ -304,7 +304,7 @@ pub(crate) fn word_pos(
     let phrase = required_string(interp, args, 1);
     let string = required_string(interp, args, 2);
     let start = whole_number(interp, name, args, 3)?;
-    method_string_arguments(name, args)?;
+    method_string_arguments(args)?;
     let start = match start {
         Some(value) => position_of(value)?,
         None => 1,
