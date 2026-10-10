@@ -1,0 +1,17 @@
+count 16
+/* A ::CLASS directive in a Package~new source resolves its SUBCLASS through
+   the new package and its context's package. */
+p1 = .package~new('p1', .array~of('::class hid2', '::method name', '  return "hid2"'))
+signal on syntax name s1
+p3 = .package~new('p3', .array~of('::class k subclass hid2', '::routine y public', '  return .k~new~name'), p1)
+say 'subclass via p1:' p3~findRoutine('Y')~call
+s1r:
+signal on syntax name s2
+p4 = .package~new('p4', .array~of('::class k subclass hid3', '::routine y public', '  return .k~new~name'), p1)
+say 'subclass hid3 via p1:' p4~findRoutine('Y')~call
+exit
+s1: say 'subclass via p1: error' condition('O')~code; signal s1r
+s2: say 'subclass hid3 via p1: error' condition('O')~code; exit
+::class hid3
+::method name
+  return 'hid3'

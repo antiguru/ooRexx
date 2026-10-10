@@ -607,7 +607,20 @@ impl Interp {
         installing: ProgramId,
         upper: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
-        if let Some(found) = self.installed_class(upper) {
+        // `findClass` on the installing package (`ClassResolver::lookup`,
+        // `ClassDirective.cpp:185`): its installed classes and then its
+        // parents', then its merged public classes and then its parents'
+        // public ones (`classes/PackageClass.cpp:982-1049`).
+        if let Some(found) = self
+            .package_classes
+            .get(&installing)
+            .and_then(|table| table.get(upper))
+        {
+            return Ok(Some(*found));
+        }
+        if self.has_package_parent(installing)
+            && let Some(found) = self.parent_installed_class(installing, upper)
+        {
             return Ok(Some(found));
         }
         if let Some(found) = self
@@ -616,6 +629,11 @@ impl Interp {
             .and_then(|table| table.get(upper))
         {
             return Ok(Some(*found));
+        }
+        if self.has_package_parent(installing)
+            && let Some(found) = self.parent_public_class(installing, upper)
+        {
+            return Ok(Some(found));
         }
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
         // search is the package's classes and then the environment
