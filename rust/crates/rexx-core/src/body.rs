@@ -1047,6 +1047,8 @@ impl Body {
         match self {
             // Neither reaches an `ObjRef`: a `Number` and a byte string are
             // both plain data, never a handle into the heap.
+            // `Heap::collect`'s mark loop relies on this: it reads a `Text`
+            // survivor's bytes and never calls `trace` on it.
             Body::Text { .. } => {}
             Body::Num { .. } => {}
             Body::Stem {

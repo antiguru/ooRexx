@@ -1436,9 +1436,9 @@ Nothing newly exceeds +0.5%. parse is +1.1983%. Every program carries a fixed ~7
 
 ## Parse round 2
 
-Commit `23d78ec1b`: the collector sums the survivors' held bytes in the mark loop in release, as the debug build already did, and sets the running figure to that sum after the sweep. The sweep no longer reads a freed body's bytes in release. A string survivor reaches nothing, so the mark loop reads its length and skips the call to `Body::trace`. The debug build still sums the freed bytes and asserts that the running figure less them equals the survivors' sum. The resurrect loop sums resurrected UNINIT bodies, and `body_bytes_tests::a_collection_sums_the_survivors_body_bytes` now checks that sum in release. Report: `.superpowers/sdd/2026-10-07-phase-6-1/parse-round2-report.md`.
+Commit `23d78ec1b`: the collector sums the survivors' held bytes in the mark loop in release, as the debug build already did, and sets the running figure to that sum after the sweep. The sweep no longer reads a freed body's bytes in release. A string survivor reaches nothing, so the mark loop reads its length and skips the call to `Body::trace`. The debug build still sums the freed bytes and asserts that the running figure less them equals the survivors' sum. The resurrect loop sums resurrected UNINIT bodies. `body_bytes_tests::a_collection_sums_the_survivors_body_bytes` checks the string and resurrect paths in release. The non-string mark arm is checked only by the debug assertion (G6). Report: `.superpowers/sdd/2026-10-07-phase-6-1/parse-round2-report.md`.
 
-Perf, `callgrind.sh -r 2` over all programs with base61, `cf167fba1` (`cur`) and `23d78ec1b` (`fin`) in one run, exit 0, spreads 0.0001% at most. `fin` was built from `git archive 23d78ec1b` with its own target directory and one `Compiling rexx-exec` line, sha256 `2d56a4e252de765c168a9adde9b18a8c581a774abf6dc947363043b091f61729`. d% is against base61:
+Perf, `callgrind.sh -r 2` over all programs with base61, `cf167fba1` (`cur`) and `23d78ec1b` (`fin`) in one run, exit 0, spreads 0.0001% at most (`.superpowers/sdd/2026-10-07-phase-6-1/parse-round2-evidence/cg-fin.log`, binaries and sha256 in `cg-fin-binaries.txt`, per-round rows in `cg-fin-summary.tsv`). `fin` was built from `git archive 23d78ec1b` with its own target directory and one `Compiling rexx-exec` line, sha256 `2d56a4e252de765c168a9adde9b18a8c581a774abf6dc947363043b091f61729`. d% is against base61:
 
 | program | base61 Ir | cf167fba1 d% | 23d78ec1b d% |
 |---|---:|---:|---:|
@@ -1470,7 +1470,7 @@ Perf, `callgrind.sh -r 2` over all programs with base61, `cf167fba1` (`cur`) and
 | pingmsg | 1676421124 | +0.0537 | -0.2971 |
 | pingsem | 1181250540 | -0.4857 | -0.4857 |
 
-parse is +0.4824%, inside +0.5%. Nothing newly exceeds +0.5%, and no program rises: every program falls or moves by fewer than 1,000 Ir. cgdiff `cf167fba1` to `23d78ec1b`: `collect_now` falls on every collecting program (parse -10.98M, strings -83.29M, rexxcps -82.14M, alloc4c -37.29M), and heapshape's `Body::trace` falls by 41.61M.
+parse is +0.4824%, inside +0.5%. Nothing newly exceeds +0.5%, and no program rises: every program falls or moves by fewer than 1,000 Ir. cgdiff `cf167fba1` to `23d78ec1b` (`parse-round2-evidence/cgdiff-cur-to-a4.txt`, measured on the A4 build, which differs from `23d78ec1b` by one comment): `collect_now` falls on every collecting program (parse -10.98M, strings -83.29M, rexxcps -82.14M, alloc4c -37.29M), and heapshape's `Body::trace` falls by 41.61M.
 
 Gates, `bggates.sh 23d78ec1b` (`.superpowers/sdd/2026-10-07-phase-6-1/bg/23d78ec1b/status.txt`, finished 2026-10-10T21:03:14+02:00):
 * G1 fmt, G2 clippy, G3 release build, G5 debug build, G7 clippy pinning, G8 pinning self-tests and G9 loom: exit 0.

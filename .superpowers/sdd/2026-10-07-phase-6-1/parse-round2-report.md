@@ -23,7 +23,7 @@ Each variant was built from `git archive HEAD` plus the working-tree patch, with
 
 ### (A) plain: `held_bytes()` per survivor in the mark loop
 
-`callgrind.sh -r 2`, all programs (`/tmp/claude-1000/p61/pr2/cg-a/`):
+`callgrind.sh -r 2`, all programs (`parse-round2-evidence/cg-a.log`, binaries in `cg-a-binaries.txt`):
 
 | program | cur d% | A d% |
 |---|---:|---:|
@@ -65,7 +65,7 @@ Quick `-r 1 -p "parse heapshape"`: parse +0.4829, heapshape +0.6938. cgdiff cur 
 
 ### (A3) A' plus the string fast path, and (A4) A plus the string fast path
 
-`callgrind.sh -r 2`, all programs (`/tmp/claude-1000/p61/pr2/cg-a34/`):
+`callgrind.sh -r 2`, all programs (`parse-round2-evidence/cg-a34.log`, binaries in `cg-a34-binaries.txt`):
 
 | program | cur d% | A3 d% | A4 d% |
 |---|---:|---:|---:|
@@ -101,7 +101,7 @@ Both meet the target. They differ only on heapshape (-1.9373 against -1.8518, ab
 
 ## Final: `23d78ec1b`
 
-The committed tree differs from A4 by one comment's wording. It was rebuilt from `git archive 23d78ec1b`, with its own target directory and one `Compiling rexx-exec` line (sha256 `2d56a4e252de765c168a9adde9b18a8c581a774abf6dc947363043b091f61729`). It was measured with `callgrind.sh -r 2` over all programs together with base61 and cur: exit 0, spreads 0.0001% at most (`/tmp/claude-1000/p61/pr2/cg-fin/`).
+The committed tree differs from A4 by one comment's wording. It was rebuilt from `git archive 23d78ec1b`, with its own target directory and one `Compiling rexx-exec` line (sha256 `2d56a4e252de765c168a9adde9b18a8c581a774abf6dc947363043b091f61729`). It was measured with `callgrind.sh -r 2` over all programs together with base61 and cur: exit 0, spreads 0.0001% at most (`parse-round2-evidence/cg-fin.log`, `cg-fin-binaries.txt`, `cg-fin-summary.tsv`).
 
 | program | base61 Ir | cf167fba1 d% | 23d78ec1b d% |
 |---|---:|---:|---:|
@@ -136,7 +136,7 @@ The committed tree differs from A4 by one comment's wording. It was rebuilt from
 * parse +0.4824%, inside +0.5%.
 * Nothing newly exceeds +0.5%. fibcall +0.4413 and fibfunc +0.4304 are unchanged.
 * No program rises. Every program either falls or moves by fewer than 1,000 Ir (the largest is pingguard, +701).
-* cgdiff cur to A4 (`/tmp/claude-1000/p61/pr2/cgdiff-a4.txt`), in self Ir:
+* cgdiff cur to A4 (`parse-round2-evidence/cgdiff-cur-to-a4.txt`), in self Ir:
   * `collect_now`: alloc -35.31M, alloc4c -37.29M, arith -41.58M, decloop -14.12M, decrender -14.12M, dirread -2.35M, parse -10.98M, strings -83.29M, rexxcps -82.14M, pingmsg -5.87M.
   * heapshape: `Body::trace` -41.61M and `collect_now` -5.94M.
   * Nothing else moves by more than 100K on any of those programs.
@@ -173,3 +173,18 @@ The committed tree differs from A4 by one comment's wording. It was rebuilt from
 3. Task 12's "smaller of" variant was not rebuilt. Its explanation above comes from (A)'s per-survivor cost.
 4. `bggates.sh` is not executable (mode 664). The first attempt failed with "Permission denied" before creating anything, and it was run with `bash bggates.sh`.
 5. The report is not committed. It is under `.superpowers`, for the controller.
+
+## Fix round 1
+
+The review is `parse-round2-review.md`. Changes:
+* The callgrind logs, tables, binaries lists and the cur-to-A4 cgdiff are copied to `parse-round2-evidence/`. The gate record's `## Parse round 2` and this report cite them there.
+* The doc comment on `Heap::held_bytes` now states its contract: the survivors' sum at the last collection, plus holds and less releases since. Only the debug build's check in `Heap::collect` uses its value, and a release collection overwrites it unread. The dead release writes stay. Gating the running figure on `debug_assertions` would change every charge site's code, so it is not simple, and nothing shows it is perf-neutral.
+* The per-object `debug_assert_eq!` that compared `held_bytes()` with itself on the non-string arm is gone. The string fast path now asserts in debug that `bytes.heap_len()` equals `Body::held_bytes()`, which are two independent computations.
+* `Body::trace`'s `Text` arm names the mark-loop fast path that relies on it.
+* The gate record's sentence on the committed test now says that the test checks the string and resurrect paths in release, and that only the debug assertion checks the non-string arm.
+
+Accepted gap, per the controller: no release test witnesses the non-string mark arm. If that arm answers 0, every release test stays green, and only the debug collection assertion catches it. G6 runs the debug tests, so the gap is covered at the gate.
+
+Only comments and a debug-only assertion changed, so callgrind was not re-run (`debug_assert_eq!` compiles to nothing in release).
+
+Per-step check on the fix tree: fmt 0, clippy with pinning,sharing 0, workspace clippy 0, `cargo test -p rexx-exec -p rexx-core -p rexx-api --no-fail-fast` exit 0 (2332 passed, 0 failed, 1 ignored), and the corpus pair exit 0 (29 passed with 1 ignored, and 21 passed).

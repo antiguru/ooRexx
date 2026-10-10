@@ -1,0 +1,16 @@
+23d78ec1b started 2026-10-10T20:18:02+02:00
+G1 fmt exit 0
+G2 clippy exit 0
+G3 release build exit 0
+load G4 9.46 11.29 8.12 1/1116 877136 2026-10-10T20:21:58+02:00
+G4 release test exit 0
+G5 debug build exit 0
+load G6 14.44 6.19 6.14 1/1128 1127433 2026-10-10T20:39:30+02:00
+G6 debug test exit 0
+G7 clippy pinning exit 0
+G8 pinning self-tests exit 0
+G9 loom exit 0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/23d78ec1b/logs/g4-test-release.txt:0
+/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-07-phase-6-1/bg/23d78ec1b/logs/g6-test-debug.txt:0
+P48 reruns: 0
+finished 2026-10-10T21:03:14+02:00

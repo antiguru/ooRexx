@@ -73,8 +73,10 @@ pub struct Heap {
     bytes_since: usize,
     /// The body bytes the last collection found live.
     live_bytes: usize,
-    /// The body bytes every live object holds now: what was charged or held
-    /// less what was released and what the sweeps freed.
+    /// The body bytes every live object holds: the survivors' sum at the
+    /// last collection, plus what was held and less what was released
+    /// since. Only the debug build's check in [`Heap::collect`] uses its
+    /// value: a release collection overwrites it unread.
     held_bytes: usize,
     /// The most body bytes held at once as of the last collection.
     peak_bytes: usize,
@@ -237,6 +239,7 @@ impl Heap {
             let held = if let Body::Text { bytes, .. } = &object.body {
                 // A string reaches nothing, so it skips the call to trace,
                 // which costs more than reading the string's length.
+                debug_assert_eq!(bytes.heap_len(), object.body.held_bytes());
                 bytes.heap_len()
             } else {
                 reached.clear();
@@ -244,7 +247,6 @@ impl Heap {
                 work.extend(reached.iter().copied());
                 object.body.held_bytes()
             };
-            debug_assert_eq!(held, object.body.held_bytes());
             survivor_bytes += held;
         }
 
