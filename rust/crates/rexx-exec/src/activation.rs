@@ -996,26 +996,42 @@ impl Activation {
         if let Some(replied) = replied {
             replied.object_roots(out);
         }
-        // The trapped condition's own object, destructured rather than
-        // reached through a field: the exhaustive match above guards this
-        // struct's fields, and an `ObjRef` added to `TrappedCondition` would
-        // otherwise arrive unrooted with nothing to say so.
-        if let Some(TrappedCondition {
-            name: _,
-            code_sub: _,
-            call: _,
-            description: _,
-            object,
-        }) = cold.as_deref().and_then(|cold| cold.condition.as_ref())
+        // The cold part and the trapped condition's own object, destructured
+        // rather than reached through a field: the exhaustive match above
+        // guards this struct's fields, and an `ObjRef` added to
+        // `ActivationCold`, `TrappedCondition` or `AutoExpose` would otherwise
+        // arrive unrooted with nothing to say so.
+        if let Some(ActivationCold {
+            condition,
+            // A `Raised` and its failure sites: bytes and numbers.
+            active_condition: _,
+            random_seed: _,
+            // Paths and environment bytes.
+            locals: _,
+            auto_expose,
+            executable,
+        }) = cold.as_deref()
         {
-            out.extend(*object);
+            if let Some(TrappedCondition {
+                name: _,
+                code_sub: _,
+                call: _,
+                description: _,
+                object,
+            }) = condition
+            {
+                out.extend(*object);
+            }
+            if let Some(AutoExpose {
+                owner,
+                scope,
+                local: _,
+            }) = auto_expose
+            {
+                out.extend([*owner, *scope]);
+            }
+            out.extend(*executable);
         }
-        if let Some(AutoExpose { owner, scope, .. }) =
-            cold.as_deref().and_then(|cold| cold.auto_expose.as_ref())
-        {
-            out.extend([*owner, *scope]);
-        }
-        out.extend(cold.as_deref().and_then(|cold| cold.executable));
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.
         out.extend(streams.values().copied());
