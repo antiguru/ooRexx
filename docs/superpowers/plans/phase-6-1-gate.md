@@ -1144,3 +1144,46 @@ Exit 0, load average 1.04 at the end. t11a against base61: rexxcps -1.27%, empty
 (base +3.72%), alloc -2.44%, alloc4c -0.88%, heapshape -1.62%, pingmsg +1.46%, pingsem -1.61%,
 pingguard +3.39% (base +5.08%). emptyloop retires the same instructions as base (-0.0000%), as at the
 heapshape round (+4.43% there with Ir flat), so its wall clock gap is not added work.
+
+## Task 11b
+
+Deferred items, scheduling and finalization. Report:
+`.superpowers/sdd/2026-10-07-phase-6-1/task-11b-report.md`. Base `32d2f4925`, head `595ba08ef`, each
+`rexx-run` built from `git archive <sha> rust interpreter` in its own target directory
+(`/tmp/claude-1000/p61/t11b/targetb`, `/tmp/claude-1000/p61/t11b/target`) with one `Compiling
+rexx-exec` line. sha256 base `f8925d342f6571d625c59e4ab48faee4545c3aaa7eeba0704deda12fedc243fc`, head
+`64d770432bbcaff95899c4ec345a400a9ba33befab9db08437fc81506cff6b5a`.
+
+```
+memcap 8G bash rust/bench-programs/callgrind.sh -r 2 -j 3 -o /tmp/claude-1000/p61/t11b/cg1 -p "pingmsg pingguard pingsem alloc alloc4c heapshape rexxcps emptyloop" base61=/tmp/claude-1000/p61/t1/bin/base/rexx-run base=/tmp/claude-1000/p61/t11b/bin/base/rexx-run t11b=/tmp/claude-1000/p61/t11b/bin/head/rexx-run
+```
+
+Exit 0, every spread at most 0.0001%. Percentages are against base61.
+
+| program | base % | t11b (running total) % | verdict |
+|---|---:|---:|---|
+| pingmsg | +0.0001 | -0.0190 | inside |
+| pingguard | -0.3835 | -0.5906 | inside |
+| pingsem | -0.2662 | -0.4694 | inside |
+| alloc | +0.0118 | +0.0118 | inside |
+| alloc4c | +0.0607 | +0.0607 | inside |
+| heapshape | +0.0520 | +0.0520 | inside |
+| rexxcps | +0.4268 | +0.4268 | inside |
+| emptyloop | -0.3191 | -0.3191 | inside |
+
+The emptiness test of `uninit_ready` at each return costs rexxcps 12,608 Ir over base
+(17,864,347,751 against 17,864,335,143).
+
+```
+PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pingsem pingpong/pingguard" memcap 8G bash rust/bench-programs/wallclock.sh -r 5 -o /tmp/claude-1000/p61/t11b/wall base61=... base=... t11b=...
+```
+
+Exit 0, load average 1.01 at the end. t11b against base61: rexxcps +0.15%, emptyloop +5.84% (base
++4.67%), alloc -2.74%, alloc4c -0.36%, heapshape +0.00%, pingmsg +1.00%, pingsem +1.61%, pingguard
++0.00%.
+
+Per-task check at `595ba08ef` (`/tmp/claude-1000/p61/t11b/tools/gates.sh`, statuses in
+`gates-status.txt`): debug `cargo test --workspace --no-fail-fast` 0 (3139 passed, 0 failed);
+`REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle` 0; `REXX_CORPUS_GATE=1 ... --release
+--test concurrency_tests whole_groups` 0, 16 passed, the seeded gate among them. No committed outcome
+changed.

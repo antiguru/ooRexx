@@ -229,8 +229,9 @@ The interpreter's first thread keeps today's large reservation (`INTERPRETER_STA
 512 KiB, `common/platform/unix/SysThread.hpp:67`; reservations count against the `ulimit -v` the
 oracle wrapper applies). On a pool thread, Error 11 is raised when the remaining stack falls below a
 margin, as the oracle's `stackLimit` does, besides the depth cap; pinned recursion is the only
-native-stack recursion left after S1. The pool has a bound; when a spawn fails or the bound is
-reached, a release with ready activities leaves them for the next thread that takes the baton.
+native-stack recursion left after S1. The pool keeps at most its bound of threads; a job that finds
+every thread busy gets a thread beyond the bound (Phase 6.1 Task 11b). When a spawn fails, a
+release with ready activities leaves them for the next thread that takes the baton.
 
 ---
 
