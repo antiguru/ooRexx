@@ -277,3 +277,4 @@ lang/package_find_through_parent.rex
 lang/routine_new_directive_subclass.rex
 lang/package_new_directive_subclass.rex
 lang/external_directive_subclass.rex
+lang/routine_new_parent_required.rex
