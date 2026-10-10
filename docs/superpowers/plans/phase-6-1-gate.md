@@ -1381,3 +1381,55 @@ code. pingguard: the largest pad move is 2.78 points (close +4.53%, cpad8 +1.75%
 drift, so its drift is unattributed. emptyloop:
 no pad moves it (4.38-4.62%), instructions are fewer and context switches equal, so the cycles are spent
 in the loop itself; unattributed beyond that, as at Task 2 (`loop_advance`, Moritz's ruling there).
+
+## Final fix
+
+Commits, in order:
+* `250176706`, `34501b269`, `7c203a8ff` and `384936cc9`: finding 1 as specified, then three perf rounds. Each round was over budget (strings +31.6%, +32.5%, +3.88%, +2.80% against base61).
+* `6bc2df715` (ruled fallback): reverts that code to the `821e68087` tree. Deviation 30 and R11 now name every builtin argument position as refused, citing the final review's table. `tests/string_answer_arguments/positions` asserts each refusal with the oracle's answer beside it.
+* `7eb7416c7`, `c51a367df`, `c92f18d51`: findings 2 and 4 and minor 6 queued. `7eb7416c7` also carries minor 5 (472).
+* `c10b30ff1`: finding 3, `Array~append` through a kept last item (`rexx_core::ArraySlots`). `cf167fba1`: a sized `new` builds its slots empty.
+
+Gates, `bggates.sh cf167fba1` (`.superpowers/sdd/2026-10-07-phase-6-1/bg/cf167fba1/status.txt`, finished 2026-10-10T18:48:14+02:00):
+* G1 fmt, G2 clippy, G3 release build, G5 debug build, G7 clippy pinning, G8 pinning self-tests and G9 loom: exit 0.
+* G4 release test: exit 0, 3149 passed, 0 failed, 4 ignored.
+* G6 debug test: exit 0, 3153 passed, 0 failed, 4 ignored.
+* P48 reruns 0.
+
+Perf, `callgrind.sh -r 2` over all programs with base61, `close` and `cf167fba1` in one run, spreads 0.0017% at most. d% is against base61:
+
+| program | base61 Ir | close d% | cf167fba1 d% |
+|---|---:|---:|---:|
+| alloc | 20345537338 | -0.0318 | +0.4253 |
+| alloc4c | 3140684534 | -0.0654 | -0.0651 |
+| arith | 11488857953 | +0.2725 | +0.2725 |
+| assign | 18983599260 | -3.1651 | -3.1650 |
+| compound | 8937498229 | -1.1172 | -1.1171 |
+| decloop | 2469010921 | -2.2380 | -2.2377 |
+| decrender | 4228326834 | -1.0609 | -1.0607 |
+| dirread | 2644857074 | +0.1049 | +0.1582 |
+| dispatch | 20809503035 | -0.3597 | -0.3596 |
+| dispatchclass | 15794935129 | -0.6321 | -0.6321 |
+| emptyloop | 7786099831 | -0.6402 | -0.6401 |
+| extcall | 7552641613 | +0.0021 | +0.0022 |
+| fibcall | 8413279881 | +0.4413 | +0.4413 |
+| fibfunc | 8228290876 | +0.4303 | +0.4304 |
+| heapshape | 2334068066 | +0.0093 | +0.1852 |
+| nop | 9283340217 | -1.0863 | -1.0862 |
+| parse | 1536336657 | +1.1978 | +1.1983 |
+| sayloop | 109048243 | -0.4070 | -0.4003 |
+| sendloop | 14013810949 | -0.4984 | -0.4983 |
+| startup | 58097208 | +0.2676 | +0.2807 |
+| strings | 17537481412 | +0.3735 | +0.3735 |
+| textnum | 1155145965 | -0.5405 | -0.5399 |
+| varlookup | 13437530316 | -2.2612 | -2.2611 |
+| rexxcps | 17788420928 | +0.2694 | +0.2694 |
+| pingguard | 1159017766 | -0.7113 | -0.7106 |
+| pingmsg | 1676421252 | -0.0422 | +0.0537 |
+| pingsem | 1181250809 | -0.4863 | -0.4857 |
+
+Nothing newly exceeds +0.5%. parse is +1.1983%. Every program carries a fixed ~7.5K Ir from hash-store slot writes keeping the last item, and the controller accepted it, parse's +0.0005 point over close included.
+* heapshape +0.18 points: `native_array_put` keeping the last item, about 4 Ir per put.
+* alloc +0.46 points:
+  * `.array~of` finding its last item, +27M.
+  * `from_utf8` +66M and memcmp +24M at unchanged call counts. Their per-line Ir moves between the aligned word loop and the byte loop, which depends on where the name buffers are allocated.

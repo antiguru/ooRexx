@@ -1,6 +1,6 @@
 # Phase 6.1 final fix report
 
-Status: BLOCKED. Finding 1 took the controller's fallback (refusal, `6bc2df715`). Finding 3 is committed (`c10b30ff1`), but it puts parse at +1.1984% against the +1.1979% limit, and the controller has the cgdiff. The gate run and the gate record section wait on that ruling.
+Status: DONE_WITH_CONCERNS. Finding 1 ended in the controller's fallback (refusal, `6bc2df715`). Finding 3 landed in `c10b30ff1` and `cf167fba1`. Gates are green on `cf167fba1`.
 
 ## Commits
 
@@ -13,6 +13,8 @@ Status: BLOCKED. Finding 1 took the controller's fallback (refusal, `6bc2df715`)
 * `c92f18d51` Minor 6 queue file.
 * `6bc2df715` Finding 1 fallback (ruled): the code of the four commits above is reverted by a reverse patch (rexx-exec/src has an empty diff against `821e68087`). Deviation 30 and R11 name every builtin argument position as refused, citing the review's table. The positions file asserts 66 refusals, each with the oracle's error in its comment, and 4 oracle-identical direct-`.nil` rows. The cold-site design was not tried: the oracle orders the builtin's own 40.12 (`changestr('a','a',o,'x')`) and STRIP's 93.915 option check ahead of the 88.909, and conversion runs before both.
 * `c10b30ff1` Finding 3: `ArraySlots`, plus the row 33 and 11a corrections.
+* `cf167fba1` Finding 3 remedy (ruled): `ArraySlots::empty(len)` for a sized `new`.
+* The report and the gate record's `## Final fix` section are committed after the gates.
 
 ## Finding 1
 
@@ -107,7 +109,29 @@ At `384936cc9` the cgdiff from close on strings is `builtin::run` +414,000,025 s
     * heapshape: `native_array_new` +7.0M (`ArraySlots::new` scans an empty `new(n)`), `native_array_put` +4.0M.
     * alloc: `from_utf8` +66M, memcmp +24M, `native_array_of` +27M.
     * parse: hash `install_store`/`insert_in`/`write_slot` +6.1K.
-* Not yet done: the controller's perf ruling, the gate run and the gate record section.
+* Remedy `cf167fba1`, per-step check on the archived tree:
+  * fmt 0, clippy pinning,sharing 0, workspace clippy 0.
+  * Tests for rexx-exec, rexx-core and rexx-api: exit 0.
+  * Corpus pair: exit 0.
+* Callgrind on all programs (`perf/cg-f3b.log`), d% vs base61:
+  * parse +1.1983.
+  * heapshape +0.1852 (close +0.0093).
+  * alloc +0.4253 (close -0.0318).
+  * Nothing newly exceeds +0.5%.
+* The controller accepted the fixed ~7.5K Ir per program.
+* Attribution:
+  * heapshape: `ArraySlots::set` keeping the last item, `native_array_put` +4.0M.
+  * alloc: `.array~of`'s last-item scan, +27M. Also `from_utf8` +66M and memcmp +24M at equal call counts, whose per-line Ir moves between the aligned and byte loops. That is buffer alignment, not input change.
+
+## Gates
+
+`bggates.sh cf167fba1`, finished 2026-10-10T18:48:14+02:00:
+* G1, G2, G3, G5, G7, G8, G9: exit 0.
+* G4 release: exit 0, 3149 passed, 0 failed, 4 ignored.
+* G6 debug: exit 0, 3153 passed, 0 failed, 4 ignored.
+* P48 reruns 0.
+
+The full table is in `docs/superpowers/plans/phase-6-1-gate.md` `## Final fix`.
 
 ## Concerns
 
