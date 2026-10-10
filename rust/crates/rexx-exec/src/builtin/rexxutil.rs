@@ -161,8 +161,15 @@ pub(crate) fn mk_dir(
 /// nothing it checks.
 const SLEEP_MAXIMUM: f64 = 2_147_483.0;
 
-/// `SysSleep(seconds)`: parks the running activity until the delay has
-/// passed, fractional seconds accepted.
+/// The shortest sleep: one microsecond, `TIME`'s resolution. The oracle's
+/// sleep is a `nanosleep` call even for a zero delay
+/// (`SysThread::longSleep`, `common/platform/unix/SysThread.cpp:191`), and
+/// `TIME('E')` after it read 0 in none of 2000 passes for a delay of 0 or
+/// 0.00000001.
+const SLEEP_FLOOR: std::time::Duration = std::time::Duration::from_micros(1);
+
+/// `SysSleep(seconds)`: parks the running activity until the delay, at least
+/// [`SLEEP_FLOOR`], has passed, fractional seconds accepted.
 pub(crate) fn sleep(
     interp: &mut Interp,
     _name: &'static [u8],
@@ -184,7 +191,7 @@ pub(crate) fn sleep(
         );
     }
     park_point!(interp, crate::pinning::ParkKind::SysSleep);
-    let deadline = interp.now() + std::time::Duration::from_secs_f64(seconds);
+    let deadline = interp.now() + std::time::Duration::from_secs_f64(seconds).max(SLEEP_FLOOR);
     let done = answer(interp, 0);
     interp.park_routine_with(
         crate::scheduler::ParkReason::Sleep { deadline },

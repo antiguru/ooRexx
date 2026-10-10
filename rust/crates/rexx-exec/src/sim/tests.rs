@@ -821,3 +821,25 @@ fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
         );
     }
 }
+
+/// `TIME('E')` after `SysSleep` is never 0, whatever the delay: on the
+/// virtual clock a sleep shorter than a microsecond would otherwise end
+/// inside the microsecond `TIME` read. The oracle read 0 in none of 2000
+/// passes for a delay of 0 or 0.00000001.
+#[test]
+fn time_e_after_any_sleep_is_never_zero() {
+    let program = "do d over 0, 0.0, 0.00000001, 0.000001\n\
+                   call time 'R'\n\
+                   call SysSleep d\n\
+                   say d (time('E') > 0)\n\
+                   end\n";
+    for seed in 1..=20 {
+        let outcome = run_in(program, Some(sim(&format!("sim:{seed},fifo"))));
+        assert_eq!(outcome.exit_code, 0, "seed {seed}: {}", stderr(&outcome));
+        assert_eq!(
+            stdout(&outcome),
+            "0 1\n0.0 1\n0.00000001 1\n0.000001 1\n",
+            "seed {seed}"
+        );
+    }
+}
