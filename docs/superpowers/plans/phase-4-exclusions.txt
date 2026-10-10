@@ -5612,21 +5612,12 @@ possible and the citation is what was checked.
   nothing is resolved through the context agrees, pinned by
   library_context_package.rex.
 
-  Method~new AND Routine~new REFUSE ANY THIRD ARGUMENT, loudly, naming
-  Phase 5 (found by Y1; native_executable_new's args.len() > 2 in
-  dispatch.rs).
+  Method~new AND Routine~new REFUSED ANY THIRD ARGUMENT. CLOSED by Phase
+  6.1 Task 11a Step 6 (98caea3de): measured 2026-10-10 at 97cb37712, two
+  runs each from a fresh directory,
     say .Method~new('mm', 'return 43', .context~package)
-    oracle: a Method, rc 0
-    this:   rc 120, method "NEW" of class "Method" is not implemented
-            (Phase 5)
-  Loud and pre-existing. OWNER: none. It is Phase 5 debt of the kind D-L2
-  recorded for the Directory methods, but the ruling that gave those to
-  Phase 8 named only them, so no open phase holds this one.
-  RE-HOMED AT PHASE 8'S CLOSE: the refusal is Loud::native_method's, which
-  now names Phase 9, the phase that owns an unimplemented native method (the
-  surface plan's m4 ruling); measured 2026-09-28, the same program ends rc
-  120 with "... is not implemented (Phase 9)". OWNER: Phase 9. The Routine~new
-  entries below that quote the old text are the same refusal.
+    say .Routine~new('rr', 'return 43', .context~package)~call
+  answer `a Method` and `43`, rc 0, on the oracle and here.
 
   THE TRACEBACK OF A RAISE INSIDE .Package~new OR loadPackage LACKED THE
   ORACLE'S COMPILED-METHOD LINE AND THE CALLING CLAUSE. CLOSED: measured
@@ -5787,15 +5778,12 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
     this:   start, rc 157, the same without 2 *-* ::requires 'pub.cls'
   NO OWNER: the traceback family.
 
-  Routine~new WITH A CONTEXT, measured again for this task (see "Method~new
-  AND Routine~new REFUSE ANY THIRD ARGUMENT" above):
+  Routine~new WITH A CONTEXT. CLOSED by Phase 6.1 Task 11a Steps 6 and 6b
+  (98caea3de, 8b95afe79): measured 2026-10-10 at 97cb37712, two runs each,
     r = .Routine~new('r', .array~of('return rxcalcsqrt(16)', "::requires
       'rxmath' LIBRARY"), .context~package); say r~call   (main declares
       ::routine rxcalcsqrt answering 'main' arg(1))
-    oracle: main 16, rc 0
-    this:   rc 120, method "NEW" of class "Routine" is not implemented
-            (Phase 5)
-  Owner as that entry records: none.
+  answers `main 16`, rc 0, on the oracle and here.
 
   A KEPT RESOLUTION IS PER COMPILED BODY, AND A BODY HAS ONE PER TRACE
   SETTING (plan.rs, chunks cached under (BodyKey, ChunkTrace)). An internal
@@ -5819,14 +5807,11 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   agrees. rc 0 both. NO OWNER: Interp::namespace_routine reads the
   namespace package's own two tables, and no phase names the namespace walk.
 
-  Routine~new WITH NO CONTEXT GETS NO PARENT PACKAGE, where Routine~newFile
-  with none gets the caller's; the oracle gives both the calling frame's
-  package (BaseExecutable.cpp:252-260).
+  Routine~new WITH NO CONTEXT GETS THE CALLING FRAME'S PACKAGE as its parent
+  (BaseExecutable.cpp:252-260). CLOSED by Phase 6.1 Task 11a Step 6b
+  (8b95afe79): measured 2026-10-10 at 97cb37712, two runs each,
     r = .Routine~new('x', 'return mainr()'); say 'new' r~call
-    oracle: new mainr / find a Routine, rc 0
-    this:   stdout empty, rc 213, 43.1 Could not find routine "MAINR".
-  NO OWNER: Routine~new's context handling is Phase 5 debt with the entry
-  above.
+  answers `new mainr`, rc 0, on the oracle and here.
 
   Package~addRoutine REFUSES A LIBRARY Routine OBJECT.
     p~addRoutine('SQ2', p~findRoutine('RXCALCSQRT')); say 'added' sq2(16)
