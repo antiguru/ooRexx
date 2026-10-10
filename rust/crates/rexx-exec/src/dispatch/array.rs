@@ -18,6 +18,7 @@ use super::{
 
 use super::new_instance;
 use super::{Arity, NativeMethod};
+use rexx_core::ArraySlots;
 
 // `Array`'s sort family, chained into `ObjectModel::build`.
 pub(super) mod sort;
@@ -118,6 +119,11 @@ fn empty_slots(size: usize) -> Result<Vec<Option<ObjRef>>, Failure> {
         .map_err(|_| Failure::from(Raised::system_resources()))?;
     slots.resize(size, None);
     Ok(slots)
+}
+
+/// [`empty_slots`] as an array body's slots.
+fn empty_array_slots(size: usize) -> Result<ArraySlots, Failure> {
+    ArraySlots::empty(size).map_err(|_| Failure::from(Raised::system_resources()))
 }
 
 /// The bounds policy a subscript list is validated under -- `IndexAccess`
@@ -558,7 +564,7 @@ pub(super) fn native_array_new(
             None => {
                 let size = array_size_argument(interp, *only, 1)?;
                 Body::Array {
-                    slots: empty_slots(size)?.into(),
+                    slots: empty_array_slots(size)?,
                     // `newRexx`'s own `if (totalSize == 0)` (`:125`-`:128`),
                     // whose one entry nothing reads: an explicit zero size
                     // fixes the shape, and the entry is not the extent.
@@ -620,7 +626,7 @@ fn multidimensional_body(
         shape.push(extent);
     }
     Ok(Body::Array {
-        slots: empty_slots(size)?.into(),
+        slots: empty_array_slots(size)?,
         dimensions: Some(shape.into()),
     })
 }

@@ -33,6 +33,14 @@ impl ArraySlots {
         ArraySlots { items, last }
     }
 
+    /// `len` empty slots, or the allocator's refusal.
+    pub fn empty(len: usize) -> Result<ArraySlots, TryReserveError> {
+        let mut items = Vec::new();
+        items.try_reserve_exact(len)?;
+        items.resize(len, None);
+        Ok(ArraySlots { items, last: 0 })
+    }
+
     /// The 1-based index of the last occupied slot, or 0.
     #[inline]
     pub fn last_item(&self) -> usize {
@@ -215,7 +223,9 @@ mod tests {
     /// assertion compares the index with the slots.
     #[test]
     fn every_write_keeps_the_last_item() {
-        let mut slots = ArraySlots::new(vec![None, some(1), None, None]);
+        let mut slots = ArraySlots::empty(3).expect("three slots");
+        assert_eq!((slots.len(), slots.last_item()), (3, 0));
+        slots = ArraySlots::new(vec![None, some(1), None, None]);
         assert_eq!(slots.last_item(), 2);
         slots.set(3, some(2));
         assert_eq!(slots.last_item(), 4);
