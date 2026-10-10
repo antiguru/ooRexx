@@ -217,9 +217,9 @@ impl Heap {
         // read of every slot in the table. Whether a *target* survived cannot
         // be decided here, so the decision waits for the loop to finish.
         let mut weak_marked: Vec<u32> = Vec::new();
-        // The survivors' body bytes, summed only to check the running figure
-        // the sweep leaves in `held_bytes`.
-        #[cfg(debug_assertions)]
+        // The survivors' body bytes, which become the running figure after
+        // the sweep. Summed here, the cost scales with the survivors rather
+        // than with the garbage the sweep frees.
         let mut survivor_bytes = 0;
         while let Some(r) = work.pop() {
             let Some(slot) = self.resolve(r) else {
@@ -234,13 +234,18 @@ impl Heap {
             if matches!(object.body, Body::WeakRef(_)) {
                 weak_marked.push(slot as u32);
             }
-            #[cfg(debug_assertions)]
-            {
-                survivor_bytes += object.body.held_bytes();
-            }
-            reached.clear();
-            object.body.trace(&mut reached);
-            work.extend(reached.iter().copied());
+            let held = if let Body::Text { bytes, .. } = &object.body {
+                // A string reaches nothing, so it skips the call to trace,
+                // which costs more than reading the string's length.
+                bytes.heap_len()
+            } else {
+                reached.clear();
+                object.body.trace(&mut reached);
+                work.extend(reached.iter().copied());
+                object.body.held_bytes()
+            };
+            debug_assert_eq!(held, object.body.held_bytes());
+            survivor_bytes += held;
         }
 
         // Pass 1: clear weak references whose target did not survive.
@@ -314,16 +319,17 @@ impl Heap {
             let Slot::Live { object, .. } = &self.slots[slot] else {
                 unreachable!("resolve rejects free slots")
             };
-            #[cfg(debug_assertions)]
-            {
-                survivor_bytes += object.body.held_bytes();
-            }
+            // A resurrected body survives, so its bytes stay held.
+            survivor_bytes += object.body.held_bytes();
             reached.clear();
             object.body.trace(&mut reached);
             resurrect.extend(reached.iter().copied());
         }
 
         let mut swept = 0;
+        // The freed bodies' bytes, summed only to check the survivors' sum
+        // against the running figure.
+        #[cfg(debug_assertions)]
         let mut freed_bytes = 0;
         let mut freed_classes = Vec::new();
         for slot in 0..self.slots.len() {
@@ -348,7 +354,12 @@ impl Heap {
                     );
                     freed_classes.push(ObjRef::heap(slot as u32, generation));
                 }
-                body => freed_bytes += body.held_bytes(),
+                _ => {
+                    #[cfg(debug_assertions)]
+                    {
+                        freed_bytes += object.body.held_bytes();
+                    }
+                }
             }
             swept += 1;
             self.live -= 1;
@@ -370,13 +381,19 @@ impl Heap {
                 },
             };
         }
-        self.release_body_bytes(freed_bytes);
+        // The running figure less the freed bytes must equal the survivors'
+        // sum. A charge site that missed `hold_body_bytes` or its release
+        // shows up here.
         #[cfg(debug_assertions)]
-        assert_eq!(
-            survivor_bytes, self.held_bytes,
-            "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
-            self.held_bytes
-        );
+        {
+            self.release_body_bytes(freed_bytes);
+            assert_eq!(
+                survivor_bytes, self.held_bytes,
+                "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
+                self.held_bytes
+            );
+        }
+        self.held_bytes = survivor_bytes;
         self.peak_bytes = self.peak_body_bytes();
         self.live_bytes = self.held_bytes;
         self.bytes_since = 0;
