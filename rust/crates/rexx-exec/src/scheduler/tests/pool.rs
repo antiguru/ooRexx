@@ -71,10 +71,14 @@ impl Meeting {
     }
 }
 
-static MEETINGS: [Meeting; 2] = [Meeting::new(), Meeting::new()];
+static MEETINGS: [Meeting; 3] = [Meeting::new(), Meeting::new(), Meeting::new()];
 
 /// How long the meeting in each slot waits for its second call.
-const PATIENCE: [Duration; 2] = [Duration::from_secs(10), Duration::from_millis(300)];
+const PATIENCE: [Duration; 3] = [
+    Duration::from_secs(10),
+    Duration::from_millis(300),
+    Duration::from_secs(2),
+];
 
 extern "C-unwind" fn meet<const SLOT: usize>(
     _context: *mut RexxCallContext_,
@@ -124,6 +128,7 @@ fn library() -> rexx_api::load::Library {
     rexx_api::load::routines_only(&[
         ("MEET", meet::<0>),
         ("MEETBRIEFLY", meet::<1>),
+        ("MEETATFULLPOOL", meet::<2>),
         ("NAP", nap),
         ("HERE", here),
         ("SENDTHENAWAIT", rexx_api::load::send_then_await),
@@ -160,13 +165,15 @@ extern "C-unwind" fn boom(
     panic!("a native panicked");
 }
 
-/// The pool a run gets, where a test sets it, the run's deadline, the
+/// The pool a run gets, where a test sets it, and whether it stops at its
+/// bound, the run's deadline, the
 /// library offered, by name, the interpreter thread's stack, the file
 /// [`crate::set_panic_at_call_end`] names, and whether
 /// [`crate::set_fail_native_wait`] is set.
 pub(super) struct Shape {
     pub(super) stack: Option<usize>,
     pub(super) bound: Option<usize>,
+    pub(super) fixed: bool,
     pub(super) deadline: Duration,
     pub(super) library: (&'static [u8], fn() -> rexx_api::load::Library),
     pub(super) interpreter_stack: usize,
@@ -178,6 +185,7 @@ pub(super) struct Shape {
 pub(super) const SHAPE: Shape = Shape {
     stack: None,
     bound: None,
+    fixed: false,
     deadline: Duration::from_secs(60),
     library: (b"pooltest", library),
     interpreter_stack: crate::INTERPRETER_STACK_BYTES,
@@ -186,12 +194,13 @@ pub(super) const SHAPE: Shape = Shape {
     switch: None,
 };
 
-/// A run: its outcome, its driver exits, the interpreter's thread, how many
-/// times a callback took the baton, and how many abandoned calls' frames it
-/// still held at its end.
+/// A run: its outcome, its driver exits, the pool threads it spawned beyond
+/// the bound, the interpreter's thread, how many times a callback took the
+/// baton, and how many abandoned calls' frames it still held at its end.
 pub(super) struct Ran {
     pub(super) outcome: Outcome,
     pub(super) exits: u64,
+    pub(super) beyond: u64,
     pub(super) thread: ThreadId,
     pub(super) takes: u64,
     pub(super) abandoned: usize,
@@ -253,6 +262,9 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
             if let Some(threads) = shape.bound {
                 crate::set_pool_bound(threads);
             }
+            if shape.fixed {
+                crate::set_pool_fixed();
+            }
             if let Some(path) = shape.panic_at_call_end {
                 crate::set_panic_at_call_end(path);
             }
@@ -269,6 +281,7 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
             Ran {
                 outcome,
                 exits: crate::scheduler::native_exits(),
+                beyond: crate::scheduler::threads_beyond_bound(),
                 thread: std::thread::current().id(),
                 takes: crate::dispatch::library::callback_takes(),
                 abandoned: crate::scheduler::abandoned_held(),
@@ -382,7 +395,8 @@ fn the_translator_on_a_pool_thread_has_the_interpreter_threads_stack() {
 }
 
 /// A pool thread whose callback's nested loop starts another call when no
-/// pool thread is free runs that call on the baton it holds by a lend.
+/// pool thread is free and none can be spawned runs that call on the baton
+/// it holds by a lend.
 #[test]
 fn a_call_on_a_pool_thread_with_no_thread_free_runs_on_its_lend() {
     let ran = run_shaped(
@@ -393,12 +407,94 @@ fn a_call_on_a_pool_thread_with_no_thread_free_runs_on_its_lend() {
          ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n",
         Shape {
             bound: Some(2),
+            fixed: true,
             ..SHAPE
         },
     )
     .expect("the run did not panic");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
     assert_eq!(ran.stdout(), "ok 4\n");
+    assert_eq!(ran.beyond, 0);
+}
+
+/// With every pool thread busy, a command whose child waits for another
+/// activity's command runs on a thread beyond the bound, so the other
+/// activity runs and the two children meet at the fifo. Run on the baton,
+/// the reader's `timeout` ends it first and the writer's ends it after.
+#[test]
+fn a_command_at_a_full_pool_runs_beyond_the_bound() {
+    let path = std::env::temp_dir().join(format!("rexx-full-pool-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let path = path.to_string_lossy().into_owned();
+    let ran = run_shaped(
+        &format!(
+            "address system 'mkfifo {path}'
+do i = 1 to 2
+  s.i = .s~new~start('nap')
+end
+             call SysSleep 0.3
+w = .w~new~start('write')
+             address system 'timeout 5 cat {path}'
+say 'read' rc
+say w~result
+             ::class s
+::method nap
+  address system 'sleep 2'
+             ::class w
+::method write
+  call SysSleep 0.1
+               address system 'timeout 5 sh -c \"echo hi > {path}\"'
+  return 'wrote' rc
+"
+        ),
+        Shape {
+            bound: Some(2),
+            deadline: Duration::from_secs(30),
+            switch: Some(crate::SwitchMode::AtClause(1_000_000)),
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "hi\nread 0\nwrote 0\n");
+    assert!(ran.beyond >= 1, "{} threads beyond the bound", ran.beyond);
+}
+
+/// With the pool's one thread busy, a native call that waits for another
+/// activity's call runs on a thread beyond the bound, so the other activity
+/// runs and the two calls meet. Run on the baton, each gives up in turn.
+#[test]
+fn a_native_call_at_a_full_pool_runs_beyond_the_bound() {
+    MEETINGS[2].reset();
+    let ran = run_shaped(
+        "n = .t~new~start('nap')
+o = .t~new~start('other')
+call SysSleep 0.05
+         call MEETATFULLPOOL
+say 'main'
+say o~result
+         ::requires 'pooltest' LIBRARY
+::class t
+::method nap
+  call NAP
+         ::method other
+  call SysSleep 0.1
+  call MEETATFULLPOOL
+  return 'other'
+",
+        Shape {
+            bound: Some(1),
+            deadline: Duration::from_secs(30),
+            switch: Some(crate::SwitchMode::AtClause(1_000_000)),
+            ..SHAPE
+        },
+    )
+    .expect("the run did not panic");
+    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    assert_eq!(ran.stdout(), "main\nother\n");
+    assert_eq!(MEETINGS[2].outcome(), (2, 0));
+    assert!(ran.beyond >= 1, "{} threads beyond the bound", ran.beyond);
 }
 
 /// What a command's child writes off the baton reaches the output as it

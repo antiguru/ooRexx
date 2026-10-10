@@ -254,10 +254,28 @@ thread_local! {
 #[cfg(test)]
 fn new_pool() -> crate::scheduler::Pool {
     let (stack, bound) = POOL_SHAPE.with(std::cell::Cell::get);
-    crate::scheduler::Pool::new(
+    let pool = crate::scheduler::Pool::new(
         stack.unwrap_or(crate::scheduler::POOL_STACK_BYTES),
         bound.unwrap_or(crate::scheduler::POOL_BOUND),
-    )
+    );
+    if POOL_FIXED.with(std::cell::Cell::get) {
+        pool.fix_at_bound();
+    }
+    pool
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Whether the pools of interpreters this thread makes stop at their
+    /// bound.
+    static POOL_FIXED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Has the pools of interpreters this thread makes spawn no thread beyond
+/// their bound, so a call that finds every thread busy runs on the baton.
+#[cfg(test)]
+pub(crate) fn set_pool_fixed() {
+    POOL_FIXED.with(|fixed| fixed.set(true));
 }
 
 /// Gives the pool threads of interpreters this thread makes `bytes` of stack.

@@ -336,7 +336,7 @@ fn a_callback_is_served_at_a_pinned_holders_next_cold_visit() {
 }
 
 /// Recalls that reach the holder together, while it keeps the baton for a
-/// call at the pool's bound, are each served: the first callback waits for
+/// call at a pool that spawns no thread beyond its bound, are each served: the first callback waits for
 /// the second, which its own thread's nested loop finds in the inbox rather
 /// than behind the holder's lend.
 #[test]
@@ -362,6 +362,7 @@ fn recalls_drained_together_are_each_served() {
         Shape {
             library: (b"callbacktest", library),
             bound: Some(2),
+            fixed: true,
             deadline: Duration::from_secs(20),
             ..SHAPE
         },

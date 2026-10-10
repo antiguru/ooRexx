@@ -510,13 +510,14 @@ pub(crate) trait Scheduler {
     fn stop_the_world(&self);
     /// Runs the native call the running activity, parked for it, prepared,
     /// off the baton (spec 2026-09-29 P6-3): on a pool thread, which this
-    /// thread lends the baton to while it enters the call, or, where no pool
-    /// thread is free, here on the baton. Its completion is posted.
+    /// thread lends the baton to while it enters the call, or, where the pool
+    /// is off or no thread can be spawned, here on the baton. Its completion
+    /// is posted.
     fn exit_for_native(&mut self);
     /// Runs `block`, a blocking operation of the running activity's that
     /// touches no island value, on a pool thread, which posts what it ended
-    /// with under the token answered; `Err(block)` where no pool thread is
-    /// free.
+    /// with under the token answered; `Err(block)` where the pool is off or
+    /// no thread can be spawned.
     fn exit_for_block(
         &mut self,
         block: crate::command::Block,
@@ -2775,9 +2776,9 @@ pub(crate) fn take_scripted() -> Option<Scripted> {
 }
 
 mod pool;
-#[cfg(test)]
-pub(crate) use pool::threads_spawned;
 pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
+#[cfg(test)]
+pub(crate) use pool::{threads_beyond_bound, threads_spawned};
 
 #[cfg(test)]
 #[expect(clippy::disallowed_methods, reason = "these tests time real runs")]

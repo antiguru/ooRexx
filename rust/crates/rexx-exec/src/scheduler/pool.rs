@@ -21,7 +21,9 @@ use std::thread::{JoinHandle, ThreadId};
 /// are measured against that size.
 pub(crate) const POOL_STACK_BYTES: usize = crate::INTERPRETER_STACK_BYTES;
 
-/// The most threads an interpreter's pool runs.
+/// The most threads an interpreter's pool keeps. A job that finds every
+/// thread busy gets a thread beyond the bound, which ends once the pool is
+/// back within it, so a blocking call never waits for a busy thread.
 pub(crate) const POOL_BOUND: usize = 64;
 
 /// What a pool thread runs.
@@ -55,7 +57,6 @@ pub(crate) fn posting_panics(
 pub(crate) struct Pool {
     shared: Arc<Shared>,
     stack: usize,
-    bound: usize,
 }
 
 struct Shared {
@@ -66,6 +67,10 @@ struct State {
     idle: Vec<Worker>,
     threads: Vec<(ThreadId, JoinHandle<()>)>,
     closed: bool,
+    bound: usize,
+    /// Whether no thread is spawned beyond the bound.
+    #[cfg(test)]
+    fixed: bool,
 }
 
 /// A pool thread, idle or reserved for one job.
@@ -89,8 +94,8 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Pool {
-    /// An empty pool of at most `bound` threads, each with `stack` bytes of
-    /// stack.
+    /// An empty pool that keeps at most `bound` threads, each with `stack`
+    /// bytes of stack.
     pub(crate) fn new(stack: usize, bound: usize) -> Pool {
         Pool {
             shared: Arc::new(Shared {
@@ -98,10 +103,12 @@ impl Pool {
                     idle: Vec::new(),
                     threads: Vec::new(),
                     closed: false,
+                    bound,
+                    #[cfg(test)]
+                    fixed: false,
                 }),
             }),
             stack,
-            bound,
         }
     }
 
@@ -110,23 +117,34 @@ impl Pool {
         self.stack
     }
 
-    /// Bounds the pool at `bound` threads from now on; at 0 no thread, idle
-    /// or new, is reserved.
-    pub(crate) fn set_bound(&mut self, bound: usize) {
-        self.bound = bound;
+    /// Bounds the pool at `bound` threads kept from now on; at 0 no thread,
+    /// idle or new, is reserved.
+    pub(crate) fn set_bound(&self, bound: usize) {
+        lock(&self.shared.state).bound = bound;
     }
 
-    /// An idle thread, or a new one, for one job; `None` where the bound is
-    /// reached or the spawn fails.
+    /// Spawns no thread beyond the bound from now on, so a job that finds
+    /// every thread busy gets none.
+    #[cfg(test)]
+    pub(crate) fn fix_at_bound(&self) {
+        lock(&self.shared.state).fixed = true;
+    }
+
+    /// An idle thread, or a new one, for one job: beyond the bound where
+    /// every thread is busy. `None` where the bound is 0 or the spawn fails.
     pub(crate) fn reserve(&self) -> Option<Worker> {
-        if self.bound == 0 {
+        let mut state = lock(&self.shared.state);
+        if state.bound == 0 {
             return None;
         }
-        let mut state = lock(&self.shared.state);
         if let Some(worker) = state.idle.pop() {
             return Some(worker);
         }
-        if state.threads.len() >= self.bound {
+        // Every thread busy: a new one beyond the bound, since a command or
+        // native call run inline instead holds the baton while it waits, and
+        // what it waits for may be another activity's to do.
+        #[cfg(test)]
+        if state.fixed && state.threads.len() >= state.bound {
             return None;
         }
         let mailbox = Arc::new(Mailbox {
@@ -144,6 +162,10 @@ impl Pool {
         let thread = spawned.thread().id();
         #[cfg(test)]
         SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
+        #[cfg(test)]
+        if state.threads.len() >= state.bound {
+            BEYOND.with(|beyond| beyond.set(beyond.get() + 1));
+        }
         state.threads.push((thread, spawned));
         Some(Worker { thread, mailbox })
     }
@@ -200,7 +222,20 @@ pub(crate) fn threads_spawned() -> u64 {
     SPAWNED.with(std::cell::Cell::get)
 }
 
-/// A pool thread: runs each job it is sent, then waits idle for the next.
+#[cfg(test)]
+thread_local! {
+    /// How many threads this thread has spawned beyond its pool's bound.
+    static BEYOND: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// [`BEYOND`]'s count.
+#[cfg(test)]
+pub(crate) fn threads_beyond_bound() -> u64 {
+    BEYOND.with(std::cell::Cell::get)
+}
+
+/// A pool thread: runs each job it is sent, then waits idle for the next,
+/// or ends where the pool holds more threads than its bound.
 fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
     crate::signal::block();
     loop {
@@ -222,6 +257,14 @@ fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
         job();
         let mut state = lock(&shared.state);
         if state.closed {
+            return;
+        }
+        if state.threads.len() > state.bound {
+            let me = std::thread::current().id();
+            if let Some(at) = state.threads.iter().position(|(id, _)| *id == me) {
+                // Dropping the handle detaches this thread, which ends here.
+                state.threads.swap_remove(at);
+            }
             return;
         }
         state.idle.push(Worker {
