@@ -145,3 +145,87 @@ Found in Step 2 and approved by the controller.
 * No drain at a native activation's return (`NativeActivation.cpp:1361`) beyond the send path through
   `finish_send`, and none inside `INTERPRET`. The probes reach the drain through `INIT`'s and a
   label's returns.
+
+## Fix round 1
+
+Brief `task-11b-fix1-brief.md`, review `task-11b-review.md`. Head `108bc81fa`.
+
+### I1: drains at an INTERPRET's end and at a native method's return (`be020a36d`)
+
+* `run/interpret.rs` `run_fragment`: at a fragment's normal end (`Flow::Next`, `Return`, `Exit`),
+  the `RETURNED` block an `INTERPRET` activation leaves through (`RexxActivation.cpp:676-705`).
+  `LEAVE`/`ITERATE` failures and `SIGNAL` out of the fragment do not drain.
+* `dispatch.rs` `run_other`: at the return of an `External` (`LIBRARY REXX`, for example the
+  `Stream` methods) or `Library` method, which are the oracle's `NativeMethod`s
+  (`NativeActivation::run`, `NativeActivation.cpp:1361`). The drain runs on `Ok` only. A generated
+  attribute method does not drain, which matches the reviewer's `attronly` control, and neither do
+  primitive (`Invocable::Native`) methods or native routines (`sysslp` control).
+* `run.rs` SAY: after the direct write that stands in for `.STDOUT`'s `LINEOUT` when `.OUTPUT` is not
+  redirected. A routed SAY reaches the `run_other` site through the monitor's send.
+* Each site is one `uninit_ready.is_empty()` test before the out-of-line `#[cold]`
+  `run_uninits_at_return`. A trace line's direct write does not drain.
+* Tests (`src/tests.rs`, `inline_uninit_rounds`: two inline rounds of 300 objects, with no label,
+  routine or Rexx method returning in the loop): `pending_uninits_run_as_a_native_method_returns`
+  (`call lineout '/dev/null', 'x'`), `pending_uninits_run_as_say_writes` (`say ''`) and
+  `pending_uninits_run_as_an_interpret_ends` (`interpret 'nop'`). Each asserts `1 1` as stdout's last
+  line and a peak of at most twice `COLLECT_BYTES_FLOOR`. Disabling each site (`if false && ...`)
+  turns only its own test red. Restored from copies.
+* The reviewer's probes (`/tmp/claude-1000/p61/t11br/probes/`), 1 run per engine, head binary
+  `bin/fr1` (sha256 `f82d21a13b024925ef1d4eefc4c180b4c8e9d0edb692df75c987f576b1cb9333`):
+
+| probe | crate | oracle |
+|---|---|---|
+| attronly (control) | `done 0`, 356,372 KB | `done 0`, 376,028 KB |
+| rtncall | `done 951`, 69,284 KB | `done 999`, 16,180 KB |
+| b_say | `done 951`, 69,444 KB | `done 998`, 16,328 KB |
+| b_callline | `done 951`, 68,532 KB | `done 996`, 14,648 KB |
+| b_xlineind | `done 951`, 69,248 KB | `done 998`, 18,272 KB |
+| streamsend | `done 951`, 69,164 KB | `done 999`, 15,136 KB |
+| interp | `done 951`, 68,720 KB | `done 998`, 24,336 KB |
+| sysslp (control) | `done 0`, 355,928 KB | `done 0`, 370,284 KB |
+
+All runs rc 0 with empty stderr. The remaining gap (951 against 995-999) is collection cadence, as
+the review's `cadence.rex` shows.
+
+### M1: the pool's shrink has a test (`bec5fe4a7`)
+
+`scheduler::tests::pool::threads_beyond_the_bound_end_after_their_jobs`: a bound-1 pool runs three
+held jobs (3 threads), and once they are released it is back at 1 thread within 10 s (test accessor
+`Pool::threads`). With the shrink disabled (`if false && state.threads.len() > state.bound`), it is
+red: left 3, right 1.
+
+### M2
+
+No change. Controller queues it.
+
+### M3: `ActivationCold` destructured (`108bc81fa`)
+
+`Activation::object_roots` destructures `ActivationCold` and `AutoExpose` exhaustively, naming
+`active_condition`, `random_seed`, `locals` and `local` as holding no `ObjRef`. A dummy field added
+to `ActivationCold` fails `cargo check` with E0027 at the pattern. It reads the same fields as before,
+and only at a collection.
+
+### Checks and perf
+
+* `cargo fmt --all --check` 0. `clippy --workspace --all-targets -D warnings` 0. `clippy -p rexx-exec
+  --all-targets --features pinning,sharing -D warnings` 0. `refusal-sites.tsv` re-derived with no
+  change.
+* `tools/gates-fr1.sh` at `108bc81fa` (status `gates-fr1-status.txt`, `finished`): debug workspace 0
+  (3143 passed, 0 failed). Corpus pair 0. `whole_groups` 0, 16 passed, the seeded gate among them.
+* Callgrind, `-r 2`, base61 against `bin/head` (`595ba08ef`) and `bin/fr1` (`be020a36d`), output
+  `/tmp/claude-1000/p61/t11b/cg2`:
+
+| program | t11b % | fr1 % |
+|---|---:|---:|
+| pingmsg | -0.0190 | -0.0190 |
+| pingguard | -0.5906 | -0.5906 |
+| pingsem | -0.4694 | -0.4694 |
+| alloc | +0.0118 | +0.0118 |
+| alloc4c | +0.0607 | +0.0607 |
+| heapshape | +0.0520 | +0.0520 |
+| rexxcps | +0.4268 | +0.4268 |
+| emptyloop | -0.3191 | -0.3191 |
+
+  rexxcps fr1 is 17,864,345,882 Ir against t11b's 17,864,348,575. M1 and M3 change no non-test
+  code on these programs' paths, except `object_roots` at a collection, so they were not measured
+  apart.
