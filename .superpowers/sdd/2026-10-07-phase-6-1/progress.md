@@ -245,3 +245,4 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Parked for Moritz: one-variable PARSE VALUE/ARG over a non-string STRING answer refuses where the oracle assigns .nil itself. Matching it needs more than one parse_template.rs site. Cost: a loud refusal, not a wrong answer.
 - Task 11a: complete (fbdf615e8..9c47d845b).
 - Task 11b dispatched: t11b-impl (opus), brief task-11b-brief.md, carry task-11b-carry.md.
+- Task 11b Step 1 committed (51782fcb8). Ruling: the pre-existing rooting defect (an activation's stream table is not a GC root, because Activity::object_roots never calls Activation::object_roots) is fixed in 11b before Step 2. Prefer reusing Activation::object_roots, after a field diff that names every missed root. Why: the UNINIT drain makes it observable (Error 48.1 under gc=1), so Step 2 cannot land without it. Cost if wrong: a separate commit with its own test.
