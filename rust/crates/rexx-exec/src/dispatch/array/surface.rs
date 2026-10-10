@@ -206,9 +206,7 @@ fn clear_array_slot(interp: &mut Interp, receiver: ObjRef, offset: usize) -> Res
     let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            if let Some(slot) = slots.get_mut(offset) {
-                *slot = None;
-            }
+            slots.set_within(offset, None);
             Ok(())
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),
@@ -448,9 +446,7 @@ fn native_array_fill(
     let store = store_of(interp, receiver)?;
     match interp.heap.get_mut(store).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            for slot in slots.iter_mut() {
-                *slot = Some(item);
-            }
+            slots.fill(Some(item));
             Ok(Some(receiver))
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),

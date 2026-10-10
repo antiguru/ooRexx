@@ -996,7 +996,7 @@ fn every_class_the_library_declares_carries_the_rexx_defined_flag() {
 fn a_native_activations_local_references_are_roots_only_while_it_lives() {
     let mut interp = Interp::new();
     let object = interp.heap.alloc(rexx_core::Body::Array {
-        slots: Vec::new(),
+        slots: Vec::new().into(),
         dimensions: None,
     });
 
@@ -1051,7 +1051,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     let mut interp = Interp::new();
     let fresh = |interp: &mut Interp| {
         interp.heap.alloc(rexx_core::Body::Array {
-            slots: Vec::new(),
+            slots: Vec::new().into(),
             dimensions: None,
         })
     };

@@ -251,7 +251,7 @@ fn native_list_put(
     let (items, _, _) = list_state(interp, receiver)?;
     match interp.heap.get_mut(items).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            slots[at] = item;
+            slots.set(at, item);
             Ok(None)
         }
         _ => Err(Loud::receiver_class("a value that is not a list").into()),

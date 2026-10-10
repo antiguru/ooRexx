@@ -509,7 +509,7 @@ fn context_stack_frames(
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
-                slots,
+                slots: slots.into(),
             },
         );
         interp.roots.activity_mut().pop_frame(frame);
@@ -921,7 +921,7 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
         BehaviourId::ARRAY,
         Body::Array {
             dimensions: None,
-            slots,
+            slots: slots.into(),
         },
     );
     interp.roots.activity_mut().push_temp(array);

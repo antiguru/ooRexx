@@ -32,7 +32,7 @@ fn build_graph() -> (Heap, RootSet) {
         if let Some(obj) = heap.get_mut(outer[i].expect("every slot was filled above"))
             && let Body::Array { slots: items, .. } = &mut obj.body
         {
-            items[0] = Some(target);
+            items.set(0, Some(target));
         }
     }
 

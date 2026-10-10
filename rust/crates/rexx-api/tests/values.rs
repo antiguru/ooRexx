@@ -84,7 +84,7 @@ impl Interpreter {
     fn array(&mut self) -> ObjRef {
         self.heap.alloc(Body::Array {
             dimensions: None,
-            slots: vec![None],
+            slots: vec![None].into(),
         })
     }
 

@@ -103,7 +103,7 @@ impl FakeHost {
     /// The items of an array body.
     pub(crate) fn items(&self, object: ObjRef) -> Option<Vec<Option<ObjRef>>> {
         match &self.heap.get(object)?.body {
-            Body::Array { slots, .. } => Some(slots.clone()),
+            Body::Array { slots, .. } => Some(slots.to_vec()),
             _ => None,
         }
     }
@@ -294,7 +294,7 @@ impl Surface for FakeHost {
     fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef {
         self.heap.alloc(Body::Array {
             dimensions: None,
-            slots: items.to_vec(),
+            slots: items.to_vec().into(),
         })
     }
 

@@ -61,7 +61,7 @@ fn reference_cycles_are_collected() {
     else {
         panic!("a exists")
     };
-    slots[0] = Some(b);
+    slots.set(0, Some(b));
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
 }

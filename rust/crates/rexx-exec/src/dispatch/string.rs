@@ -1969,7 +1969,7 @@ pub(super) fn native_string_makearray(
     // carries no dimensions rather than one of size 0.
     let body = Body::Array {
         dimensions: None,
-        slots,
+        slots: slots.into(),
     };
     let object = interp.alloc_charged(BehaviourId::ARRAY, body);
     interp.roots.activity_mut().push_temp(object);

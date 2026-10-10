@@ -264,9 +264,7 @@ fn write_back(interp: &mut Interp, receiver: ObjRef, items: Vec<ObjRef>) -> Resu
     let receiver = store_of(interp, receiver)?;
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            for (slot, item) in slots.iter_mut().zip(items) {
-                *slot = Some(item);
-            }
+            slots.overwrite(items);
             Ok(())
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),

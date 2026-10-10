@@ -10,7 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 use crate::bytes::Bytes;
-use crate::{ObjRef, SlotRef};
+use crate::{ArraySlots, ObjRef, SlotRef};
 use rexx_num::{Form, Number};
 use rustc_hash::FxHashMap;
 use std::collections::TryReserveError;
@@ -108,7 +108,7 @@ pub enum Body {
     /// An array's slots, in index order, `None` for a slot that holds no
     /// object at all.
     Array {
-        slots: Vec<Option<ObjRef>>,
+        slots: ArraySlots,
         dimensions: Option<Box<[usize]>>,
     },
     /// A user-defined object: the class it belongs to, the behaviour it
@@ -1000,7 +1000,7 @@ impl Body {
     /// A single-dimensional array over `slots`.
     pub fn array(slots: Vec<Option<ObjRef>>) -> Body {
         Body::Array {
-            slots,
+            slots: ArraySlots::new(slots),
             dimensions: None,
         }
     }

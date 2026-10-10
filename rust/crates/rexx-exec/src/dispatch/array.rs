@@ -355,7 +355,7 @@ fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<()
                     .try_reserve_exact(extra)
                     .map_err(|_| Failure::from(Raised::system_resources()))?;
             }
-            slots.resize(size, None);
+            slots.resize(size);
             slots.capacity().saturating_sub(before)
         }
         _ => return Err(Loud::receiver_class("a value that is not an array").into()),
@@ -429,7 +429,7 @@ fn array_reshape(
             dimensions: held,
         }) => {
             let before = slots.capacity();
-            *slots = grown;
+            slots.replace(grown);
             *held = Some(dimensions.into());
             (before, slots.capacity())
         }
@@ -498,7 +498,7 @@ pub(super) fn native_array_put(
     let receiver = collection_store(interp, receiver);
     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            slots[position - 1] = Some(value);
+            slots.set(position - 1, Some(value));
             Ok(None)
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),
@@ -558,7 +558,7 @@ pub(super) fn native_array_new(
             None => {
                 let size = array_size_argument(interp, *only, 1)?;
                 Body::Array {
-                    slots: empty_slots(size)?,
+                    slots: empty_slots(size)?.into(),
                     // `newRexx`'s own `if (totalSize == 0)` (`:125`-`:128`),
                     // whose one entry nothing reads: an explicit zero size
                     // fixes the shape, and the entry is not the extent.
@@ -594,7 +594,7 @@ pub(super) fn native_array_of(
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
     let body = Body::Array {
-        slots: args.to_vec(),
+        slots: args.to_vec().into(),
         dimensions: args.is_empty().then(|| Box::from([0].as_slice())),
     };
     let object = array_of_class(interp, class, body)?;
@@ -620,7 +620,7 @@ fn multidimensional_body(
         shape.push(extent);
     }
     Ok(Body::Array {
-        slots: empty_slots(size)?,
+        slots: empty_slots(size)?.into(),
         dimensions: Some(shape.into()),
     })
 }

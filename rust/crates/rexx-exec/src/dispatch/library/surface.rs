@@ -43,7 +43,7 @@ impl Surface for Interp {
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
-                slots: items.to_vec(),
+                slots: items.to_vec().into(),
             },
         )
     }

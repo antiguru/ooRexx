@@ -371,6 +371,111 @@ fn appends_and_reads_copy_slots_linearly() {
     );
 }
 
+/// One `Array~append` shape: `setup` builds `s` (`2N` standing for twice
+/// `n`), then `n` appends, then one more and the array's readings, which
+/// must be the oracle's `expected(n)` (measured at 2,000 and 200,000, twice
+/// each). A release build runs 200,000 appends and must take under 5 s,
+/// where the oracle takes under 0.1 s and an append that scans the trailing
+/// empty slots takes over 5 s at 100,000.
+#[expect(clippy::disallowed_methods, reason = "the bound is on real time")]
+fn append_shape(setup: &str, expected: impl Fn(usize) -> String) {
+    let n = if cfg!(debug_assertions) {
+        2_000
+    } else {
+        200_000
+    };
+    let setup = setup.replace("2N", &(2 * n).to_string());
+    let program = format!(
+        "{setup}\ndo i = 1 to {n}; s~append(i); end\n\
+         say s~append(0) s~items s~last s~lastItem s~size s~dimension s~first s~firstItem\n"
+    );
+    let started = std::time::Instant::now();
+    let (rc, stdout, stderr) = run_source(&program);
+    let took = started.elapsed();
+    assert_eq!((rc, stdout, stderr), (0, expected(n) + "\n", String::new()));
+    if !cfg!(debug_assertions) {
+        assert!(took.as_secs() < 5, "{n} appends took {took:?}");
+    }
+}
+
+#[test]
+fn append_to_a_dense_array() {
+    append_shape("s = .array~new", |n| {
+        format!("{0} {0} {0} 0 {0} 1 1 1", n + 1)
+    });
+}
+
+#[test]
+fn append_after_a_sparse_put_and_empty() {
+    append_shape("s = .array~new; s[2N] = 1; s~empty", |n| {
+        format!("{0} {0} {0} 0 {1} 1 1 1", n + 1, 2 * n)
+    });
+}
+
+#[test]
+fn append_after_a_sized_new_and_empty() {
+    append_shape("s = .array~new(2N); s~empty", |n| {
+        format!("{0} {0} {0} 0 {1} 1 1 1", n + 1, 2 * n)
+    });
+}
+
+#[test]
+fn append_after_a_sparse_put() {
+    append_shape("s = .array~new; s[2N] = 1", |n| {
+        format!("{0} {1} {0} 0 {0} 1 {2} 1", 3 * n + 1, n + 2, 2 * n)
+    });
+}
+
+#[test]
+fn append_after_appends_and_empty() {
+    append_shape(
+        "s = .array~new; do i = 1 to 2N; s~append(i); end; s~empty",
+        |n| format!("{0} {0} {0} 0 {1} 1 1 1", n + 1, 2 * n),
+    );
+}
+
+/// `append` after each write that moves an array's last item, oracle rc 0
+/// twice. In a debug build every `append` asserts the kept last item against
+/// the slots.
+#[test]
+fn append_after_every_kind_of_write() {
+    let program = "a = .array~of(1, 2, 3)\n\
+        a~remove(3); say 'remove last' a~append('x') a~size a~items\n\
+        a~delete(4); say 'delete last' a~append('y') a~size a~items\n\
+        a[10] = 'p'; say 'sparse put' a~append('z') a~size a~items\n\
+        a~remove(11); say 'remove past' a~append('w') a~size a~items\n\
+        a~insert('i', .nil); say 'insert front' a~append('v') a~size a~items\n\
+        a~insert(, a~last); say 'insert hole' a~append('u') a~size a~items\n\
+        a~put(.nil, 1); say 'put nil' a~append('t') a~size a~items\n\
+        a~fill('f'); say 'fill' a~append('s') a~size a~items\n\
+        a~empty; say 'empty' a~append('r') a~size a~items\n\
+        b = .array~of('c', 'a', 'b'); b~sort; b~remove(3)\n\
+        say 'sort' b~append('q') b~size b~items b~makestring('l', ',')\n\
+        b~stableSortWith(.caselessComparator~new)\n\
+        say 'stable sort' b~append('p') b~size b~items\n\
+        c = .array~new(5); say 'new(5)' c~append('o') c~size c~items\n\
+        d = .array~of(1, 2); d~delete(2); d~delete(1); say 'deleted all' d~append('n') d~size d~items\n\
+        e = .array~new; e[3] = 'm'; e~remove(3); say 'sparse removed' e~append('l') e~size e~items\n\
+        f = .array~of(1,2,3)~section(2); say 'section' f~append('k') f~size f~items\n\
+        g = 'a b c'~makeArray(' '); g~remove(3); say 'makearray' g~append('j') g~size g~items\n\
+        q = .queue~of(1, 2, 3); q~remove(3); say 'queue' q~append('h') q~size q~items\n\
+        q[2] = .nil; say 'queue put' q~append('g') q~items\n\
+        l = .list~of(1, 2); l~empty; say 'list' l~append('f') l~items\n";
+    assert_eq!(
+        run_source(program),
+        (
+            0,
+            "remove last 3 3 3\ndelete last 4 4 4\nsparse put 11 11 6\nremove past 11 11 6\n\
+             insert front 13 13 8\ninsert hole 14 14 9\nput nil 15 15 10\nfill 16 16 16\n\
+             empty 1 16 1\nsort 3 3 3 a,b,q\nstable sort 4 4 4\nnew(5) 1 5 1\n\
+             deleted all 1 1 1\nsparse removed 1 3 1\nsection 3 3 3\nmakearray 3 3 3\n\
+             queue 3 3 3\nqueue put 4 4\nlist 0 1\n"
+                .to_owned(),
+            String::new()
+        )
+    );
+}
+
 /// A `Routine` or `Method` compiled from source resolves routines and
 /// classes, private ones included, through its package's parent: the
 /// caller's package, or the context given to `NEW`; a source with

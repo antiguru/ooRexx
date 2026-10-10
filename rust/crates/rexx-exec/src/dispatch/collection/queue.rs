@@ -146,7 +146,7 @@ fn native_queue_put(
     };
     match interp.heap.get_mut(store).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            slots[position - 1] = Some(item);
+            slots.set(position - 1, Some(item));
             Ok(None)
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),

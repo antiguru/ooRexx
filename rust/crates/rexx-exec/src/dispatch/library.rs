@@ -1603,7 +1603,7 @@ impl Host for Interp {
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
-                slots,
+                slots: slots.into(),
             },
         );
         self.activity

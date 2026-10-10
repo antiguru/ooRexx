@@ -265,13 +265,12 @@ pub(super) fn append_slot(
     receiver: ObjRef,
     item: ObjRef,
 ) -> Result<usize, Failure> {
-    let (at, length) = read_slots(interp, receiver, |slots| {
-        let at = slots
-            .iter()
-            .rposition(Option::is_some)
-            .map_or(0, |last| last + 1);
-        (at, slots.len())
-    })?;
+    let store = store_of(interp, receiver)?;
+    // `ArrayClass::appendRexx` puts at `lastItem + 1`, which the slots keep.
+    let (at, length) = match interp.heap.get(store).map(|object| &object.body) {
+        Some(Body::Array { slots, .. }) => (slots.last_item(), slots.len()),
+        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+    };
     if at >= length {
         array_grow(interp, receiver, at + 1)?;
     }
@@ -395,9 +394,7 @@ fn write_slot(
     let store = store_of(interp, receiver)?;
     match interp.heap.get_mut(store).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
-            if let Some(slot) = slots.get_mut(at) {
-                *slot = item;
-            }
+            slots.set_within(at, item);
             Ok(())
         }
         _ => Err(Loud::receiver_class("a value that is not an array").into()),
@@ -414,7 +411,7 @@ pub(super) fn array_grow(
     let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             let before = slots.capacity();
-            slots.resize(length, None);
+            slots.resize(length);
             slots.capacity().saturating_sub(before)
         }
         _ => return Err(Loud::receiver_class("a value that is not an array").into()),

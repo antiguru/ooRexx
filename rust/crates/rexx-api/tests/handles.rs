@@ -20,7 +20,7 @@ use rexx_core::{
 /// what they hold and not only by the handle that names them.
 fn array(slots: usize) -> Body {
     Body::Array {
-        slots: vec![None; slots],
+        slots: vec![None; slots].into(),
         dimensions: None,
     }
 }

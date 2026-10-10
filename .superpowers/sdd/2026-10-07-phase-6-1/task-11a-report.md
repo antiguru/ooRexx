@@ -187,6 +187,10 @@ The controller ruled this in after Step 6 turned six TEST_NEW_CONTEXT_* refusals
   deep. It requires fewer than 2.5x as many copies at twice the size. Reverting `append_slot` gives
   2,008,002 and 8,016,002, which is red. Reverting List's handle read gives 2,258,502 and 9,017,002, also
   red. The stdout it asserts (`h 501`) is the oracle's, 1/1.
+* `append_slot` still scanned from the end for the last item, so an array with trailing empty slots
+  stayed quadratic: after a sparse put, a sized `new` or `empty`, 1e5 appends took 5.62-12.87 s where
+  the oracle takes 0.01-0.07 s (final review finding 3). The final fix keeps the last item
+  (`ArraySlots`, `final-fix-report.md`).
 * Scaling, wall clock (elapsed/user s, 3 interleaved runs each; base = `fr1`, head = `e8a19b2e6`):
 
 | program | base | head | oracle |

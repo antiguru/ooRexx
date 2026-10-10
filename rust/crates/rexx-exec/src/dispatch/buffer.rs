@@ -1014,7 +1014,7 @@ pub(super) fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Resul
         BehaviourId::ARRAY,
         Body::Array {
             dimensions: None,
-            slots,
+            slots: slots.into(),
         },
     );
     interp.roots.activity_mut().pop_frame(frame);

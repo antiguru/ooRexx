@@ -657,7 +657,7 @@ fn reset_copied_message(interp: &mut Interp, copy: ObjRef) {
             BehaviourId::ARRAY,
             Body::Array {
                 dimensions: None,
-                slots,
+                slots: slots.into(),
             },
         );
         interp.set_native_entry(copy, MESSAGE_PARTIES, parties);
@@ -1232,7 +1232,7 @@ pub(super) fn native_message_notify(
                 BehaviourId::ARRAY,
                 Body::Array {
                     dimensions: None,
-                    slots: Vec::new(),
+                    slots: Vec::new().into(),
                 },
             );
             interp.set_native_entry(receiver, MESSAGE_PARTIES, parties);

@@ -481,9 +481,8 @@ fn link_at(interp: &Interp, store: &Store, slot: usize) -> Result<usize, Failure
 fn write_slot(interp: &mut Interp, array: ObjRef, slot: usize, value: Option<ObjRef>) {
     if let Some(Body::Array { slots, .. }) =
         interp.heap.get_mut(array).map(|object| &mut object.body)
-        && let Some(cell) = slots.get_mut(slot)
     {
-        *cell = value;
+        slots.set_within(slot, value);
     }
 }
 
