@@ -123,6 +123,12 @@ impl Pool {
         lock(&self.shared.state).bound = bound;
     }
 
+    /// How many threads the pool holds, idle or running a job.
+    #[cfg(test)]
+    pub(crate) fn threads(&self) -> usize {
+        lock(&self.shared.state).threads.len()
+    }
+
     /// Spawns no thread beyond the bound from now on, so a job that finds
     /// every thread busy gets none.
     #[cfg(test)]

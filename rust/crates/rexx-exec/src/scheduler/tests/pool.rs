@@ -675,3 +675,30 @@ fn a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity() {
     assert_eq!(ran.stdout(), "0\nw\n");
     assert_eq!(ran.exits, 0);
 }
+
+/// Threads spawned beyond the bound end once their jobs have run, leaving
+/// the pool at its bound.
+#[test]
+fn threads_beyond_the_bound_end_after_their_jobs() {
+    let pool = crate::scheduler::Pool::new(1 << 20, 1);
+    let gate = std::sync::Arc::new((Mutex::new(false), Condvar::new()));
+    for _ in 0..3 {
+        let worker = pool.reserve().expect("a thread");
+        let gate = std::sync::Arc::clone(&gate);
+        worker.run(Box::new(move || {
+            let (open, opened) = &*gate;
+            let mut open = open.lock().expect("unpoisoned");
+            while !*open {
+                open = opened.wait(open).expect("unpoisoned");
+            }
+        }));
+    }
+    assert_eq!(pool.threads(), 3);
+    *gate.0.lock().expect("unpoisoned") = true;
+    gate.1.notify_all();
+    let end = Instant::now() + Duration::from_secs(10);
+    while pool.threads() > 1 && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(pool.threads(), 1);
+}
