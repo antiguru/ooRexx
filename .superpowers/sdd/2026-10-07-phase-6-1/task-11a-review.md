@@ -187,3 +187,142 @@ is ever cited as the linearity proof.
 * `call on nostring name h` gives 25.1 with `found "&1"` on both base `fr1` and HEAD. The oracle says
   `found "NOSTRING"`. The insert is not substituted.
 * The `Package~new(..., ctx)` and external-call `::CLASS ... SUBCLASS` variants from I1.
+
+## Re-review 1
+
+Scope: fix round 1, `f8d7049e8..559c78653`. I skipped the ledger commits and the controller's
+`857a01931`. HEAD was built from `git archive 559c78653 rust interpreter` into
+`/tmp/claude-1000/p61/t11ar/src`, with its own target dir and one `Compiling rexx-exec` line. Runs
+went through `t11ar/tools/both.sh` as before. "At 849f3dfb0" means my review-round results at
+`f8d7049e8`, which has the same code. New probes are in `/tmp/claude-1000/p61/t11ar/probes/r1/`.
+
+### Verdicts
+
+* **Spec compliance: not compliant.** I1, I2 and I4 are fixed. I3 is fixed for its seven ruled
+  sites, but the widening put two consumers in the `.nil` set where the oracle reads `.nil`
+  through the string layout: the ordering comparisons (N1) and PARSE VALUE/ARG (N2). R11 narrowed
+  says those sites refuse.
+* **Quality: needs fixes.** N1 and N2 turn loud refusals into silent wrong answers. The witness
+  rows that cover them pass only for the inputs they happen to use.
+
+Open: 2 Critical (N1, N2), 0 Important, 4 Minor (m1 and m2 recorded by the controller, plus new N3
+and N4).
+
+### Status of the review findings
+
+* **I1: fixed.** `directive_class` resolves through `installing`. I ran 3 runs per engine, and all
+  three routes now match. At `f8d7049e8` the crate's answers were the reverse of the oracle's, or
+  `loaded` for the external CALL.
+  * `routsub` (Routine~new) gives `2943d9b7`.
+  * `pkgsub` (Package~new with a context) gives `f636abb1`.
+  * `a8/main` (external CALL) gives `error 98.909`.
+  * The corpus witnesses `routine_new_directive_subclass` and `package_new_directive_subclass`
+    match 3/3. `external_directive_subclass` is the `a8` shape, which I ran directly.
+  * `shadow`, `req` and `pkgctx` still match 3/3.
+* **I2: fixed.** `req.rex` matches 3/3. The implementer showed the M2 mutant turning
+  `routine_new_parent_required.rex` red in the corpus gate. I did not re-run that mutation.
+* **I3: the seven ruled sites are fixed.** `string_answer_nil_consumers.rex` matches 3/3 with
+  stdout `9f736739` and stderr `58a6570b`, covering SIGNAL VALUE, the tail, `+`, `**`, DIGITS, FUZZ,
+  DO count, DO FOR, FORM, the timeout, OPTIONS, the equality rows, PARSE VALUE and ARG
+  (single-variable only), the command and INTERPRET. All 39 earlier `b/` probes were re-run, with
+  `drop` skipped because it crashes the oracle. Every one either matches or is an expected rc 120
+  refusal. In those refusals the oracle gives Error 5 (`||`, `value()`, `upper()`, `"abc"~"||"`),
+  88.909 (say, queue, lineout, charout), 24.1 found `"?"` (trace) or 29.1 (address). The widening
+  is assessed in N1 and N2.
+* **I4: fixed.** `ns_sigbytes` matches 3/3 (`h NOSTRING [The NIL object] 3`), and
+  `string_answer_nostring_trapped.rex` matches 3/3. It gave rc 120 at `f8d7049e8`.
+
+### New findings
+
+#### N1 (Critical). The ordering comparisons compare against the text "The NIL object", and the oracle does not
+
+`eval.rs:1324` sends every non-concatenation operator to `required_string_or_nil`. The `.nil` rule
+at `:1325-1329` covers only equality, so `<`, `>`, `<=`, `>=`, `<<`, `>>`, `<<=` and `>>=` compare
+the left side with "The NIL object". In the oracle, `RexxString::comp` runs `stringComp` on
+`other->requestString()` (`StringClass.cpp:774`, `:795-801`). That reads `getLength()` and
+`getStringData()` from `.nil` through the string layout, so the answer is a garbage read. Probe
+`r1/order.rex`, 3/3 per engine:
+
+```
+                                             crate     oracle
+"The NIL object" <= o, >= o                  1 1       0 1
+"The NIL objecs" < o, "The NIL objecu" > o   1 1       0 1
+<<=  >>=  <<  >>  (same operands)            1 1 1 1   0 1 0 1
+"Tha"<o "Thf">o "S"<o "U">o "a">o "A"<o      1 1 1 1 1 1   0 1 0 1 1 0
+1<o 1>o ""<o " "<o                           1 0 1 1   0 1 0 0
+```
+
+`r1/empty.rex` gives `"" < o` 0 but `"" << o` 1 on the oracle, which no text could produce. The
+witness line `ordered ("abc" < o) ("abc" >> o) ("Z" > o)` gives `0 1 1` on both engines only
+because those inputs happen to agree. Equality is a layout read in the oracle too. `primitiveIsEqual`
+checks for `.nil` before converting, against the original operand, and then compares a garbage
+length. Its answers (`=`, `==` are 0 and `\=`, `\==` are 1, including against `""`) are what the
+crate's rule gives (`r1/empty.rex`: `eq 0 0 0 1 1` on both engines), so equality may stay by the
+controller's ruling.
+
+**Fix:** let `required_string_operand` take the `.nil` path only for `& | &&` and the equality
+operators (`is_equality`), and refuse the ordering operators. Remove the `ordered` line from
+`string_answer_nil_consumers.rex` and regenerate its sourceline file. In Deviation 30, list the
+ordering operators as refused and say that equality is a layout read whose answer the crate pins.
+
+#### N2 (Critical). PARSE VALUE and PARSE ARG answer the text where the oracle answers `.nil` or Error 5
+
+`parse_template.rs:445` and `:631` now read `.nil` as "The NIL object" for every template. The
+oracle reads `.nil` through the string layout as soon as the template splits, and a one-variable
+template assigns the `.nil` object itself. Probes in `r1/`, 2/2 per engine:
+
+| probe | crate | oracle |
+|---|---|---|
+| `parse value o with p q r` | `[The][NIL][object]` | rc 251, Error 5 |
+| `parse value o with p 4 q` | `[The][ NIL object]` | rc 251, Error 5 |
+| `parse value o with p "N" q` | `[The ][IL object]` | rc 251, Error 5 |
+| `parse value o with p .` | `[The]` | a different stdout in each run |
+| `parse upper value o with p` | `[THE NIL OBJECT]` | rc 251, Error 5 |
+| `parse value o with p; say (p == .nil) (p = .nil)` | `0 0` | `1 1` |
+| `call pa o` / `parse arg p q` | `[The][NIL object]` | rc 251, Error 5 |
+| `call pa o` / `parse arg p; say (p == .nil)` | `0` | `1` |
+
+At `f8d7049e8` each of these refused with rc 120. PARSE ARG was moved without a ruling. PARSE
+VALUE was ruled in by the controller, but only the one-variable case was observed, and there the
+oracle assigns `.nil`, not a string.
+
+**Fix:** put both sites back in the bytes set. The one defined case is a single-variable template
+with no UPPER/LOWER/CASELESS and no other template element, which assigns `.nil`. Answer it only
+with its own witness, or ask the controller for a ruling first. Remove the `parse value` and
+`parse arg` lines from the witness, or change them to match.
+
+#### N3 (Minor). OPTIONS has no observable effect, so its row cannot show a defined answer
+
+`c03_options` matches (rc 0, `end`), but a garbage read of `.nil` would also do nothing visible.
+The row is harmless either way. **Fix:** mark it "no observable" in the table instead of citing
+the defined-answer rule.
+
+#### N4 (Minor). The classification table's PARSE rows are wrong
+
+The `parse_template.rs:445` and `:631` rows say "The NIL object". That is true only for a
+one-variable template, and even there the oracle assigns `.nil`. **Fix:** correct the rows with N2.
+
+### Requested checks
+
+* **(2) Classification table.** I ran 19 rows: `c01`, `c02`, `c03`, `c06`, `c07`, `c08`, `c09`,
+  `c10`, `c12`, `c13`, `c14`, three `c15_*`, `c19`, `b02`, `b11`, `b33` and `parsearg`, 1 crate run
+  and 2 oracle runs each. I did not re-run `c05`, `c11` or `b08`, because they crash the oracle and
+  are listed in `oracle-crashes.txt`. Each refused-garbage row is rc 120 against the oracle's
+  Error 5, 98.920 or 24.1. Each 88.909 row is rc 120 against 88.909. On the ruled-out moves without
+  a ruling:
+  * NUMERIC FORM VALUE (25.11 "a SN"), the semaphore timeout (88.902 "a SN"), and the native int,
+    double, size, stem, CSTRING and ObjectToString conversions match. That includes
+    `string_answer_nil_native.rex` 2/2 with `LD_LIBRARY_PATH` set to the oracle's lib. Each
+    depends only on the conversion failing or on `.nil` as an object, so they are defined.
+  * OPTIONS: N3.
+  * PARSE ARG: N2.
+* **(3) Comparisons.** `=` and `==` against "The NIL object" give 0 on both engines, and `\=`/`\==`
+  give 1. The ordering operators compare against the text in the crate and do not match the
+  oracle (N1).
+* **(4) Sidecar.** `string_answer_nil_native.env` is the existing `tests/support/sidecar.rs`
+  mechanism. It has the same `LD_LIBRARY_PATH={oraclelib}` line as `trapped_condition_native_levels.env`
+  and the other native corpus entries, so the in-process side can load `orxmethod`/`orxfunction`
+  from the oracle's lib. It is right and follows precedent.
+* **(5) Breakage.** Outside N1 and N2 I found nothing. The 39 `b/` probes, the Step 6b probes and
+  all new corpus witnesses match or refuse as expected. I did not re-run the perf figures, as
+  instructed.
