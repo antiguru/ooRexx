@@ -1375,8 +1375,9 @@ interleaved runs per binary, medians (`.superpowers/sdd/2026-10-07-phase-6-1/tas
 | pingsem | +4.64% | +0.56% | +4.19% | +1.00% | +0.50% | 785-786 |
 | pingguard | +4.53% | +1.75% | +2.27% | +1.85% | -0.63% | 785-788 |
 
-pingsem and pingguard: a pad alone moves the same code's cycles by up to 4.1 points (cpad8 against
-close) at equal instructions and context switches, as large as the drift, so the drift cannot be
-told apart from layout and is not attributable to code. emptyloop:
+pingsem: a pad alone moves the same code's cycles by 4.08 points (close +4.64%, cpad8 +0.56%) at
+equal instructions and context switches, as large as its drift, so the drift is not attributable to
+code. pingguard: the largest pad move is 2.78 points (close +4.53%, cpad8 +1.75%), below its +4.53%
+drift, so its drift is unattributed. emptyloop:
 no pad moves it (4.38-4.62%), instructions are fewer and context switches equal, so the cycles are spent
 in the loop itself; unattributed beyond that, as at Task 2 (`loop_advance`, Moritz's ruling there).
