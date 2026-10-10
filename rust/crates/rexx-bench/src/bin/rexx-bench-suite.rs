@@ -108,6 +108,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "dirread",
+        role: Role::Loop,
+    },
+    Axis {
         name: "dispatch",
         role: Role::Loop,
     },

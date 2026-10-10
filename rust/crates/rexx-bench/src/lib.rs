@@ -64,6 +64,9 @@ pub static PROGRAMS: &[&str] = &[
     "fibfunc",
     "sendloop",
     "extcall",
+    // Added in Phase 6.1: the store-backed read of a Directory entry and a
+    // `.local` entry, the path whose cost Task 7 measured.
+    "dirread",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does
