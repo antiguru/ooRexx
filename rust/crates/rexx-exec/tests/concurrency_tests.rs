@@ -4435,15 +4435,13 @@ mod group_runs {
                     .join("run")
             }
 
-            /// Removes the item directory a [`scratch`] directory `dir` is in,
-            /// and the run's directory once it is empty.
+            /// Removes the item directory a [`scratch`] directory `dir` is in.
             fn remove(dir: &Path) {
                 let item = dir.parent().expect("an item directory");
                 if item.exists() {
                     std::fs::remove_dir_all(item).expect("cannot remove a run");
                 }
-                // Fails while another item of the run is still there.
-                let _ = std::fs::remove_dir(item.parent().expect("a run directory"));
+                // The shared run directory stays: removing it races another job's create_dir_all.
             }
 
             /// What one unit found.
