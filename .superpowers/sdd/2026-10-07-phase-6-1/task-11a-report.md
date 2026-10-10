@@ -372,7 +372,7 @@ Brief `task-11a-fix1-brief.md`, review `task-11a-review.md`. Head `2021f173f`. P
 | `parse_template.rs:631` | PARSE VALUE | .nil-set | "The NIL object" | `b/b10_parse` |
 | `dispatch/semaphore.rs:197` | semaphore timeout | .nil-set | 88.902 naming "a SN" | `f1c/c08_sem` |
 | `run/interpret.rs:155` | `drop (v)` | refused-garbage | SIGSEGV rc 139 | `b/b08_drop` |
-| `run/loops.rs:685` | DO ... FOR | .nil-set | 26.3 naming "a SN" | `f1/p_do_i___1_for_o__en` |
+| `run/loops.rs:685` | DO ... FOR | .nil-set | 26.3 naming "a SN" | `f1/p_do_i___1_for_o__end_` |
 | `run/loops.rs:695` | DO count | .nil-set | 26.2 naming "a SN" | `b/b13_docount` |
 | `dispatch/library.rs:1503` | native logical argument | .nil-set | 34.901 found "The NIL object" | `s4c/found_nil` (5/5) |
 | `dispatch/library.rs:1733` | native numeric and stem arguments | .nil-set | 88.907, 88.921, 93.969 naming "a SN" | `f1c/c15_*` |
