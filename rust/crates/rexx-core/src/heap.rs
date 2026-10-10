@@ -334,12 +334,13 @@ impl Heap {
                 continue;
             };
             let generation = *generation;
-            freed_bytes += object.body.held_bytes();
-            // Reported so the caller can drop the rows it keys by this class.
-            // The handle is still the live one here; after the assignment
-            // below its generation has moved on and it would name nothing.
-            if matches!(object.body, Body::Class { .. }) {
-                freed_classes.push(ObjRef::heap(slot as u32, generation));
+            match &object.body {
+                // Reported so the caller can drop the rows it keys by this
+                // class. The handle is still the live one here; after the
+                // assignment below its generation has moved on and it would
+                // name nothing.
+                Body::Class { .. } => freed_classes.push(ObjRef::heap(slot as u32, generation)),
+                body => freed_bytes += body.held_bytes(),
             }
             swept += 1;
             self.live -= 1;

@@ -101,6 +101,16 @@ impl Bytes {
         }
     }
 
+    /// The length of the separate allocation these bytes are held in, or 0
+    /// when they are held inline.
+    #[inline]
+    pub fn heap_len(&self) -> usize {
+        match &self.0 {
+            Repr::Inline { .. } => 0,
+            Repr::Heap(v) => v.len(),
+        }
+    }
+
     /// Whether these bytes are held inline rather than in a separate
     /// allocation.
     pub fn is_inline(&self) -> bool {

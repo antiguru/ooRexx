@@ -1029,7 +1029,7 @@ impl Body {
     /// `MutableBuffer`'s capacity. Nothing for every other body.
     pub fn held_bytes(&self) -> usize {
         match self {
-            Body::Text { bytes, .. } if !bytes.is_inline() => bytes.as_slice().len(),
+            Body::Text { bytes, .. } => bytes.heap_len(),
             Body::Array { slots, .. } => slots.capacity() * SLOT_BYTES,
             Body::Instance {
                 native: Some(native),
