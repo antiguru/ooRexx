@@ -1934,7 +1934,16 @@ DEVIATIONS -- permanent, chosen
      both naming the original object, and a native method's numeric and
      stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
      (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
-     string_answer_nil_native.rex. Where it
+     string_answer_nil_native.rex. A builtin argument position that is not
+     the string the builtin operates on answers the oracle's error at the
+     program's own line: 88.909 numbered as the `String` method the builtin
+     forwards to numbers it, 40.12 and 93.904 naming the original object,
+     and 40.19, 40.23, 40.28 and 40.904 naming "The NIL object"
+     (`crate::builtin::nil_argument_positions`, one row per position the
+     Phase 6.1 final review measured;
+     crates/rexx-exec/tests/string_answer_arguments/positions). The target
+     position, and any builtin position that table does not list, refuses.
+     Where it
      reads `.nil` through the string layout, the answer is garbage or a
      crash. Measured by Phase 6.1's scout E (probes i7b, i7e, i7f, i7h),
      Task 11a (probes bytes_dir, bytes_nil, bytes_queue, bytes_obj, s4_nil,
@@ -1961,6 +1970,10 @@ DEVIATIONS -- permanent, chosen
                                       template assigns the `.nil` object
        OPTIONS o                      nothing observable
        `queue o`, `lineout`, `charout` rc 168, 88.909 through REXX frames
+       `changestr('a', o, 'b')`,
+       `countstr('z', o)`, `strip(o)`  SIGSEGV, rc 139
+       `pos('z', o)`                  rc 0, `1190`
+       `trunc(o)`, `sign(o)`, `abs(o)` rc 163, 93.943 found "The NIL object"
 
      This crate refuses each, rc 120, with `a STRING method answering an
      object with no string value is not implemented` (a one-variable PARSE

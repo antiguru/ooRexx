@@ -19,8 +19,8 @@
 use rexx_core::ObjRef;
 
 use super::{
-    Args, arg, buffer, count_of, length_of, optional_string, pad_byte, position_of,
-    required_render, required_string, whole_number,
+    Args, arg, buffer, count_of, length_of, method_string_argument, method_string_arguments,
+    optional_string, pad_byte, position_of, required_render, required_string, whole_number,
 };
 use crate::Interp;
 use crate::error::{Failure, Raised};
@@ -506,6 +506,7 @@ pub(crate) fn insert(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let start = whole_number(interp, name, args, 3)?;
     let requested = whole_number(interp, name, args, 4)?;
     let pad = pad_byte(interp, name, args, 5)?.unwrap_or(b' ');
+    method_string_arguments(name, args)?;
 
     let start = match start {
         Some(value) => count_of(value, 2)?,
@@ -555,6 +556,7 @@ pub(crate) fn overlay(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
     let start = whole_number(interp, name, args, 3)?;
     let requested = whole_number(interp, name, args, 4)?;
     let pad = pad_byte(interp, name, args, 5)?.unwrap_or(b' ');
+    method_string_arguments(name, args)?;
 
     let start = match start {
         Some(value) => position_of(value)?,
@@ -573,6 +575,7 @@ pub(crate) fn pos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
     // carries why moving them is not observable.
     let start = whole_number(interp, name, args, 3)?;
     let requested = whole_number(interp, name, args, 4)?;
+    method_string_arguments(name, args)?;
     let needle = required_render(interp, args, 1);
     let haystack = required_render(interp, args, 2);
     let needle = needle.text(interp);
@@ -596,6 +599,7 @@ pub(crate) fn lastpos(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
     let haystack = required_string(interp, args, 2);
     let start = whole_number(interp, name, args, 3)?;
     let requested = whole_number(interp, name, args, 4)?;
+    method_string_arguments(name, args)?;
 
     let start = match start {
         Some(value) => position_of(value)?,
@@ -621,12 +625,14 @@ pub(crate) fn reverse(
 }
 
 /// `STRIP(string [,option] [,chars])`.
-pub(crate) fn strip(interp: &mut Interp, _name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
+pub(crate) fn strip(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let option = optional_string(interp, args, 2);
     let set = optional_string(interp, args, 3);
-
+    // `RexxString::strip` validates its option before it reads its set.
+    method_string_argument(name, args, 2)?;
     let option = option_letter(option.as_deref(), "BLT")?.unwrap_or(b'B');
+    method_string_argument(name, args, 3)?;
     let kept = strip_bytes(&string, option, set.as_deref());
     Ok(interp.text(kept))
 }
@@ -738,6 +744,7 @@ pub(crate) fn abbrev(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let information = required_string(interp, args, 1);
     let info = required_string(interp, args, 2);
     let requested = whole_number(interp, name, args, 3)?;
+    method_string_arguments(name, args)?;
 
     let minimum = match requested {
         Some(value) => Some(length_of(value)?),
@@ -790,6 +797,7 @@ pub(crate) fn compare(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Resul
     let first = required_string(interp, args, 1);
     let second = required_string(interp, args, 2);
     let pad = pad_byte(interp, name, args, 3)?.unwrap_or(b' ');
+    method_string_arguments(name, args)?;
 
     Ok(interp.counted(compare_at(&first, &second, pad)))
 }
@@ -876,9 +884,10 @@ pub(crate) fn compare_to_over(
 /// `haystack` holds.
 pub(crate) fn countstr(
     interp: &mut Interp,
-    _name: &[u8],
+    name: &[u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
+    method_string_arguments(name, args)?;
     let needle = required_string(interp, args, 1);
     let haystack = required_string(interp, args, 2);
     let count = count_occurrences(&haystack, &needle, usize::MAX);
@@ -970,6 +979,7 @@ pub(crate) fn changestr(
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let requested = whole_number(interp, name, args, 4)?;
+    method_string_arguments(name, args)?;
     let needle = required_render(interp, args, 1);
     let haystack = required_render(interp, args, 2);
     let replacement = required_render(interp, args, 3);
@@ -1012,6 +1022,7 @@ pub(crate) fn translate(
     let pad = pad_byte(interp, name, args, 4)?;
     let start = whole_number(interp, name, args, 5)?;
     let range = whole_number(interp, name, args, 6)?;
+    method_string_arguments(name, args)?;
 
     if out_table.is_none() && in_table.is_none() && pad.is_none() {
         return case_shifted(interp, string, start, range, u8::to_ascii_uppercase);
@@ -1079,6 +1090,7 @@ pub(crate) fn verify(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result
     let option = optional_string(interp, args, 3);
     let start = whole_number(interp, name, args, 4)?;
     let range = whole_number(interp, name, args, 5)?;
+    method_string_arguments(name, args)?;
 
     let option = option_letter(option.as_deref(), "MN")?.unwrap_or(b'N');
     let start = match start {

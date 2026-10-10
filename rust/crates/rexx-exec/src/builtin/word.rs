@@ -31,7 +31,10 @@ use std::ops::Range;
 
 use rexx_core::ObjRef;
 
-use super::{Args, length_of, position_of, required_render, required_string, whole_number};
+use super::{
+    Args, length_of, method_string_arguments, position_of, required_render, required_string,
+    whole_number,
+};
 use crate::Interp;
 use crate::error::Failure;
 
@@ -300,7 +303,9 @@ pub(crate) fn word_pos(
 ) -> Result<ObjRef, Failure> {
     let phrase = required_string(interp, args, 1);
     let string = required_string(interp, args, 2);
-    let start = match whole_number(interp, name, args, 3)? {
+    let start = whole_number(interp, name, args, 3)?;
+    method_string_arguments(name, args)?;
+    let start = match start {
         Some(value) => position_of(value)?,
         None => 1,
     };

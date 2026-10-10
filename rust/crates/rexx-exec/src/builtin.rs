@@ -757,6 +757,100 @@ pub(crate) fn raw_argument_positions(name: &'static [u8]) -> &'static [usize] {
 /// second builtin joining it is one row rather than a second branch.
 static RAW_ARGUMENT_POSITIONS: &[(&[u8], &[usize])] = &[(b"VALUE", &[2])];
 
+/// What reads a `.nil` that a user `STRING` method's answer with no string
+/// value converted to, at a position [`nil_argument_positions`] lists.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum NilArgument {
+    /// The builtin's own argument check, which raises its 40.x or 93.x.
+    Checked,
+    /// The `String` method the builtin forwards to, which raises 88.909
+    /// naming this position of its own.
+    MethodString(usize),
+}
+
+/// The 1-based argument positions of `name` where a user `STRING` answer
+/// with no string value reads as `.nil` (Deviation 30), each with what reads
+/// it. A position not listed refuses such an answer.
+pub(crate) fn nil_argument_positions(name: &[u8]) -> &'static [(usize, NilArgument)] {
+    match NIL_ARGUMENT_POSITIONS.iter().find(|(row, _)| *row == name) {
+        Some((_, positions)) => positions,
+        None => &[],
+    }
+}
+
+/// The whole of what [`nil_argument_positions`] answers. Every row is a
+/// position the oracle answers with an error at the program's own line,
+/// measured twice per position (`tests/string_answer_arguments`). The string
+/// a builtin operates on is never listed: the oracle reads `.nil` there
+/// through the string layout, and that position stays a refusal.
+static NIL_ARGUMENT_POSITIONS: &[(&[u8], &[(usize, NilArgument)])] = {
+    use NilArgument::{Checked, MethodString};
+    &[
+        (b"ABBREV", &[(2, MethodString(1)), (3, Checked)]),
+        (b"ARG", &[(1, Checked)]),
+        (b"BITAND", &[(2, MethodString(1))]),
+        (b"C2D", &[(2, Checked)]),
+        (b"CENTER", &[(3, Checked)]),
+        (
+            b"CHANGESTR",
+            &[(1, MethodString(1)), (3, MethodString(2)), (4, Checked)],
+        ),
+        (b"COMPARE", &[(2, MethodString(1)), (3, Checked)]),
+        (b"CONDITION", &[(1, Checked)]),
+        (b"COPIES", &[(2, Checked)]),
+        (b"COUNTSTR", &[(1, MethodString(1))]),
+        (b"D2X", &[(2, Checked)]),
+        (b"DATATYPE", &[(2, MethodString(1))]),
+        (b"DATE", &[(2, Checked)]),
+        (b"ERRORTEXT", &[(1, Checked)]),
+        (b"FORMAT", &[(2, Checked)]),
+        (b"INSERT", &[(1, MethodString(1)), (3, Checked)]),
+        (b"LASTPOS", &[(1, MethodString(1))]),
+        (b"LEFT", &[(2, Checked)]),
+        (b"MAX", &[(2, Checked)]),
+        (b"OVERLAY", &[(1, MethodString(1)), (3, Checked)]),
+        (b"POS", &[(1, MethodString(1)), (3, Checked), (4, Checked)]),
+        (b"RANDOM", &[(1, Checked), (2, Checked), (3, Checked)]),
+        (b"SOURCELINE", &[(1, Checked)]),
+        (b"SPACE", &[(2, Checked), (3, Checked)]),
+        (b"STRIP", &[(2, MethodString(1)), (3, MethodString(2))]),
+        (b"SUBSTR", &[(2, Checked), (4, Checked)]),
+        (b"TIME", &[(2, Checked)]),
+        (b"TRANSLATE", &[(2, MethodString(1)), (4, Checked)]),
+        (b"TRUNC", &[(2, Checked)]),
+        (b"VERIFY", &[(2, MethodString(1)), (3, MethodString(2))]),
+        (b"WORDINDEX", &[(2, Checked)]),
+        (b"WORDLENGTH", &[(2, Checked)]),
+        (b"WORDPOS", &[(1, MethodString(1))]),
+        (b"XRANGE", &[(1, Checked)]),
+    ]
+};
+
+/// The 88.909 the `String` method `name` forwards to raises for the first
+/// [`NilArgument::MethodString`] position holding a converted `.nil`. A
+/// builtin calls this after its own argument checks and before the method's
+/// other checks, which is where the oracle's method reads its string
+/// arguments.
+fn method_string_arguments(name: &[u8], args: Args<'_>) -> Result<(), Failure> {
+    nil_argument_positions(name)
+        .iter()
+        .try_for_each(|(position, _)| method_string_argument(name, args, *position))
+}
+
+/// [`method_string_arguments`] for the one builtin `position`, for a method
+/// that checks something else between its string arguments.
+fn method_string_argument(name: &[u8], args: Args<'_>, position: usize) -> Result<(), Failure> {
+    let reading = nil_argument_positions(name)
+        .iter()
+        .find(|(at, _)| *at == position);
+    if let Some((_, NilArgument::MethodString(method_position))) = reading
+        && args.no_string_value(position)
+    {
+        return Err(Raised::argument_needs_a_string_value(*method_position).into());
+    }
+    Ok(())
+}
+
 /// One builtin call's arguments, in each of the readings a builtin needs of
 /// them.
 #[derive(Copy, Clone)]
@@ -779,6 +873,14 @@ impl<'a> Args<'a> {
     /// message names.
     fn object(self, position: usize) -> Option<ObjRef> {
         self.objects.get(position - 1).copied().flatten()
+    }
+
+    /// Whether the protocol converted the object at 1-based `position` to
+    /// `.nil`, which only a user `STRING` answer with no string value does.
+    fn no_string_value(self, position: usize) -> bool {
+        // A `.nil` the program passed itself converts to its own string
+        // value, or stays `.nil` in both readings when nothing ran.
+        arg(self, position) == Some(ObjRef::NIL) && self.object(position) != Some(ObjRef::NIL)
     }
 
     /// Every position from 1-based `from` onwards, converted -- what a

@@ -311,12 +311,16 @@ impl Interp {
         }) {
             return Ok(None);
         }
+        let nil = crate::builtin::nil_argument_positions(name);
         let mut converted = Vec::with_capacity(args.len());
         for (index, argument) in args.iter().enumerate() {
             let position = index + 1;
             converted.push(match argument {
                 None => None,
                 Some(value) if raw.contains(&position) => Some(*value),
+                Some(value) if nil.iter().any(|(at, _)| *at == position) => {
+                    Some(self.required_string_or_nil(*value)?)
+                }
                 Some(value) => Some(self.required_string_value(*value)?),
             });
         }
