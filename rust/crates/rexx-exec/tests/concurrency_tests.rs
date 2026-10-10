@@ -4630,9 +4630,8 @@ mod group_runs {
                     return;
                 }
                 let derived = derived_tests();
-                let sample: Vec<Unit> = read_table()
+                let sample: Vec<Unit> = self_test_rows(read_table())
                     .into_iter()
-                    .filter(|row| row.debug_seeds > 0)
                     .map(|row| Unit {
                         seed: seed(&row.group, &row.part, 0),
                         policy: with_k("pre:2", row.k),
@@ -4678,6 +4677,38 @@ mod group_runs {
                     }
                 }
                 assert!(broken.is_empty(), "{}", broken.join("\n"));
+            }
+
+            /// The rows the determinism self-test runs: those with debug seeds
+            /// whose virtual time does not start at the wall clock.
+            fn self_test_rows(rows: Vec<Row>) -> Vec<Row> {
+                rows.into_iter()
+                    .filter(|row| row.debug_seeds > 0)
+                    // Ruling R6: a clock=real row reads the wall clock, so two processes need not agree.
+                    .filter(|row| !row.real_clock())
+                    .collect()
+            }
+
+            /// The self-test leaves out every `clock=real` row of the committed
+            /// table, and the table has one it would otherwise pick.
+            #[test]
+            fn the_self_test_runs_only_virtual_clock_rows() {
+                let rows = read_table();
+                assert!(
+                    rows.iter()
+                        .any(|row| row.debug_seeds > 0 && row.real_clock()),
+                    "no clock=real row has debug seeds, so the filter is not exercised"
+                );
+                let picked = self_test_rows(rows);
+                assert!(!picked.is_empty(), "the self-test picks no row");
+                for row in &picked {
+                    assert!(
+                        !row.real_clock(),
+                        "{} {} reads the wall clock",
+                        row.group,
+                        row.part
+                    );
+                }
             }
 
             /// Under [`REFRESH_ENV`], runs each row's oracle 5 times, 30 where
