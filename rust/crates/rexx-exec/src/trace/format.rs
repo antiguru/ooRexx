@@ -271,10 +271,10 @@ impl ChunkTrace {
     pub(crate) const OFF: ChunkTrace = ChunkTrace(0);
 }
 
-/// A [`TraceMode`] beside the [`ChunkTrace`] the trace sink obeys under it --
-/// its packing, or [`ChunkTrace::OFF`] while a debug pause runs -- so that
-/// both are paid where the setting or the pause changes rather than at every
-/// clause that reads them.
+/// A [`TraceMode`], whether a line typed at a debug pause runs, and the
+/// [`ChunkTrace`] the trace sink obeys under them -- the mode's packing, or
+/// [`ChunkTrace::OFF`] while the pause runs -- so that all are paid where the
+/// setting or the pause changes rather than at every clause that reads them.
 ///
 /// **The byte cannot drift from the mode**: [`TraceCache::of`] is the only way
 /// to build one, and it derives the byte.
@@ -282,6 +282,7 @@ impl ChunkTrace {
 pub(crate) struct TraceCache {
     mode: TraceMode,
     chunk: ChunkTrace,
+    paused: bool,
 }
 
 impl TraceCache {
@@ -294,6 +295,18 @@ impl TraceCache {
             } else {
                 ChunkTrace::of(mode)
             },
+            paused,
+        }
+    }
+
+    /// The setting the trace sink obeys: [`TraceMode::OFF`] while a line
+    /// typed at a debug pause runs, else [`TraceCache::mode`].
+    #[inline(always)]
+    pub(crate) fn traced(self) -> TraceMode {
+        if self.paused {
+            TraceMode::OFF
+        } else {
+            self.mode
         }
     }
 

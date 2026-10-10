@@ -82,10 +82,17 @@ impl Interp {
     /// merges into -- is [`Interp::trace_mode`] and is untouched.
     #[inline(always)]
     pub(crate) fn traced_mode(&self) -> TraceMode {
-        if self.debug_pause() {
-            return TraceMode::OFF;
-        }
-        self.trace_mode()
+        let traced = self.activity.trace_cache.traced();
+        debug_assert_eq!(
+            traced,
+            if self.debug_pause() {
+                TraceMode::OFF
+            } else {
+                self.trace_mode()
+            },
+            "the cached traced setting is not the running activation's"
+        );
+        traced
     }
 
     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
