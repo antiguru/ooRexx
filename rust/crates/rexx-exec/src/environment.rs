@@ -678,6 +678,7 @@ impl Interp {
     /// A class the running package's own directives installed, under its
     /// uppercased name, or one installed up its parent chain --
     /// `PackageClass::findInstalledClass`, the first step of the order.
+    #[inline]
     fn installed_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         if let Some(found) = self
@@ -697,6 +698,7 @@ impl Interp {
     /// imported, or one public up its parent chain --
     /// `PackageClass::findPublicClass`, the step between the package's own
     /// installed classes and the directories.
+    #[inline]
     fn imported_class(&self, upper: &[u8]) -> Option<ObjRef> {
         let program = self.running_program()?;
         if let Some(found) = self
