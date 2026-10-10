@@ -237,3 +237,4 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Ruling (m1, m2): parked. m1: the run_repeating clock store is kept unreached so the two loop drivers agree; cost if wrong: one dead store. m2: the copy counter scope is noted; cost if wrong: a future copy path goes unwitnessed.
 - Queue add: .superpowers/sdd/queued/2026-10-10-call-on-nostring-insert.md (pre-existing 25.1 insert).
 - Task 11a fix round 1 dispatched to t11a-impl, brief task-11a-fix1-brief.md.
+- Ruling (fix round 1, I3 widened): comparisons (right operand, keeping primitiveIsEqual's .nil equality rule) and `parse value` join the .nil set. Why: the oracle's answers are defined (2/2), and this is the same R11-narrowed principle. Cost if wrong: two more witnessed rows. Callgrind on all eight programs is required because eval.rs comparisons sit on rexxcps's path.
