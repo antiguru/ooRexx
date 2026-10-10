@@ -1,0 +1,327 @@
+c28a63f37 Phase 6.1 parse round 2: gate record, criterion 7 holds
+23d78ec1b Phase 6.1 parse round 2: the collector sums survivor bytes
+diff --git a/docs/superpowers/plans/2026-07-27-rust-rewrite.md b/docs/superpowers/plans/2026-07-27-rust-rewrite.md
+index 439f36693..1e55e1c7a 100644
+--- a/docs/superpowers/plans/2026-07-27-rust-rewrite.md
++++ b/docs/superpowers/plans/2026-07-27-rust-rewrite.md
+@@ -643,31 +643,31 @@ The C++ splits this into `Scanner.cpp` (1,955), `Clause.cpp`, `Token.cpp`, `Inst
+ ---
+ 
+ ## 2. Phase roadmap
+ 
+ Gates are hard. A phase does not close until every exit criterion is demonstrated with committed evidence (a CI run, a benchmark report, a diff log).
+ 
+ | # | Phase | Entry | Exit gate | Rung |
+ |---|---|---|---|---|
+ | 0 | Oracle & inventory | — | Differ runs C++ against itself with zero diffs on the corpus; benchmark baselines committed for all 5 platforms; error table and builtin inventory generated; L1 extraction fraction reported; D7 protocol stability answered | — |
+ | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
+ | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
+ | 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` under `samples/` to an AST (301 files); `SOURCELINE` and `TRACE`'s `*-*` source lines match the oracle byte-for-byte; parse errors give the oracle's **number and sub-number on a plausible line**, with message text and substitutions deliberately not reproduced (2026-07-28 scope decision); parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
+ | 4 | Classic executor, split 4a / 4b / 4c / 4d / 4e / 4f | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and **66 of the 81 builtin functions**, the excluded set being exactly `phase-4-exclusions.txt`; `samples/rexxcps.rex` runs clean, and **every classic-Rexx benchmark axis is within measurement noise of the C++ oracle or better** -- the Global Constraints `:39` parity gate, with no recorded debt available on a classic-Rexx axis (`phase-4d-gate.md`, amended 2026-08-09); **4e closed 2026-08-11** with the register IR the default engine and its ratios recorded on both instruments (`phase-4e-gate.md`), leaving the parity clause to 4f. **Not** `:40`'s 1.5× figure, which scopes to Phase 1 | L0 named subsets + the `base/expressions` assertion table |
+ | 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; **the class wiring is complete**: every class named by a `cls*` section across the reference, minus `RegularExpression` (delivered by `::requires "rxregexp.cls"`, which is not on this build's search path, measured 43.901 rc 213), plus `ArgUtil`, is an `.environment` class answering `~id`, `~class`, `~superClass`, `~superClasses`, `~metaClass` and `~isA(.Class)` byte-identically, and every documented hierarchy edge is present in that class's `~superClasses`; `RexxInfo` is **out** of that class set, because `EndSpecialClassDefinition(RexxInfo)` routes the class object to a target no environment symbol reaches, **and** its `.environment` entry is required to be an *instance* whose `~class~id` is `RexxInfo`; the documented per-class **method** sets are **5c's** and are not this clause (`docs/superpowers/specs/2026-08-17-phase-5-object-model.md:328`, and D48 `:1245` for the class half); `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
+ | 6 | Concurrency | 5 | **CLOSED 2026-10-07**, `docs/superpowers/plans/phase-6-gate.md`. Activities, kernel lock (per interpreter since D3's 2026-09-29 note, ruling 1: the design's baton; nothing process-wide), guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified**, and **D3's no-global-lock constraint demonstrated**: no type, invariant or API is sound only while a global interpretation lock is held. A coarse lock may still be shipped here; nothing may depend on it | L2 |
+-| 6.1 | Loose ends of closed phases | 6 | **CLOSED 2026-10-10**, `docs/superpowers/plans/phase-6-1-gate.md`, but for criterion 7: `parse` is +1.1979% Ir against the 6.1 base, which waits on Moritz's ruling. Every loud refusal naming Phase 5 or no phase (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/loud-census.md` classes (b) and (c)) is implemented, or re-homed to a remaining phase with a true reason, or recorded as a deviation with owner none; `closed_phases` then polices Phase 5 too. Takes the queued items `2026-09-28-phase-5-refusal-labels`, `2026-10-02-do-with-over-refusal`, `2026-09-28-use-arg-message-term`, `2026-10-02-elapsed-clock-per-routine-and-reset`, `2026-10-07-debug-pause-skipped-after-flowed-clause` , `2026-10-07-debug-input-does-not-reach-pauses`, `2026-10-07-setlocal-scope`, `2026-10-07-interpret-syntax-traceback-line`, `2026-10-07-unjudged-scheduler-mutants` and `2026-10-07-seeded-random-switch-mode` (deterministic simulation testing: random bounded preemption as the main policy and PCT as an opt-in policy, judged by the crate's own invariants with oracle differences reported, rulings R1 and R5; the gate instrument for the concurrency groups). Added by Moritz, 2026-10-07: before Phase 9, so Phase 9's exclusions are not scoped on refusals whose owners rotted. | — |
++| 6.1 | Loose ends of closed phases | 6 | **CLOSED 2026-10-10**, `docs/superpowers/plans/phase-6-1-gate.md`. Criterion 7 holds since parse round 2 (`23d78ec1b`): `parse` is +0.4824% Ir against the 6.1 base. Every loud refusal naming Phase 5 or no phase (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/loud-census.md` classes (b) and (c)) is implemented, or re-homed to a remaining phase with a true reason, or recorded as a deviation with owner none; `closed_phases` then polices Phase 5 too. Takes the queued items `2026-09-28-phase-5-refusal-labels`, `2026-10-02-do-with-over-refusal`, `2026-09-28-use-arg-message-term`, `2026-10-02-elapsed-clock-per-routine-and-reset`, `2026-10-07-debug-pause-skipped-after-flowed-clause` , `2026-10-07-debug-input-does-not-reach-pauses`, `2026-10-07-setlocal-scope`, `2026-10-07-interpret-syntax-traceback-line`, `2026-10-07-unjudged-scheduler-mutants` and `2026-10-07-seeded-random-switch-mode` (deterministic simulation testing: random bounded preemption as the main policy and PCT as an opt-in policy, judged by the crate's own invariants with oracle differences reported, rulings R1 and R5; the gate instrument for the concurrency groups). Added by Moritz, 2026-10-07: before Phase 9, so Phase 9's exclusions are not scoped on refusals whose owners rotted. | — |
+ | 7 | Streams & platform | 5 | **CLOSED 2026-09-13**, `docs/superpowers/plans/phase-7-gate.md`. `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green **on the host**; the `Sys*` subset ooTest needs (D11) works. The other four platforms are Phase 11's, per D-P1 below. **The rung is Phase 8's**: measured at the close, `ooTest.frm` loads past `.ENDOFLINE` and `rxregexp.cls` and then stops at `::METHOD INIT EXTERNAL "LIBRARY rxregexp RegExp_Init"`, so what stands between the framework and its first test group is `dlopen` | L2 -> 8 |
+ | 8 | Native API | 5, 7 | **CLOSED 2026-09-29**, `docs/superpowers/plans/phase-8-gate.md`: the L2 slice (2026-09-14, sections 1-8) and the surface plan (sections 9-10). `testbinaries/` compile unchanged against frozen headers, witnessed by the oracle's own build (section 9); native-API ooTest groups pass. Which groups are this row's is derived by `rexx-exec/tests/api_group_partition.rs`: `METHOD`, `CONVERSION` and `FUNCTION`, whose binaries import nothing from the interpreter; every other API group is row 10's (measured 2026-09-15, corrected 2026-09-28). Every test of those three passes on this crate and agrees with the oracle through `rexx-exec/tests/api_group_tests.rs` but `FUNCTION`'s `TEST_REXXQUEUE`, which creates and reads a `RexxQueue`, whose queues live in rxapi, so it is row 10's and runs on neither side; and `METHOD`'s `TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA`, which runs `rexxc`, which row 9 ships (2026-09-29). **L2 is still not reached, and what blocks it is Phase 10's work, not this phase's.** The `Directory` methods that stopped the framework at `ooTest.frm:49` were built (surface Task 1), and a group's tests now run; run unmodified, the framework runs its ticker (Phase 6 S3, 2026-10-03) and stops at `printSummary`'s `RXFUNCQUERY`, which the oracle answers through rxapi (Phase 10). The gate runs the groups with `-U` and without those two probes (section 10) | L2 -> 10 |
+ | 9 | Core conformance | 6.1, 7, 8 | **L3-core on the host**: the full suite green against existing baselines *excluding* the groups enumerated below; every benchmark at parity; `rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship. The other four platforms are Phase 11's, per D-P1 below. No native-API ooTest group is this phase's: the groups that load `INVOCATIONTester.cls` were recorded here on 2026-09-15 and are row 10's since 2026-09-28, because their library imports the RXAPI exit and subcom registries as well as the embedding API this row ships. Also this row's (Phase 6.1 ruling R2, D4 of `docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md`): `NEW` on a subclass of String, Stem, Method, Routine and Message, starting from `.superpowers/sdd/2026-10-07-phase-6-1/scout-d-prototype.patch`; and the refusals naming Phase 9, listed by `grep -rn '"Phase 9"' rust/crates/*/src` and `grep -n 'OWNER: Phase 9' docs/superpowers/plans/phase-4-exclusions.txt` at the 6.1 close: `Loud::native_method` (a primitive method this crate has no code for), rexx-api `layout::REFUSING_MEMBERS`' Phase 9 members, and the exclusions rows on a second interpreter instance, `rexxc`, conditions and stack frames under INTERPRET, and `ReleaseLocalReference` | L3-core |
+ | 10 | RXAPI & extensions | 9 | `rxregexp`, `rxmath`, `rxsock`, `hostemu`, `orxncurses` recompile and pass; RXAPI decision (D7) executed; **L3-full** with no exclusions. **Every native-API ooTest group but `METHOD`, `CONVERSION` and `FUNCTION` is this phase's, re-homed from Phase 8 by measurement**, derived by `rexx-exec/tests/api_group_partition.rs` (a group belongs to the latest phase any import in its libraries' `NEEDED` closure needs; `phase-8-gate.md` section 9). `CLASSICPackage.cls` binds `orxclassic` and `CLASSIC.testGroup:822,861,875` register `orxclassic1` through `rxfuncadd`, and `liborxclassic.so` and `liborxclassic1.so` import the function, subcom, queue and macro-space registries, which are this row's RXAPI (2026-09-15). `RexxStart`, `ProcessRexxStart`, `INVOCATION` and `ProcessInvocation` each load `INVOCATIONTester.cls` (`.context~package~loadPackage`, line 52 of each group), which binds `orxinvocation`; `liborxinvocation.so` NEEDs `liborxexits.so`, which NEEDs `librexx.so.4` and `librexxapi.so.4` and imports `RexxCreateInterpreter` and `RexxStart`, Phase 9's embedding API, and also `RexxRegisterExitDll` and the other exit and subcom registries, this row's. They were recorded as Phase 9's on 2026-09-15 from the embedding imports alone and moved here on 2026-09-28. `FUNCTION`'s `TEST_REXXQUEUE` is this row's too, since its `RexxQueue` lives in rxapi (row 8, 2026-09-28) | L3-full |
+ | 10.1 | Cross-interpreter queues and values (optional) | 10 | Queue primitives between interpreters, and moving values between them (spec `2026-09-29-phase-6-concurrency-design.md` section 10: structured clone over Rexx's own types, opt-in methods for user classes). Depends on Phase 10's RXAPI decision (D7). Optional: L3-full does not wait for it. Added by Moritz, 2026-10-07. | — |
+ | 11 | Other platforms | 10 | A second host exists and its own oracle is built there; the platform seam is named and every host assumption sits behind it; the corpus differential, the gate tables and the benchmark axes run **on each platform available**, each with its own recorded baseline; `PARSE SOURCE`'s first word is the host's rather than a constant. Phases 7 and 9's platform clauses close here | L3-full, per platform |
+ 
+ Phases 6, 7, and 8 are independent of each other and may run in parallel once Phase 5 closes.
+ 
+ **D-L2, 2026-09-14: L2's blocker is a closed phase's leftovers, and no open phase owns them.**
+ *(As recorded when opened; the ruling at its end gives the blocker to Phase 8.)*
+ Measured at Phase 8's L2 slice close and recorded in `docs/superpowers/plans/phase-8-l2.md`. The
+ framework stops at `ooTest.frm:49`, `.local~hasEntry(...)`. It is not one method: `hasIndex`,
+ `entry`, `hasEntry`, `setEntry`, `items`, `index`, `remove`, `supplier` and `allIndexes` all refuse
+ on `.local` and `.environment`, and only `at` and `put` answer. Every one of those refusals names
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index ccbd0296f..f49406ba6 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -1344,31 +1344,31 @@ change only a table and a test. The pad2 control is 0.0000% everywhere, so the b
+ | fibfunc | 8228290764 | +0.4721 | +0.4303 | +0.0000 |
+ | heapshape | 2334068378 | +0.0520 | +0.0093 | +0.0000 |
+ | nop | 9283340655 | -1.0755 | -1.0863 | -0.0000 |
+ | parse | 1536336774 | +1.7815 | +1.1979 | -0.0000 |
+ | sayloop | 109048217 | +0.1425 | -0.4071 | +0.0001 |
+ | sendloop | 14013810691 | -0.7125 | -0.4984 | +0.0000 |
+ | startup | 58097223 | +0.2670 | +0.2680 | +0.0000 |
+ | strings | 17537481300 | +0.4584 | +0.3735 | -0.0000 |
+ | textnum | 1155145989 | -0.5233 | -0.5405 | +0.0000 |
+ | varlookup | 13437530297 | -2.1198 | -2.2612 | +0.0000 |
+ | rexxcps | 17788421071 | +0.4268 | +0.2694 | -0.0000 |
+ | pingguard | 1159017714 | -0.5905 | -0.7113 | +0.0000 |
+ | pingmsg | 1676421012 | -0.0190 | -0.0421 | +0.0000 |
+ | pingsem | 1181250699 | -0.4694 | -0.4863 | +0.0000 |
+ 
+-**`parse` is over budget, +1.1979%; every other program is inside +0.5%.** Attribution and the round
++**`parse` was over budget here, +1.1979%; every other program is inside +0.5%. `## Parse round 2` (`23d78ec1b`) brings parse to +0.4824%, and criterion 7 holds.** Attribution and the round
+ are in the report's "Parse attribution" and "Parse perf round": the residual is the freed-body byte
+ accounting in `collect_now` (heapshape round 1, `5214a2089`, on Task 5a's charge), the Task 4a driver
+ codegen and the Task 8-10 allocation codegen (both accepted under the l.103 precedent), and Task 5a's
+ byte charge per PARSE piece. It goes to Moritz.
+ 
+ Wall clock, `PROGRAMS="emptyloop pingpong/pingsem pingpong/pingguard" bash
+ rust/bench-programs/wallclock.sh -r 5` with base61, its three pads and `close`: emptyloop +4.91%
+ (pads +0.23 to +0.93), pingsem +1.60% (pads -3.20 to 0.00), pingguard +2.50% (pads 0.00 to +0.83).
+ `perf stat -e cycles:u,instructions:u,software/context-switches/,software/cpu-migrations/`, 5
+ interleaved runs per binary, medians (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/perf-stat.txt`), with `close` built twice more with
+ `layout-pad.py` 8 and 48 (`cpad8`, `cpad48`, same instruction counts as `close`):
+ 
+ | program | close cycles | cpad8 | cpad48 | base61 pad2 | instructions close vs base61 | context switches |
+ |---|---:|---:|---:|---:|---:|---|
+ | emptyloop | +4.62% | +4.38% | +4.46% | +0.07% | -0.63% | 6-12 on every binary |
+@@ -1421,15 +1421,59 @@ Perf, `callgrind.sh -r 2` over all programs with base61, `close` and `cf167fba1`
+ | sendloop | 14013810949 | -0.4984 | -0.4983 |
+ | startup | 58097208 | +0.2676 | +0.2807 |
+ | strings | 17537481412 | +0.3735 | +0.3735 |
+ | textnum | 1155145965 | -0.5405 | -0.5399 |
+ | varlookup | 13437530316 | -2.2612 | -2.2611 |
+ | rexxcps | 17788420928 | +0.2694 | +0.2694 |
+ | pingguard | 1159017766 | -0.7113 | -0.7106 |
+ | pingmsg | 1676421252 | -0.0422 | +0.0537 |
+ | pingsem | 1181250809 | -0.4863 | -0.4857 |
+ 
+ Nothing newly exceeds +0.5%. parse is +1.1983%. Every program carries a fixed ~7.5K Ir from hash-store slot writes keeping the last item, and the controller accepted it, parse's +0.0005 point over close included.
+ * heapshape +0.18 points: `native_array_put` keeping the last item, about 4 Ir per put.
+ * alloc +0.46 points:
+   * `.array~of` finding its last item, +27M.
+   * `from_utf8` +66M and memcmp +24M at unchanged call counts. Their per-line Ir moves between the aligned word loop and the byte loop, which depends on where the name buffers are allocated.
++
++## Parse round 2
++
++Commit `23d78ec1b`: the collector sums the survivors' held bytes in the mark loop in release, as the debug build already did, and sets the running figure to that sum after the sweep. The sweep no longer reads a freed body's bytes in release. A string survivor reaches nothing, so the mark loop reads its length and skips the call to `Body::trace`. The debug build still sums the freed bytes and asserts that the running figure less them equals the survivors' sum. The resurrect loop sums resurrected UNINIT bodies, and `body_bytes_tests::a_collection_sums_the_survivors_body_bytes` now checks that sum in release. Report: `.superpowers/sdd/2026-10-07-phase-6-1/parse-round2-report.md`.
++
++Perf, `callgrind.sh -r 2` over all programs with base61, `cf167fba1` (`cur`) and `23d78ec1b` (`fin`) in one run, exit 0, spreads 0.0001% at most. `fin` was built from `git archive 23d78ec1b` with its own target directory and one `Compiling rexx-exec` line, sha256 `2d56a4e252de765c168a9adde9b18a8c581a774abf6dc947363043b091f61729`. d% is against base61:
++
++| program | base61 Ir | cf167fba1 d% | 23d78ec1b d% |
++|---|---:|---:|---:|
++| alloc | 20345537302 | +0.4253 | +0.2515 |
++| alloc4c | 3140684449 | -0.0651 | -1.2531 |
++| arith | 11488858262 | +0.2725 | -0.0899 |
++| assign | 18983599250 | -3.1650 | -3.1650 |
++| compound | 8937498228 | -1.1171 | -1.1171 |
++| decloop | 2469010841 | -2.2377 | -2.8106 |
++| decrender | 4228326880 | -1.0607 | -1.3952 |
++| dirread | 2644857003 | +0.1582 | +0.0690 |
++| dispatch | 20809503043 | -0.3596 | -0.3596 |
++| dispatchclass | 15794935302 | -0.6321 | -0.6321 |
++| emptyloop | 7786100004 | -0.6401 | -0.6401 |
++| extcall | 7552641533 | +0.0022 | +0.0022 |
++| fibcall | 8413280478 | +0.4413 | +0.4413 |
++| fibfunc | 8228290864 | +0.4304 | +0.4304 |
++| heapshape | 2334068375 | +0.1852 | -1.8518 |
++| nop | 9283340619 | -1.0862 | -1.0862 |
++| parse | 1536336771 | +1.1983 | +0.4824 |
++| sayloop | 109048299 | -0.4004 | -0.4004 |
++| sendloop | 14013810686 | -0.4983 | -0.4983 |
++| startup | 58097187 | +0.2809 | +0.2809 |
++| strings | 17537481400 | +0.3735 | -0.1020 |
++| textnum | 1155145953 | -0.5399 | -0.5399 |
++| varlookup | 13437530430 | -2.2611 | -2.2611 |
++| rexxcps | 17788420667 | +0.2694 | -0.1931 |
++| pingguard | 1159017374 | -0.7107 | -0.7106 |
++| pingmsg | 1676421124 | +0.0537 | -0.2971 |
++| pingsem | 1181250540 | -0.4857 | -0.4857 |
++
++parse is +0.4824%, inside +0.5%. Nothing newly exceeds +0.5%, and no program rises: every program falls or moves by fewer than 1,000 Ir. cgdiff `cf167fba1` to `23d78ec1b`: `collect_now` falls on every collecting program (parse -10.98M, strings -83.29M, rexxcps -82.14M, alloc4c -37.29M), and heapshape's `Body::trace` falls by 41.61M.
++
++Gates, `bggates.sh 23d78ec1b` (`.superpowers/sdd/2026-10-07-phase-6-1/bg/23d78ec1b/status.txt`, finished 2026-10-10T21:03:14+02:00):
++* G1 fmt, G2 clippy, G3 release build, G5 debug build, G7 clippy pinning, G8 pinning self-tests and G9 loom: exit 0.
++* G4 release test: exit 0, 3149 passed, 0 failed, 4 ignored.
++* G6 debug test: exit 0, 3153 passed, 0 failed, 4 ignored.
++* P48 reruns 0.
+diff --git a/rust/crates/rexx-core/src/heap.rs b/rust/crates/rexx-core/src/heap.rs
+index 5c13b92bc..cb79cb790 100644
+--- a/rust/crates/rexx-core/src/heap.rs
++++ b/rust/crates/rexx-core/src/heap.rs
+@@ -205,54 +205,59 @@ impl Heap {
+         self.marks.resize(self.slots.len(), false);
+ 
+         // The caller's roots and this heap's own. See the `immortal` field for
+         // why an interned constant is a root here rather than a slot range or
+         // a flag.
+         let mut work: Vec<ObjRef> = roots.iter().chain(self.immortal.iter().copied()).collect();
+         let mut reached = Vec::new();
+         // The marked weak references, gathered here rather than by a walk of
+         // the arena afterwards. The mark loop visits each marked slot exactly
+         // once -- that is what the `replace` below guarantees -- so this ends
+         // up holding precisely the slots such a walk would have selected, at
+         // the cost of one discriminant test per marked object instead of a
+         // read of every slot in the table. Whether a *target* survived cannot
+         // be decided here, so the decision waits for the loop to finish.
+         let mut weak_marked: Vec<u32> = Vec::new();
+-        // The survivors' body bytes, summed only to check the running figure
+-        // the sweep leaves in `held_bytes`.
+-        #[cfg(debug_assertions)]
++        // The survivors' body bytes, which become the running figure after
++        // the sweep. Summed here, the cost scales with the survivors rather
++        // than with the garbage the sweep frees.
+         let mut survivor_bytes = 0;
+         while let Some(r) = work.pop() {
+             let Some(slot) = self.resolve(r) else {
+                 continue;
+             };
+             if std::mem::replace(&mut self.marks[slot], true) {
+                 continue; // already marked: this is what terminates cycles
+             }
+             let Slot::Live { object, .. } = &self.slots[slot] else {
+                 unreachable!("resolve rejects free slots")
+             };
+             if matches!(object.body, Body::WeakRef(_)) {
+                 weak_marked.push(slot as u32);
+             }
+-            #[cfg(debug_assertions)]
+-            {
+-                survivor_bytes += object.body.held_bytes();
+-            }
+-            reached.clear();
+-            object.body.trace(&mut reached);
+-            work.extend(reached.iter().copied());
++            let held = if let Body::Text { bytes, .. } = &object.body {
++                // A string reaches nothing, so it skips the call to trace,
++                // which costs more than reading the string's length.
++                bytes.heap_len()
++            } else {
++                reached.clear();
++                object.body.trace(&mut reached);
++                work.extend(reached.iter().copied());
++                object.body.held_bytes()
++            };
++            debug_assert_eq!(held, object.body.held_bytes());
++            survivor_bytes += held;
+         }
+ 
+         // Pass 1: clear weak references whose target did not survive.
+         for slot in weak_marked {
+             let slot = slot as usize;
+             let Slot::Live { object, .. } = &self.slots[slot] else {
+                 unreachable!("the mark loop only records live slots")
+             };
+             let Body::WeakRef(target) = object.body else {
+                 unreachable!("the mark loop only records weak references")
+             };
+             // "Dead" includes unresolvable: a target whose slot was already
+             // freed, or whose generation has moved on, died in an earlier
+             // cycle and its reference must still clear.
+             let target_alive = self.resolve(target).is_some_and(|t| self.marks[t]);
+@@ -302,93 +307,105 @@ impl Heap {
+             let Slot::Live { object, .. } = &mut self.slots[slot] else {
+                 unreachable!("resolve rejects free slots")
+             };
+             object.ready_for_uninit = true;
+         }
+         while let Some(r) = resurrect.pop() {
+             let Some(slot) = self.resolve(r) else {
+                 continue;
+             };
+             if std::mem::replace(&mut self.marks[slot], true) {
+                 continue;
+             }
+             let Slot::Live { object, .. } = &self.slots[slot] else {
+                 unreachable!("resolve rejects free slots")
+             };
+-            #[cfg(debug_assertions)]
+-            {
+-                survivor_bytes += object.body.held_bytes();
+-            }
++            // A resurrected body survives, so its bytes stay held.
++            survivor_bytes += object.body.held_bytes();
+             reached.clear();
+             object.body.trace(&mut reached);
+             resurrect.extend(reached.iter().copied());
+         }
+ 
+         let mut swept = 0;
++        // The freed bodies' bytes, summed only to check the survivors' sum
++        // against the running figure.
++        #[cfg(debug_assertions)]
+         let mut freed_bytes = 0;
+         let mut freed_classes = Vec::new();
+         for slot in 0..self.slots.len() {
+             if self.marks[slot] {
+                 continue;
+             }
+             let Slot::Live { object, generation } = &self.slots[slot] else {
+                 continue;
+             };
+             let generation = *generation;
+             match &object.body {
+                 // Reported so the caller can drop the rows it keys by this
+                 // class. The handle is still the live one here; after the
+                 // assignment below its generation has moved on and it would
+                 // name nothing. `held_bytes` charges nothing for a Class
+                 // body, so this arm adds none to `freed_bytes`.
+                 Body::Class { .. } => {
+                     debug_assert_eq!(
+                         object.body.held_bytes(),
+                         0,
+                         "held_bytes charges bytes for a Class body"
+                     );
+                     freed_classes.push(ObjRef::heap(slot as u32, generation));
+                 }
+-                body => freed_bytes += body.held_bytes(),
++                _ => {
++                    #[cfg(debug_assertions)]
++                    {
++                        freed_bytes += object.body.held_bytes();
++                    }
++                }
+             }
+             swept += 1;
+             self.live -= 1;
+             // A slot whose generation would overflow is retired, not reused:
+             // wrapping would let a stale handle alias a live object again,
+             // which is the whole reason the generation exists.
+             self.slots[slot] = match generation.checked_add(1) {
+                 Some(next) if next <= crate::GENERATION_MAX => {
+                     let free = Slot::Free {
+                         next: self.free_head,
+                         generation: next,
+                     };
+                     self.free_head = Some(slot as u32);
+                     free
+                 }
+                 _ => Slot::Free {
+                     next: None,
+                     generation,
+                 },
+             };
+         }
+-        self.release_body_bytes(freed_bytes);
++        // The running figure less the freed bytes must equal the survivors'
++        // sum. A charge site that missed `hold_body_bytes` or its release
++        // shows up here.
+         #[cfg(debug_assertions)]
+-        assert_eq!(
+-            survivor_bytes, self.held_bytes,
+-            "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
+-            self.held_bytes
+-        );
++        {
++            self.release_body_bytes(freed_bytes);
++            assert_eq!(
++                survivor_bytes, self.held_bytes,
++                "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
++                self.held_bytes
++            );
++        }
++        self.held_bytes = survivor_bytes;
+         self.peak_bytes = self.peak_body_bytes();
+         self.live_bytes = self.held_bytes;
+         self.bytes_since = 0;
+         CollectStats {
+             swept,
+             live: self.live,
+             pending_uninit,
+             freed_classes,
+             live_bytes: self.held_bytes,
+         }
+     }
+ 
+     /// Allocates `body` and holds the bytes it holds outside its slot.
+     pub fn alloc(&mut self, body: Body) -> ObjRef {
+         self.hold_body_bytes(body.held_bytes());
