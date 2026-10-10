@@ -319,12 +319,16 @@ impl Interp {
             converted.push(match argument {
                 None => None,
                 Some(value) if raw.contains(&position) => Some(*value),
-                Some(value) if nil.iter().any(|(at, _)| *at == position) => {
-                    let read = self.required_string_or_nil(*value)?;
+                Some(value) => {
+                    // The positions are asked only where a `STRING` method
+                    // ran, so a string argument costs no scan of them.
+                    let read = self
+                        .required_string_or(*value, || nil.iter().any(|(at, _)| *at == position))?;
+                    // Only a substituted answer reads as `.nil`: a `.nil`
+                    // the program passed reads as its own string value.
                     substituted |= read == ObjRef::NIL && *value != ObjRef::NIL;
                     Some(read)
                 }
-                Some(value) => Some(self.required_string_value(*value)?),
             });
         }
         Ok(Some((converted, substituted)))
