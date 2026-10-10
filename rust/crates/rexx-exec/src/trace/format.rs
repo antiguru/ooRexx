@@ -282,7 +282,7 @@ impl ChunkTrace {
 pub(crate) struct TraceCache {
     mode: TraceMode,
     chunk: ChunkTrace,
-    traced: TraceMode,
+    paused: bool,
 }
 
 impl TraceCache {
@@ -295,7 +295,7 @@ impl TraceCache {
             } else {
                 ChunkTrace::of(mode)
             },
-            traced: if paused { TraceMode::OFF } else { mode },
+            paused,
         }
     }
 
@@ -303,7 +303,11 @@ impl TraceCache {
     /// typed at a debug pause runs, else [`TraceCache::mode`].
     #[inline(always)]
     pub(crate) fn traced(self) -> TraceMode {
-        self.traced
+        if self.paused {
+            TraceMode::OFF
+        } else {
+            self.mode
+        }
     }
 
     #[inline(always)]
