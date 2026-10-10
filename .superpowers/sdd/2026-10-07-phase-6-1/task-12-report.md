@@ -302,7 +302,7 @@ Earlier tasks', at `5c83d9250`:
 
 * l.30: per-task check without full gates; `whole_groups` only at Tasks 3, 5, 10, 12.
 * l.31: scheduler tests' inline programs stay out of the seeded gate.
-* l.34: `size_of::<Activation>()` pinned at 480, not 512 (R4's intent read as "no growth").
+* l.34: `size_of::<Activation>()` pinned at 472 (`activation.rs:502`, since `d27a9d441`), not 512 (R4's intent read as "no growth").
 * l.38, l.51: false doc sentences fixed inside fix rounds.
 * l.50: criterion 5 row reasons written into the gate record at Task 2.
 * l.52: REPLY trace gap and TraceObject collector gap not 6.1 items (now `2026-10-10-reply-continuation-trace-entry.md`, `2026-10-02-traceobject-variable-and-collector.md`).

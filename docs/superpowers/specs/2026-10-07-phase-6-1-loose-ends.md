@@ -48,7 +48,7 @@ oldest entry (`:1494-1500`).
 | `current_case_text` | none | none | INTERPRET: shared; a typed debug line: saved and restored around it (the oracle runs it on its own block stack) | moves; held inline, in the space `condition` leaves |
 | `debug_pause` | false | false | INTERPRET: shared, false; a typed debug line: true for its duration | n/a |
 
-`size_of::<Activation>() == 512` holds (`activation.rs:497`). Adding an `i64` anchor gives 520 and an
+`size_of::<Activation>() == 472` holds (`activation.rs:502`, since `d27a9d441`). Adding an `i64` anchor gives 520 and an
 `i64` plus a cold box 528 (plan review I1, a `cargo check` with the probe fields). So T1 shrinks what
 it adds: `cached_clock: Option<i64>` becomes an `i64` with a sentinel (saves 8), the flags become bits
 in `ActivationFlags`, the propagated condition reuses the existing `condition: Option<TrappedCondition>`
