@@ -1934,7 +1934,11 @@ DEVIATIONS -- permanent, chosen
      both naming the original object, and a native method's numeric and
      stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
      (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
-     string_answer_nil_native.rex. Every builtin argument position refuses.
+     string_answer_nil_native.rex. Every builtin argument position that
+     sends STRING refuses. VALUE's second argument (read raw) and native
+     routine arguments such as FILESPEC and SYSFILEEXISTS send no STRING on
+     either engine and do not refuse (the native case is queued as the
+     final review's finding 2).
      At a position that is not the string the builtin operates on the
      oracle's answer is defined, at the program's own line: 88.909 numbered
      as the `String` method the builtin forwards to numbers it, 40.12 and

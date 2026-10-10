@@ -1,0 +1,2599 @@
+afc479058 Phase 6.1: Activation size history in the spec, queue Array~sort after remove
+522f923be Phase 6.1 final fix: gate record and report
+6c5a10a7a Phase 6.1 ledger: finding 3 remedy accepted
+cf167fba1 Phase 6.1 final fix: a sized Array~new builds its slots empty
+4001480c8 Phase 6.1 ledger: finding 3 perf ruling
+68a561ae6 Phase 6.1 final fix: report, blocked on finding 3's parse delta
+149f9e3c9 Phase 6.1 ledger: finding 1 fallback, finding 3 committed
+c10b30ff1 Phase 6.1 final fix: Array~append keeps the last item
+6bc2df715 Phase 6.1 final fix: builtin argument positions refuse (Deviation 30)
+f4067b1cb Phase 6.1 ledger: final fix fourth perf ruling and fallback
+384936cc9 Phase 6.1 final fix: nil positions are asked only where STRING ran
+78367f7b4 Phase 6.1 ledger: final fix third perf ruling
+7c203a8ff Phase 6.1 final fix: the nil positions ride on the builtin row
+cc646dc1a Phase 6.1 ledger: final fix second perf ruling
+34501b269 Phase 6.1 final fix: method_string_arguments costs nothing unconverted
+814238a91 Phase 6.1 ledger: final fix perf regression ruling
+c92f18d51 Phase 6.1 final fix: queue BEEP's wrong-type argument message (final review minor 6)
+c51a367df Phase 6.1 final fix: queue List~remove copies the list per call (final review finding 4)
+7eb7416c7 Phase 6.1 final fix: queue native routine arguments that are not strings (final review finding 2)
+250176706 Phase 6.1 final fix: a STRING answer at a non-target builtin argument
+ .../sdd/2026-10-07-phase-6-1/final-fix-report.md   | 141 +++++
+ .superpowers/sdd/2026-10-07-phase-6-1/progress.md  |   9 +
+ .../sdd/2026-10-07-phase-6-1/task-11a-report.md    |   4 +
+ .../sdd/2026-10-07-phase-6-1/task-12-report.md     |   4 +-
+ .../queued/2026-10-10-array-sort-after-remove.md   |  25 +
+ .../queued/2026-10-10-beep-wrong-type-message.md   |  31 +
+ .../2026-10-10-list-remove-copies-per-call.md      |  33 +
+ ...6-10-10-native-routine-arguments-not-strings.md |  37 ++
+ docs/superpowers/plans/phase-4-exclusions.txt      |  18 +-
+ docs/superpowers/plans/phase-6-1-gate.md           |  52 ++
+ .../specs/2026-10-07-phase-6-1-loose-ends.md       |   9 +-
+ rust/crates/rexx-api/src/callbacks/fake.rs         |   4 +-
+ rust/crates/rexx-api/tests/handles.rs              |   2 +-
+ rust/crates/rexx-api/tests/values.rs               |   2 +-
+ rust/crates/rexx-core/benches/heap.rs              |   2 +-
+ rust/crates/rexx-core/src/body.rs                  |   6 +-
+ rust/crates/rexx-core/src/lib.rs                   |   2 +
+ rust/crates/rexx-core/src/slots.rs                 | 269 +++++++++
+ rust/crates/rexx-core/tests/collect.rs             |   2 +-
+ rust/crates/rexx-exec/src/builtin/state.rs         |   9 +-
+ rust/crates/rexx-exec/src/dispatch/array.rs        |  18 +-
+ rust/crates/rexx-exec/src/dispatch/array/sort.rs   |   4 +-
+ .../crates/rexx-exec/src/dispatch/array/surface.rs |   8 +-
+ rust/crates/rexx-exec/src/dispatch/buffer.rs       |   2 +-
+ rust/crates/rexx-exec/src/dispatch/collection.rs   |  19 +-
+ .../rexx-exec/src/dispatch/collection/list.rs      |   2 +-
+ .../rexx-exec/src/dispatch/collection/queue.rs     |   2 +-
+ rust/crates/rexx-exec/src/dispatch/context.rs      |   4 +-
+ rust/crates/rexx-exec/src/dispatch/hash.rs         |   3 +-
+ rust/crates/rexx-exec/src/dispatch/library.rs      |   2 +-
+ .../rexx-exec/src/dispatch/library/surface.rs      |   2 +-
+ .../rexx-exec/src/dispatch/object_protocol.rs      |   4 +-
+ rust/crates/rexx-exec/src/dispatch/string.rs       |   2 +-
+ rust/crates/rexx-exec/src/dispatch/tests.rs        | 105 ++++
+ rust/crates/rexx-exec/src/tests.rs                 |   4 +-
+ .../rexx-exec/tests/string_answer_arguments.rs     |  68 +++
+ .../tests/string_answer_arguments/positions        | 664 +++++++++++++++++++++
+ 37 files changed, 1516 insertions(+), 58 deletions(-)
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/final-fix-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/final-fix-report.md
+new file mode 100644
+index 000000000..7227872c2
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/final-fix-report.md
+@@ -0,0 +1,141 @@
++# Phase 6.1 final fix report
++
++Status: DONE_WITH_CONCERNS. Finding 1 ended in the controller's fallback (refusal, `6bc2df715`). Finding 3 landed in `c10b30ff1` and `cf167fba1`. Gates are green on `cf167fba1`.
++
++## Commits
++
++* `250176706` Finding 1: a STRING answer at a non-target builtin argument.
++* `34501b269` Perf fix 1 (ruled): identity early return and a cold table lookup in the 88.909 helpers.
++* `7c203a8ff` Perf fix 2 (ruled): the nil positions on each `Builtin` row, and a `substituted` flag on `Args` that every helper tests first.
++* `384936cc9` Perf fix 3 (ruled): nil membership as a closure that only `required_string_dispatch` evaluates.
++* `7eb7416c7` Finding 2 queue file, **and Minor 5** (spec section 2 and Task 12 report l.34 now state 472). A failed `git add` of the Minor 5 paths had staged them anyway, and they went into this commit. History was not rewritten.
++* `c51a367df` Finding 4 queue file.
++* `c92f18d51` Minor 6 queue file.
++* `6bc2df715` Finding 1 fallback (ruled): the code of the four commits above is reverted by a reverse patch (rexx-exec/src has an empty diff against `821e68087`). Deviation 30 and R11 name every builtin argument position as refused, citing the review's table. The positions file asserts 66 refusals, each with the oracle's error in its comment, and 4 oracle-identical direct-`.nil` rows. The cold-site design was not tried: the oracle orders the builtin's own 40.12 (`changestr('a','a',o,'x')`) and STRIP's 93.915 option check ahead of the 88.909, and conversion runs before both.
++* `c10b30ff1` Finding 3: `ArraySlots`, plus the row 33 and 11a corrections.
++* `cf167fba1` Finding 3 remedy (ruled): `ArraySlots::empty(len)` for a sized `new`.
++* The report and the gate record's `## Final fix` section are committed after the gates.
++
++## Finding 1
++
++* Shared site: `Interp::required_string_arguments` (`dispatch/reqstr.rs`). The positions listed by `crate::builtin::nil_argument_positions` convert through `required_string_or_nil`. Every other position keeps `required_string_value` and its refusal.
++* The table `NIL_ARGUMENT_POSITIONS` (`builtin.rs`) has one row per position in the review's table. Each row is `Checked`, where the builtin's own 40.x or 93.904 check raises (`whole_number` names `Args::object`, `pad_byte` names the converted `.nil`), or `MethodString(n)`, where `method_string_arguments` / `method_string_argument` raise 88.909 numbered as the forwarded `String` method numbers it. The helper runs in each of the bodies that forward (CHANGESTR, COUNTSTR, POS, LASTPOS, OVERLAY, INSERT, TRANSLATE, VERIFY, STRIP, COMPARE, ABBREV, WORDPOS, the bit family, DATATYPE). It runs after the builtin's own checks and before the method's others. STRIP checks its set after its option, as `RexxString::strip` does.
++* `Args::no_string_value`: the converted value is `.nil` and the original is not. That tells this case apart from a `.nil` the program passed itself.
++* Witness: `tests/string_answer_arguments.rs` with `tests/string_answer_arguments/positions`. It holds 49 positions with `.object~new`, 11 with `.directory~new`, and 9 ordering and direct-`.nil` cases (armed). It also holds 1 unarmed program and 3 target positions that refuse. Every non-refusal expectation is the oracle's stderr, path-normalised, identical across 2 runs. REWRITE=1 left every oracle row unchanged.
++* Negative controls: forcing `required_string_arguments` to never take the nil arm reddens the test. Forcing `no_string_value` to false reddens it too. Both were restored and checked with grep and `git diff`.
++* Deviation 30 (`phase-4-exclusions.txt`) and spec R11 state the split. The Deviation 30 table gained the measured target rows: CHANGESTR/COUNTSTR/STRIP SIGSEGV, `pos('z', o)` 1190, `abs`/`sign`/`trunc` 93.943. Each was re-run on the oracle.
++* `refusal-sites.tsv`: no derived row moved, and `refusal_sites` passed.
++* Per-step check at the finding 1 tree:
++  * fmt.
++  * `cargo clippy -p rexx-exec --all-targets --features pinning,sharing -- -D warnings`: exit 0.
++  * `cargo test -p rexx-exec --no-fail-fast`: exit 0, 1990 passed, 0 failed, 1 ignored.
++  * Corpus pair (`REXX_CORPUS_GATE=1 --test corpus --test ir_recorded_oracle`): exit 0, 29 passed 1 ignored, 21 passed.
++
++### Perf: FAILED, four measurements
++
++`callgrind.sh -r 2` over all programs, base61 against `250176706` (scratchpad `perf/cg-f1.log`, exit 0, spreads 0.0002% at most):
++
++| program | d% vs base61 |
++|---|---|
++| strings | +31.6095 |
++| alloc4c | +7.7275 |
++| parse | +4.2050 (limit +1.1979) |
++| decrender | +3.5746 |
++| rexxcps | +1.3272 |
++| others | equal to `cg-close2`'s close column to 4 places |
++
++Cause, first reading: `method_string_arguments` searched the table by name on every call. That was incomplete. Under an armed latch every heap string argument builds the converted vector, so the converted path is the common one.
++
++All runs below are `callgrind.sh -r 2` over all programs against base61, with binaries built from a `git archive` of the commit. Each archived commit passed fmt, clippy with pinning,sharing, `cargo test -p rexx-exec` and the corpus pair, all exit 0.
++
++| program | close | 250176706 | 34501b269 | 7c203a8ff | 384936cc9 |
++|---|---|---|---|---|---|
++| strings | +0.3735 | +31.6095 | +32.5161 | +3.8803 | +2.8026 |
++| parse | +1.1979 | +4.2050 | +4.2050 | +1.4843 | +1.5884 |
++| alloc4c | -0.0654 | +7.7275 | +7.7275 | +0.4437 | +0.6346 |
++| decrender | -1.0609 | +3.5746 | +3.5745 | -0.7581 | -0.6446 |
++| rexxcps | +0.2694 | +1.3272 | +1.3272 | +0.4410 | +0.4426 |
++
++At `384936cc9` the cgdiff from close on strings is `builtin::run` +414,000,025 self Ir. Per line (`perf/strings-run-lines-f1d.txt`):
++* +189M on the `substituted |= read == ObjRef::NIL && ...` line, where `ObjRef` equality decodes the tag.
++* +144M on the call with the extra argument.
++* +108M on the wider `Args` construction.
++
++## Finding 3 (uncommitted)
++
++* `rexx-core/src/slots.rs`: `ArraySlots`, the slots plus a kept 1-based last-item index (`ArrayClass::lastItem`). Reads go through `Deref<Target = [Option<ObjRef>]>`. There is no `DerefMut`, so every write goes through a method that maintains the index. The methods are `set`, `set_within`, `fill`, `overwrite`, `push`, `pop`, `insert`, `remove`, `resize`, `clear` and `replace`. `last_item()` debug-asserts the cached index against a recomputation. `Body::Array.slots` is now `ArraySlots`.
++* Site enumeration. Before the change: `grep -rn "Body::Array\|Body::array(" crates --include=*.rs`, 94 lines (scratchpad `f3/grep-body-array.txt`). After the type change, the compiler listed every write and construction site (scratchpad `f3/check1.txt`):
++  * Writes:
++    * `dispatch/collection.rs` `write_slot` and `array_grow`
++    * `dispatch/array.rs` `array_resize`, the reshape `*slots = grown` and `native_array_put`
++    * `dispatch/array/sort.rs` `write_back`
++    * `dispatch/array/surface.rs` `clear_array_slot` and fill
++    * `dispatch/collection/list.rs` put
++    * `dispatch/collection/queue.rs` put
++    * `dispatch/hash.rs` `write_slot`
++    * `rexx-core` bench and test sites
++  * Unchanged writes that keep compiling against the new methods: `array_splice` remove, `array_splice_slot` insert, surface `pop`, list `clear`, and the message parties `push`.
++  * Constructions: `state.rs`, `array.rs` (new, of, multidimensional), `buffer.rs`, `context.rs` (twice), `library.rs`, `library/surface.rs`, `object_protocol.rs` (twice), `string.rs`, `tests.rs` (twice), `rexx-api` fake and tests.
++* `append_slot` reads `slots.last_item()` instead of scanning.
++* Tests:
++  * `slots::tests::every_write_keeps_the_last_item`.
++  * `dispatch::tests::append_to_a_dense_array`, `append_after_a_sparse_put_and_empty`, `append_after_a_sized_new_and_empty`, `append_after_a_sparse_put` and `append_after_appends_and_empty`. Each asserts the oracle's answers, measured at 2,000 and 200,000 twice each. In release each runs 200,000 appends with a 5 s bound.
++  * `append_after_every_kind_of_write`: the oracle's output, 2 of 2.
++* All pass in debug and release (release 0.10 s).
++* Negative control: restoring the scan in `append_slot` fails three shape tests in release at 21.7 to 22.2 s. Shape d is not slow under the scan, because its last item is at the end. The review's d figure was cumulative `time('e')`. The fix was restored and checked with grep.
++* Inverting `wrote()`'s clear branch reddens `append_after_a_sparse_put_and_empty`, `append_after_every_kind_of_write` and `append_after_appends_and_empty` in debug, each with "the cached last item disagrees with the slots". The branch was restored and checked with grep.
++* Task 12 report row 33 and the 11a report's Step 7 now state the trailing-empty-slot case (working tree).
++* Per-step check on the working tree:
++  * `cargo test -p rexx-exec -p rexx-core -p rexx-api --no-fail-fast`: exit 0, 2332 passed, 0 failed, 1 ignored.
++  * Corpus pair: exit 0.
++  * Clippy first failed on `Instant::now` in `append_shape`. It is now under `#[expect(clippy::disallowed_methods)]`, and the rexx-exec (pinning,sharing) and workspace clippy runs then finished clean.
++* Per-step check on archived `c10b30ff1`:
++  * fmt 0, clippy pinning,sharing 0, workspace clippy 0.
++  * `cargo test -p rexx-exec -p rexx-core -p rexx-api --no-fail-fast`: exit 0, 2332 passed, 0 failed, 1 ignored.
++  * Corpus pair: exit 0, 29+1 ignored and 21.
++  * Release append tests: 6 passed in 0.10 s.
++* Perf (`perf/cg-f3.log`, `-r 2`, base/close/fb/f3), d% vs base61:
++  * fb equals close everywhere.
++  * f3:
++    * parse +1.1984, against close +1.1979 and the +1.1979 limit.
++    * heapshape +0.4858 (close +0.0093).
++    * alloc +0.4253 (close -0.0318).
++    * dirread +0.1582 (close +0.1049).
++    * pingmsg +0.0537 (close -0.0421).
++    * Every other program is about +7,500 Ir, fixed.
++  * Nothing newly exceeds +0.5%.
++  * The script exits 1 on a SPREAD flag for base61's pingsem cell (0.0127%).
++  * cgdiff fb→f3:
++    * heapshape: `native_array_new` +7.0M (`ArraySlots::new` scans an empty `new(n)`), `native_array_put` +4.0M.
++    * alloc: `from_utf8` +66M, memcmp +24M, `native_array_of` +27M.
++    * parse: hash `install_store`/`insert_in`/`write_slot` +6.1K.
++* Remedy `cf167fba1`, per-step check on the archived tree:
++  * fmt 0, clippy pinning,sharing 0, workspace clippy 0.
++  * Tests for rexx-exec, rexx-core and rexx-api: exit 0.
++  * Corpus pair: exit 0.
++* Callgrind on all programs (`perf/cg-f3b.log`), d% vs base61:
++  * parse +1.1983.
++  * heapshape +0.1852 (close +0.0093).
++  * alloc +0.4253 (close -0.0318).
++  * Nothing newly exceeds +0.5%.
++* The controller accepted the fixed ~7.5K Ir per program.
++* Attribution:
++  * heapshape: `ArraySlots::set` keeping the last item, `native_array_put` +4.0M.
++  * alloc: `.array~of`'s last-item scan, +27M. Also `from_utf8` +66M and memcmp +24M at equal call counts, whose per-line Ir moves between the aligned and byte loops. That is buffer alignment, not input change.
++
++## Gates
++
++`bggates.sh cf167fba1`, finished 2026-10-10T18:48:14+02:00:
++* G1, G2, G3, G5, G7, G8, G9: exit 0.
++* G4 release: exit 0, 3149 passed, 0 failed, 4 ignored.
++* G6 debug: exit 0, 3153 passed, 0 failed, 4 ignored.
++* P48 reruns 0.
++
++The full table is in `docs/superpowers/plans/phase-6-1-gate.md` `## Final fix`.
++
++## Concerns
++
++1. Minor 5 shares commit `7eb7416c7` with the finding 2 queue file.
++2. The spec section 2 paragraph still carries 520 and 528 and "Ruling R4 keeps 512", all measured against 512. The R4 row still reads "== 512 Kept". The brief named only the first sentence.
++3. Builtin positions outside the review's table still refuse even where the oracle may be defined: RXQUEUE 2 (40.26), the stream builtins (93.938), D2X 1 (93.928), BITOR and BITXOR 2, MAX 3 and beyond. These were not measured per position here.
++4. New, pre-existing divergence, not queued: `b = .array~of('c','a','b'); b~remove(3); b~sort`. The oracle sorts, rc 0. This crate raises 98.975 "Missing array element at position 3", the same before and after finding 3.
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md
+index a9d01e3b0..4344ab9b3 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md
+@@ -182,16 +182,20 @@ The controller ruled this in after Step 6 turned six TEST_NEW_CONTEXT_* refusals
+   through `array_grow`. `last_item`, `Array~first`/`last`, `isEmpty`, `empty`, `hasIndex`, `remove`,
+   the `sortWith` counts and Queue's item count use it too. `List`'s handle and free-stack reads borrow
+   (`collection/list.rs`). `Array~items` already borrowed; it is still an O(n) count per call.
+ * Test: `dispatch::tests::appends_and_reads_copy_slots_linearly` counts slots copied with a test-only
+   counter in `array_slots_owned` and `occupied`, at 2000 and 4000 appends plus an unwind 500 and 1000
+   deep. It requires fewer than 2.5x as many copies at twice the size. Reverting `append_slot` gives
+   2,008,002 and 8,016,002, which is red. Reverting List's handle read gives 2,258,502 and 9,017,002, also
+   red. The stdout it asserts (`h 501`) is the oracle's, 1/1.
++* `append_slot` still scanned from the end for the last item, so an array with trailing empty slots
++  stayed quadratic: after a sparse put, a sized `new` or `empty`, 1e5 appends took 5.62-12.87 s where
++  the oracle takes 0.01-0.07 s (final review finding 3). The final fix keeps the last item
++  (`ArraySlots`, `final-fix-report.md`).
+ * Scaling, wall clock (elapsed/user s, 3 interleaved runs each; base = `fr1`, head = `e8a19b2e6`):
+ 
+ | program | base | head | oracle |
+ |---|---|---|---|
+ | append 1e3 | 0.05-0.06 / 0.02-0.03 | 0.03-0.06 / 0.01-0.02 | 0.00-0.01 / 0.00 |
+ | append 1e4 | 0.08-0.11 / 0.07-0.08 | 0.05-0.06 / 0.02-0.03 | 0.00-0.01 / 0.00 |
+ | append 1e5 | 5.35-5.37 / 5.30-5.34 | 0.07-0.08 / 0.03-0.04 | 0.02 / 0.01 |
+ | listappend 1e4 | 0.06-0.08 / 0.03-0.04 | 0.04-0.07 / 0.02 | 0.01 / 0.00 |
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-12-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-12-report.md
+index 11d403d12..1702d75e4 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-12-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-12-report.md
+@@ -54,17 +54,17 @@ new file.
+ | 25 | `.context~executable` in a method's internal routine (ledger l.101) | existing file `2026-10-02-frame-executable-invocation-and-native-levels.md` | `t4f.rex` at `6a87cd616`: oracle `Method`, ours `Routine` |
+ | 26 | a user STRING answering an Array or another object (ledger l.108) | fixed by `5bb6510af` (Task 11a Step 4) and its fix rounds | `i7a.rex` identical on both at `6a87cd616` |
+ | 27 | rooting harness blind to dropped pushes (ledger l.108) | new file `2026-10-10-rooting-harness-blind-to-dropped-pushes.md` | harness gap; mutation evidence in `task-4a-review.md` |
+ | 28 | ATTRIBUTE TESTMISPLACEDCLASSMETHOD (ledger l.119) | new file `2026-10-10-misplaced-class-attribute-error.md` | `attrcls.rex`: oracle 99.905, ours 99.937 |
+ | 29 | DIFFERING rows agreeing in both green runs: TIME whole/derived, CALL derived, REPLY every (ledger l.119) | new file `2026-10-10-whole-groups-differing-rows-that-agree.md` | the `whole_groups` run at `97cb37712` lists exactly these as differing and agreeing |
+ | 30 | CALL whole passes TEST_4 but the rest run failed it (ledger l.121) | same new file as row 29 | CALL whole and derived agree with the oracle at `97cb37712`; CALL has no rest part since Task 5 I2, so the rest run cannot be repeated |
+ | 31 | prologue stack frames also miss nested/newFile intermediate frames (ledger l.121) | new file `2026-10-10-prologue-frames-missing-loading-levels.md` | `frames.rex`, `frames2.rex`: oracle `METHOD NEW` and `ROUTINE mid2.cls` frames, ours neither |
+ | 32 | pending UNINIT never finalized mid-run (ledger l.127) | fixed by `595ba08ef` and `be020a36d` (Task 11b) | `uninit.rex` at `6a87cd616`: `done 950`, peak 69 MB (scout E1 measured 356 MB at its HEAD); oracle `done 995`, 16 MB |
+-| 33 | Array~append quadratic (ledger l.127) | fixed by `e8a19b2e6` (Task 11a Step 7) | `append.rex` (1e5 appends), 5 interleaved runs at `97cb37712`: 0.03 s each here, 0.01-0.02 s on the oracle (scout E2: 5.4 s) |
++| 33 | Array~append quadratic (ledger l.127) | fixed for an array with no trailing empty slots by `e8a19b2e6` (Task 11a Step 7); after a sparse put, a sized `new` or `empty` it stayed quadratic, 1e5 appends 5.62-12.87 s (final review finding 3), and is fixed by the final fix's `ArraySlots` commit (`final-fix-report.md`) | `append.rex` (1e5 appends), 5 interleaved runs at `97cb37712`: 0.03 s each here, 0.01-0.02 s on the oracle (scout E2: 5.4 s) |
+ | 34 | COPIES fills byte by byte (ledger l.129) | fixed by `e4064dac0` (Task 11a Step 8) | `copies.rex` (loop999, N = 1e6), 5 interleaved runs at `97cb37712`: 0.43-0.44 s here (scout E2: 1.00-1.12 s), 0.76-0.77 s on the oracle |
+ | 35 | `=` after ITERATE indent (ledger l.135) | new file `2026-10-10-debug-equals-after-iterate-indent.md` | `e2.rex`: `3 *-*       iterate` against `3 *-*   iterate` |
+ | 36 | REPLY no pause (ledger l.135) and REPLY reprints the banner (ledger l.138) | new file `2026-10-10-debug-reply-pause-and-banner.md` | `k3.rex`, 5 runs each, one outcome per engine |
+ | 37 | labelled block DO header pause (ledger l.135) | new file `2026-10-10-debug-labelled-block-header-pause.md` | `g1.rex`: oracle pauses after `do label lbl`, ours after `nop` |
+ | 38 | oracle defect: `=` at a zero-pass DO pause, then END 10.1 (ledger l.135) | new file `2026-10-10-upstream-zero-pass-do-reexecute.md` (upstream candidate; Deviation 26) | `z26.rex`: oracle 10.1 rc 246, ours `end` rc 0 |
+ | 39 | 28.x from LEAVE/ITERATE not trappable by SIGNAL ON SYNTAX (ledger l.138) | new file `2026-10-10-leave-iterate-error-not-trappable.md` | `lv4o.rex`: oracle `trapped 4` rc 0, ours 28.3 rc 228 |
+ | 40 | 10.x and 24.1 messages print `&n` unsubstituted (ledger l.138) | new file `2026-10-10-translation-error-inserts.md` (fix round 1); the work ruling R3 defers | `cs.rex` (24.1) and `e103.rex` (10.2) are translation errors: unsubstituted here, filled on the oracle |
+ | 41 | `trace c` drops the echo of a failing ADDRESS command (ledger l.138) | new file `2026-10-10-trace-c-command-echo.md` | `cc2.rex`: ours lacks `3 *-* address command 'false'` |
+@@ -297,17 +297,17 @@ Task 12's own, from `progress.md` at `9512f083c`:
+ * l.270: `refusal-sites.tsv` refreshed as its own commit (`13bbff35f`), line numbers only.
+ * l.271: the seeded-gate harness keeps its shared run directory (`97cb37712`), which leaves an empty directory behind in the target's tmp.
+ * l.273: `quick_native_calls_at_the_smallest_bound_run_alike` is excluded under TSan only, through the 6.1 copy of `tsan.sh`; one sim-bound native test goes unchecked under TSan.
+ 
+ Earlier tasks', at `5c83d9250`:
+ 
+ * l.30: per-task check without full gates; `whole_groups` only at Tasks 3, 5, 10, 12.
+ * l.31: scheduler tests' inline programs stay out of the seeded gate.
+-* l.34: `size_of::<Activation>()` pinned at 480, not 512 (R4's intent read as "no growth").
++* l.34: `size_of::<Activation>()` pinned at 472 (`activation.rs:502`, since `d27a9d441`), not 512 (R4's intent read as "no growth").
+ * l.38, l.51: false doc sentences fixed inside fix rounds.
+ * l.50: criterion 5 row reasons written into the gate record at Task 2.
+ * l.52: REPLY trace gap and TraceObject collector gap not 6.1 items (now `2026-10-10-reply-continuation-trace-entry.md`, `2026-10-02-traceobject-variable-and-collector.md`).
+ * l.62: object control values and DO OVER `.context~package~local` made IMPLEMENT (a reachable GUARD).
+ * l.63: TEST_TRACEOBJECT_COLLECTOR failure bisected in Task 3's fix round.
+ * l.64: CALL ON ANY known-gap row; two oracle crashes into `oracle-crashes.txt`.
+ * l.68: option (B) for DO TO identity, superseded by your l.69/l.72 rulings.
+ * l.73: numeric TO/BY cached as one object per loop.
+diff --git a/.superpowers/sdd/queued/2026-10-10-array-sort-after-remove.md b/.superpowers/sdd/queued/2026-10-10-array-sort-after-remove.md
+new file mode 100644
+index 000000000..fd5fd9422
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-10-10-array-sort-after-remove.md
+@@ -0,0 +1,25 @@
++# Array~sort raises 98.975 after a trailing remove
++
++Found by the Phase 6.1 final fix (concern 4 in `final-fix-report.md`); the fixer reports the same answer before and after finding 3. Queued by the Phase 6.1 controller (2026-10-10).
++
++After `remove` empties the last slot, the oracle sorts the remaining items and keeps the size at 2. This crate raises 98.975 for the emptied position.
++
++Probe `s.rex`, run from a fresh empty directory:
++
++    b = .array~of('c','a','b')
++    b~remove(3)
++    b~sort
++    say b~items b[1] b[2]
++
++Oracle (`/home/moritz/dev/repos/ooRexx/build/bin/rexx` under `ulimit -v 1048576`), rc 0:
++
++    2 a c
++
++This crate (`rust/target/release/rexx-run` in the worktree, under `memcap 2G`), rc 158:
++
++           *-* Compiled method "SORT" with scope "Array".
++         3 *-* b~sort
++    Error 98 running PROGRAM line 3:  Execution error.
++    Error 98.975:  Missing array element at position 3.
++
++Suspected site: the Array SORT native sorts over `size` rather than up to the last item, so it meets the emptied slot. `ArraySlots` now keeps the last item (`c10b30ff1`), which the sort can use as its bound. Probing an empty slot inside the range, not at the end, comes before choosing the fix.
+diff --git a/.superpowers/sdd/queued/2026-10-10-beep-wrong-type-message.md b/.superpowers/sdd/queued/2026-10-10-beep-wrong-type-message.md
+new file mode 100644
+index 000000000..715a3f8a4
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-10-10-beep-wrong-type-message.md
+@@ -0,0 +1,31 @@
++# BEEP's wrong-type argument message differs
++
++Found by the Phase 6.1 final review (minor 6, `probes/s2/beep_msg.rex`); pre-existing at the 6.1 base. Queued by the Phase 6.1 final fix (2026-10-10). Same rc and code; the message and the `running` line differ.
++
++The oracle checks the whole-number range before the frequency range. `whole_argument`'s own doc says the non-numeric answer was not measured.
++
++Probe `beep.rex`, run from a fresh empty directory:
++
++    say beep(.object~new)
++
++Oracle, rc 168:
++
++    [stdout]
++    (empty)
++    [stderr]
++           *-* Compiled routine "BEEP".
++         1 *-* say beep(.object~new)
++    Error 88 running REXX:  Invalid argument.
++    Error 88.907:  Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "an Object".
++
++This crate (`rexx-run` built from the final fix's finding 1 tree), rc 168, `PROGRAM` standing for the program's path:
++
++    [stdout]
++    (empty)
++    [stderr]
++           *-* Compiled routine "BEEP".
++         1 *-* say beep(.object~new)
++    Error 88 running PROGRAM line 1:  Invalid argument.
++    Error 88.907:  Argument frequency must be in the range 37 to 32767; found "an Object".
++
++Suspected site: `builtin/platform.rs`, `beep` and `whole_argument`, and the delivery flag that makes a native routine's error line read `running REXX:`.
+diff --git a/.superpowers/sdd/queued/2026-10-10-list-remove-copies-per-call.md b/.superpowers/sdd/queued/2026-10-10-list-remove-copies-per-call.md
+new file mode 100644
+index 000000000..d37c313c6
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-10-10-list-remove-copies-per-call.md
+@@ -0,0 +1,33 @@
++# `List~remove` copies the list per call
++
++Found by the Phase 6.1 final review (finding 4, `probes/b/t21a.rex`); pre-existing at the 6.1 base, which the review found timing out on the first loop. Queued by the Phase 6.1 final fix (2026-10-10). Same answers; quadratic time where the oracle is constant per call. Task 11a's scope named `Array~append`, `items` and `List~append`, not `remove`.
++
++Probe `lr2.rex`, run from a fresh empty directory under `timeout -k 5 60`:
++
++    l = .list~new; do i = 1 to 200000; l~append(i); end
++    call time 'r'
++    do i = 1 to 20000; l~remove(l~first); end
++    say 'remove first x20000' time('r')
++    do i = 1 to 20000; l~remove(l~last); end
++    say 'remove last x20000' time('r')
++    say l~items
++
++Oracle, rc 0, one run:
++
++    [stdout]
++    remove first x20000 0.003279
++    remove last x20000 0.004486
++    160000
++    [stderr]
++    (empty)
++
++This crate (`rexx-run` built from the final fix's finding 1 tree), rc 124 at the timeout, one run, `PROGRAM` standing for the program's path:
++
++    [stdout]
++    remove first x20000 29.150683
++    [stderr]
++         5 *-*   l~remove(l~last);
++    Error 4 running PROGRAM line 5:  Program interrupted.
++    Error 4.1:  Program interrupted with HALT condition.
++
++Suspected site: `dispatch/collection/list.rs`. `list_position` copies the handles and items arrays (`array_slots_owned`) and scans them for the handle on every lookup, and `list_take` removes from both by position (`array_splice`, a `Vec::remove` that shifts every later slot).
+diff --git a/.superpowers/sdd/queued/2026-10-10-native-routine-arguments-not-strings.md b/.superpowers/sdd/queued/2026-10-10-native-routine-arguments-not-strings.md
+new file mode 100644
+index 000000000..33d722d1d
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-10-10-native-routine-arguments-not-strings.md
+@@ -0,0 +1,37 @@
++# Native routine arguments that are not strings are rendered, not refused
++
++Found by the Phase 6.1 final review (finding 2, `probes/s2/native_routine_args.rex`, `probes/s3/s3_62.rex`, `s3_69.rex`); pre-existing at the 6.1 base. Queued by the Phase 6.1 final fix (2026-10-10). Silent: rc 0 here where the oracle raises 88.909.
++
++Neither engine sends `STRING` for a native routine's argument, so this is not an R11 site. The oracle converts with `requiredString(position)` and raises 88.909 through the routine's frame; this crate renders the object's default name or reads it as a missing file. The review found the same answers on base61.
++
++Probe `natargs.rex`, run from a fresh empty directory:
++
++    o = .object~new
++    say 'filespec' filespec('name', o)
++    say 'sysfileexists' sysfileexists(o)
++    say 'directory' directory(o)
++    say 'sysfiletree' sysfiletree(o, 'f.')
++
++Oracle, rc 168:
++
++    [stdout]
++    (empty)
++    [stderr]
++           *-* Compiled routine "FILESPEC".
++         2 *-* say 'filespec' filespec('name', o)
++    Error 88 running REXX:  Invalid argument.
++    Error 88.909:  Argument 2 must have a string value.
++
++This crate (`rexx-run` built from the final fix's finding 1 tree), rc 0:
++
++    [stdout]
++    filespec an Object
++    sysfileexists 0
++    directory 
++    sysfiletree 0
++    [stderr]
++    (empty)
++
++`say 'directory' directory(o)` alone: oracle rc 168, `Compiled routine "DIRECTORY"`, 88.909 Argument 1; this crate rc 0, `directory `.
++
++Suspected site: the native routine bodies' argument reads, `builtin/platform.rs` (`directory`, `filespec`) and `builtin/rexxutil.rs` (`file_exists`, the `SysFileTree` body), which call `Interp::to_text` where the oracle calls `requiredString(position)`.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 4f820e5d1..ae738aed5 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -1929,17 +1929,29 @@ DEVIATIONS -- permanent, chosen
+      naming the original object), a host command and INTERPRET (both run
+      "The NIL object"), an equality operator (`=`, `==`, `\=`, `\==`: the
+      oracle's `primitiveIsEqual` reads `.nil` through the string layout too,
+      and its answer over varied inputs is that `.nil` equals no string, which
+      the crate pins), NUMERIC FORM VALUE (25.11) and a semaphore timeout (88.902),
+      both naming the original object, and a native method's numeric and
+      stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
+      (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
+-     string_answer_nil_native.rex. Where it
++     string_answer_nil_native.rex. Every builtin argument position refuses.
++     At a position that is not the string the builtin operates on the
++     oracle's answer is defined, at the program's own line: 88.909 numbered
++     as the `String` method the builtin forwards to numbers it, 40.12 and
++     93.904 naming the original object, and 40.19, 40.23, 40.28 and 40.904
++     naming "The NIL object" (the Phase 6.1 final review's finding 1 table,
++     .superpowers/sdd/2026-10-07-phase-6-1/final-review.md).
++     crates/rexx-exec/tests/string_answer_arguments/positions holds one
++     refusal per position with the oracle's answer beside it. Raising those
++     errors in the oracle's order cost builtin calls under an armed latch
++     2.8% to 32.5% of bench-programs/strings.rex's instructions across the
++     designs the Phase 6.1 final fix measured.
++     Where it
+      reads `.nil` through the string layout, the answer is garbage or a
+      crash. Measured by Phase 6.1's scout E (probes i7b, i7e, i7f, i7h),
+      Task 11a (probes bytes_dir, bytes_nil, bytes_queue, bytes_obj, s4_nil,
+      s4_queue) and the Task 11a review (probes b02 to b40), STRING
+      answering a Directory, `.nil`, a Queue or an Object:
+ 
+        `say length(o)`                rc 0, a pointer-sized number that
+                                       differed in each of two runs
+@@ -1956,16 +1968,20 @@ DEVIATIONS -- permanent, chosen
+        `... with output stream (o)`   rc 158, 98.920 on the file ""
+        `"" << o`, `"" < o`, `<=`, ...  0 or 1 by no rule a string could give
+                                       (`"" < o` 0, `"" << o` 1)
+        PARSE VALUE, PARSE ARG         rc 251, Error 5 for a splitting
+                                       template or UPPER; a one-variable
+                                       template assigns the `.nil` object
+        OPTIONS o                      nothing observable
+        `queue o`, `lineout`, `charout` rc 168, 88.909 through REXX frames
++       `changestr('a', o, 'b')`,
++       `countstr('z', o)`, `strip(o)`  SIGSEGV, rc 139
++       `pos('z', o)`                  rc 0, `1190`
++       `trunc(o)`, `sign(o)`, `abs(o)` rc 163, 93.943 found "The NIL object"
+ 
+      This crate refuses each, rc 120, with `a STRING method answering an
+      object with no string value is not implemented` (a one-variable PARSE
+      template too, since assigning the `.nil` object is not built), after a trapped
+      NOSTRING (which the oracle raises first, with "The NIL object"); the
+      88.909 consumers are refused too, since this crate builds no frames for
+      the REXX package's methods. The oracle's other answers are reads of
+      `.nil` through the string layout, not specified observables. Not
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index 68308a09d..ccbd0296f 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -1376,8 +1376,60 @@ interleaved runs per binary, medians (`.superpowers/sdd/2026-10-07-phase-6-1/tas
+ | pingguard | +4.53% | +1.75% | +2.27% | +1.85% | -0.63% | 785-788 |
+ 
+ pingsem: a pad alone moves the same code's cycles by 4.08 points (close +4.64%, cpad8 +0.56%) at
+ equal instructions and context switches, as large as its drift, so the drift is not attributable to
+ code. pingguard: the largest pad move is 2.78 points (close +4.53%, cpad8 +1.75%), below its +4.53%
+ drift, so its drift is unattributed. emptyloop:
+ no pad moves it (4.38-4.62%), instructions are fewer and context switches equal, so the cycles are spent
+ in the loop itself; unattributed beyond that, as at Task 2 (`loop_advance`, Moritz's ruling there).
++
++## Final fix
++
++Commits, in order:
++* `250176706`, `34501b269`, `7c203a8ff` and `384936cc9`: finding 1 as specified, then three perf rounds. Each round was over budget (strings +31.6%, +32.5%, +3.88%, +2.80% against base61).
++* `6bc2df715` (ruled fallback): reverts that code to the `821e68087` tree. Deviation 30 and R11 now name every builtin argument position as refused, citing the final review's table. `tests/string_answer_arguments/positions` asserts each refusal with the oracle's answer beside it.
++* `7eb7416c7`, `c51a367df`, `c92f18d51`: findings 2 and 4 and minor 6 queued. `7eb7416c7` also carries minor 5 (472).
++* `c10b30ff1`: finding 3, `Array~append` through a kept last item (`rexx_core::ArraySlots`). `cf167fba1`: a sized `new` builds its slots empty.
++
++Gates, `bggates.sh cf167fba1` (`.superpowers/sdd/2026-10-07-phase-6-1/bg/cf167fba1/status.txt`, finished 2026-10-10T18:48:14+02:00):
++* G1 fmt, G2 clippy, G3 release build, G5 debug build, G7 clippy pinning, G8 pinning self-tests and G9 loom: exit 0.
++* G4 release test: exit 0, 3149 passed, 0 failed, 4 ignored.
++* G6 debug test: exit 0, 3153 passed, 0 failed, 4 ignored.
++* P48 reruns 0.
++
++Perf, `callgrind.sh -r 2` over all programs with base61, `close` and `cf167fba1` in one run, spreads 0.0017% at most. d% is against base61:
++
++| program | base61 Ir | close d% | cf167fba1 d% |
++|---|---:|---:|---:|
++| alloc | 20345537338 | -0.0318 | +0.4253 |
++| alloc4c | 3140684534 | -0.0654 | -0.0651 |
++| arith | 11488857953 | +0.2725 | +0.2725 |
++| assign | 18983599260 | -3.1651 | -3.1650 |
++| compound | 8937498229 | -1.1172 | -1.1171 |
++| decloop | 2469010921 | -2.2380 | -2.2377 |
++| decrender | 4228326834 | -1.0609 | -1.0607 |
++| dirread | 2644857074 | +0.1049 | +0.1582 |
++| dispatch | 20809503035 | -0.3597 | -0.3596 |
++| dispatchclass | 15794935129 | -0.6321 | -0.6321 |
++| emptyloop | 7786099831 | -0.6402 | -0.6401 |
++| extcall | 7552641613 | +0.0021 | +0.0022 |
++| fibcall | 8413279881 | +0.4413 | +0.4413 |
++| fibfunc | 8228290876 | +0.4303 | +0.4304 |
++| heapshape | 2334068066 | +0.0093 | +0.1852 |
++| nop | 9283340217 | -1.0863 | -1.0862 |
++| parse | 1536336657 | +1.1978 | +1.1983 |
++| sayloop | 109048243 | -0.4070 | -0.4003 |
++| sendloop | 14013810949 | -0.4984 | -0.4983 |
++| startup | 58097208 | +0.2676 | +0.2807 |
++| strings | 17537481412 | +0.3735 | +0.3735 |
++| textnum | 1155145965 | -0.5405 | -0.5399 |
++| varlookup | 13437530316 | -2.2612 | -2.2611 |
++| rexxcps | 17788420928 | +0.2694 | +0.2694 |
++| pingguard | 1159017766 | -0.7113 | -0.7106 |
++| pingmsg | 1676421252 | -0.0422 | +0.0537 |
++| pingsem | 1181250809 | -0.4863 | -0.4857 |
++
++Nothing newly exceeds +0.5%. parse is +1.1983%. Every program carries a fixed ~7.5K Ir from hash-store slot writes keeping the last item, and the controller accepted it, parse's +0.0005 point over close included.
++* heapshape +0.18 points: `native_array_put` keeping the last item, about 4 Ir per put.
++* alloc +0.46 points:
++  * `.array~of` finding its last item, +27M.
++  * `from_utf8` +66M and memcmp +24M at unchanged call counts. Their per-line Ir moves between the aligned word loop and the byte loop, which depends on where the name buffers are allocated.
+diff --git a/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md b/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
+index 956bc3e7f..05a6e56ce 100644
+--- a/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
++++ b/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
+@@ -43,22 +43,23 @@ oldest entry (`:1494-1500`).
+ |---|---|---|---|---|
+ | `elapsed_anchor`, `pending_elapsed_reset` | fresh | copied from the caller, with the caller's stale `cached_clock` | shared | moves with the box |
+ | `random_seed` | own, seeded from the activity's generator on first use (the oracle seeds at creation, `RexxActivation.cpp:174`, `:312`; lazy seeding is unobservable, since the activity seed is clock- and pid-derived) | none: walks to the nearest top-level activation | shared | moves |
+ | `locals` | own list; restored at the activation's end | none: walks to the nearest top-level activation | shared | moves; restored at the continuation's end |
+ | `active_condition` | none | copied; a `CALL ON` handler gets the trapped condition | shared | moves |
+ | `current_case_text` | none | none | INTERPRET: shared; a typed debug line: saved and restored around it (the oracle runs it on its own block stack) | moves; held inline, in the space `condition` leaves |
+ | `debug_pause` | false | false | INTERPRET: shared, false; a typed debug line: true for its duration | n/a |
+ 
+-`size_of::<Activation>() == 512` holds (`activation.rs:497`). Adding an `i64` anchor gives 520 and an
++When this spec was written, `size_of::<Activation>() == 512` held. Adding an `i64` anchor gives 520 and an
+ `i64` plus a cold box 528 (plan review I1, a `cargo check` with the probe fields). So T1 shrinks what
+ it adds: `cached_clock: Option<i64>` becomes an `i64` with a sentinel (saves 8), the flags become bits
+ in `ActivationFlags`, the propagated condition reuses the existing `condition: Option<TrappedCondition>`
+ field where T1 shows them equivalent, and the seed and SETLOCAL list go in one cold box allocated on
+-first use. Ruling R4 keeps 512: the existing `condition` field joins the cold box.
++first use. Ruling R4 keeps 512: the existing `condition` field joins the cold box. Task 1 brought the
++size to 480 (`66b0f6854`) and Task 4a to 472 (`d27a9d441`), which `activation.rs:502` asserts.
+ 
+ Witnesses: each scout B probe, rewritten as a predicate where it prints a time (as `c2` is), becomes a
+ corpus program where it is single-activity, and a crate test where it is concurrent (`reply`, `sl2`).
+ `dbgcall` needs T5's CALL-return pause, so it is T5's witness; T1's `debug_pause` witness has no
+ flowed clause. `scheduler/tests.rs`'s
+ `a_reply_continuation_keeps_the_elapsed_clock_and_the_random_seed` is rewritten to the oracle's rule.
+ `sl3` aborts the oracle (`free(): invalid pointer`, 5 of 5 runs): it is `oracle-crashes.txt` entry 10b
+ (one restore per process survives) reached through the termination restore; T1 extends 10b with that
+@@ -206,24 +207,24 @@ three rounds per stage, then the figures go to Moritz.
+ 
+ Moritz, 2026-10-07, on the open items the spec reviews left (R5-R8 after the final review, `spec-review-final.md`):
+ 
+ | # | Question | Ruling |
+ |---|---|---|
+ | R1 | D7's scope | Sim and invariants; oracle differences reported, never gating. "Treat it as a tool for as long as we're building the implementation, but eventually we'll be stand alone ideally." |
+ | R2 | b14 cannot be rehomed with a true reason (D4) | Into 6.1 with subclass `NEW` on String, Stem, Method, Routine and Message (and VariableReference's 93.967), if a scout sizes `NEW` at M or less; else Phase 9's row is amended to name these refusals as its work. |
+ | R3 | Parse-error message inserts | Not in 6.1. The 2026-07-28 decision stands; 6.1 lands the traceback line for all three paths. A later reversal goes through a raising API that cannot be called without the inserts its message needs. |
+-| R4 | `size_of::<Activation>() == 512` | Kept. The existing `condition` field, the seed and the SETLOCAL list go in one cold box allocated on first use, measured on the T1 programs. |
++| R4 | `size_of::<Activation>() == 512` | Kept, and since lowered to 472 (`d27a9d441`). The existing `condition` field, the seed and the SETLOCAL list go in one cold box allocated on first use, measured on the T1 programs. |
+ | R5 | PCT (the row's wording) | Built as an opt-in policy `pct:d,k=N`, in the gate mix, judged by invariants only; random bounded preemption stays the main policy. |
+ | R6 | A program's own failed check under R1 | Red where no committed oracle outcome has it; then decided case by case. |
+ | R7 | D6 with no branch-free design | Pay the ~0.5%: correct debug pauses are worth it. A branch-free design is still tried first. |
+ | R8 | Criterion 1's reach | The row's: census classes (b) and (c). |
+ | R9 | One truth judgment (Moritz, 2026-10-08, from the truthiness survey) | Added to 6.1 as Task 4a: every site that turns a value into true or false goes through one function judging as the oracle's `truthValue` does (identity fast path, `requestString`, exactly `0` or `1`, else Error 34 with the caller's sub-number); SELECT CASE and collection `==` answers included; fast paths checked against it; Deviation 25 stays for DO TO and BY only. |
+ | R10 | Collection trigger counts slots only (Moritz, 2026-10-08, from the whole_groups OOM diagnosis) | Added to 6.1 as Task 5a: a collection is also due on bytes allocated since the last one, so a loop of large dead strings runs in bounded memory; within the +0.5% perf budget. |
+-| R11 | Deferred items still reproducing (Moritz, 2026-10-09, from scout E: `.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md`, `scout-e2-report.md`) | Added to 6.1 as Task 11a (empty-body `TIME('E')` loop hang, `Message~halt` after `~send`, `EXIT` in a handler at the REPLY clause's end, a user STRING answering an Array joined as the oracle joins it, wrong-type native rows that name Phase 9, the `Literals` rows, COPIES doubling fill, `Array`/`List` append and length without copying every slot) and Task 11b (a blocking call never runs inline while it can starve the process; pending UNINITs drained at activation return as the oracle drains them). A user STRING answering any other non-string object converts to `.nil`, as the oracle's `primitiveMakeString` makes it: every consumer whose oracle answer is then defined answers it (truth, the logical operators, a native logical argument, SIGNAL VALUE, a stem tail, arithmetic, NUMERIC DIGITS and FUZZ, a DO count or FOR, a host command, INTERPRET, an equality operator, NUMERIC FORM VALUE, a semaphore timeout, a native method's numeric, stem and ObjectToString conversions; errors that name the operand name the original object), and a consumer where the oracle reads `.nil` through the string layout (garbage or a crash) or answers 88.909 through REXX-package frames this crate does not build is a loud refusal and a deviation row, owner none, after a trapped NOSTRING. The ordering operators, PARSE and OPTIONS refuse. Amended 2026-10-10 (controller ruling (c) on Task 11a, and the Task 11a fix round 1 and 2 rulings). |
++| R11 | Deferred items still reproducing (Moritz, 2026-10-09, from scout E: `.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md`, `scout-e2-report.md`) | Added to 6.1 as Task 11a (empty-body `TIME('E')` loop hang, `Message~halt` after `~send`, `EXIT` in a handler at the REPLY clause's end, a user STRING answering an Array joined as the oracle joins it, wrong-type native rows that name Phase 9, the `Literals` rows, COPIES doubling fill, `Array`/`List` append and length without copying every slot) and Task 11b (a blocking call never runs inline while it can starve the process; pending UNINITs drained at activation return as the oracle drains them). A user STRING answering any other non-string object converts to `.nil`, as the oracle's `primitiveMakeString` makes it: every consumer whose oracle answer is then defined answers it (truth, the logical operators, a native logical argument, SIGNAL VALUE, a stem tail, arithmetic, NUMERIC DIGITS and FUZZ, a DO count or FOR, a host command, INTERPRET, an equality operator, NUMERIC FORM VALUE, a semaphore timeout, a native method's numeric, stem and ObjectToString conversions; errors that name the operand name the original object), and a consumer where the oracle reads `.nil` through the string layout (garbage or a crash) or answers 88.909 through REXX-package frames this crate does not build is a loud refusal and a deviation row, owner none, after a trapped NOSTRING. Every builtin argument position refuses too, including the positions other than the string the builtin operates on, where the oracle's answer is defined (the final review's finding 1 table, Deviation 30). The ordering operators, PARSE and OPTIONS refuse. Amended 2026-10-10 (controller ruling (c) on Task 11a, the Task 11a fix round 1 and 2 rulings, and the final review's finding 1). |
+ 
+ Settled from the reviews: FIFO with seeded one-event order; inline pool; `fail=wait:K` ships, sim
+ only; seeded clock origin; trace and replay in 6.1, shrinker queued; seeds by rule; b13's
+ non-crashing rows are a deviation (the oracle reads a wrong-type object; the value is an accident of
+ layout).
+ 
+ ## 7. Staging
+ 
+diff --git a/rust/crates/rexx-api/src/callbacks/fake.rs b/rust/crates/rexx-api/src/callbacks/fake.rs
+index 43bddff27..31ec93475 100644
+--- a/rust/crates/rexx-api/src/callbacks/fake.rs
++++ b/rust/crates/rexx-api/src/callbacks/fake.rs
+@@ -98,17 +98,17 @@ impl FakeHost {
+     /// `object`'s bytes, where it is a text body.
+     pub(crate) fn bytes(&self, object: ObjRef) -> Option<Vec<u8>> {
+         self.string_bytes(object).map(Cow::into_owned)
+     }
+ 
+     /// The items of an array body.
+     pub(crate) fn items(&self, object: ObjRef) -> Option<Vec<Option<ObjRef>>> {
+         match &self.heap.get(object)?.body {
+-            Body::Array { slots, .. } => Some(slots.clone()),
++            Body::Array { slots, .. } => Some(slots.to_vec()),
+             _ => None,
+         }
+     }
+ 
+     fn number<T: std::str::FromStr>(&self, object: ObjRef) -> Option<T> {
+         if let Decoded::SmallInt(small) = object.decode() {
+             return small.to_string().parse().ok();
+         }
+@@ -289,17 +289,17 @@ impl Surface for FakeHost {
+     fn clear_condition(&mut self) {
+         self.cleared += 1;
+         self.held = None;
+     }
+ 
+     fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef {
+         self.heap.alloc(Body::Array {
+             dimensions: None,
+-            slots: items.to_vec(),
++            slots: items.to_vec().into(),
+         })
+     }
+ 
+     fn raise_exception(&mut self, number: usize, substitutions: Option<ObjRef>) {
+         self.held = Some(Held::Syntax(number, substitutions));
+     }
+ 
+     fn raise_condition(
+diff --git a/rust/crates/rexx-api/tests/handles.rs b/rust/crates/rexx-api/tests/handles.rs
+index 70557615e..1bd44fce3 100644
+--- a/rust/crates/rexx-api/tests/handles.rs
++++ b/rust/crates/rexx-api/tests/handles.rs
+@@ -15,17 +15,17 @@ use rexx_api::handles::Table;
+ use rexx_core::{
+     Body, Decoded, GENERATION_MAX, Heap, ObjRef, RootSet, SMALL_INT_MAX, SMALL_INT_MIN,
+ };
+ 
+ /// An object with `slots` empty slots, so two allocations are told apart by
+ /// what they hold and not only by the handle that names them.
+ fn array(slots: usize) -> Body {
+     Body::Array {
+-        slots: vec![None; slots],
++        slots: vec![None; slots].into(),
+         dimensions: None,
+     }
+ }
+ 
+ fn heap_parts(object: ObjRef) -> (u32, u32) {
+     match object.decode() {
+         Decoded::Heap { slot, generation } => (slot, generation),
+         other => panic!("expected a heap reference, got {other:?}"),
+diff --git a/rust/crates/rexx-api/tests/values.rs b/rust/crates/rexx-api/tests/values.rs
+index cd1f388aa..ce8872d58 100644
+--- a/rust/crates/rexx-api/tests/values.rs
++++ b/rust/crates/rexx-api/tests/values.rs
+@@ -79,17 +79,17 @@ impl Interpreter {
+             bytes: Bytes::from_slice(bytes),
+             num: None,
+         })
+     }
+ 
+     fn array(&mut self) -> ObjRef {
+         self.heap.alloc(Body::Array {
+             dimensions: None,
+-            slots: vec![None],
++            slots: vec![None].into(),
+         })
+     }
+ 
+     fn stem(&mut self, name: &[u8]) -> ObjRef {
+         self.heap.alloc(Body::Stem {
+             name: name.into(),
+             default: None,
+             tails: rexx_core::NameMap::default(),
+diff --git a/rust/crates/rexx-core/benches/heap.rs b/rust/crates/rexx-core/benches/heap.rs
+index de855cd72..229ef7615 100644
+--- a/rust/crates/rexx-core/benches/heap.rs
++++ b/rust/crates/rexx-core/benches/heap.rs
+@@ -27,17 +27,17 @@ fn build_graph() -> (Heap, RootSet) {
+         outer.push(Some(heap.alloc(Body::array(elems))));
+     }
+ 
+     for i in 0..(OUTER / 10) {
+         let target = outer[OUTER - 1 - i].expect("every slot was filled above");
+         if let Some(obj) = heap.get_mut(outer[i].expect("every slot was filled above"))
+             && let Body::Array { slots: items, .. } = &mut obj.body
+         {
+-            items[0] = Some(target);
++            items.set(0, Some(target));
+         }
+     }
+ 
+     // The Rexx side also builds `root = .directory~new` and sets
+     // `root["K" || i] = a` for each of the 1,000 arrays -- the same arrays
+     // `outer` already reaches, but under 1,000 more distinct key strings
+     // ("K" concatenated, same reasoning as "e" || j above). This crate has
+     // no `Directory` body, so the container is approximated with a plain
+diff --git a/rust/crates/rexx-core/src/body.rs b/rust/crates/rexx-core/src/body.rs
+index 882d6a7c8..dcbac495a 100644
+--- a/rust/crates/rexx-core/src/body.rs
++++ b/rust/crates/rexx-core/src/body.rs
+@@ -5,17 +5,17 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ use crate::bytes::Bytes;
+-use crate::{ObjRef, SlotRef};
++use crate::{ArraySlots, ObjRef, SlotRef};
+ use rexx_num::{Form, Number};
+ use rustc_hash::FxHashMap;
+ use std::collections::TryReserveError;
+ 
+ /// Identifies the behaviour (class + method dictionary) an object responds to.
+ #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+ pub struct BehaviourId(pub u16);
+ 
+@@ -103,17 +103,17 @@ pub enum Body {
+         /// each naming that stem: `CompoundTableElement::expose`'s
+         /// `realElement`. Such a tail is also in `tails`, as a tombstone, so
+         /// that it keeps its place and holds no value of its own.
+         exposed: Option<Box<crate::NameMap<Vec<u8>, ObjRef>>>,
+     },
+     /// An array's slots, in index order, `None` for a slot that holds no
+     /// object at all.
+     Array {
+-        slots: Vec<Option<ObjRef>>,
++        slots: ArraySlots,
+         dimensions: Option<Box<[usize]>>,
+     },
+     /// A user-defined object: the class it belongs to, the behaviour it
+     /// dispatches against, the name something gave it, and its instance
+     /// variables, one pool per scope (D40).
+     Instance {
+         class: ObjRef,
+         behaviour: BehaviourHandle,
+@@ -995,17 +995,17 @@ impl NativeObject {
+ /// took `Number` from 32 bytes to 40 -- `Body::Num`'s payload had headroom
+ /// against `Body::Stem`'s, which is what set the width then and sets it now.
+ const _: () = assert!(size_of::<Body>() <= 80);
+ 
+ impl Body {
+     /// A single-dimensional array over `slots`.
+     pub fn array(slots: Vec<Option<ObjRef>>) -> Body {
+         Body::Array {
+-            slots,
++            slots: ArraySlots::new(slots),
+             dimensions: None,
+         }
+     }
+ 
+     /// A `.Pointer` over `address`, an instance of `class` with no variables
+     /// and no methods of its own (`PointerClass::operator new`,
+     /// `interpreter/classes/PointerClass.cpp:122`, which marks the object as
+     /// having no references).
+diff --git a/rust/crates/rexx-core/src/lib.rs b/rust/crates/rexx-core/src/lib.rs
+index aed71b05a..8d0a12bd0 100644
+--- a/rust/crates/rexx-core/src/lib.rs
++++ b/rust/crates/rexx-core/src/lib.rs
+@@ -21,16 +21,17 @@ mod body;
+ // the only reader, and gives the measurement that bought it;
+ // `tests/unsafe_sites.rs` is what stops a second site appearing quietly.
+ #[allow(unsafe_code)]
+ mod bytes;
+ mod frame;
+ mod handle;
+ mod heap;
+ mod roots;
++mod slots;
+ 
+ pub use behaviour::BehaviourTable;
+ pub use body::{
+     AlignedBytes, BehaviourHandle, BehaviourId, Body, BufferBytes, BufferState, MethodId,
+     NativeObject, NativeState, NotNumeric, Object, ObjectMethod, ObjectMethods, OpenFile, OpenMode,
+     SLOT_BYTES, ScopePools, StandardStream, StreamState, StreamStatus, VarRef, VarRefHome,
+     pointer_to_string,
+ };
+@@ -38,14 +39,15 @@ pub use bytes::{Bytes, INLINE_BYTES};
+ pub use frame::{FrameArena, FrameBlock, ParkedFrame, RegFrame};
+ pub use handle::{
+     Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
+ };
+ #[cfg(feature = "sharing")]
+ pub use heap::SharingCount;
+ pub use heap::{CollectStats, Heap};
+ pub use roots::{ActivityRoots, FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
++pub use slots::ArraySlots;
+ 
+ /// The hasher behind [`NameMap`].
+ pub type NameHasher = rustc_hash::FxBuildHasher;
+ 
+ /// A map keyed by a name out of the program text.
+ pub type NameMap<K, V> = std::collections::HashMap<K, V, NameHasher>;
+diff --git a/rust/crates/rexx-core/src/slots.rs b/rust/crates/rexx-core/src/slots.rs
+new file mode 100644
+index 000000000..b8fcf82a4
+--- /dev/null
++++ b/rust/crates/rexx-core/src/slots.rs
+@@ -0,0 +1,269 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! An array's slots with the index of its last item kept beside them.
++
++use std::collections::TryReserveError;
++use std::ops::Deref;
++
++use crate::ObjRef;
++
++/// An array's slots in index order, `None` for a slot that holds no object,
++/// and the 1-based index of the last occupied slot, 0 when none is
++/// (`ArrayClass::lastItem`). Reads go through `Deref`. Every write goes
++/// through a method here, which keeps the index.
++#[derive(Clone, Debug, Default, PartialEq, Eq)]
++pub struct ArraySlots {
++    items: Vec<Option<ObjRef>>,
++    last: usize,
++}
++
++impl ArraySlots {
++    /// Slots over `items`.
++    pub fn new(items: Vec<Option<ObjRef>>) -> ArraySlots {
++        let last = last_within(&items, items.len());
++        ArraySlots { items, last }
++    }
++
++    /// `len` empty slots, or the allocator's refusal.
++    pub fn empty(len: usize) -> Result<ArraySlots, TryReserveError> {
++        let mut items = Vec::new();
++        items.try_reserve_exact(len)?;
++        items.resize(len, None);
++        Ok(ArraySlots { items, last: 0 })
++    }
++
++    /// The 1-based index of the last occupied slot, or 0.
++    #[inline]
++    pub fn last_item(&self) -> usize {
++        debug_assert_eq!(
++            self.last,
++            last_within(&self.items, self.items.len()),
++            "the cached last item disagrees with the slots"
++        );
++        self.last
++    }
++
++    /// Writes slot `at`.
++    ///
++    /// # Panics
++    ///
++    /// If `at` is past the end.
++    #[inline]
++    pub fn set(&mut self, at: usize, item: Option<ObjRef>) {
++        self.items[at] = item;
++        self.wrote(at, item.is_some());
++    }
++
++    /// Writes slot `at` if there is one, and answers whether there was.
++    #[inline]
++    pub fn set_within(&mut self, at: usize, item: Option<ObjRef>) -> bool {
++        match self.items.get_mut(at) {
++            Some(slot) => {
++                *slot = item;
++                self.wrote(at, item.is_some());
++                true
++            }
++            None => false,
++        }
++    }
++
++    /// Writes every slot.
++    pub fn fill(&mut self, item: Option<ObjRef>) {
++        self.items.fill(item);
++        self.last = if item.is_some() { self.items.len() } else { 0 };
++    }
++
++    /// Writes slots `0..` from `items`, stopping at whichever ends first.
++    pub fn overwrite(&mut self, items: impl IntoIterator<Item = ObjRef>) {
++        let mut written = 0;
++        for (slot, item) in self.items.iter_mut().zip(items) {
++            *slot = Some(item);
++            written += 1;
++        }
++        self.last = self.last.max(written);
++    }
++
++    /// Appends one slot.
++    pub fn push(&mut self, item: Option<ObjRef>) {
++        self.items.push(item);
++        if item.is_some() {
++            self.last = self.items.len();
++        }
++    }
++
++    /// Removes the final slot and answers what it held.
++    pub fn pop(&mut self) -> Option<Option<ObjRef>> {
++        let popped = self.items.pop();
++        if self.last > self.items.len() {
++            self.last = last_within(&self.items, self.items.len());
++        }
++        popped
++    }
++
++    /// Inserts a slot at `at`, shifting the later ones up.
++    ///
++    /// # Panics
++    ///
++    /// If `at` is past the end.
++    pub fn insert(&mut self, at: usize, item: Option<ObjRef>) {
++        self.items.insert(at, item);
++        if at < self.last {
++            self.last += 1;
++        } else if item.is_some() {
++            self.last = at + 1;
++        }
++    }
++
++    /// Removes slot `at`, shifting the later ones down, and answers what it
++    /// held.
++    ///
++    /// # Panics
++    ///
++    /// If `at` is past the end.
++    pub fn remove(&mut self, at: usize) -> Option<ObjRef> {
++        let removed = self.items.remove(at);
++        if at + 1 < self.last {
++            self.last -= 1;
++        } else if at + 1 == self.last {
++            self.last = last_within(&self.items, at);
++        }
++        removed
++    }
++
++    /// Grows or shrinks to `len` slots, the added ones empty.
++    pub fn resize(&mut self, len: usize) {
++        self.items.resize(len, None);
++        if self.last > len {
++            self.last = last_within(&self.items, len);
++        }
++    }
++
++    /// Removes every slot.
++    pub fn clear(&mut self) {
++        self.items.clear();
++        self.last = 0;
++    }
++
++    /// Replaces every slot with `items` and answers the old ones.
++    pub fn replace(&mut self, items: Vec<Option<ObjRef>>) -> Vec<Option<ObjRef>> {
++        std::mem::replace(self, ArraySlots::new(items)).items
++    }
++
++    /// `Vec::try_reserve_exact` over the slots.
++    pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), TryReserveError> {
++        self.items.try_reserve_exact(additional)
++    }
++
++    /// How many slots the allocation holds.
++    pub fn capacity(&self) -> usize {
++        self.items.capacity()
++    }
++
++    /// The slots themselves.
++    pub fn into_vec(self) -> Vec<Option<ObjRef>> {
++        self.items
++    }
++
++    /// Moves the index after slot `at` was written, `occupied` saying whether
++    /// it now holds an object.
++    #[inline]
++    fn wrote(&mut self, at: usize, occupied: bool) {
++        if occupied {
++            self.last = self.last.max(at + 1);
++        } else if at + 1 == self.last {
++            self.last = last_within(&self.items, at);
++        }
++    }
++}
++
++impl Deref for ArraySlots {
++    type Target = [Option<ObjRef>];
++
++    #[inline]
++    fn deref(&self) -> &[Option<ObjRef>] {
++        &self.items
++    }
++}
++
++impl From<Vec<Option<ObjRef>>> for ArraySlots {
++    fn from(items: Vec<Option<ObjRef>>) -> ArraySlots {
++        ArraySlots::new(items)
++    }
++}
++
++/// The 1-based index of the last occupied slot among `items[..bound]`, or 0.
++fn last_within(items: &[Option<ObjRef>], bound: usize) -> usize {
++    items[..bound]
++        .iter()
++        .rposition(Option::is_some)
++        .map_or(0, |at| at + 1)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::ArraySlots;
++    use crate::ObjRef;
++
++    fn some(n: i64) -> Option<ObjRef> {
++        let item = ObjRef::small_int(n);
++        assert!(item.is_some(), "{n} is a small integer");
++        item
++    }
++
++    /// Every write method, each followed by the accessor, whose debug
++    /// assertion compares the index with the slots.
++    #[test]
++    fn every_write_keeps_the_last_item() {
++        let mut slots = ArraySlots::empty(3).expect("three slots");
++        assert_eq!((slots.len(), slots.last_item()), (3, 0));
++        slots = ArraySlots::new(vec![None, some(1), None, None]);
++        assert_eq!(slots.last_item(), 2);
++        slots.set(3, some(2));
++        assert_eq!(slots.last_item(), 4);
++        slots.set(3, None);
++        assert_eq!(slots.last_item(), 2);
++        assert!(slots.set_within(0, some(3)));
++        assert!(!slots.set_within(9, some(3)));
++        assert_eq!(slots.last_item(), 2);
++        slots.set_within(1, None);
++        assert_eq!(slots.last_item(), 1);
++        slots.insert(0, None);
++        assert_eq!(slots.last_item(), 2);
++        slots.insert(4, some(4));
++        assert_eq!(slots.last_item(), 5);
++        assert_eq!(slots.remove(0), None);
++        assert_eq!(slots.last_item(), 4);
++        assert_eq!(slots.remove(3), some(4));
++        assert_eq!(slots.last_item(), 1);
++        slots.push(None);
++        assert_eq!(slots.last_item(), 1);
++        slots.push(some(5));
++        assert_eq!(slots.last_item(), slots.len());
++        assert_eq!(slots.pop(), Some(some(5)));
++        assert_eq!(slots.last_item(), 1);
++        slots.resize(10);
++        assert_eq!(slots.last_item(), 1);
++        slots.resize(0);
++        assert_eq!(slots.last_item(), 0);
++        slots.resize(3);
++        slots.fill(some(6));
++        assert_eq!(slots.last_item(), 3);
++        slots.fill(None);
++        assert_eq!(slots.last_item(), 0);
++        slots.overwrite([some(7), some(8)].into_iter().flatten());
++        assert_eq!(slots.last_item(), 2);
++        assert_eq!(slots.replace(vec![some(9), None]).len(), 3);
++        assert_eq!(slots.last_item(), 1);
++        slots.clear();
++        assert_eq!(slots.last_item(), 0);
++    }
++}
+diff --git a/rust/crates/rexx-core/tests/collect.rs b/rust/crates/rexx-core/tests/collect.rs
+index 853d194b0..3e059ebcc 100644
+--- a/rust/crates/rexx-core/tests/collect.rs
++++ b/rust/crates/rexx-core/tests/collect.rs
+@@ -56,17 +56,17 @@ fn reference_cycles_are_collected() {
+     // told of.
+     let Some(Object {
+         body: Body::Array { slots, .. },
+         ..
+     }) = heap.get_mut(a)
+     else {
+         panic!("a exists")
+     };
+-    slots[0] = Some(b);
++    slots.set(0, Some(b));
+     let stats = heap.collect(&roots);
+     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
+ }
+ 
+ #[test]
+ fn swept_slots_are_reused_by_the_next_allocation() {
+     let mut heap = Heap::new();
+     let roots = RootSet::new();
+diff --git a/rust/crates/rexx-exec/src/builtin/state.rs b/rust/crates/rexx-exec/src/builtin/state.rs
+index aeac4564d..75a9a0f85 100644
+--- a/rust/crates/rexx-exec/src/builtin/state.rs
++++ b/rust/crates/rexx-exec/src/builtin/state.rs
+@@ -271,18 +271,23 @@ pub(crate) fn arg(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<Ob
+             };
+             // `new_array()` leaves the shape unset, while `ArrayClass(objs,
+             // count)` fixes it when `count` is zero
+             // (`classes/ArrayClass.cpp:314`) -- and position 1 takes the
+             // second even when there are no arguments at all, because the
+             // C++ tests it before the past-the-end arm.
+             let dimensions: Option<Box<[usize]>> =
+                 (index == 1 && slots.is_empty()).then(|| Box::from([0].as_slice()));
+-            let object =
+-                interp.alloc_charged(BehaviourId::ARRAY, Body::Array { slots, dimensions });
++            let object = interp.alloc_charged(
++                BehaviourId::ARRAY,
++                Body::Array {
++                    slots: slots.into(),
++                    dimensions,
++                },
++            );
+             // The array's only root: nothing else names it between here and
+             // the caller storing it.
+             interp.roots.activity_mut().push_temp(object);
+             Ok(object)
+         }
+         Some(_) => {
+             let found = option.unwrap_or_default();
+             Err(Raised::argument_not_in_list(name, 2, VALID, &found).into())
+diff --git a/rust/crates/rexx-exec/src/dispatch/array.rs b/rust/crates/rexx-exec/src/dispatch/array.rs
+index f86c3be85..d426e823e 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array.rs
+@@ -13,16 +13,17 @@
+ 
+ use super::{
+     BehaviourId, Body, Cleared, Decoded, Failure, INIT, Interp, Loud, ObjRef, Raised,
+     class_receiver, collection, required_string_argument,
+ };
+ 
+ use super::new_instance;
+ use super::{Arity, NativeMethod};
++use rexx_core::ArraySlots;
+ 
+ // `Array`'s sort family, chained into `ObjectModel::build`.
+ pub(super) mod sort;
+ 
+ // `Array`'s collection surface, chained into `ObjectModel::build` after its
+ // sort family.
+ pub(super) mod surface;
+ 
+@@ -115,16 +116,21 @@ fn empty_slots(size: usize) -> Result<Vec<Option<ObjRef>>, Failure> {
+     let mut slots = Vec::new();
+     slots
+         .try_reserve_exact(size)
+         .map_err(|_| Failure::from(Raised::system_resources()))?;
+     slots.resize(size, None);
+     Ok(slots)
+ }
+ 
++/// [`empty_slots`] as an array body's slots.
++fn empty_array_slots(size: usize) -> Result<ArraySlots, Failure> {
++    ArraySlots::empty(size).map_err(|_| Failure::from(Raised::system_resources()))
++}
++
+ /// The bounds policy a subscript list is validated under -- `IndexAccess`
+ /// and `IndexUpdate` (`classes/ArrayClass.hpp:62`-`:63`).
+ #[derive(Clone, Copy, PartialEq, Eq)]
+ pub(super) enum IndexUse {
+     /// `getRexx`: a subscript past the end answers `.nil`.
+     Get,
+     /// `putRexx`: a subscript past the end grows the array.
+     Put,
+@@ -350,17 +356,17 @@ fn array_resize(interp: &mut Interp, receiver: ObjRef, size: usize) -> Result<()
+     let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+             let before = slots.capacity();
+             if let Some(extra) = size.checked_sub(slots.len()) {
+                 slots
+                     .try_reserve_exact(extra)
+                     .map_err(|_| Failure::from(Raised::system_resources()))?;
+             }
+-            slots.resize(size, None);
++            slots.resize(size);
+             slots.capacity().saturating_sub(before)
+         }
+         _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+     };
+     interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+     Ok(())
+ }
+ 
+@@ -424,17 +430,17 @@ fn array_reshape(
+         }
+     }
+     let (before, after) = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array {
+             slots,
+             dimensions: held,
+         }) => {
+             let before = slots.capacity();
+-            *slots = grown;
++            slots.replace(grown);
+             *held = Some(dimensions.into());
+             (before, slots.capacity())
+         }
+         _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+     };
+     // The replacement can hold fewer slots than the extended original did.
+     interp.charge_growth(after.saturating_sub(before) * rexx_core::SLOT_BYTES);
+     interp
+@@ -493,17 +499,17 @@ pub(super) fn native_array_put(
+     let Some(value) = args[0] else {
+         return Err(Raised::missing_method_argument(1).into());
+     };
+     let position = array_position(interp, receiver, &args[1..], IndexUse::Put)?
+         .expect("IndexUse::Put grows the array rather than answering out of bounds");
+     let receiver = collection_store(interp, receiver);
+     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            slots[position - 1] = Some(value);
++            slots.set(position - 1, Some(value));
+             Ok(None)
+         }
+         _ => Err(Loud::receiver_class("a value that is not an array").into()),
+     }
+ }
+ 
+ /// `Array~dimension([n])`: how many dimensions the array has, or the extent
+ /// of dimension `n` -- `ArrayClass::dimensionRexx`
+@@ -553,17 +559,17 @@ pub(super) fn native_array_new(
+             Some(slots) => {
+                 let items = slots.iter().flatten().count();
+                 spread = slots[..items].to_vec();
+                 multidimensional_body(interp, &spread)?
+             }
+             None => {
+                 let size = array_size_argument(interp, *only, 1)?;
+                 Body::Array {
+-                    slots: empty_slots(size)?,
++                    slots: empty_array_slots(size)?,
+                     // `newRexx`'s own `if (totalSize == 0)` (`:125`-`:128`),
+                     // whose one entry nothing reads: an explicit zero size
+                     // fixes the shape, and the entry is not the extent.
+                     dimensions: (size == 0).then(|| Box::from([0].as_slice())),
+                 }
+             }
+         },
+         _ => multidimensional_body(interp, args)?,
+@@ -589,17 +595,17 @@ fn array_of_class(interp: &mut Interp, class: ObjRef, body: Body) -> Result<ObjR
+ pub(super) fn native_array_of(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let class = class_receiver(interp, receiver)?;
+     let body = Body::Array {
+-        slots: args.to_vec(),
++        slots: args.to_vec().into(),
+         dimensions: args.is_empty().then(|| Box::from([0].as_slice())),
+     };
+     let object = array_of_class(interp, class, body)?;
+     let caller = interp.caller();
+     interp.send_message(object, INIT, None, &[], caller)?;
+     Ok(Some(object))
+ }
+ 
+@@ -615,17 +621,17 @@ fn multidimensional_body(
+         let extent = array_size_argument(interp, *dimension, at + 1)?;
+         size = size
+             .checked_mul(extent)
+             .filter(|size| *size <= MAX_FIXED_ARRAY_SIZE)
+             .ok_or_else(|| Failure::from(Raised::array_too_big(MAX_FIXED_ARRAY_SIZE)))?;
+         shape.push(extent);
+     }
+     Ok(Body::Array {
+-        slots: empty_slots(size)?,
++        slots: empty_array_slots(size)?,
+         dimensions: Some(shape.into()),
+     })
+ }
+ 
+ /// `ArrayClass::validateSize` (`classes/ArrayClass.cpp:178`) over
+ /// `nonNegativeArgument` (`classes/StringClassUtil.cpp:167`): a whole number
+ /// of at least zero, `MaxFixedArraySize` its upper bound.
+ pub(super) fn array_size_argument(
+diff --git a/rust/crates/rexx-exec/src/dispatch/array/sort.rs b/rust/crates/rexx-exec/src/dispatch/array/sort.rs
+index 46907991a..e2a05b622 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array/sort.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array/sort.rs
+@@ -259,19 +259,17 @@ fn copy_run(source: &[ObjRef], start: usize, target: &mut [ObjRef], index: usize
+ 
+ /// Writes `items` back over the receiver's slots, which is what makes the
+ /// sort family sort **in place**: measured, `p = .Array~of('b','a')` then
+ /// `q = p~sort` leaves `p` reading `a,b` and `q` is that same array.
+ fn write_back(interp: &mut Interp, receiver: ObjRef, items: Vec<ObjRef>) -> Result<(), Failure> {
+     let receiver = store_of(interp, receiver)?;
+     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            for (slot, item) in slots.iter_mut().zip(items) {
+-                *slot = Some(item);
+-            }
++            slots.overwrite(items);
+             Ok(())
+         }
+         _ => Err(Loud::receiver_class("a value that is not an array").into()),
+     }
+ }
+ 
+ fn sort_by(
+     interp: &mut Interp,
+diff --git a/rust/crates/rexx-exec/src/dispatch/array/surface.rs b/rust/crates/rexx-exec/src/dispatch/array/surface.rs
+index f1901b7ce..6cc07942a 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array/surface.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array/surface.rs
+@@ -201,19 +201,17 @@ fn native_array_supplier(
+     new_supplier(interp, items, indexes).map(Some)
+ }
+ 
+ /// Empties one slot of an array receiver.
+ fn clear_array_slot(interp: &mut Interp, receiver: ObjRef, offset: usize) -> Result<(), Failure> {
+     let receiver = store_of(interp, receiver)?;
+     match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            if let Some(slot) = slots.get_mut(offset) {
+-                *slot = None;
+-            }
++            slots.set_within(offset, None);
+             Ok(())
+         }
+         _ => Err(Loud::receiver_class("a value that is not an array").into()),
+     }
+ }
+ 
+ // ---- Array's own surface ----
+ 
+@@ -443,19 +441,17 @@ fn native_array_fill(
+ ) -> Result<Option<ObjRef>, Failure> {
+     let item = item_argument(args)?;
+     // Through the store like everything else -- reaching `receiver` directly
+     // made this the one row that worked on an `Array` and refused on a
+     // subclass of one.
+     let store = store_of(interp, receiver)?;
+     match interp.heap.get_mut(store).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            for slot in slots.iter_mut() {
+-                *slot = Some(item);
+-            }
++            slots.fill(Some(item));
+             Ok(Some(receiver))
+         }
+         _ => Err(Loud::receiver_class("a value that is not an array").into()),
+     }
+ }
+ 
+ /// `Array~section(start [, count])`: a new array over that run --
+ /// `ArrayClass::sectionRexx`.
+diff --git a/rust/crates/rexx-exec/src/dispatch/buffer.rs b/rust/crates/rexx-exec/src/dispatch/buffer.rs
+index 701cacc91..707b1da38 100644
+--- a/rust/crates/rexx-exec/src/dispatch/buffer.rs
++++ b/rust/crates/rexx-exec/src/dispatch/buffer.rs
+@@ -1009,17 +1009,17 @@ pub(super) fn array_of_texts(interp: &mut Interp, pieces: Vec<Vec<u8>>) -> Resul
+         let value = interp.text_built(piece);
+         interp.roots.activity_mut().push_temp(value);
+         slots.push(Some(value));
+     }
+     let object = interp.alloc_charged(
+         BehaviourId::ARRAY,
+         Body::Array {
+             dimensions: None,
+-            slots,
++            slots: slots.into(),
+         },
+     );
+     interp.roots.activity_mut().pop_frame(frame);
+     interp.roots.activity_mut().push_temp(object);
+     let caller = interp.caller();
+     interp.send_message(object, INIT, None, &[], caller)?;
+     Ok(object)
+ }
+diff --git a/rust/crates/rexx-exec/src/dispatch/collection.rs b/rust/crates/rexx-exec/src/dispatch/collection.rs
+index 6232dc356..5dd0ad808 100644
+--- a/rust/crates/rexx-exec/src/dispatch/collection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/collection.rs
+@@ -260,23 +260,22 @@ pub(super) fn occupied(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usiz
+ 
+ /// `append`'s body without the message send: writes `item` past the last
+ /// item, growing to fit, and answers the 1-based index it landed on.
+ pub(super) fn append_slot(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     item: ObjRef,
+ ) -> Result<usize, Failure> {
+-    let (at, length) = read_slots(interp, receiver, |slots| {
+-        let at = slots
+-            .iter()
+-            .rposition(Option::is_some)
+-            .map_or(0, |last| last + 1);
+-        (at, slots.len())
+-    })?;
++    let store = store_of(interp, receiver)?;
++    // `ArrayClass::appendRexx` puts at `lastItem + 1`, which the slots keep.
++    let (at, length) = match interp.heap.get(store).map(|object| &object.body) {
++        Some(Body::Array { slots, .. }) => (slots.last_item(), slots.len()),
++        _ => return Err(Loud::receiver_class("a value that is not an array").into()),
++    };
+     if at >= length {
+         array_grow(interp, receiver, at + 1)?;
+     }
+     write_slot(interp, receiver, at, Some(item))?;
+     Ok(at + 1)
+ }
+ 
+ /// A `Queue`'s two-tier index bound, which is two different errors.
+@@ -390,36 +389,34 @@ fn write_slot(
+     item: Option<ObjRef>,
+ ) -> Result<(), Failure> {
+     // A monitor keeps its destination in a `Queue`, so an array write is one
+     // of the ways `SAY`'s route moves.
+     interp.bump_route_generation();
+     let store = store_of(interp, receiver)?;
+     match interp.heap.get_mut(store).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            if let Some(slot) = slots.get_mut(at) {
+-                *slot = item;
+-            }
++            slots.set_within(at, item);
+             Ok(())
+         }
+         _ => Err(Loud::receiver_class("a value that is not an array").into()),
+     }
+ }
+ 
+ /// Grows `receiver` to `length` empty slots, for an `insert` past the end.
+ pub(super) fn array_grow(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     length: usize,
+ ) -> Result<(), Failure> {
+     let receiver = store_of(interp, receiver)?;
+     let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+             let before = slots.capacity();
+-            slots.resize(length, None);
++            slots.resize(length);
+             slots.capacity().saturating_sub(before)
+         }
+         _ => return Err(Loud::receiver_class("a value that is not an array").into()),
+     };
+     interp.charge_growth(grown * rexx_core::SLOT_BYTES);
+     Ok(())
+ }
+ /// `Queue~of(item, ...)` and `List~of(item, ...)`: a new collection of the
+diff --git a/rust/crates/rexx-exec/src/dispatch/collection/list.rs b/rust/crates/rexx-exec/src/dispatch/collection/list.rs
+index aad948c32..3f1dfe1b8 100644
+--- a/rust/crates/rexx-exec/src/dispatch/collection/list.rs
++++ b/rust/crates/rexx-exec/src/dispatch/collection/list.rs
+@@ -246,17 +246,17 @@ fn native_list_put(
+     let item = args.first().copied().flatten();
+     let Some(at) = list_position(interp, receiver, handle)? else {
+         let written = interp.to_text(handle);
+         return Err(Raised::incorrect_list_index(&written).into());
+     };
+     let (items, _, _) = list_state(interp, receiver)?;
+     match interp.heap.get_mut(items).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            slots[at] = item;
++            slots.set(at, item);
+             Ok(None)
+         }
+         _ => Err(Loud::receiver_class("a value that is not a list").into()),
+     }
+ }
+ 
+ /// `List~remove(index)` and `List~delete(index)`, one body upstream: takes
+ /// the item out, frees the handle and answers the item, or `.nil` for a
+diff --git a/rust/crates/rexx-exec/src/dispatch/collection/queue.rs b/rust/crates/rexx-exec/src/dispatch/collection/queue.rs
+index e0246d593..05a916196 100644
+--- a/rust/crates/rexx-exec/src/dispatch/collection/queue.rs
++++ b/rust/crates/rexx-exec/src/dispatch/collection/queue.rs
+@@ -141,17 +141,17 @@ fn native_queue_put(
+         let position = super::positive_index(interp, index, 2)?;
+         queue_bound(interp, receiver, position)?;
+     }
+     let Some(position) = array_position(interp, store, &args[1..], IndexUse::Get)? else {
+         return Err(refuse(interp));
+     };
+     match interp.heap.get_mut(store).map(|object| &mut object.body) {
+         Some(Body::Array { slots, .. }) => {
+-            slots[position - 1] = Some(item);
++            slots.set(position - 1, Some(item));
+             Ok(None)
+         }
+         _ => Err(Loud::receiver_class("a value that is not an array").into()),
+     }
+ }
+ 
+ /// `Queue~at(index)` and `Queue~[index]`: `ArrayClass::getRexx` over the
+ /// store.
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index 5673c284a..966981dcd 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -504,17 +504,17 @@ fn context_stack_frames(
+             let object = build_live_frame(interp, level)?;
+             interp.roots.activity_mut().push_temp(object);
+             slots.push(Some(object));
+         }
+         let array = interp.alloc_charged(
+             BehaviourId::ARRAY,
+             Body::Array {
+                 dimensions: None,
+-                slots,
++                slots: slots.into(),
+             },
+         );
+         interp.roots.activity_mut().pop_frame(frame);
+         interp.roots.activity_mut().push_temp(array);
+         Ok(Some(array))
+     })
+ }
+ 
+@@ -916,17 +916,17 @@ fn trace_line_text(interp: &Interp, snapshot: &Snapshot) -> Vec<u8> {
+ }
+ 
+ /// A fresh `Array` over `slots`, an omitted position left empty.
+ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
+     let array = interp.alloc_charged(
+         BehaviourId::ARRAY,
+         Body::Array {
+             dimensions: None,
+-            slots,
++            slots: slots.into(),
+         },
+     );
+     interp.roots.activity_mut().push_temp(array);
+     array
+ }
+ 
+ /// The value one `StackFrame` snapshot entry holds.
+ fn frame_entry(interp: &Interp, receiver: ObjRef, name: &[u8]) -> Result<ObjRef, Failure> {
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash.rs b/rust/crates/rexx-exec/src/dispatch/hash.rs
+index 6a6b614d1..91fe24184 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -476,19 +476,18 @@ fn link_at(interp: &Interp, store: &Store, slot: usize) -> Result<usize, Failure
+         Some(Decoded::SmallInt(link)) if link >= 0 => Ok(link as usize),
+         _ => Ok(store.no_more()),
+     }
+ }
+ 
+ fn write_slot(interp: &mut Interp, array: ObjRef, slot: usize, value: Option<ObjRef>) {
+     if let Some(Body::Array { slots, .. }) =
+         interp.heap.get_mut(array).map(|object| &mut object.body)
+-        && let Some(cell) = slots.get_mut(slot)
+     {
+-        *cell = value;
++        slots.set_within(slot, value);
+     }
+ }
+ 
+ fn write_link(interp: &mut Interp, store: &Store, slot: usize, link: usize) {
+     let value = interp.counted(link);
+     write_slot(interp, store.next, slot, Some(value));
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 7449cd1b0..6d0879f34 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -1598,17 +1598,17 @@ impl Host for Interp {
+         if let Some(list) = frame.argument_list {
+             return list;
+         }
+         let slots = frame.arguments.clone();
+         let list = self.alloc_charged(
+             BehaviourId::ARRAY,
+             Body::Array {
+                 dimensions: None,
+-                slots,
++                slots: slots.into(),
+             },
+         );
+         self.activity
+             .native_handles
+             .last_mut()
+             .expect("a native activation is running")
+             .argument_list = Some(list);
+         list
+diff --git a/rust/crates/rexx-exec/src/dispatch/library/surface.rs b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+index 0bf15c0e8..f7f608b38 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library/surface.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+@@ -38,17 +38,17 @@ impl Surface for Interp {
+         frame.condition = None;
+     }
+ 
+     fn new_array(&mut self, items: &[Option<ObjRef>]) -> ObjRef {
+         self.alloc_charged(
+             BehaviourId::ARRAY,
+             Body::Array {
+                 dimensions: None,
+-                slots: items.to_vec(),
++                slots: items.to_vec().into(),
+             },
+         )
+     }
+ 
+     fn raise_exception(&mut self, number: usize, substitutions: Option<ObjRef>) {
+         // Each item's `stringValue()`, the default name where that raises,
+         // and nothing for an empty slot, which is `messageSubstitution`'s
+         // (`interpreter/concurrency/Activity.cpp:1246`).
+diff --git a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+index 8177f41d3..10981866e 100644
+--- a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+@@ -652,17 +652,17 @@ fn reset_copied_message(interp: &mut Interp, copy: ObjRef) {
+     interp.remove_native_entry(copy, MESSAGE_RESULT);
+     interp.remove_native_entry(copy, MESSAGE_CONDITION);
+     if let Some(parties) = interp.native_entry(copy, MESSAGE_PARTIES) {
+         let slots = interp.array_slots_of(parties).unwrap_or_default();
+         let parties = interp.alloc_charged(
+             BehaviourId::ARRAY,
+             Body::Array {
+                 dimensions: None,
+-                slots,
++                slots: slots.into(),
+             },
+         );
+         interp.set_native_entry(copy, MESSAGE_PARTIES, parties);
+     }
+ }
+ 
+ /// The pool entries a collection's CONTENTS live in, as (scope class, name).
+ pub(super) const COLLECTION_STORES: &[(&str, &[u8])] = &[
+@@ -1227,17 +1227,17 @@ pub(super) fn native_message_notify(
+     }
+     let parties = match interp.native_entry(receiver, MESSAGE_PARTIES) {
+         Some(parties) => parties,
+         None => {
+             let parties = interp.alloc_charged(
+                 BehaviourId::ARRAY,
+                 Body::Array {
+                     dimensions: None,
+-                    slots: Vec::new(),
++                    slots: Vec::new().into(),
+                 },
+             );
+             interp.set_native_entry(receiver, MESSAGE_PARTIES, parties);
+             parties
+         }
+     };
+     if let Some(Body::Array { slots, .. }) = interp.heap.get_mut(parties).map(|held| &mut held.body)
+     {
+diff --git a/rust/crates/rexx-exec/src/dispatch/string.rs b/rust/crates/rexx-exec/src/dispatch/string.rs
+index 0122b49e8..3728e7714 100644
+--- a/rust/crates/rexx-exec/src/dispatch/string.rs
++++ b/rust/crates/rexx-exec/src/dispatch/string.rs
+@@ -1964,17 +1964,17 @@ pub(super) fn native_string_makearray(
+         let text = interp.text_built(line.to_vec());
+         interp.roots.activity_mut().push_temp(text);
+         slots.push(Some(text));
+     }
+     // Measured, oracle: `''~makeArray~dimension` is 0, so an empty result
+     // carries no dimensions rather than one of size 0.
+     let body = Body::Array {
+         dimensions: None,
+-        slots,
++        slots: slots.into(),
+     };
+     let object = interp.alloc_charged(BehaviourId::ARRAY, body);
+     interp.roots.activity_mut().push_temp(object);
+     let caller = interp.caller();
+     interp.send_message(object, INIT, None, &[], caller)?;
+     Ok(Some(object))
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/tests.rs b/rust/crates/rexx-exec/src/dispatch/tests.rs
+index 8d1f6d16c..b69915861 100644
+--- a/rust/crates/rexx-exec/src/dispatch/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/tests.rs
+@@ -366,16 +366,121 @@ fn appends_and_reads_copy_slots_linearly() {
+     let (twice, large) = copied(4000);
+     assert_eq!(twice, "4000 4000 4000 4000 4000\nh 1001\n");
+     assert!(
+         large * 10 < small * 25,
+         "{small} slots copied at 2000, {large} at 4000"
+     );
+ }
+ 
++/// One `Array~append` shape: `setup` builds `s` (`2N` standing for twice
++/// `n`), then `n` appends, then one more and the array's readings, which
++/// must be the oracle's `expected(n)` (measured at 2,000 and 200,000, twice
++/// each). A release build runs 200,000 appends and must take under 5 s,
++/// where the oracle takes under 0.1 s and an append that scans the trailing
++/// empty slots takes over 5 s at 100,000.
++#[expect(clippy::disallowed_methods, reason = "the bound is on real time")]
++fn append_shape(setup: &str, expected: impl Fn(usize) -> String) {
++    let n = if cfg!(debug_assertions) {
++        2_000
++    } else {
++        200_000
++    };
++    let setup = setup.replace("2N", &(2 * n).to_string());
++    let program = format!(
++        "{setup}\ndo i = 1 to {n}; s~append(i); end\n\
++         say s~append(0) s~items s~last s~lastItem s~size s~dimension s~first s~firstItem\n"
++    );
++    let started = std::time::Instant::now();
++    let (rc, stdout, stderr) = run_source(&program);
++    let took = started.elapsed();
++    assert_eq!((rc, stdout, stderr), (0, expected(n) + "\n", String::new()));
++    if !cfg!(debug_assertions) {
++        assert!(took.as_secs() < 5, "{n} appends took {took:?}");
++    }
++}
++
++#[test]
++fn append_to_a_dense_array() {
++    append_shape("s = .array~new", |n| {
++        format!("{0} {0} {0} 0 {0} 1 1 1", n + 1)
++    });
++}
++
++#[test]
++fn append_after_a_sparse_put_and_empty() {
++    append_shape("s = .array~new; s[2N] = 1; s~empty", |n| {
++        format!("{0} {0} {0} 0 {1} 1 1 1", n + 1, 2 * n)
++    });
++}
++
++#[test]
++fn append_after_a_sized_new_and_empty() {
++    append_shape("s = .array~new(2N); s~empty", |n| {
++        format!("{0} {0} {0} 0 {1} 1 1 1", n + 1, 2 * n)
++    });
++}
++
++#[test]
++fn append_after_a_sparse_put() {
++    append_shape("s = .array~new; s[2N] = 1", |n| {
++        format!("{0} {1} {0} 0 {0} 1 {2} 1", 3 * n + 1, n + 2, 2 * n)
++    });
++}
++
++#[test]
++fn append_after_appends_and_empty() {
++    append_shape(
++        "s = .array~new; do i = 1 to 2N; s~append(i); end; s~empty",
++        |n| format!("{0} {0} {0} 0 {1} 1 1 1", n + 1, 2 * n),
++    );
++}
++
++/// `append` after each write that moves an array's last item, oracle rc 0
++/// twice. In a debug build every `append` asserts the kept last item against
++/// the slots.
++#[test]
++fn append_after_every_kind_of_write() {
++    let program = "a = .array~of(1, 2, 3)\n\
++        a~remove(3); say 'remove last' a~append('x') a~size a~items\n\
++        a~delete(4); say 'delete last' a~append('y') a~size a~items\n\
++        a[10] = 'p'; say 'sparse put' a~append('z') a~size a~items\n\
++        a~remove(11); say 'remove past' a~append('w') a~size a~items\n\
++        a~insert('i', .nil); say 'insert front' a~append('v') a~size a~items\n\
++        a~insert(, a~last); say 'insert hole' a~append('u') a~size a~items\n\
++        a~put(.nil, 1); say 'put nil' a~append('t') a~size a~items\n\
++        a~fill('f'); say 'fill' a~append('s') a~size a~items\n\
++        a~empty; say 'empty' a~append('r') a~size a~items\n\
++        b = .array~of('c', 'a', 'b'); b~sort; b~remove(3)\n\
++        say 'sort' b~append('q') b~size b~items b~makestring('l', ',')\n\
++        b~stableSortWith(.caselessComparator~new)\n\
++        say 'stable sort' b~append('p') b~size b~items\n\
++        c = .array~new(5); say 'new(5)' c~append('o') c~size c~items\n\
++        d = .array~of(1, 2); d~delete(2); d~delete(1); say 'deleted all' d~append('n') d~size d~items\n\
++        e = .array~new; e[3] = 'm'; e~remove(3); say 'sparse removed' e~append('l') e~size e~items\n\
++        f = .array~of(1,2,3)~section(2); say 'section' f~append('k') f~size f~items\n\
++        g = 'a b c'~makeArray(' '); g~remove(3); say 'makearray' g~append('j') g~size g~items\n\
++        q = .queue~of(1, 2, 3); q~remove(3); say 'queue' q~append('h') q~size q~items\n\
++        q[2] = .nil; say 'queue put' q~append('g') q~items\n\
++        l = .list~of(1, 2); l~empty; say 'list' l~append('f') l~items\n";
++    assert_eq!(
++        run_source(program),
++        (
++            0,
++            "remove last 3 3 3\ndelete last 4 4 4\nsparse put 11 11 6\nremove past 11 11 6\n\
++             insert front 13 13 8\ninsert hole 14 14 9\nput nil 15 15 10\nfill 16 16 16\n\
++             empty 1 16 1\nsort 3 3 3 a,b,q\nstable sort 4 4 4\nnew(5) 1 5 1\n\
++             deleted all 1 1 1\nsparse removed 1 3 1\nsection 3 3 3\nmakearray 3 3 3\n\
++             queue 3 3 3\nqueue put 4 4\nlist 0 1\n"
++                .to_owned(),
++            String::new()
++        )
++    );
++}
++
+ /// A `Routine` or `Method` compiled from source resolves routines and
+ /// classes, private ones included, through its package's parent: the
+ /// caller's package, or the context given to `NEW`; a source with
+ /// directives does too.
+ #[test]
+ fn a_compiled_source_resolves_through_its_package_parent() {
+     assert_eq!(
+         run_source(include_str!(
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index 1383fa9d9..6b1d95217 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -991,17 +991,17 @@ fn every_class_the_library_declares_carries_the_rexx_defined_flag() {
+ 
+ /// A native activation's local references are roots while its table is on
+ /// [`Activity::native_handles`] and nothing once it is popped, which is what
+ /// makes a handle outliving its activation a lookup miss (D5).
+ #[test]
+ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
+     let mut interp = Interp::new();
+     let object = interp.heap.alloc(rexx_core::Body::Array {
+-        slots: Vec::new(),
++        slots: Vec::new().into(),
+         dimensions: None,
+     });
+ 
+     let mut frame = crate::NativeFrame {
+         owner: rexx_core::ObjRef::NIL,
+         scope: rexx_core::ObjRef::NIL,
+         method: true,
+         receiver: rexx_core::ObjRef::NIL,
+@@ -1046,17 +1046,17 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
+ /// The receiver, the arguments, the argument array and the lent buffers a
+ /// native activation holds for its conversions are roots while it lives,
+ /// each one alone.
+ #[test]
+ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
+     let mut interp = Interp::new();
+     let fresh = |interp: &mut Interp| {
+         interp.heap.alloc(rexx_core::Body::Array {
+-            slots: Vec::new(),
++            slots: Vec::new().into(),
+             dimensions: None,
+         })
+     };
+     let (receiver, argument, list) = (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+     let (additional, result, condition) =
+         (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+     let lent = fresh(&mut interp);
+     interp.activity.native_handles.push(crate::NativeFrame {
+diff --git a/rust/crates/rexx-exec/tests/string_answer_arguments.rs b/rust/crates/rexx-exec/tests/string_answer_arguments.rs
+new file mode 100644
+index 000000000..1b18f0791
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/string_answer_arguments.rs
+@@ -0,0 +1,68 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! A builtin argument whose user `STRING` method answers an object with no
++//! string value (Deviation 30). Each `call` and `refuses` case runs
++//! `say <call>` with `o` an instance whose `STRING` answers the `string=`
++//! object; `program` runs its input as the whole program. A `call` or
++//! `program` case records the oracle's rc, stdout and stderr. A `refuses`
++//! case records this crate's refusal, and its comment the oracle's answer.
++
++use rexx_exec::Invocation;
++
++mod watchdog;
++
++const CASES: &str = "tests/string_answer_arguments";
++
++/// The path every case runs as, which the recorded stderr spells `PROGRAM`.
++const PATH: &str = "probe.rex";
++
++/// The program a `call` case runs.
++fn call_program(call: &str, answer: &str) -> String {
++    format!(
++        "o = .q~new\nsay {call}\nsay \"after\"\nexit\n::class q\n::method string\n  return {answer}\n"
++    )
++}
++
++/// `rc`, stdout and stderr as the case file records them.
++fn transcript(text: String) -> String {
++    let outcome = watchdog::run_bounded(PATH, text.into_bytes(), Invocation::none());
++    format!(
++        "rc {}\n[stdout]\n{}[stderr]\n{}",
++        outcome.exit_code,
++        String::from_utf8_lossy(&outcome.stdout),
++        String::from_utf8_lossy(&outcome.stderr).replace(PATH, "PROGRAM"),
++    )
++}
++
++#[test]
++fn string_answers_at_builtin_argument_positions() {
++    let mut cases = 0;
++    datadriven::walk(CASES, |file| {
++        file.run(|case| {
++            cases += 1;
++            let input = case.input.trim_end();
++            match case.directive.as_str() {
++                "call" | "refuses" => {
++                    let answer = match case.args.get("string").map(|v| v[0].as_str()) {
++                        Some("object") => ".object~new",
++                        Some("directory") => ".directory~new",
++                        other => panic!("unknown string= {other:?}"),
++                    };
++                    transcript(call_program(input, answer))
++                }
++                "program" => transcript(format!("{input}\n")),
++                other => panic!("unknown directive {other}"),
++            }
++        });
++    });
++    assert!(cases > 0, "no case ran");
++}
+diff --git a/rust/crates/rexx-exec/tests/string_answer_arguments/positions b/rust/crates/rexx-exec/tests/string_answer_arguments/positions
+new file mode 100644
+index 000000000..6639b5be3
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/string_answer_arguments/positions
+@@ -0,0 +1,664 @@
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++changestr(o, 'a', 'b')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 2 must have a string value. (2 of 2 runs)
++refuses string=object
++changestr('a', 'a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++countstr(o, 'zaz')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++pos(o, 'zzz')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++lastpos(o, 'zzz')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++overlay(o, 'abc')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++insert(o, 'abc')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++translate('abc', o, 'abc')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++verify('abc', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 2 must have a string value. (2 of 2 runs)
++refuses string=object
++verify('abc', 'a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++strip('zz', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 2 must have a string value. (2 of 2 runs)
++refuses string=object
++strip('zabz', 'B', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++compare('zzz', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++abbrev('zzz', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++wordpos(o, 'a zzz b')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++bitand('a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++datatype('1', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  INSERT argument 3 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++insert('a', 'b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  SPACE argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++space('a b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  COPIES argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++copies('a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  D2X argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++d2x(1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  C2D argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++c2d('a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  FORMAT argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++format(1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  TRUNC argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++trunc(1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  RANDOM argument 1 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++random(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  RANDOM argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++random(1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  RANDOM argument 3 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++random(1, 2, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  SOURCELINE argument 1 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++sourceline(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  ERRORTEXT argument 1 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++errortext(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  ARG argument 1 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++arg(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  CHANGESTR argument 4 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++changestr('a', 'a', 'b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  POS argument 3 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++pos('z', 'zz', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  POS argument 4 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++pos('z', 'zz', 1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  SUBSTR argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++substr('abc', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  LEFT argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++left('abc', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  ABBREV argument 3 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++abbrev('zz', 'z', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  WORDINDEX argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++wordindex('a b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  WORDLENGTH argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++wordlength('a b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  OVERLAY argument 3 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=object
++overlay('a', 'b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  SPACE argument 3 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=object
++space('a b', 1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  SUBSTR argument 4 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=object
++substr('abc', 1, 1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  CENTER argument 3 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=object
++center('a', 5, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  TRANSLATE argument 4 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=object
++translate('abc', 'x', 'y', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  COMPARE argument 3 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=object
++compare('a', 'b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.19:  DATE argument 2, "The NIL object", is not in the format described by argument 3, "N". (2 of 2 runs)
++refuses string=object
++date('N', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.19:  TIME argument 2, "The NIL object", is not in the format described by argument 3, "N". (2 of 2 runs)
++refuses string=object
++time('N', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.28:  XRANGE argument 1 must be a character class name or a single character; found "The NIL object". (2 of 2 runs)
++refuses string=object
++xrange(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.904:  CONDITION argument 1 must be one of ACDEIORS; found "The NIL object". (2 of 2 runs)
++refuses string=object
++condition(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 93.904:  Method argument 1 must be a number; found "a Q". (2 of 2 runs)
++refuses string=object
++max(1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 2 must have a string value. (2 of 2 runs)
++refuses string=directory
++changestr('a', 'a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 2 must have a string value. (2 of 2 runs)
++refuses string=directory
++strip('zabz', 'B', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=directory
++datatype('1', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  COPIES argument 2 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=directory
++copies('a', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  RANDOM argument 3 must be a whole number; found "a Q". (2 of 2 runs)
++refuses string=directory
++random(1, 2, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  SUBSTR argument 4 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=directory
++substr('abc', 1, 1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.23:  COMPARE argument 3 must be a single character; found "The NIL object". (2 of 2 runs)
++refuses string=directory
++compare('a', 'b', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.19:  DATE argument 2, "The NIL object", is not in the format described by argument 3, "N". (2 of 2 runs)
++refuses string=directory
++date('N', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.28:  XRANGE argument 1 must be a character class name or a single character; found "The NIL object". (2 of 2 runs)
++refuses string=directory
++xrange(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.904:  CONDITION argument 1 must be one of ACDEIORS; found "The NIL object". (2 of 2 runs)
++refuses string=directory
++condition(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 93.904:  Method argument 1 must be a number; found "a Q". (2 of 2 runs)
++refuses string=directory
++max(1, o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  CHANGESTR argument 4 must be a whole number; found "x". (2 of 2 runs)
++refuses string=object
++changestr('a', 'a', o, 'x')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 40.12:  POS argument 3 must be a whole number; found "x". (2 of 2 runs)
++refuses string=object
++pos(o, 'zz', 'x')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++verify('abc', o, 'Q')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++insert(o, 'b', -1)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 88.909:  Argument 1 must have a string value. (2 of 2 runs)
++refuses string=object
++lastpos(o, 'zz', 0)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# refused; oracle Error 93.915:  Method option must be one of "BLT"; found "Q". (2 of 2 runs)
++refuses string=object
++strip('zz', 'Q', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# a .nil the program passes is its own string value, armed, oracle 2 of 2 runs
++call string=object
++changestr('a', 'a', .nil)
++----
++rc 0
++[stdout]
++The NIL object
++after
++[stderr]
++
++# a .nil the program passes is its own string value, armed, oracle 2 of 2 runs
++call string=object
++translate('abc', .nil, 'abc')
++----
++rc 0
++[stdout]
++The
++after
++[stderr]
++
++# a .nil the program passes is its own string value, armed, oracle 2 of 2 runs
++call string=object
++copies('a', .nil)
++----
++rc 216
++[stdout]
++[stderr]
++     2 *-* say copies('a', .nil)
++Error 40 running PROGRAM line 2:  Incorrect call to routine.
++Error 40.12:  COPIES argument 2 must be a whole number; found "The NIL object".
++
++# a .nil the program passes is its own string value, unarmed, oracle 2 of 2 runs
++program
++say changestr('a', 'a', .nil)
++say copies('a', .nil)
++----
++rc 216
++[stdout]
++The NIL object
++[stderr]
++     2 *-* say copies('a', .nil)
++Error 40 running PROGRAM line 2:  Incorrect call to routine.
++Error 40.12:  COPIES argument 2 must be a whole number; found "The NIL object".
++
++# a target position: oracle SIGSEGV rc 139
++refuses string=object
++changestr('a', o, 'b')
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# a target position: oracle 1190 rc 0, a layout read
++refuses string=object
++pos('z', o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented
++
++# a target position: oracle 93.943 found "The NIL object"
++refuses string=directory
++trunc(o)
++----
++rc 120
++[stdout]
++[stderr]
++rexx-exec: a STRING method answering an object with no string value is not implemented

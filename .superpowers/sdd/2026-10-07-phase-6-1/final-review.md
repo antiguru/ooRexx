@@ -175,3 +175,71 @@ frequency must be in the range 37 to 32767; found "an Object"`, both rc 168 thro
 
 No perf or callgrind runs, no full gate runs and no subagents, per the brief. The R11 sweep used one
 `STRING` shape (`.object~new`) across builtins; `.nil` and a Queue were swept at instruction level only.
+
+## Re-review
+
+Range `821e68087..afc479058`, at `afc479058` (Fable, 2026-10-10). Verdict: **approved, one Minor open**.
+Binaries from `git archive afc479058` built in `/tmp/claude-1000/p61/final/rr-target` (debug and
+release, each with its own `Compiling rexx-exec` line; deleted after the run). Runs through the same
+`probe.sh` wrapper as above, from fresh `mktemp -d` directories, under `memcap 2G timeout -k 5 60`.
+
+### The six findings
+
+| # | status | checked |
+|---|---|---|
+| 1 builtin argument positions | **addressed as ruled (fallback, not fixed)**: `6bc2df715` reverts the four code commits (`rexx-exec/src` diff against `821e68087` empty, per the report; the range's stat shows no reqstr or builtin.rs change), Deviation 30 and R11 state the refusal and cite the finding 1 table, and `tests/string_answer_arguments/positions` records this crate's rc 120 transcript per position (69 `refuses` rows: 57 `string=object`, 12 `string=directory`; 3 `call` and 1 `program` row with the oracle's own answer), so a position that stopped refusing or changed its message fails the test. The oracle's answer is in each row's comment, not asserted, which is what Deviation 30 says ("with the oracle's answer beside it"). See the open Minor below on the sentence "Every builtin argument position refuses". |
+| 2 native routine arguments | queued as ruled: `2026-10-10-native-routine-arguments-not-strings.md`, oracle and crate transcripts match mine |
+| 3 `Array~append` | **fixed**: `c10b30ff1`, `cf167fba1`; `probes/b/t22a.rex` on the new release: after sparse+empty 0.012 s, after new(200000)+empty 0.025 s, after sparse 0.037 s, after append+empty 0.060 s (were 5.62, 11.00, 11.01, 12.87 s; oracle 0.011, 0.024, 0.039, 0.072 s). Row 33 and the 11a report now say which shape `e8a19b2e6` fixed. |
+| 4 `List~remove` | queued as ruled: `2026-10-10-list-remove-copies-per-call.md` |
+| 5 Activation size records | fixed: spec section 2 and R4 restated as history; `git show` confirms 480 at `66b0f6854` (`activation.rs:503`) and 472 at `d27a9d441` and HEAD (`:502`); Task 12 report l.34 says 472 |
+| 6 BEEP message | queued as ruled: `2026-10-10-beep-wrong-type-message.md` |
+
+### ArraySlots hunt
+
+By reading: `items` and `last` are private, there is no `DerefMut`, and `replace`, `new` and `From`
+recompute, so only the module's own `set`, `set_within`, `fill`, `overwrite`, `push`, `pop`,
+`insert`, `remove`, `resize`, `clear` can move `last`; each arm is exact (`insert` below `last` shifts
+it up, `remove` at `last` recomputes within `at`, `pop`/`resize` recompute only when `last` falls
+past the new length, `overwrite` takes the max). `last_item()` is read only by `append_slot`
+(`collection.rs:271`) and recomputes under `debug_assert_eq!`, so a debug run that appends after a
+write is the live check.
+
+By running (`probes/as/as1_shapes.rex`, 46 steps, each followed by an append, `last`, `items`,
+`size`, `lastItem` and a delete of the appended slot): sized `new`, put, sparse put past size, delete
+of a trailing and an inner slot, `empty`, `fill`, delete at size twice, `section`, `copy` then delete
+and a sparse put then delete, `of`, `insert` at front, end and after an index, `remove` of last and
+first, `removeItem`, `allItems`, `sort`, `stableSort`, `sortWith`, put at 10 then delete and remove at
+10, a two-dimensional `new` with puts, a put at 1e6 then delete, `empty` then put, `makeArray`, append
+of `.nil`, `allIndexes`, `supplier~allItems`, Queue `push`/`queue`/`pull`/`remove`, List
+`append`/`insert`/`remove`, `fill` then two deletes, `new(0)` append delete, two deletes of sparse
+puts. Output identical to the oracle (rc 0, 48 lines) on the release binary, the debug binary and
+the debug binary under `REXX_SWITCH_MODE=sim:7,gc=0.01`; no assertion fired.
+`probes/as/as3_grow_paths.rex` (sparse puts at multiples of 7 with deletes, appends, 20 removes of
+`last`, 20 front inserts) identical on the same three, and under `sim:3,gc=0.05`. The reshape path
+(`slots.replace(grown)`) is covered by the two-dimensional put. `as2_sort_after_remove.rex` reproduces
+the queued 98.975 on all three (the oracle sorts, rc 0 there; with a hole at position 1 the oracle
+raises 98.975 too, which the queue file's scope note anticipates).
+
+### Prose
+
+* Spec section 2 and R4: true ("when this spec was written ... 512"; 480 at `66b0f6854`; 472 at
+  `d27a9d441`, asserted at `activation.rs:502`). The 520 and 528 figures stay as what was measured
+  against 512, which the new first sentence frames.
+* Row 33, the 11a report's Step 7 note, the gate record's `## Final fix` commit list and gate
+  lines: consistent with the diff and the report. The perf table was not re-measured (no perf).
+* Deviation 30's new table rows (`changestr('a', o, 'b')`, `countstr('z', o)`, `strip(o)` SIGSEGV;
+  `pos('z', o)` 1190; `trunc`, `sign`, `abs` 93.943) match my s3 measurements.
+* Ledger: "datadriven file keeps 66 refuses rows plus 4" undercounts; the file has 69 `refuses` rows
+  (the three target-position rows the report names separately).
+
+### Open
+
+**Minor 7 (new): "Every builtin argument position refuses" is false for two position kinds.**
+Deviation 30 ("Every builtin argument position refuses.") and R11 ("Every builtin argument position
+refuses too"). `probes/s2/every_position.rex` with a `STRING` answering `.object~new` on the new
+release: `value('abc', o)` prints `ABC` on both engines (the second argument is stored unconverted,
+`RAW_ARGUMENT_POSITIONS`), and `filespec('name', o)` prints `a Q` and `sysfileexists(o)` prints `0`,
+rc 0, where the oracle raises 88.909 (finding 2's queued divergence; neither engine sends `STRING`
+there). The sentence needs "except VALUE's second argument, which both engines keep as the object,
+and the native routine positions of `2026-10-10-native-routine-arguments-not-strings.md`", or the
+positions file needs rows for them.
