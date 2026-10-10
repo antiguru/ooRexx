@@ -609,46 +609,25 @@ impl Activity {
         {
             out.extend(*object);
         }
-        // The context objects of the activations on the stack. **The one
-        // object an activation owns outright**: everything else it holds is
-        // rooted by its slot frame, by `Interp::class_variables`, or -- a
-        // send's receiver -- by the temporary `Interp::message_term` takes
-        // over the sending clause. A `RexxContext` is created by
-        // `Interp::context_object` and stored on the activation, and nothing
-        // else refers to it. Handed over here rather than kept rooted per
-        // activation because the alternative is a global root whose key has
-        // to be minted, replaced and retired as activations come and go, and
-        // this pays only when a collection actually happens.
-        out.extend(
-            running
-                .iter()
-                .map(std::ops::Deref::deref)
-                .chain(suspended.iter().map(Box::as_ref))
-                .filter_map(|activation| activation.context_object),
-        );
-        // A `REPLY`'s value and moved continuation, until its activation ends;
-        // and the `Method` object a method no dictionary entry names runs
-        // for, which a method that took its own entry back holds nowhere
-        // else.
+        // Everything each activation on the stack holds
+        // (`Activation::object_roots`). Among it: the context object, which
+        // `Interp::context_object` creates and nothing else refers to; a
+        // `REPLY`'s value and moved continuation, until its activation ends;
+        // the `Method` object a method no dictionary entry names runs for,
+        // which a method that took its own entry back holds nowhere else; the
+        // trapped condition's object, which a `CALL ON` handler's activation
+        // and every callee that inherits its `CONDITION()` hold once the queue
+        // has handed it over; and the streams the builtins opened by name,
+        // which only the table holds. Handed over here rather than kept
+        // rooted per activation because the alternative is a global root
+        // whose key has to be minted, replaced and retired as activations come
+        // and go, and this pays only when a collection actually happens.
         for activation in running
             .iter()
             .map(std::ops::Deref::deref)
             .chain(suspended.iter().map(Box::as_ref))
         {
-            if let Some(replied) = &activation.replied {
-                replied.object_roots(out);
-            }
-            out.extend(activation.cold.as_deref().and_then(|cold| cold.executable));
+            activation.object_roots(out);
         }
-        // The trapped condition's object, which a `CALL ON` handler's
-        // activation and every callee that inherits its `CONDITION()` hold
-        // once the queue has handed it over.
-        out.extend(
-            running
-                .iter()
-                .map(std::ops::Deref::deref)
-                .chain(suspended.iter().map(Box::as_ref))
-                .filter_map(|activation| activation.condition()?.object),
-        );
     }
 }

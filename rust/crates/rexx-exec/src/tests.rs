@@ -1203,6 +1203,29 @@ fn short_strings_keep_the_slot_cadence() {
     );
 }
 
+/// A stream a builtin opened by name is rooted by its activation's table: a
+/// forced collection runs the `UNINIT`s it readies, and the second `LINEIN`
+/// reads on from the table's stream (`two`), where a stream readied as
+/// unreachable is closed by its `UNINIT` and answers Error 48.1.
+#[test]
+fn a_builtins_stream_survives_collections_while_its_table_holds_it() {
+    let path = std::env::temp_dir().join(format!("rexx-stream-root-{}", std::process::id()));
+    std::fs::write(&path, "one\ntwo\n").expect("the file");
+    let program = format!(
+        "f = '{}'\nsay linein(f)\ncall gc 'force'\nsay linein(f)\n",
+        path.display()
+    );
+    let outcome = run_program(TEST_PATH, program.into_bytes(), crate::Invocation::none());
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "stderr: {:?}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "one\ntwo\n");
+}
+
 /// The bytes a body stops holding between collections leave the live figure
 /// the next collection starts from: a 40 MB buffer cut to one byte, then a
 /// 40 MB string dropped, each followed by a loop of dead 1 MB copies. The
