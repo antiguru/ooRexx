@@ -1888,10 +1888,12 @@ mod group_runs {
         }
     }
 
-    /// The GUARD group's tests that pass, `TEST_WAIT_MULTIPLE` and the other
-    /// `WHEN` waits among them. The rest are refused: a translation error
-    /// inside the test's own `INTERPRET`.
+    /// The GUARD group's tests that pass: every test of the group.
     const GUARD_PASSING: &[&str] = &[
+        "TEST_INVALID_OPTION_ONOFF",
+        "TEST_INVALID_OPTION_ONOFF_WHEN",
+        "TEST_INVALID_OPTION_WHEN",
+        "TEST_NO_OPTION",
         "TEST_OFF",
         "TEST_ON",
         "TEST_ON_DEFAULT",
@@ -1901,11 +1903,16 @@ mod group_runs {
         "TEST_WAIT_MULTIPLE",
         "TEST_WAIT_SIMPLE",
         "TEST_WAIT_SIMPLE_TRIGGER",
+        "TEST_WHEN_EXPRESSION_COMPOUND",
+        "TEST_WHEN_EXPRESSION_CONSTANT",
+        "TEST_WHEN_EXPRESSION_REFERENCE",
+        "TEST_WHEN_EXPRESSION_SELF",
         "TEST_WHEN_MULTIPLE_NO_WAIT",
         "TEST_WHEN_NOT_BOOLEAN",
         "TEST_WHEN_NOVALUE",
         "TEST_WHEN_SINGLE_NO_WAIT",
         "TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT",
+        "TEST_WHEN_USE_LOCAL",
         "TEST_WHEN_USE_LOCAL_NO_WAIT",
     ];
 
