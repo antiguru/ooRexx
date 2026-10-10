@@ -1,0 +1,501 @@
+# Review package: 1421378c4..HEAD
+
+## Commits
+9c47d845b Phase 6.1 Task 11a fix round 2: report
+e0f1aba1f Phase 6.1 Task 11a fix round 2, N4: Deviation 30 and R11 match the refusals
+a0fd7c952 Phase 6.1 Task 11a fix round 2, N1-N3: ordering, PARSE and OPTIONS refuse again
+
+## Files changed
+ .../sdd/2026-10-07-phase-6-1/task-11a-report.md    | 70 ++++++++++++++++++++++
+ docs/superpowers/plans/phase-4-exclusions.txt      | 16 +++--
+ .../specs/2026-10-07-phase-6-1-loose-ends.md       |  2 +-
+ rust/corpus/lang/string_answer_nil_consumers.rex   | 17 ++----
+ rust/crates/rexx-exec/src/dispatch/reqstr.rs       | 13 ++--
+ rust/crates/rexx-exec/src/dispatch/tests.rs        | 18 ++++++
+ rust/crates/rexx-exec/src/eval.rs                  |  2 +-
+ rust/crates/rexx-exec/src/parse_template.rs        |  4 +-
+ rust/crates/rexx-exec/src/run.rs                   |  2 +-
+ .../string_answer_nil_consumers.txt                | 19 ++----
+ 10 files changed, 120 insertions(+), 43 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md b/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md
+index bc500c9de..a9d01e3b0 100644
+--- a/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md
++++ b/.superpowers/sdd/2026-10-07-phase-6-1/task-11a-report.md
+@@ -413,10 +413,80 @@ against base61, t11a = `438f90b9e` (`cg19`, every spread 0.0000%):
+ `2021f173f` adds only a sidecar file.
+ 
+ ### Concerns
+ 
+ * Pre-existing, outside the task: with `.context~package~setSecurityManager`, the oracle consults
+   the manager neither for a host command's `RC` nor for an external call's `::REQUIRES`, and the
+   crate does both. The controls differ: `c18_secrc5` (`RC` 5) and `f1d/main2.rex`.
+ * Oracle SIGSEGV shapes, not in `oracle-crashes.txt`: `expose (v)` (`c11_expose`) and `procedure
+   expose (v)` (`c05_procexpose`) with `v` an object whose STRING answers a Directory. They join the
+   reviewer's `drop (v)`.
++
++## Fix round 2
++
++Brief `task-11a-fix2-brief.md`, re-review 1 in `task-11a-review.md`, probes
++`/tmp/claude-1000/p61/t11ar/probes/r1/`. Head `e0f1aba1f`. N1, N2 and N3 share one witness and one
++crate test, so they land in one commit (`a0fd7c952`). N4 is `e0f1aba1f`.
++
++* **N1:** `src/dispatch/reqstr.rs` `required_string_operand` takes the `.nil` path only for
++  `& | &&` and the equality operators (`eval.rs` `is_equality`, now `pub(crate)`). The ordering
++  operators refuse.
++* **N2:** `src/parse_template.rs` `argument_text` and `parse_strings` call `required_string_value`
++  again, and every PARSE VALUE or ARG template refuses. The one-variable template, where the oracle
++  assigns the `.nil` object, is refused too. Assigning the object would need a new source kind in
++  the template walk (`SourceText`, `exec_parse`), which is more than the one site the ruling allows.
++* **N3:** OPTIONS (`src/run.rs`) calls `required_string_value` again.
++* **N4:** Deviation 30 lists the ordering operators, PARSE and OPTIONS with their oracle answers.
++  It says equality is a read of `.nil` through the string layout whose answer, over varied inputs,
++  is that `.nil` equals no string, and the crate pins that answer. R11's line in the spec is updated
++  to match.
++
++Corrections to round 1's classification table:
++
++| site | consumer | class | oracle | probe |
++|---|---|---|---|---|
++| `run.rs:1201` | OPTIONS | refused, nothing observable | rc 0 whatever it reads | `f1c/c03_options` |
++| `eval.rs:1324` | ordering operators | refused-garbage | `"" < o` 0 and `"" << o` 1; `"The NIL object" <= o` 0 | `r1/order.rex`, `r1/empty.rex` |
++| `eval.rs:1324` | equality operators | .nil-set (layout read, answer pinned) | `.nil` equals no string, including `""` and `1` | `r1/empty.rex`, witness |
++| `parse_template.rs:445` | PARSE ARG | refused-garbage | Error 5 when split; a one-variable template assigns `.nil` | `r1/pa_words`, `pa_upper`, `pa_isnil` |
++| `parse_template.rs:631` | PARSE VALUE | refused-garbage | Error 5 for words, position, literal and UPPER; `p .` varies per run; one variable assigns `.nil` | `r1/pv_*` |
++
++Oracle runs, 3 each, crate rc 120 on every probe:
++* `pv_words`, `pv_pos`, `pv_lit`, `pa_words` and `pa_upper` give rc 251 with Error 5.
++* `pv_dot` gave a different stdout in each of its 3 runs.
++* `pv_one`, `pv_isnil` and `pa_isnil` give rc 0 (`p == .nil` is 1).
++* `order.rex` gives rc 159 with the reviewer's values.
++* `empty.rex`: the crate prints the equality line, then refuses at the ordering line.
++
++Tests:
++* `corpus/lang/string_answer_nil_consumers.rex` drops the ordering, PARSE and OPTIONS rows, and its
++  equality line now also covers `""` and `1` (`0 0 0 1 1 0 0 1 0 1`). It matches the oracle 3/3.
++* `dispatch::tests::a_string_answer_reads_as_primitive_make_string_reads_it` adds refusal rows for
++  `'' << o`, `'abc' < o`, PARSE VALUE with one and with two variables, PARSE ARG and OPTIONS, over
++  each of a Directory, a Queue, `.nil` and an Object answer.
++* At `438f90b9e`, `say '' << o` prints `1` and `parse value o with p q` prints `The NIL object`.
++  At `e0f1aba1f` both refuse.
++
++Checks at `e0f1aba1f` (status file `ws8-status.txt`):
++* `cargo fmt --all --check`: 0.
++* `cargo clippy --workspace --all-targets -- -D warnings`: 0.
++* The feature clippy: 0.
++* `memcap 8G cargo test -j 4 --workspace --no-fail-fast`: 0.
++* `REXX_CORPUS_GATE=1` corpus and ir_recorded_oracle: 0.
++* `whole_groups` with the seeded gate in release: 0.
++
++Perf: `callgrind.sh -r 2 -j 3` on all eight programs against base61, t11a = `e0f1aba1f` (`cg20`,
++every spread 0.0001% or less):
++
++| program | t11a % |
++|---|---:|
++| pingmsg | +0.0001 |
++| pingguard | -0.3835 |
++| pingsem | -0.2662 |
++| alloc | +0.0118 |
++| alloc4c | +0.0607 |
++| heapshape | +0.0520 |
++| rexxcps | +0.4268 |
++| emptyloop | -0.3191 |
++
++Concern: the one-variable PARSE form refuses where the oracle answers by assigning `.nil`. This is
++by ruling, because building it takes more than one site.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 7b4b4dfbb..a0eaa3cf3 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -1920,23 +1920,24 @@ DEVIATIONS -- permanent, chosen
+      `primitiveMakeString` (interpreter/classes/ObjectClass.cpp:1285). A
+      string, a number, an Array (its items joined by a newline) and a
+      MutableBuffer convert, and this crate reads them the same way. Any other
+      object converts to `.nil`. Where the oracle's consumer then answers a
+      defined result, this crate answers it too: a truth value (every
+      condition context), the logical operators and a native logical argument
+      (34.x, found "The NIL object"), SIGNAL VALUE (16.1 on the label "The
+      NIL object"), a stem tail, arithmetic (41.1 and 26.8 naming the
+      original object), NUMERIC DIGITS and FUZZ and a DO count or FOR (26.x
+      naming the original object), a host command and INTERPRET (both run
+-     "The NIL object"), a comparison (`.nil` is equal to no string, and the
+-     ordering operators compare "The NIL object"), PARSE VALUE and ARG,
+-     OPTIONS, NUMERIC FORM VALUE (25.11) and a semaphore timeout (88.902),
++     "The NIL object"), an equality operator (`=`, `==`, `\=`, `\==`: the
++     oracle's `primitiveIsEqual` reads `.nil` through the string layout too,
++     and its answer over varied inputs is that `.nil` equals no string, which
++     the crate pins), NUMERIC FORM VALUE (25.11) and a semaphore timeout (88.902),
+      both naming the original object, and a native method's numeric and
+      stem arguments (88.907, 88.921, 93.969 naming it) and ObjectToString
+      (`.nil`); corpus/lang/string_answer_nil_consumers.rex and
+      string_answer_nil_native.rex. Where it
+      reads `.nil` through the string layout, the answer is garbage or a
+      crash. Measured by Phase 6.1's scout E (probes i7b, i7e, i7f, i7h),
+      Task 11a (probes bytes_dir, bytes_nil, bytes_queue, bytes_obj, s4_nil,
+      s4_queue) and the Task 11a review (probes b02 to b40), STRING
+      answering a Directory, `.nil`, a Queue or an Object:
+ 
+@@ -1946,24 +1947,31 @@ DEVIATIONS -- permanent, chosen
+        `say o`                        rc 168, 88.909, with a traceback
+                                       through the REXX package's
+                                       `Stream~SAY` and `Monitor~UNKNOWN`
+        `value(o)`, `upper(o)`         rc 251, Error 5
+        `address value o`              rc 227, 29.1
+        `trace value o`                rc 232, 24.1 found "?"
+        `v = o; drop (v)`, `expose (v)`,
+        `procedure expose (v)`         SIGSEGV, rc 139
+        `call (o)`, `address (o) cmd`  rc 251, Error 5
+        `... with output stream (o)`   rc 158, 98.920 on the file ""
++       `"" << o`, `"" < o`, `<=`, ...  0 or 1 by no rule a string could give
++                                      (`"" < o` 0, `"" << o` 1)
++       PARSE VALUE, PARSE ARG         rc 251, Error 5 for a splitting
++                                      template or UPPER; a one-variable
++                                      template assigns the `.nil` object
++       OPTIONS o                      nothing observable
+        `queue o`, `lineout`, `charout` rc 168, 88.909 through REXX frames
+ 
+      This crate refuses each, rc 120, with `a STRING method answering an
+-     object with no string value is not implemented`, after a trapped
++     object with no string value is not implemented` (a one-variable PARSE
++     template too, since assigning the `.nil` object is not built), after a trapped
+      NOSTRING (which the oracle raises first, with "The NIL object"); the
+      88.909 consumers are refused too, since this crate builds no frames for
+      the REXX package's methods. The oracle's other answers are reads of
+      `.nil` through the string layout, not specified observables. Not
+      witnessed in the corpus.
+ 
+ EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
+ ---------------------------------------------------------------------
+ 
+ Criterion 5 requires every out-of-scope `ExprKind` variant to name an owning
+diff --git a/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md b/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
+index 647f5b369..956bc3e7f 100644
+--- a/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
++++ b/docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md
+@@ -211,21 +211,21 @@ Moritz, 2026-10-07, on the open items the spec reviews left (R5-R8 after the fin
+ | R1 | D7's scope | Sim and invariants; oracle differences reported, never gating. "Treat it as a tool for as long as we're building the implementation, but eventually we'll be stand alone ideally." |
+ | R2 | b14 cannot be rehomed with a true reason (D4) | Into 6.1 with subclass `NEW` on String, Stem, Method, Routine and Message (and VariableReference's 93.967), if a scout sizes `NEW` at M or less; else Phase 9's row is amended to name these refusals as its work. |
+ | R3 | Parse-error message inserts | Not in 6.1. The 2026-07-28 decision stands; 6.1 lands the traceback line for all three paths. A later reversal goes through a raising API that cannot be called without the inserts its message needs. |
+ | R4 | `size_of::<Activation>() == 512` | Kept. The existing `condition` field, the seed and the SETLOCAL list go in one cold box allocated on first use, measured on the T1 programs. |
+ | R5 | PCT (the row's wording) | Built as an opt-in policy `pct:d,k=N`, in the gate mix, judged by invariants only; random bounded preemption stays the main policy. |
+ | R6 | A program's own failed check under R1 | Red where no committed oracle outcome has it; then decided case by case. |
+ | R7 | D6 with no branch-free design | Pay the ~0.5%: correct debug pauses are worth it. A branch-free design is still tried first. |
+ | R8 | Criterion 1's reach | The row's: census classes (b) and (c). |
+ | R9 | One truth judgment (Moritz, 2026-10-08, from the truthiness survey) | Added to 6.1 as Task 4a: every site that turns a value into true or false goes through one function judging as the oracle's `truthValue` does (identity fast path, `requestString`, exactly `0` or `1`, else Error 34 with the caller's sub-number); SELECT CASE and collection `==` answers included; fast paths checked against it; Deviation 25 stays for DO TO and BY only. |
+ | R10 | Collection trigger counts slots only (Moritz, 2026-10-08, from the whole_groups OOM diagnosis) | Added to 6.1 as Task 5a: a collection is also due on bytes allocated since the last one, so a loop of large dead strings runs in bounded memory; within the +0.5% perf budget. |
+-| R11 | Deferred items still reproducing (Moritz, 2026-10-09, from scout E: `.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md`, `scout-e2-report.md`) | Added to 6.1 as Task 11a (empty-body `TIME('E')` loop hang, `Message~halt` after `~send`, `EXIT` in a handler at the REPLY clause's end, a user STRING answering an Array joined as the oracle joins it, wrong-type native rows that name Phase 9, the `Literals` rows, COPIES doubling fill, `Array`/`List` append and length without copying every slot) and Task 11b (a blocking call never runs inline while it can starve the process; pending UNINITs drained at activation return as the oracle drains them). A user STRING answering any other non-string object converts to `.nil`, as the oracle's `primitiveMakeString` makes it: every consumer whose oracle answer is then defined answers it (truth, the logical operators, a native logical argument, SIGNAL VALUE, a stem tail, arithmetic, NUMERIC DIGITS and FUZZ, a DO count or FOR, a host command, INTERPRET, a comparison, PARSE VALUE and ARG, OPTIONS, NUMERIC FORM VALUE, a semaphore timeout, a native method's numeric, stem and ObjectToString conversions; errors that name the operand name the original object), and a consumer where the oracle reads `.nil` through the string layout (garbage or a crash) or answers 88.909 through REXX-package frames this crate does not build is a loud refusal and a deviation row, owner none, after a trapped NOSTRING. Amended 2026-10-10 (controller ruling (c) on Task 11a, and the Task 11a fix round 1 ruling on I3). |
++| R11 | Deferred items still reproducing (Moritz, 2026-10-09, from scout E: `.superpowers/sdd/2026-10-07-phase-6-1/scout-e1-report.md`, `scout-e2-report.md`) | Added to 6.1 as Task 11a (empty-body `TIME('E')` loop hang, `Message~halt` after `~send`, `EXIT` in a handler at the REPLY clause's end, a user STRING answering an Array joined as the oracle joins it, wrong-type native rows that name Phase 9, the `Literals` rows, COPIES doubling fill, `Array`/`List` append and length without copying every slot) and Task 11b (a blocking call never runs inline while it can starve the process; pending UNINITs drained at activation return as the oracle drains them). A user STRING answering any other non-string object converts to `.nil`, as the oracle's `primitiveMakeString` makes it: every consumer whose oracle answer is then defined answers it (truth, the logical operators, a native logical argument, SIGNAL VALUE, a stem tail, arithmetic, NUMERIC DIGITS and FUZZ, a DO count or FOR, a host command, INTERPRET, an equality operator, NUMERIC FORM VALUE, a semaphore timeout, a native method's numeric, stem and ObjectToString conversions; errors that name the operand name the original object), and a consumer where the oracle reads `.nil` through the string layout (garbage or a crash) or answers 88.909 through REXX-package frames this crate does not build is a loud refusal and a deviation row, owner none, after a trapped NOSTRING. The ordering operators, PARSE and OPTIONS refuse. Amended 2026-10-10 (controller ruling (c) on Task 11a, and the Task 11a fix round 1 and 2 rulings). |
+ 
+ Settled from the reviews: FIFO with seeded one-event order; inline pool; `fail=wait:K` ships, sim
+ only; seeded clock origin; trace and replay in 6.1, shrinker queued; seeds by rule; b13's
+ non-crashing rows are a deviation (the oracle reads a wrong-type object; the value is an accident of
+ layout).
+ 
+ ## 7. Staging
+ 
+ | Stage | Delivers |
+ |---|---|
+diff --git a/rust/corpus/lang/string_answer_nil_consumers.rex b/rust/corpus/lang/string_answer_nil_consumers.rex
+index e6bf860d7..26a8da3b2 100644
+--- a/rust/corpus/lang/string_answer_nil_consumers.rex
++++ b/rust/corpus/lang/string_answer_nil_consumers.rex
+@@ -1,16 +1,16 @@
+ /* A STRING answer with no string value is .nil, and the consumers that read
+    .nil as an object answer as the oracle does: SIGNAL VALUE, a stem tail,
+    arithmetic, NUMERIC DIGITS and FUZZ, a DO count and FOR, a host command,
+-   INTERPRET, a comparison, PARSE VALUE and ARG, OPTIONS, NUMERIC FORM VALUE
+-   and a semaphore timeout. The errors that name the operand name the original
+-   object, and .nil is equal to no string. */
++   INTERPRET, an equality, NUMERIC FORM VALUE and a semaphore timeout. The
++   errors that name the operand name the original object, and .nil is equal
++   to no string. */
+ o = .sn~new
+ signal on syntax name s1
+ signal value o
+ s1: say 'signal value' condition('O')~code condition('O')~message
+ x.o = 1
+ say 'tail' x.o x.['The NIL object']
+ signal on syntax name s2
+ say 1 + o
+ s2: say 'arithmetic' condition('O')~code condition('O')~message
+ signal on syntax name s3
+@@ -27,28 +27,19 @@ do o; end
+ s6: say 'do count' condition('O')~code condition('O')~message
+ signal on syntax name s7
+ do i = 1 for o; end
+ s7: say 'do for' condition('O')~code condition('O')~message
+ signal on syntax name s8
+ numeric form value o
+ s8: say 'form' condition('O')~code condition('O')~message
+ signal on syntax name s9
+ say .eventsemaphore~new~wait(o)
+ s9: say 'timeout' condition('O')~code condition('O')~message
+-options o
+-say 'options done'
+-say 'equal' ("abc" = o) ("The NIL object" = o) ("The NIL object" == o) ("abc" \= o) ("abc" \== o)
+-say 'ordered' ("abc" < o) ("abc" >> o) ("Z" > o)
+-parse value o with pv
+-say 'parse value' pv
+-call pa o
++say 'equal' ("abc" = o) ("The NIL object" = o) ("The NIL object" == o) ("abc" \= o) ("abc" \== o) ("" = o) ("" == o) ("" \= o) (1 = o) (1 <> o)
+ address system o
+ say 'command rc' rc
+ interpret o
+ say 'interpret rc' rc
+ exit
+-pa: parse arg pa1
+-say 'parse arg' pa1
+-return
+ ::class sn
+ ::method string
+   return .directory~new
+diff --git a/rust/crates/rexx-exec/src/dispatch/reqstr.rs b/rust/crates/rexx-exec/src/dispatch/reqstr.rs
+index fca26db83..21eee3316 100644
+--- a/rust/crates/rexx-exec/src/dispatch/reqstr.rs
++++ b/rust/crates/rexx-exec/src/dispatch/reqstr.rs
+@@ -64,35 +64,34 @@ impl Interp {
+     /// [`Interp::required_string_value`] for a consumer that reads the answer
+     /// as an object (a truth value, a native logical argument): a user
+     /// `STRING` answer with no string value is `.nil` here, as
+     /// `primitiveMakeString` makes it, where the bytes consumers refuse it.
+     #[inline]
+     pub(crate) fn required_string_or_nil(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+         self.required_string_or(value, || true)
+     }
+ 
+     /// [`Interp::required_string_value`] for the right operand of `op`: a
+-    /// logical operator and a comparison read it as
+-    /// [`Interp::required_string_or_nil`] does, and concatenation reads its
+-    /// bytes.
++    /// logical operator and an equality read it as
++    /// [`Interp::required_string_or_nil`] does, and every other operator reads
++    /// its bytes. The oracle's ordering operators read `.nil` through the
++    /// string layout (`StringClass.cpp:795-801`).
+     #[inline]
+     pub(crate) fn required_string_operand(
+         &mut self,
+         value: ObjRef,
+         op: rexx_parse::Operator,
+     ) -> Result<ObjRef, Failure> {
+         use rexx_parse::Operator;
+         self.required_string_or(value, || {
+-            !matches!(
+-                op,
+-                Operator::Concatenate | Operator::Abuttal | Operator::Blank
+-            )
++            matches!(op, Operator::And | Operator::Or | Operator::Xor)
++                || crate::eval::is_equality(op)
+         })
+     }
+ 
+     /// The required-string protocol, with `nil` saying whether a user
+     /// `STRING` answer with no string value is `.nil` or refused. It is asked
+     /// only where a `STRING` method runs.
+     #[inline]
+     fn required_string_or(
+         &mut self,
+         value: ObjRef,
+diff --git a/rust/crates/rexx-exec/src/dispatch/tests.rs b/rust/crates/rexx-exec/src/dispatch/tests.rs
+index a75c17f8d..8d1f6d16c 100644
+--- a/rust/crates/rexx-exec/src/dispatch/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/tests.rs
+@@ -496,20 +496,38 @@ fn a_string_answer_reads_as_primitive_make_string_reads_it() {
+         );
+     }
+     let refusal = "rexx-exec: a STRING method answering an object with no string value \
+                    is not implemented\n";
+     for answer in [".directory~new", ".queue~of('a')", ".nil", ".object~new"] {
+         assert_eq!(
+             run_source(&program(answer)),
+             (120, String::new(), refusal.to_owned()),
+             "{answer}"
+         );
++        // The ordering operators, PARSE and OPTIONS read `.nil` through the
++        // oracle's string layout, so they refuse with the bytes consumers.
++        for statement in [
++            "say '' << .k~new",
++            "say 'abc' < .k~new",
++            "parse value .k~new with p",
++            "parse value .k~new with p q",
++            "call r .k~new\nexit\nr: parse arg p\nreturn",
++            "options .k~new",
++        ] {
++            let program =
++                format!("{statement}\nexit\n::class k\n::method string\n  return {answer}\n");
++            assert_eq!(
++                run_source(&program),
++                (120, String::new(), refusal.to_owned()),
++                "{statement} over {answer}"
++            );
++        }
+         let length = format!("say length(.k~new)\n::class k\n::method string\n  return {answer}\n");
+         assert_eq!(
+             run_source(&length),
+             (120, String::new(), refusal.to_owned()),
+             "length over {answer}"
+         );
+         let judged = format!(
+             "o = .k~new\nsignal on syntax name s1\nif o then nop\n\
+              s1: say condition('O')~code condition('O')~message\n\
+              signal on syntax name s2\nsay 1 & o\n\
+diff --git a/rust/crates/rexx-exec/src/eval.rs b/rust/crates/rexx-exec/src/eval.rs
+index 0a6560959..1ccf24b07 100644
+--- a/rust/crates/rexx-exec/src/eval.rs
++++ b/rust/crates/rexx-exec/src/eval.rs
+@@ -1574,21 +1574,21 @@ fn is_comparison(op: Operator) -> bool {
+             | StrictBackslashLessThan
+             | StrictGreaterThanEqual
+             | StrictLessThanEqual
+             | LessThanGreaterThan
+             | GreaterThanLessThan
+     )
+ }
+ 
+ /// Whether `op` asks whether two values are the same, as against how they
+ /// order.
+-fn is_equality(op: Operator) -> bool {
++pub(crate) fn is_equality(op: Operator) -> bool {
+     use Operator::*;
+     matches!(
+         op,
+         Equal
+             | BackslashEqual
+             | StrictEqual
+             | StrictBackslashEqual
+             | LessThanGreaterThan
+             | GreaterThanLessThan
+     )
+diff --git a/rust/crates/rexx-exec/src/parse_template.rs b/rust/crates/rexx-exec/src/parse_template.rs
+index 364fa5e26..e87dda1e1 100644
+--- a/rust/crates/rexx-exec/src/parse_template.rs
++++ b/rust/crates/rexx-exec/src/parse_template.rs
+@@ -435,21 +435,21 @@ impl Interp {
+     fn argument_text(&mut self, at: usize, parse: &Parse) -> Result<SourceText, Failure> {
+         let argument = match self.activity.call_context.arguments.get(at) {
+             Some(Some(argument)) => Some(*argument),
+             Some(None) | None => None,
+         };
+         match argument {
+             // `PARSE ARG` converts each argument through the same
+             // `ParseTarget::init` the other sources reach, and traces no
+             // `>K>` of its own to disagree with.
+             Some(value) => {
+-                let value = self.required_string_or_nil(value)?;
++                let value = self.required_string_value(value)?;
+                 Ok(self.source_text(value, parse))
+             }
+             None => Ok(SourceText::Owned(self.take_parse_buffer())),
+         }
+     }
+ 
+     /// One `PARSE` instruction: resolve the source, then walk the template.
+     pub(crate) fn exec_parse(
+         &mut self,
+         code: &Code<'_>,
+@@ -621,21 +621,21 @@ impl Interp {
+             // class-side `makeString` returning `'p q'`:
+             // `>K>   "VALUE" => "The K class"` and then `>>>   "p q"`.
+             Subject::Value(value) => {
+                 // The rendering exists for that line and for nothing else, so
+                 // it is taken under the line's own gate.
+                 if self.traced_mode().results {
+                     let traced = self.rendered_into_parse_buffer(value);
+                     self.trace_keyword(indent, keyword, &traced);
+                     self.give_parse_buffer(traced);
+                 }
+-                let converted = self.required_string_or_nil(value)?;
++                let converted = self.required_string_value(value)?;
+                 self.source_text(converted, parse)
+             }
+         };
+         Ok(ParseStrings::One(Some(value)))
+     }
+ 
+     /// `PARSE VAR`'s source: the variable read, in all three name shapes.
+     fn read_parse_var(
+         &mut self,
+         code: &Code<'_>,
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index c7d9b6c69..dd80a2e82 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -1191,21 +1191,21 @@ impl Interp {
+             }
+ 
+             // `FORWARD` and its options. See `exec_forward`.
+             InstructionKind::Forward(forward) => self.exec_forward(code, forward),
+ 
+             // `OPTIONS`: the expression is evaluated, converted and traced, and
+             // nothing else (`RexxInstructionOptions::execute`).
+             InstructionKind::Options { expression } => {
+                 let value = self.eval(code, expression)?;
+                 self.roots.activity_mut().push_temp(value);
+-                let value = self.required_string_or_nil(value)?;
++                let value = self.required_string_value(value)?;
+                 let text = self.to_text(value).to_vec();
+                 self.trace_result(self.activity.clause_state.current_value_indent, &text);
+                 Ok(Flow::Next)
+             }
+ 
+             other => Err(Loud::instruction(other).into()),
+         }
+     }
+ 
+     /// A message send that is a clause of its own
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/string_answer_nil_consumers.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/string_answer_nil_consumers.txt
+index 3af3119f8..410ec2588 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/string_answer_nil_consumers.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/string_answer_nil_consumers.txt
+@@ -1,17 +1,17 @@
+-count 54
++count 45
+ /* A STRING answer with no string value is .nil, and the consumers that read
+    .nil as an object answer as the oracle does: SIGNAL VALUE, a stem tail,
+    arithmetic, NUMERIC DIGITS and FUZZ, a DO count and FOR, a host command,
+-   INTERPRET, a comparison, PARSE VALUE and ARG, OPTIONS, NUMERIC FORM VALUE
+-   and a semaphore timeout. The errors that name the operand name the original
+-   object, and .nil is equal to no string. */
++   INTERPRET, an equality, NUMERIC FORM VALUE and a semaphore timeout. The
++   errors that name the operand name the original object, and .nil is equal
++   to no string. */
+ o = .sn~new
+ signal on syntax name s1
+ signal value o
+ s1: say 'signal value' condition('O')~code condition('O')~message
+ x.o = 1
+ say 'tail' x.o x.['The NIL object']
+ signal on syntax name s2
+ say 1 + o
+ s2: say 'arithmetic' condition('O')~code condition('O')~message
+ signal on syntax name s3
+@@ -28,28 +28,19 @@ do o; end
+ s6: say 'do count' condition('O')~code condition('O')~message
+ signal on syntax name s7
+ do i = 1 for o; end
+ s7: say 'do for' condition('O')~code condition('O')~message
+ signal on syntax name s8
+ numeric form value o
+ s8: say 'form' condition('O')~code condition('O')~message
+ signal on syntax name s9
+ say .eventsemaphore~new~wait(o)
+ s9: say 'timeout' condition('O')~code condition('O')~message
+-options o
+-say 'options done'
+-say 'equal' ("abc" = o) ("The NIL object" = o) ("The NIL object" == o) ("abc" \= o) ("abc" \== o)
+-say 'ordered' ("abc" < o) ("abc" >> o) ("Z" > o)
+-parse value o with pv
+-say 'parse value' pv
+-call pa o
++say 'equal' ("abc" = o) ("The NIL object" = o) ("The NIL object" == o) ("abc" \= o) ("abc" \== o) ("" = o) ("" == o) ("" \= o) (1 = o) (1 <> o)
+ address system o
+ say 'command rc' rc
+ interpret o
+ say 'interpret rc' rc
+ exit
+-pa: parse arg pa1
+-say 'parse arg' pa1
+-return
+ ::class sn
+ ::method string
+   return .directory~new

@@ -326,3 +326,47 @@ one-variable template, and even there the oracle assigns `.nil`. **Fix:** correc
 * **(5) Breakage.** Outside N1 and N2 I found nothing. The 39 `b/` probes, the Step 6b probes and
   all new corpus witnesses match or refuse as expected. I did not re-run the perf figures, as
   instructed.
+
+## Re-review 2
+
+Scope: fix round 2, `1421378c4..9c47d845b`. I built HEAD `9c47d845b` from `git archive` into
+`/tmp/claude-1000/p61/t11ar/src`, with its own target dir and one `Compiling rexx-exec` line. Runs
+went through `t11ar/tools/both.sh`, with 2 runs per engine unless stated.
+
+### Verdicts
+
+* **Spec compliance: compliant.** N1 to N4 are closed as the fix-round-2 rulings direct.
+* **Quality: acceptable.** No regression was found. No Critical or Important finding is open.
+
+### Status
+
+* **N1: fixed.** `reqstr.rs` `required_string_operand` takes the `.nil` path only for `& | &&` and
+  `is_equality`. `r1/order.rex` refuses with rc 120 at its first ordering line. On the oracle it
+  is rc 159 with the garbage values recorded in re-review 1. `r1/empty.rex` prints the equality
+  line `eq 0 0 0 1 1` on both engines, and then the crate refuses at the ordering line.
+* **Equality still matches.** New probe `r2/eqonly.rex` runs `''`, `' '`, "The NIL object", `1`
+  and `0` under `=`, `==`, `\=`, `\==`, `<>` and `><`. Both engines give
+  `0 0 0 0 0 0 0 1 1 1 1 1` (stdout `59b0d07b`).
+* **N2: fixed by refusal.** Every `r1/pv_*` and `r1/pa_*` probe refuses with rc 120. That
+  includes `pv_one`, `pv_isnil` and `pa_isnil`, where the oracle assigns `.nil` with rc 0. The
+  oracle gives rc 251 Error 5 for `pv_words`, `pv_pos`, `pv_lit`, `pa_words` and `pa_upper`, and a
+  different stdout in each run for `pv_dot`. Refusing the one-variable form is the brief's own
+  fallback, and the implementer named the reason: assigning the object needs a new `SourceText`
+  kind beyond the one site. That form stays a loud refusal, as recorded in Deviation 30.
+* **N3: fixed.** `run.rs` OPTIONS calls `required_string_value`. `f1c/c03_options` refuses with
+  rc 120, where the oracle gives rc 0.
+* **N4: fixed.** The table corrections in the report's "## Fix round 2" agree with the probe
+  results above. Deviation 30 and the spec's R11 line changed in `e0f1aba1f`. I did not
+  re-review their wording.
+
+### Regression check
+
+The corpus witnesses `string_answer_nil_consumers`, `string_answer_nostring_trapped`,
+`string_answer_array`, `routine_new_directive_subclass`, `package_new_directive_subclass` and
+`routine_new_package_parent` each match 2/2. The 39 `b/` consumer probes were re-run 1/1, with
+`drop` skipped because it crashes the oracle. Every difference is an expected rc 120 refusal:
+* the bytes set: say, `||` either side, address, trace, queue, `"abc"~"||"`, `value()`, lineout,
+  charout and `upper()`;
+* `b10_parse`, which is newly refused by the N2 ruling.
+
+Everything else matches, including `b38` (`1 && o`, 34.901) and the native-argument rows.

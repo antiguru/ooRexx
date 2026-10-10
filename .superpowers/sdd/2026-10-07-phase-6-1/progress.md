@@ -241,3 +241,7 @@ Task 3: Ruling: the fresh-object-per-pass Minor joins round 3 — an identityHas
 - Task 11a re-review 1: I1, I2, I3 (ruled sites) and I4 are fixed. New: N1 Critical (the ordering operators compare against the text where the oracle reads garbage: `"" < o` gives 0 and `"" << o` gives 1); N2 Critical (PARSE splitting templates give Error 5 on the oracle, and a single-variable template assigns .nil itself); N3 Minor (OPTIONS has no observable answer); N4 Minor (table). My comparison ruling rested on the implementer's two inputs; that was my error.
 - Ruling (fix round 2): ordering operators refuse; equality stays. PARSE assigns .nil for a single-variable template and refuses every other template. OPTIONS refuses. A site joins the .nil set only when its oracle answer is witnessed over varied inputs and no input could tell it from a garbage read. Cost if wrong: more refusals; each one is loud.
 - Task 11a fix round 2 dispatched to t11a-impl, brief task-11a-fix2-brief.md.
+- Task 11a fix round 2: a0fd7c952, e0f1aba1f, 9c47d845b. Re-review 2: spec ✅, quality ✅, N1-N4 closed.
+- Parked for Moritz: one-variable PARSE VALUE/ARG over a non-string STRING answer refuses where the oracle assigns .nil itself. Matching it needs more than one parse_template.rs site. Cost: a loud refusal, not a wrong answer.
+- Task 11a: complete (fbdf615e8..9c47d845b).
+- Task 11b dispatched: t11b-impl (opus), brief task-11b-brief.md, carry task-11b-carry.md.
