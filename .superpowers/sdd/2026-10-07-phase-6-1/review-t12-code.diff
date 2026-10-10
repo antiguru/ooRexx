@@ -1,0 +1,997 @@
+dfd65490d Phase 6.1 Task 12: close
+9892f031b Phase 6.1 ledger: final gates, whole_groups, TSan ruling
+97cb37712 Phase 6.1 Task 12: the seeded gate keeps its shared run directory
+1adffb89d Phase 6.1 ledger: gate run at f85ea20cd, sim-gate harness race ruling
+13bbff35f Phase 6.1 Task 12: refusal-sites.tsv after the TraceCache lines
+baa2ad942 Phase 6.1 ledger: refusal-sites drift ruling
+f85ea20cd Phase 6.1 ledger: TraceCache revert, parse residual +1.20%
+ab4bc780e Phase 6.1 Task 12 parse round: revert the stored traced setting
+65b80b03a Phase 6.1 ledger: parse round result and residual
+23f4b609f Phase 6.1 Task 12 parse round: TraceCache holds the traced setting itself
+fce0bd4c1 Phase 6.1 Task 12 parse round: one body match per swept object
+01c7d7a85 Phase 6.1 Task 12 parse round: the traced setting reads the trace cache
+b45885004 Phase 6.1 ledger: parse ceiling and widened round
+b565088aa Phase 6.1 ledger: SysSleep fix, gates at 0f159f674, parse attribution
+84aa32a62 Phase 6.1 Task 12: queue what 6.1 leaves
+0f159f674 Phase 6.1 Task 12: SysSleep sleeps at least one microsecond
+fe676703a Phase 6.1 ledger: SysSleep root cause and ruling
+8fc6a5fd8 Phase 6.1 ledger: stale elapsed clock ruling
+a68c735fd Phase 6.1 Task 12: every GUARD group test passes
+e075f1d36 Phase 6.1 Task 12: the determinism self-test skips clock=real rows
+c29d23825 Phase 6.1 ledger: parse over budget, attribution ruled
+b0d3934e5 Phase 6.1 ledger: Task 12 G4 rulings
+6a87cd616 Phase 6.1 Task 12: dirread bench program
+5c83d9250 Phase 6.1 ledger: Task 12 dispatched
+ .../bg/0f159f674/logs/g1-fmt.txt                   |    0
+ .../bg/0f159f674/logs/g2-clippy.txt                |   92 +
+ .../bg/0f159f674/logs/g3-build-release.txt         |  226 +
+ .../0f159f674/logs/g4-criterion-one-s3-table.txt   |   63 +
+ .../bg/0f159f674/logs/g4-criterion-one-table.txt   |  141 +
+ .../bg/0f159f674/logs/g4-test-release.txt          | 4777 ++++++++++++++++++
+ .../bg/0f159f674/logs/g4-timer-table.txt           |   73 +
+ .../bg/0f159f674/logs/g5-build-debug.txt           |  226 +
+ .../0f159f674/logs/g6-criterion-one-s3-table.txt   |   63 +
+ .../bg/0f159f674/logs/g6-criterion-one-table.txt   |  141 +
+ .../bg/0f159f674/logs/g6-test-debug.txt            | 4780 ++++++++++++++++++
+ .../bg/0f159f674/logs/g6-timer-table.txt           |   73 +
+ .../bg/0f159f674/logs/g7-clippy-pinning.txt        |   58 +
+ .../bg/0f159f674/logs/g8-test-pinning.txt          |   68 +
+ .../bg/0f159f674/logs/g9-loom.txt                  |   96 +
+ .../sdd/2026-10-07-phase-6-1/bg/0f159f674/pid      |    1 +
+ .../2026-10-07-phase-6-1/bg/0f159f674/status.txt   |   16 +
+ .../bg/6a87cd616/logs/g1-fmt.txt                   |    0
+ .../bg/6a87cd616/logs/g2-clippy.txt                |   92 +
+ .../bg/6a87cd616/logs/g3-build-release.txt         |  226 +
+ .../6a87cd616/logs/g4-criterion-one-s3-table.txt   |   63 +
+ .../bg/6a87cd616/logs/g4-criterion-one-table.txt   |  141 +
+ .../bg/6a87cd616/logs/g4-test-release.txt          | 5101 ++++++++++++++++++++
+ .../bg/6a87cd616/logs/g4-timer-table.txt           |   73 +
+ .../bg/6a87cd616/logs/g5-build-debug.txt           |  226 +
+ .../6a87cd616/logs/g6-criterion-one-s3-table.txt   |   63 +
+ .../bg/6a87cd616/logs/g6-criterion-one-table.txt   |  141 +
+ .../bg/6a87cd616/logs/g6-test-debug.txt            | 4969 +++++++++++++++++++
+ .../bg/6a87cd616/logs/g6-timer-table.txt           |   73 +
+ .../bg/6a87cd616/logs/g7-clippy-pinning.txt        |   58 +
+ .../bg/6a87cd616/logs/g8-test-pinning.txt          |   68 +
+ .../bg/6a87cd616/logs/g9-loom.txt                  |   96 +
+ .../sdd/2026-10-07-phase-6-1/bg/6a87cd616/pid      |    1 +
+ .../2026-10-07-phase-6-1/bg/6a87cd616/status.txt   |   16 +
+ .../bg/97cb37712/logs/g1-fmt.txt                   |    0
+ .../bg/97cb37712/logs/g2-clippy.txt                |   92 +
+ .../bg/97cb37712/logs/g3-build-release.txt         |  226 +
+ .../97cb37712/logs/g4-criterion-one-s3-table.txt   |   63 +
+ .../bg/97cb37712/logs/g4-criterion-one-table.txt   |  141 +
+ .../bg/97cb37712/logs/g4-test-release.txt          | 4777 ++++++++++++++++++
+ .../bg/97cb37712/logs/g4-timer-table.txt           |   73 +
+ .../bg/97cb37712/logs/g5-build-debug.txt           |  226 +
+ .../97cb37712/logs/g6-criterion-one-s3-table.txt   |   63 +
+ .../bg/97cb37712/logs/g6-criterion-one-table.txt   |  141 +
+ .../bg/97cb37712/logs/g6-test-debug.txt            | 4780 ++++++++++++++++++
+ .../bg/97cb37712/logs/g6-timer-table.txt           |   73 +
+ .../bg/97cb37712/logs/g7-clippy-pinning.txt        |   58 +
+ .../bg/97cb37712/logs/g8-test-pinning.txt          |   68 +
+ .../bg/97cb37712/logs/g9-loom.txt                  |   96 +
+ .../sdd/2026-10-07-phase-6-1/bg/97cb37712/pid      |    1 +
+ .../2026-10-07-phase-6-1/bg/97cb37712/status.txt   |   16 +
+ .../bg/f85ea20cd/logs/g1-fmt.txt                   |    0
+ .../bg/f85ea20cd/logs/g2-clippy.txt                |   92 +
+ .../bg/f85ea20cd/logs/g3-build-release.txt         |  226 +
+ .../f85ea20cd/logs/g4-criterion-one-s3-table.txt   |   63 +
+ .../bg/f85ea20cd/logs/g4-criterion-one-table.txt   |  141 +
+ .../bg/f85ea20cd/logs/g4-test-release.txt          | 4820 ++++++++++++++++++
+ .../bg/f85ea20cd/logs/g4-timer-table.txt           |   73 +
+ .../bg/f85ea20cd/logs/g5-build-debug.txt           |  226 +
+ .../f85ea20cd/logs/g6-criterion-one-s3-table.txt   |   63 +
+ .../bg/f85ea20cd/logs/g6-criterion-one-table.txt   |  141 +
+ .../bg/f85ea20cd/logs/g6-test-debug.txt            | 4843 +++++++++++++++++++
+ .../bg/f85ea20cd/logs/g6-timer-table.txt           |   73 +
+ .../bg/f85ea20cd/logs/g7-clippy-pinning.txt        |   58 +
+ .../bg/f85ea20cd/logs/g8-test-pinning.txt          |   68 +
+ .../bg/f85ea20cd/logs/g9-loom.txt                  |   96 +
+ .../sdd/2026-10-07-phase-6-1/bg/f85ea20cd/pid      |    1 +
+ .../2026-10-07-phase-6-1/bg/f85ea20cd/status.txt   |   16 +
+ .../sdd/2026-10-07-phase-6-1/p61-gates/tsan.sh     |   39 +
+ .superpowers/sdd/2026-10-07-phase-6-1/progress.md  |   19 +
+ .../sdd/2026-10-07-phase-6-1/task-12-brief.md      |   20 +
+ .../sdd/2026-10-07-phase-6-1/task-12-carry.md      |   23 +
+ .../task-12-evidence/cg-all/binaries.txt           |    5 +
+ .../task-12-evidence/cg-all/table.txt              |   28 +
+ .../task-12-evidence/cg-call/binaries.txt          |    7 +
+ .../task-12-evidence/cg-call/table.txt             |    4 +
+ .../task-12-evidence/cg-close2/binaries.txt        |    6 +
+ .../task-12-evidence/cg-close2/table.txt           |   28 +
+ .../task-12-evidence/cg-parse/binaries.txt         |   16 +
+ .../cg-parse/diff.c37d874a36.c1fd487d02.txt        |  143 +
+ .../cg-parse/diff.c66d9eac18.c37d874a36.txt        |   68 +
+ .../cg-parse/diff.cb71606f16.t11a.txt              |  138 +
+ .../task-12-evidence/cg-parse/table.txt            |    2 +
+ .../task-12-evidence/cg-parse2/binaries.txt        |   11 +
+ .../task-12-evidence/cg-parse2/table.txt           |    2 +
+ .../task-12-evidence/cg-r1/binaries.txt            |    5 +
+ .../task-12-evidence/cg-r1/table.txt               |    5 +
+ .../task-12-evidence/cg-r3/binaries.txt            |    5 +
+ .../task-12-evidence/cg-r3/table.txt               |    7 +
+ .../task-12-evidence/cg-r4b/binaries.txt           |    5 +
+ .../task-12-evidence/cg-r4b/table.txt              |    5 +
+ .../task-12-evidence/cg-x/binaries.txt             |    5 +
+ .../task-12-evidence/cg-x/table.txt                |    5 +
+ .../task-12-evidence/cgtext.py                     |   38 +
+ .../task-12-evidence/guard-bisect-flip.txt         |   18 +
+ .../task-12-evidence/guard-bisect-results.txt      |   99 +
+ .../2026-10-07-phase-6-1/task-12-evidence/one.sh   |   13 +
+ .../2026-10-07-phase-6-1/task-12-evidence/one2.sh  |   13 +
+ .../task-12-evidence/perf-stat.txt                 |   75 +
+ .../2026-10-07-phase-6-1/task-12-evidence/probe.sh |   14 +
+ .../task-12-evidence/sim-gate-debug-run.txt        |   19 +
+ .../task-12-evidence/sim-gate-debug-summary.txt    |   30 +
+ .../task-12-evidence/sim-gate-release-summary.txt  |   59 +
+ .../task-12-evidence/simsum.py                     |   18 +
+ .../tsan-first/lib-failure-excerpt.txt             |  100 +
+ .../task-12-evidence/tsan-first/tsan2.out          |    5 +
+ .../task-12-evidence/tsan/api.txt                  |   77 +
+ .../task-12-evidence/tsan/int.txt                  |  113 +
+ .../task-12-evidence/tsan/lib.txt                  | 1070 ++++
+ .../task-12-evidence/tsan/tsan3.out                |    5 +
+ .../task-12-evidence/wall/binaries.txt             |    7 +
+ .../task-12-evidence/wall/table.txt                |    4 +
+ .../task-12-evidence/wall/wall.tsv                 |   75 +
+ .../task-12-evidence/whole-groups-run.txt          |   51 +
+ .../task-12-evidence/whole-groups-table.tsv        |   61 +
+ .../sdd/2026-10-07-phase-6-1/task-12-report.md     |  340 ++
+ .../queued/2026-10-10-class-enhanced-skips-new.md  |   53 +
+ .../2026-10-10-compiled-method-package-in-trace.md |   32 +
+ .../2026-10-10-debug-do-header-notready-order.md   |   79 +
+ ...2026-10-10-debug-equals-after-iterate-indent.md |   77 +
+ ...2026-10-10-debug-labelled-block-header-pause.md |  128 +
+ .../2026-10-10-debug-reply-pause-and-banner.md     |   94 +
+ .../sdd/queued/2026-10-10-debug-typed-call-sigl.md |   61 +
+ .../2026-10-10-debug-typed-raise-untrapped.md      |   49 +
+ .../sdd/queued/2026-10-10-debug-typed-signal.md    |   52 +
+ ...0-directory-setmethod-unknown-traceback-line.md |   32 +
+ .../2026-10-10-enhanced-object-name-in-messages.md |   30 +
+ ...2026-10-10-leave-iterate-error-not-trappable.md |   31 +
+ .../2026-10-10-misplaced-class-attribute-error.md  |   29 +
+ .../queued/2026-10-10-oracle-judged-seeded-gate.md |    7 +
+ ...10-10-prologue-frames-missing-loading-levels.md |   67 +
+ ...10-propagated-condition-extra-traceback-line.md |   42 +
+ ...-10-10-raise-novalue-return-into-call-on-any.md |   29 +
+ .../2026-10-10-reply-continuation-trace-entry.md   |   63 +
+ ...10-reply-propagated-condition-traceback-line.md |   44 +
+ ...0-10-rooting-harness-blind-to-dropped-pushes.md |    7 +
+ ...6-10-10-select-case-value-outlives-construct.md |    7 +
+ .../queued/2026-10-10-sim-pool-seeded-delivery.md  |    7 +
+ .superpowers/sdd/queued/2026-10-10-sim-shrinker.md |    7 +
+ .../2026-10-10-string-translate-empty-tables.md    |   25 +
+ .../sdd/queued/2026-10-10-subclass-package.md      |   29 +
+ .../sdd/queued/2026-10-10-subclass-rexxinfo.md     |   30 +
+ .../sdd/queued/2026-10-10-trace-c-command-echo.md  |   33 +
+ ...10-trapped-header-comparison-holds-to-object.md |   66 +
+ .../queued/2026-10-10-upstream-do-to-identity.md   |   40 +
+ .../2026-10-10-upstream-zero-pass-do-reexecute.md  |   54 +
+ .../2026-10-10-variable-reference-concatenation.md |   29 +
+ ...10-10-whole-groups-differing-rows-that-agree.md |    7 +
+ docs/superpowers/plans/2026-07-27-rust-rewrite.md  |    4 +-
+ docs/superpowers/plans/phase-6-1-gate.md           |  157 +
+ rust/bench-programs/README.md                      |    1 +
+ rust/bench-programs/callgrind.sh                   |    2 +-
+ rust/bench-programs/dirread.rex                    |   11 +
+ rust/corpus/refusal-sites.tsv                      |    4 +-
+ rust/corpus/sim-exempt.tsv                         |    1 -
+ rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs |    4 +
+ rust/crates/rexx-bench/src/lib.rs                  |    3 +
+ rust/crates/rexx-core/src/body.rs                  |    2 +-
+ rust/crates/rexx-core/src/bytes.rs                 |   10 +
+ rust/crates/rexx-core/src/heap.rs                  |   13 +-
+ rust/crates/rexx-exec/src/builtin/rexxutil.rs      |   13 +-
+ rust/crates/rexx-exec/src/sim/tests.rs             |   22 +
+ rust/crates/rexx-exec/src/trace.rs                 |   15 +-
+ rust/crates/rexx-exec/src/trace/format.rs          |   21 +-
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   |   54 +-
+ 165 files changed, 48744 insertions(+), 33 deletions(-)
+diff --git a/docs/superpowers/plans/2026-07-27-rust-rewrite.md b/docs/superpowers/plans/2026-07-27-rust-rewrite.md
+index 1b5458abe..ecbe38171 100644
+--- a/docs/superpowers/plans/2026-07-27-rust-rewrite.md
++++ b/docs/superpowers/plans/2026-07-27-rust-rewrite.md
+@@ -648,24 +648,24 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
+ 
+ | # | Phase | Entry | Exit gate | Rung |
+ |---|---|---|---|---|
+ | 0 | Oracle & inventory | — | Differ runs C++ against itself with zero diffs on the corpus; benchmark baselines committed for all 5 platforms; error table and builtin inventory generated; L1 extraction fraction reported; D7 protocol stability answered | — |
+ | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
+ | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
+ | 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` under `samples/` to an AST (301 files); `SOURCELINE` and `TRACE`'s `*-*` source lines match the oracle byte-for-byte; parse errors give the oracle's **number and sub-number on a plausible line**, with message text and substitutions deliberately not reproduced (2026-07-28 scope decision); parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
+ | 4 | Classic executor, split 4a / 4b / 4c / 4d / 4e / 4f | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and **66 of the 81 builtin functions**, the excluded set being exactly `phase-4-exclusions.txt`; `samples/rexxcps.rex` runs clean, and **every classic-Rexx benchmark axis is within measurement noise of the C++ oracle or better** -- the Global Constraints `:39` parity gate, with no recorded debt available on a classic-Rexx axis (`phase-4d-gate.md`, amended 2026-08-09); **4e closed 2026-08-11** with the register IR the default engine and its ratios recorded on both instruments (`phase-4e-gate.md`), leaving the parity clause to 4f. **Not** `:40`'s 1.5× figure, which scopes to Phase 1 | L0 named subsets + the `base/expressions` assertion table |
+ | 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; **the class wiring is complete**: every class named by a `cls*` section across the reference, minus `RegularExpression` (delivered by `::requires "rxregexp.cls"`, which is not on this build's search path, measured 43.901 rc 213), plus `ArgUtil`, is an `.environment` class answering `~id`, `~class`, `~superClass`, `~superClasses`, `~metaClass` and `~isA(.Class)` byte-identically, and every documented hierarchy edge is present in that class's `~superClasses`; `RexxInfo` is **out** of that class set, because `EndSpecialClassDefinition(RexxInfo)` routes the class object to a target no environment symbol reaches, **and** its `.environment` entry is required to be an *instance* whose `~class~id` is `RexxInfo`; the documented per-class **method** sets are **5c's** and are not this clause (`docs/superpowers/specs/2026-08-17-phase-5-object-model.md:328`, and D48 `:1245` for the class half); `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
+ | 6 | Concurrency | 5 | **CLOSED 2026-10-07**, `docs/superpowers/plans/phase-6-gate.md`. Activities, kernel lock (per interpreter since D3's 2026-09-29 note, ruling 1: the design's baton; nothing process-wide), guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified**, and **D3's no-global-lock constraint demonstrated**: no type, invariant or API is sound only while a global interpretation lock is held. A coarse lock may still be shipped here; nothing may depend on it | L2 |
+-| 6.1 | Loose ends of closed phases | 6 | Every loud refusal naming Phase 5 or no phase (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/loud-census.md` classes (b) and (c)) is implemented, or re-homed to a remaining phase with a true reason, or recorded as a deviation with owner none; `closed_phases` then polices Phase 5 too. Takes the queued items `2026-09-28-phase-5-refusal-labels`, `2026-10-02-do-with-over-refusal`, `2026-09-28-use-arg-message-term`, `2026-10-02-elapsed-clock-per-routine-and-reset`, `2026-10-07-debug-pause-skipped-after-flowed-clause` , `2026-10-07-debug-input-does-not-reach-pauses`, `2026-10-07-setlocal-scope`, `2026-10-07-interpret-syntax-traceback-line`, `2026-10-07-unjudged-scheduler-mutants` and `2026-10-07-seeded-random-switch-mode` (deterministic simulation testing with PCT schedules, the gate instrument for the concurrency groups). Added by Moritz, 2026-10-07: before Phase 9, so Phase 9's exclusions are not scoped on refusals whose owners rotted. | — |
++| 6.1 | Loose ends of closed phases | 6 | **CLOSED 2026-10-10**, `docs/superpowers/plans/phase-6-1-gate.md`, but for criterion 7: `parse` is +1.1979% Ir against the 6.1 base, which waits on Moritz's ruling. Every loud refusal naming Phase 5 or no phase (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/loud-census.md` classes (b) and (c)) is implemented, or re-homed to a remaining phase with a true reason, or recorded as a deviation with owner none; `closed_phases` then polices Phase 5 too. Takes the queued items `2026-09-28-phase-5-refusal-labels`, `2026-10-02-do-with-over-refusal`, `2026-09-28-use-arg-message-term`, `2026-10-02-elapsed-clock-per-routine-and-reset`, `2026-10-07-debug-pause-skipped-after-flowed-clause` , `2026-10-07-debug-input-does-not-reach-pauses`, `2026-10-07-setlocal-scope`, `2026-10-07-interpret-syntax-traceback-line`, `2026-10-07-unjudged-scheduler-mutants` and `2026-10-07-seeded-random-switch-mode` (deterministic simulation testing: random bounded preemption as the main policy and PCT as an opt-in policy, judged by the crate's own invariants with oracle differences reported, rulings R1 and R5; the gate instrument for the concurrency groups). Added by Moritz, 2026-10-07: before Phase 9, so Phase 9's exclusions are not scoped on refusals whose owners rotted. | — |
+ | 7 | Streams & platform | 5 | **CLOSED 2026-09-13**, `docs/superpowers/plans/phase-7-gate.md`. `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green **on the host**; the `Sys*` subset ooTest needs (D11) works. The other four platforms are Phase 11's, per D-P1 below. **The rung is Phase 8's**: measured at the close, `ooTest.frm` loads past `.ENDOFLINE` and `rxregexp.cls` and then stops at `::METHOD INIT EXTERNAL "LIBRARY rxregexp RegExp_Init"`, so what stands between the framework and its first test group is `dlopen` | L2 -> 8 |
+ | 8 | Native API | 5, 7 | **CLOSED 2026-09-29**, `docs/superpowers/plans/phase-8-gate.md`: the L2 slice (2026-09-14, sections 1-8) and the surface plan (sections 9-10). `testbinaries/` compile unchanged against frozen headers, witnessed by the oracle's own build (section 9); native-API ooTest groups pass. Which groups are this row's is derived by `rexx-exec/tests/api_group_partition.rs`: `METHOD`, `CONVERSION` and `FUNCTION`, whose binaries import nothing from the interpreter; every other API group is row 10's (measured 2026-09-15, corrected 2026-09-28). Every test of those three passes on this crate and agrees with the oracle through `rexx-exec/tests/api_group_tests.rs` but `FUNCTION`'s `TEST_REXXQUEUE`, which creates and reads a `RexxQueue`, whose queues live in rxapi, so it is row 10's and runs on neither side; and `METHOD`'s `TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA`, which runs `rexxc`, which row 9 ships (2026-09-29). **L2 is still not reached, and what blocks it is Phase 10's work, not this phase's.** The `Directory` methods that stopped the framework at `ooTest.frm:49` were built (surface Task 1), and a group's tests now run; run unmodified, the framework runs its ticker (Phase 6 S3, 2026-10-03) and stops at `printSummary`'s `RXFUNCQUERY`, which the oracle answers through rxapi (Phase 10). The gate runs the groups with `-U` and without those two probes (section 10) | L2 -> 10 |
+-| 9 | Core conformance | 6.1, 7, 8 | **L3-core on the host**: the full suite green against existing baselines *excluding* the groups enumerated below; every benchmark at parity; `rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship. The other four platforms are Phase 11's, per D-P1 below. No native-API ooTest group is this phase's: the groups that load `INVOCATIONTester.cls` were recorded here on 2026-09-15 and are row 10's since 2026-09-28, because their library imports the RXAPI exit and subcom registries as well as the embedding API this row ships | L3-core |
++| 9 | Core conformance | 6.1, 7, 8 | **L3-core on the host**: the full suite green against existing baselines *excluding* the groups enumerated below; every benchmark at parity; `rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship. The other four platforms are Phase 11's, per D-P1 below. No native-API ooTest group is this phase's: the groups that load `INVOCATIONTester.cls` were recorded here on 2026-09-15 and are row 10's since 2026-09-28, because their library imports the RXAPI exit and subcom registries as well as the embedding API this row ships. Also this row's (Phase 6.1 ruling R2, D4 of `docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md`): `NEW` on a subclass of String, Stem, Method, Routine and Message, starting from `.superpowers/sdd/2026-10-07-phase-6-1/scout-d-prototype.patch`; and the refusals naming Phase 9, listed by `grep -rn '"Phase 9"' rust/crates/*/src` and `grep -n 'OWNER: Phase 9' docs/superpowers/plans/phase-4-exclusions.txt` at the 6.1 close: `Loud::native_method` (a primitive method this crate has no code for), rexx-api `layout::REFUSING_MEMBERS`' Phase 9 members, and the exclusions rows on a second interpreter instance, `rexxc`, the `native_method` re-home, conditions and stack frames under INTERPRET, and `ReleaseLocalReference` | L3-core |
+ | 10 | RXAPI & extensions | 9 | `rxregexp`, `rxmath`, `rxsock`, `hostemu`, `orxncurses` recompile and pass; RXAPI decision (D7) executed; **L3-full** with no exclusions. **Every native-API ooTest group but `METHOD`, `CONVERSION` and `FUNCTION` is this phase's, re-homed from Phase 8 by measurement**, derived by `rexx-exec/tests/api_group_partition.rs` (a group belongs to the latest phase any import in its libraries' `NEEDED` closure needs; `phase-8-gate.md` section 9). `CLASSICPackage.cls` binds `orxclassic` and `CLASSIC.testGroup:822,861,875` register `orxclassic1` through `rxfuncadd`, and `liborxclassic.so` and `liborxclassic1.so` import the function, subcom, queue and macro-space registries, which are this row's RXAPI (2026-09-15). `RexxStart`, `ProcessRexxStart`, `INVOCATION` and `ProcessInvocation` each load `INVOCATIONTester.cls` (`.context~package~loadPackage`, line 52 of each group), which binds `orxinvocation`; `liborxinvocation.so` NEEDs `liborxexits.so`, which NEEDs `librexx.so.4` and `librexxapi.so.4` and imports `RexxCreateInterpreter` and `RexxStart`, Phase 9's embedding API, and also `RexxRegisterExitDll` and the other exit and subcom registries, this row's. They were recorded as Phase 9's on 2026-09-15 from the embedding imports alone and moved here on 2026-09-28. `FUNCTION`'s `TEST_REXXQUEUE` is this row's too, since its `RexxQueue` lives in rxapi (row 8, 2026-09-28) | L3-full |
+ | 10.1 | Cross-interpreter queues and values (optional) | 10 | Queue primitives between interpreters, and moving values between them (spec `2026-09-29-phase-6-concurrency-design.md` section 10: structured clone over Rexx's own types, opt-in methods for user classes). Depends on Phase 10's RXAPI decision (D7). Optional: L3-full does not wait for it. Added by Moritz, 2026-10-07. | — |
+ | 11 | Other platforms | 10 | A second host exists and its own oracle is built there; the platform seam is named and every host assumption sits behind it; the corpus differential, the gate tables and the benchmark axes run **on each platform available**, each with its own recorded baseline; `PARSE SOURCE`'s first word is the host's rather than a constant. Phases 7 and 9's platform clauses close here | L3-full, per platform |
+ 
+ Phases 6, 7, and 8 are independent of each other and may run in parallel once Phase 5 closes.
+ 
+ **D-L2, 2026-09-14: L2's blocker is a closed phase's leftovers, and no open phase owns them.**
+ *(As recorded when opened; the ruling at its end gives the blocker to Phase 8.)*
+ Measured at Phase 8's L2 slice close and recorded in `docs/superpowers/plans/phase-8-l2.md`. The
+ framework stops at `ooTest.frm:49`, `.local~hasEntry(...)`. It is not one method: `hasIndex`,
+diff --git a/docs/superpowers/plans/phase-6-1-gate.md b/docs/superpowers/plans/phase-6-1-gate.md
+index f8f68182e..dc6aa4997 100644
+--- a/docs/superpowers/plans/phase-6-1-gate.md
++++ b/docs/superpowers/plans/phase-6-1-gate.md
+@@ -1180,10 +1180,167 @@ PROGRAMS="rexxcps emptyloop alloc alloc4c heapshape pingpong/pingmsg pingpong/pi
+ 
+ Exit 0, load average 1.01 at the end. t11b against base61: rexxcps +0.15%, emptyloop +5.84% (base
+ +4.67%), alloc -2.74%, alloc4c -0.36%, heapshape +0.00%, pingmsg +1.00%, pingsem +1.61%, pingguard
+ +0.00%.
+ 
+ Per-task check at `595ba08ef` (`/tmp/claude-1000/p61/t11b/tools/gates.sh`, statuses in
+ `gates-status.txt`): debug `cargo test --workspace --no-fail-fast` 0 (3139 passed, 0 failed);
+ `REXX_CORPUS_GATE=1 ... --test corpus --test ir_recorded_oracle` 0; `REXX_CORPUS_GATE=1 ... --release
+ --test concurrency_tests whole_groups` 0, 16 passed, the seeded gate among them. No committed outcome
+ changed.
++
++## Task 12
++
++Phase close. Report: `.superpowers/sdd/2026-10-07-phase-6-1/task-12-report.md`; evidence files in
++`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/`. Code commits: `6a87cd616` (dirread bench program), `e075f1d36` and `a68c735fd` (G4 test
++fixes), `0f159f674` (SysSleep floor), `01c7d7a85`, `fce0bd4c1`, `23f4b609f`, `ab4bc780e` (parse
++round; the last reverts the third), `13bbff35f` (refusal-sites re-derived), `97cb37712` (seeded-gate
++harness race). Queue: `84aa32a62`.
++
++### Gates
++
++`.superpowers/sdd/2026-10-07-phase-6-1/p61-gates/bggates.sh` (`-j 4`), each run alone on a frozen
++`git archive` of the commit; statuses and logs in `bg/<sha>/`.
++
++| commit | G1 | G2 | G3 | G4 | G5 | G6 | G7 | G8 | G9 | reds |
++|---|---|---|---|---|---|---|---|---|---|---|
++| `6a87cd616` | 0 | 0 | 0 | 101 | 0 | 101 | 0 | 0 | 0 | GUARD pass list stale; SysSleep TEST_SLEEP_DURATION between modes; the determinism self-test on a `clock=real` row |
++| `0f159f674` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | none (one P48 rerun, TEST_SLEEP_DURATION, passed) |
++| `f85ea20cd` | 0 | 0 | 0 | 101 | 0 | 101 | 0 | 0 | 0 | `refusal_sites` line drift (`01c7d7a85`); G6 seeded gate harness race |
++| `97cb37712` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | none, 0 P48 reruns |
++
++At `97cb37712`: G4 3141 passed, 0 failed, 4 ignored; G6 3145 passed, 0 failed, 4 ignored; G8 16
++passed; G9 15 passed. Fixes: the GUARD list (`a68c735fd`; nine tests flip at `59eb57f37`, parse
++errors as SYNTAX, each passing the oracle 2 of 2); the self-test picks virtual-clock rows only
++(`e075f1d36`, R6); SysSleep sleeps at least a microsecond (`0f159f674`: alone on a quiet machine,
++interleaved, `6a87cd616` failed TEST_SLEEP_DURATION 10 of 40 and base61 1 of 40; the fix 0 of 40,
++base61 0 of 40 in that round; every failure `SysSleep(0.00000001) took 0`); the seeded gate keeps its
++shared run directory (`97cb37712`: `remove()` deleted `sim-gate-<profile>` with `remove_dir` while
++another job's `create_dir_all` was between creating it and creating its item, ENOENT at
++`sidecar.rs:128`).
++
++### Criterion 8: TSan
++
++`.superpowers/sdd/2026-10-07-phase-6-1/p61-gates/tsan.sh` is Phase 6's script with one more skip,
++`scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike`: it bounds 50
++RxCalcSqrt calls by the simulation's `block=` floor of 1 ms, and TSan's slowdown carries one past it.
++First run with Phase 6's script at `97cb37712`: `api exit 0`, `lib exit 101`, `int exit 0`, `no tsan
++log`; the one failure, `native.rs:368`, rc 120 "a native call in the simulation mode that runs longer
++than its bound is not implemented" where the first run gave rc 0 `239.036 idle`
++(`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/tsan-first/lib-failure-excerpt.txt`). The test passes in G4 and G6 at `97cb37712`
++(`g4-test-release.txt:1513`, `g6-test-debug.txt:1524`). Rerun with the copy,
++`CARGO_BUILD_JOBS=4 memcap 8G bash .../p61-gates/tsan.sh <target> <logs>` from `rust/`:
++
++```
++api exit 0
++lib exit 0
++int exit 0
++no tsan log
++```
++
++rexx-api lib 70 passed; rexx-exec lib 1063 passed, 14 filtered out; `concurrency_tests` 49 passed,
++`program_end` 2, `signals` 36 (1 filtered out), `stdin_contention` 1 (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/tsan/`).
++
++### Criterion 5: `whole_groups`
++
++`REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_TABLE=... REXX_SIM_REPORT=... memcap 8G /usr/bin/time -v cargo
++test -j 1 --release -p rexx-exec --test concurrency_tests whole_groups` at `97cb37712`: exit 0, 17
++passed, 6:50, max RSS 2,585,996 KB. Table: `.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/whole-groups-table.tsv`. Listed as differing and
++agreeing in this run: TIME whole and derived (both modes), CALL derived (both), REPLY whole and
++derived (every).
++
++| row (spec section 8, criterion 5) | outcome at `97cb37712` |
++|---|---|
++| TIME TEST_4, TEST_10, the `_R` pair; TEST_5, TEST_11 | pass: TIME whole and derived agree with the oracle (524 and 81 assertions) in both modes |
++| CALL TEST_4 | pass: CALL whole and derived agree |
++| RexxContext TESTCONDITION01 | pass: RexxContext derived agrees; the rest part fails only TESTRS01 |
++| GUARD TEST_WHEN_USE_LOCAL_NO_WAIT | pass: GUARD whole and derived agree |
++| TRACE_TraceObject `test_object_and_scope`, TEST_CALLER_STACK_FRAME_REPLY_START | fail; cause outside 6.1: both read `.TraceObject~collector` with option `P`, and this crate builds a TraceObject only for a routed `.TRACEOUTPUT` (queued `2026-10-02-traceobject-variable-and-collector`, Phase 6 S2-S5) |
++| Method whole and derived | derived agrees; whole refuses at TEST_NEW_FOUR_ARGS, Method NEW with an INIT argument (Phase 9, roadmap row 9) |
++| MethodArgs TEST_REQUEST_STRING_* | pass: MethodArgs whole and derived agree |
++| TRACE TEST_TRACE_LABEL_WITH_FORWARD | fail; cause outside 6.1: a REPLY continuation run to its end is not announced (queued `2026-10-10-reply-continuation-trace-entry`, ruled not 6.1's at Task 2) |
++| DateTime TEST_BRUTE_FORCE | pass: DateTime agrees |
++| Class TEST_CLASS_DEFINE | pass: Class whole fails only TEST_ACTIVATE and TEST_METHODS |
++| scout A's parse-error rows (ATTRIBUTE TESTABSTRACTTWICE, CONSTANT TEST_BAD_NEGATIVE, METHOD TESTABSTRACTEXTERNAL, CALL TEST_INVALID, GUARD TEST_INVALID_OPTION_ONOFF) | pass: none is in its part's failing set; CALL and GUARD agree |
++| TRACE `.DebugInput` rows | pass: TRACE whole's failing set holds none of the `?` tests |
++
++### Criterion 6: the seeded gate
++
++Release, inside the `whole_groups` run above: 13720 runs in 131 s, 0 reds, 34 exempted (20
++MutexSemaphore single TEST_EXCLUSION, 14 `message_notify.rex`, both design-limit), 0 P48 reruns.
++Debug, `REXX_CORPUS_GATE=1 REXX_SIM_REPORT=... memcap 8G cargo test -j 4 -p rexx-exec --test
++concurrency_tests sim_gate::`: exit 0, 11 passed, 1792 runs in 12 s, 0 reds, 7 exempted. Seed counts
++and the debug subset are Task 10's (`rust/corpus/sim-gate.tsv`: 70 seeds per row in release; 14 per row
++in debug on 128 rows). The determinism self-test passes in both builds; the gate's reds on the
++re-introduced defects and the mutant verdicts are Task 10's and Task 11's records above. Oracle
++differences, by part, release (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/sim-gate-release-summary.txt`): 70 each for STREAM whole, Class
++whole, Message whole and derived, Method whole and rest, Object whole and rest, RexxContext whole and
++rest, ATTRIBUTE whole and derived, CONSTANT whole and rest, METHOD whole, rest and derived, RAISE whole
++and derived, TRACE whole, TRACE_TraceObject whole and derived, Section1 whole (each a part whose
++normal-mode run is in `DIFFERING`); REPLY derived 29 and whole 14; MutexSemaphore single 20 and
++`message_notify.rex` 14 (the exempt deadlocks); `guard_on_lock_passes_between_activities.rex` 16;
++Ticker derived 9 and whole 8; `context_moved_by_reply.rex` 8; `main_ends_in_pinned_yield.rex` 3;
++`ticker_fires_on_its_replied_activity.rex` 2; MethodArgs derived 1. SysSleep whole and derived, which
++Task 10 listed (61 and 55), are gone with `0f159f674`, and so is their `sim-exempt.tsv` row.
++
++### Criterion 7: performance
++
++Every program, `bash rust/bench-programs/callgrind.sh -r 3 -j 4 -o ... base=<base61> pad2=<base61 +
++layout-pad 48> before=<0f159f674> close=<ab4bc780e>`, exit 0, no gate running
++(`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/cg-close2/`). base61's sha256 matches `## Task 1`; `close` from `git archive ab4bc780e`, own
++target directory, one `Compiling rexx-exec` line, sha256
++`4e8ab4c7d5d1c2daa5c97bfb9f1873431faebbad777c89830c87d58fe14b5b10`; `13bbff35f` and `97cb37712`
++change only a table and a test. The pad2 control is 0.0000% everywhere, so the band is 0.
++
++| program | base61 Ir | before (`0f159f674`) % | after (`ab4bc780e`) % | pad2 % |
++|---|---:|---:|---:|---:|
++| alloc | 20345537514 | +0.0118 | -0.0318 | -0.0000 |
++| alloc4c | 3140684485 | +0.0607 | -0.0654 | +0.0000 |
++| arith | 11488858265 | +0.2861 | +0.2724 | -0.0000 |
++| assign | 18983599254 | -3.1598 | -3.1651 | -0.0000 |
++| compound | 8937498030 | -1.0053 | -1.1172 | +0.0000 |
++| decloop | 2469010741 | -2.3171 | -2.2380 | +0.0000 |
++| decrender | 4228326951 | -1.1070 | -1.0609 | -0.0000 |
++| dirread | 2644856962 | +0.1273 | +0.1049 | +0.0000 |
++| dispatch | 20809502845 | -0.5038 | -0.3597 | +0.0000 |
++| dispatchclass | 15794935187 | -0.7841 | -0.6321 | +0.0000 |
++| emptyloop | 7786099871 | -0.3191 | -0.6402 | +0.0000 |
++| extcall | 7552641451 | +0.0418 | +0.0021 | +0.0000 |
++| fibcall | 8413280378 | +0.4617 | +0.4412 | -0.0000 |
++| fibfunc | 8228290764 | +0.4721 | +0.4303 | +0.0000 |
++| heapshape | 2334068378 | +0.0520 | +0.0093 | +0.0000 |
++| nop | 9283340655 | -1.0755 | -1.0863 | -0.0000 |
++| parse | 1536336774 | +1.7815 | +1.1979 | -0.0000 |
++| sayloop | 109048217 | +0.1425 | -0.4071 | +0.0001 |
++| sendloop | 14013810691 | -0.7125 | -0.4984 | +0.0000 |
++| startup | 58097223 | +0.2670 | +0.2680 | +0.0000 |
++| strings | 17537481300 | +0.4584 | +0.3735 | -0.0000 |
++| textnum | 1155145989 | -0.5233 | -0.5405 | +0.0000 |
++| varlookup | 13437530297 | -2.1198 | -2.2612 | +0.0000 |
++| rexxcps | 17788421071 | +0.4268 | +0.2694 | -0.0000 |
++| pingguard | 1159017714 | -0.5905 | -0.7113 | +0.0000 |
++| pingmsg | 1676421012 | -0.0190 | -0.0421 | +0.0000 |
++| pingsem | 1181250699 | -0.4694 | -0.4863 | +0.0000 |
++
++**`parse` is over budget, +1.1979%; every other program is inside +0.5%.** Attribution and the round
++are in the report's "Parse attribution" and "Parse perf round": the residual is the freed-body byte
++accounting in `collect_now` (heapshape round 1, `5214a2089`, on Task 5a's charge), the Task 4a driver
++codegen and the Task 8-10 allocation codegen (both accepted under the l.103 precedent), and Task 5a's
++byte charge per PARSE piece. It goes to Moritz.
++
++Wall clock, `PROGRAMS="emptyloop pingpong/pingsem pingpong/pingguard" bash
++rust/bench-programs/wallclock.sh -r 5` with base61, its three pads and `close`: emptyloop +4.91%
++(pads +0.23 to +0.93), pingsem +1.60% (pads -3.20 to 0.00), pingguard +2.50% (pads 0.00 to +0.83).
++`perf stat -e cycles:u,instructions:u,software/context-switches/,software/cpu-migrations/`, 5
++interleaved runs per binary, medians (`.superpowers/sdd/2026-10-07-phase-6-1/task-12-evidence/perf-stat.txt`), with `close` built twice more with
++`layout-pad.py` 8 and 48 (`cpad8`, `cpad48`, same instruction counts as `close`):
++
++| program | close cycles | cpad8 | cpad48 | base61 pad2 | instructions close vs base61 | context switches |
++|---|---:|---:|---:|---:|---:|---|
++| emptyloop | +4.62% | +4.38% | +4.46% | +0.07% | -0.63% | 6-12 on every binary |
++| pingsem | +4.64% | +0.56% | +4.19% | +1.00% | +0.50% | 785-786 |
++| pingguard | +4.53% | +1.75% | +2.27% | +1.85% | -0.63% | 785-788 |
++
++pingsem and pingguard: the same code moves by up to 4.1 points with layout alone (cpad8 against
++close) at equal instructions and context switches, so their drift is attributed to layout. emptyloop:
++no pad moves it (4.38-4.62%), instructions are fewer and context switches equal, so the cycles are spent
++in the loop itself; unattributed beyond that, as at Task 2 (`loop_advance`, Moritz's ruling there).
+diff --git a/rust/bench-programs/README.md b/rust/bench-programs/README.md
+index f6101ef9f..27509d77f 100644
+--- a/rust/bench-programs/README.md
++++ b/rust/bench-programs/README.md
+@@ -17,20 +17,21 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
+ | `parse.rex` | `PARSE` in the shapes a real program uses: a positional pattern, a **variable** pattern, and `PARSE VAR` with several targets. Added 2026-09-10 to close a coverage hole -- `exec_parse` is 6.8% of `rexxcps`' profile and no program here exercised it at all |
+ | `textnum.rex` | Values that arrive as **text** and are then used as numbers, with fresh handles each iteration so a handle-keyed cache cannot answer from the previous one. Added 2026-09-10 for the same reason: `rexxcps` performs 5,580,002 of these conversions and no program here performed one |
+ | `decloop.rex` | A **decimal-controlled** `DO` -- `do j=1.1 to 2.2 by 1.1`. `emptyloop.rex` and every other loop here use integer control, and the two are not the same axis: measured 2026-09-10, integer control is 1.22x the oracle and decimal control 1.63x |
+ | `decrender.rex` | The same decimal control plus the renderings a real program performs on the control value (`length(j)`, `j='foobar'`), which is `rexxcps`' inner-loop shape. **1.99x**, the worst ratio in the suite, and the construct that carries `rexxcps` above every other primitive it exercises |
+ | `nop.rex` | The fixed cost every clause pays: a counted loop whose body is 100 `nop` clauses, one per line, so the loop step is amortised over them. 1,000,000 passes |
+ | `assign.rex` | The same shape with 100 `x = y` clauses, `y` assigned once before the loop: the per-clause cost plus one variable read and one write. 1,000,000 passes |
+ | `fibcall.rex` | Recursive fib(22) by internal `CALL`, 30 times |
+ | `fibfunc.rex` | Recursive fib(22) by internal function call, 30 times |
+ | `sendloop.rex` | An empty `::METHOD` sent 5,000,000 times |
+ | `extcall.rex` | `liborxfunction`'s `TestIntArg` called 3,000,000 times; needs the library's directory on `LD_LIBRARY_PATH` |
++| `dirread.rex` | Directory entry reads by message and by `[]`, and a `.local` entry read as an environment symbol: the store-backed read path, 200,000 passes. Added in Phase 6.1 from Task 7's measurement of that path; sized against this crate (0.3s), not the oracle (0.05s) |
+ | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
+ | `pingpong/pingmsg.rex` | Message round trip: `~start` on a new activity and its `~result` awaited, 80,000 times. Criterion 7 of Phase 6, recorded against the oracle; in a subdirectory, so the criterion harness does not run it; `callgrind.sh` runs it as `pingmsg` |
+ | `pingpong/pingsem.rex` | Semaphore post/wait: two activities hand a turn back and forth through two `EventSemaphore`s, 100,000 times each way. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
+ | `pingpong/pingguard.rex` | GUARD WHEN handoff: two activities pass a turn through one object's variable, each in `GUARD ON WHEN`, 100,000 times each. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
+ | `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
+ 
+ ## Determinism
+ 
+ Same rule as `corpus/`: byte-identical output on every run of the same interpreter. No `DATE()`,
+ `TIME()`, process IDs, or unordered iteration. Every program in this directory was run under
+diff --git a/rust/bench-programs/callgrind.sh b/rust/bench-programs/callgrind.sh
+index 729c81af1..e8b71dbe9 100755
+--- a/rust/bench-programs/callgrind.sh
++++ b/rust/bench-programs/callgrind.sh
+@@ -31,21 +31,21 @@ if [ $# -lt 1 ]; then
+     exit 2
+ fi
+ lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
+ [ -f "$lib/liborxfunction.so" ] || { echo "no liborxfunction.so in $lib; set REXX_LIB_DIR" >&2; exit 2; }
+ [ -n "$out" ] || out=$(mktemp -d)
+ mkdir -p "$out"
+ out=$(cd "$out" && pwd)
+ 
+ # Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
+ PINGPONG="pingguard pingmsg pingsem"
+-PROGRAMS="alloc alloc4c arith assign compound decloop decrender dispatch
++PROGRAMS="alloc alloc4c arith assign compound decloop decrender dirread dispatch
+ dispatchclass emptyloop extcall fibcall fibfunc heapshape nop parse sayloop
+ sendloop startup strings textnum varlookup rexxcps $PINGPONG"
+ on_disk=$(cd "$here" && ls ./*.rex pingpong/*.rex | sed 's|^\./||; s|^pingpong/||; s|\.rex$||' | sort)
+ listed=$(echo $PROGRAMS | tr ' ' '\n' | grep -vx rexxcps | sort)
+ if [ "$on_disk" != "$listed" ]; then
+     echo "PROGRAMS and $here/*.rex disagree:" >&2
+     diff <(echo "$listed") <(echo "$on_disk") >&2
+     exit 2
+ fi
+ if [ -n "$sel" ]; then
+diff --git a/rust/bench-programs/dirread.rex b/rust/bench-programs/dirread.rex
+new file mode 100644
+index 000000000..8a9c6708d
+--- /dev/null
++++ b/rust/bench-programs/dirread.rex
+@@ -0,0 +1,11 @@
++/* Directory and .local entry reads: the store-backed read path. */
++d = .directory~new
++d~put(1, 'A')
++.local~zz = 2
++n = 200000
++do i = 1 to n
++  x = d~a
++  y = d['A']
++  z = .zz
++end
++say x y z
+diff --git a/rust/corpus/sim-exempt.tsv b/rust/corpus/sim-exempt.tsv
+index 0a5bc8fd0..5c02ecfc1 100644
+--- a/rust/corpus/sim-exempt.tsv
++++ b/rust/corpus/sim-exempt.tsv
+@@ -1,8 +1,7 @@
+ # Reds of the seeded gate ruled not to be defects, read by
+ # crates/rexx-exec/tests/concurrency_tests.rs, sim_gate. Tab-separated columns: group, part,
+ # test, kind, a text the red's line holds (its refusal where it has one), each * for any; then the
+ # reason and its evidence. A kind is panic, crash, hang, invariant, determinism, design-limit,
+ # check or no-report. Each row is as narrow as its evidence (controller rulings, Task 10).
+ base/class/MutexSemaphore.testGroup	single	TEST_EXCLUSION	design-limit	a wait in the simulation mode that only a signal can end	the test's own race (ruling P46): main takes the mutex between the worker's step = 6 and its last acquire and never releases it, so the worker waits forever; the oracle reaches the same deadlock in that interleaving	the oracle hangs 3 of 3 at rc 137 on docs/superpowers/records/2026-10-01-phase-6-s2-s5/exclusion-every-hang.rex; under uniform:1 the whole part ends in this refusal on 60 of 60 seeds and passes 60 of 60 with TEST_EXCLUSION left out (Task 10 report, R4)
+-base/rexxutil/SysSleep.testGroup	*	TEST_SLEEP_DURATION	check	*	the test asserts host sleep latency: its lower bound needs at least 1 us measured after SysSleep(1e-8), which a real system gets only from nanosleep's overshoot, and the spec models no sleep latency (controller ruling, Task 10 carry)	under sim the virtual clock jumps to the 10 ns deadline and time('E') reads 0 (task-9-report.md, Concern 2); nanosleep overshoots 51 to 110 us on this host (review of Task 9, check 6)
+ corpus/lang/message_notify.rex	program	-	design-limit	a wait that nothing left to run can end	the program's own race: a ~notify landing while the notified message's activity runs its notification loop is never sent messageComplete, in the oracle (MessageClass.cpp:217-229, :666-685) as here (notify_parties), so the later ~wait never ends	docs/superpowers/records/2026-10-07-phase-6-1/notify-window.md: the oracle hangs 5 of 5 on notify-window.rex, which forces that interleaving (Task 10 report, R5)
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+index 62ab120b0..2e7c5fa06 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+@@ -100,20 +100,24 @@ const AXES: &[Axis] = &[
+         role: Role::Loop,
+     },
+     Axis {
+         name: "decloop",
+         role: Role::Loop,
+     },
+     Axis {
+         name: "decrender",
+         role: Role::Loop,
+     },
++    Axis {
++        name: "dirread",
++        role: Role::Loop,
++    },
+     Axis {
+         name: "dispatch",
+         role: Role::Loop,
+     },
+     Axis {
+         name: "dispatchclass",
+         role: Role::Loop,
+     },
+     Axis {
+         name: "emptyloop",
+diff --git a/rust/crates/rexx-bench/src/lib.rs b/rust/crates/rexx-bench/src/lib.rs
+index 3761d9690..5cf60386c 100644
+--- a/rust/crates/rexx-bench/src/lib.rs
++++ b/rust/crates/rexx-bench/src/lib.rs
+@@ -57,20 +57,23 @@ pub static PROGRAMS: &[&str] = &[
+     // change to how output reaches its destination is visible to the suite at
+     // all. Measured, `emptyloop` says once after its
+     // loop and `rexxcps`' in-loop says are guards a passing run never takes.
+     "sayloop",
+     "nop",
+     "assign",
+     "fibcall",
+     "fibfunc",
+     "sendloop",
+     "extcall",
++    // Added in Phase 6.1: the store-backed read of a Directory entry and a
++    // `.local` entry, the path whose cost Task 7 measured.
++    "dirread",
+ ];
+ 
+ /// Programs in `bench-programs/` that the criterion harness deliberately does
+ /// not benchmark.
+ pub static NOT_BENCHMARKED: &[&str] = &["heapshape"];
+ 
+ /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
+ /// search path the same way `rexx-diff` does (`rexx-oracle/src/bin/rexx-diff.rs`):
+ /// the binary's own directory, plus a sibling `lib/`, which is where
+ /// `build/bin/rexx` finds `build/lib/*.so`.
+diff --git a/rust/crates/rexx-core/src/body.rs b/rust/crates/rexx-core/src/body.rs
+index d66ab4f82..882d6a7c8 100644
+--- a/rust/crates/rexx-core/src/body.rs
++++ b/rust/crates/rexx-core/src/body.rs
+@@ -1022,21 +1022,21 @@ impl Body {
+             own: None,
+             native: Some(Box::new(NativeState::Pointer(address))),
+         }
+     }
+ 
+     /// The bytes this body holds in an allocation of its own: a `Text`'s
+     /// bytes when they do not fit inline, an `Array`'s slot capacity, and a
+     /// `MutableBuffer`'s capacity. Nothing for every other body.
+     pub fn held_bytes(&self) -> usize {
+         match self {
+-            Body::Text { bytes, .. } if !bytes.is_inline() => bytes.as_slice().len(),
++            Body::Text { bytes, .. } => bytes.heap_len(),
+             Body::Array { slots, .. } => slots.capacity() * SLOT_BYTES,
+             Body::Instance {
+                 native: Some(native),
+                 ..
+             } => match &**native {
+                 NativeState::Buffer(state) => state.capacity,
+                 _ => 0,
+             },
+             _ => 0,
+         }
+diff --git a/rust/crates/rexx-core/src/bytes.rs b/rust/crates/rexx-core/src/bytes.rs
+index 36787ec62..5c36955dc 100644
+--- a/rust/crates/rexx-core/src/bytes.rs
++++ b/rust/crates/rexx-core/src/bytes.rs
+@@ -94,20 +94,30 @@ impl Bytes {
+                 // the assertion above holds it inside the array on every debug
+                 // run of the suite. Nothing between construction and here can
+                 // shorten the array or lengthen `len`: `Repr` is private to
+                 // this file and neither field is written anywhere else.
+                 unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), len) }
+             }
+             Repr::Heap(v) => v,
+         }
+     }
+ 
++    /// The length of the separate allocation these bytes are held in, or 0
++    /// when they are held inline.
++    #[inline]
++    pub fn heap_len(&self) -> usize {
++        match &self.0 {
++            Repr::Inline { .. } => 0,
++            Repr::Heap(v) => v.len(),
++        }
++    }
++
+     /// Whether these bytes are held inline rather than in a separate
+     /// allocation.
+     pub fn is_inline(&self) -> bool {
+         matches!(self.0, Repr::Inline { .. })
+     }
+ }
+ 
+ impl Deref for Bytes {
+     type Target = [u8];
+ 
+diff --git a/rust/crates/rexx-core/src/heap.rs b/rust/crates/rexx-core/src/heap.rs
+index cbe8fa728..6d8e0c839 100644
+--- a/rust/crates/rexx-core/src/heap.rs
++++ b/rust/crates/rexx-core/src/heap.rs
+@@ -327,26 +327,27 @@ impl Heap {
+         let mut freed_bytes = 0;
+         let mut freed_classes = Vec::new();
+         for slot in 0..self.slots.len() {
+             if self.marks[slot] {
+                 continue;
+             }
+             let Slot::Live { object, generation } = &self.slots[slot] else {
+                 continue;
+             };
+             let generation = *generation;
+-            freed_bytes += object.body.held_bytes();
+-            // Reported so the caller can drop the rows it keys by this class.
+-            // The handle is still the live one here; after the assignment
+-            // below its generation has moved on and it would name nothing.
+-            if matches!(object.body, Body::Class { .. }) {
+-                freed_classes.push(ObjRef::heap(slot as u32, generation));
++            match &object.body {
++                // Reported so the caller can drop the rows it keys by this
++                // class. The handle is still the live one here; after the
++                // assignment below its generation has moved on and it would
++                // name nothing.
++                Body::Class { .. } => freed_classes.push(ObjRef::heap(slot as u32, generation)),
++                body => freed_bytes += body.held_bytes(),
+             }
+             swept += 1;
+             self.live -= 1;
+             // A slot whose generation would overflow is retired, not reused:
+             // wrapping would let a stale handle alias a live object again,
+             // which is the whole reason the generation exists.
+             self.slots[slot] = match generation.checked_add(1) {
+                 Some(next) if next <= crate::GENERATION_MAX => {
+                     let free = Slot::Free {
+                         next: self.free_head,
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil.rs b/rust/crates/rexx-exec/src/builtin/rexxutil.rs
+index b847abf65..7cfba2b58 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil.rs
+@@ -154,22 +154,29 @@ pub(crate) fn mk_dir(
+         Err(errno) => i64::from(errno.raw_os_error()),
+     };
+     Ok(answer(interp, code))
+ }
+ 
+ /// The upper bound `SysSleep` enforces, on every platform -- the C++ holds
+ /// this one number and the Unix documentation's `999999999` corresponds to
+ /// nothing it checks.
+ const SLEEP_MAXIMUM: f64 = 2_147_483.0;
+ 
+-/// `SysSleep(seconds)`: parks the running activity until the delay has
+-/// passed, fractional seconds accepted.
++/// The shortest sleep: one microsecond, `TIME`'s resolution. The oracle's
++/// sleep is a `nanosleep` call even for a zero delay
++/// (`SysThread::longSleep`, `common/platform/unix/SysThread.cpp:191`), and
++/// `TIME('E')` after it read 0 in none of 2000 passes for a delay of 0 or
++/// 0.00000001.
++const SLEEP_FLOOR: std::time::Duration = std::time::Duration::from_micros(1);
++
++/// `SysSleep(seconds)`: parks the running activity until the delay, at least
++/// [`SLEEP_FLOOR`], has passed, fractional seconds accepted.
+ pub(crate) fn sleep(
+     interp: &mut Interp,
+     _name: &'static [u8],
+     args: &[Option<ObjRef>],
+ ) -> Result<ObjRef, Failure> {
+     if args.len() > 1 {
+         return Err(Raised::too_many_internal_arguments(1).into());
+     }
+     let Some(Some(value)) = args.first().copied() else {
+         return Err(Raised::missing_internal_argument("1").into());
+@@ -177,21 +184,21 @@ pub(crate) fn sleep(
+     let text = interp.to_text(value).into_owned();
+     let Ok(seconds) = String::from_utf8_lossy(&text).trim().parse::<f64>() else {
+         return Err(Raised::native_argument_not_a_number("delay", &text).into());
+     };
+     if !(0.0..=SLEEP_MAXIMUM).contains(&seconds) {
+         return Err(
+             Raised::native_argument_out_of_range("delay", 0, SLEEP_MAXIMUM as i64, &text).into(),
+         );
+     }
+     park_point!(interp, crate::pinning::ParkKind::SysSleep);
+-    let deadline = interp.now() + std::time::Duration::from_secs_f64(seconds);
++    let deadline = interp.now() + std::time::Duration::from_secs_f64(seconds).max(SLEEP_FLOOR);
+     let done = answer(interp, 0);
+     interp.park_routine_with(
+         crate::scheduler::ParkReason::Sleep { deadline },
+         |interp, done| {
+             interp.activity.asleep = None;
+             if std::mem::take(&mut interp.activity.woken_by_halt) {
+                 return Ok(Some(answer(interp, EINTR)));
+             }
+             Ok(Some(done))
+         },
+diff --git a/rust/crates/rexx-exec/src/sim/tests.rs b/rust/crates/rexx-exec/src/sim/tests.rs
+index 0b3a2c78b..25339ecef 100644
+--- a/rust/crates/rexx-exec/src/sim/tests.rs
++++ b/rust/crates/rexx-exec/src/sim/tests.rs
+@@ -814,10 +814,32 @@ fn each_invariant_is_refused_where_a_switch_finds_it_broken() {
+         assert_eq!(sound.exit_code, 0, "{corruption:?}: {}", stderr(&sound));
+         assert_eq!(stdout(&sound), answer, "{corruption:?}");
+         let broken = corrupted(source, "sim:1", Some(corruption));
+         assert_eq!(
+             (broken.exit_code, stderr(&broken)),
+             (120, format!("rexx-exec: the scheduler found {expected}\n")),
+             "{corruption:?}"
+         );
+     }
+ }
++
++/// `TIME('E')` after `SysSleep` is never 0, whatever the delay: on the
++/// virtual clock a sleep shorter than a microsecond would otherwise end
++/// inside the microsecond `TIME` read. The oracle read 0 in none of 2000
++/// passes for a delay of 0 or 0.00000001.
++#[test]
++fn time_e_after_any_sleep_is_never_zero() {
++    let program = "do d over 0, 0.0, 0.00000001, 0.000001\n\
++                   call time 'R'\n\
++                   call SysSleep d\n\
++                   say d (time('E') > 0)\n\
++                   end\n";
++    for seed in 1..=20 {
++        let outcome = run_in(program, Some(sim(&format!("sim:{seed},fifo"))));
++        assert_eq!(outcome.exit_code, 0, "seed {seed}: {}", stderr(&outcome));
++        assert_eq!(
++            stdout(&outcome),
++            "0 1\n0.0 1\n0.00000001 1\n0.000001 1\n",
++            "seed {seed}"
++        );
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/trace.rs b/rust/crates/rexx-exec/src/trace.rs
+index bddc3a9f8..6218b83a5 100644
+--- a/rust/crates/rexx-exec/src/trace.rs
++++ b/rust/crates/rexx-exec/src/trace.rs
+@@ -75,24 +75,31 @@ impl Interp {
+     /// line typed at an interactive-debug pause runs.
+     ///
+     /// **`RexxActivation::noTracing` includes `debugPause`**, and answering
+     /// an off setting here reaches every gate at once: nothing echoes, a
+     /// chunk compiled during the pause carries no trace op, and one compiled
+     /// earlier is stale and falls back to the run-time gate. The program's
+     /// own setting -- what `TRACE()` answers and what a `TRACE` instruction
+     /// merges into -- is [`Interp::trace_mode`] and is untouched.
+     #[inline(always)]
+     pub(crate) fn traced_mode(&self) -> TraceMode {
+-        if self.debug_pause() {
+-            return TraceMode::OFF;
+-        }
+-        self.trace_mode()
++        let traced = self.activity.trace_cache.traced();
++        debug_assert_eq!(
++            traced,
++            if self.debug_pause() {
++                TraceMode::OFF
++            } else {
++                self.trace_mode()
++            },
++            "the cached traced setting is not the running activation's"
++        );
++        traced
+     }
+ 
+     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
+     /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
+     /// `WHEN`/`OTHERWISE` header (see `run/loops.rs`'s own doc comments on those
+     /// call sites for why a `DO`/`LOOP` needs a second echo and nothing else
+     /// built so far does). A label cannot appear at any of them -- one
+     /// inside a `DO` block is error 47.2 at parse time, measured.
+     pub(crate) fn trace_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
+         self.trace_stepped_clause(false, false, line, indent, text);
+diff --git a/rust/crates/rexx-exec/src/trace/format.rs b/rust/crates/rexx-exec/src/trace/format.rs
+index 0fe6c4fcf..e7208556f 100644
+--- a/rust/crates/rexx-exec/src/trace/format.rs
++++ b/rust/crates/rexx-exec/src/trace/format.rs
+@@ -264,43 +264,56 @@ impl ChunkTrace {
+     pub(crate) fn echoes(self, is_label: bool, is_command: bool) -> bool {
+         self.0 & ChunkTrace::CLAUSES != 0
+             || (self.0 & ChunkTrace::LABELS != 0 && is_label)
+             || (self.0 & ChunkTrace::COMMANDS != 0 && is_command)
+     }
+ 
+     /// [`ChunkTrace::of`] applied to [`TraceMode::OFF`]: no bit set.
+     pub(crate) const OFF: ChunkTrace = ChunkTrace(0);
+ }
+ 
+-/// A [`TraceMode`] beside the [`ChunkTrace`] the trace sink obeys under it --
+-/// its packing, or [`ChunkTrace::OFF`] while a debug pause runs -- so that
+-/// both are paid where the setting or the pause changes rather than at every
+-/// clause that reads them.
++/// A [`TraceMode`], whether a line typed at a debug pause runs, and the
++/// [`ChunkTrace`] the trace sink obeys under them -- the mode's packing, or
++/// [`ChunkTrace::OFF`] while the pause runs -- so that all are paid where the
++/// setting or the pause changes rather than at every clause that reads them.
+ ///
+ /// **The byte cannot drift from the mode**: [`TraceCache::of`] is the only way
+ /// to build one, and it derives the byte.
+ #[derive(Copy, Clone, Debug)]
+ pub(crate) struct TraceCache {
+     mode: TraceMode,
+     chunk: ChunkTrace,
++    paused: bool,
+ }
+ 
+ impl TraceCache {
+     #[inline(always)]
+     pub(crate) fn of(mode: TraceMode, paused: bool) -> TraceCache {
+         TraceCache {
+             mode,
+             chunk: if paused {
+                 ChunkTrace::OFF
+             } else {
+                 ChunkTrace::of(mode)
+             },
++            paused,
++        }
++    }
++
++    /// The setting the trace sink obeys: [`TraceMode::OFF`] while a line
++    /// typed at a debug pause runs, else [`TraceCache::mode`].
++    #[inline(always)]
++    pub(crate) fn traced(self) -> TraceMode {
++        if self.paused {
++            TraceMode::OFF
++        } else {
++            self.mode
+         }
+     }
+ 
+     #[inline(always)]
+     pub(crate) fn mode(self) -> TraceMode {
+         self.mode
+     }
+ 
+     #[inline(always)]
+     pub(crate) fn chunk(self) -> ChunkTrace {
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 1e32d4c28..c5aed3afd 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -1881,38 +1881,45 @@ mod group_runs {
+                 .find(|row| row.test.eq_ignore_ascii_case(test))
+                 .unwrap_or_else(|| panic!("{test} is listed"));
+             assert!(
+                 matches!(row.outcome, Outcome::Pass),
+                 "{test} is {}",
+                 row.outcome.label()
+             );
+         }
+     }
+ 
+-    /// The GUARD group's tests that pass, `TEST_WAIT_MULTIPLE` and the other
+-    /// `WHEN` waits among them. The rest are refused: a translation error
+-    /// inside the test's own `INTERPRET`.
++    /// The GUARD group's tests that pass: every test of the group.
+     const GUARD_PASSING: &[&str] = &[
++        "TEST_INVALID_OPTION_ONOFF",
++        "TEST_INVALID_OPTION_ONOFF_WHEN",
++        "TEST_INVALID_OPTION_WHEN",
++        "TEST_NO_OPTION",
+         "TEST_OFF",
+         "TEST_ON",
+         "TEST_ON_DEFAULT",
+         "TEST_ON_OFF",
+         "TEST_ON_OFF_CONSECUTIVE",
+         "TEST_UNGUARDED",
+         "TEST_WAIT_MULTIPLE",
+         "TEST_WAIT_SIMPLE",
+         "TEST_WAIT_SIMPLE_TRIGGER",
++        "TEST_WHEN_EXPRESSION_COMPOUND",
++        "TEST_WHEN_EXPRESSION_CONSTANT",
++        "TEST_WHEN_EXPRESSION_REFERENCE",
++        "TEST_WHEN_EXPRESSION_SELF",
+         "TEST_WHEN_MULTIPLE_NO_WAIT",
+         "TEST_WHEN_NOT_BOOLEAN",
+         "TEST_WHEN_NOVALUE",
+         "TEST_WHEN_SINGLE_NO_WAIT",
+         "TEST_WHEN_SINGLE_UNINITIALIZED_NO_WAIT",
++        "TEST_WHEN_USE_LOCAL",
+         "TEST_WHEN_USE_LOCAL_NO_WAIT",
+     ];
+ 
+     /// [`GUARD_PASSING`] with the shipped scheduler and with a switch at every
+     /// opportunity, and every other test refused.
+     #[test]
+     fn the_outcome_table_of_the_guard_group_in_both_modes() {
+         if !gate_mode() {
+             eprintln!("group_runs: skipped without {GATE_ENV}");
+             return;
+@@ -4421,29 +4428,27 @@ mod group_runs {
+             /// build's profile, named by the unit alone: a program may read its
+             /// own path, so a replay from the same target directory runs where
+             /// the gate ran.
+             fn unit_dir(name: &str, unit: &Unit) -> PathBuf {
+                 PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                     .join(format!("{name}-{}", profile()))
+                     .join(format!("{:016x}", fnv(unit.name().as_bytes())))
+                     .join("run")
+             }
+ 
+-            /// Removes the item directory a [`scratch`] directory `dir` is in,
+-            /// and the run's directory once it is empty.
++            /// Removes the item directory a [`scratch`] directory `dir` is in.
+             fn remove(dir: &Path) {
+                 let item = dir.parent().expect("an item directory");
+                 if item.exists() {
+                     std::fs::remove_dir_all(item).expect("cannot remove a run");
+                 }
+-                // Fails while another item of the run is still there.
+-                let _ = std::fs::remove_dir(item.parent().expect("a run directory"));
++                // The shared run directory stays: removing it races another job's create_dir_all.
+             }
+ 
+             /// What one unit found.
+             struct Found {
+                 key: String,
+                 sim: String,
+                 took: Duration,
+                 reds: Vec<Red>,
+                 /// `None` where not compared, else the oracle outcome it
+                 /// matches, by number.
+@@ -4623,23 +4628,22 @@ mod group_runs {
+             /// Step 4's self-test: each row with debug seeds, seed 0 under
+             /// `pre:2`, run twice, each in a process of its own, gives one
+             /// trace hash and one outcome.
+             #[test]
+             fn a_seeded_run_repeats_in_a_fresh_process() {
+                 if !gate_mode() {
+                     eprintln!("sim_gate: skipped without {GATE_ENV}");
+                     return;
+                 }
+                 let derived = derived_tests();
+-                let sample: Vec<Unit> = read_table()
++                let sample: Vec<Unit> = self_test_rows(read_table())
+                     .into_iter()
+-                    .filter(|row| row.debug_seeds > 0)
+                     .map(|row| Unit {
+                         seed: seed(&row.group, &row.part, 0),
+                         policy: with_k("pre:2", row.k),
+                         row,
+                     })
+                     .collect();
+                 assert!(!sample.is_empty(), "no row has debug seeds");
+                 let pairs = in_jobs(&sample, |_, unit| {
+                     [0, 1].map(|_| {
+                         let dir = unit_dir("sim-self", unit);
+@@ -4673,20 +4677,52 @@ mod group_runs {
+                             unit.name(),
+                             outcome_key(&unit.row, &compared(&first.run)),
+                             outcome_key(&unit.row, &compared(&second.run)),
+                             unit.replay()
+                         ));
+                     }
+                 }
+                 assert!(broken.is_empty(), "{}", broken.join("\n"));
+             }
+ 
++            /// The rows the determinism self-test runs: those with debug seeds
++            /// whose virtual time does not start at the wall clock.
++            fn self_test_rows(rows: Vec<Row>) -> Vec<Row> {
++                rows.into_iter()
++                    .filter(|row| row.debug_seeds > 0)
++                    // Ruling R6: a clock=real row reads the wall clock, so two processes need not agree.
++                    .filter(|row| !row.real_clock())
++                    .collect()
++            }
++
++            /// The self-test leaves out every `clock=real` row of the committed
++            /// table, and the table has one it would otherwise pick.
++            #[test]
++            fn the_self_test_runs_only_virtual_clock_rows() {
++                let rows = read_table();
++                assert!(
++                    rows.iter()
++                        .any(|row| row.debug_seeds > 0 && row.real_clock()),
++                    "no clock=real row has debug seeds, so the filter is not exercised"
++                );
++                let picked = self_test_rows(rows);
++                assert!(!picked.is_empty(), "the self-test picks no row");
++                for row in &picked {
++                    assert!(
++                        !row.real_clock(),
++                        "{} {} reads the wall clock",
++                        row.group,
++                        row.part
++                    );
++                }
++            }
++
+             /// Under [`REFRESH_ENV`], runs each row's oracle 5 times, 30 where
+             /// its outcomes vary or none is the outcome of seed 0 here under
+             /// `fifo`, and adds what it saw to the row's committed set.
+             #[test]
+             fn the_oracle_sets_grow_only_under_refresh() {
+                 if !gate_mode() || std::env::var(REFRESH_ENV).as_deref() != Ok("1") {
+                     eprintln!("sim_gate: oracle sets not refreshed without {REFRESH_ENV}=1");
+                     return;
+                 }
+                 let oracle = oracle::locate();
