@@ -280,8 +280,6 @@ Pointers are `progress.md` line numbers (`l.N`) at `5c83d9250`, or files.
 * Resolved after this report: parse round 2 (`23d78ec1b`) sums survivor bytes in the mark loop instead of reading every freed body, and parse is +0.4824% Ir against base61 (`parse-round2-report.md`, gate record `## Parse round 2`). Criterion 7 holds.
 * emptyloop's wall clock is +4.6% in cycles at -0.63% instructions, and layout pads do not move it (Wall clock). Task 2 accepted it. Re-accept, or open an item.
 * The upstream candidates `2026-10-10-upstream-do-to-identity.md` and `2026-10-10-upstream-zero-pass-do-reexecute.md`: file them on SourceForge or not.
-* Mapping row 40: 10.x and 24.1 messages print `&n` at translation time. Ruling R3 keeps parse-error inserts out of 6.1, so no file was written. Say if you want one.
-* `phase-4-exclusions.txt`'s row "Method~new AND Routine~new REFUSE ANY THIRD ARGUMENT" (re-homed to Phase 9) is false at `6a87cd616`: `.Method~new('mm', 'return 43', .context~package)` answers `a Method` on both (`mnew3.rex`), since Task 11a Step 6 (`98caea3de`). Not edited here: the brief names no exclusions edit. Roadmap row 9 still lists it among the Phase 9 rows the grep finds.
 * `2026-10-10-oracle-judged-seeded-gate.md`: R1 frames the end state as a stand-alone crate; close the item as not wanted, or keep it.
 
 ### Rulings made on your behalf (controller)
