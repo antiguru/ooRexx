@@ -81,7 +81,7 @@ public:
 
     RexxObject *getValue();
     void        setValue(RexxObject *);
-    void        setValueRexx(RexxObject *);
+    RexxObject *setValueRexx(RexxObject *);
     RexxString *getName();
     bool        isStem();
     RexxVariable *getVariable() { return variable; }

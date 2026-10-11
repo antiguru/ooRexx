@@ -256,7 +256,7 @@ else                    end
 <varlistentry>
 <term>003</term>
 <listitem>
-<para>END corresponding to block on line <emphasis role="italic">symbol</emphasis> must not have a symbol following it because there is no LABEL or control variable; found "<emphasis role="italic">line_number</emphasis>".</para>
+<para>END corresponding to block on line <emphasis role="italic">line_number</emphasis> must not have a symbol following it because there is no LABEL or control variable; found "<emphasis role="italic">symbol</emphasis>".</para>
 </listitem>
 </varlistentry>
 <varlistentry>
@@ -280,7 +280,7 @@ else                    end
 <varlistentry>
 <term>007</term>
 <listitem>
-<para>END corresponding to SELECT on line <emphasis role="italic">symbol</emphasis> must not have a symbol following it because there is no LABEL; found "<emphasis role="italic">line_number</emphasis>".</para>
+<para>END corresponding to SELECT on line <emphasis role="italic">line_number</emphasis> must not have a symbol following it because there is no LABEL; found "<emphasis role="italic">symbol</emphasis>".</para>
 </listitem>
 </varlistentry>
 </variablelist>
@@ -292,8 +292,7 @@ else                    end
 </para>
 <para>The available stack space has been exhausted.
       This could be because of a looping INTERPRET instruction, such as:</para>
-<programlisting>
-line = 'INTERPRET line'
+<programlisting language="rexx">line = 'INTERPRET line'
 INTERPRET line
 </programlisting>
 <para>The INTERPRET instruction loops until all available stack space has been exhausted.
@@ -417,16 +416,14 @@ editbin rexx.exe /stack:100000000
 <emphasis role="bold">Explanation:</emphasis>
 </para>
 <para>Hexadecimal strings must not have leading or trailing whitespace characters and whitespace can only be embedded at byte boundaries.  Only the digits 0-9 and the letters a-f and A-F are allowed.  The following are valid hexadecimal strings: </para>
-<programlisting>
-'13'x
+<programlisting language="rexx">'13'x
 'A3C2 1c34'x
 '1de8'x
 </programlisting>
 <para>Binary strings must not have leading or trailing whitespace characters and whitespace can only be embedded at the boundaries of groups of four binary digits.
     Only the digits 0 and 1 are allowed.
     These are valid binary strings:</para>
-<programlisting>
-'1011'b
+<programlisting language="rexx">'1011'b
 '110 1101'b
 '101101 11010011'b
 </programlisting>
@@ -1391,7 +1388,7 @@ editbin rexx.exe /stack:100000000
 <varlistentry>
 <term>935</term>
 <listitem>
-<para>Subdirective NUMERIC must be followed by one of the keywords INHERIT or NOINHERIT; found "<emphasis role="italic">symbol</emphasis>".</para>
+<para>Subdirective NUMERIC must be followed by one of the keywords INHERIT or NOINHERIT; found "<emphasis role="italic">word</emphasis>".</para>
 </listitem>
 </varlistentry>
 </variablelist>
@@ -2102,8 +2099,7 @@ editbin rexx.exe /stack:100000000
 Say Enter A, B, or C
 </programlisting>
 <para>as follows:</para>
-<programlisting>
-Say 'Enter A, B, or C'
+<programlisting language="rexx">Say 'Enter A, B, or C'
 </programlisting>
 <para>The associated subcodes are: </para>
 <variablelist>

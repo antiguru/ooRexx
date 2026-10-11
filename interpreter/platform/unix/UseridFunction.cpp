@@ -61,7 +61,17 @@ RexxString *SystemInterpreter::getUserid()
     struct passwd *pstUsrDat;
 
     account_buffer[ACCOUNT_BUFFER_SIZE-1] = '\0'; /* Max delimiter            */
-    pstUsrDat = getpwuid(geteuid());
-    strncpy(account_buffer, pstUsrDat->pw_name, ACCOUNT_BUFFER_SIZE-1);
+    uid_t uid = geteuid();
+    pstUsrDat = getpwuid(uid);
+    // a uid without a passwd entry (e.g. a container run with --user 12345)
+    // has no name: use the number, as the rxapi service name does
+    if (pstUsrDat == NULL)
+    {
+        snprintf(account_buffer, ACCOUNT_BUFFER_SIZE, "%u", (unsigned int)uid);
+    }
+    else
+    {
+        strncpy(account_buffer, pstUsrDat->pw_name, ACCOUNT_BUFFER_SIZE-1);
+    }
     return new_string(account_buffer);
 }

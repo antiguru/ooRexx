@@ -3302,6 +3302,10 @@ void RexxActivation::loadLibrary(RexxString *target, RexxInstruction *instructio
 RexxObject * RexxActivation::internalCall(RexxString *name, RexxInstruction *target,
     RexxObject **arguments, size_t argcount, ProtectedObject &returnObject)
 {
+    // internal function calls (x = f(n)) do not go through CallInstruction,
+    // which checks the stack for CALL, so check here as well: unbounded
+    // recursion must end in Error 11, not in a crash
+    activity->checkStackSpace();
     // we need to set SIGL to the caller's line number
     size_t lineNum = current->getLineNumber();
     setLocalVariable(GlobalNames::SIGL, VARIABLE_SIGL, new_integer(lineNum));

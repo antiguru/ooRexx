@@ -3295,3 +3295,130 @@ XsltCheckDone:
   xmlQ = .Yaml~yamlToXml(wrapper, "xsd")
   self~assertTrue(xmlQ~pos("<sequence>") > 0, "Queue yamlToXml > has sequence")
   self~assertTrue(xmlQ~pos("first") > 0, "Queue yamlToXml > has first")
+
+/*========================================================================*/
+/* Group 51 — Line numbers of parse errors                                */
+/*                                                                        */
+/* The line reported is the line of the offending text.  Before the fix,  */
+/* most errors reported the NEXT line: they are raised after their line   */
+/* has been consumed.  Each case has a line before and a line after the  */
+/* offending one, so that an off-by-one in either direction shows.        */
+/*========================================================================*/
+::method "test51_ErrorLineNumbers"
+  nl = "0A"x
+  cases = .array~new
+  /* expected line, start of the message, YAML */
+  cases~append(.array~of(2, "Mapping value is not allowed", "a: 1" || nl || "k: A: B" || nl || "z: 3"))
+  cases~append(.array~of(3, "Mapping value is not allowed", "a: 1" || nl || "b:" || nl || "  k: A: B" || nl || "z: 3"))
+  cases~append(.array~of(2, "Unknown alias",                "a: 1" || nl || "k: *nope" || nl || "z: 3"))
+  cases~append(.array~of(3, "Unknown alias",                "s:" || nl || "  - x" || nl || "  - *nope" || nl || "z: 3"))
+  cases~append(.array~of(2, "Anchor cannot precede alias",  "a: 1" || nl || "k: &a *b" || nl || "z: 3"))
+  cases~append(.array~of(2, "Multiple anchors",             "a: 1" || nl || "k: &a &b v" || nl || "z: 3"))
+  cases~append(.array~of(2, "Invalid content after flow sequence", "a: 1" || nl || "k: [1] x" || nl || "z: 3"))
+  cases~append(.array~of(2, "Invalid content after flow mapping",  "a: 1" || nl || "k: {a: 1} x" || nl || "z: 3"))
+  cases~append(.array~of(3, "Invalid content after flow sequence", "s:" || nl || "  - x" || nl || "  - [1] x" || nl || "z: 3"))
+  cases~append(.array~of(2, "Invalid trailing content after quoted scalar", "a: 1" || nl || 'k: "a" x' || nl || "z: 3"))
+  cases~append(.array~of(2, "Invalid block scalar indicator", "a: 1" || nl || "k: |x" || nl || "z: 3"))
+  cases~append(.array~of(2, "Invalid escape sequence",      "a: 1" || nl || 'k: "\q"' || nl || "z: 3"))
+  cases~append(.array~of(2, "Invalid extra comma",          "a: 1" || nl || "k: [1,, 2]" || nl || "z: 3"))
+  cases~append(.array~of(2, "Missing comma between flow mapping entries", "a: 1" || nl || "k: {a: 1 b: 2}" || nl || "z: 3"))
+  cases~append(.array~of(3, "Flow sequence continuation line not indented enough", "a: 1" || nl || "k: [1, 2" || nl || "z: 3]"))
+  cases~append(.array~of(3, "Quoted string continuation line not indented enough", "a: 1" || nl || "k: 'abc" || nl || "z: 2'"))
+  cases~append(.array~of(2, "Unterminated flow sequence",   "a: 1" || nl || "k: [1, 2"))
+  cases~append(.array~of(2, "Unterminated flow mapping",    "a: 1" || nl || "k: {a: 1," || nl || "  b: 2"))
+  cases~append(.array~of(2, "Unterminated ' quoted string", "a: 1" || nl || "k: 'abc" || nl || "  def"))
+  cases~append(.array~of(3, "Tab character in indentation", "a: 1" || nl || "b:" || nl || "09"x"c: 1" || nl || "z: 3"))
+  cases~append(.array~of(3, "Leading all-space line has too many spaces", "a: 1" || nl || "k: |" || nl || "    " || nl || "  x" || nl || "z: 3"))
+  cases~append(.array~of(2, "Duplicate %YAML directive",    "%YAML 1.2" || nl || "%YAML 1.2" || nl || "---" || nl || "a: 1"))
+  do c over cases
+    parse value self~errorOf(c[3]) with line "|" msg
+    self~assertTrue(msg~startsWith(c[2]), "error raised:" c[2] "("msg")")
+    self~assertEquals(c[1], line, "line of:" c[2])
+  end
+
+  /* parseFrontMatter: lines of the whole document ("---" is line 1) */
+  fm = .array~of("---", "title: x", "k: A: B", "---", "# Text")
+  parse value self~errorOf(fm, .true) with line "|" msg
+  self~assertEquals(3, line, "front matter: line of the document")
+
+  /* The context line is the offending line too */
+  signal on syntax name ctx51
+  .Yaml~new~parseString("a: 1" || nl || "k: A: B" || nl || "z: 3")
+  ctx51:
+  self~assertEquals("  > k: A: B", condition("O")["ADDITIONAL"][2], "context line")
+
+/*========================================================================*/
+/* Group 52 — Reserved indicators cannot start a plain scalar             */
+/*                                                                        */
+/* c-directive (%) and c-reserved (@ `) (YAML 1.2 §7.3.3, ns-plain-first) */
+/* were only rejected where a scalar starts a line of its own; an inline  */
+/* value, a key or a sequence item was accepted as text.                  */
+/*========================================================================*/
+::method "test52_ReservedIndicators"
+  nl = "0A"x
+  do yaml over .array~of("k: @x", "k: `x", "k: %x", "@k: 1", "`k: 1", -
+                         "- @x", "s:" || nl || "  - `x", "- k: @x")
+    parse value self~errorOf(yaml) with line "|" msg
+    self~assertTrue(msg~startsWith("Reserved indicator"), "rejected:" yaml "("msg")")
+  end
+  /* Quoted, or not at the start, they are text */
+  doc = .Yaml~new~parseString('a: "@x"' || nl || "b: '`x'" || nl || "c: x@y" || nl || "d: 50%")
+  self~assertEquals("@x",  doc["a"], "quoted @")
+  self~assertEquals("`x",  doc["b"], "quoted `")
+  self~assertEquals("x@y", doc["c"], "@ inside")
+  self~assertEquals("50%", doc["d"], "% at the end")
+
+/*========================================================================*/
+/* Group 53 — "a: b: c" inside a sequence item                            */
+/*                                                                        */
+/* A nested implicit mapping on the line of its key (ZCZ6) was rejected   */
+/* in a block mapping but accepted in a compact one ("- a: b: c").        */
+/* Explicit entries ("- ? a: b" / ": c: d", Spec Example 8.19) are valid. */
+/*========================================================================*/
+::method "test53_CompactNestedMapping"
+  nl = "0A"x
+  parse value self~errorOf("- k: A: B") with line "|" msg
+  self~assertTrue(msg~startsWith("Mapping value is not allowed"), "first entry ("msg")")
+  parse value self~errorOf("- a: 1" || nl || "  k: A: B") with line "|" msg
+  self~assertTrue(msg~startsWith("Mapping value is not allowed"), "later entry ("msg")")
+  self~assertEquals(2, line, "later entry: its line")
+  doc = .Yaml~new~parseString("- sun: yellow" || nl || "- ? earth: blue" || nl || "  : moon: white")
+  self~assertEquals(2, doc~items, "Spec Example 8.19 still parses")
+
+/*========================================================================*/
+/* Group 54 — Undeclared tag handle                                       */
+/*                                                                        */
+/* With no %TAG directive at all, a named handle (!x!y) raised error 97.1 */
+/* (.nil does not understand "AT": Rexx "|" does not short-circuit)       */
+/* instead of the YamlError.                                              */
+/*========================================================================*/
+::method "test54_UndeclaredTagHandle"
+  nl = "0A"x
+  parse value self~errorOf("a: 1" || nl || "k: !x!y v") with line "|" msg
+  self~assertTrue(msg~startsWith("Undeclared tag handle '!x!'"), "YamlError ("msg")")
+  self~assertEquals(2, line, "its line")
+  doc = .Yaml~new~parseString("%TAG !x! tag:example.com,2026:" || nl || "---" || nl || "k: !x!y v")
+  self~assertEquals("v", doc["k"], "a declared handle is fine")
+
+/*------------------------------------------------------------------------*/
+/* errorOf — "line|message" of the YamlError the YAML raises              */
+/*------------------------------------------------------------------------*/
+::method errorOf
+  use strict arg yaml, frontMatter = .false
+  signal on syntax name raised
+  if frontMatter then .Yaml~new~parseFrontMatter(yaml)
+  else                .Yaml~new~parseString(yaml)
+  return "0|(no error)"
+  raised:
+  co = condition("O")
+  text = co["ADDITIONAL"]
+  if text~isA(.array) then text = text[1]
+  if \text~isA(.string) then return "0|"co["CODE"] co["MESSAGE"]
+  parse var text "YamlError: " msg
+  line = 0
+  at = msg~lastPos(" (line ")
+  if at > 0 then do
+    line = msg~substr(at + 7)~strip("T", ")")
+    msg  = msg~left(at - 1)
+  end
+  return line"|"msg

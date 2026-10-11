@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2024 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -41,6 +41,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
+#include <limits>
 
 // the base time used for Time('T');
 RexxDateTime RexxDateTime::unixBaseTime(1970, 1, 1);
@@ -235,7 +236,7 @@ int64_t RexxDateTime::getBaseTime()
  */
 int64_t RexxDateTime::getUTCBaseTime()
 {
-    return getBaseTime() + timeZoneOffset;
+    return getBaseTime() - timeZoneOffset;
 }
 
 
@@ -251,7 +252,15 @@ int64_t RexxDateTime::getUTCBaseTime()
 int64_t RexxDateTime::getUnixTime()
 {
     // subtract the baseline time and convert to seconds.
-    return (getBaseTime() - unixBaseTime.getBaseTime()) / (int64_t)MICROSECONDS;
+    int64_t microseconds = getBaseTime() - unixBaseTime.getBaseTime();
+    int64_t ticks = microseconds / MICROSECONDS;
+    // integer division truncates toward zero, which is up when negative
+    // correct this
+    if (microseconds % MICROSECONDS < 0)
+    {
+        --ticks;
+    }
+    return ticks;
 }
 
 
@@ -393,6 +402,11 @@ bool RexxDateTime::setBaseTime(int64_t basetime)
  */
 bool RexxDateTime::setUnixTime(int64_t basetime)
 {
+    // don't overflow int64_t with the multiplication
+    if (basetime < MIN_UNIX_SECONDS || basetime > MAX_UNIX_SECONDS)
+    {
+        return false;
+    }
     // calculate this as a base time value.
     int64_t adjustedTime = (basetime * (int64_t)MICROSECONDS) + unixBaseTime.getBaseTime();
     // set the value based on the adjustment.
@@ -531,15 +545,24 @@ const char *RexxDateTime::getMonthName()
  * Parse a date in 'N'ormal format into the timestamp.
  *
  * @param date   The string version of the date.
+ * @param dateLength
+ *               The length of the date buffer.
  * @param sep    The field separator character used in the date.  This argument
  *               can be NULL, which means use the default separator.
+ * @param sepLength
+ *               The length of the sep buffer.
  *
  * @return true if the date parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseNormalDate(const char *date, const char *sep)
+bool RexxDateTime::parseNormalDate(const char *date, size_t dateLength, const char *sep, size_t sepLength)
 {
-    return parseDateTimeFormat(date, "DD/MMM/YYYY", sep == NULL ? " " : sep, 0);
-
+    if (sep == NULL)
+    {
+        sep = " ";
+        sepLength = 1;
+    }
+    return parseDateTimeFormat(date, dateLength, "DD/MMM/YYYY", sizeof("DD/MMM/YYYY") - 1,
+        sep, sepLength, 0);
 }
 
 
@@ -547,14 +570,24 @@ bool RexxDateTime::parseNormalDate(const char *date, const char *sep)
  * Parse a date in 'I'SO 8601 format into the timestamp.
  *
  * @param date   The string version of the date.
+ * @param dateLength
+ *               The length of the date buffer.
  * @param sep    The field separator character used in the date.  This argument
  *               can be NULL, which means use the default separator.
+ * @param sepLength
+ *               The length of the sep buffer.
  *
  * @return true if the date parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseISODate(const char *date, const char *sep)
+bool RexxDateTime::parseISODate(const char *date, size_t dateLength, const char *sep, size_t sepLength)
 {
-    return parseDateTimeFormat(date, "YYYY/mm/dd", sep == NULL ? "-" : sep, 0);
+    if (sep == NULL)
+    {
+        sep = "-";
+        sepLength = 1;
+    }
+    return parseDateTimeFormat(date, dateLength, "YYYY/mm/dd", sizeof("YYYY/mm/dd") - 1,
+        sep, sepLength, 0);
 }
 
 
@@ -562,14 +595,24 @@ bool RexxDateTime::parseISODate(const char *date, const char *sep)
  * Parse a date in 'S'tandard format into the timestamp.
  *
  * @param date   The string version of the date.
+ * @param dateLength
+ *               The length of the date buffer.
  * @param sep    The field separator character used in the date.  This argument
  *               can be NULL, which means use the default separator.
+ * @param sepLength
+ *               The length of the sep buffer.
  *
  * @return true if the date parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseStandardDate(const char *date, const char *sep)
+bool RexxDateTime::parseStandardDate(const char *date, size_t dateLength, const char *sep, size_t sepLength)
 {
-    return parseDateTimeFormat(date, "YYYY/mm/dd", sep == NULL ? "" : sep, 0);
+    if (sep == NULL)
+    {
+        sep = "";
+        sepLength = 0;
+    }
+    return parseDateTimeFormat(date, dateLength, "YYYY/mm/dd", sizeof("YYYY/mm/dd") - 1,
+        sep, sepLength, 0);
 }
 
 
@@ -577,17 +620,27 @@ bool RexxDateTime::parseStandardDate(const char *date, const char *sep)
  * Parse a date in 'E'uropean format into the timestamp.
  *
  * @param date   The string version of the date.
+ * @param dateLength
+ *               The length of the date buffer.
  * @param sep    The field separator character used in the date.  This argument
  *               can be NULL, which means use the default separator.
+ * @param sepLength
+ *               The length of the sep buffer.
  * @param currentYear
  *               The current year used to fill in the centuries portion of the
  *               date.
  *
  * @return true if the date parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseEuropeanDate(const char *date, const char *sep, wholenumber_t currentYear)
+bool RexxDateTime::parseEuropeanDate(const char *date, size_t dateLength, const char *sep, size_t sepLength, wholenumber_t currentYear)
 {
-    return parseDateTimeFormat(date, "dd/mm/yy",  sep == NULL ? "/" : sep, currentYear);
+    if (sep == NULL)
+    {
+        sep = "/";
+        sepLength = 1;
+    }
+    return parseDateTimeFormat(date, dateLength, "dd/mm/yy", sizeof("dd/mm/yy") - 1,
+        sep, sepLength, currentYear);
 }
 
 
@@ -595,17 +648,27 @@ bool RexxDateTime::parseEuropeanDate(const char *date, const char *sep, wholenum
  * Parse a date in 'U'sa format into the timestamp.
  *
  * @param date   The string version of the date.
+ * @param dateLength
+ *               The length of the date buffer.
  * @param sep    The field separator character used in the date.  This argument
  *               can be NULL, which means use the default separator.
+ * @param sepLength
+ *               The length of the sep buffer.
  * @param currentYear
  *               The current year used to fill in the centuries portion of the
  *               date.
  *
  * @return true if the date parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseUsaDate(const char *date, const char *sep, wholenumber_t currentYear)
+bool RexxDateTime::parseUsaDate(const char *date, size_t dateLength, const char *sep, size_t sepLength, wholenumber_t currentYear)
 {
-    return parseDateTimeFormat(date, "mm/dd/yy", sep == NULL ? "/" : sep, currentYear);
+    if (sep == NULL)
+    {
+        sep = "/";
+        sepLength = 1;
+    }
+    return parseDateTimeFormat(date, dateLength, "mm/dd/yy", sizeof("mm/dd/yy") - 1,
+        sep, sepLength, currentYear);
 }
 
 
@@ -613,56 +676,72 @@ bool RexxDateTime::parseUsaDate(const char *date, const char *sep, wholenumber_t
  * Parse a date in 'O'rderd format into the timestamp.
  *
  * @param date   The string version of the date.
+ * @param dateLength
+ *               The length of the date buffer.
  * @param sep    The field separator character used in the date.  This argument
  *               can be NULL, which means use the default separator.
+ * @param sepLength
+ *               The length of the sep buffer.
  * @param currentYear
  *               The current year used to fill in the centuries portion of the
  *               date.
  *
  * @return true if the date parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseOrderedDate(const char *date, const char *sep, wholenumber_t currentYear)
+bool RexxDateTime::parseOrderedDate(const char *date, size_t dateLength, const char *sep, size_t sepLength, wholenumber_t currentYear)
 {
-    return parseDateTimeFormat(date, "yy/mm/dd", sep == NULL ? "/" : sep, currentYear);
+    if (sep == NULL)
+    {
+        sep = "/";
+        sepLength = 1;
+    }
+    return parseDateTimeFormat(date, dateLength, "yy/mm/dd", sizeof("yy/mm/dd") - 1,
+        sep, sepLength, currentYear);
 }
 
 
 /**
  * Parse a time in 'N'ormal format into the timestamp.
  *
- * @param date   The string version of the date.
+ * @param time   The string version of the time.
+ * @param timeLength
+ *               The length of the time buffer.
  *
- * @return true if the date parses correctly, false for any parsing errors.
+ * @return true if the time parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseNormalTime(const char *time)
+bool RexxDateTime::parseNormalTime(const char *time, size_t timeLength)
 {
-    return parseDateTimeFormat(time, "HH:ii:ss", "", 0);
+    return parseDateTimeFormat(time, timeLength, "HH:ii:ss", sizeof("HH:ii:ss") - 1, "", 0, 0);
 }
 
 
 /**
  * Parse a time in 'C'ivil format into the timestamp.
  *
- * @param date   The string version of the date.
+ * @param time   The string version of the time.
+ * @param timeLength
+ *               The length of the time buffer.
  *
- * @return true if the date parses correctly, false for any parsing errors.
+ * @return true if the time parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseCivilTime(const char *time)
+bool RexxDateTime::parseCivilTime(const char *time, size_t timeLength)
 {
-    return parseDateTimeFormat(time, "cc:iiCC", "", 0);
+    return parseDateTimeFormat(time, timeLength, "cc:iiCC", sizeof("cc:iiCC") - 1, "", 0, 0);
 }
 
 
 /**
  * Parse a time in 'L'ong format into the timestamp.
  *
- * @param date   The string version of the date.
+ * @param time   The string version of the time.
+ * @param timeLength
+ *               The length of the time buffer.
  *
- * @return true if the date parses correctly, false for any parsing errors.
+ * @return true if the time parses correctly, false for any parsing errors.
  */
-bool RexxDateTime::parseLongTime(const char *time)
+bool RexxDateTime::parseLongTime(const char *time, size_t timeLength)
 {
-    return parseDateTimeFormat(time, "HH:ii:ss.uuuuuu", "", 0);
+    return parseDateTimeFormat(time, timeLength, "HH:ii:ss.uuuuuu", sizeof("HH:ii:ss.uuuuuu") - 1, "", 0, 0);
 }
 
 
@@ -751,10 +830,26 @@ bool RexxDateTime::setMinutes(wholenumber_t m)
  */
 bool RexxDateTime::adjustTimeZone(int64_t o)
 {
-    // we set the time using a UTC time adjusted by the offset,
-    int64_t base = getUTCBaseTime();
-    setBaseTime(base - o);
-    // then set the offset afterward
+    // offset is local minus UTC
+    // first subtract the current offset, then add the requested offset
+    // also, check limits
+    int64_t base = getBaseTime();
+    const int64_t minimum = std::numeric_limits<int64_t>::min();
+    const int64_t maximum = std::numeric_limits<int64_t>::max();
+    if ((timeZoneOffset > 0 && base < minimum + timeZoneOffset) ||
+        (timeZoneOffset < 0 && base > maximum + timeZoneOffset))
+    {
+        return false;
+    }
+    int64_t utc = base - timeZoneOffset;
+    if ((o > 0 && utc > maximum - o) || (o < 0 && utc < minimum - o))
+    {
+        return false;
+    }
+    if (!setBaseTime(utc + o))
+    {
+        return false;
+    }
     timeZoneOffset = o;
     return true;
 }
@@ -795,28 +890,43 @@ bool RexxDateTime::adjustTimeZone(int64_t o)
  */
 bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, const char *sep, wholenumber_t currentYear)
 {
+    return parseDateTimeFormat(date, strlen(date), format, strlen(format), sep, strlen(sep), currentYear);
+}
+
+bool RexxDateTime::parseDateTimeFormat(const char *date, size_t datelength,
+    const char *format, size_t formatLength, const char *sep, size_t sepLength,
+    wholenumber_t currentYear)
+{
+    if (sepLength > 1)
+    {
+        return false;
+    }
     day = 1;                             // set some defaults for the date portion
     month = 1;
     year = 1;
     const char *inputscan = date;        // and get some scanning pointers
     const char *formatscan = format;
 
-    size_t datelength = strlen(date);
+    const char *inputEnd = date + datelength;
+    const char *formatEnd = format + formatLength;
     // because of possible 1- or 2-digits fields like DD or cc our format may be
     // of the same length or longer than the date, but never the other way round
-    if (strlen(format) < datelength)
+    if (formatLength < datelength)
     {
         return false;
     }
     // scan through this character-by-character, parsing out the pieces
-    while (*formatscan != '\0')
+    while (formatscan < formatEnd)
     {
+        size_t inputRemaining = inputEnd - inputscan;
+        size_t formatRemaining = formatEnd - formatscan;
         switch (*formatscan)
         {
             // month spec, which requires two digits
             case 'm':
                 // parse out the number version
-                if (!getNumber(inputscan, MONTH_SIZE, &month, MONTHS))
+                if (inputRemaining < MONTH_SIZE || formatRemaining < MONTH_SIZE ||
+                    !getNumber(inputscan, MONTH_SIZE, &month, MONTHS))
                 {
                     return false;
                 }
@@ -832,7 +942,8 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
             // day specifier, requires two digits
             case 'd':
                 // parse out the number version
-                if (!getNumber(inputscan, DAY_SIZE, &day))
+                if (inputRemaining < DAY_SIZE || formatRemaining < DAY_SIZE ||
+                    !getNumber(inputscan, DAY_SIZE, &day))
                 {
                     return false;
                 }
@@ -846,9 +957,13 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
                 {
                     // We accept 1 or 2 digits here, so check the second to see if
                     // it's a digit, which will determine our length to scan.
-                    int numberLength = 1;
+                    if (inputscan == inputEnd || formatRemaining < DAY_SIZE)
+                    {
+                        return false;
+                    }
+                    size_t numberLength = 1;
 
-                    if (Utilities::isDigit(*(inputscan + 1)))
+                    if (inputRemaining >= 2 && Utilities::isDigit(inputscan[1]))
                     {
                         numberLength = 2;
                     }
@@ -865,7 +980,8 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
             // 24 hours format field
             case 'H':
                 // parse out the number version
-                if (!getNumber(inputscan, HOURS_SIZE, &hours, MAXHOURS))
+                if (inputRemaining < HOURS_SIZE || formatRemaining < HOURS_SIZE ||
+                    !getNumber(inputscan, HOURS_SIZE, &hours, MAXHOURS))
                 {
                     return false;
                 }
@@ -876,7 +992,8 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
             // minutes field
             case 'i':
                 // parse out the number version
-                if (!getNumber(inputscan, MINUTES_SIZE, &minutes, MAXMINUTES))
+                if (inputRemaining < MINUTES_SIZE || formatRemaining < MINUTES_SIZE ||
+                    !getNumber(inputscan, MINUTES_SIZE, &minutes, MAXMINUTES))
                 {
                     return false;
                 }
@@ -887,7 +1004,8 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
             // seconds field
             case 's':
                 // parse out the number version
-                if (!getNumber(inputscan, SECONDS_SIZE, &seconds, MAXSECONDS))
+                if (inputRemaining < SECONDS_SIZE || formatRemaining < SECONDS_SIZE ||
+                    !getNumber(inputscan, SECONDS_SIZE, &seconds, MAXSECONDS))
                 {
                     return false;
                 }
@@ -897,28 +1015,33 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
 
             // microseconds in a long time
             case 'u':
+            {
                 // don't require all six digits of microseconds, but at least one
-                int microlength;
-                microlength = std::max(1, (int)(date + datelength - inputscan));
-                microlength = std::min(MICRO_SIZE, microlength);
+                if (inputscan == inputEnd || formatRemaining < MICRO_SIZE)
+                {
+                    return false;
+                }
+                size_t microlength = std::min<size_t>(MICRO_SIZE, inputRemaining);
                 // parse out the number version
                 if (!getNumber(inputscan, microlength, &microseconds))
                 {
                     return false;
                 }
                 // we may have parsed less than 6 digits .. adjust microseconds
-                for (; microlength < MICRO_SIZE; microlength++)
+                for (size_t digits = microlength; digits < MICRO_SIZE; digits++)
                 {
                     microseconds *= 10;
                 }
                 inputscan += microlength;     // step both pointers
                 formatscan += MICRO_SIZE;
                 break;
+            }
 
             // two digit year value
             case 'y':
                 // parse out the number version
-                if (!getNumber(inputscan, SHORT_YEAR, &year))
+                if (inputRemaining < SHORT_YEAR || formatRemaining < SHORT_YEAR ||
+                    !getNumber(inputscan, SHORT_YEAR, &year))
                 {
                     return false;
                 }
@@ -948,7 +1071,8 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
             // 4-digit year
             case 'Y':
                 // parse out the number version
-                if (!getNumber(inputscan, LONG_YEAR, &year))
+                if (inputRemaining < LONG_YEAR || formatRemaining < LONG_YEAR ||
+                    !getNumber(inputscan, LONG_YEAR, &year))
                 {
                     return false;
                 }
@@ -959,6 +1083,10 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
             // 3 character language form
             case 'M':
             {
+                if (inputRemaining < CHAR_MONTH || formatRemaining < CHAR_MONTH)
+                {
+                    return false;
+                }
                 month = 0;
                 // scan months table for a descriptive match
                 for (int i = 0; i < MONTHS; i++)
@@ -982,8 +1110,13 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
 
             // am/pm civil time modifier
             case 'C':
+                if (inputRemaining < MERIDIAN_SIZE ||
+                    formatRemaining < MERIDIAN_SIZE)
+                {
+                    return false;
+                }
                 // "am" time                         */
-                if (!memcmp(inputscan, ANTEMERIDIAN, strlen(ANTEMERIDIAN)))
+                if (!memcmp(inputscan, ANTEMERIDIAN, MERIDIAN_SIZE))
                 {
                     // for parsing purposes, 12:nn is really 00:nn
                     if (hours == 12)
@@ -992,7 +1125,7 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
                     }
                 }
                 // "pm"time
-                else if (!memcmp(inputscan, POSTMERIDIAN, strlen(POSTMERIDIAN)))
+                else if (!memcmp(inputscan, POSTMERIDIAN, MERIDIAN_SIZE))
                 {
                     // if 12 something, that's at the beginning of the period.
                     // otherwise, add 12 to convert to 24 hours time internally,
@@ -1006,8 +1139,8 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
                 {
                     return false;
                 }
-                inputscan += strlen(ANTEMERIDIAN);
-                formatscan += strlen(ANTEMERIDIAN);
+                inputscan += MERIDIAN_SIZE;
+                formatscan += MERIDIAN_SIZE;
                 break;
 
             // civil time hours spec, either one or two digits
@@ -1015,14 +1148,18 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
                 {
                     // We accept 1 or 2 digits here, so check the second to see if
                     // it's a digit, which will determine our length to scan.
-                    int numberLength = 1;
+                    if (inputscan == inputEnd || formatRemaining < HOURS_SIZE)
+                    {
+                        return false;
+                    }
+                    size_t numberLength = 1;
 
-                    if (Utilities::isDigit(*(inputscan +1)))
+                    if (inputRemaining >= 2 && Utilities::isDigit(inputscan[1]))
                     {
                         numberLength = 2;
                     }
                     // parse out the number version
-                    if (!getNumber(inputscan, numberLength, &hours, MAXCIVILHOURS))
+                    if (!getNumber(inputscan, numberLength, &hours, MAXCIVILHOURS) || hours == 0)
                     {
                         return false;
                     }
@@ -1033,7 +1170,7 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
 
             // a separator
             case '/':
-                if (*sep == '\0')
+                if (sepLength == 0)
                 {
                     // only increment the format...we're not expecting a character in the input
                     formatscan++;
@@ -1041,19 +1178,19 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
                 else
                 {
                     // the input must match the provided separator
-                    if (*inputscan != *sep)
+                    if (inputRemaining < sepLength || memcmp(inputscan, sep, sepLength) != 0)
                     {
                         return false;
                     }
                     formatscan++;
-                    inputscan++;
+                    inputscan += sepLength;
                 }
                 break;
 
             // time format separator characters...these are hard coded.
             case ':':
             case '.':
-                if (*inputscan != *formatscan)
+                if (inputscan == inputEnd || *inputscan != *formatscan)
                 {
                     return false;
                 }
@@ -1067,7 +1204,7 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
         }
     }
     // there must be no residual data left in our date
-    if (inputscan < date + datelength)
+    if (inputscan != inputEnd)
     {
         return false;
     }
@@ -1081,7 +1218,7 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
 
     // now validity check the day of the month is not greater than the max for that month.  This
     // will require a special leapyear check for February
-    if (month == FEBRUARY && isLeapYear())
+    if (month == 2 && isLeapYear())
     {
         if (day > LEAPMONTH)       // too many days?
         {
@@ -1109,7 +1246,7 @@ bool  RexxDateTime::parseDateTimeFormat(const char *date, const char *format, co
  *
  * @return true if the field is valid, false for any parsing error.
  */
-bool RexxDateTime::getNumber(const char *input, wholenumber_t length, int *target)
+bool RexxDateTime::getNumber(const char *input, size_t length, int *target)
 {
     wholenumber_t value = 0;                  // the default
     // process the specified number of digits
@@ -1146,7 +1283,7 @@ bool RexxDateTime::getNumber(const char *input, wholenumber_t length, int *targe
  * @return true if the number is valid, false for any parsing/validation
  *         errors.
  */
-bool RexxDateTime::getNumber(const char *input, wholenumber_t length, int *target, int max)
+bool RexxDateTime::getNumber(const char *input, size_t length, int *target, int max)
 {
     // if this scans correctly, validate the range
     if (getNumber(input, length, target))
@@ -1162,28 +1299,6 @@ bool RexxDateTime::getNumber(const char *input, wholenumber_t length, int *targe
 
 
 /**
- * Format a base time into human readable form.
- *
- * @param buffer The target buffer for the output.
- */
-void RexxDateTime::formatBaseTime(char *buffer)
-{
-    Numerics::formatInt64(getBaseTime(), (char *)buffer);
-}
-
-
-/**
- * Format a unix time into human readable form.
- *
- * @param buffer The target buffer for the output.
- */
-void RexxDateTime::formatUnixTime(char *buffer)
-{
-    Numerics::formatInt64(getUnixTime(), (char *)buffer);
-}
-
-
-/**
  * Format a date in 'E'uropean format.
  *
  * @param buffer The target buffer for the output.
@@ -1191,6 +1306,73 @@ void RexxDateTime::formatUnixTime(char *buffer)
  *               be NULL, in which case the default is used.  The string value
  *               can also be a null string ("").
  */
+/**
+ * Format a date with an explicitly sized separator, including a NUL byte.
+ * Return the number of bytes stored, excluding the final C terminator.
+ */
+size_t RexxDateTime::formatDate(char *buffer, size_t bufferSize, int style, const char *sep, size_t sepLength)
+{
+    if (bufferSize == 0)
+    {
+        return 0;
+    }
+    if (sep == NULL)
+    {
+        sep = style == 'N' ? " " : style == 'I' ? "-" : style == 'S' ? "" : "/";
+        sepLength = strlen(sep);
+    }
+
+    char first[16], second[16], third[16];
+    switch (style)
+    {
+        case 'E':
+            snprintf(first, sizeof(first), "%02d", day);
+            snprintf(second, sizeof(second), "%02d", month);
+            snprintf(third, sizeof(third), "%02d", year % 100);
+            break;
+        case 'U':
+            snprintf(first, sizeof(first), "%02d", month);
+            snprintf(second, sizeof(second), "%02d", day);
+            snprintf(third, sizeof(third), "%02d", year % 100);
+            break;
+        case 'O':
+            snprintf(first, sizeof(first), "%02d", year % 100);
+            snprintf(second, sizeof(second), "%02d", month);
+            snprintf(third, sizeof(third), "%02d", day);
+            break;
+        case 'N':
+            snprintf(first, sizeof(first), "%d", day);
+            snprintf(second, sizeof(second), "%3.3s", monthNames[month - 1]);
+            snprintf(third, sizeof(third), "%04d", year);
+            break;
+        case 'I':
+        case 'S':
+            snprintf(first, sizeof(first), "%04d", year);
+            snprintf(second, sizeof(second), "%02d", month);
+            snprintf(third, sizeof(third), "%02d", day);
+            break;
+        default:
+            buffer[0] = '\0';
+            return 0;
+    }
+
+    const char *parts[] = {first, sep, second, sep, third};
+    size_t lengths[] = {strlen(first), sepLength, strlen(second), sepLength, strlen(third)};
+    size_t written = 0;
+    for (size_t i = 0; i < sizeof(parts) / sizeof(parts[0]); ++i)
+    {
+        size_t length = std::min(lengths[i], bufferSize - written - 1);
+        if (length != 0)
+        {
+            memcpy(buffer + written, parts[i], length);
+            written += length;
+        }
+    }
+    buffer[written] = '\0';
+    return written;
+}
+
+
 void RexxDateTime::formatEuropeanDate(char *buffer, wholenumber_t bufferSize, const char *sep)
 {
     // make sure we have a valid delimiter
@@ -1340,16 +1522,4 @@ void RexxDateTime::formatLongTime(char *buffer, wholenumber_t bufferSize)
 void RexxDateTime::formatNormalTime(char *buffer, wholenumber_t bufferSize)
 {
     snprintf(buffer, bufferSize, "%2.2d:%2.2d:%2.2d", hours, minutes, seconds);
-}
-
-
-/**
- * Format a the time zone offset value
- *
- * @param buffer The target buffer for the output.
- */
-void RexxDateTime::formatTimeZone(char *buffer)
-{
-    // the time zone is a sized value
-    Numerics::formatInt64(timeZoneOffset, (char *)buffer);
 }

@@ -475,10 +475,12 @@
  *                          stored (the v8o behaviour).
  */
 ::method init
-  expose lines pos anchors anchorMap mergeSourceMap unescapeUnicode preserveTags directivesMap currentDirectives flowMinIndent
+  expose lines pos anchors anchorMap mergeSourceMap unescapeUnicode preserveTags directivesMap currentDirectives flowMinIndent curLine lineOffset
   use strict arg unescapeUnicode = .true, preserveTags = .false
+  lineOffset        = 0
   lines             = .array~new
   pos               = 1
+  curLine           = 0
   anchors           = .table~new
   anchorMap         = .identityTable~new
   mergeSourceMap    = .identityTable~new
@@ -571,17 +573,22 @@
 
 /** Extracts and parses the YAML front-matter block from a text that uses
  *  the <code>---</code> / <code>---</code> convention (e.g. Jekyll,
- *  Hugo, Markdown documents).
+ *  Hugo, Markdown documents).  The line numbers of parse errors are lines
+ *  of the whole <code>input</code>, where the opening <code>---</code> is
+ *  line 1.
  *
  *  @param input the full text containing front-matter
  *  @return the ooRexx object tree of the front-matter, or <code>.nil</code>
  *          if no front-matter block is found
  */
 ::method parseFrontMatter
+  expose lineOffset
   use strict arg input
   yamlLines = self~extractFM(input)
   if yamlLines == .nil then return .nil
-  return self~parseString(yamlLines)
+  self~loadInput(yamlLines)
+  lineOffset = 1                /* the opening "---" is line 1 */
+  return self~parseOneDoc
 
 /** Extracts and parses YAML front-matter from a file.
  *
@@ -824,7 +831,7 @@
  *  @param input a .String or .Array of lines to parse
  */
 ::method loadInput private
-  expose lines pos anchors anchorMap mergeSourceMap
+  expose lines pos anchors anchorMap mergeSourceMap curLine lineOffset
   use strict arg input
   select
     when input~isA(.array) then lines = input~copy
@@ -836,6 +843,8 @@
       raise syntax 93.900 additional("Input must be a String or Array")
   end
   pos            = 1
+  curLine        = 0
+  lineOffset     = 0
   anchors        = .table~new
   anchorMap      = .identityTable~new
   mergeSourceMap = .identityTable~new
@@ -931,7 +940,7 @@
          document-end marker (YAML 1.2, §9.2).  Without it, the
          directive is ambiguous — it could be scalar content. */
       if docs~items > 0 & \hadDocEnd then
-        self~raiseError("Missing document-end marker '...' before directive")
+        self~raiseError("Missing document-end marker '...' before directive", pos)
       self~skipBlanksOnly
       hasDocStart = .false
       if pos <= lines~items then do
@@ -946,7 +955,7 @@
            Otherwise, the "directive" might be scalar content that
            blockNode didn't consume — revert and stop parsing. */
         if docs~items == 0 then
-          self~raiseError("Directive without document start marker '---'")
+          self~raiseError("Directive without document start marker '---'", pos)
         else do
           pos = savedPos
           leave  /* stop multi-doc loop — remaining content is ambiguous */
@@ -967,7 +976,7 @@
         end
       end
       if \hasDocStart then
-        self~raiseError("Invalid trailing content after document:" lines[pos]~strip)
+        self~raiseError("Invalid trailing content after document:" lines[pos]~strip, pos)
     end
     docStartResidual = self~skipDocStart
     /* When --- has content on the same line (e.g. "--- >", "--- !tag"),
@@ -1027,7 +1036,7 @@
     end
     if stripped~left(6) == "%YAML " then do
       if yamlVersion \== .nil then
-        self~raiseError("Duplicate %YAML directive")
+        self~raiseError("Duplicate %YAML directive", pos)
       versionStr = stripped~substr(7)~strip
       /* Strip comment (must be preceded by space) */
       sp = versionStr~pos(" ")
@@ -1036,11 +1045,11 @@
         if after~left(1) == "#" then
           versionStr = versionStr~left(sp - 1)
         else
-          self~raiseError("Extra content on %YAML directive:" stripped)
+          self~raiseError("Extra content on %YAML directive:" stripped, pos)
       end
       /* Validate no '#' without preceding space */
       if versionStr~pos("#") > 0 then
-        self~raiseError("Invalid %YAML directive:" stripped)
+        self~raiseError("Invalid %YAML directive:" stripped, pos)
       yamlVersion = versionStr
       pos = pos + 1; iterate
     end
@@ -1103,7 +1112,7 @@
           return .true
         end
         else
-          self~raiseError("Invalid content after document end marker:" s)
+          self~raiseError("Invalid content after document end marker:" s, pos)
       end
       /* else: ...x style — not a doc-end marker, leave it */
     end
@@ -1126,7 +1135,7 @@
  *  @return the parsed node (.Table, .Array, scalar, or .nil)
  */
 ::method blockNode private
-  expose lines pos anchors anchorMap flowMinIndent
+  expose lines pos anchors anchorMap flowMinIndent curLine
   use strict arg minIndent, scalarParentIndent = (.nil)
 
   self~skipBlanks
@@ -1135,6 +1144,7 @@
   line    = lines[pos]
   indent  = self~indentOf(line)
   if indent < minIndent then return .nil
+  curLine = pos
   content = line~strip
 
   /* Anchor prefix */
@@ -1354,7 +1364,7 @@
  *  @return a .Table representing the mapping
  */
 ::method blockMap private
-  expose lines pos anchors anchorMap mergeSourceMap
+  expose lines pos anchors anchorMap mergeSourceMap curLine
   use strict arg blockIndent
 
   map    = .table~new
@@ -1367,6 +1377,7 @@
     line   = lines[pos]
     indent = self~indentOf(line)
     if indent \== blockIndent then leave
+    curLine = pos
     self~checkTabIndent(line)
 
     content = line~strip
@@ -1460,6 +1471,7 @@
         vLine   = lines[pos]
         vIndent = self~indentOf(vLine)
         vContent = vLine~strip
+        if vIndent == blockIndent, vContent~left(1) == ":" then curLine = pos
         /* Tab after ':' indicator is invalid */
         if vIndent == blockIndent, vContent~left(1) == ":", -
            vContent~length >= 2, vContent[2] == "09"x then
@@ -1507,6 +1519,7 @@
       else
         key = stripped
     end
+    self~checkPlainKey(key)
     key     = self~unquoteIfNeeded(key)
     /* Resolve alias keys: *name → anchored value */
     if key~left(1) == "*" then
@@ -1519,14 +1532,7 @@
        start a nested mapping, which is not allowed on the same line
        as the parent key.  Only applies to plain scalar values — skip
        anchors, aliases, tags, quoted strings, and flow collections. */
-    if valPart \== "" then do
-      vpc = valPart~left(1)
-      if vpc \== "&", vpc \== "*", vpc \== "!", vpc \== "'", vpc \== '"', -
-         vpc \== "[", vpc \== "{" then do
-        if self~findMapColon(valPart) > 0 then
-          self~raiseError("Mapping value is not allowed in this context:" valPart)
-      end
-    end
+    self~checkNoNestedMapping(valPart)
 
     value   = self~mapValue(valPart, indent)
 
@@ -1575,7 +1581,7 @@
  *  @return the parsed value node
  */
 ::method mapValue private
-  expose lines pos anchors anchorMap preserveTags flowMinIndent
+  expose lines pos anchors anchorMap preserveTags flowMinIndent curLine
   use strict arg valPart, parentIndent, allowInlineSeq = .false
 
   /* Tag prefix — strip and resolve */
@@ -1620,6 +1626,7 @@
         if aRest == "" | aRest~left(1) == "#" then do
           valAnchor = aTag~substr(2)
           anchors[valAnchor] = .nil
+          curLine = pos
           pos = pos + 1
           self~skipBlanks
           if pos > lines~items then do
@@ -1776,6 +1783,7 @@
   end
 
   /* Plain scalar — may have multiline continuation */
+  self~checkPlainFirst(valPart)
   parts = .array~new
   stripped = self~stripComment(valPart)
   parts~append(stripped)
@@ -1804,7 +1812,7 @@
  *  @return an .Array of sequence items
  */
 ::method blockSeq private
-  expose lines pos anchors anchorMap flowMinIndent
+  expose lines pos anchors anchorMap flowMinIndent curLine
   use strict arg blockIndent
 
   arr = .array~new
@@ -1816,6 +1824,7 @@
     line   = lines[pos]
     indent = self~indentOf(line)
     if indent \== blockIndent then leave
+    curLine = pos
     self~checkTabIndent(line)
 
     content = line~strip
@@ -1985,6 +1994,7 @@
           end
         end
         else do
+          self~checkPlainFirst(afterDash)
           parts = .array~new
           stripped = self~stripComment(afterDash)
           parts~append(stripped)
@@ -2010,7 +2020,7 @@
  *  @return a .Table representing the compact mapping
  */
 ::method compactMap private
-  expose lines pos
+  expose lines pos curLine
   use strict arg firstLine, virtualIndent
 
   map = .table~new
@@ -2018,6 +2028,12 @@
   colonPos = self~findMapColon(firstLine)
   key     = self~unquoteIfNeeded(firstLine~left(colonPos - 1)~strip)
   valPart = firstLine~substr(colonPos + 1)~strip
+  /* "? key" and ": value" are explicit entries: a compact mapping may
+     follow them on the same line (Spec Example 8.19, V9D5) */
+  if firstLine~left(1) \== "?" then do
+    self~checkPlainKey(key)
+    self~checkNoNestedMapping(valPart)
+  end
   map[key] = self~mapValue(valPart, virtualIndent - 2)
 
   do while pos <= lines~items
@@ -2029,8 +2045,13 @@
     content = line~strip
     colonPos = self~findMapColon(content)
     if colonPos = 0 then leave
+    curLine = pos
     key     = self~unquoteIfNeeded(content~left(colonPos - 1)~strip)
     valPart = content~substr(colonPos + 1)~strip
+    if content~left(1) \== "?", content~left(1) \== ":" then do
+      self~checkPlainKey(key)
+      self~checkNoNestedMapping(valPart)
+    end
     pos     = pos + 1
     map[key] = self~mapValue(valPart, indent)
   end
@@ -2131,10 +2152,12 @@
          forbids (§6.1).  Lines with leading space(s) before a tab are
          OK: the space provides the indentation and the tab is content. */
       if line~pos("09"x) > 0 & self~indentOf(line) == 0 then
-        self~raiseError("Tab character in indentation (YAML 1.2 forbids tabs for indentation)")
+        self~raiseError("Tab character in indentation (YAML 1.2 forbids tabs for indentation)", pos)
       /* Track indent of leading all-space lines (non-empty, spaces only) */
-      if firstContent & line \== "" & line~verify(" ") == 0 then
+      if firstContent & line \== "" & line~verify(" ") == 0 then do
+        if line~length > maxLeadingSpaces then maxLeadingLine = pos
         maxLeadingSpaces = max(maxLeadingSpaces, line~length)
+      end
       bodyLines~append("")
       pos = pos + 1
       iterate
@@ -2146,7 +2169,7 @@
       if scalarIndent <= parentIndent then leave
       /* Leading all-space lines must not have more spaces than scalarIndent */
       if maxLeadingSpaces > scalarIndent then
-        self~raiseError("Leading all-space line has too many spaces ("maxLeadingSpaces") for block scalar indentation level" scalarIndent)
+        self~raiseError("Leading all-space line has too many spaces ("maxLeadingSpaces") for block scalar indentation level" scalarIndent, maxLeadingLine)
       firstContent = .false
     end
     if lineIndent < scalarIndent then leave
@@ -2370,14 +2393,17 @@
  *  @return an .Array of sequence items
  */
 ::method flowSeq private
-  expose lines pos flowMinIndent
+  expose lines pos flowMinIndent curLine
   use strict arg text
+
+  startLine = curLine           /* where the collection opens */
 
   full = self~stripComment(text)
   do while self~countUnquoted(full, "[") > self~countUnquoted(full, "]")
-    if pos > lines~items then self~raiseError("Unterminated flow sequence")
+    if pos > lines~items then self~raiseError("Unterminated flow sequence", startLine)
     /* Document markers at column 0 are invalid inside flow collections */
     nLine = lines[pos]
+    curLine = pos
     if nLine~length >= 3 then do
       prefix3 = nLine~left(3)
       if prefix3 == "---" | prefix3 == "..." then
@@ -2466,14 +2492,17 @@
  *  @return a .Table of key-value pairs
  */
 ::method flowMap private
-  expose lines pos flowMinIndent
+  expose lines pos flowMinIndent curLine
   use strict arg text
+
+  startLine = curLine           /* where the collection opens */
 
   full = self~stripComment(text)
   do while self~countUnquoted(full, "{") > self~countUnquoted(full, "}")
-    if pos > lines~items then self~raiseError("Unterminated flow mapping")
+    if pos > lines~items then self~raiseError("Unterminated flow mapping", startLine)
     /* Document markers at column 0 are invalid inside flow collections */
     nLine = lines[pos]
+    curLine = pos
     if nLine~length >= 3 then do
       prefix3 = nLine~left(3)
       if prefix3 == "---" | prefix3 == "..." then
@@ -2842,10 +2871,11 @@
  *  @return a two-element .Array: [value, trailingRest]
  */
 ::method multiLineQuoted private
-  expose lines pos unescapeUnicode
+  expose lines pos unescapeUnicode curLine
   use strict arg text, minIndent = 0
 
   quote = text~left(1)
+  startLine = curLine           /* where the scalar opens */
 
   /* Check whether the quote is closed in the initial text */
   if self~isQuoteClosed(text) then do
@@ -2869,6 +2899,7 @@
 
   do while pos <= lines~items
     nLine = lines[pos]
+    curLine = pos
 
     /* Document markers at column 0 terminate even inside quoted scalars */
     if nLine~length >= 3 then do
@@ -2922,7 +2953,7 @@
   end
 
   /* If we reach here, the quote was never closed */
-  self~raiseError("Unterminated" quote "quoted string")
+  self~raiseError("Unterminated" quote "quoted string", startLine)
 
 /* Checks whether a quoted string (starting with its quote character)
    has a matching closing quote, taking into account escape sequences
@@ -3243,8 +3274,9 @@
   tagHandles = .nil
   if currentDirectives \== .nil then
     tagHandles = currentDirectives~at("tagHandles")
-  if tagHandles == .nil | tagHandles~at(handle) == .nil then
-    self~raiseError("Undeclared tag handle '"handle"' in tag:" tag)
+  if tagHandles \== .nil then
+    if tagHandles~at(handle) \== .nil then return
+  self~raiseError("Undeclared tag handle '"handle"' in tag:" tag)
 
 /** Resolves a tag handle using a tag-handles table from %TAG directives.
  *  For example, with %TAG !e! tag:example.com,2000: the tag
@@ -3303,9 +3335,49 @@
   nextPos = indent + 1
   if nextPos <= line~length then do
     if line[nextPos] == "09"x then
-      raise syntax 93.900 additional( -
-        .YamlError~new("Tab character in indentation (YAML 1.2 forbids tabs for indentation)")~makeString)
+      self~raiseError("Tab character in indentation (YAML 1.2 forbids tabs for indentation)")
   end
+
+/** Rejects a nested implicit mapping on the same line as its key:
+ *  "a: b: c" (ZCZ6).  In block context, a second ": " in the inline value
+ *  would start a nested mapping, which is not allowed on the same line as
+ *  the parent key.  Only applies to plain scalar values: anchors, aliases,
+ *  tags, quoted strings, and flow collections are skipped.  Used by
+ *  blockMap and by compactMap ("- a: b: c").
+ *
+ *  @param valPart the inline value, after the key's ": "
+ */
+::method checkNoNestedMapping private
+  use strict arg valPart
+  if valPart == "" then return
+  vpc = valPart~left(1)
+  if vpc == "&" | vpc == "*" | vpc == "!" | vpc == "'" | vpc == '"' | -
+     vpc == "[" | vpc == "{" then return
+  if self~findMapColon(valPart) > 0 then
+    self~raiseError("Mapping value is not allowed in this context:" valPart)
+
+/** Rejects a plain scalar that starts with a reserved indicator.
+ *  c-directive (%) and c-reserved (@ `) cannot start a plain scalar
+ *  (YAML 1.2 §7.3.3, ns-plain-first), in any position: a key, an inline
+ *  value, or a sequence item.
+ *
+ *  @param text the scalar as written (quoted text is not checked)
+ */
+::method checkPlainFirst private
+  use strict arg text
+  fc = text~left(1)
+  if fc == "%" | fc == "@" | fc == "`" then
+    self~raiseError("Reserved indicator" fc "cannot start a plain scalar")
+
+/** As checkPlainFirst, for an implicit mapping key.  Keys that are not
+ *  plain scalars (quoted, aliases, tags, flow collections, "?") are not
+ *  checked.
+ *
+ *  @param key the key as written
+ */
+::method checkPlainKey private
+  use strict arg key
+  if key~isA(.string) then self~checkPlainFirst(key)
 
 /** Advances the position past blank lines and comment-only lines.
  *  Stops at the first line that has non-comment content.
@@ -3501,11 +3573,22 @@
  *  @param msg the error description
  */
 ::method raiseError private
-  expose lines pos
-  use strict arg msg
+  expose lines pos curLine lineOffset
+  use strict arg msg, line = .nil
+  /* The line to report: the one given, else the line whose text is being
+     parsed (curLine), else the current position.  'pos' alone is not
+     enough: most checks run after their line has been consumed, when
+     'pos' already points at the NEXT line. */
+  if line == .nil then line = curLine
+  if line == 0 then line = pos
+  if line > lines~items then line = lines~items
   ctx = ""
-  if pos >= 1 & pos <= lines~items then ctx = lines[pos]
-  raise syntax 93.900 additional(.YamlError~new(msg, pos, 0, ctx)~makeString)
+  if line >= 1 then do
+    ctx  = lines[line]
+    line = line + lineOffset    /* parseFrontMatter: lines of the document */
+  end
+  else line = 0
+  raise syntax 93.900 additional(.YamlError~new(msg, line, 0, ctx)~makeString)
 
 /*============================================================================*/
 /*  yaml.deepEqual                                                                 */

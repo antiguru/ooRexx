@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2023 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -93,35 +93,6 @@ void MicrosecondsToFileTime(uint64_t usecs, FILETIME &timeStamp)
 
     timeStamp.dwHighDateTime = (DWORD)(temp >> 32);
     timeStamp.dwLowDateTime = (DWORD)temp;
-}
-
-/**
- * Search for a given filename, returning the fully
- * resolved name if it is found.
- *
- * @param name     The input search name.
- * @param fullName The returned fully resolved name.
- * @param fullNameLength
- *                 length of the full name return buffer
- *
- * @return True if the file was located, false otherwise.
- */
-bool SysFileSystem::searchFileName(const char *name, FileNameBuffer &fullName)
-{
-    // try to resolve the path name
-    if (getFullPathName(name, fullName))
-    {
-        // this must be a file.
-        return isFile(fullName);
-    }
-
-    // search on the path...also must be a file
-    if (searchOnPath(name, NULL, NULL, fullName))
-    {
-        return isFile(fullName);
-    }
-
-    return false;
 }
 
 

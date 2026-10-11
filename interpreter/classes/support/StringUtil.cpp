@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2021 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -227,7 +227,7 @@ size_t StringUtil::pos(const char *stringData, size_t haystack_length, RexxStrin
     const char *endpointer = haypointer + _range - needle_length + 1;
 
     // try to find the first char of needle with memchr()
-    haypointer = (char *)memchr(haypointer, *needlepointer, endpointer - haypointer);
+    haypointer = (const char *)memchr(haypointer, *needlepointer, endpointer - haypointer);
 
     // if needle is just a single char, we're finshed
     if (needle_length == 1)
@@ -247,7 +247,8 @@ size_t StringUtil::pos(const char *stringData, size_t haystack_length, RexxStrin
         {
             return haypointer - stringData + 1;
         }
-        haypointer = (char *)memchr(haypointer + 1, *needlepointer, endpointer - haypointer);
+        haypointer++;
+        haypointer = (const char *)memchr(haypointer, *needlepointer, endpointer - haypointer);
     }
     return 0;  // we got nothing...
 }

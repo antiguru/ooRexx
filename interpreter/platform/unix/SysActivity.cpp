@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2024 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -126,6 +126,38 @@ void SysActivity::useCurrentThread()
 }
 
 
+#ifdef HAVE_PTHREAD_GETATTR_NP
+/**
+ * The current thread's stack (lowest address and size), asked once per
+ * thread. pthread_getattr_np() is costly for the process's main thread:
+ * glibc answers it by reading and parsing /proc/self/maps, which is long in
+ * a large host process (~200 us in a .NET host, milliseconds with thousands
+ * of mappings), and the interpreter asks every time it is entered
+ * (Activity::run, each new Activity). A thread's stack does not move, so
+ * the answer is kept in thread-local storage.
+ *
+ * @param stackAddr Receives the lowest address of the stack.
+ * @param stackSize Receives the size of the stack.
+ */
+static void currentThreadStack(void **stackAddr, size_t *stackSize)
+{
+    static thread_local bool   known = false;
+    static thread_local void  *addr = NULL;
+    static thread_local size_t size = 0;
+    if (!known)
+    {
+        pthread_attr_t attrs;
+        pthread_getattr_np(pthread_self(), &attrs);
+        pthread_attr_getstack(&attrs, &addr, &size);
+        pthread_attr_destroy(&attrs);
+        known = true;
+    }
+    *stackAddr = addr;
+    *stackSize = size;
+}
+#endif
+
+
 /**
  * Return the pointer to the base of the current stack.
  * This is used for checking recursion overflows.
@@ -140,12 +172,9 @@ char* SysActivity::getStackBase()
 // non-portable implementations.
 #ifdef HAVE_PTHREAD_GETATTR_NP
     // Linux
-    pthread_attr_t attrs;
-    pthread_getattr_np(pthread_self(), &attrs);
     void   *stackAddr;
     size_t  stackSize;
-    pthread_attr_getstack(&attrs, &stackAddr, &stackSize);
-    pthread_attr_destroy(&attrs);
+    currentThreadStack(&stackAddr, &stackSize);
 #ifdef OPSYS_AIX
     // although POSIX requires pthread_attr_getstack() to return stackaddr
     // pointing to the lowest addressable byte of the stack, on AIX 7.2 it
@@ -192,12 +221,9 @@ size_t SysActivity::getStackSize()
 {
 #ifdef HAVE_PTHREAD_GETATTR_NP
     // Linux
-    pthread_attr_t attrs;
-    pthread_getattr_np(pthread_self(), &attrs);
     void   *stackAddr;
     size_t  stackSize;
-    pthread_attr_getstack(&attrs, &stackAddr, &stackSize);
-    pthread_attr_destroy(&attrs);
+    currentThreadStack(&stackAddr, &stackSize);
     return stackSize;
 #elif defined HAVE_PTHREAD_ATTR_GET_NP
     // FreeBSD, OpenIndiana

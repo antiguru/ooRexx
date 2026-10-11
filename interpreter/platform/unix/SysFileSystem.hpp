@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2019 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -100,7 +100,6 @@ class SysFileSystem
      static const char NewLine;
      static const char CarriageReturn;
 
-     static bool  searchFileName(const char *name, FileNameBuffer &fileName);
      static void  qualifyStreamName(const char *unqualifiedName, FileNameBuffer &qualifiedName);
      static bool  fileExists(const char *name);
      static bool  searchName(const char *name, const char *path, const char *extension, FileNameBuffer &resolvedName);

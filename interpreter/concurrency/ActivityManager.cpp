@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2025 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -649,11 +649,12 @@ bool ActivityManager::poolActivity(Activity *activity)
     // are we shutting down or have too many threads in the pool?
     if (processTerminating || availableActivities->items() > MAX_THREAD_POOL_SIZE)
     {
-        // have the activity clean up its resources.
-        activity->cleanupActivityResources();
-
-        // remove this from the activity list
-        allActivities().removeItem(activity);
+        // The thread will end: Activity::runThread() calls activityEnded(),
+        // which removes the activity from allActivities() and cleans it up.
+        // Do not remove it here: allActivities() is what keeps the activity
+        // alive, and runThread() releases the kernel lock and then uses the
+        // activity again (in activityEnded()) while holding no lock at all, so a
+        // garbage collection on another thread in between would sweep it.
         return false;
     }
     else

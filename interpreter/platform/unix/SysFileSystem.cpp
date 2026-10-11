@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2025 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -78,89 +78,6 @@ const char SysFileSystem::CarriageReturn = '\r';
 // .DateTime~new(1970, 1, 1) - .DateTime~new(1, 1, 1)~totalSeconds
 const int64_t StatEpoch = 62135596800;           // seconds between 0001-01-01 and 1970-01-01
 const int64_t NoTimeStamp = -999999999999999999; // invalid file time
-
-/**
- * Search for a given filename, returning the fully
- * resolved name if it is found.
- *
- * @param name     The original name.
- * @param fullName A pointer to the buffer where the resolved name is returned.
- *
- * @return True if the file was found, false otherwise.
- */
-bool SysFileSystem::searchFileName(const char *name, FileNameBuffer &fullName)
-{
-    size_t nameLength = strlen(name);
-
-    /* does the filename already have a path? */
-    /* or does it start with "~" ? */
-    /* (beware, don't test "." because files like ".hidden" alone are candidate for search in PATH */
-    if (strstr(name, "/") != NULL || name[0] == '~' || name[0] == '.')
-    {
-        bool done = canonicalizeName(fullName);
-        if (done == false || fileExists(fullName) == false)
-        {
-            fullName.at(0) = '\0';
-            return false;
-        }
-        return true;
-    }
-
-    // Get the current working directory
-    if (!getCurrentDirectory(fullName))
-    {
-        return false;
-    }
-    // now add on to the front of the name
-    fullName += '/';
-    fullName += name;
-
-    // if the file exists, then return it
-    if (fileExists(fullName))
-    {
-        return true;
-    }
-
-    // it was not in the current directory so search the PATH
-    const char *currentPath = getenv("PATH");
-    if (currentPath == NULL)
-    {
-        fullName = "";
-        return false;
-    }
-
-    const char *sep = strchr(currentPath, ':');
-    while (sep != NULL)
-    {
-        /* try each entry in the PATH */
-        int i = sep - currentPath;
-        fullName.set(currentPath, i);
-        fullName += '/';
-        fullName += name;
-        if (fileExists(fullName) == true)
-        {
-            return true;
-        }
-        currentPath = sep + 1;
-        sep = strchr(currentPath, ':');
-    }
-
-    /* the last entry in the PATH might not be terminated by a colon */
-    if (*currentPath != '\0')
-    {
-        fullName = currentPath;
-        fullName += currentPath;
-        fullName += name;
-        if (fileExists(fullName) == true)
-        {
-            return true;
-        }
-    }
-
-    // not found, return a null string
-    fullName = "";
-    return false;
-}
 
 
 /**
@@ -1565,12 +1482,15 @@ This new filename must be freed when no longer needed.
 */
 char* temporaryFilename(const char *filename, int &errInfo)
 {
+    // the callers test errInfo, not the result
+    errInfo = 0;
     // allocate a buffer large enough to hold the file name plus the extra characters
     // we add to the end.
     size_t fullLength = strlen(filename) + 8;
     char *tempFileName = (char *)malloc(fullLength);
     if (tempFileName == NULL)
     {
+        errInfo = ENOMEM;
         return NULL;
     }
 
@@ -1578,14 +1498,13 @@ char* temporaryFilename(const char *filename, int &errInfo)
     srand((int)time(NULL));
     size_t num = rand();
     // we only handle the lower six digits
-    num = num % 6;
+    num = num % 1000000;
     size_t start = num;
 
     while (true)
     {
-        char numstr[8];
         // append 6 random digits to the base file name
-        snprintf(tempFileName, sizeof(numstr), "%s%06zu", filename, num);
+        snprintf(tempFileName, fullLength, "%s%06zu", filename, num);
 
         // if there's no matching file, we're finished.
         if (!SysFileSystem::fileExists(tempFileName))
@@ -1594,11 +1513,13 @@ char* temporaryFilename(const char *filename, int &errInfo)
         }
 
         // generate a new number for filling in the name
-        num = (num + 1) % 6;
+        num = (num + 1) % 1000000;
 
         // if we've wrapped around to where we started, time to give up
         if (num == start)
         {
+            free(tempFileName);
+            errInfo = EEXIST;
             return NULL;
         }
     }
@@ -2032,8 +1953,12 @@ void SysFileIterator::findNextEntry()
     while (fnmatch(patternSpec, testName, flags) != 0)
     {
 #ifndef HAVE_FNM_CASEFOLD
-        // free the uppercase copy of the last test
-        free((void *)testName);
+        // free the uppercase copy of the last test (only a caseless
+        // search made one; otherwise testName is the readdir() entry)
+        if (caseLess)
+        {
+            free((void *)testName);
+        }
 #endif
         entry = readdir(handle);
         if (entry == NULL)
@@ -2045,14 +1970,20 @@ void SysFileIterator::findNextEntry()
         }
         testName = entry->d_name;
 #ifndef HAVE_FNM_CASEFOLD
-        char *upperName = strdup(testName);
-        Utilities::strupper(upperName);
-        testName = upperName;
+        if (caseLess)
+        {
+            char *upperName = strdup(testName);
+            Utilities::strupper(upperName);
+            testName = upperName;
+        }
 #endif
     }
 #ifndef HAVE_FNM_CASEFOLD
     // free the uppercase copy of the last test
-    free((void *)testName);
+    if (caseLess)
+    {
+        free((void *)testName);
+    }
 #endif
     // we need to perform the stat64() using the fully resolved name.
     // if there is an allocation error here, we have limited ability to raise

@@ -2501,6 +2501,7 @@ RexxObject    *PackageClass::options(RexxString *optionName, RexxString *newValu
                             case nostringFlag:   packageSettings.enableNostringSyntax(); break;
                             case notreadyFlag:   packageSettings.enableNotreadySyntax(); break;
                             case novalueFlag:    packageSettings.enableNovalueSyntax(); break;
+                            default:             break;
                         }
                     }
                     else
@@ -2513,7 +2514,8 @@ RexxObject    *PackageClass::options(RexxString *optionName, RexxString *newValu
                             case nostringFlag:   packageSettings.disableNostringSyntax(); break;
                             case notreadyFlag:   packageSettings.disableNotreadySyntax(); break;
                             case novalueFlag:    packageSettings.disableNovalueSyntax(); break;
-                        }
+                            default:             break;
+                       }
                     }
                 }
                 else    // raise exception
@@ -2714,6 +2716,7 @@ RexxObject    *PackageClass::clzOptions(RexxString *optionName, RexxString *newV
             overrideCount = numberArgument(strNewValue, 2);
         }
         break;
+    default: break;
     }
     return currentValue;
 }
@@ -2876,8 +2879,11 @@ PackageSetting PackageClass::setPackageSettings(RexxString *newValue, bool setOv
 
         if (hint[0] != 0)    // illegal character found
         {
-            char info[128]="";
-            snprintf(info, 128, "argument must not contain a semi-colon, CR, or LF, found: %s", hint);
+            // add sizeof(hint) to silence this warning emitted by gcc 11.4.0 during debug build:
+            // warning: ‘%s’ directive output may be truncated writing up to 127 bytes into a region of size 70
+            // note: ‘snprintf’ output between 59 and 186 bytes into a destination of size 128
+            char info[128 + sizeof(hint)]="";
+            snprintf(info, sizeof(info), "argument must not contain a semi-colon, CR, or LF, found: %s", hint);
             // reportError(...) 93.900
             reportException(Error_Incorrect_method_user_defined, new_string(info));
         }

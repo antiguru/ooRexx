@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2024 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -90,21 +90,9 @@
 #define FUTURE_THRESHOLD 49            /* future threshold for 2 digit years*/
 #define POSTMERIDIAN     "pm"          /* "pm" spec of civil time           */
 #define ANTEMERIDIAN     "am"          /* "am" spec of civil time           */
-                                       /* leap year calculation             */
+#define MERIDIAN_SIZE 2                /* size of am/pm markers             */
+// leap year calculation
 #define LeapYear(year) ((!(year % LEAP_CYCLE)) && ((year % CENTURY) || (!(year % OLYMPIAD))))
-
-#define JANUARY     1                  /* positions of the months           */
-#define FEBRUARY    2
-#define MARCH       3
-#define APRIL       4
-#define MAY         5
-#define JUNE        6
-#define JULY        7
-#define AUGUST      8
-#define SEPTEMBER   9
-#define OCTOBER     10
-#define NOVEMBER    11
-#define DECEMBER    12
 
 
 class RexxDateTime                      // ooRexx internal time stamp class
@@ -133,27 +121,28 @@ public:
     bool setBaseDate(wholenumber_t basedays);
     bool setBaseTime(int64_t basetime);
     bool setUnixTime(int64_t basetime);
+    static constexpr int64_t MIN_UNIX_SECONDS = -62135596800LL;
+    static constexpr int64_t MAX_UNIX_SECONDS = 253402300799LL;
     void setTimeInSeconds(wholenumber_t basetime);
     void clear();
     void setDate(wholenumber_t newYear, wholenumber_t newDay);
     void setDay(wholenumber_t basedays);
-    bool parseNormalDate(const char *date, const char *sep);
-    bool parseISODate(const char *date, const char *sep);
-    bool parseStandardDate(const char *date, const char *sep);
-    bool parseEuropeanDate(const char *date, const char *sep, wholenumber_t currentYear);
-    bool parseUsaDate(const char *date, const char *sep, wholenumber_t currentYear);
-    bool parseOrderedDate(const char *date, const char *sep, wholenumber_t currentYear);
-    bool parseNormalTime(const char *date);
-    bool parseCivilTime(const char *date);
-    bool parseLongTime(const char *date);
+    bool parseNormalDate(const char *date, size_t dateLength, const char *sep, size_t sepLength);
+    bool parseISODate(const char *date, size_t dateLength, const char *sep, size_t sepLength);
+    bool parseStandardDate(const char *date, size_t dateLength, const char *sep, size_t sepLength);
+    bool parseEuropeanDate(const char *date, size_t dateLength, const char *sep, size_t sepLength, wholenumber_t currentYear);
+    bool parseUsaDate(const char *date, size_t dateLength, const char *sep, size_t sepLength, wholenumber_t currentYear);
+    bool parseOrderedDate(const char *date, size_t dateLength, const char *sep, size_t sepLength, wholenumber_t currentYear);
+    bool parseNormalTime(const char *time, size_t timeLength);
+    bool parseCivilTime(const char *time, size_t timeLength);
+    bool parseLongTime(const char *time, size_t timeLength);
     bool setHours(wholenumber_t h);
     bool setSeconds(wholenumber_t s);
     bool setMinutes(wholenumber_t m);
     bool adjustTimeZone(int64_t o);
-    void formatBaseTime(char *buffer);
-    void formatUnixTime(char *buffer);
     void formatEuropeanDate(char *buffer, wholenumber_t bufferSize, const char *sep);
     void formatMonthName(char *buffer);
+    size_t formatDate(char *buffer, size_t bufferSize, int style, const char *sep, size_t sepLength);
     void formatNormalDate(char *buffer, wholenumber_t bufferSize, const char *sep);
     void formatOrderedDate(char *buffer, wholenumber_t bufferSize, const char *sep);
     void formatISODate(char *buffer, wholenumber_t bufferSize, const char *sep);
@@ -163,7 +152,6 @@ public:
     void formatCivilTime(char *buffer, wholenumber_t bufferSize);
     void formatLongTime(char *buffer, wholenumber_t bufferSize);
     void formatNormalTime(char *buffer, wholenumber_t bufferSize);
-    void formatTimeZone(char *buffer);
     inline void setTimeZoneOffset(int64_t o) { timeZoneOffset = o; }
     inline int64_t getTimeZoneOffset() { return timeZoneOffset; }
 
@@ -180,8 +168,11 @@ public:
 protected:
 
     bool parseDateTimeFormat(const char *date, const char *format, const char *sep, wholenumber_t currentYear);
-    bool getNumber(const char *input, wholenumber_t length, int *target);
-    bool getNumber(const char *input, wholenumber_t length, int *target, int max);
+    bool parseDateTimeFormat(const char *date, size_t dateLength,
+        const char *format, size_t formatLength, const char *sep, size_t sepLength,
+        wholenumber_t currentYear);
+    bool getNumber(const char *input, size_t length, int *target);
+    bool getNumber(const char *input, size_t length, int *target, int max);
 
     static const char  *dayNames[];      // table of day names for date formatting
     static const char  *monthNames[];    // table of month names for date formatting

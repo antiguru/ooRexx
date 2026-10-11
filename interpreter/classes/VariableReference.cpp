@@ -195,12 +195,16 @@ void VariableReference::setValue(RexxObject *v)
  *
  * @param v      The new variable value.
  */
-void VariableReference::setValueRexx(RexxObject *v)
+RexxObject *VariableReference::setValueRexx(RexxObject *v)
 {
     requiredArgument(v, "VALUE");
 
     // NB: setValue sorts out the stem vs. simple assignment bits
     variable->setValue(v);
+    // native methods are called through a RexxObject *(...) pointer, so
+    // this must return a value (calling a void function that way is
+    // undefined behaviour; WebAssembly traps on it)
+    return OREF_NULL;
 }
 
 

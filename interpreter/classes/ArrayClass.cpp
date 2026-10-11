@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2022 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -1221,8 +1221,21 @@ bool ArrayClass::validateIndex(RexxObject **index, size_t indexCount,
         // we process this exactly the same way, but swap the count and
         // pointers around to be the array data.
         ArrayClass *indirect = (ArrayClass *)index[0];
-        indexCount = indirect->items();
+
+        // an index list must be single-dimensional and it must not be sparse
+        if (!indirect->isSingleDimensional())
+        {
+            reportException(Error_Incorrect_method_noarray, argPosition);
+        }
+        indexCount = indirect->size();
         index = (RexxObject **)indirect->data();
+        for (size_t i = 0; i < indexCount; i++)
+        {
+            if (index[i] == OREF_NULL)
+            {
+                reportException(Error_Execution_sparse_array, i + 1);
+            }
+        }
     }
 
     /* Is this array one-dimensional?    */

@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2019 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -285,8 +285,12 @@ void MemoryObject::checkUninit()
     {
         RexxInternalObject *uninitObject = iterator.value();
 
-        // was this object not marked by the last sweep operation?
-        if (uninitObject != OREF_NULL && uninitObject->isObjectDead(markWord))
+        // was this object not marked by the last sweep operation?  An object
+        // that is already waiting for its uninit method is not counted again:
+        // it stays unreferenced (only the uninit table holds it) until
+        // runUninits() removes it, so every collection in between would count
+        // it once more, and pendingUninits would never return to zero.
+        if (uninitObject != OREF_NULL && uninitObject->isObjectDead(markWord) && !uninitObject->isReadyForUninit())
         {
             // mark this as ready for uninit
             uninitObject->setReadyForUninit();
@@ -350,33 +354,45 @@ void  MemoryObject::runUninits()
     // get the current activity for running the uninits
     Activity *activity = ActivityManager::currentActivity;
 
+    // The uninit methods must not run while we are iterating the uninit table:
+    // an uninit method may give up the kernel lock (a native method always does,
+    // Rexx code does when it yields), and another thread may then add objects
+    // to the table, which can expand it and replace its contents under the
+    // iterator.  So we first move the objects that are ready into an array, and
+    // run their uninit methods once the iteration is complete.
+    Protected<ArrayClass> ready = new_array();
+
     // scan the uninit table looking for objects that are elegable for collection.
     for (HashContents::TableIterator iterator = uninitTable->iterator(); iterator.isAvailable();)
     {
         RexxInternalObject *uninitObject = iterator.value();
 
-        // was this object already marked for running the uninit?  run it now
+        // was this object already marked for running the uninit?
         if (uninitObject != OREF_NULL && uninitObject->isReadyForUninit())
         {
-            // we remove this item here and advance the iterator.
+            // add it to the ready array BEFORE removing it from the table: the
+            // append may expand the array and trigger a garbage collection, and
+            // an object that is in neither place would be swept.  The ready
+            // array keeps it alive until its uninit method has run.
+            ready->append(uninitObject);
+            // now remove this item and advance the iterator.
             iterator.removeAndAdvance();
             // remove the pending item count
             pendingUninits--;
-
-            // because we've removed this from the uninit table, it is no longer
-            // proctected.  We need to ensure it does not get GC'd until after the
-            // uninit method runs
-            ProtectedObject p(uninitObject);
-
-            // run this method with appropriate error trapping
-            UninitDispatcher dispatcher(uninitObject);
-            activity->run(dispatcher);
         }
         // not processing that item, so just step the iterator
         else
         {
             iterator.next();
         }
+    }
+
+    // now run the uninit methods, with appropriate error trapping
+    size_t count = ready->items();
+    for (size_t i = 1; i <= count; i++)
+    {
+        UninitDispatcher dispatcher(ready->get(i));
+        activity->run(dispatcher);
     }
 
     // turn off the interlock

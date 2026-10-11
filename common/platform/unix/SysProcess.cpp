@@ -166,10 +166,17 @@ static bool resolveProgramName(const char *name, char *resolved, size_t resolved
  */
 void SysProcess::getUserID(char *buffer)
 {
-    struct passwd *pstUsrDat;
-
-    pstUsrDat = getpwuid(geteuid());
+    uid_t uid = geteuid();
+    struct passwd *pstUsrDat = getpwuid(uid);
+    // a uid without a passwd entry (e.g. a container run with --user 12345)
+    // has no name: use the number, as the rxapi service name does
+    if (pstUsrDat == NULL)
+    {
+        snprintf(buffer, MAX_USERID_LENGTH, "%u", (unsigned int)uid);
+        return;
+    }
     strncpy(buffer, pstUsrDat->pw_name, MAX_USERID_LENGTH-1);
+    buffer[MAX_USERID_LENGTH-1] = '\0';
 }
 
 

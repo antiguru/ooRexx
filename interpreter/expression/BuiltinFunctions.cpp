@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2025 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -1059,6 +1059,7 @@ BUILTIN(DATE)
         }
     }
 
+    size_t outputSeparatorLength = 0;
     const char *outputSeparator = NULL;      // each format has it's own default
 
     // validate the output separator is only used with supported styles
@@ -1070,13 +1071,13 @@ BUILTIN(DATE)
             reportException(Error_Incorrect_call_format_incomp_sep, "DATE", IntegerOne, new_string((char)style), IntegerFour);
         }
         // must be zero or 1 character and cannot be alpha numeric
-        if (osep->getLength() > 1 || (osep->getLength() == 1 && strchr(ALPHANUM, osep->getChar(0)) != NULL))
+        if (osep->getLength() > 1 || (osep->getLength() == 1 && memchr(ALPHANUM, osep->getChar(0), strlen(ALPHANUM)) != NULL))
         {
             reportException(Error_Incorrect_call_parm_wrong_sep, "DATE", IntegerFour, osep);
         }
-        // string objects are null terminated, so we can point directly at what will
-        // be either 1 or 0 characters of data.
+        // we keep an explicit length to allow '00'x as separator
         outputSeparator = osep->getStringData();
+        outputSeparatorLength = osep->getLength();
     }
 
     // given an input timestamp to parse?  Need to figure out the form
@@ -1084,6 +1085,7 @@ BUILTIN(DATE)
     {
         bool valid = true;
 
+        size_t separatorLength = 0;
         const char *separator = NULL;      // different formats will override this
 
         // if we have a separator for input, perform validation here
@@ -1092,20 +1094,19 @@ BUILTIN(DATE)
             // only valid with certain styles
             if (strchr("BDFLMTW", style2) != NULL)
             {
-                reportException(Error_Incorrect_call_format_incomp_sep, "DATE", IntegerThree, new_string((char *)&style2, 1), IntegerFive);
+                reportException(Error_Incorrect_call_format_incomp_sep, "DATE", IntegerThree, new_string((char)style2), IntegerFive);
             }
 
             // explicitly specified delimiter, we need to validate this first
-            if (isep->getLength() > 1 || (isep->getLength() == 1 && strchr(ALPHANUM, isep->getChar(0)) != NULL))
+            if (isep->getLength() > 1 || (isep->getLength() == 1 && memchr(ALPHANUM, isep->getChar(0), strlen(ALPHANUM)) != NULL))
             {
                 // the field delimiter must be a single character and NOT
-                // alphanumeric, or a null character
+                // alphanumeric.  '00'x is a valid separator.
                 reportException(Error_Incorrect_call_parm_wrong_sep, new_string("DATE"), IntegerFive, isep);
             }
 
-            // string objects are null terminated, so we can point directly at what will
-            // be either 1 or 0 characters of data.
             separator = isep->getStringData();
+            separatorLength = isep->getLength();
         }
 
         // clear the time stamp copy
@@ -1117,7 +1118,7 @@ BUILTIN(DATE)
         {
             // 'N'ormal
             case 'N':
-                valid = timestamp.parseNormalDate(indate->getStringData(), separator);
+                valid = timestamp.parseNormalDate(indate->getStringData(), indate->getLength(), separator, separatorLength);
                 break;
 
             // 'B'asedate
@@ -1127,7 +1128,7 @@ BUILTIN(DATE)
                 wholenumber_t basedays;
                 if (!indate->numberValue(basedays) || !timestamp.setBaseDate(basedays))
                 {
-                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char *)&style2, 1));
+                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char)style2));
                 }
                 break;
             }
@@ -1139,7 +1140,7 @@ BUILTIN(DATE)
                 int64_t basetime;
                 if (!Numerics::objectToInt64(indate, basetime) || !timestamp.setBaseTime(basetime))
                 {
-                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char *)&style2, 1));
+                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char)style2));
                 }
                 break;
             }
@@ -1150,7 +1151,7 @@ BUILTIN(DATE)
                 int64_t basetime;
                 if (!Numerics::objectToInt64(indate, basetime) || !timestamp.setUnixTime(basetime))
                 {
-                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char *)&style2, 1));
+                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char)style2));
                 }
                 break;
             }
@@ -1160,10 +1161,10 @@ BUILTIN(DATE)
             {
                 // smaller numeric value
                 wholenumber_t yearday;
-                if (!indate->numberValue(yearday) || yearday < 0 || yearday > YEAR_DAYS + 1 ||
+                if (!indate->numberValue(yearday) || yearday < 1 || yearday > YEAR_DAYS + 1 ||
                     (yearday > YEAR_DAYS && !LeapYear(current.year)))
                 {
-                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char *)&style2, 1));
+                    reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char)style2));
                 }
                 // set the date directly
                 timestamp.setDate(current.year, yearday);
@@ -1172,32 +1173,32 @@ BUILTIN(DATE)
 
             // 'E'uropean format, days-month-year
             case 'E':
-                valid = timestamp.parseEuropeanDate(indate->getStringData(), separator, current.year);
+                valid = timestamp.parseEuropeanDate(indate->getStringData(), indate->getLength(), separator, separatorLength, current.year);
                 break;
 
             // 'O'rdered format, year-month-day
             case 'O':
-                valid = timestamp.parseOrderedDate(indate->getStringData(), separator, current.year);
+                valid = timestamp.parseOrderedDate(indate->getStringData(), indate->getLength(), separator, separatorLength, current.year);
                 break;
 
             // 'I'SO 8601 format
             case 'I':
-                valid = timestamp.parseISODate(indate->getStringData(), separator);
+                valid = timestamp.parseISODate(indate->getStringData(), indate->getLength(), separator, separatorLength);
                 break;
 
             // 'S'tandard format
             case 'S':
-                valid = timestamp.parseStandardDate(indate->getStringData(), separator);
+                valid = timestamp.parseStandardDate(indate->getStringData(), indate->getLength(), separator, separatorLength);
                 break;
 
             // 'U'SA format, month-day-year
             case 'U':
-                valid = timestamp.parseUsaDate(indate->getStringData(), separator, current.year);
+                valid = timestamp.parseUsaDate(indate->getStringData(), indate->getLength(), separator, separatorLength, current.year);
                 break;
 
             // invalid input option
             default:
-                reportException(Error_Incorrect_call_list, "DATE", IntegerThree, "BDEFINOSTU", new_string((char *)&style2, 1));
+                reportException(Error_Incorrect_call_list, "DATE", IntegerThree, "BDEFINOSTU", new_string((char)style2));
                 break;
         }
 
@@ -1211,7 +1212,7 @@ BUILTIN(DATE)
             }
             else
             {
-                reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char *)&style2, 1));
+                reportException(Error_Incorrect_call_format_invalid, "DATE", indate, new_string((char)style2));
             }
         }
     }
@@ -1233,34 +1234,33 @@ BUILTIN(DATE)
     {
 
         case 'B':
-            // always return RexxInteger instead of String
+            // always return as RexxInteger
             return new_integer(timestamp.getBaseDate());
 
         case 'F':
-            // if possible, return RexxInteger instead of String
-#ifdef __REXX64__
-            return new_integer(timestamp.getBaseTime());
-#else
-            timestamp.formatBaseTime(work);
-            break;
-#endif
+            // return as RexxInteger, or as NumberString if too large
+            return Numerics::int64ToObject(timestamp.getBaseTime());
 
         case 'T':
-            // if possible, return RexxInteger instead of String
-#ifdef __REXX64__
-            return new_integer(timestamp.getUnixTime());
-#else
-            timestamp.formatUnixTime(work);
-            break;
-#endif
+            // return as RexxInteger, or as NumberString if too large
+            return Numerics::int64ToObject(timestamp.getUnixTime());
 
         case 'D':
-            // always return RexxInteger instead of String
+            // always return as RexxInteger
             return new_integer(timestamp.getYearDay());
 
+
         case 'E':
-            timestamp.formatEuropeanDate(work, sizeof(work), outputSeparator);
-            break;
+        case 'I':
+        case 'N':
+        case 'O':
+        case 'S':
+        case 'U':
+        {
+            size_t length = timestamp.formatDate(work, sizeof(work), style,
+                outputSeparator, outputSeparatorLength);
+            return new_string(work, length);
+        }
 
         case 'L':
         {
@@ -1276,25 +1276,6 @@ BUILTIN(DATE)
             timestamp.formatMonthName(work);
             break;
 
-        case 'N':
-            timestamp.formatNormalDate(work, sizeof(work), outputSeparator);
-            break;
-
-        case 'O':
-            timestamp.formatOrderedDate(work, sizeof(work), outputSeparator);
-            break;
-
-        case 'I':
-            timestamp.formatISODate(work, sizeof(work), outputSeparator);
-            break;
-
-        case 'S':
-            timestamp.formatStandardDate(work, sizeof(work), outputSeparator);
-            break;
-
-        case 'U':
-            timestamp.formatUsaDate(work, sizeof(work), outputSeparator);
-            break;
 
         case 'W':
             timestamp.formatWeekDay(work);
@@ -1367,10 +1348,11 @@ BUILTIN(TIME)
         // the input timestamp is not valid with the elapsed time options
         if (style == 'R' || style == 'E')
         {
-            reportException(Error_Incorrect_call_invalid_conversion, "TIME", new_string((char *)&style, 1));
+            reportException(Error_Incorrect_call_invalid_conversion, "TIME", new_string((char)style));
         }
         bool valid = true;                 // assume this is a good timestamp
         timestamp.clear();                 // clear everything out
+        timestamp.setDate(1, 1);           // time-only conversions use 01 Jan 0001
         // everything is done using the current timezone offset
         timestamp.setTimeZoneOffset(current.getTimeZoneOffset());
 
@@ -1378,17 +1360,17 @@ BUILTIN(TIME)
         {
             // 'N'ormal default style, 01:23:45 format (24 hour)
             case 'N':
-                valid = timestamp.parseNormalTime(intime->getStringData());
+                valid = timestamp.parseNormalTime(intime->getStringData(), intime->getLength());
                 break;
 
             // 'C'ivil time, 1:23pm format (12-hour, no zero)
             case 'C':
-                valid = timestamp.parseCivilTime(intime->getStringData());
+                valid = timestamp.parseCivilTime(intime->getStringData(), intime->getLength());
                 break;
 
             // 'L'ong time, full 24-hour, plus fractional
             case 'L':
-                valid = timestamp.parseLongTime(intime->getStringData());
+                valid = timestamp.parseLongTime(intime->getStringData(), intime->getLength());
                 break;
 
             // 'H'our format...
@@ -1443,7 +1425,7 @@ BUILTIN(TIME)
         }
         if (!valid)
         {
-            reportException(Error_Incorrect_call_format_invalid, "TIME", intime, new_string((char *)&style2, 1));
+            reportException(Error_Incorrect_call_format_invalid, "TIME", intime, new_string((char)style2));
         }
     }
 
@@ -1490,7 +1472,7 @@ BUILTIN(TIME)
             break;
 
         case 'H':                         // 'Hours'
-            // always return RexxInteger instead of String
+            // always return as RexxInteger
             return new_integer(timestamp.hours);
 
         case 'L':                         // 'L'ong format
@@ -1498,7 +1480,7 @@ BUILTIN(TIME)
             break;
 
         case 'M':                         // 'M'inutes format
-            // always return RexxInteger instead of String
+            // always return as RexxInteger
             return new_integer(timestamp.hours * MINUTES_IN_HOUR + timestamp.minutes);
 
         case 'N':                         // 'N'ormal format...the default
@@ -1506,35 +1488,20 @@ BUILTIN(TIME)
             break;
 
         case 'S':                         // 'S'econds format...total seconds
-            // always return RexxInteger instead of String
+            // always return as RexxInteger
             return new_integer((timestamp.hours * MINUTES_IN_HOUR + timestamp.minutes) * SECONDS_IN_MINUTE + timestamp.seconds);
 
         case 'F':                          // 'F'ull
-            // if possible, return RexxInteger instead of String
-#ifdef __REXX64__
-            return new_integer(timestamp.getBaseTime());
-#else
-            timestamp.formatBaseTime(work);
-            break;
-#endif
+            // return as RexxInteger, or as NumberString if too large
+            return Numerics::int64ToObject(timestamp.getBaseTime());
 
         case 'T':                          // 'T'icks
-            // if possible, return RexxInteger instead of String
-#ifdef __REXX64__
-            return new_integer(timestamp.getUnixTime());
-#else
-            timestamp.formatUnixTime(work);
-            break;
-#endif
+            // return as RexxInteger, or as NumberString if too large
+            return Numerics::int64ToObject(timestamp.getUnixTime());
 
         case 'O':                          // 'O'ffset.  microseconds offset from UTC
-            // if possible, return RexxInteger instead of String
-#ifdef __REXX64__
-            return new_integer(timestamp.timeZoneOffset);
-#else
-            timestamp.formatTimeZone(work);
-            break;
-#endif
+            // return as RexxInteger, or as NumberString if too large
+            return Numerics::int64ToObject(timestamp.timeZoneOffset);
 
         // unknown output format
         default:
@@ -1693,8 +1660,9 @@ BUILTIN(XRANGE)
 
             length = 1 + (endchar < startchar ? 256 - startchar + endchar : endchar - startchar);
 
-            // just two args?  we can finish this early
-            if (mode == CALC_LENGTH && argcount <= 2)
+            // return early only if this is the first and only sequence
+            // two args can also be a character class followed by a start byte
+            if (mode == CALC_LENGTH && argcount <= 2 && XRANGE_arg == 2)
             {
                 // create a new string to build the result
                 result = raw_string(length);
@@ -1956,7 +1924,7 @@ BUILTIN(SIGN)
     // do this on the string value
     if (isInteger(argument))
     {
-        return((RexxInteger *)argument)->sign();
+        return ((RexxInteger *)argument)->sign();
     }
     else if (isNumberString(argument))
     {
@@ -2004,7 +1972,7 @@ BUILTIN(MAX)
     // do this on the string value
     if (isInteger(argument))
     {
-        return((RexxInteger *)argument)->Max(stack->arguments(argcount - 1), argcount - 1);
+        return ((RexxInteger *)argument)->Max(stack->arguments(argcount - 1), argcount - 1);
     }
     else if (isNumberString(argument))
     {
@@ -2033,7 +2001,7 @@ BUILTIN(MIN)
     // do this on the string value
     if (isInteger(argument))
     {
-        return((RexxInteger *)argument)->Min(stack->arguments(argcount - 1), argcount - 1);
+        return ((RexxInteger *)argument)->Min(stack->arguments(argcount - 1), argcount - 1);
     }
     else if (isNumberString(argument))
     {

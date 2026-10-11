@@ -1,6 +1,6 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
-/* Copyright (c) 2005-2018 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -128,7 +128,7 @@ void CommandIOContext::resolveConflicts()
         else if (error != OREF_NULL && error->needsBuffering(input))
         {
             // make this buffered until the command returns
-            output = new BufferingOutputTarget(output);
+            error = new BufferingOutputTarget(error);
         }
     }
 }

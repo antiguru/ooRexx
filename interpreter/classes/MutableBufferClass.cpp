@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.             */
-/* Copyright (c) 2005-2019 Rexx Language Association. All rights reserved.    */
+/* Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.    */
 /*                                                                            */
 /* This program and the accompanying materials are made available under       */
 /* the terms of the Common Public License v1.0 which accompanies this         */
@@ -295,7 +295,7 @@ char *MutableBuffer::setCapacity(size_t newLength)
     // extend by the delta
     if (newLength > bufferLength)
     {
-        ensureCapacity(newLength - bufferLength);
+        ensureCapacity(newLength - dataLength);
     }
     // return a pointer to the current buffer data
     return getData();
@@ -499,7 +499,7 @@ MutableBuffer *MutableBuffer::overlay(RexxObject *str, RexxObject *pos, RexxObje
     char padChar = optionalPadArgument(pad, ' ', ARG_FOUR);
 
     // make sure we have room for this
-    ensureCapacity(begin + replaceLength);
+    setCapacity(begin + replaceLength);
 
     // is our start position beyond the current data end?
     if (begin > dataLength)
@@ -604,7 +604,7 @@ MutableBuffer *MutableBuffer::replaceAt(RexxObject *str, RexxObject *pos, RexxOb
     }
 
     // make sure we have room for this
-    ensureCapacity(finalLength);
+    setCapacity(finalLength);
 
     // is our start position beyond the current data end?
     // NB: Even though we've adjusted the buffer size, the dataLength is still
@@ -1078,7 +1078,7 @@ MutableBuffer *MutableBuffer::changeStr(RexxString *needle, RexxString *newNeedl
 
         // calculate the final length and make sure we have enough space
         size_t resultLength = getLength() + matches * (newLength - needleLength);
-        ensureCapacity(resultLength);
+        setCapacity(resultLength);
 
         size_t growth = (newLength - needleLength) * matches;
 
@@ -1243,7 +1243,7 @@ MutableBuffer *MutableBuffer::caselessChangeStr(RexxString *needle, RexxString *
 
         // calculate the final length and make sure we have enough space
         size_t resultLength = getLength() + matches * (newLength - needleLength);
-        ensureCapacity(resultLength);
+        setCapacity(resultLength);
 
         size_t growth = (newLength - needleLength) * matches;
 
