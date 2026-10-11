@@ -5281,8 +5281,8 @@ the loadable ones that declare a loader, rxsock and rxunixsys, print nothing.
   WholeNumberToObject through the context the loader or an earlier Stash
   kept): the oracle prints "same 0" and no UseStash line, rc 0; ours prints
   "same 1" and "use 42", rc 0. The task's re-review measured the oracle at
-  rc 139 on its own variant of the probe. OWNER: Phase 9, whose instance API
-  is where a second instance would come from.
+  rc 139 on its own variant of the probe. OWNER: Phase 10, whose instance API
+  is where a second instance would come from (Phase 9 spec R4, 2026-10-10).
   SAY OUTPUT AND AN EXTENSION'S OWN printf INTERLEAVE DIFFERENTLY. SAY is
   buffered in the interpreter and written at exit (Phase 7 spec A1,
   docs/superpowers/specs/2026-09-11-phase-7-streams-platform.md:12), while a
@@ -6132,7 +6132,7 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   `call SysSleep 0` is rc 0 with result 0 on both (syssleep.rex); what is
   missing is the package name. The roadmap's D11 reads "Decision: build the
   `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in
-  Phase 10." OWNER: Phase 10, by that line, as the remainder of RexxUtil;
+  Phase 10." OWNER: Phase 9, as non-macrospace RexxUtil (Phase 9 spec R2);
   binding the internal package's names is new mechanism beside `LIBRARY
   REXX`'s. Row 521's ::REQUIRES LIBRARY and ::CONSTANT-before-EXTERNAL
   shapes match (constlib.rex rc 214, constlib2.rex rc 166, reqlib.rex rc 0,
@@ -6176,4 +6176,5 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   oracle's release drops the object from the activation's save list
   (NativeActivation::removeLocalReference,
   interpreter/execution/NativeActivation.cpp:1219). Output and rc agree.
-  OWNER: Phase 9 (benchmark and resource parity).
+  OWNER: Phase 9 (peak memory stops growing with the loop count, Phase 9 spec
+  section 3).

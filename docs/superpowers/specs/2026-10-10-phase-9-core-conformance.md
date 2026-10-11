@@ -1,6 +1,6 @@
 # Phase 9: core conformance
 
-**Status:** draft for Moritz's review, 2026-10-11, after four review rounds
+**Status:** agreed with Moritz 2026-10-11, after four review rounds
 (`.superpowers/sdd/2026-10-10-phase-9-scoping/spec-review.md`, `spec-rereview.md`,
 `spec-review-fable.md`, `spec-recheck-fable.md`). Roadmap row 9
 (`docs/superpowers/plans/2026-07-27-rust-rewrite.md:661`) is the exit contract, read through this
@@ -281,7 +281,8 @@ Moritz, 2026-10-10 and 2026-10-11, on the survey and the review (`decisions.md`)
     with Phase 6's accepted overruns, so it is not a clean A/B.
 * **`phase-4-exclusions.txt`.**
   * `:5284` (the second instance) is re-owned to Phase 10.
-  * `:6179` is split: `ReleaseLocalReference` stays Phase 9's, and parity goes to Phase 9.1.
+  * `:6179` (`ReleaseLocalReference`, the row's only subject) keeps Phase 9 with section 3's bar as
+    its reason in place of "benchmark and resource parity".
   * `:6135` (`LIBRARY rexxutil`) is re-owned to Phase 9. `:5516`, also "OWNER: Phase 10", is
     classified by 9a's D3 pass.
 
