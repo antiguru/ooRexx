@@ -44,3 +44,14 @@ Controller rulings on the spec review (`spec-review.md`), 2026-10-11:
   crates, the touched test binaries and ooTest groups); the workspace test at sub-phase close; G1-G9,
   TSan, the whole-suite gate and all-program callgrind once at the Phase 9 close. Perf drift between
   closes is accepted as a risk. Mechanical additions are batched several to a task.
+
+Controller rulings on the fable review (`spec-review-fable.md`), 2026-10-11:
+
+* Ruling: the suite harness iterates past a run-ending refusal as scout A did (rename the last
+  started test out, re-run, cap 60), and the captured refusal text is the owner check -- finding 1 --
+  wrong costs a harness redesign before 9a closes.
+* Ruling: `ReleaseLocalReference`'s bar is peak RSS at 2,000,000 iterations at most twice that at
+  200,000, from a committed C probe built with the system `cc` -- finding 11 -- wrong costs a
+  threshold change.
+* Ruling: the perf budget is measured once at the close against `rexx-run` at `a98238be5`; the 9c
+  A/B sits inside the budget -- finding 3 -- wrong costs the front end's share of the budget.
