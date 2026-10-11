@@ -914,16 +914,59 @@ pub fn test_names(
     names
 }
 
-/// The group's tests, sorted and upper case, from the `::METHOD`s named
-/// `test...` of its `ooTestCase` subclasses: for a group whose whole-group
-/// listing run outlasts the oracle's deadline. A test class inheriting from
-/// another test class, or a `::CLASS` directive split across lines, is not
-/// listed; resource bodies are skipped.
+/// The group's tests, sorted, distinct and upper case, from the `::METHOD`s
+/// named `test...` of its test classes ([`test_classes`]): for a group whose
+/// whole-group listing run outlasts the oracle's deadline. A `::CLASS`
+/// directive split across lines is not followed; resource bodies are skipped.
 pub fn source_test_names(dir: &str, group: &str) -> Vec<String> {
-    let text = read_lossy(&groups_root().join(dir).join(format!("{group}.testGroup")));
-    let mut in_test_class = false;
+    source_test_names_in(&groups_root(), dir, group)
+}
+
+/// [`source_test_names`] over the groups below `root`.
+pub fn source_test_names_in(root: &Path, dir: &str, group: &str) -> Vec<String> {
+    let classes = source_classes(&read_lossy(
+        &root.join(dir).join(format!("{group}.testGroup")),
+    ));
+    let tests = test_classes(&classes);
+    let names: BTreeSet<String> = classes
+        .iter()
+        .filter(|class| tests.contains(&class.name))
+        .flat_map(|class| class.methods.iter())
+        .filter(|name| name.starts_with("TEST"))
+        .cloned()
+        .collect();
+    names.into_iter().collect()
+}
+
+/// One `::CLASS` of a group file.
+pub struct SourceClass {
+    /// Lower case, unquoted.
+    pub name: String,
+    /// The classes its directive names after `SUBCLASS`, `MIXINCLASS` or
+    /// `INHERIT`, lower case and unquoted.
+    pub parents: Vec<String>,
+    /// Whether its directive names `ooTestCase`.
+    pub direct: bool,
+    /// Its `::METHOD` names, upper case and unquoted.
+    pub methods: Vec<String>,
+    /// Its methods' lines, lower case.
+    pub body: String,
+}
+
+/// The `::CLASS`es of `text`, resource bodies skipped.
+pub fn source_classes(text: &str) -> Vec<SourceClass> {
+    const KEYWORDS: &[&str] = &[
+        "subclass",
+        "mixinclass",
+        "inherit",
+        "public",
+        "private",
+        "metaclass",
+        "abstract",
+    ];
+    let unquoted = |word: &str| word.trim_matches(['\'', '"']).to_ascii_lowercase();
+    let mut classes: Vec<SourceClass> = Vec::new();
     let mut resource_end: Option<String> = None;
-    let mut names = Vec::new();
     for line in text.lines() {
         if let Some(marker) = &resource_end {
             if line.starts_with(marker.as_str()) {
@@ -934,21 +977,69 @@ pub fn source_test_names(dir: &str, group: &str) -> Vec<String> {
         let lower = line.trim_start().to_ascii_lowercase();
         if lower.starts_with("::resource") {
             resource_end = Some(resource_marker(line.trim_start()));
-        } else if lower.starts_with("::class") {
-            in_test_class = lower.contains("ootestcase");
-        } else if let Some(rest) = lower.strip_prefix("::method") {
-            let name = rest
-                .split_whitespace()
-                .next()
-                .unwrap_or("")
-                .trim_matches(['\'', '"']);
-            if in_test_class && name.starts_with("test") {
-                names.push(name.to_ascii_uppercase());
+        } else if let Some(rest) = lower.strip_prefix("::class") {
+            let words: Vec<&str> = rest.split_whitespace().collect();
+            let mut parents = Vec::new();
+            let mut after: Option<&str> = None;
+            // `INHERIT` takes every word after it (the oracle's
+            // `parser/DirectiveParser.cpp:461-469`).
+            for word in words.iter().skip(1) {
+                if after == Some("inherit") {
+                    parents.push(unquoted(word));
+                } else if KEYWORDS.contains(word) {
+                    after = Some(word);
+                } else if let Some(keyword) = after {
+                    if matches!(keyword, "subclass" | "mixinclass") {
+                        parents.push(unquoted(word));
+                    }
+                    after = None;
+                }
+            }
+            classes.push(SourceClass {
+                name: words
+                    .first()
+                    .map_or_else(String::new, |word| unquoted(word)),
+                parents,
+                direct: lower.contains("ootestcase"),
+                methods: Vec::new(),
+                body: String::new(),
+            });
+        } else if let Some(class) = classes.last_mut() {
+            if let Some(rest) = lower.strip_prefix("::method") {
+                let name = rest.split_whitespace().next().unwrap_or("");
+                class.methods.push(unquoted(name).to_ascii_uppercase());
+            } else if !lower.starts_with("::") {
+                class.body.push_str(&lower);
+                class.body.push('\n');
             }
         }
     }
-    names.sort();
-    names
+    classes
+}
+
+/// The names of `classes` that are test classes: those naming `ooTestCase`,
+/// and those naming a test class of `classes` as their superclass or a
+/// class they inherit.
+pub fn test_classes(classes: &[SourceClass]) -> BTreeSet<String> {
+    let mut tests: BTreeSet<String> = classes
+        .iter()
+        .filter(|class| class.direct)
+        .map(|class| class.name.clone())
+        .collect();
+    loop {
+        let more: Vec<String> = classes
+            .iter()
+            .filter(|class| {
+                !tests.contains(&class.name)
+                    && class.parents.iter().any(|parent| tests.contains(parent))
+            })
+            .map(|class| class.name.clone())
+            .collect();
+        if more.is_empty() {
+            return tests;
+        }
+        tests.extend(more);
+    }
 }
 
 /// The line prefix that ends the resource `directive` opens: its `END`

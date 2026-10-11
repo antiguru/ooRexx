@@ -1,0 +1,44 @@
+#!/usr/bin/env rexx
+/* Test classes that reach ooTestCase through another test class of the file,
+   one declared before the class it subclasses. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.Base.testGroup)
+  group~add(.Child.testGroup)
+  group~add(.Grandchild.testGroup)
+  group~add(.Mixed.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "Grandchild.testGroup" subclass "Child.testGroup" public
+
+::method test_grand
+  self~assertSame(1, 1)
+
+::class "Base.testGroup" subclass ooTestCase public
+
+::method test_base
+  self~assertSame(1, 1)
+
+::class "Child.testGroup" subclass "Base.testGroup" public
+
+::method test_child
+  self~assertSame(1, 1)
+
+::class "Mix.testGroup" mixinclass "Base.testGroup" public
+
+::method test_mix
+  self~assertSame(1, 1)
+
+::class "Mixed.testGroup" public subclass "Base.testGroup" inherit "Mix.testGroup"
+
+::method test_mixed
+  self~assertSame(1, 1)
+
+::class "Helper" public
+
+::method test_helper
+  return 1

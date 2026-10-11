@@ -24,6 +24,8 @@
 
 #[path = "support/group_runner.rs"]
 mod group_runner;
+#[path = "support/suite_rows.rs"]
+mod suite_rows;
 mod support;
 mod watchdog;
 
@@ -38,8 +40,9 @@ use std::time::Duration;
 use group_runner::{
     Ended, ProcessRun, VERBOSITY, crate_environment_with_path, failing, fresh_copy_from,
     groups_root, interpreter_bin, mark_starts_in_file, reaching_rxapi_in, read_bytes, refusal,
-    renamed, run_process, set_environment, skip, started_in_file, worktree,
+    renamed, run_process, set_environment, skip, source_test_names_in, started_in_file, worktree,
 };
+use suite_rows::{Context, Owner, Row, check_rows, group_path, read_rows, table_path};
 use support::oracle::{ORACLE_MEMORY_LIMIT_KIB, oracle_root};
 
 /// Runs the suite when set to anything but empty or `0`.
@@ -48,9 +51,6 @@ pub const GATE_ENV: &str = "REXX_SUITE_GATE";
 /// The `dir/group` names, comma-separated, the gate runs instead of every
 /// group.
 pub const GROUPS_ENV: &str = "REXX_SUITE_GROUPS";
-
-/// Where the table is written; the oracle-difference report goes beside it.
-pub const TABLE_ENV: &str = "REXX_SUITE_TABLE";
 
 /// The crate's least bound in seconds, where set.
 pub const FLOOR_ENV: &str = "REXX_SUITE_CRATE_FLOOR";
@@ -116,8 +116,10 @@ pub struct GroupRun {
     pub failed: BTreeSet<String>,
     /// Each test a run ended in, with the refusal or how the run ended.
     pub blocked: BTreeMap<String, String>,
-    /// How the run ended, where it ended before any test started.
+    /// How the first run ended, where it ended before any test started.
     pub blocked_at_load: Option<String>,
+    /// How a later run ended, where it started no test and ended early.
+    pub ended_before_a_test: Option<String>,
     pub iterations: usize,
     /// Whether the last run ended with the framework's summary.
     pub ended_normally: bool,
@@ -138,6 +140,7 @@ impl GroupRun {
             failed: BTreeSet::new(),
             blocked: BTreeMap::new(),
             blocked_at_load: None,
+            ended_before_a_test: None,
             iterations: 0,
             ended_normally: false,
             cap,
@@ -196,15 +199,6 @@ pub fn floor_from(value: Option<&str>) -> Duration {
     })
 }
 
-/// `dir/group`, or `group` for a group at the top.
-pub fn group_path(dir: &str, group: &str) -> String {
-    if dir.is_empty() {
-        group.to_string()
-    } else {
-        format!("{dir}/{group}")
-    }
-}
-
 /// Each `*.testGroup` below `ootest/ooRexx`, as `(dir, group)`, in the order
 /// of their paths, as `ooTestFinder::findFiles` lists them (`ooTest.frm`).
 pub fn discover_groups() -> Vec<(String, String)> {
@@ -236,6 +230,17 @@ fn discover_in(root: &Path) -> Vec<(String, String)> {
     walk(root, root, &mut found);
     found.sort_by_key(|(dir, group)| format!("{}.testGroup", group_path(dir, group)));
     found
+}
+
+/// The tests of `group` of `dir`, as [`group_runner::source_test_names`]
+/// enumerates them: the denominator before the row files' rows.
+pub fn expected_set(dir: &str, group: &str) -> BTreeSet<String> {
+    expected_set_in(&groups_root(), dir, group)
+}
+
+/// [`expected_set`] over the groups below `root`.
+pub fn expected_set_in(root: &Path, dir: &str, group: &str) -> BTreeSet<String> {
+    source_test_names_in(root, dir, group).into_iter().collect()
 }
 
 /// `value` as a `PATH` string.
@@ -399,11 +404,17 @@ fn tests_ran(stdout: &[u8]) -> Option<String> {
         .map(|rest| rest.trim().to_string())
 }
 
-/// How a run ended early, or `None` where it ended with the framework's
-/// summary.
+/// How a run ended early, or `None` where it exited below 128, other than
+/// `timeout`'s 124, with the framework's summary. Stderr's text only labels a
+/// run that ended early: a command the run starts writes to the same stderr.
 fn end_reason(process: &ProcessRun, deadline: Duration) -> Option<String> {
-    if let Some(line) = refusal(&process.run) {
-        return Some(line);
+    let summary = tests_ran(&process.run.stdout).is_some();
+    let early = match process.ended {
+        Ended::Exited(code) => code == 124 || code >= 128 || !summary,
+        Ended::Signaled(_) | Ended::Killed => true,
+    };
+    if !early {
+        return None;
     }
     let stderr = String::from_utf8_lossy(&process.run.stderr);
     let line_with = |needle: &str| {
@@ -417,26 +428,23 @@ fn end_reason(process: &ProcessRun, deadline: Duration) -> Option<String> {
     {
         return Some(format!("out of memory: {line}"));
     }
-    if let Some(line) = line_with("panicked at") {
-        return Some(format!("crash: {line}"));
-    }
-    match process.ended {
-        Ended::Killed => return Some(format!("timeout: killed after {:?}", process.took)),
-        Ended::Exited(124 | 137) => {
-            return Some(format!("timeout after {} s", deadline.as_secs()));
+    Some(match process.ended {
+        Ended::Killed => format!("timeout: killed after {:?}", process.took),
+        Ended::Exited(124 | 137) => format!("timeout after {} s", deadline.as_secs()),
+        Ended::Signaled(signal) => format!("crash: signal {signal}"),
+        Ended::Exited(code) => {
+            if let Some(line) = refusal(&process.run) {
+                line
+            } else if let Some(line) = line_with("panicked at") {
+                format!("crash: {line}")
+            } else if code >= 128 {
+                format!("crash: rc {code}")
+            } else {
+                let last = stderr.lines().last().unwrap_or("");
+                format!("no summary: rc {code}, stderr ends {last:?}")
+            }
         }
-        Ended::Exited(code) if code >= 128 => return Some(format!("crash: rc {code}")),
-        Ended::Signaled(signal) => return Some(format!("crash: signal {signal}")),
-        Ended::Exited(_) => {}
-    }
-    if tests_ran(&process.run.stdout).is_none() {
-        let last = stderr.lines().last().unwrap_or("");
-        return Some(format!(
-            "no summary: rc {:?}, stderr ends {last:?}",
-            process.run.status
-        ));
-    }
-    None
+    })
 }
 
 /// Records one run's tests in `result`, and answers how it ended early.
@@ -467,7 +475,8 @@ fn record(
             }
         }
         Some(reason) => match tests.last() {
-            None => result.blocked_at_load = Some(reason.clone()),
+            None if result.iterations == 1 => result.blocked_at_load = Some(reason.clone()),
+            None => result.ended_before_a_test = Some(reason.clone()),
             Some(last) => {
                 result.blocked.insert(last.clone(), reason.clone());
             }
@@ -621,8 +630,12 @@ pub fn crate_run_once(
     if let Err(problem) = check_path(&path, &bin) {
         panic!("{problem}");
     }
+    // `--foreground` keeps `timeout` in the run's process group, so the kill
+    // `run_process` sends the group once the run ends reaches what a test left
+    // running.
     let mut words = vec![
         "timeout".to_string(),
+        "--foreground".to_string(),
         "-s".to_string(),
         "KILL".to_string(),
         deadline.as_secs().max(1).to_string(),
@@ -689,6 +702,9 @@ fn table_row(side: &str, run: &GroupRun) -> String {
         run.blocked_at_load
             .clone()
             .unwrap_or_else(|| "-".to_string()),
+        run.ended_before_a_test
+            .clone()
+            .unwrap_or_else(|| "-".to_string()),
         run.iterations.to_string(),
         if run.ended_normally { "yes" } else { "no" }.to_string(),
         run.cap.label().to_string(),
@@ -701,7 +717,7 @@ fn table_row(side: &str, run: &GroupRun) -> String {
 pub fn table(revision: &str, results: &[(GroupRun, GroupRun)]) -> String {
     let mut table = format!(
         "# ootest revision {revision}\n\
-         group\tside\texpected\tstarted\tpassed\tfailed\tblocked\tblocked at load\titerations\tended normally\tcap\ttests ran\n"
+         group\tside\texpected\tstarted\tpassed\tfailed\tblocked\tblocked at load\tended before a test\titerations\tended normally\tcap\ttests ran\n"
     );
     for (oracle, ours) in results {
         for (side, run) in [("oracle", oracle), ("crate", ours)] {
@@ -728,19 +744,6 @@ pub fn oracle_differences(revision: &str, results: &[(GroupRun, GroupRun)]) -> S
         }
     }
     report
-}
-
-/// Where the table goes.
-fn table_path() -> PathBuf {
-    std::env::var_os(TABLE_ENV).map_or_else(
-        || {
-            PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-                .parent()
-                .expect("the target directory")
-                .join("suite/table.tsv")
-        },
-        PathBuf::from,
-    )
 }
 
 /// The groups [`GROUPS_ENV`] names, each of which must be discovered, else
@@ -777,12 +780,156 @@ fn suite_gate() -> bool {
     std::env::var(GATE_ENV).is_ok_and(|value| !value.is_empty() && value != "0")
 }
 
+/// The rows of `group` (`dir/group`).
+fn rows_of<'a>(rows: &'a [Row], group: &str) -> Vec<&'a Row> {
+    rows.iter().filter(|row| row.group == group).collect()
+}
+
+/// The `GROUP.TEST` names of `rows` the harness renames out on both sides.
+fn renamed_out_by_rows(group: &str, rows: &[&Row]) -> BTreeSet<String> {
+    rows.iter()
+        .filter(|row| row.renamed_out())
+        .map(|row| format!("{group}.{}", row.test))
+        .collect()
+}
+
+/// D1 on this crate's run `ours` of a group whose rows are `rows`, its
+/// `expected` already the enumeration less the rows, and the oracle's run
+/// `oracle` against the rows: each reason the group is not green.
+pub fn judge(oracle: &GroupRun, ours: &GroupRun, rows: &[&Row]) -> Vec<String> {
+    let rowed: BTreeSet<&String> = rows.iter().map(|row| &row.test).collect();
+    let mut problems = Vec::new();
+    let list = |tests: Vec<&String>| {
+        tests
+            .iter()
+            .map(|test| test.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    if !ours.ended_normally {
+        let how = ours
+            .blocked_at_load
+            .as_ref()
+            .map(|reason| format!("blocked at load: {reason}"))
+            .or_else(|| {
+                ours.ended_before_a_test
+                    .as_ref()
+                    .map(|reason| format!("a run started no test: {reason}"))
+            })
+            .unwrap_or_else(|| format!("after {} runs", ours.iterations));
+        problems.push(format!("did not end normally, {how}"));
+    }
+    let not_started: Vec<&String> = ours.expected.difference(&ours.started).collect();
+    if !not_started.is_empty() {
+        problems.push(format!("not started: {}", list(not_started)));
+    }
+    let not_passed: Vec<&String> = ours
+        .expected
+        .intersection(&ours.started)
+        .filter(|test| !ours.passed.contains(*test))
+        .collect();
+    if !not_passed.is_empty() {
+        problems.push(format!("not passed: {}", list(not_passed)));
+    }
+    let outside: Vec<&String> = ours
+        .started
+        .iter()
+        .filter(|test| !ours.expected.contains(*test) && !rowed.contains(test))
+        .collect();
+    if !outside.is_empty() {
+        problems.push(format!(
+            "started outside the expected set and the rows: {}",
+            list(outside)
+        ));
+    }
+    for row in rows {
+        if let (Some(recorded), Some(captured)) = (row.refusal(), ours.blocked.get(&row.test))
+            && recorded != captured
+        {
+            problems.push(format!(
+                "{}'s refusal is not the one captured: {captured}",
+                row.at()
+            ));
+        }
+        if row.owner == Owner::NotRun && oracle.started.contains(&row.test) {
+            problems.push(format!("{}'s test started on the oracle", row.at()));
+        }
+    }
+    problems
+}
+
+/// The denominator check on the oracle's run: the tests it started that are
+/// neither expected nor rowed, and the expected tests it did not start.
+pub fn oracle_denominator(oracle: &GroupRun, rows: &[&Row]) -> String {
+    let rowed: BTreeSet<&String> = rows.iter().map(|row| &row.test).collect();
+    let extra: Vec<&str> = oracle
+        .started
+        .iter()
+        .filter(|test| !oracle.expected.contains(*test) && !rowed.contains(test))
+        .map(String::as_str)
+        .collect();
+    let missing: Vec<&str> = oracle
+        .expected
+        .difference(&oracle.started)
+        .map(String::as_str)
+        .collect();
+    if extra.is_empty() && missing.is_empty() {
+        "equal".to_string()
+    } else {
+        format!(
+            "started, not expected: [{}]; expected, not started: [{}]",
+            extra.join(" "),
+            missing.join(" ")
+        )
+    }
+}
+
+/// Every test either side started or blocked, or the group expects or rows,
+/// with its row's owner and each side's verdict.
+pub fn per_test(revision: &str, results: &[(GroupRun, GroupRun)], rows: &[Row]) -> String {
+    let mut report = format!("# ootest revision {revision}\ngroup\ttest\trow\toracle\tcrate\n");
+    for (oracle, ours) in results {
+        let group_rows = rows_of(rows, &oracle.group);
+        let tests: BTreeSet<&String> = [oracle, ours]
+            .iter()
+            .flat_map(|run| {
+                run.started
+                    .iter()
+                    .chain(run.blocked.keys())
+                    .chain(run.expected.iter())
+            })
+            .chain(group_rows.iter().map(|row| &row.test))
+            .collect();
+        for test in tests {
+            let owner = group_rows
+                .iter()
+                .find(|row| &row.test == test)
+                .map_or_else(|| "-".to_string(), |row| format!("{:?}", row.owner));
+            let _ = writeln!(
+                report,
+                "{}\t{test}\t{owner}\t{}\t{}",
+                oracle.group,
+                oracle.verdict(test),
+                ours.verdict(test)
+            );
+        }
+    }
+    report
+}
+
+/// D1 over the groups run, and spec section 2's denominator check: every
+/// group `testOORexx.rex` finds, or those [`GROUPS_ENV`] names, on both
+/// sides, each judged against the row files. Writes the table, the
+/// oracle-difference report, the per-test record and `verdicts.tsv` beside
+/// [`table_path`] before asserting every group green.
 #[test]
-fn every_group_on_both_sides() {
+fn l3_core_suite() {
     if !suite_gate() {
         return;
     }
     let revision = suite_revision();
+    let (rows, malformed) = read_rows();
+    assert!(malformed.is_empty(), "the row files: {malformed:#?}");
     let groups = selected(discover_groups());
     let settings = CrateSettings::from_env();
     let pool = rayon::ThreadPoolBuilder::new()
@@ -794,21 +941,361 @@ fn every_group_on_both_sides() {
         use rayon::prelude::*;
         groups
             .par_iter()
-            .map(|(dir, group)| run_group(&settings, dir, group, &BTreeSet::new()))
+            .map(|(dir, group)| {
+                let path = group_path(dir, group);
+                let group_rows = rows_of(&rows, &path);
+                let (mut oracle, mut ours) = run_group(
+                    &settings,
+                    dir,
+                    group,
+                    &renamed_out_by_rows(group, &group_rows),
+                );
+                let mut expected = expected_set(dir, group);
+                for row in &group_rows {
+                    expected.remove(&row.test);
+                }
+                oracle.expected = expected.clone();
+                ours.expected = expected;
+                (oracle, ours)
+            })
             .collect()
     });
     let path = table_path();
     fs::create_dir_all(path.parent().expect("a directory")).expect("the table's directory");
     fs::write(&path, table(&revision, &results)).expect("cannot write the table");
-    let differences = path.with_file_name("oracle-differences.tsv");
-    fs::write(&differences, oracle_differences(&revision, &results))
-        .expect("cannot write the oracle-difference report");
+    let beside = |name: &str| path.with_file_name(name);
+    fs::write(
+        beside("oracle-differences.tsv"),
+        oracle_differences(&revision, &results),
+    )
+    .expect("cannot write the oracle-difference report");
+    fs::write(
+        beside(suite_rows::TESTS_FILE),
+        per_test(&revision, &results, &rows),
+    )
+    .expect("cannot write the per-test record");
+    let mut verdicts =
+        format!("# ootest revision {revision}\ngroup\tverdict\tcrate\toracle denominator\n");
+    let mut red = Vec::new();
+    for (oracle, ours) in &results {
+        let group_rows = rows_of(&rows, &oracle.group);
+        let problems = judge(oracle, ours, &group_rows);
+        let verdict = if problems.is_empty() { "green" } else { "red" };
+        if !problems.is_empty() {
+            red.push(oracle.group.clone());
+        }
+        let _ = writeln!(
+            verdicts,
+            "{}\t{verdict}\t{}\t{}",
+            oracle.group,
+            problems.join(" | "),
+            oracle_denominator(oracle, &group_rows)
+        );
+    }
+    let verdict_path = beside("verdicts.tsv");
+    fs::write(&verdict_path, verdicts).expect("cannot write the verdicts");
     eprintln!(
-        "suite: {} groups, table {}, differences {}",
+        "suite: {} groups, {} red, table {}, verdicts {}",
         results.len(),
+        red.len(),
         path.display(),
-        differences.display()
+        verdict_path.display()
     );
+    assert!(
+        red.is_empty(),
+        "{} of {} groups are not green; each reason is in {}",
+        red.len(),
+        results.len(),
+        verdict_path.display()
+    );
+}
+
+/// The row files' owner checks over every group (spec section 2), and each
+/// row [`suite_rows::derived_rows`] derives from the group files present.
+#[test]
+fn the_row_files_hold_only_checked_rows() {
+    let (rows, mut problems) = read_rows();
+    let context = Context::new(&groups_root(), &discover_groups());
+    problems.extend(check_rows(&rows, &context));
+    let present: BTreeSet<String> = rows
+        .iter()
+        .map(|row| {
+            let owner = match row.owner {
+                Owner::Phase10(reason) => format!("Phase 10 {}", reason.name()),
+                Owner::Deviation(number) => format!("Deviation {number}"),
+                other => format!("{other:?}"),
+            };
+            format!("{}\t{}\t{owner}\t{}", row.group, row.test, row.reason)
+        })
+        .collect();
+    let missing: Vec<String> = suite_rows::derived_rows(&context)
+        .into_iter()
+        .filter(|line| !present.contains(line))
+        .collect();
+    if !missing.is_empty() {
+        problems.push(format!("derived rows missing:\n{}", missing.join("\n")));
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Each owner's check, on rows each of which passes or fails it.
+mod row_checks {
+    use std::collections::BTreeSet;
+
+    use super::group_runner::{groups_root, worktree};
+    use super::suite_rows::{
+        Context, EXCLUSIONS, LICENCES, NOT_RUN, ROW_10_GROUPS, check_row, check_rows, parse_rows,
+    };
+
+    fn context(groups: &[&str]) -> Context {
+        let groups: Vec<(String, String)> = groups
+            .iter()
+            .map(|path| match path.rsplit_once('/') {
+                Some((dir, group)) => (dir.to_string(), group.to_string()),
+                None => (String::new(), (*path).to_string()),
+            })
+            .collect();
+        Context::new(&groups_root(), &groups)
+    }
+
+    /// What is wrong with the one row `line` in `file`.
+    fn problems(file: &str, line: &str, context: &Context) -> Vec<String> {
+        let (revision, rows, mut problems) =
+            parse_rows(file, &format!("# ootest revision 13178\n{line}\n"));
+        assert_eq!(revision.as_deref(), Some("13178"));
+        for row in &rows {
+            if let Err(problem) = check_row(row, context) {
+                problems.push(problem);
+            }
+        }
+        problems
+    }
+
+    const GROUPS: &[&str] = &[
+        "base/bif/RXQUEUE",
+        "base/bif/CHAROUT",
+        "base/class/RexxQueue",
+        "extensions/json/json",
+        "API/oo/RexxStart",
+        "utilities/rxapi",
+        "base/rexxutil/platform/unix/tilde",
+        "regressions/bug2061_newline_misalignment",
+        "doc/rexxref/chapter7/Section4",
+    ];
+
+    const PASSING: &[(&str, &str)] = &[
+        (
+            EXCLUSIONS,
+            "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Rxapi\treaching_rxapi",
+        ),
+        (
+            EXCLUSIONS,
+            "extensions/json/json\tTEST_INVALID_EMPTY\tPhase 10 Extension\tgroup",
+        ),
+        (
+            EXCLUSIONS,
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10)",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tFlaky\tcommon.txt: CHAROUT.testGroup/TEST_STDOUT_START",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation 4\tidentity",
+        ),
+        (
+            NOT_RUN,
+            "regressions/bug2061_newline_misalignment\tTEST_STDOUT_NEWLINE\tNotRun\trestrictOS line 41",
+        ),
+        (
+            NOT_RUN,
+            "doc/rexxref/chapter7/Section4\tTEST_BEEP_EXAMPLE_7_4_6\tNotRun\ttest type DOC_EXAMPLE_NOISE_TEST",
+        ),
+    ];
+
+    const FAILING: &[(&str, &str)] = &[
+        (
+            EXCLUSIONS,
+            "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Rxapi",
+        ),
+        (
+            EXCLUSIONS,
+            "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Queue\treaching_rxapi",
+        ),
+        (
+            LICENCES,
+            "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Rxapi\treaching_rxapi",
+        ),
+        (
+            EXCLUSIONS,
+            "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Extension\treaching_rxapi",
+        ),
+        (
+            EXCLUSIONS,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tPhase 10 Rxapi\treaching_rxapi",
+        ),
+        (
+            EXCLUSIONS,
+            "base/bif/CHAROUT\tTEST_NO_SUCH_TEST\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10)",
+        ),
+        (
+            EXCLUSIONS,
+            "base/bif/NO_SUCH_GROUP\tTEST_A\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10)",
+        ),
+        (
+            EXCLUSIONS,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tPhase 10 Extension\tgroup",
+        ),
+        (
+            EXCLUSIONS,
+            "API/oo/RexxStart\tTEST_A\tPhase 10 Extension\tgroup",
+        ),
+        (
+            EXCLUSIONS,
+            "utilities/rxapi\tTEST_A\tPhase 10 Extension\tgroup",
+        ),
+        (
+            EXCLUSIONS,
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: Object~copy is not implemented (Phase 9)",
+        ),
+        (
+            EXCLUSIONS,
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\tit needs the daemon",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation 5\twithdrawn",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation 999\tnone",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation x1\tnone",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tEnvironment\truled: Moritz 2026-10-11",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tEnvironment\trecord: rust/corpus/suite-oracle-runs/none.txt; ruled: Moritz 2026-10-11",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tEnvironment\trecord: rust/corpus/suite-revision.txt; ruled: Moritz 2026-10-11",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tFlaky\tcommon.txt: LINEOUT.testGroup/TEST_LINE_TRANSIENT",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tFlaky\tit is slow",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_SIMPLE\tFlaky\tcommon.txt: CHAROUT.testGroup/TEST_SIMPLE",
+        ),
+        (
+            LICENCES,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tNotRun\trestrictOS line 41",
+        ),
+        (
+            NOT_RUN,
+            "regressions/bug2061_newline_misalignment\tTEST_STDOUT_NEWLINE\tNotRun\trestrictOS line 40",
+        ),
+        (
+            NOT_RUN,
+            "base/rexxutil/platform/unix/tilde\tTEST_TILDE\tNotRun\trestrictOS line 41",
+        ),
+        (
+            NOT_RUN,
+            "doc/rexxref/chapter7/Section4\tTEST_BEEP_EXAMPLE_7_4_6\tNotRun\ttest type UNIT_TEST",
+        ),
+        (
+            NOT_RUN,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tNotRun\ttest type DOC_EXAMPLE_NOISE_TEST",
+        ),
+        (
+            NOT_RUN,
+            "base/bif/CHAROUT\tTEST_STDOUT_START\tNotRun\tit does not run",
+        ),
+        (
+            NOT_RUN,
+            "base/bif/CHAROUT\ttest_stdout_start\tNotRun\trestrictOS line 41",
+        ),
+    ];
+
+    #[test]
+    fn each_owner_check_passes_its_rows_and_fails_the_others() {
+        let context = context(GROUPS);
+        for (file, line) in PASSING {
+            assert_eq!(
+                problems(file, line, &context),
+                Vec::<String>::new(),
+                "{file}: {line}"
+            );
+        }
+        for (file, line) in FAILING {
+            assert!(
+                !problems(file, line, &context).is_empty(),
+                "passed: {file}: {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_rxapi_rows_are_reaching_rxapis_output() {
+        let context = context(&["base/bif/RXQUEUE", "base/bif/CHAROUT"]);
+        let renamed: Vec<String> = context
+            .rxapi
+            .iter()
+            .map(|(group, test)| format!("{group}\t{test}\tPhase 10 Rxapi\treaching_rxapi"))
+            .collect();
+        assert!(renamed.len() > 1, "RXQUEUE reaches rxapi");
+        let file = |lines: &[String]| {
+            let (_, rows, malformed) = parse_rows(
+                EXCLUSIONS,
+                &format!("# ootest revision 13178\n{}\n", lines.join("\n")),
+            );
+            assert_eq!(malformed, Vec::<String>::new());
+            check_rows(&rows, &context)
+        };
+        assert_eq!(file(&renamed), Vec::<String>::new());
+        assert_eq!(file(&renamed[1..]).len(), 1, "a missing row");
+        let doubled = [renamed.clone(), renamed[..1].to_vec()].concat();
+        assert_eq!(file(&doubled).len(), 1, "a doubled row");
+    }
+
+    #[test]
+    fn a_file_without_its_revision_is_malformed() {
+        let (_, _, problems) = parse_rows(
+            EXCLUSIONS,
+            "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Rxapi\treaching_rxapi\n",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+    }
+
+    #[test]
+    fn the_row_10_groups_are_the_native_api_partitions() {
+        let source = std::fs::read_to_string(
+            worktree().join("rust/crates/rexx-exec/tests/api_group_partition.rs"),
+        )
+        .expect("api_group_partition.rs");
+        let stems: BTreeSet<&str> = source
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("(\""))
+            .filter_map(|rest| rest.strip_suffix("\", 10),"))
+            .collect();
+        let ours: BTreeSet<&str> = ROW_10_GROUPS
+            .iter()
+            .map(|group| group.rsplit('/').next().expect("a stem"))
+            .collect();
+        assert_eq!(stems, ours);
+    }
 }
 
 /// The harness's own behaviour, on the groups under `tests/suite/fixtures/`
@@ -822,7 +1309,8 @@ mod fixtures {
     use super::group_runner::{interpreter_bin, started_in_file};
     use super::{
         CapKind, CrateSettings, GroupRun, check_path, crate_run_once, crate_side_environment,
-        discover_groups, floor_from, marker, path_of, resolve, run_group_on_crate_within,
+        discover_groups, end_reason, expected_set_in, floor_from, marker, path_of, resolve,
+        run_group_on_crate_within, run_group_on_oracle_from,
     };
 
     fn root() -> PathBuf {
@@ -980,6 +1468,131 @@ mod fixtures {
         fs::copy(env!("CARGO_BIN_EXE_rexx-run"), bin.join("rexxc")).expect("a rexxc");
         assert!(check_path(&path, &bin).is_err());
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+    }
+
+    /// A fresh `run` directory below the target's temporary directory.
+    fn scratch_run(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("suite-{name}-{}", std::process::id()))
+            .join("run")
+    }
+
+    fn memcap() -> Option<PathBuf> {
+        resolve("memcap", &path_of(std::env::var_os("PATH")))
+    }
+
+    #[test]
+    fn a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally() {
+        let run = scratch_run("child-refuses");
+        let (process, tests) = crate_run_once(
+            &root(),
+            &run,
+            "",
+            "ChildRefuses",
+            &BTreeSet::new(),
+            memcap().as_deref(),
+            Duration::from_secs(60),
+        );
+        assert_eq!(tests, ["TEST_A"]);
+        assert!(
+            String::from_utf8_lossy(&process.run.stderr).contains(MACRO_REFUSAL),
+            "the child's refusal is on the run's stderr: {:?}",
+            String::from_utf8_lossy(&process.run.stderr)
+        );
+        assert_eq!(end_reason(&process, Duration::from_secs(60)), None);
+        fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+
+        let run = crate_run(&settings(), "ChildRefuses");
+        assert_eq!(run.iterations, 1);
+        assert!(run.blocked.is_empty(), "{:?}", run.blocked);
+        assert_eq!(run.passed, names(&["TEST_A"]));
+        assert!(run.ended_normally);
+    }
+
+    /// Whether a process runs `sleep 41.5`, which `Grandchild`'s test starts.
+    fn grandchild_sleeps() -> bool {
+        fs::read_dir("/proc")
+            .expect("/proc")
+            .filter_map(Result::ok)
+            .any(|entry| {
+                fs::read(entry.path().join("cmdline"))
+                    .is_ok_and(|cmdline| cmdline == b"sleep\x0041.5\x00")
+            })
+    }
+
+    #[test]
+    fn a_command_a_test_leaves_running_is_killed_with_the_run() {
+        let run = scratch_run("grandchild");
+        let (process, tests) = crate_run_once(
+            &root(),
+            &run,
+            "",
+            "Grandchild",
+            &BTreeSet::new(),
+            memcap().as_deref(),
+            Duration::from_secs(60),
+        );
+        assert_eq!(tests, ["TEST_A"]);
+        assert_eq!(end_reason(&process, Duration::from_secs(60)), None);
+        assert!(!grandchild_sleeps(), "the command outlived the run");
+        fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+    }
+
+    #[test]
+    fn a_command_the_crate_side_runs_finds_its_rexx_and_no_rexxc() {
+        let run = scratch_run("child-path");
+        let (_, tests) = crate_run_once(
+            &root(),
+            &run,
+            "",
+            "ChildPath",
+            &BTreeSet::new(),
+            memcap().as_deref(),
+            Duration::from_secs(60),
+        );
+        assert_eq!(tests, ["TEST_A"]);
+        let beside = run.parent().expect("a parent");
+        assert_eq!(
+            fs::read_to_string(beside.join("rexx-path.txt")).expect("rexx's path"),
+            format!("{}\n", interpreter_bin(&run).join("rexx").display())
+        );
+        assert_eq!(
+            fs::read_to_string(beside.join("rexxc-path.txt")).expect("rexxc's path"),
+            "127\n"
+        );
+        fs::remove_dir_all(beside).expect("cannot remove the run");
+    }
+
+    #[test]
+    fn a_run_that_starts_no_test_after_an_earlier_one_did_is_not_blocked_at_load() {
+        let run = crate_run(&settings(), "RefusedAfterFirst");
+        assert_eq!(run.iterations, 2);
+        assert_eq!(
+            run.blocked,
+            BTreeMap::from([("TEST_A".to_string(), MACRO_REFUSAL.to_string())])
+        );
+        assert_eq!(run.blocked_at_load, None);
+        assert_eq!(run.ended_before_a_test.as_deref(), Some(MACRO_REFUSAL));
+        assert!(!run.ended_normally);
+    }
+
+    #[test]
+    fn the_expected_set_follows_test_classes_through_the_file_as_the_framework_does() {
+        let expected = expected_set_in(&root(), "", "Inherits");
+        assert_eq!(
+            expected,
+            names(&[
+                "TEST_BASE",
+                "TEST_CHILD",
+                "TEST_GRAND",
+                "TEST_MIX",
+                "TEST_MIXED"
+            ])
+        );
+        let oracle = run_group_on_oracle_from(&root(), "", "Inherits", &BTreeSet::new());
+        assert!(oracle.ended_normally);
+        assert_eq!(oracle.started, expected);
+        assert_eq!(oracle.passed, expected);
     }
 
     #[test]

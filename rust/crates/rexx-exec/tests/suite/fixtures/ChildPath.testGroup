@@ -1,0 +1,17 @@
+#!/usr/bin/env rexx
+/* TEST_A writes where a command it runs finds rexx and rexxc, beside the
+   copy. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.ChildPath.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "ChildPath.testGroup" subclass ooTestCase public
+
+::method test_a
+  address system 'command -v rexx > ../rexx-path.txt; command -v rexxc > ../rexxc-path.txt; echo $? >> ../rexxc-path.txt'
+  self~assertSame(0, rc)

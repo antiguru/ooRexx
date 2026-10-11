@@ -524,6 +524,8 @@ fn the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one() {
 
 #[path = "support/group_runner.rs"]
 mod group_runner;
+#[path = "support/suite_rows.rs"]
+mod suite_rows;
 mod support;
 mod watchdog;
 
@@ -3436,6 +3438,83 @@ mod group_runs {
                 stderr: stderr.as_bytes().to_vec(),
                 status: Some(status),
             }
+        }
+
+        /// Each test a [`DIFFERING`] key names as failing or as its last
+        /// started test, as `(dir/group, TEST)`.
+        fn differing_tests() -> BTreeSet<(String, String)> {
+            let mut tests = BTreeSet::new();
+            for (group, _, _, key, _) in DIFFERING {
+                let group = group
+                    .strip_suffix(".testGroup")
+                    .expect("a group file")
+                    .to_string();
+                if let Some((_, rest)) = key.split_once("last started ") {
+                    let last = rest.split([',', ' ']).next().expect("a test");
+                    tests.insert((group.clone(), last.to_string()));
+                }
+                if let Some((_, rest)) = key.split_once("failing [") {
+                    let list = rest.split(']').next().expect("a closed list");
+                    for test in list.split_whitespace() {
+                        tests.insert((group.clone(), test.to_string()));
+                    }
+                }
+            }
+            tests
+        }
+
+        #[test]
+        fn the_differing_tests_are_read_from_every_key() {
+            let tests = differing_tests();
+            for (group, test) in [
+                ("base/bif/STREAM", "TEST_RELATIVE_FILE_EXISTS2"),
+                ("base/bif/STREAM", "TEST_WRONG_TOO_MANY_ARGS_S"),
+                ("base/bif/TIME", "TEST_VALIDOPT_BIGCHAR_R"),
+                ("base/class/Message", "TEST_REPLYWITH_NOT_ARRAY"),
+            ] {
+                assert!(
+                    tests.contains(&(group.to_string(), test.to_string())),
+                    "{group} {test}"
+                );
+            }
+        }
+
+        /// Spec 2026-10-10 section 2: every test a [`DIFFERING`] key names as
+        /// failing or last started passes in the suite gate's last per-test
+        /// record, or has a row in one of the three row files. Gate-only,
+        /// under the suite gate's variable, since it reads that record.
+        #[test]
+        fn every_differing_test_is_fixed_or_has_a_row() {
+            use super::super::suite_rows::{TESTS_FILE, by_test, read_rows, table_path};
+            if std::env::var("REXX_SUITE_GATE")
+                .map_or(true, |value| value.is_empty() || value == "0")
+            {
+                return;
+            }
+            let record = table_path().with_file_name(TESTS_FILE);
+            let text = read_lossy(&record);
+            let passed: BTreeSet<(String, String)> = text
+                .lines()
+                .filter(|line| !line.starts_with('#'))
+                .filter_map(|line| {
+                    let fields: Vec<&str> = line.split('\t').collect();
+                    (fields.len() == 5 && fields[4] == "passed")
+                        .then(|| (fields[0].to_string(), fields[1].to_string()))
+                })
+                .collect();
+            let (rows, malformed) = read_rows();
+            assert!(malformed.is_empty(), "{malformed:#?}");
+            let rowed = by_test(&rows);
+            let open: Vec<String> = differing_tests()
+                .into_iter()
+                .filter(|test| !passed.contains(test) && !rowed.contains_key(test))
+                .map(|(group, test)| format!("{group} {test}"))
+                .collect();
+            assert!(
+                open.is_empty(),
+                "neither passing in {} nor rowed: {open:#?}",
+                record.display()
+            );
         }
 
         #[test]

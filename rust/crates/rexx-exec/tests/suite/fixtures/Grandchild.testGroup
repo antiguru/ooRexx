@@ -1,0 +1,16 @@
+#!/usr/bin/env rexx
+/* TEST_A leaves a command running in the background. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.Grandchild.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "Grandchild.testGroup" subclass ooTestCase public
+
+::method test_a
+  address system 'sleep 41.5 > /dev/null 2>&1 &'
+  self~assertSame(0, rc)

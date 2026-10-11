@@ -1,0 +1,8 @@
+# The suite gate's permanent licences (spec 2026-10-10 section 2): Deviation,
+# Environment and Flaky rows. One row per test: dir/group, TEST, owner,
+# reason. A Deviation or Environment row is added only by Moritz's ruling.
+# ootest revision 13178
+base/bif/CHAROUT	TEST_STDOUT_START	Flaky	common.txt: CHAROUT.testGroup/TEST_STDOUT_START
+base/bif/LINEOUT	TEST_LINE_TRANSIENT	Flaky	common.txt: LINEOUT.testGroup/TEST_LINE_TRANSIENT
+base/rexxutil/SysSleep	TEST_SLEEP_CONCURRENT	Flaky	common.txt: SYSSLEEP.testGroup/TEST_SLEEP_CONCURRENT
+base/rexxutil/SysSleep	TEST_SLEEP_DURATION	Flaky	common.txt: SYSSLEEP.testGroup/TEST_SLEEP_DURATION
