@@ -773,7 +773,7 @@ pub(crate) fn deferred_send(entry: &NativeExternal, owner: Owner) -> Loud {
     Loud {
         message: crate::owned_message(
             &format!("the LIBRARY REXX entry point \"{}\"", entry.name),
-            Some(owner.label()),
+            Some(owner),
         ),
     }
 }

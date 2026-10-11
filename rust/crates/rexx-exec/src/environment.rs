@@ -257,7 +257,7 @@ pub(crate) struct EnvironmentModel {
     /// crate does not build, one per owner. A write replaces one in place,
     /// which keeps the oracle's order. The owner is `None` for the entries the
     /// library bootstrap fills, which no program reads unfilled.
-    owed: [(ObjRef, Option<&'static str>); 2],
+    owed: [(ObjRef, Option<Owner>); 2],
     /// A reading of `.local`'s pool and of `.environment`'s, in that order,
     /// from an earlier lookup; one that is not current is read again.
     views: [Option<hash::StoreView>; 2],
@@ -362,11 +362,11 @@ impl Interp {
         let frame = self.roots.activity_mut().push_frame();
         let mut owed = [
             (ObjRef::NIL, None),
-            (ObjRef::NIL, Some(Owner::Phase10(Deferral::Rxapi).label())),
+            (ObjRef::NIL, Some(Owner::Phase10(Deferral::Rxapi))),
         ];
         for (at, (held, owner)) in owed.iter_mut().enumerate() {
             let rendered = match owner {
-                Some(owner) => format!("an entry owed by {owner}"),
+                Some(owner) => format!("an entry owed by {}", owner.label()),
                 None => "an entry the library bootstrap fills".to_string(),
             };
             *held = self.alloc_with(
@@ -493,7 +493,7 @@ impl Interp {
 
     /// The owner of `item`, when it stands in for an entry the oracle's
     /// directory holds and this crate does not build.
-    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<Option<&'static str>> {
+    pub(crate) fn owed_entry_owner(&self, item: ObjRef) -> Option<Option<Owner>> {
         let model = self.environment.as_ref()?;
         model
             .owed
@@ -1316,10 +1316,7 @@ impl Interp {
     /// The owner of an entry `object` holds and this crate does not build, or
     /// `None` for a collection whose entries it fills. Only `.environment` and
     /// `.local` hold such entries.
-    pub(crate) fn unbuilt_collection_owner(
-        &mut self,
-        object: ObjRef,
-    ) -> Option<Option<&'static str>> {
+    pub(crate) fn unbuilt_collection_owner(&mut self, object: ObjRef) -> Option<Option<Owner>> {
         self.directory_scope(object)?;
         hash::owed_table_owner(self, object)
     }

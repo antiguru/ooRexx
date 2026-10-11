@@ -172,7 +172,7 @@ TEST_OBJECT_OBJECTNAMEEQUALS.
 
 ## The 9d set
 
-`rust/corpus/phase-9d-set.txt`, derived from this run's `tests.tsv` by the command in its header. It
+`rust/corpus/suite-9d-set.txt`, derived from this run's `tests.tsv` by the command in its header. It
 holds the TSV's `tests_wrong` tests less the 52 witnesses spec section 3 names, and two tests the
 TSV does not have: `base/class/Package`'s `TEST_PROLOG`, which scout A's run reached only as a
 timeout. `TEST_PACKAGE_FINDPROGRAM_REXXTRY` asks `findProgram` for `mime.cls`, which the oracle

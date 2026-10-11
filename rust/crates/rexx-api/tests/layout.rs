@@ -759,6 +759,24 @@ fn a_populated_table_refuses_exactly_the_members_it_names() {
     assert_eq!(refusing_members(), listed);
 }
 
+/// Every member a populated table still refuses is the embedding API's
+/// (ruling R4), and its refusal names Phase 10 with that reason.
+#[test]
+fn every_refusing_member_is_owed_by_phase_10_for_embedding() {
+    let embedding = rexx_core::Owner::Phase10(rexx_core::Deferral::Embedding);
+    for (member, _) in rexx_api::layout::REFUSING_MEMBERS {
+        assert_eq!(
+            rexx_api::layout::refusal_owner(member),
+            Some(embedding),
+            "{member}"
+        );
+    }
+    assert_eq!(
+        rexx_api::layout::refusal_owner("RexxInstanceInterface.Halt"),
+        Some(embedding)
+    );
+}
+
 /// The negative control for the comparison above: a refusing table compared
 /// with itself refuses everything, and a filled member differs from its stub.
 #[test]

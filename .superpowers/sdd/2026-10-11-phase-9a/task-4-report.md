@@ -221,3 +221,63 @@ Per-task wall time: about 2 minutes for the final fmt, clippy and test runs over
 5. Not touched: `phase-4-exclusions.txt:5284` (the second instance, R4) still reads `OWNER: Phase 10`
    with no reason; `refusal-dispositions.tsv` records quoting probes that "only STDQUE (Phase 10)
    refused" are history and stay.
+
+## Fix round 1
+
+Review: `task-4-review.md`. One commit, the one that adds this section, on top of 598e9f22c.
+
+1. **Important 1, the bypass.** `owned_message` takes `Option<Owner>` and prints `owner.label()`;
+   it no longer accepts a string. Retyped with it: `instruction_owner`/`expr_owner`,
+   `excluded_owner`, `rexx_api::layout::refusal_owner` (answers `Option<Owner>`), the owed-entry
+   chain (`environment.rs` `owed`, `owed_entry_owner`, `unbuilt_collection_owner`,
+   `hash::DirectoryEntry::Owed`, `owed_table_owner`, `Loud::environment_symbol`,
+   `environment_entry`, `unreadable_collection`). `native_method`'s `Some("Phase 9")` is
+   `Some(Owner::Phase9)`. `Owner::phase()` is removed; the two tests that compared phase names
+   (`tests/internal_routines.rs`, `src/dispatch/native/tests.rs`) map the variant to its phase name
+   themselves. `phase_ten_reasons.rs`'s module doc lost the false clause ("whose label is the only
+   text that names Phase 10"). `refusal_dispositions.rs` reads the new forms: an `Owner`
+   parameter is the caller's, `Some(Owner::...)` is that owner's label; the string forms are gone
+   from the scanner and from its fixture.
+2. **The 9d set renamed.** `git mv rust/corpus/phase-9d-set.txt rust/corpus/suite-9d-set.txt`;
+   references updated in `docs/superpowers/plans/2026-10-11-phase-9a.md:177` and
+   `docs/superpowers/plans/phase-9a-gate.md:175` (`grep -rn '9d-set' rust/ docs/superpowers/plans/
+   docs/superpowers/specs/ rust/CLAUDE.md`: nothing else; the file's own header does not name
+   itself). SDD briefs, reports and the ledger keep the old name as history.
+   `coverage::the_union_reads_every_phase_subset_file` and
+   `ir::corpus_shape_tests::every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops`
+   pass (rows below).
+3. **`phase-4-exclusions.txt:5284`** reads `OWNER: Phase 10 Embedding, whose instance API ...`.
+4. **Minors.**
+   * R4 witness: `rexx-api/tests/layout.rs`
+     `every_refusing_member_is_owed_by_phase_10_for_embedding` (every `REFUSING_MEMBERS` member's
+     `refusal_owner`, and `RexxInstanceInterface.Halt` by name). Mutant: the `Halt` row's owner to
+     `Owner::Phase9` -> `cargo test --release -p rexx-api --test layout every_refusing_member`
+     exit 101, the test FAILED; reversed, `cmp` identical. The two `ffi.rs` texts are not witnessed:
+     their assertions run inside `extern "C"` functions, where a panic aborts the process, so no
+     in-process test can reach them.
+   * REHOME: a row's phase matches a constructor whose label is that phase, or that phase followed
+     by a space and a reason. Fixture: a `REHOME Phase 10` row for an `Owner::Phase10(Rxapi)`
+     constructor passes; a `REHOME Phase 9` row for an `Extension` constructor and the existing
+     `REHOME Phase 10` row for a Phase 9 constructor are reported.
+   * The duplicate `a_phase_10_label_carries_the_variant_name` is deleted.
+   * Blanking, two assertions: `without_test_modules` asserts each blanked module reaches its
+     closing line (no silent blanking to the end of the file), and
+     `the_scan_reads_the_test_modules_it_leaves_out` asserts `lib.rs`'s production text still yields
+     the literal `"a package settings write"`. (The review's suggested `"Phase 9"` literal no longer
+     exists after item 1.)
+
+`refusal-sites.tsv` refreshed again (`REXX_REFUSAL_SITES_REFRESH=1 ... --test refusal_sites --
+--test-threads=1`, exit 0): 33 rows changed, every change in column 4 with the path unchanged.
+
+Checks (all cargo commands under `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t4-target
+CARGO_INCREMENTAL=0 memcap 8G`, `-j 4`, unpiped, output to a file):
+
+| Command | Exit |
+|---|---|
+| `cargo fmt --all` then `cargo clippy -p rexx-core -p rexx-inventory -p rexx-api -p rexx-exec --all-targets -- -D warnings` | 0, 0 |
+| `cargo test --release -p rexx-exec --lib --test owners --test closed_phases --test refusal_dispositions --test refusal_sites --test internal_routines --test phase_ten_reasons --test spike --test native_entries --test suite --test coverage --no-fail-fast` | 0 (lib 1083, coverage 21, others as before; 2m39s) |
+| `cargo test --release -p rexx-api -p rexx-core -p rexx-inventory --no-fail-fast` | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/bif/LINEOUT,base/class/RexxQueue,base/directives/ROUTINE cargo test --release -p rexx-exec --test suite` | 101, the same three verdicts and captured texts as round 0 |
+
+Concern: the `ffi.rs` owners are pinned only by the structural scan, which catches a bare
+`"Phase 10"` but not a change to `Owner::Phase9`.

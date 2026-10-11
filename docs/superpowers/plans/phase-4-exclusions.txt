@@ -5281,7 +5281,7 @@ the loadable ones that declare a loader, rxsock and rxunixsys, print nothing.
   WholeNumberToObject through the context the loader or an earlier Stash
   kept): the oracle prints "same 0" and no UseStash line, rc 0; ours prints
   "same 1" and "use 42", rc 0. The task's re-review measured the oracle at
-  rc 139 on its own variant of the probe. OWNER: Phase 10, whose instance API
+  rc 139 on its own variant of the probe. OWNER: Phase 10 Embedding, whose instance API
   is where a second instance would come from (Phase 9 spec R4, 2026-10-10).
   SAY OUTPUT AND AN EXTENSION'S OWN printf INTERLEAVE DIFFERENTLY. SAY is
   buffered in the interpreter and written at exit (Phase 7 spec A1,

@@ -62,7 +62,7 @@ fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
 pub(super) fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
     let gap = |name: &str, owner: Owner| {
         Some(Loud {
-            message: owned_message(name, Some(owner.label())),
+            message: owned_message(name, Some(owner)),
         })
     };
     match kind {

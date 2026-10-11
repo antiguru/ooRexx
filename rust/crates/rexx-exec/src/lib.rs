@@ -497,7 +497,7 @@ impl Loud {
     fn internal_routine(name: &[u8], owner: Owner) -> Loud {
         let shown = String::from_utf8_lossy(name).into_owned();
         Loud {
-            message: owned_message(&format!("routine \"{shown}\""), Some(owner.label())),
+            message: owned_message(&format!("routine \"{shown}\""), Some(owner)),
         }
     }
 
@@ -508,7 +508,7 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("routine \"{shown}\" with a named semaphore"),
-                Some(Owner::Phase9.label()),
+                Some(Owner::Phase9),
             ),
         }
     }
@@ -560,10 +560,7 @@ impl Loud {
     /// themselves.
     fn redirection(what: &str, owner: Owner) -> Loud {
         Loud {
-            message: owned_message(
-                &format!("an ADDRESS WITH {what} redirection"),
-                Some(owner.label()),
-            ),
+            message: owned_message(&format!("an ADDRESS WITH {what} redirection"), Some(owner)),
         }
     }
 
@@ -587,7 +584,7 @@ impl Loud {
     /// stream as the first clause (`c2_stream_first_clause`,
     /// `c2_address_with_stream_first`) refused only `STDQUE`, which is Phase
     /// 10's.
-    fn environment_symbol(name: &[u8], owner: Option<&'static str>) -> Loud {
+    fn environment_symbol(name: &[u8], owner: Option<Owner>) -> Loud {
         let shown = String::from_utf8_lossy(name);
         Loud {
             message: owned_message(&format!("environment symbol \"{shown}\""), owner),
@@ -598,7 +595,7 @@ impl Loud {
     /// entry for and this crate builds nothing for. With no owner it is an
     /// entry the library bootstrap fills, which no program reaches, by the
     /// probes [`Loud::environment_symbol`] names.
-    fn environment_entry(index: &[u8], owner: Option<&'static str>) -> Loud {
+    fn environment_entry(index: &[u8], owner: Option<Owner>) -> Loud {
         let shown = String::from_utf8_lossy(index);
         Loud {
             message: owned_message(&format!("directory entry \"{shown}\""), owner),
@@ -612,7 +609,7 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("method \"{shown}\" of class \"{scope}\""),
-                Some("Phase 9"),
+                Some(Owner::Phase9),
             ),
         }
     }
@@ -643,7 +640,7 @@ impl Loud {
     /// [`Loud::environment_entry`] instead of building. With no owner it is
     /// one holding an entry the library bootstrap fills, which no program
     /// reaches (`env_supplier` refused only `STDQUE`, Phase 10's).
-    fn unreadable_collection(owner: Option<&'static str>) -> Loud {
+    fn unreadable_collection(owner: Option<Owner>) -> Loud {
         Loud {
             message: owned_message("a directory whose entries this crate does not fill", owner),
         }
@@ -664,7 +661,7 @@ impl Loud {
     /// one.
     fn package_option_write() -> Loud {
         Loud {
-            message: owned_message("a package settings write", Some(Owner::Phase9.label())),
+            message: owned_message("a package settings write", Some(Owner::Phase9)),
         }
     }
 
@@ -944,19 +941,19 @@ pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, Option<Owner>
 
 /// The owner [`rexx_inventory::builtins::EXCLUDED`] gives the builtin
 /// `name`, or `None` for a name it does not list.
-fn excluded_owner(name: &str) -> Option<&'static str> {
+fn excluded_owner(name: &str) -> Option<Owner> {
     let (phase, reason) = rexx_inventory::builtins::owner_of(name)?;
-    Owner::named(phase, Some(reason)).map(Owner::label)
+    Owner::named(phase, Some(reason))
 }
 
-/// Appends the owner phase to a loud message, `"{name} is not implemented
-/// ({owner})"`, or leaves it unsuffixed (`"{name} is not implemented"`) when
+/// Appends the owner's label to a loud message, `"{name} is not implemented
+/// ({label})"`, or leaves it unsuffixed (`"{name} is not implemented"`) when
 /// [`instruction_owner`]/[`expr_owner`] answer `None` -- meaning "this crate
 /// implements that variant", not "the owner is some particular phase".
-fn owned_message(name: &str, owner: Option<&'static str>) -> String {
+fn owned_message(name: &str, owner: Option<Owner>) -> String {
     match owner {
         None => format!("{name} is not implemented"),
-        Some(owner) => format!("{name} is not implemented ({owner})"),
+        Some(owner) => format!("{name} is not implemented ({})", owner.label()),
     }
 }
 
@@ -965,7 +962,7 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// (`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
 /// split") -- `None` for a variant this crate implements (see
 /// [`owned_message`]'s doc for why that is `None` and not a `"4a"` string).
-fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
+fn instruction_owner(kind: &InstructionKind) -> Option<Owner> {
     match kind {
         InstructionKind::Assignment { .. }
         | InstructionKind::Label { .. }
@@ -1054,7 +1051,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
 /// own doc for why this is a third copy of `owners.rs`'s `EXPR_TAGS` (there,
 /// `EXPR_TAGS`), and for the completeness guarantee the exhaustive match
 /// below carries.
-fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
+fn expr_owner(kind: &ExprKind) -> Option<Owner> {
     match kind {
         ExprKind::Literal(_)
         | ExprKind::Constant(_)

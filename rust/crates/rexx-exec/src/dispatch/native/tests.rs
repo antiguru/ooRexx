@@ -155,7 +155,10 @@ fn every_deferred_entry_point_names_an_open_phase() {
         };
         deferred += 1;
         assert!(
-            OPEN.contains(&owner.phase()),
+            OPEN.contains(&match owner {
+                Owner::Phase9 => "Phase 9",
+                Owner::Phase10(_) => "Phase 10",
+            }),
             "{} defers to {owner:?}, which is not one of {OPEN:?}",
             entry.name
         );

@@ -12,12 +12,11 @@
 //! **A refusal naming Phase 10 carries a reason from D3's closed set**
 //! (spec `2026-10-10-phase-9-core-conformance.md` D3).
 //!
-//! The reason is a `rexx_core::Deferral` inside `rexx_core::Owner::Phase10`,
-//! whose label is the only text that names Phase 10. So no string literal in
-//! the production sources of the crates `closed_phases.rs` scans for refusals
-//! (`rexx-exec`, `rexx-api`) may name Phase 10: one that does is a phase name
-//! that reached a refusal without a reason. Test modules hold vocabularies
-//! and are out of scope.
+//! The reason is a `rexx_core::Deferral` inside `rexx_core::Owner::Phase10`.
+//! No string literal in the production sources of the crates
+//! `closed_phases.rs` scans for refusals (`rexx-exec`, `rexx-api`) may name
+//! Phase 10: one that does is a phase name that reached a refusal without a
+//! reason. Test modules hold vocabularies and are out of scope.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -26,7 +25,7 @@ use std::path::{Path, PathBuf};
 #[path = "support/literals.rs"]
 mod source_literals;
 
-use rexx_core::{Deferral, Owner};
+use rexx_core::Owner;
 use source_literals::{literals, names, shown, source_files};
 
 /// The crates whose refusals the scan covers.
@@ -55,6 +54,11 @@ fn without_test_modules(text: &str) -> String {
                 while close < lines.len() && lines[close] != closing {
                     close += 1;
                 }
+                assert!(
+                    close < lines.len(),
+                    "the test module at line {} never closes",
+                    at + 1
+                );
                 out.extend(std::iter::repeat_n("", close + 1 - at));
                 at = close + 1;
                 continue;
@@ -161,7 +165,7 @@ fn no_production_literal_names_phase_10() {
     assert!(
         found.is_empty(),
         "these literals name Phase 10 without a reason; build the owner as \
-         `Owner::Phase10(Deferral::...)` and print its `label()`:\n{found:#?}"
+         `Owner::Phase10(Deferral::...)` and pass it to the constructor:\n{found:#?}"
     );
 }
 
@@ -194,6 +198,16 @@ fn the_scan_reads_the_test_modules_it_leaves_out() {
     for production in ["src/lib.rs", "src/dispatch/native.rs", "src/environment.rs"] {
         assert!(kept.contains(production), "{production} was left out");
     }
+    let (_, lib) = production_sources("rexx-exec")
+        .into_iter()
+        .find(|(path, _)| shown(path) == "src/lib.rs")
+        .expect("lib.rs is kept");
+    assert!(
+        literals(&lib)
+            .iter()
+            .any(|(_, literal)| literal == "a package settings write"),
+        "lib.rs's production text was blanked"
+    );
 }
 
 /// An inline test module is blanked to its closing brace and nothing past
@@ -268,16 +282,4 @@ fn every_excluded_builtin_names_a_reason_the_enum_knows() {
         !rexx_inventory::builtins::EXCLUDED.is_empty(),
         "the table is empty, so this test passes over nothing"
     );
-}
-
-/// The test-side vocabulary is the production one: a Phase 10 label is the
-/// phase's name, a space and the variant's name, for every variant.
-#[test]
-fn a_phase_10_label_carries_the_variant_name() {
-    for reason in Deferral::ALL {
-        assert_eq!(
-            Owner::Phase10(reason).label(),
-            format!("Phase 10 {}", reason.name())
-        );
-    }
 }

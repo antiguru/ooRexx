@@ -110,7 +110,10 @@ fn every_unimplemented_row_names_an_open_phase_that_owes_it() {
         let Some(owner) = owner else { continue };
         owed += 1;
         assert!(
-            PHASES.contains(&owner.phase()),
+            PHASES.contains(&match owner {
+                rexx_core::Owner::Phase9 => "Phase 9",
+                rexx_core::Owner::Phase10(_) => "Phase 10",
+            }),
             "{name} names owner {owner:?}, which is not one of {PHASES:?}"
         );
     }

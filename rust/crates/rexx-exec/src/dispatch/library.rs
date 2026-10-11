@@ -835,10 +835,7 @@ impl Interp {
             }
             Refused::ClassicStyle => {
                 return Loud {
-                    message: crate::owned_message(
-                        &format!("{refused}"),
-                        Some(Owner::Phase9.label()),
-                    ),
+                    message: crate::owned_message(&format!("{refused}"), Some(Owner::Phase9)),
                 }
                 .into();
             }

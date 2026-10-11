@@ -12,6 +12,8 @@
 //! The mapped collections' store, and the two classes that are the store with
 //! nothing on top.
 
+use rexx_core::Owner;
+
 use super::collection;
 use super::required_string_named_argument;
 use super::{
@@ -1626,7 +1628,7 @@ pub(crate) enum DirectoryEntry {
     Found(ObjRef),
     /// An entry the oracle holds and this crate does not build, with its
     /// owner.
-    Owed(Option<&'static str>),
+    Owed(Option<Owner>),
     Absent,
 }
 
@@ -1746,7 +1748,7 @@ fn text_slot(interp: &mut Interp, store: &Store, key: Key<'_>) -> Result<Option<
 
 /// The owner of an entry `table` still holds and this crate does not build,
 /// or `None` when it holds none.
-pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<Option<&'static str>> {
+pub(crate) fn owed_table_owner(interp: &mut Interp, table: ObjRef) -> Option<Option<Owner>> {
     let store = read_store(interp, table, CONTENTS).ok()??;
     let order = walk_in(interp, &store).ok()?;
     order.into_iter().find_map(|slot| {

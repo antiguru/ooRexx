@@ -403,11 +403,11 @@ pub const REFUSING_MEMBERS: &[(&str, Owner)] = &[
 /// The owner a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
 /// none for a member no row names, which every populated table fills.
 #[must_use]
-pub fn refusal_owner(entry: &str) -> Option<&'static str> {
+pub fn refusal_owner(entry: &str) -> Option<Owner> {
     REFUSING_MEMBERS
         .iter()
         .find(|(member, _)| *member == entry)
-        .map(|(_, owner)| owner.label())
+        .map(|(_, owner)| *owner)
 }
 
 /// The refusal text for `what`, naming `owner`.
@@ -417,8 +417,8 @@ pub(crate) fn refusal(what: &str, owner: Owner) -> String {
 
 /// The refusal text for `entry`, with its owner when it has one.
 fn refusal_text(entry: &str) -> String {
-    match REFUSING_MEMBERS.iter().find(|(member, _)| *member == entry) {
-        Some((_, owner)) => refusal(entry, *owner),
+    match refusal_owner(entry) {
+        Some(owner) => refusal(entry, owner),
         None => format!("{entry} is not implemented"),
     }
 }

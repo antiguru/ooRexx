@@ -59,15 +59,6 @@ pub enum Owner {
 }
 
 impl Owner {
-    /// The phase's name alone.
-    #[must_use]
-    pub const fn phase(self) -> &'static str {
-        match self {
-            Owner::Phase9 => "Phase 9",
-            Owner::Phase10(_) => "Phase 10",
-        }
-    }
-
     /// What a refusal prints in its parentheses: the phase's name, then a
     /// Phase 10 owner's reason.
     #[must_use]
@@ -101,13 +92,10 @@ mod tests {
     fn a_phase_10_label_is_the_phase_then_the_reason() {
         for reason in Deferral::ALL {
             let owner = Owner::Phase10(reason);
-            assert_eq!(
-                owner.label(),
-                format!("{} {}", owner.phase(), reason.name())
-            );
+            assert_eq!(owner.label(), format!("Phase 10 {}", reason.name()));
             assert_eq!(Owner::named("Phase 10", Some(reason.name())), Some(owner));
         }
-        assert_eq!(Owner::Phase9.label(), Owner::Phase9.phase());
+        assert_eq!(Owner::Phase9.label(), "Phase 9");
         assert_eq!(Owner::named("Phase 9", None), Some(Owner::Phase9));
         assert_eq!(Owner::named("Phase 10", None), None);
         assert_eq!(Owner::named("Phase 10", Some("Queue")), None);

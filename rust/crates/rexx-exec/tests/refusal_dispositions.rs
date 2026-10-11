@@ -23,12 +23,11 @@
 //! phase).
 //!
 //! An owner is read from the constructor's own `owned_message` call: `None`, or
-//! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N, and
-//! `Some(Owner::...label())` is the label that `rexx_core::Owner` value
-//! prints; an `Owner` or `&'static str` parameter is the caller's; an `Option`
-//! a caller passes in is no owner, since a caller can pass `None`; and an owner
-//! computed by a function is no owner unless [`COMPUTED_OWNERS`] names the
-//! function and the test that holds it to `Some`.
+//! no `owned_message` at all, is no owner; `Some(Owner::...)` is the label
+//! that `rexx_core::Owner` value prints; an `Owner` parameter is the caller's;
+//! an `Option` a caller passes in is no owner, since a caller can pass `None`;
+//! and an owner computed by a function is no owner unless [`COMPUTED_OWNERS`]
+//! names the function and the test that holds it to `Some`.
 //! Every `message:` field of a constructor is read, and the constructor has
 //! an owner only when each of them does. A `Loud` struct literal
 //! outside a constructor must carry an owner, so an ownerless refusal always
@@ -456,19 +455,11 @@ fn message_owner(field: &str, body: &str, params: &str) -> Owner {
         .strip_prefix("Some(")
         .and_then(|s| s.strip_suffix(')'))
     {
-        if let Some(literal) = inner.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-            return Owner::Phase(literal.to_string());
-        }
-        if param(inner, "&'staticstr") {
+        if param(inner, "Owner") {
             return Owner::Given;
         }
-        if let Some(value) = inner.strip_suffix(".label()") {
-            if param(value, "Owner") {
-                return Owner::Given;
-            }
-            if let Some(label) = owner_label(value) {
-                return Owner::Phase(label);
-            }
+        if let Some(label) = owner_label(inner) {
+            return Owner::Phase(label);
         }
     }
     if COMPUTED_OWNERS
@@ -675,7 +666,9 @@ fn problems(
                     row.constructor, row.phase
                 ));
             }
-            if *owner != Owner::Phase(row.phase.clone()) {
+            let names_it = matches!(owner, Owner::Phase(label)
+                if *label == row.phase || label.starts_with(&format!("{} ", row.phase)));
+            if !names_it {
                 found.push(format!(
                     "{}: REHOME to {}, but the constructor at {site} carries {owner:?}",
                     row.constructor, row.phase
@@ -797,12 +790,12 @@ fn the_scanner_reads_each_owner_form() {
     assert_eq!(
         owners.get("named_semaphore").map(|(owner, _)| owner),
         Some(&Owner::Phase("Phase 9".to_string())),
-        "a label printed by an `Owner` value"
+        "an `Owner` value"
     );
     assert_eq!(
         owners.get("internal_routine").map(|(owner, _)| owner),
         Some(&Owner::Given),
-        "an `Owner` parameter's label"
+        "an `Owner` parameter"
     );
     assert_eq!(
         owners.get("deferred_send").map(|(owner, _)| owner),
@@ -847,15 +840,15 @@ impl Loud {
     }
     fn nine() -> Loud {
         Loud {
-            message: owned_message(\"y\", Some(\"Phase 9\")),
+            message: owned_message(\"y\", Some(Owner::Phase9)),
         }
     }
-    fn given(owner: &'static str) -> Loud {
+    fn given(owner: Owner) -> Loud {
         Loud {
             message: owned_message(\"z\", Some(owner)),
         }
     }
-    fn optional(owner: Option<&'static str>) -> Loud {
+    fn optional(owner: Option<Owner>) -> Loud {
         Loud {
             message: owned_message(\"w\", owner),
         }
@@ -868,7 +861,7 @@ impl Loud {
     fn mixed(what: &str, early: bool) -> Loud {
         if early {
             return Loud {
-                message: owned_message(what, Some(\"Phase 9\")),
+                message: owned_message(what, Some(Owner::Phase9)),
             };
         }
         Loud {
@@ -886,24 +879,24 @@ fn adjacent(r: u8) -> Failure {
     match r {
         0 => return Loud { message: String::new() }.into(),
         _ => Loud {
-            message: owned_message(\"t\", Some(\"Phase 10\")),
+            message: owned_message(\"t\", Some(Owner::Phase10(Deferral::Rxapi))),
         }
         .into(),
     }
 }
-fn typed(owner: Owner) -> Loud {
+fn hostemu() -> Loud {
     Loud {
-        message: owned_message(\"s\", Some(owner.label())),
+        message: owned_message(\"s\", Some(Owner::Phase10(Deferral::Extension))),
     }
 }
 fn rxapi() -> Loud {
     Loud {
-        message: owned_message(\"r\", Some(Owner::Phase10(Deferral::Rxapi).label())),
+        message: owned_message(\"r\", Some(Owner::Phase10(Deferral::Rxapi))),
     }
 }
 fn unknown() -> Loud {
     Loud {
-        message: owned_message(\"q\", Some(Owner::Phase10(Deferral::Queue).label())),
+        message: owned_message(\"q\", Some(Owner::Phase10(Deferral::Queue))),
     }
 }
 ";
@@ -914,7 +907,10 @@ fn unknown() -> Loud {
     assert_eq!(owners.len(), 10);
     assert_eq!(owners["optional"].0, Owner::None);
     assert_eq!(owners["given"].0, Owner::Given);
-    assert_eq!(owners["typed"].0, Owner::Given);
+    assert_eq!(
+        owners["hostemu"].0,
+        Owner::Phase("Phase 10 Extension".to_string())
+    );
     assert_eq!(
         owners["rxapi"].0,
         Owner::Phase("Phase 10 Rxapi".to_string())
@@ -934,6 +930,7 @@ optional\tLIMIT\t-\tDeviation 20
 mutant_self\tGUARD\t-\tprobe p4
 mixed\tGUARD\t-\tprobe p5
 unknown\tGUARD\t-\tprobe p6
+rxapi\tREHOME\tPhase 10\t\"the row's text\"
 ";
     assert!(
         problems(&owners, &[], &parse_table(table), &documents).is_empty(),
@@ -945,6 +942,7 @@ plain\tGUARD\t-\tprobe p1
 none\tDEVIATION\t-\toracle-crashes.txt entry 7
 gone\tGUARD\t-\tprobe p2
 nine\tREHOME\tPhase 10\t\"the row's text\"
+hostemu\tREHOME\tPhase 9\t\"the row's text\"
 given\tGUARD\t-\tprobe p3
 ";
     let found = problems(&owners, &literals, &parse_table(wrong), &documents);
@@ -956,6 +954,7 @@ given\tGUARD\t-\tprobe p3
         "none: cites oracle-crashes.txt entry 7",
         "gone: a row with no constructor",
         "nine: REHOME to Phase 10, but the constructor",
+        "hostemu: REHOME to Phase 9, but the constructor",
         "given: a GUARD row for a constructor",
         "optional (src/lib.rs:22): no owner and no disposition row",
         "unknown (src/lib.rs:68): no owner and no disposition row",
