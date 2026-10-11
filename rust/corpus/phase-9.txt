@@ -1,0 +1,6 @@
+# Phase 9 corpus subset -- witnesses for the ooTest suite gate's findings.
+# The union with the earlier phase-*.txt files is what the harnesses read, not
+# this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored.

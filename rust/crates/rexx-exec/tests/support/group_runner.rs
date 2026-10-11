@@ -131,9 +131,17 @@ fn groups_root() -> PathBuf {
     worktree().join("ootest/ooRexx")
 }
 
+/// The bytes of `path`. A copy that is written back is read with this: a
+/// group file or framework file may hold bytes that are not UTF-8 (a literal
+/// `0xAA` in `C2X.testGroup`), and the copy must keep them.
+pub fn read_bytes(path: &Path) -> Vec<u8> {
+    fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
+}
+
+/// `path` as text, invalid UTF-8 replaced: for reading only, never for a
+/// file that is written back.
 pub fn read_lossy(path: &Path) -> String {
-    let bytes = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    String::from_utf8_lossy(&bytes).into_owned()
+    String::from_utf8_lossy(&read_bytes(path)).into_owned()
 }
 
 /// Each `::METHOD` and `::ROUTINE` of `text`, lower-cased, with its body.
@@ -289,33 +297,41 @@ pub fn fresh_copy(run: &Path, dir: &str) {
     .expect("cannot copy rxregexp.cls");
 }
 
+/// Whether `haystack` holds `needle`.
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
 /// Removes each `rxfuncquery` test from the copied `ooTest.frm`, with the
-/// comment above it and the assignment it guards.
-fn without_rxfuncquery(frm: &Path) {
-    let text = fs::read_to_string(frm).expect("the copied ooTest.frm");
-    let lines: Vec<&str> = text.split('\n').collect();
+/// comment above it and the assignment it guards. The file is read and
+/// written as bytes, so a byte that is not UTF-8 survives.
+pub fn without_rxfuncquery(frm: &Path) {
+    let text = read_bytes(frm);
+    let lines: Vec<&[u8]> = text.split(|&byte| byte == b'\n').collect();
     let hits: Vec<usize> = (0..lines.len())
-        .filter(|&at| lines[at].contains("rxfuncquery("))
+        .filter(|&at| contains(lines[at], b"rxfuncquery("))
         .collect();
     assert!(!hits.is_empty(), "ooTest.frm has no rxfuncquery to remove");
     let mut dropped = BTreeSet::new();
     for at in hits {
         assert!(
             at > 0
-                && lines[at - 1].trim_start().starts_with("--")
+                && lines[at - 1].trim_ascii_start().starts_with(b"--")
                 && lines
                     .get(at + 1)
-                    .is_some_and(|next| next.trim_start().starts_with("versions[")),
+                    .is_some_and(|next| next.trim_ascii_start().starts_with(b"versions[")),
             "ooTest.frm line {} is not a commented rxfuncquery test guarding one assignment",
             at + 1
         );
         dropped.extend([at - 1, at, at + 1]);
     }
-    let kept: Vec<&str> = (0..lines.len())
+    let kept: Vec<&[u8]> = (0..lines.len())
         .filter(|at| !dropped.contains(at))
         .map(|at| lines[at])
         .collect();
-    fs::write(frm, kept.join("\n")).expect("cannot rewrite the copied ooTest.frm");
+    fs::write(frm, kept.join(&b'\n')).expect("cannot rewrite the copied ooTest.frm");
 }
 
 /// `stdout` with what differs between any two runs of one side masked: each
@@ -664,41 +680,46 @@ fn interpreter_bin(run: &Path) -> PathBuf {
 
 /// Renames each test of `group` that `left_out` names in the copy's group
 /// file, so the framework no longer counts it a test; each must be found.
+/// The file is matched and rewritten as bytes: only the renamed methods'
+/// lines change, whatever bytes the rest holds.
 pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTreeSet<S>) {
-    let text = fs::read(group_file).expect("the copied group file");
-    let text = String::from_utf8_lossy(&text).into_owned();
+    let text = read_bytes(group_file);
     let mut skipped = BTreeSet::new();
-    let lines: Vec<String> = text
-        .split('\n')
+    let lines: Vec<Vec<u8>> = text
+        .split(|&byte| byte == b'\n')
         .map(|line| {
-            let trimmed = line.trim_start();
+            let trimmed = line.trim_ascii_start();
             let Some(rest) = trimmed
                 .get(..8)
-                .filter(|head| head.eq_ignore_ascii_case("::method"))
+                .filter(|head| head.eq_ignore_ascii_case(b"::method"))
                 .map(|_| &trimmed[8..])
             else {
-                return line.to_string();
+                return line.to_vec();
             };
-            let rest = rest.trim_start();
-            let quoted = rest.starts_with(['\'', '"']);
+            let rest = rest.trim_ascii_start();
+            let quoted = rest.starts_with(b"'") || rest.starts_with(b"\"");
             let name_start = usize::from(quoted);
-            let name: String = rest[name_start..]
-                .chars()
-                .take_while(|c| {
+            let name: Vec<u8> = rest[name_start..]
+                .iter()
+                .copied()
+                .take_while(|&byte| {
                     if quoted {
-                        !matches!(c, '\'' | '"')
+                        !matches!(byte, b'\'' | b'"')
                     } else {
-                        c.is_ascii_alphanumeric() || matches!(c, '_' | '!' | '?' | '.')
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'!' | b'?' | b'.')
                     }
                 })
                 .collect();
-            let member = format!("{group}.{}", name.to_ascii_uppercase());
+            let member = format!(
+                "{group}.{}",
+                String::from_utf8_lossy(&name).to_ascii_uppercase()
+            );
             if !left_out.iter().any(|name| name.as_ref() == member) {
-                return line.to_string();
+                return line.to_vec();
             }
             skipped.insert(member);
             let at = line.len() - rest.len() + name_start;
-            format!("{}SKIPPED_{}", &line[..at], &line[at..])
+            [&line[..at], b"SKIPPED_".as_slice(), &line[at..]].concat()
         })
         .collect();
     let wanted: BTreeSet<String> = left_out
@@ -711,7 +732,39 @@ pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTre
         skipped, wanted,
         "the left-out tests of {group} renamed in the copy"
     );
-    fs::write(group_file, lines.join("\n")).expect("cannot rewrite the copied group file");
+    fs::write(group_file, lines.join(&b'\n')).expect("cannot rewrite the copied group file");
+}
+
+/// The line `TestCase~execute` starts each test with, in the copy's
+/// `OOREXXUNIT.CLS`, and what it becomes: the same line, which also
+/// writes `started NAME` to stderr, so line numbers are unchanged.
+const START_LINE: &[u8] = b"  aTestResult~startTest(self)       -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
+const START_MARKED: &[u8] = b"  aTestResult~startTest(self); .error~say('started' fName) -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
+
+/// Makes the copy at `at` write `started NAME` to stderr as each test
+/// starts. The file is read and written as bytes.
+pub fn mark_starts(at: &Path) {
+    let file = at.join("framework/OOREXXUNIT.CLS");
+    let text = read_bytes(&file);
+    let hits: Vec<usize> = text
+        .windows(START_LINE.len())
+        .enumerate()
+        .filter(|(_, window)| *window == START_LINE)
+        .map(|(at, _)| at)
+        .collect();
+    assert_eq!(hits.len(), 1, "one test start in {}", file.display());
+    let at = hits[0];
+    let marked = [&text[..at], START_MARKED, &text[at + START_LINE.len()..]].concat();
+    fs::write(&file, marked).expect("cannot rewrite the copied OOREXXUNIT.CLS");
+}
+
+/// The tests `run` started, in order.
+pub fn started(run: &Run) -> Vec<String> {
+    String::from_utf8_lossy(&run.stderr)
+        .lines()
+        .filter_map(|line| line.strip_prefix("started "))
+        .map(str::to_ascii_uppercase)
+        .collect()
 }
 
 /// The path of `group`'s file in the copy `run`.

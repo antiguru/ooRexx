@@ -527,6 +527,119 @@ mod group_runner;
 mod support;
 mod watchdog;
 
+/// The group runner's copies keep every byte they do not rewrite: a group
+/// file or `ooTest.frm` need not be UTF-8.
+mod byte_exact_copies {
+    use std::collections::BTreeSet;
+    use std::fs;
+
+    use super::group_runner::{mark_starts, skip, without_rxfuncquery, worktree};
+
+    /// A scratch directory of this test's own under the target directory.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("byte-exact-copies");
+        fs::create_dir_all(&dir).expect("the scratch directory");
+        dir.join(name)
+    }
+
+    /// The lines of `bytes`, split on `\n` as the runner splits them.
+    fn lines(bytes: &[u8]) -> Vec<&[u8]> {
+        bytes.split(|&byte| byte == b'\n').collect()
+    }
+
+    /// `skip` over a copy of `C2X.testGroup`, which holds a literal `0xAA`,
+    /// changes the renamed method's line and no other byte.
+    #[test]
+    fn skip_changes_only_the_renamed_methods_line() {
+        let original = fs::read(worktree().join("ootest/ooRexx/base/bif/C2X.testGroup"))
+            .expect("C2X.testGroup");
+        assert!(
+            std::str::from_utf8(&original).is_err(),
+            "C2X.testGroup is expected to hold a byte that is not UTF-8"
+        );
+        let copy = scratch("C2X.testGroup");
+        fs::write(&copy, &original).expect("the copy");
+        let before = lines(&original);
+        let renamed = before
+            .iter()
+            .position(|line| {
+                line.trim_ascii_start()
+                    .to_ascii_lowercase()
+                    .starts_with(b"::method")
+            })
+            .expect("a test method");
+        let name =
+            String::from_utf8_lossy(before[renamed].trim_ascii_start()[8..].trim_ascii_start())
+                .split_whitespace()
+                .next()
+                .expect("a method name")
+                .trim_matches(['\'', '"'])
+                .to_string();
+        let member = format!("C2X.{}", name.to_ascii_uppercase());
+        skip(&copy, "C2X", &BTreeSet::from([member]));
+        let written = fs::read(&copy).expect("the rewritten copy");
+        let after = lines(&written);
+        assert_eq!(before.len(), after.len(), "the line count");
+        for (at, (was, now)) in before.iter().zip(&after).enumerate() {
+            if at == renamed {
+                let marker = b"SKIPPED_";
+                let inserted = now
+                    .windows(marker.len())
+                    .position(|window| window == marker)
+                    .expect("the renamed line carries the marker");
+                let restored = [&now[..inserted], &now[inserted + marker.len()..]].concat();
+                assert_eq!(restored.as_slice(), *was, "the renamed line");
+            } else {
+                assert_eq!(was, now, "line {} changed", at + 1);
+            }
+        }
+        fs::remove_file(&copy).expect("remove the copy");
+    }
+
+    /// `without_rxfuncquery` over a copy of `ooTest.frm` with a `0xFF` in a
+    /// comment does not panic and keeps the byte.
+    #[test]
+    fn without_rxfuncquery_keeps_a_byte_that_is_not_utf_8() {
+        let mut text = fs::read(worktree().join("ootest/ooTest.frm")).expect("ooTest.frm");
+        let at = text
+            .windows(2)
+            .position(|pair| pair == b"--")
+            .expect("a comment");
+        text.insert(at + 2, 0xFF);
+        let copy = scratch("ooTest.frm");
+        fs::write(&copy, &text).expect("the copy");
+        without_rxfuncquery(&copy);
+        let written = fs::read(&copy).expect("the rewritten copy");
+        assert!(written.contains(&0xFF), "the 0xFF byte was lost");
+        assert!(
+            !written.windows(12).any(|window| window == b"rxfuncquery("),
+            "an rxfuncquery test is left"
+        );
+        fs::remove_file(&copy).expect("remove the copy");
+    }
+
+    /// `mark_starts` keeps a byte that is not UTF-8 elsewhere in the file.
+    #[test]
+    fn mark_starts_keeps_a_byte_that_is_not_utf_8() {
+        let at = scratch("mark-starts");
+        fs::create_dir_all(at.join("framework")).expect("the framework directory");
+        let mut text =
+            fs::read(worktree().join("ootest/framework/OOREXXUNIT.CLS")).expect("OOREXXUNIT.CLS");
+        text.insert(0, 0xFF);
+        fs::write(at.join("framework/OOREXXUNIT.CLS"), &text).expect("the copy");
+        mark_starts(&at);
+        let written = fs::read(at.join("framework/OOREXXUNIT.CLS")).expect("the rewritten copy");
+        assert_eq!(written[0], 0xFF, "the leading 0xFF was lost");
+        assert!(
+            written
+                .windows(20)
+                .any(|window| window == b".error~say('started'"),
+            "the start line is not marked"
+        );
+        fs::remove_dir_all(&at).expect("remove the copy");
+    }
+}
+
 /// One test of criterion 1's derived list, run in process, for the
 /// instruments that read an `Outcome` field a feature adds.
 #[cfg(any(feature = "pinning", feature = "sharing"))]
@@ -2468,8 +2581,8 @@ mod group_runs {
 
         use super::super::group_runner::{
             GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
-            group_file, masked, outcome, reaching_rxapi, read_lossy, rows_in_parallel,
-            run_crate_within, run_oracle_within, skip,
+            group_file, mark_starts, masked, outcome, reaching_rxapi, read_lossy, rows_in_parallel,
+            run_crate_within, run_oracle_within, skip, started,
         };
         use super::super::support::oracle;
         use super::{WALL_CLOCK, inverted};
@@ -2936,34 +3049,6 @@ mod group_runs {
                 "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
             ),
         ];
-
-        /// The line `TestCase~execute` starts each test with, in the copy's
-        /// `OOREXXUNIT.CLS`, and what it becomes: the same line, which also
-        /// writes `started NAME` to stderr, so line numbers are unchanged.
-        const START_LINE: &str = "  aTestResult~startTest(self)       -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
-        const START_MARKED: &str = "  aTestResult~startTest(self); .error~say('started' fName) -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
-
-        fn mark_starts(at: &Path) {
-            let file = at.join("framework/OOREXXUNIT.CLS");
-            let text = read_lossy(&file);
-            assert_eq!(
-                text.matches(START_LINE).count(),
-                1,
-                "one test start in {}",
-                file.display()
-            );
-            std::fs::write(&file, text.replacen(START_LINE, START_MARKED, 1))
-                .expect("cannot rewrite the copied OOREXXUNIT.CLS");
-        }
-
-        /// The tests `run` started, in order.
-        fn started(run: &Run) -> Vec<String> {
-            String::from_utf8_lossy(&run.stderr)
-                .lines()
-                .filter_map(|line| line.strip_prefix("started "))
-                .map(str::to_ascii_uppercase)
-                .collect()
-        }
 
         /// The tests a run's `-V 2` detail names as failing or in error, in
         /// order.

@@ -63,6 +63,7 @@ const SUBSET_FILES: &[&str] = &[
     "phase-6.txt",
     "phase-7.txt",
     "phase-8.txt",
+    "phase-9.txt",
 ];
 
 /// The directory one corpus program runs in: its own, under the target
