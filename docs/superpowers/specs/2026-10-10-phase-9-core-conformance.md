@@ -63,7 +63,8 @@ below comes from scout A section 3 or from the reviews:
   tests-run figure is reported in the table and is not the denominator. The denominator check is:
   the set of names started equals the expected set. Pass or fail is criterion 1's.
 * **Denominator.** A group's expected set is its test methods, enumerated statically by
-  `rexx-extract`'s `extract`, minus the group's rows in all three files. `suite-not-run.txt` lists
+  `group_runner::source_test_names` (the `test` methods of `ooTestCase` subclasses, resource bodies
+  skipped; amended 2026-10-11 from `rexx-extract`'s `extract`, which counts both), minus the group's rows in all three files. `suite-not-run.txt` lists
   the tests the framework does not run on this host, each with its reason: `restrictOS` (for example
   `bug2061_newline_misalignment.testGroup:41`), a test type the framework skips by default (for
   example `doc/rexxref/chapter7/Section4`'s `DOC_EXAMPLE_NOISE_TEST`), or anything else `extract`
