@@ -1,8 +1,8 @@
 # Phase 9: core conformance
 
-**Status:** draft for Moritz's review, 2026-10-11, after three review rounds
+**Status:** draft for Moritz's review, 2026-10-11, after four review rounds
 (`.superpowers/sdd/2026-10-10-phase-9-scoping/spec-review.md`, `spec-rereview.md`,
-`spec-review-fable.md`). Roadmap row 9
+`spec-review-fable.md`, `spec-recheck-fable.md`). Roadmap row 9
 (`docs/superpowers/plans/2026-07-27-rust-rewrite.md:661`) is the exit contract, read through this
 document; section 7 lists the roadmap edits this spec makes.
 
@@ -22,7 +22,7 @@ file above, and its decision numbers are written "roadmap D11" to keep them apar
 |---|---|---|
 | D1 | **L3-core is judged by the suite's own verdict, against a fixed denominator.** A group is green when every test in its expected set (section 2) ran and passed under `testOORexx.rex`, every test that ran is in the expected set or has a row in one of the files of D2, and the run ends normally. Oracle differences are reported in the gate record and never gate. | Moritz, 2026-10-07 (`oracle-is-a-build-tool`): new gates judge by invariants, and ooTest's assertions are those invariants. Without the denominator, a group that discovers no tests is green. Scout A section 1 met that case: a duplicate file in the copy made `SysFileTree` and `samples/samples` run zero tests on both sides. |
 | D2 | **Three files hold every test the gate does not require to pass, one row per test, each row with an owner and a mechanically checked reason.** `phase-9-exclusions.txt` holds Phase 10 rows, and Phase 10 deletes it. `suite-licences.txt` is permanent and holds Deviation, environment and flaky rows. `suite-not-run.txt` holds tests the framework does not run on this host, and is permanent too. Section 2 gives each owner's check and the paths. | Scout A section 2: the group rules miss the rows that matter (165 of the 232 refusal-blocked tests sit in groups the gate counts). An exclusion with no checkable reason is a suite that quietly does not run. Permanent rows cannot be removed by Phase 10 work, so they need their own file. |
-| D3 | **A refusal naming Phase 10 stays Phase 10's only with a reason from a closed set**: `Rxapi` (needs the daemon), `Extension` (an extension library), `Row10NativeApi` (a row 10 native-API group) or `Embedding` (R4). The reason is a parameter of each constructor shape that names Phase 10 (`util`, `deferred`, `owned_message`, `gap`, `redirection`, `rexx-inventory`'s `EXCLUDED` table, which gains a column), and a structural test asserts every `"Phase 10"` literal under `src/` carries one; literals in `tests/` are out of its scope. Criterion 1 then shows that no gate group reaches a site without one. 9a classifies every `"Phase 10"` site and relabels the ones that are Phase 9's. | Labels rot, as 6.1 found. Non-macrospace RexxUtil was re-homed by R2 (scout D section 2). "A package settings write" (`lib.rs:664`, `fn package_option_write`) is mislabelled: it is `Package~options` and `~defaultOptions` with a value, and `rexx -o` needs it. |
+| D3 | **A refusal naming Phase 10 stays Phase 10's only with a reason from a closed set**: `Rxapi` (needs the daemon), `Extension` (an extension library), `Row10NativeApi` (a row 10 native-API group) or `Embedding` (R4). The reason is a parameter of each constructor shape that names Phase 10 (`util`, `deferred`, `owned_message` and the `gap` closure over it, `Loud::redirection`, `rexx-inventory`'s `EXCLUDED` table, which gains a column, and the `.STDQUE` owed entry at `environment.rs:363`, which becomes a constructor call). A structural test scans `rexx-exec` and `rexx-api`, the crates `closed_phases` scans, and asserts every `"Phase 10"` literal under `src/` outside `#[cfg(test)]` modules carries one; literals in `tests/` and in `tests.rs` modules are vocabularies and are out of its scope. Criterion 1 then shows that no gate group reaches a site without one. 9a classifies every `"Phase 10"` site and relabels the ones that are Phase 9's. | Labels rot, as 6.1 found. Non-macrospace RexxUtil was re-homed by R2 (scout D section 2). "A package settings write" (`lib.rs:664`, `fn package_option_write`) is mislabelled: it is `Package~options` and `~defaultOptions` with a value, and `rexx -o` needs it. |
 | D4 | **`rexx` and `rexxc` are binaries of `rexx-exec`**, built directly on `run_program` and the parser. `rexx-run` is removed and its callers switched to `rexx` in a 9c task of its own (section 5). The roadmap's `rexx-cli` crate is not created, and historical records are not rewritten. | Scout C section 1: the tests find `rexx-run` through `CARGO_BIN_EXE_rexx-run`, which cargo sets only for binaries of the same package (inferred from cargo's documentation, not run). `rexx` needs no embedding API (R4). |
 | D5 | **A `.rxo` file is the oracle's prefix, then a header the oracle rejects, then the checked source** (R5). Restore is interpreter surface, reached through `rexx FILE`, `.Routine~newFile`, `.Routine~new(name, data)` with source, encoded and binary data, `.Method` file loading, `::REQUIRES`, an external `CALL`, and the native `NewRoutine` and `LoadPackageFromData`. A compiled program answers `SOURCELINE`, `PARSE SOURCE` and trace lines as the oracle's compiled program does, which is measured rather than assumed. An oracle-written `.rxo`, or one whose header this build does not accept, raises `Error 3.903` ("cannot be run by this version"), rc 253. | Scout C section 2: the oracle's payload is a heap dump holding pointers and paths, so neither direction can be compatible. The ooTest groups write and read within one implementation, and they assert the first 29 bytes. A header that fails the oracle's `validate` makes the oracle answer 3.903 rather than crash, and a truncated image does crash it, rc 139. |
 | D6 | **Every parse-error secondary message fills its inserts, byte-identical to the oracle** (R6). The raise goes through an API that cannot be called without the inserts its message needs, which is 6.1 R3's condition for a reversal. A committed script re-derives `corpus/errors/parse-errors.tsv` from the oracle's `rexxc` with the secondary message line, and the gate compares this crate's `rexxc` against the committed file. A structural test requires each (major, sub) the raising API can emit to have a TSV row, or a recorded reason that no program reaches it. | `rexx` and `rexxc` print exactly these messages, and the `incorrectCharacters` group fails on them (scout A section 4). The TSV alone would leave any message no row raises unfilled. |
@@ -60,7 +60,8 @@ below comes from scout A section 3 or from the reviews:
   that ran it.
 * **What a test is.** A test is its uppercased method name within its group. Ran is the set of names
   in the `started` markers, as `whole_groups`' `mark_starts` writes them. The framework's own
-  tests-run figure is reported in the table and is not the denominator.
+  tests-run figure is reported in the table and is not the denominator. The denominator check is:
+  the set of names started equals the expected set. Pass or fail is criterion 1's.
 * **Denominator.** A group's expected set is its test methods, enumerated statically by
   `rexx-extract`'s `extract`, minus the group's rows in all three files. `suite-not-run.txt` lists
   the tests the framework does not run on this host, each with its reason: `restrictOS` (for example
@@ -132,9 +133,9 @@ implemented as the oracle answers, with a corpus program or a group test as its 
 * **"A package settings write"** (D3). It blocks at least 54 tests of `Package_Options`.
 * **`ReleaseLocalReference`.** On the queued probe (`2026-09-29-release-local-reference-memory`),
   peak RSS at 2,000,000 iterations is at most twice peak RSS at 200,000. Today it is 430 MB against
-  the oracle's 20 MB at 2,000,000. The probe's C source is committed, and the test builds it with the
-  system `cc` against `api/`'s frozen headers and reads peak RSS from the child's rusage; a test that
-  finds no `cc` fails.
+  the oracle's 20 MB at 2,000,000. The probe's C++ source is committed, and the test builds it with the
+  system `c++` against `api/`'s frozen headers and reads peak RSS from the child's rusage; a test that
+  finds no `c++` fails.
 
 **`base/class/Package` hangs at program end** after printing its summary (scout A section 4). 9a
 isolates the test that leaves the state behind.
@@ -289,15 +290,16 @@ Moritz, 2026-10-10 and 2026-10-11, on the survey and the review (`decisions.md`)
 * 9a relabels the `"Phase 9"` strings R4 moves to Phase 10 with the `Embedding` reason: the five
   `REFUSING_MEMBERS` rows (`layout.rs:379-383`) and the `ffi.rs:4187` and `:4229` assertion texts.
   It finds them with `closed_phases`' `mentions` over `rexx-api`, since a `grep '"Phase 9"'` misses
-  the two inside longer literals.
+  the two inside longer literals. `REFUSING_MEMBERS` gains a reason column like `EXCLUDED`, and the
+  two `ffi.rs` texts are built by one constructor that takes the reason.
 * 9a corrects `rust/CLAUDE.md:13` ("That separate `-O3` build is gone from this machine"). Scout B
   found a `Release` build at `ooRexx-rust-rewrite/build`: 5.3.0, built 27 Jul 2026, from a source
   three days older than `build/`'s.
 * 9c closes `phase-4-exclusions.txt:5542` (`rexxc`), and 9d closes `:6114` (INTERPRET).
-* 9d removes `"Phase 9"` from the open-phase vocabularies (`closed_phases`' open set,
-  `refusal_dispositions.rs`'s `OPEN_PHASES`, `owners.rs`'s `PHASES` and `SPLIT_TABLE_PHASES`), adds
-  `"Phase 9.1"` where a row may name it, and teaches `closed_phases`' `names()` that `Phase 9` is not
-  `Phase 9.1`. 9a adds `"Phase 9.1"` to `OPEN_PHASES` already, for its split of `:6179`.
+* 9a adds `"Phase 9"` to `tests/internal_routines.rs`'s `PHASES` and `src/dispatch/native/tests.rs`'s
+  `OPEN` for the rows it relabels. 9d adds `"Phase 9"` to `closed_phases`' `CLOSED`, removes it from
+  those two and from `refusal_dispositions.rs`'s `OPEN_PHASES`, adds `"Phase 9.1"` where a row may
+  name it, and teaches `closed_phases`' `names()` that `Phase 9` is not `Phase 9.1`.
 
 ## 8. Performance
 
@@ -334,7 +336,7 @@ closes the phase.
   mechanical: a new RexxUtil routine or a missing native method is one function and one witness, and
   such additions are batched several to a task.
 * **Sub-phase close:** what its gate cell names, which includes the sub-phase close command,
-  6.1's G4: `REXX_CORPUS_GATE=1 memcap 8G cargo test --workspace --release -j 4 --no-fail-fast`.
+  6.1's G4: `REXX_CORPUS_GATE=1 timeout 2400 memcap 8G cargo test -j 4 --workspace --release --no-fail-fast`.
   Without the variable, the corpus differential only reports.
 * **Phase 9 close:** G1-G9, the TSan run, the whole-suite gate of criterion 1 and `callgrind.sh` on
   every program (section 8).
