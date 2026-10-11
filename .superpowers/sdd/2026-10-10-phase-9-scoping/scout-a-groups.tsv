@@ -1,0 +1,403 @@
+dir	group	phase	rule	rxapi_tests_renamed_out	oracle_rc	oracle_secs	oracle_ran	oracle_assertions	oracle_failures	oracle_errors	oracle_failing	crate_rc_first	crate_secs_first	crate_ran_first	crate_assertions_first	crate_failures_first	crate_errors_first	stdout_agrees_first	iterations	status	first_cause_bin	first_cause_detail	tests_blocked	tests_wrong	tests_pass_here_fail_oracle	tests_unreached	crate_ran_final	crate_failing_final
+	SimpleTests	9		0	0	0.02	7	9	0	0		0	0.06	7	9	0	0	True	1	green							7	
+API/classic	CLASSIC	10	native-API group (api_group_partition.rs PARTITION)	9																not run (Phase 10)								
+API/oo	CONVERSION	9		0	0	0.03	97	280	0	0		0	0.09	97	280	0	0	True	1	green							97	
+API/oo	FUNCTION	9		1	0	0.04	157	665	0	0		0	0.09	157	665	0	0	True	1	green							157	
+API/oo	INVOCATION	10	native-API group (api_group_partition.rs PARTITION)	55																not run (Phase 10)								
+API/oo	METHOD	9		0	0	0.06	320	1150	0	0		1	0.14	320	1128	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA; rc 1 vs 0		TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA			320	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA
+API/oo	ProcessInvocation	10	native-API group (api_group_partition.rs PARTITION)	54																not run (Phase 10)								
+API/oo	ProcessRexxStart	10	native-API group (api_group_partition.rs PARTITION)	20																not run (Phase 10)								
+API/oo	RexxStart	10	native-API group (api_group_partition.rs PARTITION)	20																not run (Phase 10)								
+base/bif	ABBREV	9		0	0	0.11	117	67448	0	0		0	0.19	117	67448	0	0	True	1	green							117	
+base/bif	ABS	9		0	0	0.02	49	52	0	0		0	0.06	49	52	0	0	True	1	green							49	
+base/bif	ADDRESS	9		0	0	0.02	1	3	0	0		0	0.06	1	3	0	0	True	1	green							1	
+base/bif	ARG	9		0	0	0.04	17	225	0	0		1	0.06	17	222	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_EXTERNAL_CALLS; rc 1 vs 0		TEST_EXTERNAL_CALLS			17	TEST_EXTERNAL_CALLS
+base/bif	B2X	9		0	0	0.02	41	41	0	0		0	0.06	41	41	0	0	True	1	green							41	
+base/bif	BEEP	9		0	0	0.02	9	9	0	0		0	0.06	9	9	0	0	True	1	green							9	
+base/bif	BITAND	9		0	0	0.03	101	101	0	0		0	0.07	101	101	0	0	True	1	green							101	
+base/bif	BITOR	9		0	0	0.03	124	124	0	0		0	0.08	124	124	0	0	True	1	green							124	
+base/bif	BITXOR	9		0	0	0.03	136	136	0	0		0	0.08	136	136	0	0	True	1	green							136	
+base/bif	C2D	9		0	0	0.03	105	892	0	0		0	0.08	105	892	0	0	True	1	green							105	
+base/bif	C2X	9		0	0	0.02	34	34	0	0		0	0.06	34	34	0	0	True	1	green							34	
+base/bif	CENTER	9		0	0	0.02	97	352	0	0		0	0.07	97	352	0	0	True	1	green							97	
+base/bif	CENTRE	9		0	0	0.02	97	352	0	0		0	0.07	97	352	0	0	True	1	green							97	
+base/bif	CHANGESTR	9		0	0	0.02	9	9	0	0		0	0.06	9	9	0	0	True	1	green							9	
+base/bif	CHARIN	9		0	0	0.02	13	39	0	0		0	0.06	13	39	0	0	True	1	green							13	
+base/bif	CHAROUT	9		0	0	0.11	39	633	0	0		120	0.13	None	None	None	None	False	2	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	TEST_STDOUT_RET[refusal]	TEST_POSITIONING_1_BIN			38	TEST_POSITIONING_1_BIN
+base/bif	CHARS	9		0	0	0.05	11	2958	0	0		1	0.08	11	27	4	0	False	1	not green	wrong answer	failing here not on oracle: TEST_CHARS_NOTREADY_DIRECTORY TEST_CHARS_NOTREADY_INVALID TEST_CHARS_NOTREADY_NONEXISTING TEST_MANYCHARS_BIN; rc 1 vs 0		TEST_CHARS_NOTREADY_DIRECTORY TEST_CHARS_NOTREADY_INVALID TEST_CHARS_NOTREADY_NONEXISTING TEST_MANYCHARS_BIN			11	TEST_CHARS_NOTREADY_DIRECTORY TEST_CHARS_NOTREADY_INVALID TEST_CHARS_NOTREADY_NONEXISTING TEST_MANYCHARS_BIN
+base/bif	COMPARE	9		0	0	0.03	166	166	0	0		0	0.08	166	166	0	0	True	1	green							166	
+base/bif	CONDITION	9		0	0	0.03	14	513	0	0		2	0.07	14	108	5	2	False	1	not green	wrong answer	failing here not on oracle: TEST_CONDITION_CALL TEST_CONDITION_CALL_BIF TEST_CONDITION_CALL_EXTERNAL TEST_CONDITION_SIGNAL TEST_NOVALUE_DROP TEST_NOVALUE_METHOD_EXPOSE TEST_NOVALUE_PROEDURE_EXPOSE; rc 2 vs 0		TEST_CONDITION_CALL TEST_CONDITION_CALL_BIF TEST_CONDITION_CALL_EXTERNAL TEST_CONDITION_SIGNAL TEST_NOVALUE_DROP TEST_NOVALUE_METHOD_EXPOSE TEST_NOVALUE_PROEDURE_EXPOSE			14	TEST_CONDITION_CALL TEST_CONDITION_CALL_BIF TEST_CONDITION_CALL_EXTERNAL TEST_CONDITION_SIGNAL TEST_NOVALUE_DROP TEST_NOVALUE_METHOD_EXPOSE TEST_NOVALUE_PROEDURE_EXPOSE
+base/bif	COPIES	9		0	0	0.07	622	623	0	0		0	0.17	622	623	0	0	True	1	green							622	
+base/bif	COUNTSTR	9		0	0	0.02	5	4	0	0		0	0.06	5	4	0	0	True	1	green							5	
+base/bif	D2C	9		0	0	0.02	43	59	0	0		0	0.06	43	59	0	0	True	1	green							43	
+base/bif	D2X	9		0	0	0.02	49	67	0	0		0	0.06	49	67	0	0	True	1	green							49	
+base/bif	DATATYPE	9		0	0	0.04	17	524	0	0		0	0.13	17	524	0	0	True	1	green							17	
+base/bif	DATE	9		0	0	0.03	57	880	0	0		0	0.09	57	880	0	0	True	1	green							57	
+base/bif	DELSTR	9		0	0	0.02	71	108	0	0		0	0.09	71	108	0	0	True	1	green							71	
+base/bif	DELWORD	9		0	0	0.02	45	80	0	0		0	0.09	45	80	0	0	True	1	green							45	
+base/bif	DIGITS	9		0	0	0.02	19	26	0	0		0	0.08	19	26	0	0	True	1	green							19	
+base/bif	ERRORTEXT	9		0	0	0.02	1	103	0	0		0	0.07	1	103	0	0	True	1	green							1	
+base/bif	FILESPEC	9		0	0	0.02	12	35	0	0		0	0.06	12	35	0	0	True	1	green							12	
+base/bif	FORM	9		0	0	0.02	1	3	0	0		0	0.09	1	3	0	0	True	1	green							1	
+base/bif	FORMAT	9		0	0	0.06	767	875	0	0		0	0.22	767	875	0	0	True	1	green							767	
+base/bif	FUZZ	9		0	0	0.02	1	3	0	0		0	0.08	1	3	0	0	True	1	green							1	
+base/bif	GC	9		0	0	0.02	5	8	0	0		0	0.08	5	8	0	0	True	1	green							5	
+base/bif	INSERT	9		0	0	0.02	144	150	0	0		0	0.09	144	150	0	0	True	1	green							144	
+base/bif	LASTPOS	9		0	0	0.03	183	202	0	0		0	0.08	183	202	0	0	True	1	green							183	
+base/bif	LEFT	9		0	0	0.02	41	43	0	0		0	0.06	41	43	0	0	True	1	green							41	
+base/bif	LENGTH	9		0	0	0.02	32	32	0	0		0	0.06	32	32	0	0	True	1	green							32	
+base/bif	LINEIN	9		0	0	0.02	4	15	0	0		0	0.08	4	15	0	0	True	1	green							4	
+base/bif	LINEOUT	9		0	0	0.02	17	48	0	0		120	0.09	None	None	None	None	False	2	not green	loud refusal	rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10)	TEST_QUEUE[refusal]	TEST_BINARY TEST_INVALID_FILE TEST_LINE_NONNUMERIC TEST_LINE_TOO_LONG			16	TEST_BINARY TEST_INVALID_FILE TEST_LINE_NONNUMERIC TEST_LINE_TOO_LONG
+base/bif	LINES	9		0	0	0.02	16	102	0	0		1	0.08	16	99	3	0	False	1	not green	wrong answer	failing here not on oracle: TEST_LINES_NOTREADY_DIRECTORY TEST_LINES_NOTREADY_INVALID TEST_LINES_NOTREADY_NONEXISTING; rc 1 vs 0		TEST_LINES_NOTREADY_DIRECTORY TEST_LINES_NOTREADY_INVALID TEST_LINES_NOTREADY_NONEXISTING			16	TEST_LINES_NOTREADY_DIRECTORY TEST_LINES_NOTREADY_INVALID TEST_LINES_NOTREADY_NONEXISTING
+base/bif	LOWER	9		0	0	0.02	1	5	0	0		0	0.06	1	5	0	0	True	1	green							1	
+base/bif	MAX	9		0	0	0.02	13	20	0	0		0	0.06	13	20	0	0	True	1	green							13	
+base/bif	MIN	9		0	0	0.02	9	16	0	0		0	0.06	9	16	0	0	True	1	green							9	
+base/bif	OVERLAY	9		0	0	0.02	59	76	0	0		0	0.07	59	76	0	0	True	1	green							59	
+base/bif	POS	9		0	0	0.03	103	107	0	0		0	0.07	103	107	0	0	True	1	green							103	
+base/bif	QUALIFY	9		0	0	0.02	19	27	0	0		0	0.06	19	27	0	0	True	1	green							19	
+base/bif	QUEUED	9		0	0	0.03	8	7	0	0		0	0.06	8	7	0	0	True	1	green							8	
+base/bif	RANDOM	9		0	0	0.02	11	129	0	0		0	0.06	11	129	0	0	True	1	green							11	
+base/bif	REVERSE	9		0	0	0.02	25	28	0	0		0	0.06	25	28	0	0	True	1	green							25	
+base/bif	RIGHT	9		0	0	0.02	51	54	0	0		0	0.06	51	54	0	0	True	1	green							51	
+base/bif	RXQUEUE	9		18	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/bif	SIGN	9		0	0	0.02	48	51	0	0		0	0.06	48	51	0	0	True	1	green							48	
+base/bif	SOURCELINE	9		0	0	0.02	11	136	0	0		0	0.1	11	136	0	0	True	1	green							11	
+base/bif	SPACE	9		0	0	0.02	71	81	0	0		0	0.06	71	81	0	0	True	1	green							71	
+base/bif	STREAM	9		0	1	0.09	40	218	2	0	TEST_RELATIVE_FILE_EXISTS TEST_RELATIVE_FILE_EXISTS2	2	0.08	40	195	6	2	False	1	not green	wrong answer	failing here not on oracle: TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994; rc 2 vs 1		TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994			40	TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_RELATIVE_FILE_EXISTS TEST_RELATIVE_FILE_EXISTS2 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994
+base/bif	STRIP	9		0	0	0.03	109	115	0	0		0	0.07	109	115	0	0	True	1	green							109	
+base/bif	SUBSTR	9		0	0	0.02	91	96	0	0		0	0.07	91	96	0	0	True	1	green							91	
+base/bif	SUBWORD	9		0	0	0.03	154	160	0	0		0	0.08	154	160	0	0	True	1	green							154	
+base/bif	SYMBOL	9		0	0	0.02	29	37	0	0		0	0.06	29	37	0	0	True	1	green							29	
+base/bif	TIME	9		0	0	93.46	306	524	0	0		0	93.55	306	524	0	0	True	1	green							306	
+base/bif	TRANSLATE	9		0	0	0.02	29	39	0	0		0	0.06	29	39	0	0	True	1	green							29	
+base/bif	TRUNC	9		0	0	0.02	42	47	0	0		0	0.06	42	47	0	0	True	1	green							42	
+base/bif	UPPER	9		0	0	0.02	1	5	0	0		0	0.06	1	5	0	0	True	1	green							1	
+base/bif	VALUE	9		0	0	0.02	53	78	0	0		0	0.06	53	78	0	0	True	1	green							53	
+base/bif	VAR	9		0	0	0.02	1	6	0	0		0	0.05	1	6	0	0	True	1	green							1	
+base/bif	VERIFY	9		0	0	0.02	100	113	0	0		0	0.07	100	113	0	0	True	1	green							100	
+base/bif	WORD	9		0	0	0.02	73	72	0	0		0	0.07	73	72	0	0	True	1	green							73	
+base/bif	WORDINDEX	9		0	0	0.02	74	73	0	0		0	0.07	74	73	0	0	True	1	green							74	
+base/bif	WORDLENGTH	9		0	0	0.02	73	73	0	0		0	0.07	73	73	0	0	True	1	green							73	
+base/bif	WORDPOS	9		0	0	0.03	193	197	0	0		0	0.1	193	197	0	0	True	1	green							193	
+base/bif	WORDS	9		0	0	0.02	42	42	0	0		0	0.06	42	42	0	0	True	1	green							42	
+base/bif	X2B	9		0	0	0.03	69	73	0	0		0	0.07	69	73	0	0	True	1	green							69	
+base/bif	X2C	9		0	0	0.02	51	51	0	0		0	0.09	51	51	0	0	True	1	green							51	
+base/bif	X2D	9		0	0	0.02	73	108	0	0		0	0.07	73	108	0	0	True	1	green							73	
+base/bif	XRANGE	9		0	0	0.02	51	191	0	0		0	0.07	51	191	0	0	True	1	green							51	
+base/class	Alarm	9		0	0	14.67	6	68	0	0		0	14.01	6	68	0	0	True	1	green							6	
+base/class	Array	9		0	0	0.72	141	8262	0	0		2	1.04	141	8213	0	5	False	1	not green	wrong answer	failing here not on oracle: TESTINSERT TESTMULTIINDEXINSERT TEST_SECTION TEST_SECTION_SYNTAX5 TEST_SECTION_SYNTAX6; rc 2 vs 0		TESTINSERT TESTMULTIINDEXINSERT TEST_SECTION TEST_SECTION_SYNTAX5 TEST_SECTION_SYNTAX6			141	TESTINSERT TESTMULTIINDEXINSERT TEST_SECTION TEST_SECTION_SYNTAX5 TEST_SECTION_SYNTAX6
+base/class	Bag	9		0	0	0.03	34	229	0	0		1	0.11	34	228	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_HASITEM_VALUE_NOTEQUAL_INDEX; rc 1 vs 0		TEST_HASITEM_VALUE_NOTEQUAL_INDEX			34	TEST_HASITEM_VALUE_NOTEQUAL_INDEX
+base/class	CircularQueue	9		0	0	0.03	59	263	0	0		1	0.11	59	255	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_DIFFERENCE; rc 1 vs 0		TEST_DIFFERENCE			59	TEST_DIFFERENCE
+base/class	Class	9		0	0	0.04	103	314	0	0		1	0.1	103	300	2	0	False	1	not green	wrong answer	failing here not on oracle: TEST_ACTIVATE TEST_METHODS; rc 1 vs 0		TEST_ACTIVATE TEST_METHODS			103	TEST_ACTIVATE TEST_METHODS
+base/class	CollectionMethods	9		0	0	0.04	100	710	0	0		2	0.1	100	703	0	7	False	1	not green	wrong answer	failing here not on oracle: TEST_COLLECTION_NEW_2_ARGS; rc 2 vs 0		TEST_COLLECTION_NEW_2_ARGS			100	TEST_COLLECTION_NEW_2_ARGS
+base/class	CollectionSetlikeMethods	9		0	0	0.02	9	246	0	0		0	0.07	9	246	0	0	True	1	green							9	
+base/class	Comparator	9		0	0	0.02	8	76	0	0		0	0.09	8	76	0	0	True	1	green							8	
+base/class	DateTime	9		0	0	7.71	66	629	0	0		0	5.8	66	629	0	0	True	1	green							66	
+base/class	Directory	9		0	0	0.03	55	227	0	0		0	0.09	55	227	0	0	True	1	green							55	
+base/class	EventSemaphore	9		0	0	0.14	9	30	0	0		0	0.2	9	30	0	0	True	1	green							9	
+base/class	File	9		0	0	0.04	64	866	0	0		120	0.07	None	None	None	None	False	3	not green	loud refusal	rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10)	TEST_FILE_LASTACCESSED[refusal] TEST_FILE_LASTMODIFIED[refusal]				62	
+base/class	IdentityTable	9		0	0	0.02	43	182	0	0		1	0.08	43	173	6	0	False	1	not green	wrong answer	failing here not on oracle: TEST_AT01 TEST_BUG_1468 TEST_HASINDEX TEST_HASITEM TEST_INDEX TEST_[]; rc 1 vs 0		TEST_AT01 TEST_BUG_1468 TEST_HASINDEX TEST_HASITEM TEST_INDEX TEST_[]			43	TEST_AT01 TEST_BUG_1468 TEST_HASINDEX TEST_HASITEM TEST_INDEX TEST_[]
+base/class	List	9		0	0	0.02	55	342	0	0		0	0.09	55	342	0	0	True	1	green							55	
+base/class	Message	9		0	0	18.04	68	279	0	0		120	12.07	None	None	None	None	False	4	not green	loud refusal	rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)	TEST_REPLYWITH_NOT_ARRAY[refusal] TEST_SENDWITH_NOT_ARRAY[refusal] TEST_STARTWITH_NOT_ARRAY[refusal]				65	
+base/class	Method	9		0	0	0.04	56	103	0	0		120	0.07	None	None	None	None	False	5	not green	loud refusal	rexx-exec: method "NEW" of class "Method" is not implemented (Phase 9)	TEST_NEW_FOUR_ARGS[refusal] TEST_ROUTINE_SOURCE_COMMENT[refusal] TEST_ROUTINE_SOURCE_NOP[refusal] TEST_ROUTINE_SOURCE_WHITESPACE[refusal]	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED			52	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED
+base/class	MethodArgs	9		0	0	0.05	10	2232	0	0		0	0.16	10	2232	0	0	True	1	green							10	
+base/class	Monitor	9		0	0	0.02	7	19	0	0		0	0.06	7	19	0	0	True	1	green							7	
+base/class	MutexSemaphore	9		0	0	0.12	8	42	0	0		0	0.19	8	42	0	0	True	1	green							8	
+base/class	Object	9		0	0	0.48	149	334	0	0		120	0.08	None	None	None	None	False	3	not green	loud refusal	rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)	TEST_RUN_ARRAY_ARGUMENT[refusal] TEST_SENDWITH_NOT_ARRAY[refusal]	TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE TEST_UNINIT			147	TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE TEST_UNINIT
+base/class	Orderable	9		0	0	0.03	30	774	0	0		0	0.09	30	774	0	0	True	1	green							30	
+base/class	Package	9		0	0	0.26	80	171	0	0		124	60.05	None	None	None	None	False	6	not green	loud refusal	rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	TEST_NEW01[refusal] TEST_PACKAGE_LOCAL_GET_EMPTY[refusal] TEST_SPARSE_ARRAY_SOURCE[timeout] TEST_PROLOG[timeout] TEST_PACKAGE_LOCAL_SET[timeout] TEST_PACKAGE_LOCAL_ONE_ARG[timeout]			TESTADDCLASS01 TESTADDCLASS02 TESTADDCLASS03 TESTADDCLASS04 TESTADDNAMESPACEPACKAGE TESTADDPACKAGEBADNAMESPACENAME TESTADDPACKAGENOARGS TESTADDPACKAGENONEPACKAGE TESTADDPACKAGETOOMANYARGS TESTADDPUBLICCLASS01 TESTADDPUBLICCLASS02 TESTADDPUBLICCLASS03 TESTADDPUBLICCLASS04 TESTADDPUBLICROUTINE01 TESTADDPUBLICROUTINE02 TESTADDPUBLICROUTINE03 TESTADDPUBLICROUTINE04 TESTADDROUTINE01 TESTADDROUTINE02 TESTADDROUTINE03 TESTADDROUTINE04 TESTANNOTATIONNOARGS TESTANNOTATIONNOSTRING TESTANNOTATIONTWOARGS TESTCLASSES01 TESTFINDCLASSNOARGS TESTFINDCLASSNOSTRING TESTFINDCLASSTWOARGS TESTFINDPUBLICCLASSNOARGS TESTFINDPUBLICCLASSNOSTRING TESTFINDPUBLICCLASSTWOARGS TESTFINDPUBLICROUTINENOARGS TESTFINDPUBLICROUTINENOSTRING TESTFINDPUBLICROUTINETWOARGS TESTFINDROUTINENOARGS TESTFINDROUTINENOSTRING TESTFINDROUTINETWOARGS TESTIMPORTEDCLASSES01 TESTIMPORTEDROUTINES01 TESTLOADLIBRARY01 TESTLOADLIBRARY02 TESTLOADLIBRARY03 TESTMETHODS01 TESTRECLAIM01 TESTROUTINES01 TESTSOURCE01 TESTSOURCELINEBADLINENUMBER TESTSOURCELINENOARGS TESTSOURCELINEOUTOFRANGE TESTSOURCELINEZEROLINENUMBER TEST_NEW_CONTEXT_FLOATINGMETHOD TEST_NEW_CONTEXT_IMPORTEDPACKAGE TEST_NEW_CONTEXT_METHOD TEST_NEW_CONTEXT_METHODINHERITED TEST_NEW_CONTEXT_METHODPUBLIC TEST_NEW_CONTEXT_METHODPUBLICINHERITED TEST_NEW_CONTEXT_NIL TEST_NEW_CONTEXT_NULL TEST_NEW_CONTEXT_PROGRAMSCOPE TEST_NEW_CONTEXT_REXXPACKAGE TEST_NEW_CONTEXT_ROUTINE TEST_NEW_CONTEXT_THISPACKAGE TEST_NEW_HASHBANG TEST_NEW_SOURCE_NO_ENDOFLINE TEST_NEW_SOURCE_NO_ENDOFLINE_ARRAY TEST_NEW_SOURCE_SEMICOLON TEST_NEW_SOURCE_SEMICOLON_ARRAY TEST_NON_STRING_ARRAY_VALUE TEST_PACKAGE_FINDPROGRAM_ARG_NOSTRING TEST_PACKAGE_FINDPROGRAM_NO_ARG TEST_PACKAGE_FINDPROGRAM_NULLSTRING TEST_PACKAGE_FINDPROGRAM_REXXTRY TEST_PACKAGE_FINDPROGRAM_TWO_ARGS TEST_PACKAGE_LOCAL	incomplete	
+base/class	Package_Options	9		0	0	0.03	54	332	0	0		120	0.09	None	None	None	None	False	40	not green	loud refusal	rexx-exec: a package settings write is not implemented (Phase 10)	TEST_CLASS_OPTIONS_DEFAULTS[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_1[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_10[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_11[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_2[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_3[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_4[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_5[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_6[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_7[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_8[refusal] TEST_CLASS_OPTIONS_OPTIONNAMEERROR_9[refusal] TEST_CLASS_OPTIONS_OVERRIDE_ARGERROR_2[refusal] TEST_CLASS_OPTIONS_OVERRIDE_OPTION_ARGERROR_1[refusal] TEST_DEFAULT_OPTIONS_OVERRIDES[refusal] TEST_INSTANCE_OPTIONS_OVERRIDE_ERROR_2[refusal] TEST_INSTANCE_OPTIONS_OVERRIDE_OPTION_ERROR_1[refusal] TEST_OPTIONS[refusal] TEST_OPTIONS_ALL_ARGERROR_1[refusal] TEST_OPTIONS_ARGERROR_1[refusal] TEST_OPTIONS_CONDITION_ARGERROR_1[refusal] TEST_OPTIONS_CONDITION_ARGERROR_2[refusal] TEST_OPTIONS_CONDITION_ARGERROR_3[refusal] TEST_OPTIONS_CONDITION_ARGERROR_4[refusal] TEST_OPTIONS_CONDITION_ARGERROR_5[refusal] TEST_OPTIONS_CONDITION_ARGERROR_6[refusal] TEST_OPTIONS_DIGITAL_ARGERROR_1[refusal] TEST_OPTIONS_DIGITAL_ARGERROR_2[refusal] TEST_OPTIONS_DIGITAL_ARGERROR_3[refusal] TEST_OPTIONS_DIGITAL_ARGERROR_4[refusal] TEST_OPTIONS_FORM_ARGERROR_1[refusal] TEST_OPTIONS_FUZZ_ARGERROR_1[refusal] TEST_OPTIONS_FUZZ_ARGERROR_2[refusal] TEST_OPTIONS_FUZZ_ARGERROR_3[refusal] TEST_OPTIONS_FUZZ_ARGERROR_4[refusal] TEST_OPTIONS_INITIALPACKAGESETTINGS[refusal] TEST_OPTIONS_INITIALPACKAGESETTINGS_ARGERROR_1[refusal] TEST_OPTIONS_NUMERIC_1[refusal] TEST_OPTIONS_NUMERIC_2[refusal] TEST_OPTIONS_NUMERIC_ARG_ERROR_1[refusal]			TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_MINUS TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_PLUS TEST_OPTIONS_OVERRIDE_COUNTER_CALL_2_PLUS TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_MINUS TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_PLUS TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_2_PLUS TEST_OPTIONS_PROLOG_ARGERROR_1 TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_1 TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_2 TEST_OPTIONS_SETPACKAGEOPTIONS_RESET TEST_OPTIONS_TRACE_ARGERROR_1 TEST_OPTION_X TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_1 TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_2	incomplete	
+base/class	Properties	9		0	0	0.03	63	124	0	0		0	0.11	63	124	0	0	True	1	green							63	
+base/class	Queue	9		0	0	0.03	43	1769	0	0		1	0.08	43	1753	2	0	False	1	not green	wrong answer	failing here not on oracle: TEST_DIFFERENCE TEST_XOR; rc 1 vs 0		TEST_DIFFERENCE TEST_XOR			43	TEST_DIFFERENCE TEST_XOR
+base/class	QueueRGF	9		0	0	0.03	45	295	0	0		2	0.08	45	275	2	1	False	1	not green	wrong answer	failing here not on oracle: TEST_DIFFERENCE TEST_INSERT_ERROR2 TEST_XOR; rc 2 vs 0		TEST_DIFFERENCE TEST_INSERT_ERROR2 TEST_XOR			45	TEST_DIFFERENCE TEST_INSERT_ERROR2 TEST_XOR
+base/class	Relation	9		0	0	0.03	45	233	0	0		0	0.07	45	233	0	0	True	1	green							45	
+base/class	RexxContext	9		0	0	0.03	15	359	0	0		120	0.06	None	None	None	None	False	2	not green	loud refusal	rexx-exec: method "COPY" of class "RexxContext" is not implemented (Phase 9)	TESTCOPY01[refusal]	TESTRS01			14	TESTRS01
+base/class	RexxInfo	9		0	0	0.02	21	38	0	0		120	0.06	None	None	None	None	False	3	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	TEST_REXXINFO_EXECUTABLE[refusal] TEST_REXXINFO_LIBRARYPATH[refusal]				19	
+base/class	RexxInteger	9		0	0	0.13	20	38761	0	0		1	0.07	20	1181	19	0	False	1	not green	wrong answer	failing here not on oracle: TEST_INTEGER_ADDITION TEST_INTEGER_CONSTANT TEST_INTEGER_D2X TEST_INTEGER_DATE TEST_INTEGER_DIVISION TEST_INTEGER_INTEGERDIVIDE TEST_INTEGER_MODULO TEST_INTEGER_MULTIPLICATION TEST_INTEGER_POWER TEST_INTEGER_REMAINDER TEST_INTEGER_REXXINFO TEST_INTEGER_SUBTRACTION TEST_INTEGER_TIME TEST_INTEGER_UNARY_MINUS TEST_INTEGER_UNARY_PLUS TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC TEST_NUMBERSTRING_INTEGERDIVIDE TEST_STRING_C2D TEST_STRING_X2D; rc 1 vs 0		TEST_INTEGER_ADDITION TEST_INTEGER_CONSTANT TEST_INTEGER_D2X TEST_INTEGER_DATE TEST_INTEGER_DIVISION TEST_INTEGER_INTEGERDIVIDE TEST_INTEGER_MODULO TEST_INTEGER_MULTIPLICATION TEST_INTEGER_POWER TEST_INTEGER_REMAINDER TEST_INTEGER_REXXINFO TEST_INTEGER_SUBTRACTION TEST_INTEGER_TIME TEST_INTEGER_UNARY_MINUS TEST_INTEGER_UNARY_PLUS TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC TEST_NUMBERSTRING_INTEGERDIVIDE TEST_STRING_C2D TEST_STRING_X2D			20	TEST_INTEGER_ADDITION TEST_INTEGER_CONSTANT TEST_INTEGER_D2X TEST_INTEGER_DATE TEST_INTEGER_DIVISION TEST_INTEGER_INTEGERDIVIDE TEST_INTEGER_MODULO TEST_INTEGER_MULTIPLICATION TEST_INTEGER_POWER TEST_INTEGER_REMAINDER TEST_INTEGER_REXXINFO TEST_INTEGER_SUBTRACTION TEST_INTEGER_TIME TEST_INTEGER_UNARY_MINUS TEST_INTEGER_UNARY_PLUS TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC TEST_NUMBERSTRING_INTEGERDIVIDE TEST_STRING_C2D TEST_STRING_X2D
+base/class	RexxQueue	9		47	0	0.02	1	1	0	0		120	0.06	None	None	None	None	False	2	not green	loud refusal	rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10)	TEST_BUG_1379[refusal]				0	
+base/class	Routine	9		0	0	0.04	60	99	0	0		120	0.08	None	None	None	None	False	3	not green	loud refusal	rexx-exec: method "NEW" of class "Routine" is not implemented (Phase 9)	TEST_NEW_FOUR_ARGS[refusal] TEST_ROUTINE_SOURCE[refusal]	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED			58	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED
+base/class	Set	9		0	0	0.03	30	203	0	0		0	0.07	30	203	0	0	True	1	green							30	
+base/class	Singleton	9		0	0	0.02	2	2	0	0		0	0.07	2	2	0	0	True	1	green							2	
+base/class	StackFrame	9		0	0	0.02	11	70	0	0		120	0.07	None	None	None	None	False	8	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9)	TESTCOMPILEFRAME[refusal] TESTEXTERNALNATIVECODEFRAME[refusal] TESTINTERNALCALLFRAME[refusal] TESTINTERPRETFRAME[refusal] TESTMETHODFRAME[refusal] TESTPROGRAMFRAME[refusal] TESTROUTINEFRAME[refusal]	TESTNATIVECODEFRAME			4	TESTNATIVECODEFRAME
+base/class	Stem	9		0	0	0.03	52	253	0	0		0	0.07	52	253	0	0	True	1	green							52	
+base/class	Stream	9		0	1	0.38	107	25352	2	0	TEST_RELATIVE_EXISTS2 TEST_RELATIVE_EXISTS3	120	0.2	None	None	None	None	False	2	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	TEST_FLUSH_ON_CLOSE_XXXXXX[refusal]	TEST_ARRAYIN_3_BIN TEST_ARRAYIN_BIN TEST_LINEIN_ARG_ONE_INVALID TEST_NOTREADY_EOF_2792702 TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_OPEN_WRITE_ONLY_3274050_E TEST_OPEN_WRITE_ONLY_3274050_F TEST_SEEK_PARSER TEST_SEEK_USEDASCOUNT_2776442 TEST_STATE_NOTREADY_2			106	TEST_ARRAYIN_3_BIN TEST_ARRAYIN_BIN TEST_LINEIN_ARG_ONE_INVALID TEST_NOTREADY_EOF_2792702 TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_OPEN_WRITE_ONLY_3274050_E TEST_OPEN_WRITE_ONLY_3274050_F TEST_RELATIVE_EXISTS2 TEST_RELATIVE_EXISTS3 TEST_SEEK_PARSER TEST_SEEK_USEDASCOUNT_2776442 TEST_STATE_NOTREADY_2
+base/class	Table	9		0	0	0.03	44	210	0	0		0	0.07	44	210	0	0	True	1	green							44	
+base/class	Ticker	9		0	0	4.88	30	87	0	0		0	4.93	30	87	0	0	True	1	green							30	
+base/class	TimeSpan	9		0	0	0.03	46	74	0	0		0	0.1	46	74	0	0	True	1	green							46	
+base/class	Validate	9		0	0	0.03	101	92	0	0		2	0.07	101	92	0	3	False	1	not green	wrong answer	failing here not on oracle: TEST_VALIDATE_NON_NEGATIVE_WHOLE_NUMBER TEST_VALIDATE_POSITIVE_WHOLE_NUMBER TEST_VALIDATE_WHOLE_NUMBER; rc 2 vs 0		TEST_VALIDATE_NON_NEGATIVE_WHOLE_NUMBER TEST_VALIDATE_POSITIVE_WHOLE_NUMBER TEST_VALIDATE_WHOLE_NUMBER			101	TEST_VALIDATE_NON_NEGATIVE_WHOLE_NUMBER TEST_VALIDATE_POSITIVE_WHOLE_NUMBER TEST_VALIDATE_WHOLE_NUMBER
+base/class	WeakReference	9		0	0	0.08	2	4	0	0		0	0.08	2	4	0	0	True	1	green							2	
+base/class/MutableBuffer	append	9		0	0	0.02	5	5	0	0		0	0.09	5	5	0	0	True	1	green							5	
+base/class/MutableBuffer	brackets	9		0	0	0.02	16	29	0	0		0	0.08	16	29	0	0	True	1	green							16	
+base/class/MutableBuffer	caselessChangestr	9		0	0	0.02	13	202	0	0		0	0.06	13	202	0	0	True	1	green							13	
+base/class/MutableBuffer	caselessContains	9		0	0	0.03	43	310	0	0		0	0.1	43	310	0	0	True	1	green							43	
+base/class/MutableBuffer	caselessContainsWord	9		0	0	0.02	22	22	0	0		0	0.08	22	22	0	0	True	1	green							22	
+base/class/MutableBuffer	caselessCountstr	9		0	0	0.02	1	5	0	0		0	0.07	1	5	0	0	True	1	green							1	
+base/class/MutableBuffer	caselessLastpos	9		0	0	0.12	180	197	0	0		0	0.11	180	197	0	0	True	1	green							180	
+base/class/MutableBuffer	caselessMatch	9		0	0	0.02	12	26	0	0		0	0.09	12	26	0	0	True	1	green							12	
+base/class/MutableBuffer	caselessMatchChar	9		0	0	0.02	5	15	0	0		0	0.12	5	15	0	0	True	1	green							5	
+base/class/MutableBuffer	caselessPos	9		0	0	0.03	95	98	0	0		0	0.11	95	98	0	0	True	1	green							95	
+base/class/MutableBuffer	caselessWordPos	9		0	0	0.04	191	199	0	0		0	0.1	191	199	0	0	True	1	green							191	
+base/class/MutableBuffer	changestr	9		0	0	0.02	15	119	0	0		0	0.09	15	119	0	0	True	1	green							15	
+base/class/MutableBuffer	contains	9		0	0	0.02	29	295	0	0		0	0.09	29	295	0	0	True	1	green							29	
+base/class/MutableBuffer	containsWord	9		0	0	0.02	22	22	0	0		0	0.06	22	22	0	0	True	1	green							22	
+base/class/MutableBuffer	countstr	9		0	0	0.02	5	4	0	0		0	0.09	5	4	0	0	True	1	green							5	
+base/class/MutableBuffer	delStr	9		0	0	0.02	11	12	0	0		0	0.08	11	12	0	0	True	1	green							11	
+base/class/MutableBuffer	delete	9		0	0	0.02	11	12	0	0		0	0.08	11	12	0	0	True	1	green							11	
+base/class/MutableBuffer	delword	9		0	0	0.03	44	79	0	0		0	0.09	44	79	0	0	True	1	green							44	
+base/class/MutableBuffer	getbuffersize	9		0	0	0.02	1	3	0	0		0	0.06	1	3	0	0	True	1	green							1	
+base/class/MutableBuffer	insert	9		0	0	0.05	268	264	0	0		0	0.1	268	264	0	0	True	1	green							268	
+base/class/MutableBuffer	lastpos	9		0	0	0.04	187	376	0	0		0	0.09	187	376	0	0	True	1	green							187	
+base/class/MutableBuffer	length	9		0	0	0.02	27	59	0	0		0	0.06	27	59	0	0	True	1	green							27	
+base/class/MutableBuffer	lower	9		0	0	0.02	1	5	0	0		0	0.09	1	5	0	0	True	1	green							1	
+base/class/MutableBuffer	match	9		0	0	0.02	12	26	0	0		0	0.06	12	26	0	0	True	1	green							12	
+base/class/MutableBuffer	matchChar	9		0	0	0.02	5	15	0	0		0	0.09	5	15	0	0	True	1	green							5	
+base/class/MutableBuffer	new	9		0	0	0.02	5	5	0	0		0	0.09	5	5	0	0	True	1	green							5	
+base/class/MutableBuffer	overlay	9		0	0	0.02	65	120	0	0		0	0.1	65	120	0	0	True	1	green							65	
+base/class/MutableBuffer	pos	9		0	0	0.02	107	198	0	0		0	0.09	107	198	0	0	True	1	green							107	
+base/class/MutableBuffer	replaceAt	9		0	0	0.02	17	38	0	0		0	0.1	17	38	0	0	True	1	green							17	
+base/class/MutableBuffer	setText	9		0	0	0.02	4	35	0	0		0	0.1	4	35	0	0	True	1	green							4	
+base/class/MutableBuffer	setbuffersize	9		0	0	0.03	5	10	0	0		0	0.09	5	10	0	0	True	1	green							5	
+base/class/MutableBuffer	space	9		0	0	0.04	239	239	0	0		0	0.1	239	239	0	0	True	1	green							239	
+base/class/MutableBuffer	string	9		0	0	0.02	2	3	0	0		0	0.09	2	3	0	0	True	1	green							2	
+base/class/MutableBuffer	subWord	9		0	0	0.03	146	152	0	0		0	0.08	146	152	0	0	True	1	green							146	
+base/class/MutableBuffer	subWords	9		0	0	0.03	149	684	0	0		0	0.11	149	684	0	0	True	1	green							149	
+base/class/MutableBuffer	subchar	9		0	0	0.02	6	10	0	0		0	0.08	6	10	0	0	True	1	green							6	
+base/class/MutableBuffer	substr	9		0	0	0.03	97	156	0	0		0	0.1	97	156	0	0	True	1	green							97	
+base/class/MutableBuffer	translate	9		0	0	0.02	28	38	0	0		0	0.08	28	38	0	0	True	1	green							28	
+base/class/MutableBuffer	upper	9		0	0	0.02	1	5	0	0		0	0.09	1	5	0	0	True	1	green							1	
+base/class/MutableBuffer	verify	9		0	0	0.03	97	110	0	0		0	0.08	97	110	0	0	True	1	green							97	
+base/class/MutableBuffer	word	9		0	0	0.03	71	70	0	0		0	0.09	71	70	0	0	True	1	green							71	
+base/class/MutableBuffer	wordindex	9		0	0	0.03	72	71	0	0		0	0.08	72	71	0	0	True	1	green							72	
+base/class/MutableBuffer	wordlength	9		0	0	0.03	70	70	0	0		0	0.09	70	70	0	0	True	1	green							70	
+base/class/MutableBuffer	wordpos	9		0	0	0.03	190	194	0	0		0	0.11	190	194	0	0	True	1	green							190	
+base/class/MutableBuffer	words	9		0	0	0.02	41	41	0	0		0	0.09	41	41	0	0	True	1	green							41	
+base/class/String	String	9		0	0	0.02	2	20	0	0		0	0.07	2	20	0	0	True	1	green							2	
+base/class/String	abbrev	9		0	0	0.15	117	67448	0	0		0	0.22	117	67448	0	0	True	1	green							117	
+base/class/String	abs	9		0	0	0.02	46	56	0	0		0	0.1	46	56	0	0	True	1	green							46	
+base/class/String	append	9		0	0	0.02	3	10	0	0		0	0.09	3	10	0	0	True	1	green							3	
+base/class/String	arithmetic	9		0	0	0.02	1	18	0	0		0	0.06	1	18	0	0	True	1	green							1	
+base/class/String	b2x	9		0	0	0.03	41	41	0	0		0	0.09	41	41	0	0	True	1	green							41	
+base/class/String	bitand	9		0	0	0.03	102	102	0	0		0	0.08	102	102	0	0	True	1	green							102	
+base/class/String	bitor	9		0	0	0.03	124	124	0	0		0	0.11	124	124	0	0	True	1	green							124	
+base/class/String	bitxor	9		0	0	0.03	136	136	0	0		0	0.09	136	136	0	0	True	1	green							136	
+base/class/String	brackets	9		0	0	0.03	100	106	0	0		0	0.11	100	106	0	0	True	1	green							100	
+base/class/String	c2d	9		0	0	0.04	106	893	0	0		0	0.1	106	893	0	0	True	1	green							106	
+base/class/String	c2x	9		0	0	0.02	34	34	0	0		0	0.1	34	34	0	0	True	1	green							34	
+base/class/String	caselessAbbrev	9		0	0	0.18	119	67454	0	0		0	0.31	119	67454	0	0	True	1	green							119	
+base/class/String	caselessChangestr	9		0	0	0.02	8	25	0	0		0	0.09	8	25	0	0	True	1	green							8	
+base/class/String	caselessCompare	9		0	0	0.04	161	166	0	0		0	0.1	161	166	0	0	True	1	green							161	
+base/class/String	caselessCompareTo	9		0	0	0.02	1	6	0	0		0	0.08	1	6	0	0	True	1	green							1	
+base/class/String	caselessContains	9		0	0	0.04	117	628	0	0		0	0.13	117	628	0	0	True	1	green							117	
+base/class/String	caselessContainsWord	9		0	0	0.05	385	398	0	0		0	0.13	385	398	0	0	True	1	green							385	
+base/class/String	caselessCountstr	9		0	0	0.02	1	5	0	0		0	0.1	1	5	0	0	True	1	green							1	
+base/class/String	caselessEquals	9		0	0	0.02	1	8	0	0		0	0.07	1	8	0	0	True	1	green							1	
+base/class/String	caselessLastpos	9		0	0	0.12	183	200	0	0		0	0.13	183	200	0	0	True	1	green							183	
+base/class/String	caselessMatch	9		0	0	0.02	12	26	0	0		0	0.14	12	26	0	0	True	1	green							12	
+base/class/String	caselessMatchChar	9		0	0	0.02	5	15	0	0		0	0.09	5	15	0	0	True	1	green							5	
+base/class/String	caselessPos	9		0	0	0.03	103	106	0	0		0	0.11	103	106	0	0	True	1	green							103	
+base/class/String	caselessWordPos	9		0	0	0.03	193	201	0	0		0	0.09	193	201	0	0	True	1	green							193	
+base/class/String	ceiling	9		0	0	0.02	7	36	0	0		0	0.1	7	36	0	0	True	1	green							7	
+base/class/String	center	9		0	0	0.03	85	340	0	0		0	0.1	85	340	0	0	True	1	green							85	
+base/class/String	centre	9		0	0	0.03	85	340	0	0		0	0.1	85	340	0	0	True	1	green							85	
+base/class/String	changestr	9		0	0	0.02	10	14	0	0		0	0.08	10	14	0	0	True	1	green							10	
+base/class/String	compare	9		0	0	0.03	166	166	0	0		0	0.11	166	166	0	0	True	1	green							166	
+base/class/String	compareTo	9		0	0	0.02	1	3	0	0		0	0.09	1	3	0	0	True	1	green							1	
+base/class/String	comparisonOperators	9		0	0	0.02	4	312	0	0		1	0.08	4	264	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_NIL; rc 1 vs 0		TEST_NIL			4	TEST_NIL
+base/class/String	concatenationOperators	9		0	0	0.02	1	7	0	0		0	0.07	1	7	0	0	True	1	green							1	
+base/class/String	contains	9		0	0	0.03	115	372	0	0		0	0.12	115	372	0	0	True	1	green							115	
+base/class/String	containsWord	9		0	0	0.03	193	197	0	0		0	0.11	193	197	0	0	True	1	green							193	
+base/class/String	copies	9		0	0	0.09	552	555	0	0		0	0.19	552	555	0	0	True	1	green							552	
+base/class/String	countstr	9		0	0	0.02	5	4	0	0		0	0.1	5	4	0	0	True	1	green							5	
+base/class/String	d2c	9		0	0	0.03	43	59	0	0		0	0.09	43	59	0	0	True	1	green							43	
+base/class/String	d2x	9		0	0	0.03	49	67	0	0		0	0.08	49	67	0	0	True	1	green							49	
+base/class/String	datatype	9		0	0	0.05	18	526	0	0		0	0.11	18	526	0	0	True	1	green							18	
+base/class/String	delstr	9		0	0	0.02	70	107	0	0		0	0.1	70	107	0	0	True	1	green							70	
+base/class/String	delword	9		0	0	0.02	45	80	0	0		0	0.09	45	80	0	0	True	1	green							45	
+base/class/String	encode_decodeBase64	9		0	0	0.06	24	2260	0	0		0	0.16	24	2260	0	0	True	1	green							24	
+base/class/String	endsWith	9		0	0	0.02	4	24	0	0		0	0.07	4	24	0	0	True	1	green							4	
+base/class/String	equals	9		0	0	0.02	1	8	0	0		0	0.09	1	8	0	0	True	1	green							1	
+base/class/String	floor	9		0	0	0.02	7	36	0	0		0	0.06	7	36	0	0	True	1	green							7	
+base/class/String	format	9		0	0	0.07	771	1499	0	0		0	0.23	771	1499	0	0	True	1	green							771	
+base/class/String	iif	9		0	0	0.02	11	18	0	0		0	0.11	11	18	0	0	True	1	green							11	
+base/class/String	insert	9		0	0	0.03	144	150	0	0		0	0.11	144	150	0	0	True	1	green							144	
+base/class/String	lastpos	9		0	0	0.03	183	202	0	0		0	0.12	183	202	0	0	True	1	green							183	
+base/class/String	left	9		0	0	0.02	41	43	0	0		0	0.1	41	43	0	0	True	1	green							41	
+base/class/String	length	9		0	0	0.02	33	33	0	0		0	0.08	33	33	0	0	True	1	green							33	
+base/class/String	logicalOperators	9		0	0	0.02	1	17	0	0		0	0.06	1	17	0	0	True	1	green							1	
+base/class/String	lower	9		0	0	0.02	1	5	0	0		0	0.09	1	5	0	0	True	1	green							1	
+base/class/String	makearray	9		0	0	0.02	1	2	0	0		0	0.09	1	2	0	0	True	1	green							1	
+base/class/String	makestring	9		0	0	0.02	1	4	0	0		0	0.06	1	4	0	0	True	1	green							1	
+base/class/String	match	9		0	0	0.02	12	26	0	0		0	0.06	12	26	0	0	True	1	green							12	
+base/class/String	matchChar	9		0	0	0.02	5	15	0	0		0	0.09	5	15	0	0	True	1	green							5	
+base/class/String	max	9		0	0	0.02	14	21	0	0		0	0.08	14	21	0	0	True	1	green							14	
+base/class/String	min	9		0	0	0.02	10	17	0	0		0	0.08	10	17	0	0	True	1	green							10	
+base/class/String	modulo	9		0	0	0.03	14	938	0	0		0	0.08	14	938	0	0	True	1	green							14	
+base/class/String	new	9		0	0	0.02	1	8	0	0		0	0.1	1	8	0	0	True	1	green							1	
+base/class/String	overlay	9		0	0	0.02	58	75	0	0		0	0.09	58	75	0	0	True	1	green							58	
+base/class/String	pos	9		0	0	0.03	103	107	0	0		0	0.08	103	107	0	0	True	1	green							103	
+base/class/String	replaceat	9		0	0	0.02	17	38	0	0		0	0.09	17	38	0	0	True	1	green							17	
+base/class/String	reverse	9		0	0	0.02	24	26	0	0		0	0.08	24	26	0	0	True	1	green							24	
+base/class/String	right	9		0	0	0.03	51	53	0	0		0	0.09	51	53	0	0	True	1	green							51	
+base/class/String	round	9		0	0	0.02	8	68	0	0		0	0.1	8	68	0	0	True	1	green							8	
+base/class/String	sign	9		0	0	0.03	48	51	0	0		0	0.09	48	51	0	0	True	1	green							48	
+base/class/String	space	9		0	0	0.04	242	242	0	0		0	0.11	242	242	0	0	True	1	green							242	
+base/class/String	startsWith	9		0	0	0.02	4	22	0	0		0	0.1	4	22	0	0	True	1	green							4	
+base/class/String	strip	9		0	0	0.04	108	114	0	0		0	0.1	108	114	0	0	True	1	green							108	
+base/class/String	subWords	9		0	0	0.03	131	704	0	0		0	0.08	131	704	0	0	True	1	green							131	
+base/class/String	subchar	9		0	0	0.02	1	4	0	0		0	0.1	1	4	0	0	True	1	green							1	
+base/class/String	substr	9		0	0	0.03	91	96	0	0		0	0.11	91	96	0	0	True	1	green							91	
+base/class/String	subword	9		0	0	0.03	125	131	0	0		0	0.1	125	131	0	0	True	1	green							125	
+base/class/String	translate	9		0	0	0.03	29	39	0	0		0	0.08	29	39	0	0	True	1	green							29	
+base/class/String	trunc	9		0	0	0.03	42	45	0	0		0	0.08	42	45	0	0	True	1	green							42	
+base/class/String	upper	9		0	0	0.02	1	5	0	0		0	0.07	1	5	0	0	True	1	green							1	
+base/class/String	verify	9		0	0	0.03	100	113	0	0		0	0.09	100	113	0	0	True	1	green							100	
+base/class/String	word	9		0	0	0.03	73	72	0	0		0	0.1	73	72	0	0	True	1	green							73	
+base/class/String	wordindex	9		0	0	0.03	74	73	0	0		0	0.1	74	73	0	0	True	1	green							74	
+base/class/String	wordlength	9		0	0	0.03	73	73	0	0		0	0.1	73	73	0	0	True	1	green							73	
+base/class/String	wordpos	9		0	0	0.03	193	197	0	0		0	0.09	193	197	0	0	True	1	green							193	
+base/class/String	words	9		0	0	0.02	42	42	0	0		0	0.07	42	42	0	0	True	1	green							42	
+base/class/String	x2b	9		0	0	0.03	69	76	0	0		0	0.07	69	76	0	0	True	1	green							69	
+base/class/String	x2c	9		0	0	0.03	51	51	0	0		0	0.09	51	51	0	0	True	1	green							51	
+base/class/String	x2d	9		0	0	0.03	68	84	0	0		0	0.08	68	84	0	0	True	1	green							68	
+base/class/collections	array	9		0	0	0.02	41	134	0	0		0	0.09	41	134	0	0	True	1	green							41	
+base/class/collections	bag	9		0	0	0.02	11	44	0	0		0	0.09	11	44	0	0	True	1	green							11	
+base/class/collections	circularqueue	9		0	0	0.02	7	86	0	0		0	0.1	7	86	0	0	True	1	green							7	
+base/class/collections	directory	9		0	0	0.02	29	96	0	0		1	0.11	29	81	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_19; rc 1 vs 0		TEST_19			29	TEST_19
+base/class/collections	list	9		0	0	0.02	19	65	0	0		0	0.09	19	65	0	0	True	1	green							19	
+base/class/collections	properties	9		0	0	0.02	11	49	0	0		0	0.1	11	49	0	0	True	1	green							11	
+base/class/collections	queue	9		0	0	0.02	22	107	0	0		1	0.07	22	103	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_16; rc 1 vs 0		TEST_16			22	TEST_16
+base/class/collections	stringtable	9		0	0	0.02	44	107	0	0		0	0.07	44	107	0	0	True	1	green							44	
+base/directives	ANNOTATE	9		0	0	0.03	51	108	0	0		120	0.08	None	None	None	None	False	5	not green	loud refusal	rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	TEST_CLASS_ANNOTATIONS[refusal] TEST_METHOD_ANNOTATIONS[refusal] TEST_PACKAGE_ANNOTATIONS[refusal] TEST_ROUTINE_ANNOTATIONS[refusal]	TEST_ATTRIBUTE_ANNOTATION TEST_CONSTANT_ANNOTATION			47	TEST_ATTRIBUTE_ANNOTATION TEST_CONSTANT_ANNOTATION
+base/directives	ATTRIBUTE	9		0	0	0.03	84	304	0	0		2	0.08	84	276	1	1	False	1	not green	wrong answer	failing here not on oracle: TESTDELEGATE TESTMISPLACEDCLASSMETHOD; rc 2 vs 0		TESTDELEGATE TESTMISPLACEDCLASSMETHOD			84	TESTDELEGATE TESTMISPLACEDCLASSMETHOD
+base/directives	CLASS	9		0	0	0.03	54	157	0	0		2	0.07	54	129	0	6	False	1	not green	wrong answer	failing here not on oracle: TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_ENVIRONMENT TEST_SUBCLASS_NO_CLASS_LOCAL; rc 2 vs 0		TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_ENVIRONMENT TEST_SUBCLASS_NO_CLASS_LOCAL			54	TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_ENVIRONMENT TEST_SUBCLASS_NO_CLASS_LOCAL
+base/directives	CONSTANT	9		0	0	0.02	29	174	0	0		2	0.07	29	173	0	1	False	1	not green	wrong answer	failing here not on oracle: TEST_EXPRESSION_NOVALUE_ERROR; rc 2 vs 0		TEST_EXPRESSION_NOVALUE_ERROR			29	TEST_EXPRESSION_NOVALUE_ERROR
+base/directives	METHOD	9		0	0	2.54	78	232	0	0		120	2.7	None	None	None	None	False	2	not green	loud refusal	rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	TESTPACKAGE[refusal]	TESTDELEGATE			77	TESTDELEGATE
+base/directives	OPTIONS	9		0	0	0.05	87	155	0	0		2	0.12	87	119	7	3	False	1	not green	wrong answer	failing here not on oracle: TEST_ALL_SYNTAX_INVALID TEST_ALL_SYNTAX_MISSING TEST_ALL_SYNTAX_NOTREADY TEST_ALL_SYNTAX_OVERRIDE TEST_LOSTDIGITS_SYNTAX_OVERRIDE TEST_NOTREADY_SYNTAX_NOT TEST_NOTREADY_SYNTAX_OVERRIDE TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD TEST_OPTION_SETTINGS TEST_TRACE_LABELS; rc 2 vs 0		TEST_ALL_SYNTAX_INVALID TEST_ALL_SYNTAX_MISSING TEST_ALL_SYNTAX_NOTREADY TEST_ALL_SYNTAX_OVERRIDE TEST_LOSTDIGITS_SYNTAX_OVERRIDE TEST_NOTREADY_SYNTAX_NOT TEST_NOTREADY_SYNTAX_OVERRIDE TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD TEST_OPTION_SETTINGS TEST_TRACE_LABELS			87	TEST_ALL_SYNTAX_INVALID TEST_ALL_SYNTAX_MISSING TEST_ALL_SYNTAX_NOTREADY TEST_ALL_SYNTAX_OVERRIDE TEST_LOSTDIGITS_SYNTAX_OVERRIDE TEST_NOTREADY_SYNTAX_NOT TEST_NOTREADY_SYNTAX_OVERRIDE TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD TEST_OPTION_SETTINGS TEST_TRACE_LABELS
+base/directives	REQUIRES	9		0	0	0.03	33	37	0	0		2	0.08	33	13	0	20	False	1	not green	wrong answer	failing here not on oracle: TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP; rc 2 vs 0		TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP			33	TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP
+base/directives	RESOURCE	9		0	0	0.02	13	86	0	0		120	0.08	None	None	None	None	False	2	not green	loud refusal	rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	TEST_RESOURCE_DEFINED[refusal]				12	
+base/directives	ROUTINE	9		0	0	0.03	30	46	0	0		120	0.07	None	None	None	None	False	5	not green	loud refusal	rexx-exec: method "ALLINDEXES" of class "StringTable" is not implemented (Phase 9)	TESTDOTROUTINES[refusal] TESTEXTERNALREGISTEREDBADLIBRARYNAME[refusal] TESTEXTERNALREGISTEREDBADNAME[refusal] TESTPACKAGE[refusal]				26	
+base/expressions	ADDITION	9		0	0	0.03	198	304	0	0		0	0.08	198	304	0	0	True	1	green							198	
+base/expressions	COMPOSITE	9		0	0	0.02	28	28	0	0		0	0.06	28	28	0	0	True	1	green							28	
+base/expressions	CONCATENATION	9		0	0	0.02	3	388	0	0		0	0.07	3	388	0	0	True	1	green							3	
+base/expressions	DIVISION	9		0	0	0.04	313	379	0	0		0	0.11	313	379	0	0	True	1	green							313	
+base/expressions	EXPONENT	9		0	0	0.03	97	132	0	0		0	0.08	97	132	0	0	True	1	green							97	
+base/expressions	Literals	9		0	0	0.03	43	432	0	0		2	0.12	43	420	0	12	False	1	not green	wrong answer	failing here not on oracle: TEST_BINARY_INVALID_WHITESPACE_1 TEST_BINARY_INVALID_WHITESPACE_2 TEST_BINARY_INVALID_WHITESPACE_3 TEST_BINARY_INVALID_WHITESPACE_4 TEST_BINARY_INVALID_WHITESPACE_5 TEST_BINARY_INVALID_WHITESPACE_6 TEST_HEXADECIMAL_INVALID_WHITESPACE_1 TEST_HEXADECIMAL_INVALID_WHITESPACE_2 TEST_HEXADECIMAL_INVALID_WHITESPACE_3 TEST_HEXADECIMAL_INVALID_WHITESPACE_4 TEST_HEXADECIMAL_INVALID_WHITESPACE_5 TEST_HEXADECIMAL_INVALID_WHITESPACE_6; rc 2 vs 0		TEST_BINARY_INVALID_WHITESPACE_1 TEST_BINARY_INVALID_WHITESPACE_2 TEST_BINARY_INVALID_WHITESPACE_3 TEST_BINARY_INVALID_WHITESPACE_4 TEST_BINARY_INVALID_WHITESPACE_5 TEST_BINARY_INVALID_WHITESPACE_6 TEST_HEXADECIMAL_INVALID_WHITESPACE_1 TEST_HEXADECIMAL_INVALID_WHITESPACE_2 TEST_HEXADECIMAL_INVALID_WHITESPACE_3 TEST_HEXADECIMAL_INVALID_WHITESPACE_4 TEST_HEXADECIMAL_INVALID_WHITESPACE_5 TEST_HEXADECIMAL_INVALID_WHITESPACE_6			43	TEST_BINARY_INVALID_WHITESPACE_1 TEST_BINARY_INVALID_WHITESPACE_2 TEST_BINARY_INVALID_WHITESPACE_3 TEST_BINARY_INVALID_WHITESPACE_4 TEST_BINARY_INVALID_WHITESPACE_5 TEST_BINARY_INVALID_WHITESPACE_6 TEST_HEXADECIMAL_INVALID_WHITESPACE_1 TEST_HEXADECIMAL_INVALID_WHITESPACE_2 TEST_HEXADECIMAL_INVALID_WHITESPACE_3 TEST_HEXADECIMAL_INVALID_WHITESPACE_4 TEST_HEXADECIMAL_INVALID_WHITESPACE_5 TEST_HEXADECIMAL_INVALID_WHITESPACE_6
+base/expressions	MULTIPLICATION	9		0	0	0.03	151	1180	0	0		0	0.12	151	1180	0	0	True	1	green							151	
+base/expressions	PRECEDENCE	9		0	0	0.17	1366	1370	0	0		0	0.38	1366	1370	0	0	True	1	green							1366	
+base/expressions	REMAINDER	9		0	0	0.04	293	297	0	0		0	0.12	293	297	0	0	True	1	green							293	
+base/expressions	SPECIAL	9		0	0	0.03	96	96	0	0		0	0.1	96	96	0	0	True	1	green							96	
+base/expressions	SUBTRACTION	9		0	0	0.03	300	406	0	0		0	0.13	300	406	0	0	True	1	green							300	
+base/keyword	ADDRESS	9		1	0	0.14	79	293	0	0		120	0.11	None	None	None	None	False	3	not green	loud refusal	rexx-exec: routine "SYSGETERRORTEXT" is not implemented (Phase 10)	TEST_COMMAND_CD[refusal] TEST_PATH_COMMAND[refusal]				77	
+base/keyword	ASSIGNMENT	9		0	0	0.03	8	849	0	0		0	0.07	8	849	0	0	True	1	green							8	
+base/keyword	Assignments	9		0	0	0.02	11	18	0	0		0	0.06	11	18	0	0	True	1	green							11	
+base/keyword	CALL	9		0	0	1.68	25	181	0	0		0	1.25	25	181	0	0	True	1	green							25	
+base/keyword	DO	9		0	0	0.08	132	905	0	0		0	0.16	132	905	0	0	True	1	green							132	
+base/keyword	DoControlled	9		0	0	0.03	60	100	0	0		0	0.11	60	100	0	0	True	1	green							60	
+base/keyword	DoOther	9		0	0	0.03	28	43	0	0		0	0.11	28	43	0	0	True	1	green							28	
+base/keyword	DoOver	9		0	0	0.02	36	52	0	0		0	0.11	36	52	0	0	True	1	green							36	
+base/keyword	DoWith	9		0	0	0.03	37	74	0	0		0	0.1	37	74	0	0	True	1	green							37	
+base/keyword	EXPOSE	9		0	0	0.03	16	39	0	0		0	0.1	16	39	0	0	True	1	green							16	
+base/keyword	FORWARD	9		0	0	0.02	6	18	0	0		0	0.07	6	18	0	0	True	1	green							6	
+base/keyword	GUARD	9		0	0	0.81	24	26	0	0		0	0.85	24	26	0	0	True	1	green							24	
+base/keyword	IF	9		0	0	0.04	168	180	0	0		0	0.11	168	180	0	0	True	1	green							168	
+base/keyword	INTERPRET	9		0	0	0.02	11	11	0	0		0	0.09	11	11	0	0	True	1	green							11	
+base/keyword	ITERATE	9		0	0	0.03	31	46	0	0		0	0.12	31	46	0	0	True	1	green							31	
+base/keyword	LABEL	9		0	0	0.03	42	41	0	0		2	0.11	42	32	3	6	False	1	not green	wrong answer	failing here not on oracle: TEST_LABEL_IF_1_2 TEST_LABEL_IF_2_1 TEST_LABEL_IF_2_3 TEST_LABEL_IF_3_1 TEST_LABEL_IF_3_5 TEST_SELECT_1_3 TEST_SELECT_1_5 TEST_SELECT_2_3 TEST_SELECT_2_5; rc 2 vs 0		TEST_LABEL_IF_1_2 TEST_LABEL_IF_2_1 TEST_LABEL_IF_2_3 TEST_LABEL_IF_3_1 TEST_LABEL_IF_3_5 TEST_SELECT_1_3 TEST_SELECT_1_5 TEST_SELECT_2_3 TEST_SELECT_2_5			42	TEST_LABEL_IF_1_2 TEST_LABEL_IF_2_1 TEST_LABEL_IF_2_3 TEST_LABEL_IF_3_1 TEST_LABEL_IF_3_5 TEST_SELECT_1_3 TEST_SELECT_1_5 TEST_SELECT_2_3 TEST_SELECT_2_5
+base/keyword	LEAVE	9		0	0	0.02	23	29	0	0		0	0.09	23	29	0	0	True	1	green							23	
+base/keyword	LOOP	9		0	0	0.02	21	54	0	0		0	0.09	21	54	0	0	True	1	green							21	
+base/keyword	LOSTDIGITS	9		0	0	0.02	11	0	0	0		2	0.11	11	0	8	2	False	1	not green	wrong answer	failing here not on oracle: TESTADDITION TESTCOMPARE TESTDIVIDE TESTINTEGERDIVIDE TESTMULTIPLY TESTPOWER TESTPREFIXMINUS TESTPREFIXPLUS TESTREMAINDER TESTSUBTRACTION; rc 2 vs 0		TESTADDITION TESTCOMPARE TESTDIVIDE TESTINTEGERDIVIDE TESTMULTIPLY TESTPOWER TESTPREFIXMINUS TESTPREFIXPLUS TESTREMAINDER TESTSUBTRACTION			11	TESTADDITION TESTCOMPARE TESTDIVIDE TESTINTEGERDIVIDE TESTMULTIPLY TESTPOWER TESTPREFIXMINUS TESTPREFIXPLUS TESTREMAINDER TESTSUBTRACTION
+base/keyword	LabelOption	9		0	0	0.02	8	36	0	0		0	0.08	8	36	0	0	True	1	green							8	
+base/keyword	LoopControlled	9		0	0	0.02	60	100	0	0		0	0.12	60	100	0	0	True	1	green							60	
+base/keyword	LoopOther	9		0	0	0.02	28	43	0	0		0	0.09	28	43	0	0	True	1	green							28	
+base/keyword	LoopOver	9		0	0	0.02	36	51	0	0		0	0.1	36	51	0	0	True	1	green							36	
+base/keyword	LoopWith	9		0	0	0.03	37	74	0	0		0	0.11	37	74	0	0	True	1	green							37	
+base/keyword	NOP	9		0	0	0.02	4	5	0	0		0	0.1	4	5	0	0	True	1	green							4	
+base/keyword	NUMERIC	9		0	0	0.03	99	537	0	0		0	0.1	99	537	0	0	True	1	green							99	
+base/keyword	PARSE	9		0	0	0.11	682	1412	0	0		0	0.24	682	1412	0	0	True	1	green							682	
+base/keyword	RAISE	9		0	0	0.04	22	130	0	0		1	0.09	22	120	4	0	False	1	not green	wrong answer	failing here not on oracle: TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02; rc 1 vs 0		TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02			22	TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02
+base/keyword	REPLY	9		0	0	0.13	18	11	0	0		0	0.19	18	11	0	0	True	1	green							18	
+base/keyword	SAY	9		0	0	0.02	2	9	0	0		0	0.09	2	9	0	0	True	1	green							2	
+base/keyword	SELECT	9		0	0	0.03	44	49	0	0		0	0.08	44	49	0	0	True	1	green							44	
+base/keyword	SIGNAL	9		0	0	0.04	33	42	0	0		2	0.11	33	34	7	1	False	1	not green	wrong answer	failing here not on oracle: TEST_BUG_1877 TEST_SIGNAL_ANY_CONDITION_ERROR TEST_SIGNAL_ANY_CONDITION_FAILURE TEST_SIGNAL_ANY_CONDITION_HALT TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS TEST_SIGNAL_ANY_CONDITION_NOSTRING TEST_SIGNAL_ANY_CONDITION_NOTREADY TEST_SIGNAL_ANY_CONDITION_NOVALUE; rc 2 vs 0		TEST_BUG_1877 TEST_SIGNAL_ANY_CONDITION_ERROR TEST_SIGNAL_ANY_CONDITION_FAILURE TEST_SIGNAL_ANY_CONDITION_HALT TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS TEST_SIGNAL_ANY_CONDITION_NOSTRING TEST_SIGNAL_ANY_CONDITION_NOTREADY TEST_SIGNAL_ANY_CONDITION_NOVALUE			33	TEST_BUG_1877 TEST_SIGNAL_ANY_CONDITION_ERROR TEST_SIGNAL_ANY_CONDITION_FAILURE TEST_SIGNAL_ANY_CONDITION_HALT TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS TEST_SIGNAL_ANY_CONDITION_NOSTRING TEST_SIGNAL_ANY_CONDITION_NOTREADY TEST_SIGNAL_ANY_CONDITION_NOVALUE
+base/keyword	SelectCase	9		0	0	0.02	19	21	0	0		0	0.09	19	21	0	0	True	1	green							19	
+base/keyword	ShortCircuitAnd	9		0	0	0.02	6	6	0	0		0	0.09	6	6	0	0	True	1	green							6	
+base/keyword	TRACE	9		0	0	0.05	57	147	0	0		2	0.13	57	129	6	1	False	1	not green	wrong answer	failing here not on oracle: TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE; rc 2 vs 0		TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE			57	TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE
+base/keyword	TRACE_TraceObject	9		0	0	0.15	10	1149	0	0		2	0.21	10	18	3	2	False	1	not green	wrong answer	failing here not on oracle: TEST_CALLER_STACK_FRAME TEST_CALLER_STACK_FRAME_REPLY_START TEST_OBJECT_AND_SCOPE TEST_TRACEOBJECT_COLLECTOR TEST_VARIABLE; rc 2 vs 0		TEST_CALLER_STACK_FRAME TEST_CALLER_STACK_FRAME_REPLY_START TEST_OBJECT_AND_SCOPE TEST_TRACEOBJECT_COLLECTOR TEST_VARIABLE			10	TEST_CALLER_STACK_FRAME TEST_CALLER_STACK_FRAME_REPLY_START TEST_OBJECT_AND_SCOPE TEST_TRACEOBJECT_COLLECTOR TEST_VARIABLE
+base/keyword	USE	9		0	0	0.02	38	80	0	0		0	0.1	38	80	0	0	True	1	green							38	
+base/keyword	USELOCAL	9		0	0	0.03	9	24	0	0		0	0.08	9	24	0	0	True	1	green							9	
+base/keyword	VarRef	9		0	0	0.03	43	79	0	0		120	0.07	None	None	None	None	False	3	not green	loud refusal	rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9)	TEST_COPY[refusal] TEST_UNKNOWN_OK[refusal]	TESTDOUBLEARGSTEM TESTREFAUTOEXPOSED TESTREFAUTOEXPOSEDSTEM TESTREFEXPOSED TESTREFEXPOSEDSTEM			41	TESTDOUBLEARGSTEM TESTREFAUTOEXPOSED TESTREFAUTOEXPOSEDSTEM TESTREFEXPOSED TESTREFEXPOSEDSTEM
+base/rexxutil	Macrospace	9		39	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil	SysDumpVariables	9		0	0	0.02	4	8	0	0		120	0.1	None	None	None	None	False	5	not green	loud refusal	rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 10)	TEST_LONG[refusal] TEST_NONE[refusal] TEST_NO_ARGS_TOO_MANY[refusal] TEST_SIMPLE_AND_STEM[refusal]				0	
+base/rexxutil	SysFileDateTime	9		0	0	0.02	8	31	0	0		120	0.06	None	None	None	None	False	9	not green	loud refusal	rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10)	TEST_GET_NO_ARGS[refusal] TEST_GET_OPTION_INVALID[refusal] TEST_GET_OPTION_NULL[refusal] TEST_GET_THREE_ARGS_TOO_MANY[refusal] TEST_SET_DATETIME_INVALID[refusal] TEST_SET_FOUR_ARGS_TOO_MANY[refusal] TEST_SET_GET_DATETIME[refusal] TEST_SET_NO_ARGS[refusal]				0	
+base/rexxutil	SysFileSearch	9		0	0	0.03	14	147	0	0		120	0.06	None	None	None	None	False	15	not green	loud refusal	rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10)	TEST_BUFFER_SIZE[refusal] TEST_FIVE_ARGS_TOO_MANY[refusal] TEST_INVALID_OPTION[refusal] TEST_LONG_LINE[refusal] TEST_LONG_LINENUMBERS[refusal] TEST_NO_ARGS[refusal] TEST_NO_FILE[refusal] TEST_NO_STEM[refusal] TEST_NUL_CHARACTER[refusal] TEST_ONE_ARG_TOO_FEW[refusal] TEST_STEM_ARRAY_OBJECT[refusal] TEST_STEM_ARRAY_ZERO[refusal] TEST_STEM_NAME[refusal] TEST_TWO_ARGS_TOO_FEW[refusal]				0	
+base/rexxutil	SysFileTree	9		0	0	0.16	26	12462	0	0		1	0.1	26	908	17	0	False	1	not green	wrong answer	failing here not on oracle: TEST_ARG_FIVE_BLANK TEST_ARG_FIVE_INVALID TEST_ARG_FIVE_TOO_LONG TEST_ARG_FOUR_BLANK TEST_ARG_FOUR_INVALID TEST_ARG_FOUR_TOO_LONG TEST_ARG_ONE_NULL TEST_ARG_THREE_BLANK TEST_ARG_THREE_INVALID TEST_ARG_THREE_NULL TEST_ARG_TWO TEST_ARG_TWO_INVALID TEST_ARG_TWO_NULL TEST_HUGE TEST_TREE_DIRECTORY TEST_TREE_SINGLE_FILE TEST_TREE_SUBDIRECTORIES; rc 1 vs 0		TEST_ARG_FIVE_BLANK TEST_ARG_FIVE_INVALID TEST_ARG_FIVE_TOO_LONG TEST_ARG_FOUR_BLANK TEST_ARG_FOUR_INVALID TEST_ARG_FOUR_TOO_LONG TEST_ARG_ONE_NULL TEST_ARG_THREE_BLANK TEST_ARG_THREE_INVALID TEST_ARG_THREE_NULL TEST_ARG_TWO TEST_ARG_TWO_INVALID TEST_ARG_TWO_NULL TEST_HUGE TEST_TREE_DIRECTORY TEST_TREE_SINGLE_FILE TEST_TREE_SUBDIRECTORIES			26	TEST_ARG_FIVE_BLANK TEST_ARG_FIVE_INVALID TEST_ARG_FIVE_TOO_LONG TEST_ARG_FOUR_BLANK TEST_ARG_FOUR_INVALID TEST_ARG_FOUR_TOO_LONG TEST_ARG_ONE_NULL TEST_ARG_THREE_BLANK TEST_ARG_THREE_INVALID TEST_ARG_THREE_NULL TEST_ARG_TWO TEST_ARG_TWO_INVALID TEST_ARG_TWO_NULL TEST_HUGE TEST_TREE_DIRECTORY TEST_TREE_SINGLE_FILE TEST_TREE_SUBDIRECTORIES
+base/rexxutil	SysFileXXX	9		0	0	0.04	43	164	0	0		120	0.07	None	None	None	None	False	24	not green	loud refusal	rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 10)	TEST_FILECOPY[refusal] TEST_FILECOPY_INVALID[refusal] TEST_FILECOPY_NO_ARG[refusal] TEST_FILECOPY_ONE_ARG[refusal] TEST_FILECOPY_THREE_ARGS[refusal] TEST_FILEMOVE[refusal] TEST_FILEMOVE_INVALID[refusal] TEST_FILEMOVE_NO_ARG[refusal] TEST_FILEMOVE_ONE_ARG[refusal] TEST_FILEMOVE_THREE_ARGS[refusal] TEST_ISFILEDIRECTORY[refusal] TEST_ISFILEDIRECTORY_INVALID[refusal] TEST_ISFILEDIRECTORY_NO_ARG[refusal] TEST_ISFILEDIRECTORY_TWO_ARGS[refusal] TEST_MKDIR[refusal] TEST_TEMPFILE_EXHAUST[refusal] TEST_TEMPFILE_FILLER_LONG[refusal] TEST_TEMPFILE_FILLER_NULL[refusal] TEST_TEMPFILE_NO_ARG[refusal] TEST_TEMPFILE_PATH[refusal] TEST_TEMPFILE_SIMPLE[refusal] TEST_TEMPFILE_TEMPLATE_FILLER_MISMATCH[refusal] TEST_TEMPFILE_THREE_ARGS[refusal]	TEST_FILEEXISTS_NIL_INVALID			20	TEST_FILEEXISTS_NIL_INVALID
+base/rexxutil	SysFormatMessage	9		0	0	0.02	5	20	0	0		120	0.06	None	None	None	None	False	6	not green	loud refusal	rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 10)	TEST_LONG_SUBSTITUTIONS[refusal] TEST_NO_ARGS_TOO_FEW[refusal] TEST_ONE_ARG_TOO_FEW[refusal] TEST_SUBSTITUTIONS[refusal] TEST_TOO_MANY_SUBS[refusal]				0	
+base/rexxutil	SysSearchPath	9		0	0	0.02	10	45	0	0		120	0.07	None	None	None	None	False	11	not green	loud refusal	rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10)	TEST_SEARCHPATH_ABSOLUTE[refusal] TEST_SEARCHPATH_ARGS_FOUR[refusal] TEST_SEARCHPATH_ARGS_NONE[refusal] TEST_SEARCHPATH_ARGS_ONE[refusal] TEST_SEARCHPATH_EMPTY[refusal] TEST_SEARCHPATH_OPTION_INVALID[refusal] TEST_SEARCHPATH_OPTION_NULL[refusal] TEST_SEARCHPATH_RELATIVE[refusal] TEST_SEARCHPATH_SHELL[refusal] TEST_SEARCHPATH_VARIABLE[refusal]				0	
+base/rexxutil	SysSleep	9		0	0	6.17	7	23	0	0		0	6.25	7	23	0	0	True	1	green							7	
+base/rexxutil	SysStemCopy	9		0	0	0.02	12	103	0	0		120	0.06	None	None	None	None	False	13	not green	loud refusal	rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10)	TEST_BAD_FROM_COUNT[refusal] TEST_BAD_TO_COUNT[refusal] TEST_COPIES[refusal] TEST_COUNT_OUT_OF_RANGE[refusal] TEST_FROM_OUT_OF_RANGE[refusal] TEST_INVALID_OPTION[refusal] TEST_SPARSE_INSERT_SOURCE[refusal] TEST_SPARSE_INSERT_TARGET[refusal] TEST_SPARSE_OVERLAY_SOURCE[refusal] TEST_TO_OUT_OF_RANGE[refusal] TEST_UNSET_FROM_COUNT[refusal] TEST_UNSET_TO_COUNT[refusal]				0	
+base/rexxutil	SysStemDelete	9		0	0	0.02	5	21	0	0		120	0.07	None	None	None	None	False	6	not green	loud refusal	rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 10)	TEST_BAD_COUNT[refusal] TEST_DELETES[refusal] TEST_OUT_OF_COUNT[refusal] TEST_OUT_OF_RANGE[refusal] TEST_UNSET_COUNT[refusal]				0	
+base/rexxutil	SysStemInsert	9		0	0	0.02	5	17	0	0		120	0.08	None	None	None	None	False	6	not green	loud refusal	rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 10)	TEST_INSERT_EMPTY[refusal] TEST_INSERT_OUT_OF_RANGE[refusal] TEST_INSET[refusal] TEST_STEM_SIZE_BAD_VALUE[refusal] TEST_STEM_SIZE_NOT_SET[refusal]				0	
+base/rexxutil	SysStemSort	9		0	0	0.02	18	168	0	0		120	0.08	None	None	None	None	False	19	not green	loud refusal	rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10)	TESTSORTRANGE[refusal] TEST_ALREADY_SORTED[refusal] TEST_BAD_COUNT[refusal] TEST_BAD_DIRECTION_ARG[refusal] TEST_CASE_SENSITIVITY[refusal] TEST_COMPOUND_NAME[refusal] TEST_DESCENDING_SIMPLE[refusal] TEST_INVALID_FIRSTCOL_LASTCOL[refusal] TEST_INVALID_FIRST_LAST[refusal] TEST_INVALID_ORDER[refusal] TEST_INVALID_STEM[refusal] TEST_OUT_OF_RANGE[refusal] TEST_SIMPLE_LETTERS[refusal] TEST_SORT[refusal] TEST_SORT_COLS[refusal] TEST_SPARSE_ARRAY[refusal] TEST_TOO_MANY[refusal] TEST_UNSET_COUNT[refusal]				0	
+base/rexxutil/platform/unix	SysGetMessage	9		2	0	0.04	9	176	0	0		120	0.09	None	None	None	None	False	10	not green	loud refusal	rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10)	TEST_MESSAGE[refusal] TEST_MESSAGE_INSERTS[refusal] TEST_MESSAGE_SET[refusal] TEST_MESSAGE_SURPLUS_INSERTS[refusal] TEST_NO_ARGS[refusal] TEST_NO_MESSAGE[refusal] TEST_REXX_ALL[refusal] TEST_REXX_MAJOR[refusal] TEST_X_NO_ARGS[refusal]				0	
+base/rexxutil/platform/unix	tilde	9		0	0	0.09	1	18	0	0		120	0.06	None	None	None	None	False	2	not green	loud refusal	rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10)	TEST_TILDE[refusal]				0	
+base/rexxutil/platform/windows	SysBootDrive	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysCurPos	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysCurState	9		0	0	0.02	0	0	0	0		0	0.07	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysDrive	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysDriveMap	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysFileTree	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysGetXxxPathName	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysIni	9		0	0	0.02	0	0	0	0		0	0.07	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysIsFileDirectory	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysSystemDirectory	9		0	0	0.02	0	0	0	0		0	0.09	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysTextScreenRead	9		0	0	0.02	0	0	0	0		0	0.07	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysTextScreenSize	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysUnicode	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysWinVer	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+base/rexxutil/platform/windows	SysWin_xxx_Printer	9		0	0	0.02	0	0	0	0		0	0.1	0	0	0	0	True	1	no tests on host							0	
+base/runtime.objects	environmentEntries	9		1	0	0.03	14	179	0	0		1	0.09	14	178	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_ZZZ_TRACEOUTPUT_INVALID; rc 1 vs 0		TEST_ZZZ_TRACEOUTPUT_INVALID			14	TEST_ZZZ_TRACEOUTPUT_INVALID
+base/security.manager	SecurityManager	9		0	0	0.04	87	312	0	0		120	0.08	None	None	None	None	False	27	not green	loud refusal	rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9)	TEST_CALL_HANDLE_NOT_EXISTS[refusal] TEST_CALL_HANDLE_NO_RESULT[refusal] TEST_CALL_HANDLE_RESULT[refusal] TEST_CALL_PASS_NO_ARGS[refusal] TEST_CALL_PASS_THREE_ARGS[refusal] TEST_COMMAND_HANDLE_ERROR[refusal] TEST_COMMAND_HANDLE_FAILURE[refusal] TEST_COMMAND_HANDLE_RC[refusal] TEST_COMMAND_PASS[refusal] TEST_ENVIRONMENT_HANDLE[refusal] TEST_ENVIRONMENT_PASS[refusal] TEST_LOCAL_HANDLE_RESULT[refusal] TEST_LOCAL_PASS[refusal] TEST_METHOD_HANDLE_RESULT[refusal] TEST_REQUIRES_HANDLE[refusal] TEST_REQUIRES_HANDLE_FORBIDDEN[refusal] TEST_REQUIRES_HANDLE_SECURITY_MANAGER[refusal] TEST_REQUIRES_PASS[refusal] TEST_STREAM_PASS_BIF_CHARIN[refusal] TEST_STREAM_PASS_BIF_CHAROUT[refusal] TEST_STREAM_PASS_BIF_CHARS[refusal] TEST_STREAM_PASS_BIF_LINEIN[refusal] TEST_STREAM_PASS_BIF_LINEOUT[refusal] TEST_STREAM_PASS_BIF_LINES[refusal] TEST_STREAM_PASS_BIF_STREAM_OPEN[refusal] TEST_STREAM_REPLACE[refusal]	TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_PASS			9	TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_PASS
+base/source.file	SourceFile	9		0	0	0.07	8	34	0	0		120	0.06	None	None	None	None	False	9	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	TEST_LOGICALNOT01[refusal] TEST_LOGICALNOT02[refusal] TEST_LOGICALNOT03[refusal] TEST_LOGICALNOT04[refusal] TEST_LOGICALNOT05[refusal] TEST_LOGICALNOT06[refusal] TEST_LOGICALNOT07[refusal] TEST_LOGICALNOT08[refusal]				0	
+base/source.file	incorrectCharacters	9		0	0	0.06	1	48	0	0		1	0.1	1	7	1	0	False	1	not green	wrong answer	failing here not on oracle: TEST_INCORRECT_CHARACTERS; rc 1 vs 0		TEST_INCORRECT_CHARACTERS			1	TEST_INCORRECT_CHARACTERS
+base/source.file	whiteSpace	9		0	0	0.02	13	94	0	0		0	0.06	13	94	0	0	True	1	green							13	
+base/special.variables	RESULT_RC_SIGL	9		0	0	0.03	7	52	0	0		0	0.1	7	52	0	0	True	1	green							7	
+doc/rexxref/chapter5	Section1	9		0	0	0.05	3	17	0	0		120	0.09	None	None	None	None	False	2	not green	loud refusal	rexx-exec: method "OBJECTNAME=" of class "Object" is not implemented (Phase 9)	TEST_OBJECT_OBJECTNAMEEQUALS[refusal]				2	
+doc/rexxref/chapter7	Section4	9		0	0	0.02	0	0	0	0		0	0.08	0	0	0	0	True	1	no tests on host							0	
+extensions/dateparser	DateFormatter	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/dateparser	DateParser	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/hostemu	hostemu	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/json	json	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/json	json_02	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/unix/ncurses	ncurses	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/unix/rxunixsys	SysUnix	10	extension group (extensions/)	2																not run (Phase 10)								
+extensions/platform/windows/ole	ExcelQuickTest	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/ole	OLEObject	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/ole	OLEVariant	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/ole	Printers	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/ole	RexxProcess	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/ole	SpecialFolders	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/oodialog	Basic	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/rxwinsys	Clipboard	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/platform/windows/rxwinsys	WindowsEventLog	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/rxmath	RxMath	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/rxregexp	rxregexp	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/rxsock	socketClass	10	extension group (extensions/)	0																not run (Phase 10)								
+extensions/yaml	yaml	10	extension group (extensions/)	0																not run (Phase 10)								
+regressions	bug1853738	9		0	0	0.02	4	4	0	0		0	0.07	4	4	0	0	True	1	green							4	
+regressions	bug2003_guard_when	9		0	0	0.03	1	12	0	0		0	0.09	1	12	0	0	True	1	green							1	
+regressions	bug2061_newline_misalignment	9		0	0	0.02	0	0	0	0		0	0.06	0	0	0	0	True	1	no tests on host							0	
+samples	samples	9		0	0	60.2	29	118	0	0		120	0.09	None	None	None	None	False	1	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)				TEST_ARITHMETICEVALUATION TEST_ARRAYCALLBACK TEST_CCREPLY TEST_CONCURRENCY TEST_CONSTRAINED TEST_DELEGATION TEST_DYNAMICMETHOD TEST_FACTOR TEST_GREPLY TEST_GUESS TEST_INTERFACE TEST_KTGUARD TEST_MAKESTRING TEST_MONTH TEST_PHILFORK TEST_PROPERTIES TEST_QDATE TEST_QTIME TEST_REXXCPS TEST_SINGLELINKEDLIST TEST_SORTCOMPOSITE TEST_STACK TEST_SYNCHRONOUSCONCURRENCY TEST_TIMEZONE TEST_TREETRAVERSAL TEST_USECOMP TEST_USEPIPE TEST_USESINGLETON TEST_USETREE	incomplete	
+samples	scclient	9		0	124	300.14	2	16	0	0										oracle did not finish	oracle crash/hang	oracle rc 124						
+samples	scserver	9		0	1	0.03	2	2	1	0	TEST_04_SCSERVER.REX	120	0.05	None	None	None	None	False	1	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)				TEST_01_SAMPLEEXISTS TEST_04_SCSERVER.REX	incomplete	
+samples	sfclient	9		0	124	300.01	2	2	0	1	TEST_04_SFCLIENT.REX									oracle did not finish	oracle crash/hang	oracle rc 124						
+samples	sfserver	9		0	1	0.04	2	2	1	0	TEST_04_SFSERVER.REX	120	0.1	None	None	None	None	False	1	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)				TEST_01_SAMPLEEXISTS TEST_04_SFSERVER.REX	incomplete	
+samples/windows	adsi	9		0	0	0.02	0	0	0	0		120	0.08	None	None	None	None	False	1	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)					incomplete	
+samples/windows	fileNameDialog_demo	9		0	0	0.02	0	0	0	0		0	0.09	0	0	0	0	True	1	no tests on host							0	
+samples/windows	samples	9		0	0	0.02	0	0	0	0		120	0.09	None	None	None	None	False	1	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)					incomplete	
+samples/windows	wmi	9		0	0	0.02	0	0	0	0		120	0.09	None	None	None	None	False	1	not green	loud refusal	rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)					incomplete	
+utilities	rxapi	10?	RXAPI: rxapi daemon / external queues / rxsubcom registration (roadmap "Why Phase 9's gate is L3-core"); conflicts with row 9 shipping rxqueue, rxsubcom	0																not run (Phase 10)								
+utilities/rexx	rexx_command	9		0	0	0.17	30	85	0	0		1	0.31	30	30	22	0	False	1	not green	wrong answer	failing here not on oracle: TEST_NOARGS TEST_OPTE1 TEST_OPTE10 TEST_OPTE11 TEST_OPTE2 TEST_OPTE3 TEST_OPTE4 TEST_OPTE5 TEST_OPTE6 TEST_OPTE7 TEST_OPTE8 TEST_OPTE9 TEST_OPTENOCODE TEST_OPTONOSTRING1 TEST_OPTONOSTRING2 TEST_OPTV1 TEST_OPTV2 TEST_OPTV5 TEST_OPTV6 TEST_PASSINGARGS5 TEST_PASSINGARGS7 TEST_UNKNOWNSW; rc 1 vs 0		TEST_NOARGS TEST_OPTE1 TEST_OPTE10 TEST_OPTE11 TEST_OPTE2 TEST_OPTE3 TEST_OPTE4 TEST_OPTE5 TEST_OPTE6 TEST_OPTE7 TEST_OPTE8 TEST_OPTE9 TEST_OPTENOCODE TEST_OPTONOSTRING1 TEST_OPTONOSTRING2 TEST_OPTV1 TEST_OPTV2 TEST_OPTV5 TEST_OPTV6 TEST_PASSINGARGS5 TEST_PASSINGARGS7 TEST_UNKNOWNSW			30	TEST_NOARGS TEST_OPTE1 TEST_OPTE10 TEST_OPTE11 TEST_OPTE2 TEST_OPTE3 TEST_OPTE4 TEST_OPTE5 TEST_OPTE6 TEST_OPTE7 TEST_OPTE8 TEST_OPTE9 TEST_OPTENOCODE TEST_OPTONOSTRING1 TEST_OPTONOSTRING2 TEST_OPTV1 TEST_OPTV2 TEST_OPTV5 TEST_OPTV6 TEST_PASSINGARGS5 TEST_PASSINGARGS7 TEST_UNKNOWNSW
+utilities/rexxc	rexxc	9		0	0	0.1	11	57	0	0		2	0.11	11	1	0	8	False	1	not green	wrong answer	failing here not on oracle: TEST_REXXC_ENCODING TEST_REXXC_NO_ARG TEST_REXXC_ONE_ARG TEST_REXXC_ONE_ARG_NOT_FOUND TEST_REXXC_ONE_ARG_OPTION_S TEST_REXXC_ONE_ARG_SYNTAX TEST_REXXC_THREE_ARGS TEST_REXXC_TWO_ARGS; rc 2 vs 0		TEST_REXXC_ENCODING TEST_REXXC_NO_ARG TEST_REXXC_ONE_ARG TEST_REXXC_ONE_ARG_NOT_FOUND TEST_REXXC_ONE_ARG_OPTION_S TEST_REXXC_ONE_ARG_SYNTAX TEST_REXXC_THREE_ARGS TEST_REXXC_TWO_ARGS			11	TEST_REXXC_ENCODING TEST_REXXC_NO_ARG TEST_REXXC_ONE_ARG TEST_REXXC_ONE_ARG_NOT_FOUND TEST_REXXC_ONE_ARG_OPTION_S TEST_REXXC_ONE_ARG_SYNTAX TEST_REXXC_THREE_ARGS TEST_REXXC_TWO_ARGS
+utilities/rxqueue	rxQueue	10?	RXAPI: rxapi daemon / external queues / rxsubcom registration (roadmap "Why Phase 9's gate is L3-core"); conflicts with row 9 shipping rxqueue, rxsubcom	5																not run (Phase 10)								
+utilities/rxsubcom	rxsubcom	10?	RXAPI: rxapi daemon / external queues / rxsubcom registration (roadmap "Why Phase 9's gate is L3-core"); conflicts with row 9 shipping rxqueue, rxsubcom	0																not run (Phase 10)								
