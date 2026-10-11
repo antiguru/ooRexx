@@ -914,10 +914,11 @@ pub fn test_names(
     names
 }
 
-/// The group's tests, sorted, distinct and upper case, from the `::METHOD`s
-/// named `test...` of its test classes ([`test_classes`]): for a group whose
-/// whole-group listing run outlasts the oracle's deadline. A `::CLASS`
-/// directive split across lines is not followed; resource bodies are skipped.
+/// The group's tests, sorted, distinct and upper case: the instance methods
+/// named `test...` of its test classes ([`test_classes`]), which the
+/// framework's `getTestMethods` runs (`framework/OOREXXUNIT.CLS:1761`): for a
+/// group whose whole-group listing run outlasts the oracle's deadline. A
+/// `::CLASS` directive split across lines is not followed.
 pub fn source_test_names(dir: &str, group: &str) -> Vec<String> {
     source_test_names_in(&groups_root(), dir, group)
 }
@@ -947,13 +948,82 @@ pub struct SourceClass {
     pub parents: Vec<String>,
     /// Whether its directive names `ooTestCase`.
     pub direct: bool,
-    /// Its `::METHOD` names, upper case and unquoted.
+    /// Its instance methods' names, upper case and unquoted, from its
+    /// `::METHOD`, `::CONSTANT` and `::ATTRIBUTE` directives.
     pub methods: Vec<String>,
-    /// Its methods' lines, lower case.
+    /// Its methods' lines, lower case, comments removed.
     pub body: String,
 }
 
-/// The `::CLASS`es of `text`, resource bodies skipped.
+/// `line` without its comments, `depth` being how many block comments are
+/// open where it starts and, after, where it ends. Block comments nest and a
+/// `--` ends the line, outside quotes.
+fn without_comments(line: &str, depth: &mut usize) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let mut code = String::new();
+    let mut quote: Option<char> = None;
+    let mut at = 0;
+    while at < chars.len() {
+        let (this, next) = (chars[at], chars.get(at + 1).copied());
+        if *depth > 0 {
+            match (this, next) {
+                ('/', Some('*')) => {
+                    *depth += 1;
+                    at += 2;
+                }
+                ('*', Some('/')) => {
+                    *depth -= 1;
+                    code.push(' ');
+                    at += 2;
+                }
+                _ => at += 1,
+            }
+            continue;
+        }
+        match (quote, this, next) {
+            (Some(open), _, _) => {
+                if this == open {
+                    quote = None;
+                }
+                code.push(this);
+            }
+            (None, '\'' | '"', _) => {
+                quote = Some(this);
+                code.push(this);
+            }
+            (None, '/', Some('*')) => {
+                *depth = 1;
+                at += 1;
+            }
+            (None, '-', Some('-')) => break,
+            (None, _, _) => code.push(this),
+        }
+        at += 1;
+    }
+    code
+}
+
+/// The name a directive's `rest` starts with, upper case and unquoted, and
+/// the words after it, lower case.
+fn directive_name(rest: &str) -> (String, Vec<String>) {
+    let rest = rest.trim_start();
+    let (name, after) = match rest.chars().next() {
+        Some(quote @ ('\'' | '"')) => {
+            let close = rest[1..].find(quote).map_or(rest.len(), |at| at + 1);
+            (&rest[1..close], rest.get(close + 1..).unwrap_or(""))
+        }
+        _ => rest.split_once(char::is_whitespace).unwrap_or((rest, "")),
+    };
+    (
+        name.to_ascii_uppercase(),
+        after
+            .split_whitespace()
+            .map(str::to_ascii_lowercase)
+            .collect(),
+    )
+}
+
+/// The `::CLASS`es of `text`, comments and resource bodies skipped.
 pub fn source_classes(text: &str) -> Vec<SourceClass> {
     const KEYWORDS: &[&str] = &[
         "subclass",
@@ -967,16 +1037,19 @@ pub fn source_classes(text: &str) -> Vec<SourceClass> {
     let unquoted = |word: &str| word.trim_matches(['\'', '"']).to_ascii_lowercase();
     let mut classes: Vec<SourceClass> = Vec::new();
     let mut resource_end: Option<String> = None;
-    for line in text.lines() {
+    let mut depth = 0;
+    for raw in text.lines() {
         if let Some(marker) = &resource_end {
-            if line.starts_with(marker.as_str()) {
+            if raw.starts_with(marker.as_str()) {
                 resource_end = None;
             }
             continue;
         }
-        let lower = line.trim_start().to_ascii_lowercase();
+        let code = without_comments(raw, &mut depth);
+        let line = code.trim_start();
+        let lower = line.to_ascii_lowercase();
         if lower.starts_with("::resource") {
-            resource_end = Some(resource_marker(line.trim_start()));
+            resource_end = Some(resource_marker(line));
         } else if let Some(rest) = lower.strip_prefix("::class") {
             let words: Vec<&str> = rest.split_whitespace().collect();
             let mut parents = Vec::new();
@@ -1005,9 +1078,28 @@ pub fn source_classes(text: &str) -> Vec<SourceClass> {
                 body: String::new(),
             });
         } else if let Some(class) = classes.last_mut() {
-            if let Some(rest) = lower.strip_prefix("::method") {
-                let name = rest.split_whitespace().next().unwrap_or("");
-                class.methods.push(unquoted(name).to_ascii_uppercase());
+            let directive = |keyword: &str| {
+                lower
+                    .starts_with(keyword)
+                    .then(|| directive_name(&line[keyword.len()..]))
+            };
+            if let Some((name, after)) = directive("::method") {
+                if !after.iter().any(|word| word == "class") {
+                    class.methods.push(name);
+                }
+            } else if let Some((name, _)) = directive("::constant") {
+                class.methods.push(name);
+            } else if let Some((name, after)) = directive("::attribute") {
+                if !after.iter().any(|word| word == "class") {
+                    let get = !after.iter().any(|word| word == "set");
+                    let set = !after.iter().any(|word| word == "get");
+                    if get {
+                        class.methods.push(name.clone());
+                    }
+                    if set {
+                        class.methods.push(format!("{name}="));
+                    }
+                }
             } else if !lower.starts_with("::") {
                 class.body.push_str(&lower);
                 class.body.push('\n');

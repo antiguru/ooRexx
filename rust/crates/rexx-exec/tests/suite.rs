@@ -82,6 +82,17 @@ pub const FALLBACK_LIMIT_KIB: u64 = 4_194_304;
 /// `rust/`.
 pub const REVISION_FILE: &str = "corpus/suite-revision.txt";
 
+/// Files outside a group's directory that its tests open by a path relative
+/// to the group's, by `dir/group`, each relative to `ootest/ooRexx`: the
+/// copy holds them where the checkout does.
+pub const NEIGHBOURS: &[(&str, &[&str])] = &[
+    (
+        "base/bif/STREAM",
+        &["base/class/Array.testGroup", "API/oo/CONVERSION.testGroup"],
+    ),
+    ("base/class/Stream", &["base/bif/STREAM.testGroup"]),
+];
+
 /// What bounded a side's memory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CapKind {
@@ -334,6 +345,15 @@ fn prepare(
         .join(dir)
         .join(format!("{group}.testGroup"));
     remove_namesakes(&run.join("ooRexx"), &group_file);
+    let path = group_path(dir, group);
+    for (_, files) in NEIGHBOURS.iter().filter(|(listed, _)| *listed == path) {
+        for file in *files {
+            let to = run.join("ooRexx").join(file);
+            fs::create_dir_all(to.parent().expect("a directory"))
+                .unwrap_or_else(|e| panic!("cannot create {}: {e}", to.display()));
+            fs::copy(root.join(file), &to).unwrap_or_else(|e| panic!("cannot copy {file}: {e}"));
+        }
+    }
     skip(&group_file, group, left_out);
     let marker = marker(run);
     if marker.exists() {
@@ -1081,6 +1101,7 @@ mod row_checks {
         "base/rexxutil/platform/unix/tilde",
         "regressions/bug2061_newline_misalignment",
         "doc/rexxref/chapter7/Section4",
+        "samples/sfserver",
     ];
 
     const PASSING: &[(&str, &str)] = &[
@@ -1103,6 +1124,10 @@ mod row_checks {
         (
             LICENCES,
             "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation 4\tidentity",
+        ),
+        (
+            LICENCES,
+            "samples/sfserver\tTEST_04_SFSERVER.REX\tEnvironment\trecord: rust/corpus/suite-oracle-runs/samples-sfserver.txt; ruled: Moritz 2000-01-01",
         ),
         (
             NOT_RUN,
@@ -1186,6 +1211,14 @@ mod row_checks {
         (
             LICENCES,
             "base/bif/CHAROUT\tTEST_STDOUT_START\tEnvironment\trecord: rust/corpus/suite-revision.txt; ruled: Moritz 2026-10-11",
+        ),
+        (
+            LICENCES,
+            "samples/sfserver\tTEST_04_SFSERVER.REX\tEnvironment\trecord: rust/corpus/suite-oracle-runs/samples-scclient.txt; ruled: Moritz 2000-01-01",
+        ),
+        (
+            LICENCES,
+            "samples/sfserver\tTEST_04_SFSERVER.REX\tEnvironment\trecord: rust/corpus/suite-oracle-runs/samples-sfserver.txt; ruled: Moritz",
         ),
         (
             LICENCES,
@@ -1593,6 +1626,46 @@ mod fixtures {
         assert!(oracle.ended_normally);
         assert_eq!(oracle.started, expected);
         assert_eq!(oracle.passed, expected);
+    }
+
+    #[test]
+    fn the_expected_set_is_what_the_framework_starts_whatever_the_file_comments_or_quotes() {
+        let expected = expected_set_in(&root(), "", "Enumerated");
+        assert_eq!(
+            expected,
+            names(&[
+                "TEST_AFTER_COMMENT",
+                "TEST_ATTRIBUTE",
+                "TEST_CONSTANT",
+                "TEST_QUOTED NAME 1.5",
+                "TEST_SINGLE"
+            ])
+        );
+        let oracle = run_group_on_oracle_from(&root(), "", "Enumerated", &BTreeSet::new());
+        assert!(oracle.ended_normally);
+        assert_eq!(oracle.started, expected);
+    }
+
+    #[test]
+    fn the_relative_path_tests_pass_on_the_oracle_with_their_neighbours_copied() {
+        for (dir, group, tests) in [
+            (
+                "base/bif",
+                "STREAM",
+                ["TEST_RELATIVE_FILE_EXISTS", "TEST_RELATIVE_FILE_EXISTS2"],
+            ),
+            (
+                "base/class",
+                "Stream",
+                ["TEST_RELATIVE_EXISTS2", "TEST_RELATIVE_EXISTS3"],
+            ),
+        ] {
+            let run = super::run_group_on_oracle(dir, group, &BTreeSet::new());
+            assert!(run.ended_normally, "{group}");
+            for test in tests {
+                assert!(run.passed.contains(test), "{group} {test}");
+            }
+        }
     }
 
     #[test]

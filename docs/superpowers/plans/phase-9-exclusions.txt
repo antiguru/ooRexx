@@ -227,6 +227,7 @@ API/oo/RexxStart	TESTQUEUEEXITSIZE	Phase 10 Rxapi	reaching_rxapi
 API/oo/RexxStart	TESTSYNTAXERROR	Phase 10 Rxapi	reaching_rxapi
 API/oo/RexxStart	TESTTERMEXIT	Phase 10 Rxapi	reaching_rxapi
 API/oo/RexxStart	TESTTRACEEXIT	Phase 10 Rxapi	reaching_rxapi
+base/bif/LINEOUT	TEST_QUEUE	Phase 10 Rxapi	refusal: rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10)
 base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
 base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_SESSION	Phase 10 Rxapi	reaching_rxapi
 base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
@@ -245,6 +246,7 @@ base/bif/RXQUEUE	TEST_RXQUEUE_OPTION_INVALID	Phase 10 Rxapi	reaching_rxapi
 base/bif/RXQUEUE	TEST_RXQUEUE_SET	Phase 10 Rxapi	reaching_rxapi
 base/bif/RXQUEUE	TEST_RXQUEUE_SWITCH	Phase 10 Rxapi	reaching_rxapi
 base/bif/RXQUEUE	TEST_RXQUEUE_THREE_ARGS	Phase 10 Rxapi	reaching_rxapi
+base/class/RexxQueue	TEST_BUG_1379	Phase 10 Rxapi	refusal: rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10)
 base/class/RexxQueue	TEST_CREATE	Phase 10 Rxapi	reaching_rxapi
 base/class/RexxQueue	TEST_CREATE_INVALID	Phase 10 Rxapi	reaching_rxapi
 base/class/RexxQueue	TEST_CREATE_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
@@ -292,6 +294,8 @@ base/class/RexxQueue	TEST_SET	Phase 10 Rxapi	reaching_rxapi
 base/class/RexxQueue	TEST_SET_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
 base/class/RexxQueue	TEST_STDQUE	Phase 10 Rxapi	reaching_rxapi
 base/class/RexxQueue	TEST_STRING_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
+base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)
+base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)
 base/keyword/ADDRESS	TEST_REXXQUEUE	Phase 10 Rxapi	reaching_rxapi
 base/rexxutil/Macrospace	TEST_ADD_ARG_OPTION_ILLEGAL	Phase 10 Rxapi	reaching_rxapi
 base/rexxutil/Macrospace	TEST_ADD_ARG_PATH_INVALID	Phase 10 Rxapi	reaching_rxapi

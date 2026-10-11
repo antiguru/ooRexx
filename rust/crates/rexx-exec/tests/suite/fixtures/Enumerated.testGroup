@@ -1,0 +1,31 @@
+#!/usr/bin/env rexx
+/* Every way a group file names, or seems to name, a test. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.Enumerated.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "Enumerated.testGroup" subclass ooTestCase public
+
+::method "test_quoted name 1.5"
+  self~assertSame(1, 1)
+
+/* a comment holding /* a nested one */ and
+::method test_commented
+*/
+::method test_after_comment -- ::method test_line_commented
+  self~assertSame(1, 1)
+
+::method test_class_side class
+  return 1
+
+::constant test_constant 1
+
+::attribute test_attribute get
+
+::method 'test_single'
+  self~assertSame('/*', '/' || '*')

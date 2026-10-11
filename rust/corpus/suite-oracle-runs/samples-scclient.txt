@@ -1,0 +1,63 @@
+# The oracle on ootest group samples/scclient, ootest revision 13178, three runs.
+# The group's TEST_04 drives the sample's socket server or client on fixed
+# ports; runs 1 and 2 ran it beside the other socket sample groups.
+
+## Run 1: scout A, 2026-10-10, eight groups at once (.superpowers/sdd/2026-10-10-phase-9-scoping/scout-a-report.md)
+rc 124, 300.14 s; started TEST_01_SAMPLEEXISTS TEST_04_SCCLIENT.REX; failing -
+### stdout
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.8+deb14-amd64
+
+Tests ran:          2
+Assertions:         16
+Failures:           0
+Errors:             0
+
+File search:        00:00:00.000954
+Suite construction: 00:00:00.000115
+Test execution:     00:00:05.515919
+Total time:         00:00:05.517338
+### stderr
+started TEST_01_SAMPLEEXISTS
+started TEST_04_SCCLIENT.REX
+   362 *-* retc = SockRecv(s, 'xxx', len)
+   123 *-*   data = sock~recv(1024)
+Error 4 running /home/moritz/dev/repos/ooRexx/build/bin/socket.cls line 362:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+    87 *-*     address ""      "rexx" prefix || "server" with input using (inArrS) output stem myStemS.
+Error 4 running /tmp/claude-1000/p9scope/a/work/samples__scclient/o/run/ooRexx/samples/scclient.testGroup line 87:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+
+## Run 2: tests/suite.rs l3_core_suite at 717ab354b, 2026-10-11, eight groups at once
+verdicts from its per-test record: TEST_01_SAMPLEEXISTS passed; TEST_04_SCCLIENT.REX passed
+
+## Run 3: alone, 2026-10-11, the four groups one after another
+command: cd <copy> && ulimit -v 1048576 && LD_LIBRARY_PATH=<oracle>/lib PATH=<oracle>/bin:$PATH timeout -k 10 300 <oracle>/bin/rexx testOORexx.rex -f <copy>/ooRexx/samples/scclient.testGroup -U -V 2 < /dev/null
+rc 0, 5.534574377 s
+### stdout
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.8+deb14-amd64
+
+Tests ran:          2
+Assertions:         16
+Failures:           0
+Errors:             0
+
+File search:        00:00:00.000966
+Suite construction: 00:00:00.000119
+Test execution:     00:00:05.510337
+Total time:         00:00:05.511799
+### stderr
+

@@ -1,0 +1,65 @@
+# The oracle on ootest group samples/sfserver, ootest revision 13178, three runs.
+# The group's TEST_04 drives the sample's socket server or client on fixed
+# ports; runs 1 and 2 ran it beside the other socket sample groups.
+
+## Run 1: scout A, 2026-10-10, eight groups at once (.superpowers/sdd/2026-10-10-phase-9-scoping/scout-a-report.md)
+rc 1, 0.04 s; started TEST_01_SAMPLEEXISTS TEST_04_SFSERVER.REX; failing TEST_04_SFSERVER.REX
+### stdout
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.8+deb14-amd64
+
+Tests ran:          2
+Assertions:         2
+Failures:           1
+Errors:             0
+
+[failure] 20261010 21:55:39.346545
+  Test:   TEST_04_SFSERVER.REX
+  Class:  sfserver.testGroup
+  File:   .../ooRexx/samples/sfserver.testGroup
+  Line:   126
+  Failed: assertEquals
+    Expected: Server listening at
+    Actual:   SockBind failed: EADDRINUSE
+
+File search:        00:00:00.001121
+Suite construction: 00:00:00.000156
+Test execution:     00:00:00.011488
+Total time:         00:00:00.013187
+### stderr
+started TEST_01_SAMPLEEXISTS
+started TEST_04_SFSERVER.REX
+
+## Run 2: tests/suite.rs l3_core_suite at 717ab354b, 2026-10-11, eight groups at once
+verdicts from its per-test record: TEST_01_SAMPLEEXISTS passed; TEST_04_SFSERVER.REX failed
+
+## Run 3: alone, 2026-10-11, the four groups one after another
+command: cd <copy> && ulimit -v 1048576 && LD_LIBRARY_PATH=<oracle>/lib PATH=<oracle>/bin:$PATH timeout -k 10 300 <oracle>/bin/rexx testOORexx.rex -f <copy>/ooRexx/samples/sfserver.testGroup -U -V 2 < /dev/null
+rc 0, 8.049878947 s
+### stdout
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.8+deb14-amd64
+
+Tests ran:          2
+Assertions:         9
+Failures:           0
+Errors:             0
+
+File search:        00:00:00.000801
+Suite construction: 00:00:00.000114
+Test execution:     00:00:08.027717
+Total time:         00:00:08.028972
+### stderr
+
