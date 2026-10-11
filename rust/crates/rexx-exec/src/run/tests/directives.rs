@@ -237,7 +237,7 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
 fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
     let cases: &[(&[u8], &str)] = &[(
         b".K~defineMethods(.local)\n::class K\n",
-        "a directory whose entries this crate does not fill is not implemented (Phase 10)",
+        "a directory whose entries this crate does not fill is not implemented (Phase 10 Rxapi)",
     )];
     for (source, message) in cases {
         let outcome = routine_program(source);
@@ -265,7 +265,7 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
     // the oracle's own condition is what answers.
     let cases: &[(&[u8], &str)] = &[(
         b"say 'main ran'\n::routine r external \"REGISTERED rxmath RxCalcSqrt\"\n",
-        "::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)",
+        "::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)",
     )];
     for (source, message) in cases {
         let outcome = routine_program(source);
@@ -317,23 +317,23 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
     let cases: &[(&[u8], &str)] = &[
         (
             b"say SysStemSort('a.')\n",
-            "routine \"SYSSTEMSORT\" is not implemented (Phase 10)",
+            "routine \"SYSSTEMSORT\" is not implemented (Phase 9)",
         ),
         (
             b"say SysOpenEventSem('sem')\n",
-            "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 10)",
+            "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 9)",
         ),
         (
             b"say SysCreateEventSem('sem')\n",
-            "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 10)",
+            "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 9)",
         ),
         (
             b"say SysCreateMutexSem('sem')\n",
-            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore is not implemented (Phase 10)",
+            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore is not implemented (Phase 9)",
         ),
         (
             b"say rxqueue('G')\n",
-            "routine \"RXQUEUE\" is not implemented (Phase 10)",
+            "routine \"RXQUEUE\" is not implemented (Phase 10 Rxapi)",
         ),
     ];
     for (source, message) in cases {

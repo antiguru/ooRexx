@@ -1931,7 +1931,7 @@ fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
             (
                 120,
                 "",
-                "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
+                "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
             ),
             "{source:?}"
         );
@@ -1941,7 +1941,8 @@ fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         (
             120,
             String::new(),
-            "rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10)\n".to_string()
+            "rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10 Rxapi)\n"
+                .to_string()
         )
     );
     // The adjacent successes, each the oracle's own answer: the index and
@@ -2044,7 +2045,7 @@ fn a_reqstr_context_whose_instruction_is_another_phases_is_still_loud() {
         (
             120,
             String::new(),
-            "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10)\n"
+            "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10 Rxapi)\n"
                 .to_string()
         )
     );

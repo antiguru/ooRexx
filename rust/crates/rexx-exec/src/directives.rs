@@ -13,7 +13,7 @@
 
 use crate::plan::ProgramId;
 use crate::{GeneratedKind, Loud, dispatch, owned_message};
-use rexx_core::ObjRef;
+use rexx_core::{Deferral, ObjRef, Owner};
 use rexx_parse::{
     AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef, Directive,
     DirectiveKind, MethodDirective, Program, SymbolId,
@@ -60,9 +60,9 @@ fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
 /// The gap a `::` directive declares at install time, or `None` for one this
 /// crate can install.
 pub(super) fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
-    let gap = |name: &str, owner: &'static str| {
+    let gap = |name: &str, owner: Owner| {
         Some(Loud {
-            message: owned_message(name, Some(owner)),
+            message: owned_message(name, Some(owner.label())),
         })
     };
     match kind {
@@ -77,7 +77,10 @@ pub(super) fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
                 .as_ref()
                 .is_some_and(|spec| spec.registered) =>
         {
-            gap("::ROUTINE EXTERNAL naming REGISTERED", "Phase 10")
+            gap(
+                "::ROUTINE EXTERNAL naming REGISTERED",
+                Owner::Phase10(Deferral::Rxapi),
+            )
         }
         // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
         // resolves no name, runs no code, and every setting it writes is one

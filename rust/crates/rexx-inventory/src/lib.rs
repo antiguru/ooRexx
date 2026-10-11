@@ -20,34 +20,35 @@ pub mod builtins {
     include!(concat!(env!("OUT_DIR"), "/builtins.rs"));
 
     /// The builtins `docs/superpowers/plans/phase-4-exclusions.txt` excludes
-    /// from Phase 4, whole or in part, each with the phase that file gives it:
-    /// its fifteen whole exclusions followed by its three partial rows. The
-    /// owner rides here rather than in the refusal, so a name and the phase
-    /// blamed for it cannot drift apart.
-    pub const EXCLUDED: &[(&str, &str)] = &[
-        ("RXQUEUE", "Phase 10"),
-        ("RXFUNCADD", "Phase 10"),
-        ("RXFUNCDROP", "Phase 10"),
-        ("RXFUNCQUERY", "Phase 10"),
+    /// from Phase 4, whole or in part, each with the phase that file gives it
+    /// and the name of the `rexx_core::Deferral` that makes it Phase 10's:
+    /// its whole exclusions followed by its partial rows. The owner rides here
+    /// rather than in the refusal, so a name and the phase blamed for it
+    /// cannot drift apart.
+    pub const EXCLUDED: &[(&str, &str, &str)] = &[
+        ("RXQUEUE", "Phase 10", "Rxapi"),
+        ("RXFUNCADD", "Phase 10", "Rxapi"),
+        ("RXFUNCDROP", "Phase 10", "Rxapi"),
+        ("RXFUNCQUERY", "Phase 10", "Rxapi"),
         // Partial: in scope in one form, excluded in another. The owner is
         // the excluded form's -- `QUEUED`'s cross-process half is the RXAPI
         // daemon's. `VALUE`'s external selector and `ADDRESS`'s command
         // issuing were here too and are gone: both forms run now.
-        ("QUEUED", "Phase 10"),
+        ("QUEUED", "Phase 10", "Rxapi"),
     ];
 
-    /// The phase owing `name`'s excluded form, or `None` for a name
-    /// [`EXCLUDED`] does not list.
-    pub fn owner_of(name: &str) -> Option<&'static str> {
+    /// The phase owing `name`'s excluded form and its reason, or `None` for
+    /// a name [`EXCLUDED`] does not list.
+    pub fn owner_of(name: &str) -> Option<(&'static str, &'static str)> {
         EXCLUDED
             .iter()
-            .find(|(excluded, _)| *excluded == name)
-            .map(|(_, owner)| *owner)
+            .find(|(excluded, _, _)| *excluded == name)
+            .map(|(_, owner, reason)| (*owner, *reason))
     }
 
     /// Every excluded name, in [`EXCLUDED`] order.
     pub fn excluded_names() -> Vec<&'static str> {
-        EXCLUDED.iter().map(|(name, _)| *name).collect()
+        EXCLUDED.iter().map(|(name, _, _)| *name).collect()
     }
 
     /// The subset of [`EXCLUDED`] that is excluded only in part, and so is
@@ -62,7 +63,7 @@ pub mod builtins {
     pub fn wholly_excluded() -> Vec<&'static str> {
         EXCLUDED
             .iter()
-            .map(|(name, _)| *name)
+            .map(|(name, _, _)| *name)
             .filter(|name| !PARTIALLY_EXCLUDED.contains(name))
             .collect()
     }

@@ -104,13 +104,13 @@ fn the_table_names_exactly_what_the_two_internal_packages_register() {
 /// can read.
 #[test]
 fn every_unimplemented_row_names_an_open_phase_that_owes_it() {
-    const PHASES: &[&str] = &["Phase 10"];
+    const PHASES: &[&str] = &["Phase 9", "Phase 10"];
     let mut owed = 0usize;
     for (name, _package, owner) in rexx_exec::internal_routine_rows() {
         let Some(owner) = owner else { continue };
         owed += 1;
         assert!(
-            PHASES.contains(&owner),
+            PHASES.contains(&owner.phase()),
             "{name} names owner {owner:?}, which is not one of {PHASES:?}"
         );
     }

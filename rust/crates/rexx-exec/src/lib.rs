@@ -16,7 +16,7 @@
 #![cfg(not(all(loom, test)))]
 
 use rexx_classes::MethodId;
-use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotRef};
+use rexx_core::{Heap, NameMap, ObjRef, Owner, RootSet, SlotRef};
 use rexx_num::Settings;
 use rexx_parse::{
     CodeBody, ExprKind, InstructionKind, Operator, Program, SymbolId, SymbolTable, compound_parts,
@@ -484,7 +484,7 @@ impl Loud {
         } else {
             String::from_utf8_lossy(name).into_owned()
         };
-        let owner = rexx_inventory::builtins::owner_of(&shown);
+        let owner = excluded_owner(&shown);
         Loud {
             message: owned_message(&format!("routine \"{shown}\""), owner),
         }
@@ -494,10 +494,10 @@ impl Loud {
     /// exports and this crate has no body for. Distinct from
     /// [`Loud::unresolved_call`] only in where the name and the owner come
     /// from; the message a program sees is the same shape.
-    fn internal_routine(name: &[u8], owner: &'static str) -> Loud {
+    fn internal_routine(name: &[u8], owner: Owner) -> Loud {
         let shown = String::from_utf8_lossy(name).into_owned();
         Loud {
-            message: owned_message(&format!("routine \"{shown}\""), Some(owner)),
+            message: owned_message(&format!("routine \"{shown}\""), Some(owner.label())),
         }
     }
 
@@ -508,7 +508,7 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("routine \"{shown}\" with a named semaphore"),
-                Some("Phase 10"),
+                Some(Owner::Phase9.label()),
             ),
         }
     }
@@ -558,9 +558,12 @@ impl Loud {
     /// the grammar and does not yet build. `owner` is the phase that owes it,
     /// which is not always this one: a `RexxQueue` target waits on the queues
     /// themselves.
-    fn redirection(what: &str, owner: &'static str) -> Loud {
+    fn redirection(what: &str, owner: Owner) -> Loud {
         Loud {
-            message: owned_message(&format!("an ADDRESS WITH {what} redirection"), Some(owner)),
+            message: owned_message(
+                &format!("an ADDRESS WITH {what} redirection"),
+                Some(owner.label()),
+            ),
         }
     }
 
@@ -661,7 +664,7 @@ impl Loud {
     /// one.
     fn package_option_write() -> Loud {
         Loud {
-            message: owned_message("a package settings write", Some("Phase 10")),
+            message: owned_message("a package settings write", Some(Owner::Phase9.label())),
         }
     }
 
@@ -932,11 +935,18 @@ pub fn internal_routine_names() -> Vec<&'static str> {
 /// Every internal-package routine as `(name, package, owner)`, for the test
 /// that re-derives the two packages from the C++ tree separately. The owner
 /// is `None` for a row this crate runs.
-pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, Option<&'static str>)> {
+pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, Option<Owner>)> {
     internal_routines::INTERNAL_ROUTINES
         .iter()
         .map(|row| (row.name, row.package.label(), row.owner))
         .collect()
+}
+
+/// The owner [`rexx_inventory::builtins::EXCLUDED`] gives the builtin
+/// `name`, or `None` for a name it does not list.
+fn excluded_owner(name: &str) -> Option<&'static str> {
+    let (phase, reason) = rexx_inventory::builtins::owner_of(name)?;
+    Owner::named(phase, Some(reason)).map(Owner::label)
 }
 
 /// Appends the owner phase to a loud message, `"{name} is not implemented
@@ -3223,8 +3233,8 @@ pub struct NativeEntryPoint {
     /// The family it belongs to, lower case: the interpreter subsystem whose
     /// C++ translation unit defines it.
     pub family: &'static str,
-    /// The phase that owes this entry point a body, or `None` for one this
-    /// crate runs. Spelled as every other owner string in this crate is.
+    /// The label of the owner that owes this entry point a body, as its
+    /// refusal prints it, or `None` for one this crate runs.
     pub owner: Option<&'static str>,
     /// Whether this phase runs the entry point rather than refusing a send to
     /// it. A bind succeeds either way -- what it decides is whether the

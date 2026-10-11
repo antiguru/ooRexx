@@ -15,7 +15,7 @@
 
 use rustc_hash::FxHashMap;
 
-use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
+use rexx_core::{BehaviourId, Body, Deferral, NativeObject, ObjRef, Owner};
 
 use crate::dispatch::hash;
 use crate::plan::{ClassPackage, Package, ProgramId};
@@ -360,7 +360,10 @@ impl Interp {
         // Every object below is rooted the instant it exists and before the
         // next allocation, which can collect.
         let frame = self.roots.activity_mut().push_frame();
-        let mut owed = [(ObjRef::NIL, None), (ObjRef::NIL, Some("Phase 10"))];
+        let mut owed = [
+            (ObjRef::NIL, None),
+            (ObjRef::NIL, Some(Owner::Phase10(Deferral::Rxapi).label())),
+        ];
         for (at, (held, owner)) in owed.iter_mut().enumerate() {
             let rendered = match owner {
                 Some(owner) => format!("an entry owed by {owner}"),

@@ -147,7 +147,7 @@ fn every_deferred_entry_point_names_an_open_phase() {
     // spelling is either a typo or work nobody has been assigned, and a
     // phase that has closed cannot owe anything -- a refusal naming one
     // is a lie a program can read.
-    const OPEN: &[&str] = &["Phase 10"];
+    const OPEN: &[&str] = &["Phase 9", "Phase 10"];
     let mut deferred = 0usize;
     for entry in LIBRARY_REXX_METHODS {
         let ExternalBody::Deferred { owner } = entry.body else {
@@ -155,7 +155,7 @@ fn every_deferred_entry_point_names_an_open_phase() {
         };
         deferred += 1;
         assert!(
-            OPEN.contains(&owner),
+            OPEN.contains(&owner.phase()),
             "{} defers to {owner:?}, which is not one of {OPEN:?}",
             entry.name
         );

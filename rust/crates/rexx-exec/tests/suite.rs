@@ -1185,13 +1185,15 @@ mod judging {
     fn a_row_whose_refusal_or_claim_the_run_contradicts_reddens_its_group() {
         let refused = row(
             "TEST_R",
-            Owner::Phase10(super::suite_rows::Phase10Reason::Rxapi),
-            "refusal: rexx-exec: x (Phase 10)",
+            Owner::Phase10(super::suite_rows::Deferral::Rxapi),
+            "refusal: rexx-exec: x (Phase 10 Rxapi)",
         );
         let oracle = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
         let mut ours = run(&["TEST_A"], &["TEST_A", "TEST_R"], &["TEST_A"]);
-        ours.blocked
-            .insert("TEST_R".to_string(), "rexx-exec: x (Phase 10)".to_string());
+        ours.blocked.insert(
+            "TEST_R".to_string(),
+            "rexx-exec: x (Phase 10 Rxapi)".to_string(),
+        );
         assert_eq!(judge(&oracle, &ours, &[&refused]), Vec::<String>::new());
         ours.blocked
             .insert("TEST_R".to_string(), "rexx-exec: y (Phase 9)".to_string());
@@ -1332,7 +1334,7 @@ mod row_checks {
         ),
         (
             EXCLUSIONS,
-            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10)",
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10 Rxapi)",
         ),
         (
             LICENCES,
@@ -1379,11 +1381,11 @@ mod row_checks {
         ),
         (
             EXCLUSIONS,
-            "base/bif/CHAROUT\tTEST_NO_SUCH_TEST\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10)",
+            "base/bif/CHAROUT\tTEST_NO_SUCH_TEST\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10 Rxapi)",
         ),
         (
             EXCLUSIONS,
-            "base/bif/NO_SUCH_GROUP\tTEST_A\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10)",
+            "base/bif/NO_SUCH_GROUP\tTEST_A\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10 Rxapi)",
         ),
         (
             EXCLUSIONS,
@@ -1400,6 +1402,18 @@ mod row_checks {
         (
             EXCLUSIONS,
             "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: Object~copy is not implemented (Phase 9)",
+        ),
+        (
+            EXCLUSIONS,
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10)",
+        ),
+        (
+            EXCLUSIONS,
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10 Extension)",
+        ),
+        (
+            EXCLUSIONS,
+            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10 Rxapi2)",
         ),
         (
             EXCLUSIONS,
@@ -1585,7 +1599,7 @@ mod fixtures {
     }
 
     const MACRO_REFUSAL: &str =
-        "rexx-exec: routine \"SYSQUERYREXXMACRO\" is not implemented (Phase 10)";
+        "rexx-exec: routine \"SYSQUERYREXXMACRO\" is not implemented (Phase 10 Rxapi)";
 
     #[test]
     fn a_refusal_ends_the_run_and_the_next_run_goes_past_it() {

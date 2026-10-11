@@ -422,7 +422,7 @@ fn a_failure_ending_a_native_park_abandons_the_call() {
     assert_eq!(run.stdout(), "");
     assert_eq!(
         run.stderr(),
-        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
+        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
     );
     assert_eq!(run.exits, 1);
 }

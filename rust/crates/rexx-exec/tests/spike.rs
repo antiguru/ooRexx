@@ -75,7 +75,7 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the loud message is ASCII"),
-        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
+        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
     );
 }
 

@@ -777,7 +777,7 @@ fn a_raise_row_needs_the_sub_number_too() {
 /// category that the set-equality test then happily matches against itself.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
-    const PHASES: &[&str] = &["4b", "4c", "Phase 10"];
+    const PHASES: &[&str] = &["4b", "4c", "Phase 10 Rxapi"];
 
     // The count is the whole point of this table, not decoration on it.
     // `ANOMALY` moved 3 -> 0 on 2026-09-12: all three were `BEEP`, and Phase 7

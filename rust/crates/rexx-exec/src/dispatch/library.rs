@@ -28,7 +28,7 @@ use rexx_api::values::{
     Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, HostRef,
     Numeric, Raised as Condition,
 };
-use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
+use rexx_core::{BehaviourId, Body, Decoded, ObjRef, Owner};
 use rexx_num::{DIGITS64, Number};
 
 use super::Resolution;
@@ -835,7 +835,10 @@ impl Interp {
             }
             Refused::ClassicStyle => {
                 return Loud {
-                    message: crate::owned_message(&format!("{refused}"), Some("Phase 10")),
+                    message: crate::owned_message(
+                        &format!("{refused}"),
+                        Some(Owner::Phase9.label()),
+                    ),
                 }
                 .into();
             }

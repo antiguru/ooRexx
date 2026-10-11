@@ -19,6 +19,8 @@
 //! `tests/internal_routines.rs` re-derives this table from those three C++
 //! files.
 
+use rexx_core::{Deferral, Owner};
+
 /// Which internal package exports the routine.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Package {
@@ -56,7 +58,7 @@ pub(crate) struct InternalRoutine {
     /// The phase owing a body, or `None` for a row this crate runs. **Not a
     /// field beside `body`**: a row has one or the other, and an owner on a
     /// row that runs is a phase name nothing can print.
-    pub(crate) owner: Option<&'static str>,
+    pub(crate) owner: Option<Owner>,
     /// The code, once some phase has written it. A row with `None` refuses,
     /// naming [`InternalRoutine::owner`].
     pub(crate) body: Option<InternalBody>,
@@ -82,7 +84,7 @@ const fn util_run(name: &'static str, body: InternalBody) -> InternalRoutine {
     }
 }
 
-const fn util(name: &'static str, owner: &'static str) -> InternalRoutine {
+const fn util(name: &'static str, owner: Owner) -> InternalRoutine {
     InternalRoutine {
         name,
         package: Package::RexxUtil,
@@ -96,11 +98,11 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     rexx_run("Directory", crate::builtin::platform::directory),
     rexx_run("Filespec", crate::builtin::platform::filespec),
     rexx_run("Beep", crate::builtin::platform::beep),
-    util("SysAddRexxMacro", "Phase 10"),
-    util("SysClearRexxMacroSpace", "Phase 10"),
+    util("SysAddRexxMacro", Owner::Phase10(Deferral::Rxapi)),
+    util("SysClearRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
     util_run("SysCloseEventSem", crate::builtin::rexxutil::close_sem),
     util_run("SysCloseMutexSem", crate::builtin::rexxutil::close_sem),
-    util("SysCls", "Phase 10"),
+    util("SysCls", Owner::Phase9),
     util_run(
         "SysCreateEventSem",
         crate::builtin::rexxutil::create_event_sem,
@@ -109,59 +111,59 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         "SysCreateMutexSem",
         crate::builtin::rexxutil::create_mutex_sem,
     ),
-    util("SysCreatePipe", "Phase 10"),
-    util("SysDropFuncs", "Phase 10"),
-    util("SysDropRexxMacro", "Phase 10"),
-    util("SysDumpVariables", "Phase 10"),
-    util("SysFileCopy", "Phase 10"),
+    util("SysCreatePipe", Owner::Phase9),
+    util("SysDropFuncs", Owner::Phase9),
+    util("SysDropRexxMacro", Owner::Phase10(Deferral::Rxapi)),
+    util("SysDumpVariables", Owner::Phase9),
+    util("SysFileCopy", Owner::Phase9),
     util_run("SysFileDelete", crate::builtin::rexxutil::file_delete),
     util_run("SysFileExists", crate::builtin::rexxutil::file_exists),
-    util("SysFileMove", "Phase 10"),
-    util("SysFileSearch", "Phase 10"),
+    util("SysFileMove", Owner::Phase9),
+    util("SysFileSearch", Owner::Phase9),
     util_run("SysFileTree", crate::builtin::rexxutil::file_tree),
-    util("SysFork", "Phase 10"),
-    util("SysFormatMessage", "Phase 10"),
-    util("SysGetErrorText", "Phase 10"),
-    util("SysGetFileDateTime", "Phase 10"),
-    util("SysGetKey", "Phase 10"),
-    util("SysGetMessage", "Phase 10"),
-    util("SysGetMessageX", "Phase 10"),
+    util("SysFork", Owner::Phase9),
+    util("SysFormatMessage", Owner::Phase9),
+    util("SysGetErrorText", Owner::Phase9),
+    util("SysGetFileDateTime", Owner::Phase9),
+    util("SysGetKey", Owner::Phase9),
+    util("SysGetMessage", Owner::Phase9),
+    util("SysGetMessageX", Owner::Phase9),
     util_run("SysIsFile", crate::builtin::rexxutil::is_file),
-    util("SysIsFileDirectory", "Phase 10"),
-    util("SysIsFileLink", "Phase 10"),
+    util("SysIsFileDirectory", Owner::Phase9),
+    util("SysIsFileLink", Owner::Phase9),
     util_run("SysLinVer", crate::builtin::rexxutil::version),
-    util("SysLoadFuncs", "Phase 10"),
-    util("SysLoadRexxMacroSpace", "Phase 10"),
+    util("SysLoadFuncs", Owner::Phase9),
+    util("SysLoadRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
     util_run("SysMkDir", crate::builtin::rexxutil::mk_dir),
-    util("SysOpenEventSem", "Phase 10"),
-    util("SysOpenMutexSem", "Phase 10"),
+    util("SysOpenEventSem", Owner::Phase9),
+    util("SysOpenMutexSem", Owner::Phase9),
     util_run("SysPostEventSem", crate::builtin::rexxutil::post_event_sem),
-    util("SysQueryProcess", "Phase 10"),
-    util("SysQueryRexxMacro", "Phase 10"),
+    util("SysQueryProcess", Owner::Phase9),
+    util("SysQueryRexxMacro", Owner::Phase10(Deferral::Rxapi)),
     util_run(
         "SysReleaseMutexSem",
         crate::builtin::rexxutil::release_mutex_sem,
     ),
-    util("SysReorderRexxMacro", "Phase 10"),
+    util("SysReorderRexxMacro", Owner::Phase10(Deferral::Rxapi)),
     util_run("SysRequestMutexSem", crate::builtin::rexxutil::wait_sem),
     util_run(
         "SysResetEventSem",
         crate::builtin::rexxutil::reset_event_sem,
     ),
     util_run("SysRmDir", crate::builtin::rexxutil::rm_dir),
-    util("SysSaveRexxMacroSpace", "Phase 10"),
-    util("SysSearchPath", "Phase 10"),
-    util("SysSetFileDateTime", "Phase 10"),
-    util("SysSetPriority", "Phase 10"),
+    util("SysSaveRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
+    util("SysSearchPath", Owner::Phase9),
+    util("SysSetFileDateTime", Owner::Phase9),
+    util("SysSetPriority", Owner::Phase9),
     util_run("SysSleep", crate::builtin::rexxutil::sleep),
-    util("SysStemCopy", "Phase 10"),
-    util("SysStemDelete", "Phase 10"),
-    util("SysStemInsert", "Phase 10"),
-    util("SysStemSort", "Phase 10"),
-    util("SysTempFileName", "Phase 10"),
-    util("SysUtilVersion", "Phase 10"),
+    util("SysStemCopy", Owner::Phase9),
+    util("SysStemDelete", Owner::Phase9),
+    util("SysStemInsert", Owner::Phase9),
+    util("SysStemSort", Owner::Phase9),
+    util("SysTempFileName", Owner::Phase9),
+    util("SysUtilVersion", Owner::Phase9),
     util_run("SysVersion", crate::builtin::rexxutil::version),
-    util("SysWait", "Phase 10"),
+    util("SysWait", Owner::Phase9),
     util_run("SysWaitEventSem", crate::builtin::rexxutil::wait_sem),
 ];
 

@@ -28,6 +28,7 @@ use rexx_parse::{
 
 use super::{Arity, NativeMethod, ScopedBegin, native_file_path_separator, native_file_separator};
 use crate::{Loud, accessor_setter_name};
+use rexx_core::{Deferral, Owner};
 
 /// Which part of the interpreter an entry point belongs to, and through that
 /// which phase owes it a body.
@@ -81,7 +82,7 @@ pub(in crate::dispatch) enum ExternalBody {
     Scoped { arity: Arity, begin: ScopedBegin },
     /// A body some later phase owes, named here. The bind still succeeds;
     /// the send is loud.
-    Deferred { owner: &'static str },
+    Deferred { owner: Owner },
 }
 
 const fn implemented(
@@ -115,11 +116,7 @@ const fn scoped(
 /// **Named per row rather than per family**, because the two came apart:
 /// `handle_set` needs `from_raw_fd` and so stays refused after the stream
 /// family is built, and a refusal naming a closed phase would be a lie.
-/// It is owed by the phase that widens D-U1 past `rexx-api`'s `ffi.rs` and
-/// `load.rs`, which is Phase 10's -- adopting a descriptor the interpreter
-/// did not open is the same grant RXAPI and the external queues need. It
-/// never needed the loader.
-const fn deferred(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
+const fn deferred(name: &'static str, family: Family, owner: Owner) -> NativeExternal {
     NativeExternal {
         name,
         family,
@@ -261,7 +258,7 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(0),
         super::stream::query_time,
     ),
-    deferred("handle_set", Family::Stream, "Phase 10"),
+    deferred("handle_set", Family::Stream, Owner::Phase9),
     implemented(
         "std_set",
         Family::Stream,
@@ -298,16 +295,56 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(0),
         super::stream::uninit,
     ),
-    deferred("rexx_create_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_open_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_queue_exists", Family::Queue, "Phase 10"),
-    deferred("rexx_delete_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_query_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_push_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_queue_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_pull_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_linein_queue", Family::Queue, "Phase 10"),
-    deferred("rexx_clear_queue", Family::Queue, "Phase 10"),
+    deferred(
+        "rexx_create_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_open_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_queue_exists",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_delete_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_query_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_push_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_queue_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_pull_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_linein_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
+    deferred(
+        "rexx_clear_queue",
+        Family::Queue,
+        Owner::Phase10(Deferral::Rxapi),
+    ),
     implemented(
         "file_separator",
         Family::File,
@@ -476,7 +513,7 @@ pub(crate) fn entry_points() -> impl Iterator<Item = crate::NativeEntryPoint> {
             entry: entry.name,
             family: entry.family.label(),
             owner: match entry.body {
-                ExternalBody::Deferred { owner } => Some(owner),
+                ExternalBody::Deferred { owner } => Some(owner.label()),
                 ExternalBody::Implemented { .. } | ExternalBody::Scoped { .. } => None,
             },
             implemented: !matches!(entry.body, ExternalBody::Deferred { .. }),
@@ -732,11 +769,11 @@ pub(crate) fn unresolved_entry(external: Option<&MethodExternal>) -> Option<&[u8
 }
 
 /// The refusal a send to an entry point this phase does not implement gets.
-pub(crate) fn deferred_send(entry: &NativeExternal, owner: &'static str) -> Loud {
+pub(crate) fn deferred_send(entry: &NativeExternal, owner: Owner) -> Loud {
     Loud {
         message: crate::owned_message(
             &format!("the LIBRARY REXX entry point \"{}\"", entry.name),
-            Some(owner),
+            Some(owner.label()),
         ),
     }
 }

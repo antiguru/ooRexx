@@ -21,6 +21,8 @@
 use std::cell::Cell;
 use std::ffi::{c_char, c_int, c_void};
 
+use rexx_core::{Deferral, Owner};
+
 /// `wholenumber_t` (`api/rexx.h:237`).
 pub type wholenumber_t = isize;
 /// `stringsize_t` (`api/rexx.h:236`).
@@ -374,29 +376,49 @@ pub struct Owned<C, T> {
 }
 
 /// Each member a populated table still refuses, as `Table.Member`, with the
-/// phase its refusal names.
-pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
-    ("RexxInstanceInterface.Terminate", "Phase 9"),
-    ("RexxInstanceInterface.Halt", "Phase 9"),
-    ("RexxInstanceInterface.SetTrace", "Phase 9"),
-    ("RexxThreadInterface.HaltThread", "Phase 9"),
-    ("RexxThreadInterface.SetThreadTrace", "Phase 9"),
+/// owner and reason its refusal names.
+pub const REFUSING_MEMBERS: &[(&str, Owner)] = &[
+    (
+        "RexxInstanceInterface.Terminate",
+        Owner::Phase10(Deferral::Embedding),
+    ),
+    (
+        "RexxInstanceInterface.Halt",
+        Owner::Phase10(Deferral::Embedding),
+    ),
+    (
+        "RexxInstanceInterface.SetTrace",
+        Owner::Phase10(Deferral::Embedding),
+    ),
+    (
+        "RexxThreadInterface.HaltThread",
+        Owner::Phase10(Deferral::Embedding),
+    ),
+    (
+        "RexxThreadInterface.SetThreadTrace",
+        Owner::Phase10(Deferral::Embedding),
+    ),
 ];
 
-/// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
+/// The owner a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
 /// none for a member no row names, which every populated table fills.
 #[must_use]
 pub fn refusal_owner(entry: &str) -> Option<&'static str> {
     REFUSING_MEMBERS
         .iter()
         .find(|(member, _)| *member == entry)
-        .map(|(_, owner)| *owner)
+        .map(|(_, owner)| owner.label())
+}
+
+/// The refusal text for `what`, naming `owner`.
+pub(crate) fn refusal(what: &str, owner: Owner) -> String {
+    format!("{what} is not implemented ({})", owner.label())
 }
 
 /// The refusal text for `entry`, with its owner when it has one.
 fn refusal_text(entry: &str) -> String {
-    match refusal_owner(entry) {
-        Some(owner) => format!("{entry} is not implemented ({owner})"),
+    match REFUSING_MEMBERS.iter().find(|(member, _)| *member == entry) {
+        Some((_, owner)) => refusal(entry, *owner),
         None => format!("{entry} is not implemented"),
     }
 }

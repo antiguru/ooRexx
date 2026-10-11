@@ -23,10 +23,12 @@
 //! phase).
 //!
 //! An owner is read from the constructor's own `owned_message` call: `None`, or
-//! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N; an
-//! `Option` a caller passes in is no owner, since a caller can pass `None`; and
-//! an owner computed by a function is no owner unless [`COMPUTED_OWNERS`] names
-//! the function and the test that holds it to `Some`.
+//! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N, and
+//! `Some(Owner::...label())` is the label that `rexx_core::Owner` value
+//! prints; an `Owner` or `&'static str` parameter is the caller's; an `Option`
+//! a caller passes in is no owner, since a caller can pass `None`; and an owner
+//! computed by a function is no owner unless [`COMPUTED_OWNERS`] names the
+//! function and the test that holds it to `Some`.
 //! Every `message:` field of a constructor is read, and the constructor has
 //! an owner only when each of them does. A `Loud` struct literal
 //! outside a constructor must carry an owner, so an ownerless refusal always
@@ -40,10 +42,12 @@ use std::path::{Path, PathBuf};
 /// is built, with the test that holds it so.
 const COMPUTED_OWNERS: &[(&str, &str)] = &[
     (
-        "rexx_inventory::builtins::owner_of",
+        "excluded_owner",
         "`unresolved_call` is built for an excluded builtin, whose owner \
-         owners.rs's every_excluded_builtin_names_a_phase_that_owes_it requires, \
-         and for `BuiltinTarget::Gap`, which builtin/tests.rs asserts no name reaches",
+         owners.rs's every_excluded_builtin_names_a_phase_that_owes_it requires \
+         and whose reason phase_ten_reasons.rs's \
+         every_excluded_builtin_names_a_reason_the_enum_knows requires, and for \
+         `BuiltinTarget::Gap`, which builtin/tests.rs asserts no name reaches",
     ),
     (
         "rexx_api::layout::refusal_owner",
@@ -458,6 +462,14 @@ fn message_owner(field: &str, body: &str, params: &str) -> Owner {
         if param(inner, "&'staticstr") {
             return Owner::Given;
         }
+        if let Some(value) = inner.strip_suffix(".label()") {
+            if param(value, "Owner") {
+                return Owner::Given;
+            }
+            if let Some(label) = owner_label(value) {
+                return Owner::Phase(label);
+            }
+        }
     }
     if COMPUTED_OWNERS
         .iter()
@@ -468,6 +480,22 @@ fn message_owner(field: &str, body: &str, params: &str) -> Owner {
     // `None`, an `Option` parameter, a function this file does not vouch
     // for, or anything else: a caller or a branch can make it `None`.
     Owner::None
+}
+
+/// The label the `rexx_core::Owner` value spelled `value` prints, or `None`
+/// for a spelling that is not one.
+fn owner_label(value: &str) -> Option<String> {
+    let value = value.strip_prefix("rexx_core::").unwrap_or(value);
+    let owner = if value == "Owner::Phase9" {
+        rexx_core::Owner::Phase9
+    } else {
+        let reason = value.strip_prefix("Owner::Phase10(")?.strip_suffix(')')?;
+        let reason = reason.strip_prefix("rexx_core::").unwrap_or(reason);
+        rexx_core::Owner::Phase10(rexx_core::Deferral::named(
+            reason.strip_prefix("Deferral::")?,
+        )?)
+    };
+    Some(owner.label().to_string())
 }
 
 /// Every `Loud { ... }` struct literal outside a constructor, and `Self {
@@ -768,11 +796,13 @@ fn the_scanner_reads_each_owner_form() {
     );
     assert_eq!(
         owners.get("named_semaphore").map(|(owner, _)| owner),
-        Some(&Owner::Phase("Phase 10".to_string()))
+        Some(&Owner::Phase("Phase 9".to_string())),
+        "a label printed by an `Owner` value"
     );
     assert_eq!(
         owners.get("internal_routine").map(|(owner, _)| owner),
-        Some(&Owner::Given)
+        Some(&Owner::Given),
+        "an `Owner` parameter's label"
     );
     assert_eq!(
         owners.get("deferred_send").map(|(owner, _)| owner),
@@ -861,14 +891,34 @@ fn adjacent(r: u8) -> Failure {
         .into(),
     }
 }
+fn typed(owner: Owner) -> Loud {
+    Loud {
+        message: owned_message(\"s\", Some(owner.label())),
+    }
+}
+fn rxapi() -> Loud {
+    Loud {
+        message: owned_message(\"r\", Some(Owner::Phase10(Deferral::Rxapi).label())),
+    }
+}
+fn unknown() -> Loud {
+    Loud {
+        message: owned_message(\"q\", Some(Owner::Phase10(Deferral::Queue).label())),
+    }
+}
 ";
     let files = vec![("src/lib.rs".to_string(), code_lines(source))];
     let constructors = constructors(&files);
     let owners = owners(&constructors);
     let literals = literals(&files, &constructors);
-    assert_eq!(owners.len(), 7);
+    assert_eq!(owners.len(), 10);
     assert_eq!(owners["optional"].0, Owner::None);
     assert_eq!(owners["given"].0, Owner::Given);
+    assert_eq!(owners["typed"].0, Owner::Given);
+    assert_eq!(
+        owners["rxapi"].0,
+        Owner::Phase("Phase 10 Rxapi".to_string())
+    );
     assert_eq!(owners["mutant_self"].0, Owner::None);
     assert_eq!(owners["mixed"].0, Owner::None);
     let documents = Documents {
@@ -883,6 +933,7 @@ none\tDEVIATION\t-\toracle-crashes.txt entry 6
 optional\tLIMIT\t-\tDeviation 20
 mutant_self\tGUARD\t-\tprobe p4
 mixed\tGUARD\t-\tprobe p5
+unknown\tGUARD\t-\tprobe p6
 ";
     assert!(
         problems(&owners, &[], &parse_table(table), &documents).is_empty(),
@@ -907,6 +958,7 @@ given\tGUARD\t-\tprobe p3
         "nine: REHOME to Phase 10, but the constructor",
         "given: a GUARD row for a constructor",
         "optional (src/lib.rs:22): no owner and no disposition row",
+        "unknown (src/lib.rs:68): no owner and no disposition row",
     ];
     for needle in expect {
         assert!(

@@ -89,37 +89,14 @@ pub fn table_path() -> PathBuf {
     )
 }
 
-/// Why a test is Phase 10's: spec D3's closed set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Phase10Reason {
-    Rxapi,
-    Extension,
-    Row10NativeApi,
-    Embedding,
-}
-
-impl Phase10Reason {
-    pub const ALL: [Phase10Reason; 4] = [
-        Phase10Reason::Rxapi,
-        Phase10Reason::Extension,
-        Phase10Reason::Row10NativeApi,
-        Phase10Reason::Embedding,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Phase10Reason::Rxapi => "Rxapi",
-            Phase10Reason::Extension => "Extension",
-            Phase10Reason::Row10NativeApi => "Row10NativeApi",
-            Phase10Reason::Embedding => "Embedding",
-        }
-    }
-}
+/// Why a test is Phase 10's: spec D3's closed set, the one the refusals
+/// print.
+pub use rexx_core::Deferral;
 
 /// A row's owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Owner {
-    Phase10(Phase10Reason),
+    Phase10(Deferral),
     Deviation(u32),
     Environment,
     Flaky,
@@ -129,10 +106,7 @@ pub enum Owner {
 impl Owner {
     pub fn parse(text: &str) -> Option<Owner> {
         if let Some(reason) = text.strip_prefix("Phase 10 ") {
-            return Phase10Reason::ALL
-                .into_iter()
-                .find(|known| known.name() == reason)
-                .map(Owner::Phase10);
+            return Deferral::named(reason).map(Owner::Phase10);
         }
         if let Some(number) = text.strip_prefix("Deviation ") {
             return number
@@ -301,24 +275,24 @@ pub const R1_GROUPS: &[&str] = &[
 ];
 
 /// The reason a group the roadmap makes Phase 10's is, or `None`.
-pub fn phase_10_group(group: &str) -> Option<Phase10Reason> {
+pub fn phase_10_group(group: &str) -> Option<Deferral> {
     if group.starts_with("extensions/") {
-        Some(Phase10Reason::Extension)
+        Some(Deferral::Extension)
     } else if ROW_10_GROUPS.contains(&group) {
-        Some(Phase10Reason::Row10NativeApi)
+        Some(Deferral::Row10NativeApi)
     } else if R1_GROUPS.contains(&group) {
-        Some(Phase10Reason::Rxapi)
+        Some(Deferral::Rxapi)
     } else {
         None
     }
 }
 
 /// Whether a captured refusal `text` carries a row owned by Phase 10 for
-/// `reason`: it names Phase 10. The one place the check of a refusal row's
-/// reason is decided.
-pub fn refusal_carries(text: &str, reason: Phase10Reason) -> bool {
-    let _ = reason;
-    text.contains("(Phase 10")
+/// `reason`: it names Phase 10 with that reason in parentheses, as
+/// `rexx_core::Owner::label` prints it. The one place the check of a refusal
+/// row's reason is decided.
+pub fn refusal_carries(text: &str, reason: Deferral) -> bool {
+    text.contains(&format!("({})", rexx_core::Owner::Phase10(reason).label()))
 }
 
 /// What the owner checks need besides the rows.
@@ -534,9 +508,9 @@ pub fn check_row(row: &Row, context: &Context) -> Result<(), String> {
     }
 }
 
-fn check_phase_10(row: &Row, reason: Phase10Reason, context: &Context) -> Result<(), String> {
+fn check_phase_10(row: &Row, reason: Deferral, context: &Context) -> Result<(), String> {
     if row.reason == "reaching_rxapi" {
-        return if reason != Phase10Reason::Rxapi {
+        return if reason != Deferral::Rxapi {
             Err("a reaching_rxapi row is owned by Phase 10 Rxapi".to_string())
         } else if context
             .rxapi

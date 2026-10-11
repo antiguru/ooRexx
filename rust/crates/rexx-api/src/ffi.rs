@@ -20,13 +20,15 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
+use rexx_core::{Deferral, Owner};
+
 use crate::layout::{
     CSTRING, CallContextInterface, ExitContextInterface, IORedirectorInterface,
     MethodContextInterface, Owned, POINTER, REXXPFN, RexxArrayObject, RexxBufferObject,
     RexxBufferStringObject, RexxCallContext_, RexxCondition, RexxDirectoryObject, RexxExitContext_,
     RexxIORedirectorContext_, RexxInstance_, RexxInstanceInterface, RexxMethodContext_,
     RexxMutableBufferObject, RexxObjectPtr, RexxPackageEntry, RexxPointerObject, RexxStringObject,
-    RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t,
+    RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t, refusal, stringsize_t,
     wholenumber_t,
 };
 use crate::redirect::Redirector;
@@ -4184,10 +4186,16 @@ unsafe extern "C" fn attach_thread(
             .sub(std::mem::offset_of!(Thread, instance))
             .cast::<Thread>()
     };
-    let refused = "RexxInstanceInterface.AttachThread is not implemented (Phase 9)";
     // SAFETY: as above.
     let home = unsafe { runs_here(thread) };
-    assert!(home, "{refused}");
+    assert!(
+        home,
+        "{}",
+        refusal(
+            "RexxInstanceInterface.AttachThread",
+            Owner::Phase10(Deferral::Embedding)
+        )
+    );
     if !attached.is_null() {
         // SAFETY: the caller guarantees the write; the context is the
         // allocation's own `thread` field.
@@ -4226,7 +4234,11 @@ unsafe extern "C" fn add_command_environment(
     let home = unsafe { runs_here(thread) };
     assert!(
         home,
-        "RexxInstanceInterface.AddCommandEnvironment from another thread is not implemented (Phase 9)"
+        "{}",
+        refusal(
+            "RexxInstanceInterface.AddCommandEnvironment from another thread",
+            Owner::Phase10(Deferral::Embedding)
+        )
     );
     // SAFETY: as in `attach_thread`; the context is the allocation's own
     // `thread` field.

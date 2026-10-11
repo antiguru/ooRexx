@@ -25,6 +25,7 @@ mod bytes;
 mod frame;
 mod handle;
 mod heap;
+mod owner;
 mod roots;
 mod slots;
 
@@ -43,6 +44,7 @@ pub use handle::{
 #[cfg(feature = "sharing")]
 pub use heap::SharingCount;
 pub use heap::{CollectStats, Heap};
+pub use owner::{Deferral, Owner};
 pub use roots::{ActivityRoots, FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
 pub use slots::ArraySlots;
 

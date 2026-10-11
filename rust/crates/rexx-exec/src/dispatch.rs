@@ -2676,7 +2676,7 @@ impl Interp {
             // "SEP" with scope "K".` line.
             Invocable::External(entry) => match &entry.body {
                 native::ExternalBody::Deferred { owner } => {
-                    Err(native::deferred_send(entry, owner).into())
+                    Err(native::deferred_send(entry, *owner).into())
                 }
                 native::ExternalBody::Implemented { arity, run } => {
                     self.run_external(*arity, resolution, receiver, name, args, |interp| {

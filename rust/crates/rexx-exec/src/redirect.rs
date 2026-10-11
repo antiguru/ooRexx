@@ -21,7 +21,7 @@
 
 use std::rc::Rc;
 
-use rexx_core::{Body, Decoded, ObjRef};
+use rexx_core::{Body, Decoded, Deferral, ObjRef, Owner};
 use rexx_parse::{AddressIo, Expr, OutputOption, Redirection, SymbolId};
 
 use crate::activation::{ActivationId, IoConfigs};
@@ -423,7 +423,7 @@ impl Interp {
             return self.stem_input_lines(object);
         }
         if self.is_rexx_queue(object) {
-            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
+            return Err(Loud::redirection("RexxQueue", Owner::Phase10(Deferral::Rxapi)).into());
         }
         if self.is_stream_object(object) {
             return self.read_stream_lines(object);
@@ -518,7 +518,7 @@ impl Interp {
             if optioned {
                 return Err(Raised::queue_target_option().into());
             }
-            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
+            return Err(Loud::redirection("RexxQueue", Owner::Phase10(Deferral::Rxapi)).into());
         }
         if self.is_stream_object(object) {
             if optioned {

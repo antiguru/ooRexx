@@ -1036,7 +1036,7 @@ fn a_wholly_excluded_builtin_stays_loud_rather_than_raising_43_1() {
     assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
     assert_eq!(
         String::from_utf8_lossy(&outcome.stderr),
-        "rexx-exec: routine \"RXQUEUE\" is not implemented (Phase 10)\n",
+        "rexx-exec: routine \"RXQUEUE\" is not implemented (Phase 10 Rxapi)\n",
         "the refusal names the phase the exclusion table gives it"
     );
 }

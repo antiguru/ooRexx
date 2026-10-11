@@ -326,14 +326,14 @@ pub(crate) const EXCLUSION_PHASES: &[&str] = &["Phase 10"];
 /// `4c` until Phase 7.
 #[test]
 fn every_excluded_builtin_names_a_phase_that_owes_it() {
-    for (name, owner) in rexx_inventory::builtins::EXCLUDED {
+    for (name, owner, reason) in rexx_inventory::builtins::EXCLUDED {
         assert!(
             EXCLUSION_PHASES.contains(owner),
             "{name} names owner {owner:?}, which is not one of {EXCLUSION_PHASES:?}"
         );
         assert_eq!(
             rexx_inventory::builtins::owner_of(name),
-            Some(*owner),
+            Some((*owner, *reason)),
             "{name}'s owner must be reachable through owner_of, which is what the \
              refusal reads"
         );
