@@ -1,6 +1,6 @@
-# The oracle on ootest group samples/sfserver, ootest revision 13178, three runs.
+# The oracle on ootest group samples/sfserver, ootest revision 13178, four runs.
 # The group's TEST_04 drives the sample's socket server or client on fixed
-# ports; runs 1 and 2 ran it beside the other socket sample groups.
+# ports; runs 1, 2 and 4 ran it beside the other socket sample groups.
 
 ## Run 1: scout A, 2026-10-10, eight groups at once (.superpowers/sdd/2026-10-10-phase-9-scoping/scout-a-report.md)
 rc 1, 0.04 s; started TEST_01_SAMPLEEXISTS TEST_04_SFSERVER.REX; failing TEST_04_SFSERVER.REX
@@ -63,3 +63,6 @@ Test execution:     00:00:08.027717
 Total time:         00:00:08.028972
 ### stderr
 
+
+## Run 4: tests/suite.rs l3_core_suite at 2415e1733, 2026-10-11, eight groups at once
+verdicts from its per-test record: TEST_01_SAMPLEEXISTS started; TEST_04_SFSERVER.REX blocked: timeout: killed after 300.004546906s

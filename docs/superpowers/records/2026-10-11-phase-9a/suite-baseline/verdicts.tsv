@@ -1,0 +1,404 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+API/classic/CLASSIC	green		equal
+API/oo/CONVERSION	green		equal
+API/oo/FUNCTION	green		equal
+API/oo/INVOCATION	green		equal
+API/oo/METHOD	red	not passed: TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	equal
+API/oo/ProcessInvocation	green		equal
+API/oo/ProcessRexxStart	green		equal
+API/oo/RexxStart	green		equal
+SimpleTests	green		equal
+base/bif/ABBREV	green		equal
+base/bif/ABS	green		equal
+base/bif/ADDRESS	green		equal
+base/bif/ARG	red	not passed: TEST_EXTERNAL_CALLS	equal
+base/bif/B2X	green		equal
+base/bif/BEEP	green		equal
+base/bif/BITAND	green		equal
+base/bif/BITOR	green		equal
+base/bif/BITXOR	green		equal
+base/bif/C2D	green		equal
+base/bif/C2X	green		equal
+base/bif/CENTER	green		equal
+base/bif/CENTRE	green		equal
+base/bif/CHANGESTR	green		equal
+base/bif/CHARIN	green		equal
+base/bif/CHAROUT	red	not passed: TEST_POSITIONING_1_BIN TEST_STDOUT_RET	equal
+base/bif/CHARS	red	not passed: TEST_CHARS_NOTREADY_DIRECTORY TEST_CHARS_NOTREADY_INVALID TEST_CHARS_NOTREADY_NONEXISTING TEST_MANYCHARS_BIN	equal
+base/bif/COMPARE	green		equal
+base/bif/CONDITION	red	not passed: TEST_CONDITION_CALL TEST_CONDITION_CALL_BIF TEST_CONDITION_CALL_EXTERNAL TEST_CONDITION_SIGNAL TEST_NOVALUE_DROP TEST_NOVALUE_METHOD_EXPOSE TEST_NOVALUE_PROEDURE_EXPOSE	equal
+base/bif/COPIES	green		equal
+base/bif/COUNTSTR	green		equal
+base/bif/D2C	green		equal
+base/bif/D2X	green		equal
+base/bif/DATATYPE	green		equal
+base/bif/DATE	green		equal
+base/bif/DELSTR	green		equal
+base/bif/DELWORD	green		equal
+base/bif/DIGITS	green		equal
+base/bif/ERRORTEXT	green		equal
+base/bif/FILESPEC	green		equal
+base/bif/FORM	green		equal
+base/bif/FORMAT	green		equal
+base/bif/FUZZ	green		equal
+base/bif/GC	green		equal
+base/bif/INSERT	green		equal
+base/bif/LASTPOS	green		equal
+base/bif/LEFT	green		equal
+base/bif/LENGTH	green		equal
+base/bif/LINEIN	green		equal
+base/bif/LINEOUT	red	not passed: TEST_BINARY TEST_INVALID_FILE TEST_LINE_NONNUMERIC TEST_LINE_TOO_LONG	equal
+base/bif/LINES	red	not passed: TEST_LINES_NOTREADY_DIRECTORY TEST_LINES_NOTREADY_INVALID TEST_LINES_NOTREADY_NONEXISTING	equal
+base/bif/LOWER	green		equal
+base/bif/MAX	green		equal
+base/bif/MIN	green		equal
+base/bif/OVERLAY	green		equal
+base/bif/POS	green		equal
+base/bif/QUALIFY	green		equal
+base/bif/QUEUED	green		equal
+base/bif/RANDOM	green		equal
+base/bif/REVERSE	green		equal
+base/bif/RIGHT	green		equal
+base/bif/RXQUEUE	green		equal
+base/bif/SIGN	green		equal
+base/bif/SOURCELINE	green		equal
+base/bif/SPACE	green		equal
+base/bif/STREAM	red	not passed: TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994	equal
+base/bif/STRIP	green		equal
+base/bif/SUBSTR	green		equal
+base/bif/SUBWORD	green		equal
+base/bif/SYMBOL	green		equal
+base/bif/TIME	green		equal
+base/bif/TRANSLATE	green		equal
+base/bif/TRUNC	green		equal
+base/bif/UPPER	green		equal
+base/bif/VALUE	green		equal
+base/bif/VAR	green		equal
+base/bif/VERIFY	green		equal
+base/bif/WORD	green		equal
+base/bif/WORDINDEX	green		equal
+base/bif/WORDLENGTH	green		equal
+base/bif/WORDPOS	green		equal
+base/bif/WORDS	green		equal
+base/bif/X2B	green		equal
+base/bif/X2C	green		equal
+base/bif/X2D	green		equal
+base/bif/XRANGE	green		equal
+base/class/Alarm	green		equal
+base/class/Array	red	not passed: TESTINSERT TESTMULTIINDEXINSERT TEST_SECTION TEST_SECTION_SYNTAX5 TEST_SECTION_SYNTAX6	equal
+base/class/Bag	red	not passed: TEST_HASITEM_VALUE_NOTEQUAL_INDEX	equal
+base/class/CircularQueue	red	not passed: TEST_DIFFERENCE	equal
+base/class/Class	red	not passed: TEST_ACTIVATE TEST_METHODS	equal
+base/class/CollectionMethods	red	not passed: TEST_COLLECTION_NEW_2_ARGS	equal
+base/class/CollectionSetlikeMethods	green		equal
+base/class/Comparator	green		equal
+base/class/DateTime	green		equal
+base/class/Directory	green		equal
+base/class/EventSemaphore	green		equal
+base/class/File	red	not passed: TEST_FILE_LASTACCESSED TEST_FILE_LASTMODIFIED	equal
+base/class/IdentityTable	red	not passed: TEST_AT01 TEST_BUG_1468 TEST_HASINDEX TEST_HASITEM TEST_INDEX TEST_[]	equal
+base/class/List	green		equal
+base/class/Message	red	not passed: TEST_REPLYWITH_NOT_ARRAY TEST_SENDWITH_NOT_ARRAY TEST_STARTWITH_NOT_ARRAY	equal
+base/class/Method	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED TEST_NEW_FOUR_ARGS TEST_ROUTINE_SOURCE_COMMENT TEST_ROUTINE_SOURCE_NOP TEST_ROUTINE_SOURCE_WHITESPACE	equal
+base/class/MethodArgs	green		equal
+base/class/Monitor	green		equal
+base/class/MutableBuffer/append	green		equal
+base/class/MutableBuffer/brackets	green		equal
+base/class/MutableBuffer/caselessChangestr	green		equal
+base/class/MutableBuffer/caselessContains	green		equal
+base/class/MutableBuffer/caselessContainsWord	green		equal
+base/class/MutableBuffer/caselessCountstr	green		equal
+base/class/MutableBuffer/caselessLastpos	green		equal
+base/class/MutableBuffer/caselessMatch	green		equal
+base/class/MutableBuffer/caselessMatchChar	green		equal
+base/class/MutableBuffer/caselessPos	green		equal
+base/class/MutableBuffer/caselessWordPos	green		equal
+base/class/MutableBuffer/changestr	green		equal
+base/class/MutableBuffer/contains	green		equal
+base/class/MutableBuffer/containsWord	green		equal
+base/class/MutableBuffer/countstr	green		equal
+base/class/MutableBuffer/delStr	green		equal
+base/class/MutableBuffer/delete	green		equal
+base/class/MutableBuffer/delword	green		equal
+base/class/MutableBuffer/getbuffersize	green		equal
+base/class/MutableBuffer/insert	green		equal
+base/class/MutableBuffer/lastpos	green		equal
+base/class/MutableBuffer/length	green		equal
+base/class/MutableBuffer/lower	green		equal
+base/class/MutableBuffer/match	green		equal
+base/class/MutableBuffer/matchChar	green		equal
+base/class/MutableBuffer/new	green		equal
+base/class/MutableBuffer/overlay	green		equal
+base/class/MutableBuffer/pos	green		equal
+base/class/MutableBuffer/replaceAt	green		equal
+base/class/MutableBuffer/setText	green		equal
+base/class/MutableBuffer/setbuffersize	green		equal
+base/class/MutableBuffer/space	green		equal
+base/class/MutableBuffer/string	green		equal
+base/class/MutableBuffer/subWord	green		equal
+base/class/MutableBuffer/subWords	green		equal
+base/class/MutableBuffer/subchar	green		equal
+base/class/MutableBuffer/substr	green		equal
+base/class/MutableBuffer/translate	green		equal
+base/class/MutableBuffer/upper	green		equal
+base/class/MutableBuffer/verify	green		equal
+base/class/MutableBuffer/word	green		equal
+base/class/MutableBuffer/wordindex	green		equal
+base/class/MutableBuffer/wordlength	green		equal
+base/class/MutableBuffer/wordpos	green		equal
+base/class/MutableBuffer/words	green		equal
+base/class/MutexSemaphore	green		equal
+base/class/Object	red	not passed: TEST_INSTANCEMETHOD TEST_RUN TEST_RUN_ARRAY_ARGUMENT TEST_SENDWITH_NOT_ARRAY TEST_SETMETHOD TEST_SETMETHOD_SCOPE TEST_UNINIT	equal
+base/class/Orderable	green		equal
+base/class/Package	red	not passed: TESTRECLAIM01 TEST_NEW01 TEST_PACKAGE_FINDPROGRAM_REXXTRY TEST_PACKAGE_LOCAL_GET_EMPTY TEST_PROLOG	equal
+base/class/Package_Options	red	not passed: TEST_CLASS_OPTIONS_DEFAULTS TEST_CLASS_OPTIONS_OPTIONNAMEERROR_1 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_10 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_11 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_2 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_3 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_4 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_5 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_6 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_7 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_8 TEST_CLASS_OPTIONS_OPTIONNAMEERROR_9 TEST_CLASS_OPTIONS_OVERRIDE_ARGERROR_2 TEST_CLASS_OPTIONS_OVERRIDE_OPTION_ARGERROR_1 TEST_DEFAULT_OPTIONS_OVERRIDES TEST_INSTANCE_OPTIONS_OVERRIDE_ERROR_2 TEST_INSTANCE_OPTIONS_OVERRIDE_OPTION_ERROR_1 TEST_OPTIONS TEST_OPTIONS_ALL_ARGERROR_1 TEST_OPTIONS_ARGERROR_1 TEST_OPTIONS_CONDITION_ARGERROR_1 TEST_OPTIONS_CONDITION_ARGERROR_2 TEST_OPTIONS_CONDITION_ARGERROR_3 TEST_OPTIONS_CONDITION_ARGERROR_4 TEST_OPTIONS_CONDITION_ARGERROR_5 TEST_OPTIONS_CONDITION_ARGERROR_6 TEST_OPTIONS_DIGITAL_ARGERROR_1 TEST_OPTIONS_DIGITAL_ARGERROR_2 TEST_OPTIONS_DIGITAL_ARGERROR_3 TEST_OPTIONS_DIGITAL_ARGERROR_4 TEST_OPTIONS_FORM_ARGERROR_1 TEST_OPTIONS_FUZZ_ARGERROR_1 TEST_OPTIONS_FUZZ_ARGERROR_2 TEST_OPTIONS_FUZZ_ARGERROR_3 TEST_OPTIONS_FUZZ_ARGERROR_4 TEST_OPTIONS_INITIALPACKAGESETTINGS TEST_OPTIONS_INITIALPACKAGESETTINGS_ARGERROR_1 TEST_OPTIONS_NUMERIC_1 TEST_OPTIONS_NUMERIC_2 TEST_OPTIONS_NUMERIC_ARG_ERROR_1 TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_MINUS TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_PLUS TEST_OPTIONS_OVERRIDE_COUNTER_CALL_2_PLUS TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_MINUS TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_PLUS TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_2_PLUS TEST_OPTIONS_PROLOG_ARGERROR_1 TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_1 TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_2 TEST_OPTIONS_SETPACKAGEOPTIONS_RESET TEST_OPTIONS_TRACE_ARGERROR_1 TEST_OPTION_X TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_1 TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_2	equal
+base/class/Properties	green		equal
+base/class/Queue	red	not passed: TEST_DIFFERENCE TEST_XOR	equal
+base/class/QueueRGF	red	not passed: TEST_DIFFERENCE TEST_INSERT_ERROR2 TEST_XOR	equal
+base/class/Relation	green		equal
+base/class/RexxContext	red	not passed: TESTCOPY01 TESTRS01	equal
+base/class/RexxInfo	red	not passed: TEST_REXXINFO_EXECUTABLE TEST_REXXINFO_LIBRARYPATH	equal
+base/class/RexxInteger	red	not passed: TEST_INTEGER_ADDITION TEST_INTEGER_CONSTANT TEST_INTEGER_D2X TEST_INTEGER_DATE TEST_INTEGER_DIVISION TEST_INTEGER_INTEGERDIVIDE TEST_INTEGER_MODULO TEST_INTEGER_MULTIPLICATION TEST_INTEGER_POWER TEST_INTEGER_REMAINDER TEST_INTEGER_REXXINFO TEST_INTEGER_SUBTRACTION TEST_INTEGER_TIME TEST_INTEGER_UNARY_MINUS TEST_INTEGER_UNARY_PLUS TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC TEST_NUMBERSTRING_INTEGERDIVIDE TEST_STRING_C2D TEST_STRING_X2D	equal
+base/class/RexxQueue	green		equal
+base/class/Routine	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED TEST_NEW_FOUR_ARGS TEST_ROUTINE_SOURCE	equal
+base/class/Set	green		equal
+base/class/Singleton	green		equal
+base/class/StackFrame	red	not passed: TESTCOMPILEFRAME TESTEXTERNALNATIVECODEFRAME TESTINTERNALCALLFRAME TESTINTERPRETFRAME TESTMETHODFRAME TESTNATIVECODEFRAME TESTPROGRAMFRAME TESTROUTINEFRAME	equal
+base/class/Stem	green		equal
+base/class/Stream	red	not passed: TEST_ARRAYIN_3_BIN TEST_ARRAYIN_BIN TEST_FLUSH_ON_CLOSE_XXXXXX TEST_LINEIN_ARG_ONE_INVALID TEST_NOTREADY_EOF_2792702 TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_OPEN_WRITE_ONLY_3274050_E TEST_OPEN_WRITE_ONLY_3274050_F TEST_SEEK_PARSER TEST_SEEK_USEDASCOUNT_2776442 TEST_STATE_NOTREADY_2	equal
+base/class/String/String	green		equal
+base/class/String/abbrev	green		equal
+base/class/String/abs	green		equal
+base/class/String/append	green		equal
+base/class/String/arithmetic	green		equal
+base/class/String/b2x	green		equal
+base/class/String/bitand	green		equal
+base/class/String/bitor	green		equal
+base/class/String/bitxor	green		equal
+base/class/String/brackets	green		equal
+base/class/String/c2d	green		equal
+base/class/String/c2x	green		equal
+base/class/String/caselessAbbrev	green		equal
+base/class/String/caselessChangestr	green		equal
+base/class/String/caselessCompare	green		equal
+base/class/String/caselessCompareTo	green		equal
+base/class/String/caselessContains	green		equal
+base/class/String/caselessContainsWord	green		equal
+base/class/String/caselessCountstr	green		equal
+base/class/String/caselessEquals	green		equal
+base/class/String/caselessLastpos	green		equal
+base/class/String/caselessMatch	green		equal
+base/class/String/caselessMatchChar	green		equal
+base/class/String/caselessPos	green		equal
+base/class/String/caselessWordPos	green		equal
+base/class/String/ceiling	green		equal
+base/class/String/center	green		equal
+base/class/String/centre	green		equal
+base/class/String/changestr	green		equal
+base/class/String/compare	green		equal
+base/class/String/compareTo	green		equal
+base/class/String/comparisonOperators	red	not passed: TEST_NIL	equal
+base/class/String/concatenationOperators	green		equal
+base/class/String/contains	green		equal
+base/class/String/containsWord	green		equal
+base/class/String/copies	green		equal
+base/class/String/countstr	green		equal
+base/class/String/d2c	green		equal
+base/class/String/d2x	green		equal
+base/class/String/datatype	green		equal
+base/class/String/delstr	green		equal
+base/class/String/delword	green		equal
+base/class/String/encode_decodeBase64	green		equal
+base/class/String/endsWith	green		equal
+base/class/String/equals	green		equal
+base/class/String/floor	green		equal
+base/class/String/format	green		equal
+base/class/String/iif	green		equal
+base/class/String/insert	green		equal
+base/class/String/lastpos	green		equal
+base/class/String/left	green		equal
+base/class/String/length	green		equal
+base/class/String/logicalOperators	green		equal
+base/class/String/lower	green		equal
+base/class/String/makearray	green		equal
+base/class/String/makestring	green		equal
+base/class/String/match	green		equal
+base/class/String/matchChar	green		equal
+base/class/String/max	green		equal
+base/class/String/min	green		equal
+base/class/String/modulo	green		equal
+base/class/String/new	green		equal
+base/class/String/overlay	green		equal
+base/class/String/pos	green		equal
+base/class/String/replaceat	green		equal
+base/class/String/reverse	green		equal
+base/class/String/right	green		equal
+base/class/String/round	green		equal
+base/class/String/sign	green		equal
+base/class/String/space	green		equal
+base/class/String/startsWith	green		equal
+base/class/String/strip	green		equal
+base/class/String/subWords	green		equal
+base/class/String/subchar	green		equal
+base/class/String/substr	green		equal
+base/class/String/subword	green		equal
+base/class/String/translate	green		equal
+base/class/String/trunc	green		equal
+base/class/String/upper	green		equal
+base/class/String/verify	green		equal
+base/class/String/word	green		equal
+base/class/String/wordindex	green		equal
+base/class/String/wordlength	green		equal
+base/class/String/wordpos	green		equal
+base/class/String/words	green		equal
+base/class/String/x2b	green		equal
+base/class/String/x2c	green		equal
+base/class/String/x2d	green		equal
+base/class/Table	green		equal
+base/class/Ticker	green		equal
+base/class/TimeSpan	green		equal
+base/class/Validate	red	not passed: TEST_VALIDATE_NON_NEGATIVE_WHOLE_NUMBER TEST_VALIDATE_POSITIVE_WHOLE_NUMBER TEST_VALIDATE_WHOLE_NUMBER	equal
+base/class/WeakReference	green		equal
+base/class/collections/array	green		equal
+base/class/collections/bag	green		equal
+base/class/collections/circularqueue	green		equal
+base/class/collections/directory	red	not passed: TEST_19	equal
+base/class/collections/list	green		equal
+base/class/collections/properties	green		equal
+base/class/collections/queue	red	not passed: TEST_16	equal
+base/class/collections/stringtable	green		equal
+base/directives/ANNOTATE	red	not passed: TEST_ATTRIBUTE_ANNOTATION TEST_CLASS_ANNOTATIONS TEST_CONSTANT_ANNOTATION TEST_METHOD_ANNOTATIONS TEST_PACKAGE_ANNOTATIONS TEST_ROUTINE_ANNOTATIONS	equal
+base/directives/ATTRIBUTE	red	not passed: TESTDELEGATE TESTMISPLACEDCLASSMETHOD	equal
+base/directives/CLASS	red	not passed: TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_ENVIRONMENT TEST_SUBCLASS_NO_CLASS_LOCAL	equal
+base/directives/CONSTANT	red	not passed: TEST_EXPRESSION_NOVALUE_ERROR	equal
+base/directives/METHOD	red	not passed: TESTDELEGATE TESTPACKAGE	equal
+base/directives/OPTIONS	red	not passed: TEST_ALL_SYNTAX_INVALID TEST_ALL_SYNTAX_MISSING TEST_ALL_SYNTAX_NOTREADY TEST_ALL_SYNTAX_OVERRIDE TEST_LOSTDIGITS_SYNTAX_OVERRIDE TEST_NOTREADY_SYNTAX_NOT TEST_NOTREADY_SYNTAX_OVERRIDE TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD TEST_OPTION_SETTINGS TEST_TRACE_LABELS	equal
+base/directives/REQUIRES	red	not passed: TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP	equal
+base/directives/RESOURCE	red	not passed: TEST_RESOURCE_DEFINED	equal
+base/directives/ROUTINE	red	not passed: TESTDOTROUTINES TESTPACKAGE	equal
+base/expressions/ADDITION	green		equal
+base/expressions/COMPOSITE	green		equal
+base/expressions/CONCATENATION	green		equal
+base/expressions/DIVISION	green		equal
+base/expressions/EXPONENT	green		equal
+base/expressions/Literals	red	not passed: TEST_BINARY_INVALID_WHITESPACE_1 TEST_BINARY_INVALID_WHITESPACE_2 TEST_BINARY_INVALID_WHITESPACE_3 TEST_BINARY_INVALID_WHITESPACE_4 TEST_BINARY_INVALID_WHITESPACE_5 TEST_BINARY_INVALID_WHITESPACE_6 TEST_HEXADECIMAL_INVALID_WHITESPACE_1 TEST_HEXADECIMAL_INVALID_WHITESPACE_2 TEST_HEXADECIMAL_INVALID_WHITESPACE_3 TEST_HEXADECIMAL_INVALID_WHITESPACE_4 TEST_HEXADECIMAL_INVALID_WHITESPACE_5 TEST_HEXADECIMAL_INVALID_WHITESPACE_6	equal
+base/expressions/MULTIPLICATION	green		equal
+base/expressions/PRECEDENCE	green		equal
+base/expressions/REMAINDER	green		equal
+base/expressions/SPECIAL	green		equal
+base/expressions/SUBTRACTION	green		equal
+base/keyword/ADDRESS	red	not passed: TEST_COMMAND_CD TEST_PATH_COMMAND	equal
+base/keyword/ASSIGNMENT	green		equal
+base/keyword/Assignments	green		equal
+base/keyword/CALL	green		equal
+base/keyword/DO	green		equal
+base/keyword/DoControlled	green		equal
+base/keyword/DoOther	green		equal
+base/keyword/DoOver	green		equal
+base/keyword/DoWith	green		equal
+base/keyword/EXPOSE	green		equal
+base/keyword/FORWARD	green		equal
+base/keyword/GUARD	green		equal
+base/keyword/IF	green		equal
+base/keyword/INTERPRET	green		equal
+base/keyword/ITERATE	green		equal
+base/keyword/LABEL	red	not passed: TEST_LABEL_IF_1_2 TEST_LABEL_IF_2_1 TEST_LABEL_IF_2_3 TEST_LABEL_IF_3_1 TEST_LABEL_IF_3_5 TEST_SELECT_1_3 TEST_SELECT_1_5 TEST_SELECT_2_3 TEST_SELECT_2_5	equal
+base/keyword/LEAVE	green		equal
+base/keyword/LOOP	green		equal
+base/keyword/LOSTDIGITS	red	not passed: TESTADDITION TESTCOMPARE TESTDIVIDE TESTINTEGERDIVIDE TESTMULTIPLY TESTPOWER TESTPREFIXMINUS TESTPREFIXPLUS TESTREMAINDER TESTSUBTRACTION	equal
+base/keyword/LabelOption	green		equal
+base/keyword/LoopControlled	green		equal
+base/keyword/LoopOther	green		equal
+base/keyword/LoopOver	green		equal
+base/keyword/LoopWith	green		equal
+base/keyword/NOP	green		equal
+base/keyword/NUMERIC	green		equal
+base/keyword/PARSE	green		equal
+base/keyword/RAISE	red	not passed: TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02	equal
+base/keyword/REPLY	green		equal
+base/keyword/SAY	green		equal
+base/keyword/SELECT	green		equal
+base/keyword/SIGNAL	red	not passed: TEST_BUG_1877 TEST_SIGNAL_ANY_CONDITION_ERROR TEST_SIGNAL_ANY_CONDITION_FAILURE TEST_SIGNAL_ANY_CONDITION_HALT TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS TEST_SIGNAL_ANY_CONDITION_NOSTRING TEST_SIGNAL_ANY_CONDITION_NOTREADY TEST_SIGNAL_ANY_CONDITION_NOVALUE	equal
+base/keyword/SelectCase	green		equal
+base/keyword/ShortCircuitAnd	green		equal
+base/keyword/TRACE	red	not passed: TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE	equal
+base/keyword/TRACE_TraceObject	red	not passed: TEST_CALLER_STACK_FRAME TEST_CALLER_STACK_FRAME_REPLY_START TEST_OBJECT_AND_SCOPE TEST_TRACEOBJECT_COLLECTOR TEST_VARIABLE	equal
+base/keyword/USE	green		equal
+base/keyword/USELOCAL	green		equal
+base/keyword/VarRef	red	not passed: TESTDOUBLEARGSTEM TESTREFAUTOEXPOSED TESTREFAUTOEXPOSEDSTEM TESTREFEXPOSED TESTREFEXPOSEDSTEM TEST_COPY TEST_UNKNOWN_OK	equal
+base/rexxutil/Macrospace	green		equal
+base/rexxutil/SysDumpVariables	red	not passed: TEST_LONG TEST_NONE TEST_NO_ARGS_TOO_MANY TEST_SIMPLE_AND_STEM	equal
+base/rexxutil/SysFileDateTime	red	not passed: TEST_GET_NO_ARGS TEST_GET_OPTION_INVALID TEST_GET_OPTION_NULL TEST_GET_THREE_ARGS_TOO_MANY TEST_SET_DATETIME_INVALID TEST_SET_FOUR_ARGS_TOO_MANY TEST_SET_GET_DATETIME TEST_SET_NO_ARGS	equal
+base/rexxutil/SysFileSearch	red	not passed: TEST_BUFFER_SIZE TEST_FIVE_ARGS_TOO_MANY TEST_INVALID_OPTION TEST_LONG_LINE TEST_LONG_LINENUMBERS TEST_NO_ARGS TEST_NO_FILE TEST_NO_STEM TEST_NUL_CHARACTER TEST_ONE_ARG_TOO_FEW TEST_STEM_ARRAY_OBJECT TEST_STEM_ARRAY_ZERO TEST_STEM_NAME TEST_TWO_ARGS_TOO_FEW	equal
+base/rexxutil/SysFileTree	red	not passed: TEST_ARG_FIVE_BLANK TEST_ARG_FIVE_INVALID TEST_ARG_FIVE_TOO_LONG TEST_ARG_FOUR_BLANK TEST_ARG_FOUR_INVALID TEST_ARG_FOUR_TOO_LONG TEST_ARG_ONE_NULL TEST_ARG_THREE_BLANK TEST_ARG_THREE_INVALID TEST_ARG_THREE_NULL TEST_ARG_TWO TEST_ARG_TWO_INVALID TEST_ARG_TWO_NULL TEST_HUGE TEST_TREE_DIRECTORY TEST_TREE_SINGLE_FILE TEST_TREE_SUBDIRECTORIES	equal
+base/rexxutil/SysFileXXX	red	not passed: TEST_FILECOPY TEST_FILECOPY_INVALID TEST_FILECOPY_NO_ARG TEST_FILECOPY_ONE_ARG TEST_FILECOPY_THREE_ARGS TEST_FILEEXISTS_NIL_INVALID TEST_FILEMOVE TEST_FILEMOVE_INVALID TEST_FILEMOVE_NO_ARG TEST_FILEMOVE_ONE_ARG TEST_FILEMOVE_THREE_ARGS TEST_ISFILEDIRECTORY TEST_ISFILEDIRECTORY_INVALID TEST_ISFILEDIRECTORY_NO_ARG TEST_ISFILEDIRECTORY_TWO_ARGS TEST_MKDIR TEST_TEMPFILE_EXHAUST TEST_TEMPFILE_FILLER_LONG TEST_TEMPFILE_FILLER_NULL TEST_TEMPFILE_NO_ARG TEST_TEMPFILE_PATH TEST_TEMPFILE_SIMPLE TEST_TEMPFILE_TEMPLATE_FILLER_MISMATCH TEST_TEMPFILE_THREE_ARGS	equal
+base/rexxutil/SysFormatMessage	red	not passed: TEST_LONG_SUBSTITUTIONS TEST_NO_ARGS_TOO_FEW TEST_ONE_ARG_TOO_FEW TEST_SUBSTITUTIONS TEST_TOO_MANY_SUBS	equal
+base/rexxutil/SysSearchPath	red	not passed: TEST_SEARCHPATH_ABSOLUTE TEST_SEARCHPATH_ARGS_FOUR TEST_SEARCHPATH_ARGS_NONE TEST_SEARCHPATH_ARGS_ONE TEST_SEARCHPATH_EMPTY TEST_SEARCHPATH_OPTION_INVALID TEST_SEARCHPATH_OPTION_NULL TEST_SEARCHPATH_RELATIVE TEST_SEARCHPATH_SHELL TEST_SEARCHPATH_VARIABLE	equal
+base/rexxutil/SysSleep	green		equal
+base/rexxutil/SysStemCopy	red	not passed: TEST_BAD_FROM_COUNT TEST_BAD_TO_COUNT TEST_COPIES TEST_COUNT_OUT_OF_RANGE TEST_FROM_OUT_OF_RANGE TEST_INVALID_OPTION TEST_SPARSE_INSERT_SOURCE TEST_SPARSE_INSERT_TARGET TEST_SPARSE_OVERLAY_SOURCE TEST_TO_OUT_OF_RANGE TEST_UNSET_FROM_COUNT TEST_UNSET_TO_COUNT	equal
+base/rexxutil/SysStemDelete	red	not passed: TEST_BAD_COUNT TEST_DELETES TEST_OUT_OF_COUNT TEST_OUT_OF_RANGE TEST_UNSET_COUNT	equal
+base/rexxutil/SysStemInsert	red	not passed: TEST_INSERT_EMPTY TEST_INSERT_OUT_OF_RANGE TEST_INSET TEST_STEM_SIZE_BAD_VALUE TEST_STEM_SIZE_NOT_SET	equal
+base/rexxutil/SysStemSort	red	not passed: TESTSORTRANGE TEST_ALREADY_SORTED TEST_BAD_COUNT TEST_BAD_DIRECTION_ARG TEST_CASE_SENSITIVITY TEST_COMPOUND_NAME TEST_DESCENDING_SIMPLE TEST_INVALID_FIRSTCOL_LASTCOL TEST_INVALID_FIRST_LAST TEST_INVALID_ORDER TEST_INVALID_STEM TEST_OUT_OF_RANGE TEST_SIMPLE_LETTERS TEST_SORT TEST_SORT_COLS TEST_SPARSE_ARRAY TEST_TOO_MANY TEST_UNSET_COUNT	equal
+base/rexxutil/platform/unix/SysGetMessage	red	not passed: TEST_MESSAGE TEST_MESSAGE_INSERTS TEST_MESSAGE_SET TEST_MESSAGE_SURPLUS_INSERTS TEST_NO_ARGS TEST_NO_MESSAGE TEST_REXX_ALL TEST_REXX_MAJOR TEST_X_NO_ARGS	equal
+base/rexxutil/platform/unix/tilde	red	not passed: TEST_TILDE	equal
+base/rexxutil/platform/windows/SysBootDrive	green		equal
+base/rexxutil/platform/windows/SysCurPos	green		equal
+base/rexxutil/platform/windows/SysCurState	green		equal
+base/rexxutil/platform/windows/SysDrive	green		equal
+base/rexxutil/platform/windows/SysDriveMap	green		equal
+base/rexxutil/platform/windows/SysFileTree	green		equal
+base/rexxutil/platform/windows/SysGetXxxPathName	green		equal
+base/rexxutil/platform/windows/SysIni	green		equal
+base/rexxutil/platform/windows/SysIsFileDirectory	green		equal
+base/rexxutil/platform/windows/SysSystemDirectory	green		equal
+base/rexxutil/platform/windows/SysTextScreenRead	green		equal
+base/rexxutil/platform/windows/SysTextScreenSize	green		equal
+base/rexxutil/platform/windows/SysUnicode	green		equal
+base/rexxutil/platform/windows/SysWinVer	green		equal
+base/rexxutil/platform/windows/SysWin_xxx_Printer	green		equal
+base/runtime.objects/environmentEntries	red	not passed: TEST_ZZZ_TRACEOUTPUT_INVALID	equal
+base/security.manager/SecurityManager	red	not passed: TEST_CALL_HANDLE_NOT_EXISTS TEST_CALL_HANDLE_NO_RESULT TEST_CALL_HANDLE_RESULT TEST_CALL_PASS_NO_ARGS TEST_CALL_PASS_THREE_ARGS TEST_COMMAND_HANDLE_ERROR TEST_COMMAND_HANDLE_FAILURE TEST_COMMAND_HANDLE_RC TEST_COMMAND_PASS TEST_ENVIRONMENT_HANDLE TEST_ENVIRONMENT_PASS TEST_LOCAL_HANDLE_RESULT TEST_LOCAL_PASS TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_HANDLE_RESULT TEST_METHOD_PASS TEST_REQUIRES_HANDLE TEST_REQUIRES_HANDLE_FORBIDDEN TEST_REQUIRES_HANDLE_SECURITY_MANAGER TEST_REQUIRES_PASS TEST_STREAM_PASS_BIF_CHARIN TEST_STREAM_PASS_BIF_CHAROUT TEST_STREAM_PASS_BIF_CHARS TEST_STREAM_PASS_BIF_LINEIN TEST_STREAM_PASS_BIF_LINEOUT TEST_STREAM_PASS_BIF_LINES TEST_STREAM_PASS_BIF_STREAM_OPEN TEST_STREAM_REPLACE	equal
+base/source.file/SourceFile	red	not passed: TEST_LOGICALNOT01 TEST_LOGICALNOT02 TEST_LOGICALNOT03 TEST_LOGICALNOT04 TEST_LOGICALNOT05 TEST_LOGICALNOT06 TEST_LOGICALNOT07 TEST_LOGICALNOT08	equal
+base/source.file/incorrectCharacters	red	not passed: TEST_INCORRECT_CHARACTERS	equal
+base/source.file/whiteSpace	green		equal
+base/special.variables/RESULT_RC_SIGL	green		equal
+doc/rexxref/chapter5/Section1	red	not passed: TEST_OBJECT_OBJECTNAMEEQUALS	equal
+doc/rexxref/chapter7/Section4	green		equal
+extensions/dateparser/DateFormatter	green		equal
+extensions/dateparser/DateParser	green		equal
+extensions/hostemu/hostemu	green		equal
+extensions/json/json	green		equal
+extensions/json/json_02	green		equal
+extensions/platform/unix/ncurses/ncurses	green		equal
+extensions/platform/unix/rxunixsys/SysUnix	green		equal
+extensions/platform/windows/ole/ExcelQuickTest	green		equal
+extensions/platform/windows/ole/OLEObject	green		equal
+extensions/platform/windows/ole/OLEVariant	green		equal
+extensions/platform/windows/ole/Printers	green		equal
+extensions/platform/windows/ole/RexxProcess	green		equal
+extensions/platform/windows/ole/SpecialFolders	green		equal
+extensions/platform/windows/oodialog/Basic	green		equal
+extensions/platform/windows/rxwinsys/Clipboard	green		equal
+extensions/platform/windows/rxwinsys/WindowsEventLog	green		equal
+extensions/rxmath/RxMath	green		equal
+extensions/rxregexp/rxregexp	green		equal
+extensions/rxsock/socketClass	green		equal
+extensions/yaml/yaml	green		equal
+regressions/bug1853738	green		equal
+regressions/bug2003_guard_when	green		equal
+regressions/bug2061_newline_misalignment	green		equal
+samples/samples	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | not started: TEST_ARITHMETICEVALUATION TEST_ARRAYCALLBACK TEST_CCREPLY TEST_CONCURRENCY TEST_CONSTRAINED TEST_DELEGATION TEST_DYNAMICMETHOD TEST_FACTOR TEST_GREPLY TEST_GUESS TEST_INTERFACE TEST_KTGUARD TEST_MAKESTRING TEST_MONTH TEST_PHILFORK TEST_PROPERTIES TEST_QDATE TEST_QTIME TEST_REXXCPS TEST_SINGLELINKEDLIST TEST_SORTCOMPOSITE TEST_STACK TEST_SYNCHRONOUSCONCURRENCY TEST_TIMEZONE TEST_TREETRAVERSAL TEST_USECOMP TEST_USEPIPE TEST_USESINGLETON TEST_USETREE	equal
+samples/scclient	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | not started: TEST_01_SAMPLEEXISTS TEST_04_SCCLIENT.REX	equal
+samples/scserver	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | not started: TEST_01_SAMPLEEXISTS TEST_04_SCSERVER.REX	equal
+samples/sfclient	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | not started: TEST_01_SAMPLEEXISTS TEST_04_SFCLIENT.REX	equal
+samples/sfserver	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | not started: TEST_01_SAMPLEEXISTS TEST_04_SFSERVER.REX	equal
+samples/windows/adsi	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	equal
+samples/windows/fileNameDialog_demo	green		equal
+samples/windows/samples	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	equal
+samples/windows/wmi	red	did not end normally, blocked at load: rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	equal
+utilities/rexx/rexx_command	red	not passed: TEST_NOARGS TEST_OPTE1 TEST_OPTE10 TEST_OPTE11 TEST_OPTE2 TEST_OPTE3 TEST_OPTE4 TEST_OPTE5 TEST_OPTE6 TEST_OPTE7 TEST_OPTE8 TEST_OPTE9 TEST_OPTENOCODE TEST_OPTONOSTRING1 TEST_OPTONOSTRING2 TEST_OPTV1 TEST_OPTV2 TEST_OPTV5 TEST_OPTV6 TEST_PASSINGARGS5 TEST_PASSINGARGS7 TEST_UNKNOWNSW	equal
+utilities/rexxc/rexxc	red	not passed: TEST_REXXC_ENCODING TEST_REXXC_NO_ARG TEST_REXXC_ONE_ARG TEST_REXXC_ONE_ARG_NOT_FOUND TEST_REXXC_ONE_ARG_OPTION_S TEST_REXXC_ONE_ARG_SYNTAX TEST_REXXC_THREE_ARGS TEST_REXXC_TWO_ARGS	equal
+utilities/rxapi	green		equal
+utilities/rxqueue/rxQueue	green		equal
+utilities/rxsubcom/rxsubcom	green		equal

@@ -1,0 +1,806 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+API/classic/CLASSIC	oracle	0	63	61	TEST_51_EXTERNALFUNCTION TEST_54_EXTERNALFUNCTION		-	-	1	yes	ulimit -v 1048576	63
+API/classic/CLASSIC	crate	0	63	18	TEST_31A_VARIABLEPOOL TEST_31B_VARIABLEPOOL TEST_31C_VARIABLEPOOL TEST_31_VARIABLEPOOL TEST_32A_VARIABLEPOOL TEST_32_VARIABLEPOOL TEST_33A_VARIABLEPOOL TEST_33B_VARIABLEPOOL TEST_33C_VARIABLEPOOL TEST_33D_VARIABLEPOOL TEST_33_VARIABLEPOOL TEST_34A_VARIABLEPOOL TEST_34B_VARIABLEPOOL TEST_34_VARIABLEPOOL TEST_35A_VARIABLEPOOL TEST_35B_VARIABLEPOOL TEST_35_VARIABLEPOOL TEST_37A_VARIABLEPOOL TEST_37B_VARIABLEPOOL TEST_37_VARIABLEPOOL TEST_38A_VARIABLEPOOL TEST_38_VARIABLEPOOL TEST_39A_VARIABLEPOOL TEST_39B_VARIABLEPOOL TEST_39C_VARIABLEPOOL TEST_39D_VARIABLEPOOL TEST_39E_VARIABLEPOOL TEST_39_VARIABLEPOOL TEST_40A_VARIABLEPOOL TEST_40B_VARIABLEPOOL TEST_40C_VARIABLEPOOL TEST_40_VARIABLEPOOL TEST_51_EXTERNALFUNCTION TEST_54_EXTERNALFUNCTION TEST_70_MACROSPACE TEST_71_MACROSPACE TEST_77_FUNCTION TEST_SHV_DROP_DIRECT TEST_SHV_DROP_SYMBOLIC TEST_SHV_FETCH_DIRECT TEST_SHV_FETCH_SYMBOLIC TEST_SHV_NEXT TEST_SHV_RC TEST_SHV_SET_DIRECT TEST_SHV_SET_SYMBOLIC		-	-	1	yes	memcap 2G	63
+API/oo/CONVERSION	oracle	97	97	97			-	-	1	yes	ulimit -v 1048576	97
+API/oo/CONVERSION	crate	97	97	97			-	-	1	yes	memcap 2G	97
+API/oo/FUNCTION	oracle	157	157	157			-	-	1	yes	ulimit -v 1048576	157
+API/oo/FUNCTION	crate	157	157	157			-	-	1	yes	memcap 2G	157
+API/oo/INVOCATION	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+API/oo/INVOCATION	crate	0	0	0			-	-	1	yes	memcap 2G	0
+API/oo/METHOD	oracle	320	320	320			-	-	1	yes	ulimit -v 1048576	320
+API/oo/METHOD	crate	320	320	319	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA		-	-	1	yes	memcap 2G	320
+API/oo/ProcessInvocation	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+API/oo/ProcessInvocation	crate	0	0	0			-	-	1	yes	memcap 2G	0
+API/oo/ProcessRexxStart	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+API/oo/ProcessRexxStart	crate	0	0	0			-	-	1	yes	memcap 2G	0
+API/oo/RexxStart	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+API/oo/RexxStart	crate	0	0	0			-	-	1	yes	memcap 2G	0
+SimpleTests	oracle	7	7	7			-	-	1	yes	ulimit -v 1048576	7
+SimpleTests	crate	7	7	7			-	-	1	yes	memcap 2G	7
+base/bif/ABBREV	oracle	117	117	117			-	-	1	yes	ulimit -v 1048576	117
+base/bif/ABBREV	crate	117	117	117			-	-	1	yes	memcap 2G	117
+base/bif/ABS	oracle	49	49	49			-	-	1	yes	ulimit -v 1048576	49
+base/bif/ABS	crate	49	49	49			-	-	1	yes	memcap 2G	49
+base/bif/ADDRESS	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/ADDRESS	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/ARG	oracle	17	17	17			-	-	1	yes	ulimit -v 1048576	17
+base/bif/ARG	crate	17	17	16	TEST_EXTERNAL_CALLS		-	-	1	yes	memcap 2G	17
+base/bif/B2X	oracle	41	41	41			-	-	1	yes	ulimit -v 1048576	41
+base/bif/B2X	crate	41	41	41			-	-	1	yes	memcap 2G	41
+base/bif/BEEP	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/bif/BEEP	crate	9	9	9			-	-	1	yes	memcap 2G	9
+base/bif/BITAND	oracle	101	101	101			-	-	1	yes	ulimit -v 1048576	101
+base/bif/BITAND	crate	101	101	101			-	-	1	yes	memcap 2G	101
+base/bif/BITOR	oracle	124	124	124			-	-	1	yes	ulimit -v 1048576	124
+base/bif/BITOR	crate	124	124	124			-	-	1	yes	memcap 2G	124
+base/bif/BITXOR	oracle	136	136	136			-	-	1	yes	ulimit -v 1048576	136
+base/bif/BITXOR	crate	136	136	136			-	-	1	yes	memcap 2G	136
+base/bif/C2D	oracle	105	105	105			-	-	1	yes	ulimit -v 1048576	105
+base/bif/C2D	crate	105	105	105			-	-	1	yes	memcap 2G	105
+base/bif/C2X	oracle	34	34	34			-	-	1	yes	ulimit -v 1048576	34
+base/bif/C2X	crate	34	34	34			-	-	1	yes	memcap 2G	34
+base/bif/CENTER	oracle	97	97	97			-	-	1	yes	ulimit -v 1048576	97
+base/bif/CENTER	crate	97	97	97			-	-	1	yes	memcap 2G	97
+base/bif/CENTRE	oracle	97	97	97			-	-	1	yes	ulimit -v 1048576	97
+base/bif/CENTRE	crate	97	97	97			-	-	1	yes	memcap 2G	97
+base/bif/CHANGESTR	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/bif/CHANGESTR	crate	9	9	9			-	-	1	yes	memcap 2G	9
+base/bif/CHARIN	oracle	13	13	13			-	-	1	yes	ulimit -v 1048576	13
+base/bif/CHARIN	crate	13	13	13			-	-	1	yes	memcap 2G	13
+base/bif/CHAROUT	oracle	38	39	39			-	-	1	yes	ulimit -v 1048576	39
+base/bif/CHAROUT	crate	38	39	37	TEST_POSITIONING_1_BIN	TEST_STDOUT_RET=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	38
+base/bif/CHARS	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/bif/CHARS	crate	11	11	7	TEST_CHARS_NOTREADY_DIRECTORY TEST_CHARS_NOTREADY_INVALID TEST_CHARS_NOTREADY_NONEXISTING TEST_MANYCHARS_BIN		-	-	1	yes	memcap 2G	11
+base/bif/COMPARE	oracle	166	166	166			-	-	1	yes	ulimit -v 1048576	166
+base/bif/COMPARE	crate	166	166	166			-	-	1	yes	memcap 2G	166
+base/bif/CONDITION	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
+base/bif/CONDITION	crate	14	14	7	TEST_CONDITION_CALL TEST_CONDITION_CALL_BIF TEST_CONDITION_CALL_EXTERNAL TEST_CONDITION_SIGNAL TEST_NOVALUE_DROP TEST_NOVALUE_METHOD_EXPOSE TEST_NOVALUE_PROEDURE_EXPOSE		-	-	1	yes	memcap 2G	14
+base/bif/COPIES	oracle	622	622	622			-	-	1	yes	ulimit -v 1048576	622
+base/bif/COPIES	crate	622	622	622			-	-	1	yes	memcap 2G	622
+base/bif/COUNTSTR	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/bif/COUNTSTR	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/bif/D2C	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/bif/D2C	crate	43	43	43			-	-	1	yes	memcap 2G	43
+base/bif/D2X	oracle	49	49	49			-	-	1	yes	ulimit -v 1048576	49
+base/bif/D2X	crate	49	49	49			-	-	1	yes	memcap 2G	49
+base/bif/DATATYPE	oracle	17	17	17			-	-	1	yes	ulimit -v 1048576	17
+base/bif/DATATYPE	crate	17	17	17			-	-	1	yes	memcap 2G	17
+base/bif/DATE	oracle	57	57	57			-	-	1	yes	ulimit -v 1048576	57
+base/bif/DATE	crate	57	57	57			-	-	1	yes	memcap 2G	57
+base/bif/DELSTR	oracle	71	71	71			-	-	1	yes	ulimit -v 1048576	71
+base/bif/DELSTR	crate	71	71	71			-	-	1	yes	memcap 2G	71
+base/bif/DELWORD	oracle	45	45	45			-	-	1	yes	ulimit -v 1048576	45
+base/bif/DELWORD	crate	45	45	45			-	-	1	yes	memcap 2G	45
+base/bif/DIGITS	oracle	19	19	19			-	-	1	yes	ulimit -v 1048576	19
+base/bif/DIGITS	crate	19	19	19			-	-	1	yes	memcap 2G	19
+base/bif/ERRORTEXT	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/ERRORTEXT	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/FILESPEC	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/bif/FILESPEC	crate	12	12	12			-	-	1	yes	memcap 2G	12
+base/bif/FORM	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/FORM	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/FORMAT	oracle	767	767	767			-	-	1	yes	ulimit -v 1048576	767
+base/bif/FORMAT	crate	767	767	767			-	-	1	yes	memcap 2G	767
+base/bif/FUZZ	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/FUZZ	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/GC	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/bif/GC	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/bif/INSERT	oracle	144	144	144			-	-	1	yes	ulimit -v 1048576	144
+base/bif/INSERT	crate	144	144	144			-	-	1	yes	memcap 2G	144
+base/bif/LASTPOS	oracle	183	183	183			-	-	1	yes	ulimit -v 1048576	183
+base/bif/LASTPOS	crate	183	183	183			-	-	1	yes	memcap 2G	183
+base/bif/LEFT	oracle	41	41	41			-	-	1	yes	ulimit -v 1048576	41
+base/bif/LEFT	crate	41	41	41			-	-	1	yes	memcap 2G	41
+base/bif/LENGTH	oracle	32	32	32			-	-	1	yes	ulimit -v 1048576	32
+base/bif/LENGTH	crate	32	32	32			-	-	1	yes	memcap 2G	32
+base/bif/LINEIN	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/bif/LINEIN	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/bif/LINEOUT	oracle	15	17	17			-	-	1	yes	ulimit -v 1048576	17
+base/bif/LINEOUT	crate	15	17	12	TEST_BINARY TEST_INVALID_FILE TEST_LINE_NONNUMERIC TEST_LINE_TOO_LONG	TEST_QUEUE=rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10)	-	-	2	yes	memcap 2G	16
+base/bif/LINES	oracle	16	16	16			-	-	1	yes	ulimit -v 1048576	16
+base/bif/LINES	crate	16	16	13	TEST_LINES_NOTREADY_DIRECTORY TEST_LINES_NOTREADY_INVALID TEST_LINES_NOTREADY_NONEXISTING		-	-	1	yes	memcap 2G	16
+base/bif/LOWER	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/LOWER	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/MAX	oracle	13	13	13			-	-	1	yes	ulimit -v 1048576	13
+base/bif/MAX	crate	13	13	13			-	-	1	yes	memcap 2G	13
+base/bif/MIN	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/bif/MIN	crate	9	9	9			-	-	1	yes	memcap 2G	9
+base/bif/OVERLAY	oracle	59	59	59			-	-	1	yes	ulimit -v 1048576	59
+base/bif/OVERLAY	crate	59	59	59			-	-	1	yes	memcap 2G	59
+base/bif/POS	oracle	103	103	103			-	-	1	yes	ulimit -v 1048576	103
+base/bif/POS	crate	103	103	103			-	-	1	yes	memcap 2G	103
+base/bif/QUALIFY	oracle	19	19	19			-	-	1	yes	ulimit -v 1048576	19
+base/bif/QUALIFY	crate	19	19	19			-	-	1	yes	memcap 2G	19
+base/bif/QUEUED	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/bif/QUEUED	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/bif/RANDOM	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/bif/RANDOM	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/bif/REVERSE	oracle	25	25	25			-	-	1	yes	ulimit -v 1048576	25
+base/bif/REVERSE	crate	25	25	25			-	-	1	yes	memcap 2G	25
+base/bif/RIGHT	oracle	51	51	51			-	-	1	yes	ulimit -v 1048576	51
+base/bif/RIGHT	crate	51	51	51			-	-	1	yes	memcap 2G	51
+base/bif/RXQUEUE	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/bif/RXQUEUE	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/bif/SIGN	oracle	48	48	48			-	-	1	yes	ulimit -v 1048576	48
+base/bif/SIGN	crate	48	48	48			-	-	1	yes	memcap 2G	48
+base/bif/SOURCELINE	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/bif/SOURCELINE	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/bif/SPACE	oracle	71	71	71			-	-	1	yes	ulimit -v 1048576	71
+base/bif/SPACE	crate	71	71	71			-	-	1	yes	memcap 2G	71
+base/bif/STREAM	oracle	40	40	40			-	-	1	yes	ulimit -v 1048576	40
+base/bif/STREAM	crate	40	40	34	TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_QUERYFILE_EXISTS_OPENED_01 TEST_QUERYFILE_EXISTS_OPENED_03 TEST_SEEK_CLOSEDFILE_2785896 TEST_SEEK_CLOSEDFILE_2787994		-	-	1	yes	memcap 2G	40
+base/bif/STRIP	oracle	109	109	109			-	-	1	yes	ulimit -v 1048576	109
+base/bif/STRIP	crate	109	109	109			-	-	1	yes	memcap 2G	109
+base/bif/SUBSTR	oracle	91	91	91			-	-	1	yes	ulimit -v 1048576	91
+base/bif/SUBSTR	crate	91	91	91			-	-	1	yes	memcap 2G	91
+base/bif/SUBWORD	oracle	154	154	154			-	-	1	yes	ulimit -v 1048576	154
+base/bif/SUBWORD	crate	154	154	154			-	-	1	yes	memcap 2G	154
+base/bif/SYMBOL	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/bif/SYMBOL	crate	29	29	29			-	-	1	yes	memcap 2G	29
+base/bif/TIME	oracle	306	306	306			-	-	1	yes	ulimit -v 1048576	306
+base/bif/TIME	crate	306	306	306			-	-	1	yes	memcap 2G	306
+base/bif/TRANSLATE	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/bif/TRANSLATE	crate	29	29	29			-	-	1	yes	memcap 2G	29
+base/bif/TRUNC	oracle	42	42	42			-	-	1	yes	ulimit -v 1048576	42
+base/bif/TRUNC	crate	42	42	42			-	-	1	yes	memcap 2G	42
+base/bif/UPPER	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/UPPER	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/VALUE	oracle	53	53	53			-	-	1	yes	ulimit -v 1048576	53
+base/bif/VALUE	crate	53	53	53			-	-	1	yes	memcap 2G	53
+base/bif/VAR	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/bif/VAR	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/bif/VERIFY	oracle	100	100	100			-	-	1	yes	ulimit -v 1048576	100
+base/bif/VERIFY	crate	100	100	100			-	-	1	yes	memcap 2G	100
+base/bif/WORD	oracle	73	73	73			-	-	1	yes	ulimit -v 1048576	73
+base/bif/WORD	crate	73	73	73			-	-	1	yes	memcap 2G	73
+base/bif/WORDINDEX	oracle	74	74	74			-	-	1	yes	ulimit -v 1048576	74
+base/bif/WORDINDEX	crate	74	74	74			-	-	1	yes	memcap 2G	74
+base/bif/WORDLENGTH	oracle	73	73	73			-	-	1	yes	ulimit -v 1048576	73
+base/bif/WORDLENGTH	crate	73	73	73			-	-	1	yes	memcap 2G	73
+base/bif/WORDPOS	oracle	193	193	193			-	-	1	yes	ulimit -v 1048576	193
+base/bif/WORDPOS	crate	193	193	193			-	-	1	yes	memcap 2G	193
+base/bif/WORDS	oracle	42	42	42			-	-	1	yes	ulimit -v 1048576	42
+base/bif/WORDS	crate	42	42	42			-	-	1	yes	memcap 2G	42
+base/bif/X2B	oracle	69	69	69			-	-	1	yes	ulimit -v 1048576	69
+base/bif/X2B	crate	69	69	69			-	-	1	yes	memcap 2G	69
+base/bif/X2C	oracle	51	51	51			-	-	1	yes	ulimit -v 1048576	51
+base/bif/X2C	crate	51	51	51			-	-	1	yes	memcap 2G	51
+base/bif/X2D	oracle	73	73	73			-	-	1	yes	ulimit -v 1048576	73
+base/bif/X2D	crate	73	73	73			-	-	1	yes	memcap 2G	73
+base/bif/XRANGE	oracle	51	51	51			-	-	1	yes	ulimit -v 1048576	51
+base/bif/XRANGE	crate	51	51	51			-	-	1	yes	memcap 2G	51
+base/class/Alarm	oracle	6	6	6			-	-	1	yes	ulimit -v 1048576	6
+base/class/Alarm	crate	6	6	6			-	-	1	yes	memcap 2G	6
+base/class/Array	oracle	141	141	141			-	-	1	yes	ulimit -v 1048576	141
+base/class/Array	crate	141	141	136	TESTINSERT TESTMULTIINDEXINSERT TEST_SECTION TEST_SECTION_SYNTAX5 TEST_SECTION_SYNTAX6		-	-	1	yes	memcap 2G	141
+base/class/Bag	oracle	34	34	34			-	-	1	yes	ulimit -v 1048576	34
+base/class/Bag	crate	34	34	33	TEST_HASITEM_VALUE_NOTEQUAL_INDEX		-	-	1	yes	memcap 2G	34
+base/class/CircularQueue	oracle	59	59	59			-	-	1	yes	ulimit -v 1048576	59
+base/class/CircularQueue	crate	59	59	58	TEST_DIFFERENCE		-	-	1	yes	memcap 2G	59
+base/class/Class	oracle	103	103	103			-	-	1	yes	ulimit -v 1048576	103
+base/class/Class	crate	103	103	101	TEST_ACTIVATE TEST_METHODS		-	-	1	yes	memcap 2G	103
+base/class/CollectionMethods	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	100
+base/class/CollectionMethods	crate	10	10	9	TEST_COLLECTION_NEW_2_ARGS		-	-	1	yes	memcap 2G	100
+base/class/CollectionSetlikeMethods	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/class/CollectionSetlikeMethods	crate	9	9	9			-	-	1	yes	memcap 2G	9
+base/class/Comparator	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/class/Comparator	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/class/DateTime	oracle	66	66	66			-	-	1	yes	ulimit -v 1048576	66
+base/class/DateTime	crate	66	66	66			-	-	1	yes	memcap 2G	66
+base/class/Directory	oracle	55	55	55			-	-	1	yes	ulimit -v 1048576	55
+base/class/Directory	crate	55	55	55			-	-	1	yes	memcap 2G	55
+base/class/EventSemaphore	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/class/EventSemaphore	crate	9	9	9			-	-	1	yes	memcap 2G	9
+base/class/File	oracle	64	64	64			-	-	1	yes	ulimit -v 1048576	64
+base/class/File	crate	64	64	62		TEST_FILE_LASTACCESSED=rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10) | TEST_FILE_LASTMODIFIED=rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10)	-	-	3	yes	memcap 2G	62
+base/class/IdentityTable	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/class/IdentityTable	crate	43	43	37	TEST_AT01 TEST_BUG_1468 TEST_HASINDEX TEST_HASITEM TEST_INDEX TEST_[]		-	-	1	yes	memcap 2G	43
+base/class/List	oracle	55	55	55			-	-	1	yes	ulimit -v 1048576	55
+base/class/List	crate	55	55	55			-	-	1	yes	memcap 2G	55
+base/class/Message	oracle	68	68	68			-	-	1	yes	ulimit -v 1048576	68
+base/class/Message	crate	68	68	65		TEST_REPLYWITH_NOT_ARRAY=rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | TEST_SENDWITH_NOT_ARRAY=rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | TEST_STARTWITH_NOT_ARRAY=rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)	-	-	4	yes	memcap 2G	65
+base/class/Method	oracle	56	56	56			-	-	1	yes	ulimit -v 1048576	56
+base/class/Method	crate	56	56	50	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	TEST_NEW_FOUR_ARGS=rexx-exec: method "NEW" of class "Method" is not implemented (Phase 9) | TEST_ROUTINE_SOURCE_COMMENT=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TEST_ROUTINE_SOURCE_NOP=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TEST_ROUTINE_SOURCE_WHITESPACE=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9)	-	-	5	yes	memcap 2G	52
+base/class/MethodArgs	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/class/MethodArgs	crate	10	10	10			-	-	1	yes	memcap 2G	10
+base/class/Monitor	oracle	7	7	7			-	-	1	yes	ulimit -v 1048576	7
+base/class/Monitor	crate	7	7	7			-	-	1	yes	memcap 2G	7
+base/class/MutableBuffer/append	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/MutableBuffer/append	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/MutableBuffer/brackets	oracle	16	16	16			-	-	1	yes	ulimit -v 1048576	16
+base/class/MutableBuffer/brackets	crate	16	16	16			-	-	1	yes	memcap 2G	16
+base/class/MutableBuffer/caselessChangestr	oracle	13	13	13			-	-	1	yes	ulimit -v 1048576	13
+base/class/MutableBuffer/caselessChangestr	crate	13	13	13			-	-	1	yes	memcap 2G	13
+base/class/MutableBuffer/caselessContains	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/class/MutableBuffer/caselessContains	crate	43	43	43			-	-	1	yes	memcap 2G	43
+base/class/MutableBuffer/caselessContainsWord	oracle	22	22	22			-	-	1	yes	ulimit -v 1048576	22
+base/class/MutableBuffer/caselessContainsWord	crate	22	22	22			-	-	1	yes	memcap 2G	22
+base/class/MutableBuffer/caselessCountstr	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/MutableBuffer/caselessCountstr	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/MutableBuffer/caselessLastpos	oracle	180	180	180			-	-	1	yes	ulimit -v 1048576	180
+base/class/MutableBuffer/caselessLastpos	crate	180	180	180			-	-	1	yes	memcap 2G	180
+base/class/MutableBuffer/caselessMatch	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/class/MutableBuffer/caselessMatch	crate	12	12	12			-	-	1	yes	memcap 2G	12
+base/class/MutableBuffer/caselessMatchChar	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/MutableBuffer/caselessMatchChar	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/MutableBuffer/caselessPos	oracle	95	95	95			-	-	1	yes	ulimit -v 1048576	95
+base/class/MutableBuffer/caselessPos	crate	95	95	95			-	-	1	yes	memcap 2G	95
+base/class/MutableBuffer/caselessWordPos	oracle	191	191	191			-	-	1	yes	ulimit -v 1048576	191
+base/class/MutableBuffer/caselessWordPos	crate	191	191	191			-	-	1	yes	memcap 2G	191
+base/class/MutableBuffer/changestr	oracle	15	15	15			-	-	1	yes	ulimit -v 1048576	15
+base/class/MutableBuffer/changestr	crate	15	15	15			-	-	1	yes	memcap 2G	15
+base/class/MutableBuffer/contains	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/class/MutableBuffer/contains	crate	29	29	29			-	-	1	yes	memcap 2G	29
+base/class/MutableBuffer/containsWord	oracle	22	22	22			-	-	1	yes	ulimit -v 1048576	22
+base/class/MutableBuffer/containsWord	crate	22	22	22			-	-	1	yes	memcap 2G	22
+base/class/MutableBuffer/countstr	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/MutableBuffer/countstr	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/MutableBuffer/delStr	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/MutableBuffer/delStr	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/class/MutableBuffer/delete	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/MutableBuffer/delete	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/class/MutableBuffer/delword	oracle	44	44	44			-	-	1	yes	ulimit -v 1048576	44
+base/class/MutableBuffer/delword	crate	44	44	44			-	-	1	yes	memcap 2G	44
+base/class/MutableBuffer/getbuffersize	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/MutableBuffer/getbuffersize	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/MutableBuffer/insert	oracle	268	268	268			-	-	1	yes	ulimit -v 1048576	268
+base/class/MutableBuffer/insert	crate	268	268	268			-	-	1	yes	memcap 2G	268
+base/class/MutableBuffer/lastpos	oracle	187	187	187			-	-	1	yes	ulimit -v 1048576	187
+base/class/MutableBuffer/lastpos	crate	187	187	187			-	-	1	yes	memcap 2G	187
+base/class/MutableBuffer/length	oracle	27	27	27			-	-	1	yes	ulimit -v 1048576	27
+base/class/MutableBuffer/length	crate	27	27	27			-	-	1	yes	memcap 2G	27
+base/class/MutableBuffer/lower	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/MutableBuffer/lower	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/MutableBuffer/match	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/class/MutableBuffer/match	crate	12	12	12			-	-	1	yes	memcap 2G	12
+base/class/MutableBuffer/matchChar	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/MutableBuffer/matchChar	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/MutableBuffer/new	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/MutableBuffer/new	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/MutableBuffer/overlay	oracle	65	65	65			-	-	1	yes	ulimit -v 1048576	65
+base/class/MutableBuffer/overlay	crate	65	65	65			-	-	1	yes	memcap 2G	65
+base/class/MutableBuffer/pos	oracle	107	107	107			-	-	1	yes	ulimit -v 1048576	107
+base/class/MutableBuffer/pos	crate	107	107	107			-	-	1	yes	memcap 2G	107
+base/class/MutableBuffer/replaceAt	oracle	17	17	17			-	-	1	yes	ulimit -v 1048576	17
+base/class/MutableBuffer/replaceAt	crate	17	17	17			-	-	1	yes	memcap 2G	17
+base/class/MutableBuffer/setText	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/class/MutableBuffer/setText	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/class/MutableBuffer/setbuffersize	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/MutableBuffer/setbuffersize	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/MutableBuffer/space	oracle	239	239	239			-	-	1	yes	ulimit -v 1048576	239
+base/class/MutableBuffer/space	crate	239	239	239			-	-	1	yes	memcap 2G	239
+base/class/MutableBuffer/string	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/MutableBuffer/string	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/class/MutableBuffer/subWord	oracle	146	146	146			-	-	1	yes	ulimit -v 1048576	146
+base/class/MutableBuffer/subWord	crate	146	146	146			-	-	1	yes	memcap 2G	146
+base/class/MutableBuffer/subWords	oracle	149	149	149			-	-	1	yes	ulimit -v 1048576	149
+base/class/MutableBuffer/subWords	crate	149	149	149			-	-	1	yes	memcap 2G	149
+base/class/MutableBuffer/subchar	oracle	6	6	6			-	-	1	yes	ulimit -v 1048576	6
+base/class/MutableBuffer/subchar	crate	6	6	6			-	-	1	yes	memcap 2G	6
+base/class/MutableBuffer/substr	oracle	97	97	97			-	-	1	yes	ulimit -v 1048576	97
+base/class/MutableBuffer/substr	crate	97	97	97			-	-	1	yes	memcap 2G	97
+base/class/MutableBuffer/translate	oracle	28	28	28			-	-	1	yes	ulimit -v 1048576	28
+base/class/MutableBuffer/translate	crate	28	28	28			-	-	1	yes	memcap 2G	28
+base/class/MutableBuffer/upper	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/MutableBuffer/upper	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/MutableBuffer/verify	oracle	97	97	97			-	-	1	yes	ulimit -v 1048576	97
+base/class/MutableBuffer/verify	crate	97	97	97			-	-	1	yes	memcap 2G	97
+base/class/MutableBuffer/word	oracle	71	71	71			-	-	1	yes	ulimit -v 1048576	71
+base/class/MutableBuffer/word	crate	71	71	71			-	-	1	yes	memcap 2G	71
+base/class/MutableBuffer/wordindex	oracle	72	72	72			-	-	1	yes	ulimit -v 1048576	72
+base/class/MutableBuffer/wordindex	crate	72	72	72			-	-	1	yes	memcap 2G	72
+base/class/MutableBuffer/wordlength	oracle	70	70	70			-	-	1	yes	ulimit -v 1048576	70
+base/class/MutableBuffer/wordlength	crate	70	70	70			-	-	1	yes	memcap 2G	70
+base/class/MutableBuffer/wordpos	oracle	190	190	190			-	-	1	yes	ulimit -v 1048576	190
+base/class/MutableBuffer/wordpos	crate	190	190	190			-	-	1	yes	memcap 2G	190
+base/class/MutableBuffer/words	oracle	41	41	41			-	-	1	yes	ulimit -v 1048576	41
+base/class/MutableBuffer/words	crate	41	41	41			-	-	1	yes	memcap 2G	41
+base/class/MutexSemaphore	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/class/MutexSemaphore	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/class/Object	oracle	149	149	149			-	-	1	yes	ulimit -v 1048576	149
+base/class/Object	crate	149	149	142	TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE TEST_UNINIT	TEST_RUN_ARRAY_ARGUMENT=rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9) | TEST_SENDWITH_NOT_ARRAY=rexx-exec: method "MAKEARRAY" of class "Object" is not implemented (Phase 9)	-	-	3	yes	memcap 2G	147
+base/class/Orderable	oracle	15	15	15			-	-	1	yes	ulimit -v 1048576	30
+base/class/Orderable	crate	15	15	15			-	-	1	yes	memcap 2G	30
+base/class/Package	oracle	80	80	80			-	-	1	yes	ulimit -v 1048576	80
+base/class/Package	crate	80	80	75	TEST_PACKAGE_FINDPROGRAM_REXXTRY TEST_PROLOG	TESTRECLAIM01=timeout after 60 s | TEST_NEW01=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9) | TEST_PACKAGE_LOCAL_GET_EMPTY=rexx-exec: method "ITEMS" of class "Directory" is not implemented (Phase 9)	-	-	4	yes	memcap 2G	77
+base/class/Package_Options	oracle	54	54	54			-	-	1	yes	ulimit -v 1048576	54
+base/class/Package_Options	crate	54	54	0		TEST_CLASS_OPTIONS_DEFAULTS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_10=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_11=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_3=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_4=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_5=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_6=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_7=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_8=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OPTIONNAMEERROR_9=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OVERRIDE_ARGERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_CLASS_OPTIONS_OVERRIDE_OPTION_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_DEFAULT_OPTIONS_OVERRIDES=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_INSTANCE_OPTIONS_OVERRIDE_ERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_INSTANCE_OPTIONS_OVERRIDE_OPTION_ERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_ALL_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_CONDITION_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_CONDITION_ARGERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_CONDITION_ARGERROR_3=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_CONDITION_ARGERROR_4=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_CONDITION_ARGERROR_5=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_CONDITION_ARGERROR_6=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_DIGITAL_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_DIGITAL_ARGERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_DIGITAL_ARGERROR_3=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_DIGITAL_ARGERROR_4=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_FORM_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_FUZZ_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_FUZZ_ARGERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_FUZZ_ARGERROR_3=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_FUZZ_ARGERROR_4=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_INITIALPACKAGESETTINGS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_INITIALPACKAGESETTINGS_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_NUMERIC_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_NUMERIC_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_NUMERIC_ARG_ERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_MINUS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_PLUS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_OVERRIDE_COUNTER_CALL_2_PLUS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_MINUS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_PLUS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_2_PLUS=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_PROLOG_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_2=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_SETPACKAGEOPTIONS_RESET=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTIONS_TRACE_ARGERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_OPTION_X=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_1=rexx-exec: a package settings write is not implemented (Phase 10) | TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_2=rexx-exec: a package settings write is not implemented (Phase 10)	-	-	55	yes	memcap 2G	0
+base/class/Properties	oracle	63	63	63			-	-	1	yes	ulimit -v 1048576	63
+base/class/Properties	crate	63	63	63			-	-	1	yes	memcap 2G	63
+base/class/Queue	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/class/Queue	crate	43	43	41	TEST_DIFFERENCE TEST_XOR		-	-	1	yes	memcap 2G	43
+base/class/QueueRGF	oracle	45	45	45			-	-	1	yes	ulimit -v 1048576	45
+base/class/QueueRGF	crate	45	45	42	TEST_DIFFERENCE TEST_INSERT_ERROR2 TEST_XOR		-	-	1	yes	memcap 2G	45
+base/class/Relation	oracle	45	45	45			-	-	1	yes	ulimit -v 1048576	45
+base/class/Relation	crate	45	45	45			-	-	1	yes	memcap 2G	45
+base/class/RexxContext	oracle	15	15	15			-	-	1	yes	ulimit -v 1048576	15
+base/class/RexxContext	crate	15	15	13	TESTRS01	TESTCOPY01=rexx-exec: method "COPY" of class "RexxContext" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	14
+base/class/RexxInfo	oracle	21	21	21			-	-	1	yes	ulimit -v 1048576	21
+base/class/RexxInfo	crate	21	21	19		TEST_REXXINFO_EXECUTABLE=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_REXXINFO_LIBRARYPATH=rexx-exec: method "LIBRARYPATH" of class "RexxInfo" is not implemented (Phase 9)	-	-	3	yes	memcap 2G	19
+base/class/RexxInteger	oracle	20	20	20			-	-	1	yes	ulimit -v 1048576	20
+base/class/RexxInteger	crate	20	20	1	TEST_INTEGER_ADDITION TEST_INTEGER_CONSTANT TEST_INTEGER_D2X TEST_INTEGER_DATE TEST_INTEGER_DIVISION TEST_INTEGER_INTEGERDIVIDE TEST_INTEGER_MODULO TEST_INTEGER_MULTIPLICATION TEST_INTEGER_POWER TEST_INTEGER_REMAINDER TEST_INTEGER_REXXINFO TEST_INTEGER_SUBTRACTION TEST_INTEGER_TIME TEST_INTEGER_UNARY_MINUS TEST_INTEGER_UNARY_PLUS TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC TEST_NUMBERSTRING_INTEGERDIVIDE TEST_STRING_C2D TEST_STRING_X2D		-	-	1	yes	memcap 2G	20
+base/class/RexxQueue	oracle	0	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/RexxQueue	crate	0	1	0		TEST_BUG_1379=rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10)	-	-	2	yes	memcap 2G	0
+base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
+base/class/Routine	crate	60	60	56	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	TEST_NEW_FOUR_ARGS=rexx-exec: method "NEW" of class "Routine" is not implemented (Phase 9) | TEST_ROUTINE_SOURCE=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9)	-	-	3	yes	memcap 2G	58
+base/class/Set	oracle	30	30	30			-	-	1	yes	ulimit -v 1048576	30
+base/class/Set	crate	30	30	30			-	-	1	yes	memcap 2G	30
+base/class/Singleton	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/Singleton	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/class/StackFrame	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/StackFrame	crate	11	11	3	TESTNATIVECODEFRAME	TESTCOMPILEFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TESTEXTERNALNATIVECODEFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TESTINTERNALCALLFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TESTINTERPRETFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TESTMETHODFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TESTPROGRAMFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9) | TESTROUTINEFRAME=rexx-exec: method "EXECUTABLE" of class "StackFrame" is not implemented (Phase 9)	-	-	8	yes	memcap 2G	4
+base/class/Stem	oracle	52	52	52			-	-	1	yes	ulimit -v 1048576	52
+base/class/Stem	crate	52	52	52			-	-	1	yes	memcap 2G	52
+base/class/Stream	oracle	107	107	107			-	-	1	yes	ulimit -v 1048576	107
+base/class/Stream	crate	107	107	95	TEST_ARRAYIN_3_BIN TEST_ARRAYIN_BIN TEST_LINEIN_ARG_ONE_INVALID TEST_NOTREADY_EOF_2792702 TEST_OPEN_WRITE_ONLY_3274050_C TEST_OPEN_WRITE_ONLY_3274050_D TEST_OPEN_WRITE_ONLY_3274050_E TEST_OPEN_WRITE_ONLY_3274050_F TEST_SEEK_PARSER TEST_SEEK_USEDASCOUNT_2776442 TEST_STATE_NOTREADY_2	TEST_FLUSH_ON_CLOSE_XXXXXX=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	106
+base/class/String/String	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/String/String	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/class/String/abbrev	oracle	117	117	117			-	-	1	yes	ulimit -v 1048576	117
+base/class/String/abbrev	crate	117	117	117			-	-	1	yes	memcap 2G	117
+base/class/String/abs	oracle	46	46	46			-	-	1	yes	ulimit -v 1048576	46
+base/class/String/abs	crate	46	46	46			-	-	1	yes	memcap 2G	46
+base/class/String/append	oracle	3	3	3			-	-	1	yes	ulimit -v 1048576	3
+base/class/String/append	crate	3	3	3			-	-	1	yes	memcap 2G	3
+base/class/String/arithmetic	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/arithmetic	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/b2x	oracle	41	41	41			-	-	1	yes	ulimit -v 1048576	41
+base/class/String/b2x	crate	41	41	41			-	-	1	yes	memcap 2G	41
+base/class/String/bitand	oracle	102	102	102			-	-	1	yes	ulimit -v 1048576	102
+base/class/String/bitand	crate	102	102	102			-	-	1	yes	memcap 2G	102
+base/class/String/bitor	oracle	124	124	124			-	-	1	yes	ulimit -v 1048576	124
+base/class/String/bitor	crate	124	124	124			-	-	1	yes	memcap 2G	124
+base/class/String/bitxor	oracle	136	136	136			-	-	1	yes	ulimit -v 1048576	136
+base/class/String/bitxor	crate	136	136	136			-	-	1	yes	memcap 2G	136
+base/class/String/brackets	oracle	100	100	100			-	-	1	yes	ulimit -v 1048576	100
+base/class/String/brackets	crate	100	100	100			-	-	1	yes	memcap 2G	100
+base/class/String/c2d	oracle	106	106	106			-	-	1	yes	ulimit -v 1048576	106
+base/class/String/c2d	crate	106	106	106			-	-	1	yes	memcap 2G	106
+base/class/String/c2x	oracle	34	34	34			-	-	1	yes	ulimit -v 1048576	34
+base/class/String/c2x	crate	34	34	34			-	-	1	yes	memcap 2G	34
+base/class/String/caselessAbbrev	oracle	119	119	119			-	-	1	yes	ulimit -v 1048576	119
+base/class/String/caselessAbbrev	crate	119	119	119			-	-	1	yes	memcap 2G	119
+base/class/String/caselessChangestr	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/class/String/caselessChangestr	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/class/String/caselessCompare	oracle	161	161	161			-	-	1	yes	ulimit -v 1048576	161
+base/class/String/caselessCompare	crate	161	161	161			-	-	1	yes	memcap 2G	161
+base/class/String/caselessCompareTo	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/caselessCompareTo	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/caselessContains	oracle	117	117	117			-	-	1	yes	ulimit -v 1048576	117
+base/class/String/caselessContains	crate	117	117	117			-	-	1	yes	memcap 2G	117
+base/class/String/caselessContainsWord	oracle	385	385	385			-	-	1	yes	ulimit -v 1048576	385
+base/class/String/caselessContainsWord	crate	385	385	385			-	-	1	yes	memcap 2G	385
+base/class/String/caselessCountstr	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/caselessCountstr	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/caselessEquals	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/caselessEquals	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/caselessLastpos	oracle	183	183	183			-	-	1	yes	ulimit -v 1048576	183
+base/class/String/caselessLastpos	crate	183	183	183			-	-	1	yes	memcap 2G	183
+base/class/String/caselessMatch	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/class/String/caselessMatch	crate	12	12	12			-	-	1	yes	memcap 2G	12
+base/class/String/caselessMatchChar	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/String/caselessMatchChar	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/String/caselessPos	oracle	103	103	103			-	-	1	yes	ulimit -v 1048576	103
+base/class/String/caselessPos	crate	103	103	103			-	-	1	yes	memcap 2G	103
+base/class/String/caselessWordPos	oracle	193	193	193			-	-	1	yes	ulimit -v 1048576	193
+base/class/String/caselessWordPos	crate	193	193	193			-	-	1	yes	memcap 2G	193
+base/class/String/ceiling	oracle	7	7	7			-	-	1	yes	ulimit -v 1048576	7
+base/class/String/ceiling	crate	7	7	7			-	-	1	yes	memcap 2G	7
+base/class/String/center	oracle	85	85	85			-	-	1	yes	ulimit -v 1048576	85
+base/class/String/center	crate	85	85	85			-	-	1	yes	memcap 2G	85
+base/class/String/centre	oracle	85	85	85			-	-	1	yes	ulimit -v 1048576	85
+base/class/String/centre	crate	85	85	85			-	-	1	yes	memcap 2G	85
+base/class/String/changestr	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/class/String/changestr	crate	10	10	10			-	-	1	yes	memcap 2G	10
+base/class/String/compare	oracle	166	166	166			-	-	1	yes	ulimit -v 1048576	166
+base/class/String/compare	crate	166	166	166			-	-	1	yes	memcap 2G	166
+base/class/String/compareTo	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/compareTo	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/comparisonOperators	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/class/String/comparisonOperators	crate	4	4	3	TEST_NIL		-	-	1	yes	memcap 2G	4
+base/class/String/concatenationOperators	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/concatenationOperators	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/contains	oracle	115	115	115			-	-	1	yes	ulimit -v 1048576	115
+base/class/String/contains	crate	115	115	115			-	-	1	yes	memcap 2G	115
+base/class/String/containsWord	oracle	193	193	193			-	-	1	yes	ulimit -v 1048576	193
+base/class/String/containsWord	crate	193	193	193			-	-	1	yes	memcap 2G	193
+base/class/String/copies	oracle	552	552	552			-	-	1	yes	ulimit -v 1048576	552
+base/class/String/copies	crate	552	552	552			-	-	1	yes	memcap 2G	552
+base/class/String/countstr	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/String/countstr	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/String/d2c	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/class/String/d2c	crate	43	43	43			-	-	1	yes	memcap 2G	43
+base/class/String/d2x	oracle	49	49	49			-	-	1	yes	ulimit -v 1048576	49
+base/class/String/d2x	crate	49	49	49			-	-	1	yes	memcap 2G	49
+base/class/String/datatype	oracle	18	18	18			-	-	1	yes	ulimit -v 1048576	18
+base/class/String/datatype	crate	18	18	18			-	-	1	yes	memcap 2G	18
+base/class/String/delstr	oracle	70	70	70			-	-	1	yes	ulimit -v 1048576	70
+base/class/String/delstr	crate	70	70	70			-	-	1	yes	memcap 2G	70
+base/class/String/delword	oracle	45	45	45			-	-	1	yes	ulimit -v 1048576	45
+base/class/String/delword	crate	45	45	45			-	-	1	yes	memcap 2G	45
+base/class/String/encode_decodeBase64	oracle	24	24	24			-	-	1	yes	ulimit -v 1048576	24
+base/class/String/encode_decodeBase64	crate	24	24	24			-	-	1	yes	memcap 2G	24
+base/class/String/endsWith	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/class/String/endsWith	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/class/String/equals	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/equals	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/floor	oracle	7	7	7			-	-	1	yes	ulimit -v 1048576	7
+base/class/String/floor	crate	7	7	7			-	-	1	yes	memcap 2G	7
+base/class/String/format	oracle	771	771	771			-	-	1	yes	ulimit -v 1048576	771
+base/class/String/format	crate	771	771	771			-	-	1	yes	memcap 2G	771
+base/class/String/iif	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/String/iif	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/class/String/insert	oracle	144	144	144			-	-	1	yes	ulimit -v 1048576	144
+base/class/String/insert	crate	144	144	144			-	-	1	yes	memcap 2G	144
+base/class/String/lastpos	oracle	183	183	183			-	-	1	yes	ulimit -v 1048576	183
+base/class/String/lastpos	crate	183	183	183			-	-	1	yes	memcap 2G	183
+base/class/String/left	oracle	41	41	41			-	-	1	yes	ulimit -v 1048576	41
+base/class/String/left	crate	41	41	41			-	-	1	yes	memcap 2G	41
+base/class/String/length	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
+base/class/String/length	crate	33	33	33			-	-	1	yes	memcap 2G	33
+base/class/String/logicalOperators	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/logicalOperators	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/lower	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/lower	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/makearray	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/makearray	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/makestring	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/makestring	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/match	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/class/String/match	crate	12	12	12			-	-	1	yes	memcap 2G	12
+base/class/String/matchChar	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/class/String/matchChar	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/class/String/max	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
+base/class/String/max	crate	14	14	14			-	-	1	yes	memcap 2G	14
+base/class/String/min	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/class/String/min	crate	10	10	10			-	-	1	yes	memcap 2G	10
+base/class/String/modulo	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
+base/class/String/modulo	crate	14	14	14			-	-	1	yes	memcap 2G	14
+base/class/String/new	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/new	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/overlay	oracle	58	58	58			-	-	1	yes	ulimit -v 1048576	58
+base/class/String/overlay	crate	58	58	58			-	-	1	yes	memcap 2G	58
+base/class/String/pos	oracle	103	103	103			-	-	1	yes	ulimit -v 1048576	103
+base/class/String/pos	crate	103	103	103			-	-	1	yes	memcap 2G	103
+base/class/String/replaceat	oracle	17	17	17			-	-	1	yes	ulimit -v 1048576	17
+base/class/String/replaceat	crate	17	17	17			-	-	1	yes	memcap 2G	17
+base/class/String/reverse	oracle	24	24	24			-	-	1	yes	ulimit -v 1048576	24
+base/class/String/reverse	crate	24	24	24			-	-	1	yes	memcap 2G	24
+base/class/String/right	oracle	51	51	51			-	-	1	yes	ulimit -v 1048576	51
+base/class/String/right	crate	51	51	51			-	-	1	yes	memcap 2G	51
+base/class/String/round	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/class/String/round	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/class/String/sign	oracle	48	48	48			-	-	1	yes	ulimit -v 1048576	48
+base/class/String/sign	crate	48	48	48			-	-	1	yes	memcap 2G	48
+base/class/String/space	oracle	242	242	242			-	-	1	yes	ulimit -v 1048576	242
+base/class/String/space	crate	242	242	242			-	-	1	yes	memcap 2G	242
+base/class/String/startsWith	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/class/String/startsWith	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/class/String/strip	oracle	108	108	108			-	-	1	yes	ulimit -v 1048576	108
+base/class/String/strip	crate	108	108	108			-	-	1	yes	memcap 2G	108
+base/class/String/subWords	oracle	131	131	131			-	-	1	yes	ulimit -v 1048576	131
+base/class/String/subWords	crate	131	131	131			-	-	1	yes	memcap 2G	131
+base/class/String/subchar	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/subchar	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/substr	oracle	91	91	91			-	-	1	yes	ulimit -v 1048576	91
+base/class/String/substr	crate	91	91	91			-	-	1	yes	memcap 2G	91
+base/class/String/subword	oracle	125	125	125			-	-	1	yes	ulimit -v 1048576	125
+base/class/String/subword	crate	125	125	125			-	-	1	yes	memcap 2G	125
+base/class/String/translate	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/class/String/translate	crate	29	29	29			-	-	1	yes	memcap 2G	29
+base/class/String/trunc	oracle	42	42	42			-	-	1	yes	ulimit -v 1048576	42
+base/class/String/trunc	crate	42	42	42			-	-	1	yes	memcap 2G	42
+base/class/String/upper	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/upper	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/String/verify	oracle	100	100	100			-	-	1	yes	ulimit -v 1048576	100
+base/class/String/verify	crate	100	100	100			-	-	1	yes	memcap 2G	100
+base/class/String/word	oracle	73	73	73			-	-	1	yes	ulimit -v 1048576	73
+base/class/String/word	crate	73	73	73			-	-	1	yes	memcap 2G	73
+base/class/String/wordindex	oracle	74	74	74			-	-	1	yes	ulimit -v 1048576	74
+base/class/String/wordindex	crate	74	74	74			-	-	1	yes	memcap 2G	74
+base/class/String/wordlength	oracle	73	73	73			-	-	1	yes	ulimit -v 1048576	73
+base/class/String/wordlength	crate	73	73	73			-	-	1	yes	memcap 2G	73
+base/class/String/wordpos	oracle	193	193	193			-	-	1	yes	ulimit -v 1048576	193
+base/class/String/wordpos	crate	193	193	193			-	-	1	yes	memcap 2G	193
+base/class/String/words	oracle	42	42	42			-	-	1	yes	ulimit -v 1048576	42
+base/class/String/words	crate	42	42	42			-	-	1	yes	memcap 2G	42
+base/class/String/x2b	oracle	69	69	69			-	-	1	yes	ulimit -v 1048576	69
+base/class/String/x2b	crate	69	69	69			-	-	1	yes	memcap 2G	69
+base/class/String/x2c	oracle	51	51	51			-	-	1	yes	ulimit -v 1048576	51
+base/class/String/x2c	crate	51	51	51			-	-	1	yes	memcap 2G	51
+base/class/String/x2d	oracle	68	68	68			-	-	1	yes	ulimit -v 1048576	68
+base/class/String/x2d	crate	68	68	68			-	-	1	yes	memcap 2G	68
+base/class/Table	oracle	44	44	44			-	-	1	yes	ulimit -v 1048576	44
+base/class/Table	crate	44	44	44			-	-	1	yes	memcap 2G	44
+base/class/Ticker	oracle	30	30	30			-	-	1	yes	ulimit -v 1048576	30
+base/class/Ticker	crate	30	30	30			-	-	1	yes	memcap 2G	30
+base/class/TimeSpan	oracle	46	46	46			-	-	1	yes	ulimit -v 1048576	46
+base/class/TimeSpan	crate	46	46	46			-	-	1	yes	memcap 2G	46
+base/class/Validate	oracle	101	101	101			-	-	1	yes	ulimit -v 1048576	101
+base/class/Validate	crate	101	101	98	TEST_VALIDATE_NON_NEGATIVE_WHOLE_NUMBER TEST_VALIDATE_POSITIVE_WHOLE_NUMBER TEST_VALIDATE_WHOLE_NUMBER		-	-	1	yes	memcap 2G	101
+base/class/WeakReference	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/WeakReference	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/class/collections/array	oracle	41	41	41			-	-	1	yes	ulimit -v 1048576	41
+base/class/collections/array	crate	41	41	41			-	-	1	yes	memcap 2G	41
+base/class/collections/bag	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/collections/bag	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/class/collections/circularqueue	oracle	7	7	7			-	-	1	yes	ulimit -v 1048576	7
+base/class/collections/circularqueue	crate	7	7	7			-	-	1	yes	memcap 2G	7
+base/class/collections/directory	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/class/collections/directory	crate	29	29	28	TEST_19		-	-	1	yes	memcap 2G	29
+base/class/collections/list	oracle	19	19	19			-	-	1	yes	ulimit -v 1048576	19
+base/class/collections/list	crate	19	19	19			-	-	1	yes	memcap 2G	19
+base/class/collections/properties	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/collections/properties	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/class/collections/queue	oracle	22	22	22			-	-	1	yes	ulimit -v 1048576	22
+base/class/collections/queue	crate	22	22	21	TEST_16		-	-	1	yes	memcap 2G	22
+base/class/collections/stringtable	oracle	44	44	44			-	-	1	yes	ulimit -v 1048576	44
+base/class/collections/stringtable	crate	44	44	44			-	-	1	yes	memcap 2G	44
+base/directives/ANNOTATE	oracle	51	51	51			-	-	1	yes	ulimit -v 1048576	51
+base/directives/ANNOTATE	crate	51	51	45	TEST_ATTRIBUTE_ANNOTATION TEST_CONSTANT_ANNOTATION	TEST_CLASS_ANNOTATIONS=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9) | TEST_METHOD_ANNOTATIONS=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9) | TEST_PACKAGE_ANNOTATIONS=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9) | TEST_ROUTINE_ANNOTATIONS=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	-	-	5	yes	memcap 2G	47
+base/directives/ATTRIBUTE	oracle	84	84	84			-	-	1	yes	ulimit -v 1048576	84
+base/directives/ATTRIBUTE	crate	84	84	82	TESTDELEGATE TESTMISPLACEDCLASSMETHOD		-	-	1	yes	memcap 2G	84
+base/directives/CLASS	oracle	54	54	54			-	-	1	yes	ulimit -v 1048576	54
+base/directives/CLASS	crate	54	54	48	TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_ENVIRONMENT TEST_SUBCLASS_NO_CLASS_LOCAL		-	-	1	yes	memcap 2G	54
+base/directives/CONSTANT	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/directives/CONSTANT	crate	29	29	28	TEST_EXPRESSION_NOVALUE_ERROR		-	-	1	yes	memcap 2G	29
+base/directives/METHOD	oracle	78	78	78			-	-	1	yes	ulimit -v 1048576	78
+base/directives/METHOD	crate	78	78	76	TESTDELEGATE	TESTPACKAGE=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	77
+base/directives/OPTIONS	oracle	87	87	87			-	-	1	yes	ulimit -v 1048576	87
+base/directives/OPTIONS	crate	87	87	77	TEST_ALL_SYNTAX_INVALID TEST_ALL_SYNTAX_MISSING TEST_ALL_SYNTAX_NOTREADY TEST_ALL_SYNTAX_OVERRIDE TEST_LOSTDIGITS_SYNTAX_OVERRIDE TEST_NOTREADY_SYNTAX_NOT TEST_NOTREADY_SYNTAX_OVERRIDE TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD TEST_OPTION_SETTINGS TEST_TRACE_LABELS		-	-	1	yes	memcap 2G	87
+base/directives/REQUIRES	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
+base/directives/REQUIRES	crate	33	33	13	TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP		-	-	1	yes	memcap 2G	33
+base/directives/RESOURCE	oracle	13	13	13			-	-	1	yes	ulimit -v 1048576	13
+base/directives/RESOURCE	crate	13	13	12		TEST_RESOURCE_DEFINED=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	12
+base/directives/ROUTINE	oracle	28	30	30			-	-	1	yes	ulimit -v 1048576	30
+base/directives/ROUTINE	crate	28	30	26		TESTDOTROUTINES=rexx-exec: method "ALLINDEXES" of class "StringTable" is not implemented (Phase 9) | TESTEXTERNALREGISTEREDBADLIBRARYNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10) | TESTEXTERNALREGISTEREDBADNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10) | TESTPACKAGE=rexx-exec: method "ITEMS" of class "StringTable" is not implemented (Phase 9)	-	-	5	yes	memcap 2G	26
+base/expressions/ADDITION	oracle	198	198	198			-	-	1	yes	ulimit -v 1048576	198
+base/expressions/ADDITION	crate	198	198	198			-	-	1	yes	memcap 2G	198
+base/expressions/COMPOSITE	oracle	28	28	28			-	-	1	yes	ulimit -v 1048576	28
+base/expressions/COMPOSITE	crate	28	28	28			-	-	1	yes	memcap 2G	28
+base/expressions/CONCATENATION	oracle	3	3	3			-	-	1	yes	ulimit -v 1048576	3
+base/expressions/CONCATENATION	crate	3	3	3			-	-	1	yes	memcap 2G	3
+base/expressions/DIVISION	oracle	313	313	313			-	-	1	yes	ulimit -v 1048576	313
+base/expressions/DIVISION	crate	313	313	313			-	-	1	yes	memcap 2G	313
+base/expressions/EXPONENT	oracle	97	97	97			-	-	1	yes	ulimit -v 1048576	97
+base/expressions/EXPONENT	crate	97	97	97			-	-	1	yes	memcap 2G	97
+base/expressions/Literals	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/expressions/Literals	crate	43	43	31	TEST_BINARY_INVALID_WHITESPACE_1 TEST_BINARY_INVALID_WHITESPACE_2 TEST_BINARY_INVALID_WHITESPACE_3 TEST_BINARY_INVALID_WHITESPACE_4 TEST_BINARY_INVALID_WHITESPACE_5 TEST_BINARY_INVALID_WHITESPACE_6 TEST_HEXADECIMAL_INVALID_WHITESPACE_1 TEST_HEXADECIMAL_INVALID_WHITESPACE_2 TEST_HEXADECIMAL_INVALID_WHITESPACE_3 TEST_HEXADECIMAL_INVALID_WHITESPACE_4 TEST_HEXADECIMAL_INVALID_WHITESPACE_5 TEST_HEXADECIMAL_INVALID_WHITESPACE_6		-	-	1	yes	memcap 2G	43
+base/expressions/MULTIPLICATION	oracle	151	151	151			-	-	1	yes	ulimit -v 1048576	151
+base/expressions/MULTIPLICATION	crate	151	151	151			-	-	1	yes	memcap 2G	151
+base/expressions/PRECEDENCE	oracle	1366	1366	1366			-	-	1	yes	ulimit -v 1048576	1366
+base/expressions/PRECEDENCE	crate	1366	1366	1366			-	-	1	yes	memcap 2G	1366
+base/expressions/REMAINDER	oracle	293	293	293			-	-	1	yes	ulimit -v 1048576	293
+base/expressions/REMAINDER	crate	293	293	293			-	-	1	yes	memcap 2G	293
+base/expressions/SPECIAL	oracle	96	96	96			-	-	1	yes	ulimit -v 1048576	96
+base/expressions/SPECIAL	crate	96	96	96			-	-	1	yes	memcap 2G	96
+base/expressions/SUBTRACTION	oracle	300	300	300			-	-	1	yes	ulimit -v 1048576	300
+base/expressions/SUBTRACTION	crate	300	300	300			-	-	1	yes	memcap 2G	300
+base/keyword/ADDRESS	oracle	79	79	79			-	-	1	yes	ulimit -v 1048576	79
+base/keyword/ADDRESS	crate	79	79	77		TEST_COMMAND_CD=rexx-exec: routine "SYSGETERRORTEXT" is not implemented (Phase 10) | TEST_PATH_COMMAND=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	-	3	yes	memcap 2G	77
+base/keyword/ASSIGNMENT	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/keyword/ASSIGNMENT	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/keyword/Assignments	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/keyword/Assignments	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/keyword/CALL	oracle	25	25	25			-	-	1	yes	ulimit -v 1048576	25
+base/keyword/CALL	crate	25	25	25			-	-	1	yes	memcap 2G	25
+base/keyword/DO	oracle	132	132	132			-	-	1	yes	ulimit -v 1048576	132
+base/keyword/DO	crate	132	132	132			-	-	1	yes	memcap 2G	132
+base/keyword/DoControlled	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
+base/keyword/DoControlled	crate	60	60	60			-	-	1	yes	memcap 2G	60
+base/keyword/DoOther	oracle	28	28	28			-	-	1	yes	ulimit -v 1048576	28
+base/keyword/DoOther	crate	28	28	28			-	-	1	yes	memcap 2G	28
+base/keyword/DoOver	oracle	36	36	36			-	-	1	yes	ulimit -v 1048576	36
+base/keyword/DoOver	crate	36	36	36			-	-	1	yes	memcap 2G	36
+base/keyword/DoWith	oracle	37	37	37			-	-	1	yes	ulimit -v 1048576	37
+base/keyword/DoWith	crate	37	37	37			-	-	1	yes	memcap 2G	37
+base/keyword/EXPOSE	oracle	16	16	16			-	-	1	yes	ulimit -v 1048576	16
+base/keyword/EXPOSE	crate	16	16	16			-	-	1	yes	memcap 2G	16
+base/keyword/FORWARD	oracle	6	6	6			-	-	1	yes	ulimit -v 1048576	6
+base/keyword/FORWARD	crate	6	6	6			-	-	1	yes	memcap 2G	6
+base/keyword/GUARD	oracle	24	24	24			-	-	1	yes	ulimit -v 1048576	24
+base/keyword/GUARD	crate	24	24	24			-	-	1	yes	memcap 2G	24
+base/keyword/IF	oracle	168	168	168			-	-	1	yes	ulimit -v 1048576	168
+base/keyword/IF	crate	168	168	168			-	-	1	yes	memcap 2G	168
+base/keyword/INTERPRET	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/keyword/INTERPRET	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/keyword/ITERATE	oracle	31	31	31			-	-	1	yes	ulimit -v 1048576	31
+base/keyword/ITERATE	crate	31	31	31			-	-	1	yes	memcap 2G	31
+base/keyword/LABEL	oracle	42	42	42			-	-	1	yes	ulimit -v 1048576	42
+base/keyword/LABEL	crate	42	42	33	TEST_LABEL_IF_1_2 TEST_LABEL_IF_2_1 TEST_LABEL_IF_2_3 TEST_LABEL_IF_3_1 TEST_LABEL_IF_3_5 TEST_SELECT_1_3 TEST_SELECT_1_5 TEST_SELECT_2_3 TEST_SELECT_2_5		-	-	1	yes	memcap 2G	42
+base/keyword/LEAVE	oracle	23	23	23			-	-	1	yes	ulimit -v 1048576	23
+base/keyword/LEAVE	crate	23	23	23			-	-	1	yes	memcap 2G	23
+base/keyword/LOOP	oracle	21	21	21			-	-	1	yes	ulimit -v 1048576	21
+base/keyword/LOOP	crate	21	21	21			-	-	1	yes	memcap 2G	21
+base/keyword/LOSTDIGITS	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/keyword/LOSTDIGITS	crate	11	11	1	TESTADDITION TESTCOMPARE TESTDIVIDE TESTINTEGERDIVIDE TESTMULTIPLY TESTPOWER TESTPREFIXMINUS TESTPREFIXPLUS TESTREMAINDER TESTSUBTRACTION		-	-	1	yes	memcap 2G	11
+base/keyword/LabelOption	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/keyword/LabelOption	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/keyword/LoopControlled	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
+base/keyword/LoopControlled	crate	60	60	60			-	-	1	yes	memcap 2G	60
+base/keyword/LoopOther	oracle	28	28	28			-	-	1	yes	ulimit -v 1048576	28
+base/keyword/LoopOther	crate	28	28	28			-	-	1	yes	memcap 2G	28
+base/keyword/LoopOver	oracle	36	36	36			-	-	1	yes	ulimit -v 1048576	36
+base/keyword/LoopOver	crate	36	36	36			-	-	1	yes	memcap 2G	36
+base/keyword/LoopWith	oracle	37	37	37			-	-	1	yes	ulimit -v 1048576	37
+base/keyword/LoopWith	crate	37	37	37			-	-	1	yes	memcap 2G	37
+base/keyword/NOP	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/keyword/NOP	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/keyword/NUMERIC	oracle	99	99	99			-	-	1	yes	ulimit -v 1048576	99
+base/keyword/NUMERIC	crate	99	99	99			-	-	1	yes	memcap 2G	99
+base/keyword/PARSE	oracle	682	682	682			-	-	1	yes	ulimit -v 1048576	682
+base/keyword/PARSE	crate	682	682	682			-	-	1	yes	memcap 2G	682
+base/keyword/RAISE	oracle	22	22	22			-	-	1	yes	ulimit -v 1048576	22
+base/keyword/RAISE	crate	22	22	18	TEST_RAISE_INSERT_CRLF TEST_RAISE_PROPAGATE TEST_RAISE_SYNTAX_EXIT_02 TEST_RAISE_SYNTAX_RETURN_02		-	-	1	yes	memcap 2G	22
+base/keyword/REPLY	oracle	18	18	18			-	-	1	yes	ulimit -v 1048576	18
+base/keyword/REPLY	crate	18	18	18			-	-	1	yes	memcap 2G	18
+base/keyword/SAY	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/keyword/SAY	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/keyword/SELECT	oracle	44	44	44			-	-	1	yes	ulimit -v 1048576	44
+base/keyword/SELECT	crate	44	44	44			-	-	1	yes	memcap 2G	44
+base/keyword/SIGNAL	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
+base/keyword/SIGNAL	crate	33	33	25	TEST_BUG_1877 TEST_SIGNAL_ANY_CONDITION_ERROR TEST_SIGNAL_ANY_CONDITION_FAILURE TEST_SIGNAL_ANY_CONDITION_HALT TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS TEST_SIGNAL_ANY_CONDITION_NOSTRING TEST_SIGNAL_ANY_CONDITION_NOTREADY TEST_SIGNAL_ANY_CONDITION_NOVALUE		-	-	1	yes	memcap 2G	33
+base/keyword/SelectCase	oracle	19	19	19			-	-	1	yes	ulimit -v 1048576	19
+base/keyword/SelectCase	crate	19	19	19			-	-	1	yes	memcap 2G	19
+base/keyword/ShortCircuitAnd	oracle	6	6	6			-	-	1	yes	ulimit -v 1048576	6
+base/keyword/ShortCircuitAnd	crate	6	6	6			-	-	1	yes	memcap 2G	6
+base/keyword/TRACE	oracle	57	57	57			-	-	1	yes	ulimit -v 1048576	57
+base/keyword/TRACE	crate	57	57	50	TEST_TRACE_DROP TEST_TRACE_EXIT TEST_TRACE_EXPOSE TEST_TRACE_IGNORED TEST_TRACE_LABEL_WITH_FORWARD TEST_TRACE_OTHER_ENTRYPOINT TEST_TRACE_PROCEDURE		-	-	1	yes	memcap 2G	57
+base/keyword/TRACE_TraceObject	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/keyword/TRACE_TraceObject	crate	10	10	5	TEST_CALLER_STACK_FRAME TEST_CALLER_STACK_FRAME_REPLY_START TEST_OBJECT_AND_SCOPE TEST_TRACEOBJECT_COLLECTOR TEST_VARIABLE		-	-	1	yes	memcap 2G	10
+base/keyword/USE	oracle	38	38	38			-	-	1	yes	ulimit -v 1048576	38
+base/keyword/USE	crate	38	38	38			-	-	1	yes	memcap 2G	38
+base/keyword/USELOCAL	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/keyword/USELOCAL	crate	9	9	9			-	-	1	yes	memcap 2G	9
+base/keyword/VarRef	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/keyword/VarRef	crate	43	43	36	TESTDOUBLEARGSTEM TESTREFAUTOEXPOSED TESTREFAUTOEXPOSEDSTEM TESTREFEXPOSED TESTREFEXPOSEDSTEM	TEST_COPY=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_UNKNOWN_OK=rexx-exec: method "MAKEARRAY" of class "String" is not implemented (Phase 9)	-	-	3	yes	memcap 2G	41
+base/rexxutil/Macrospace	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/Macrospace	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/SysDumpVariables	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/rexxutil/SysDumpVariables	crate	4	4	0		TEST_LONG=rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 10) | TEST_NONE=rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 10) | TEST_NO_ARGS_TOO_MANY=rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 10) | TEST_SIMPLE_AND_STEM=rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 10)	-	-	5	yes	memcap 2G	0
+base/rexxutil/SysFileDateTime	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/rexxutil/SysFileDateTime	crate	8	8	0		TEST_GET_NO_ARGS=rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10) | TEST_GET_OPTION_INVALID=rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10) | TEST_GET_OPTION_NULL=rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10) | TEST_GET_THREE_ARGS_TOO_MANY=rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 10) | TEST_SET_DATETIME_INVALID=rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 10) | TEST_SET_FOUR_ARGS_TOO_MANY=rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 10) | TEST_SET_GET_DATETIME=rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 10) | TEST_SET_NO_ARGS=rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 10)	-	-	9	yes	memcap 2G	0
+base/rexxutil/SysFileSearch	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
+base/rexxutil/SysFileSearch	crate	14	14	0		TEST_BUFFER_SIZE=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_FIVE_ARGS_TOO_MANY=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_INVALID_OPTION=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_LONG_LINE=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_LONG_LINENUMBERS=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_NO_ARGS=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_NO_FILE=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_NO_STEM=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_NUL_CHARACTER=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_ONE_ARG_TOO_FEW=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_STEM_ARRAY_OBJECT=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_STEM_ARRAY_ZERO=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_STEM_NAME=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10) | TEST_TWO_ARGS_TOO_FEW=rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 10)	-	-	15	yes	memcap 2G	0
+base/rexxutil/SysFileTree	oracle	26	26	26			-	-	1	yes	ulimit -v 1048576	26
+base/rexxutil/SysFileTree	crate	26	26	9	TEST_ARG_FIVE_BLANK TEST_ARG_FIVE_INVALID TEST_ARG_FIVE_TOO_LONG TEST_ARG_FOUR_BLANK TEST_ARG_FOUR_INVALID TEST_ARG_FOUR_TOO_LONG TEST_ARG_ONE_NULL TEST_ARG_THREE_BLANK TEST_ARG_THREE_INVALID TEST_ARG_THREE_NULL TEST_ARG_TWO TEST_ARG_TWO_INVALID TEST_ARG_TWO_NULL TEST_HUGE TEST_TREE_DIRECTORY TEST_TREE_SINGLE_FILE TEST_TREE_SUBDIRECTORIES		-	-	1	yes	memcap 2G	26
+base/rexxutil/SysFileXXX	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/rexxutil/SysFileXXX	crate	43	43	19	TEST_FILEEXISTS_NIL_INVALID	TEST_FILECOPY=rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 10) | TEST_FILECOPY_INVALID=rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 10) | TEST_FILECOPY_NO_ARG=rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 10) | TEST_FILECOPY_ONE_ARG=rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 10) | TEST_FILECOPY_THREE_ARGS=rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 10) | TEST_FILEMOVE=rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 10) | TEST_FILEMOVE_INVALID=rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 10) | TEST_FILEMOVE_NO_ARG=rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 10) | TEST_FILEMOVE_ONE_ARG=rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 10) | TEST_FILEMOVE_THREE_ARGS=rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 10) | TEST_ISFILEDIRECTORY=rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 10) | TEST_ISFILEDIRECTORY_INVALID=rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 10) | TEST_ISFILEDIRECTORY_NO_ARG=rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 10) | TEST_ISFILEDIRECTORY_TWO_ARGS=rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 10) | TEST_MKDIR=rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 10) | TEST_TEMPFILE_EXHAUST=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_FILLER_LONG=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_FILLER_NULL=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_NO_ARG=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_PATH=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_SIMPLE=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_TEMPLATE_FILLER_MISMATCH=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10) | TEST_TEMPFILE_THREE_ARGS=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10)	-	-	24	yes	memcap 2G	20
+base/rexxutil/SysFormatMessage	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/rexxutil/SysFormatMessage	crate	5	5	0		TEST_LONG_SUBSTITUTIONS=rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 10) | TEST_NO_ARGS_TOO_FEW=rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 10) | TEST_ONE_ARG_TOO_FEW=rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 10) | TEST_SUBSTITUTIONS=rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 10) | TEST_TOO_MANY_SUBS=rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 10)	-	-	6	yes	memcap 2G	0
+base/rexxutil/SysSearchPath	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/rexxutil/SysSearchPath	crate	10	10	0		TEST_SEARCHPATH_ABSOLUTE=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_ARGS_FOUR=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_ARGS_NONE=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_ARGS_ONE=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_EMPTY=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_OPTION_INVALID=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_OPTION_NULL=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_RELATIVE=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_SHELL=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_SEARCHPATH_VARIABLE=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10)	-	-	11	yes	memcap 2G	0
+base/rexxutil/SysSleep	oracle	5	7	7			-	-	1	yes	ulimit -v 1048576	7
+base/rexxutil/SysSleep	crate	5	7	7			-	-	1	yes	memcap 2G	7
+base/rexxutil/SysStemCopy	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/rexxutil/SysStemCopy	crate	12	12	0		TEST_BAD_FROM_COUNT=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_BAD_TO_COUNT=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_COPIES=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_COUNT_OUT_OF_RANGE=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_FROM_OUT_OF_RANGE=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_INVALID_OPTION=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_SPARSE_INSERT_SOURCE=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_SPARSE_INSERT_TARGET=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_SPARSE_OVERLAY_SOURCE=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_TO_OUT_OF_RANGE=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_UNSET_FROM_COUNT=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10) | TEST_UNSET_TO_COUNT=rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 10)	-	-	13	yes	memcap 2G	0
+base/rexxutil/SysStemDelete	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/rexxutil/SysStemDelete	crate	5	5	0		TEST_BAD_COUNT=rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 10) | TEST_DELETES=rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 10) | TEST_OUT_OF_COUNT=rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 10) | TEST_OUT_OF_RANGE=rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 10) | TEST_UNSET_COUNT=rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 10)	-	-	6	yes	memcap 2G	0
+base/rexxutil/SysStemInsert	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/rexxutil/SysStemInsert	crate	5	5	0		TEST_INSERT_EMPTY=rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 10) | TEST_INSERT_OUT_OF_RANGE=rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 10) | TEST_INSET=rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 10) | TEST_STEM_SIZE_BAD_VALUE=rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 10) | TEST_STEM_SIZE_NOT_SET=rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 10)	-	-	6	yes	memcap 2G	0
+base/rexxutil/SysStemSort	oracle	18	18	18			-	-	1	yes	ulimit -v 1048576	18
+base/rexxutil/SysStemSort	crate	18	18	0		TESTSORTRANGE=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_ALREADY_SORTED=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_BAD_COUNT=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_BAD_DIRECTION_ARG=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_CASE_SENSITIVITY=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_COMPOUND_NAME=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_DESCENDING_SIMPLE=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_INVALID_FIRSTCOL_LASTCOL=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_INVALID_FIRST_LAST=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_INVALID_ORDER=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_INVALID_STEM=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_OUT_OF_RANGE=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_SIMPLE_LETTERS=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_SORT=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_SORT_COLS=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_SPARSE_ARRAY=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_TOO_MANY=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10) | TEST_UNSET_COUNT=rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 10)	-	-	19	yes	memcap 2G	0
+base/rexxutil/platform/unix/SysGetMessage	oracle	9	9	9			-	-	1	yes	ulimit -v 1048576	9
+base/rexxutil/platform/unix/SysGetMessage	crate	9	9	0		TEST_MESSAGE=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_MESSAGE_INSERTS=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_MESSAGE_SET=rexx-exec: routine "SYSGETMESSAGEX" is not implemented (Phase 10) | TEST_MESSAGE_SURPLUS_INSERTS=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_NO_ARGS=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_NO_MESSAGE=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_REXX_ALL=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_REXX_MAJOR=rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 10) | TEST_X_NO_ARGS=rexx-exec: routine "SYSGETMESSAGEX" is not implemented (Phase 10)	-	-	10	yes	memcap 2G	0
+base/rexxutil/platform/unix/tilde	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/rexxutil/platform/unix/tilde	crate	1	1	0		TEST_TILDE=rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 10)	-	-	2	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysBootDrive	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysBootDrive	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysCurPos	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysCurPos	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysCurState	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysCurState	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysDrive	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysDrive	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysDriveMap	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysDriveMap	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysFileTree	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysFileTree	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysGetXxxPathName	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysGetXxxPathName	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysIni	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysIni	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysIsFileDirectory	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysIsFileDirectory	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysSystemDirectory	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysSystemDirectory	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysTextScreenRead	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysTextScreenRead	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysTextScreenSize	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysTextScreenSize	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysUnicode	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysUnicode	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysWinVer	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysWinVer	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/rexxutil/platform/windows/SysWin_xxx_Printer	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+base/rexxutil/platform/windows/SysWin_xxx_Printer	crate	0	0	0			-	-	1	yes	memcap 2G	0
+base/runtime.objects/environmentEntries	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
+base/runtime.objects/environmentEntries	crate	14	14	13	TEST_ZZZ_TRACEOUTPUT_INVALID		-	-	1	yes	memcap 2G	14
+base/security.manager/SecurityManager	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	87
+base/security.manager/SecurityManager	crate	29	29	1	TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_PASS	TEST_CALL_HANDLE_NOT_EXISTS=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_CALL_HANDLE_NO_RESULT=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 10) | TEST_CALL_HANDLE_RESULT=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 10) | TEST_CALL_PASS_NO_ARGS=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 10) | TEST_CALL_PASS_THREE_ARGS=rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 10) | TEST_COMMAND_HANDLE_ERROR=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_COMMAND_HANDLE_FAILURE=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_COMMAND_HANDLE_RC=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_COMMAND_PASS=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_ENVIRONMENT_HANDLE=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_ENVIRONMENT_PASS=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_LOCAL_HANDLE_RESULT=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_LOCAL_PASS=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_METHOD_HANDLE_RESULT=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_REQUIRES_HANDLE=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_REQUIRES_HANDLE_FORBIDDEN=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_REQUIRES_HANDLE_SECURITY_MANAGER=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_REQUIRES_PASS=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_CHARIN=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_CHAROUT=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_CHARS=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_LINEIN=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_LINEOUT=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_LINES=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_PASS_BIF_STREAM_OPEN=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9) | TEST_STREAM_REPLACE=rexx-exec: method "COPY" of class "Object" is not implemented (Phase 9)	-	-	27	yes	memcap 2G	9
+base/source.file/SourceFile	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/source.file/SourceFile	crate	8	8	0		TEST_LOGICALNOT01=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT02=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT03=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT04=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT05=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT06=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT07=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9) | TEST_LOGICALNOT08=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	-	9	yes	memcap 2G	0
+base/source.file/incorrectCharacters	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/source.file/incorrectCharacters	crate	1	1	0	TEST_INCORRECT_CHARACTERS		-	-	1	yes	memcap 2G	1
+base/source.file/whiteSpace	oracle	13	13	13			-	-	1	yes	ulimit -v 1048576	13
+base/source.file/whiteSpace	crate	13	13	13			-	-	1	yes	memcap 2G	13
+base/special.variables/RESULT_RC_SIGL	oracle	7	7	7			-	-	1	yes	ulimit -v 1048576	7
+base/special.variables/RESULT_RC_SIGL	crate	7	7	7			-	-	1	yes	memcap 2G	7
+doc/rexxref/chapter5/Section1	oracle	3	3	3			-	-	1	yes	ulimit -v 1048576	3
+doc/rexxref/chapter5/Section1	crate	3	3	2		TEST_OBJECT_OBJECTNAMEEQUALS=rexx-exec: method "OBJECTNAME=" of class "Object" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	2
+doc/rexxref/chapter7/Section4	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+doc/rexxref/chapter7/Section4	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/dateparser/DateFormatter	oracle	0	31	31			-	-	1	yes	ulimit -v 1048576	31
+extensions/dateparser/DateFormatter	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/dateparser/DateParser	oracle	0	112	112			-	-	1	yes	ulimit -v 1048576	112
+extensions/dateparser/DateParser	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/hostemu/hostemu	oracle	0	16	16			-	-	1	yes	ulimit -v 1048576	16
+extensions/hostemu/hostemu	crate	0	16	0	TEST_EXECIO_DISKR_SKIP_THEN_STEM TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_STEM TEST_EXECIO_DISKR_START_AT_TWO_STEM TEST_EXECIO_DISKR_STEM TEST_EXECIO_DISKR_STEM_SKIP TEST_EXECIO_DISKR_TWO_LINES_STEM TEST_EXECIO_DISKW_STEM TEST_HI TEST_TE	TEST_EXECIO_DISKR_DEFAULT=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10) | TEST_EXECIO_DISKR_FIFO=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10) | TEST_EXECIO_DISKR_LIFO=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10) | TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_FIFO=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10) | TEST_EXECIO_DISKR_START_AT_TWO_FIFO=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10) | TEST_EXECIO_DISKR_TWO_LINES_FIFO=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10) | TEST_EXECIO_DISKW_DEFAULT=rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10)	-	-	8	yes	memcap 2G	9
+extensions/json/json	oracle	0	33	33			-	-	1	yes	ulimit -v 1048576	33
+extensions/json/json	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/json/json_02	oracle	0	227	227			-	-	1	yes	ulimit -v 1048576	227
+extensions/json/json_02	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/unix/ncurses/ncurses	oracle	0	1	1			-	-	1	yes	ulimit -v 1048576	1
+extensions/platform/unix/ncurses/ncurses	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/unix/rxunixsys/SysUnix	oracle	0	28	27	TEST_SYSCRYPT		-	-	1	yes	ulimit -v 1048576	28
+extensions/platform/unix/rxunixsys/SysUnix	crate	0	28	27	TEST_SYSCRYPT		-	-	1	yes	memcap 2G	28
+extensions/platform/windows/ole/ExcelQuickTest	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/ole/ExcelQuickTest	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/ole/OLEObject	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/ole/OLEObject	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/ole/OLEVariant	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/ole/OLEVariant	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/ole/Printers	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/ole/Printers	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/ole/RexxProcess	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/ole/RexxProcess	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/ole/SpecialFolders	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/ole/SpecialFolders	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/oodialog/Basic	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/oodialog/Basic	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/rxwinsys/Clipboard	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/rxwinsys/Clipboard	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/platform/windows/rxwinsys/WindowsEventLog	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+extensions/platform/windows/rxwinsys/WindowsEventLog	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/rxmath/RxMath	oracle	0	289	289			-	-	1	yes	ulimit -v 1048576	289
+extensions/rxmath/RxMath	crate	0	289	289			-	-	1	yes	memcap 2G	289
+extensions/rxregexp/rxregexp	oracle	0	33	33			-	-	1	yes	ulimit -v 1048576	33
+extensions/rxregexp/rxregexp	crate	0	33	33			-	-	1	yes	memcap 2G	33
+extensions/rxsock/socketClass	oracle	0	23	23			-	-	1	yes	ulimit -v 1048576	23
+extensions/rxsock/socketClass	crate	0	0	0			-	-	1	yes	memcap 2G	0
+extensions/yaml/yaml	oracle	0	50	50			-	-	1	yes	ulimit -v 1048576	50
+extensions/yaml/yaml	crate	0	0	0			-	-	1	yes	memcap 2G	0
+regressions/bug1853738	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+regressions/bug1853738	crate	4	4	4			-	-	1	yes	memcap 2G	4
+regressions/bug2003_guard_when	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+regressions/bug2003_guard_when	crate	1	1	1			-	-	1	yes	memcap 2G	1
+regressions/bug2061_newline_misalignment	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+regressions/bug2061_newline_misalignment	crate	0	0	0			-	-	1	yes	memcap 2G	0
+samples/samples	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+samples/samples	crate	29	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/scclient	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+samples/scclient	crate	2	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/scserver	oracle	2	2	1	TEST_04_SCSERVER.REX		-	-	1	yes	ulimit -v 1048576	2
+samples/scserver	crate	2	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/sfclient	oracle	2	2	1	TEST_04_SFCLIENT.REX		-	-	1	yes	ulimit -v 1048576	2
+samples/sfclient	crate	2	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/sfserver	oracle	2	2	0		TEST_04_SFSERVER.REX=timeout: killed after 300.004546906s	-	-	1	no	ulimit -v 1048576	-
+samples/sfserver	crate	2	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/windows/adsi	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+samples/windows/adsi	crate	0	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/windows/fileNameDialog_demo	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+samples/windows/fileNameDialog_demo	crate	0	0	0			-	-	1	yes	memcap 2G	0
+samples/windows/samples	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+samples/windows/samples	crate	0	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+samples/windows/wmi	oracle	0	0	0			-	-	1	yes	ulimit -v 1048576	0
+samples/windows/wmi	crate	0	0	0			rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	1	no	memcap 2G	-
+utilities/rexx/rexx_command	oracle	30	30	30			-	-	1	yes	ulimit -v 1048576	30
+utilities/rexx/rexx_command	crate	30	30	8	TEST_NOARGS TEST_OPTE1 TEST_OPTE10 TEST_OPTE11 TEST_OPTE2 TEST_OPTE3 TEST_OPTE4 TEST_OPTE5 TEST_OPTE6 TEST_OPTE7 TEST_OPTE8 TEST_OPTE9 TEST_OPTENOCODE TEST_OPTONOSTRING1 TEST_OPTONOSTRING2 TEST_OPTV1 TEST_OPTV2 TEST_OPTV5 TEST_OPTV6 TEST_PASSINGARGS5 TEST_PASSINGARGS7 TEST_UNKNOWNSW		-	-	1	yes	memcap 2G	30
+utilities/rexxc/rexxc	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+utilities/rexxc/rexxc	crate	11	11	3	TEST_REXXC_ENCODING TEST_REXXC_NO_ARG TEST_REXXC_ONE_ARG TEST_REXXC_ONE_ARG_NOT_FOUND TEST_REXXC_ONE_ARG_OPTION_S TEST_REXXC_ONE_ARG_SYNTAX TEST_REXXC_THREE_ARGS TEST_REXXC_TWO_ARGS		-	-	1	yes	memcap 2G	11
+utilities/rxapi	oracle	0	1	1			-	-	1	yes	ulimit -v 1048576	1
+utilities/rxapi	crate	0	1	0		TEST_RXAPI_LOCKED=rexx-exec: method "EXECUTABLE" of class "RexxInfo" is not implemented (Phase 9)	-	-	2	yes	memcap 2G	0
+utilities/rxqueue/rxQueue	oracle	0	4	4			-	-	1	yes	ulimit -v 1048576	4
+utilities/rxqueue/rxQueue	crate	0	4	1	TEST_CURRENT_DIR_FILTER TEST_STDERR_TO_RXQUEUE	TEST_RXQUEUE_MAXIMUM_LINE_LENGTH=rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10)	-	-	2	yes	memcap 2G	3
+utilities/rxsubcom/rxsubcom	oracle	0	13	13			-	-	1	yes	ulimit -v 1048576	13
+utilities/rxsubcom/rxsubcom	crate	0	13	6	TEST_ACTIONS_ENVIRONMENT_CASELESS TEST_DROP_TWICE TEST_INVALID_ARGS TEST_REGISTER_INVALID_HANDLER TEST_REGISTER_INVALID_LIBRARY TEST_REGISTER_TWICE TEST_UNREGISTERED		-	-	1	yes	memcap 2G	13
