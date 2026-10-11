@@ -1,0 +1,35 @@
+/* Object~copy of a Method: a new object over the same code and scope,
+   whose flags and annotations are its own. */
+m = .k~method('M1')
+c = m~copy
+say (c == m) (c~scope == m~scope) c~scope~id c~isGuarded c~isPrivate
+c~setPrivate
+say c~isPrivate m~isPrivate
+say (m~copy~source == m~source) m~copy~source~items (c~package == m~package)
+say (c~annotations == m~annotations) c~annotation('a') m~annotation('a')
+.k~define('M2', c)
+say .k~new~m1 .k~new~send('M1')
+n = .method~new('n', 'return .context~executable')
+o = n~copy
+say (o == n) o~source[1]
+.k~define('N', o)
+say .k~new~n~class
+p = .k~method('M1')~copy
+.k~define('MD', p)
+say .k~new~md
+say .k~new~go(p)
+f = .context~stackFrames[1]
+g = f~copy
+say g~class (g == f) g~type g~line (g~context == f~context)
+signal on syntax name s1
+x = .context~copy
+s1:
+say condition('O')['CODE'] condition('O')['MESSAGE']
+::class k
+::method m1
+  return 'm1' self~class~id
+::annotate method m1 a 'one'
+::method go
+  use arg c
+  self~setMethod('MS', c)
+  return self~ms self~run(c)

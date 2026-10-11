@@ -22,6 +22,7 @@ use rexx_core::{BehaviourId, Body};
 /// `ObjectModel::build` beside [`super::NATIVE_METHODS`].
 pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("RexxContext", "ARGS", Arity::Fixed(0), context_args),
+    ("RexxContext", "COPY", Arity::Fixed(0), context_copy),
     (
         "RexxContext",
         "CONDITION",
@@ -70,6 +71,12 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("StackFrame", "CONTEXT", Arity::Fixed(0), frame_context),
     (
         "StackFrame",
+        "EXECUTABLE",
+        Arity::Fixed(0),
+        frame_executable,
+    ),
+    (
+        "StackFrame",
         "INVOCATION",
         Arity::Fixed(0),
         frame_invocation,
@@ -115,6 +122,7 @@ mod key {
     pub(super) const TARGET: &[u8] = b"TARGET";
     pub(super) const ARGUMENTS: &[u8] = b"ARGUMENTS";
     pub(super) const CONTEXT: &[u8] = b"CONTEXT";
+    pub(super) const EXECUTABLE: &[u8] = b"EXECUTABLE";
     pub(super) const TRACE_LINE: &[u8] = b"TRACELINE";
 }
 
@@ -394,6 +402,17 @@ pub(crate) fn local_variables(interp: &mut Interp, depth: usize) -> Result<ObjRe
     hash::directory_of(interp, entries)
 }
 
+/// `RexxContext::copyRexx`, whose whole body is the 93.970 raise.
+fn context_copy(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let target = interp.string_value_text(receiver);
+    Err(Raised::copy_not_supported(&target).into())
+}
+
 /// `RexxContext::getExecutable`: `activation->getExecutable()`, the `Method`
 /// or `Routine` object this context is running.
 fn context_executable(
@@ -457,6 +476,10 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
                 _ => Err(Loud::unknown_receiver("a package table this crate did not build").into()),
             }
         }
+        // An internal call runs its caller's code, and answers its caller's
+        // executable: measured, oracle rc 0, an internal routine called from
+        // a `::METHOD` answers that `Method`.
+        (Entry::InternalCall, ..) => executable_at(interp, depth + 1),
         _ => Ok(interp.program_routine_object(program)),
     }
 }
@@ -579,12 +602,25 @@ fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failu
         })
         .map(std::borrow::Cow::into_owned)
         .unwrap_or_default();
+    let owner = level.owner;
     let mut trace_text = Vec::new();
     crate::trace::push_clause(&mut trace_text, line, indent, &text);
     while trace_text.last() == Some(&b'\n') {
         trace_text.pop();
     }
-    build_ended_frame(interp, b"INTERPRET", b"", line, &[], &trace_text)
+    let depth = interp
+        .frames()
+        .position(|activation| activation.id == owner);
+    let executable = depth.and_then(|depth| executable_at(interp, depth).ok());
+    build_ended_frame(
+        interp,
+        b"INTERPRET",
+        b"",
+        line,
+        &[],
+        &trace_text,
+        executable,
+    )
 }
 
 /// One `StackFrame` for the activation at `depth` --
@@ -608,11 +644,15 @@ pub(crate) fn build_frame_with(
     // `createStackFrame`'s own `getContextObject()` does -- see
     // `Interp::context_object_at`.
     let context = interp.context_object_at(depth);
+    let executable = executable_at(interp, depth).ok();
     let mut snapshot = read_snapshot(interp, depth)?;
     if !arguments {
         snapshot.arguments.clear();
     }
     let frame = interp.roots.activity_mut().push_frame();
+    if let Some(executable) = executable {
+        interp.roots.activity_mut().push_temp(executable);
+    }
     let kind = interp.text(snapshot.kind);
     interp.roots.activity_mut().push_temp(kind);
     let name = interp.text_built(std::mem::take(&mut snapshot.name));
@@ -631,7 +671,7 @@ pub(crate) fn build_frame_with(
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, std::mem::take(&mut snapshot.arguments));
     interp.roots.activity_mut().push_temp(arguments);
-    let entries = [
+    let mut entries = vec![
         (key::TYPE, kind),
         (key::NAME, name),
         (key::LINE, line),
@@ -641,7 +681,10 @@ pub(crate) fn build_frame_with(
         (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
         (key::TRACE_LINE, trace_line),
     ];
-    Ok(frame_object(interp, frame, entries, &trace_text))
+    if let Some(executable) = executable {
+        entries.push((key::EXECUTABLE, executable));
+    }
+    Ok(frame_object(interp, frame, &entries, &trace_text))
 }
 
 /// The `StackFrame` holding `entries`, whose values the caller rooted inside
@@ -649,7 +692,7 @@ pub(crate) fn build_frame_with(
 fn frame_object(
     interp: &mut Interp,
     frame: rexx_core::FrameId,
-    entries: [(&'static [u8], ObjRef); 8],
+    entries: &[(&'static [u8], ObjRef)],
     trace_text: &[u8],
 ) -> ObjRef {
     let class = interp.object_model().stack_frame;
@@ -661,7 +704,7 @@ fn frame_object(
     let Body::Native(native) = &mut held.body else {
         unreachable!("allocated as Body::Native by native_instance")
     };
-    for (name, value) in entries {
+    for &(name, value) in entries {
         native.set_entry(name, value);
     }
     // `StackFrameClass::stringValue`/`makeString`, which answer the traceback
@@ -685,18 +728,20 @@ fn frame_object(
 /// with no name, target or arguments, and an invocation and a context of its
 /// own (`RexxActivation::createStackFrame`, `RexxActivation.cpp:5006`). The
 /// context is one whose activation has ended, as the fragment's has by the
-/// time anything reads it.
+/// time anything reads it; the executable is the running activation's.
 pub(crate) fn build_interpret_frame(
     interp: &mut Interp,
     line: usize,
     trace_text: &[u8],
 ) -> Result<ObjRef, Failure> {
-    build_ended_frame(interp, b"INTERPRET", b"", line, &[], trace_text)
+    let executable = executable_at(interp, 0).ok();
+    build_ended_frame(interp, b"INTERPRET", b"", line, &[], trace_text, executable)
 }
 
 /// A `StackFrame` of type `kind` for a level that has ended, built from its
 /// parts: its own invocation, no target, and a context whose activation has
-/// ended.
+/// ended. `executable` is what `~executable` answers, `None` where this crate
+/// does not know it.
 pub(crate) fn build_ended_frame(
     interp: &mut Interp,
     kind: &[u8],
@@ -704,8 +749,12 @@ pub(crate) fn build_ended_frame(
     line: usize,
     arguments: &[Option<ObjRef>],
     trace_text: &[u8],
+    executable: Option<ObjRef>,
 ) -> Result<ObjRef, Failure> {
     let frame = interp.roots.activity_mut().push_frame();
+    if let Some(executable) = executable {
+        interp.roots.activity_mut().push_temp(executable);
+    }
     let kind = interp.text(kind);
     interp.roots.activity_mut().push_temp(kind);
     let name = interp.text(name);
@@ -718,7 +767,7 @@ pub(crate) fn build_ended_frame(
     let trace_line = interp.text(trace_text);
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments.to_vec());
-    let entries = [
+    let mut entries = vec![
         (key::TYPE, kind),
         (key::NAME, name),
         (key::LINE, line),
@@ -728,7 +777,10 @@ pub(crate) fn build_ended_frame(
         (key::CONTEXT, context),
         (key::TRACE_LINE, trace_line),
     ];
-    Ok(frame_object(interp, frame, entries, trace_text))
+    if let Some(executable) = executable {
+        entries.push((key::EXECUTABLE, executable));
+    }
+    Ok(frame_object(interp, frame, &entries, trace_text))
 }
 
 /// The `StackFrame` of a native method or routine that `target` (`.nil` for a
@@ -771,7 +823,7 @@ pub(crate) fn build_native_level_frame(
         (key::CONTEXT, context),
         (key::TRACE_LINE, trace_line),
     ];
-    frame_object(interp, frame, entries, trace_text)
+    frame_object(interp, frame, &entries, trace_text)
 }
 
 /// The `StackFrame` of the native call in row `row` of
@@ -829,7 +881,7 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
         (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
         (key::TRACE_LINE, trace_line),
     ];
-    Ok(frame_object(interp, frame, entries, &trace_text))
+    Ok(frame_object(interp, frame, &entries, &trace_text))
 }
 
 /// The activation at `depth` read out in one pass, before anything allocates.
@@ -1002,6 +1054,25 @@ fn frame_arguments(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     frame_entry(interp, receiver, key::ARGUMENTS).map(Some)
+}
+
+/// `StackFrameClass::getExecutable`: the `Method` or `Routine` the frame's
+/// level was running, `.nil` for a `COMPILE` frame. A native level's is not
+/// kept, nor one [`executable_at`] could not answer when the frame was
+/// built, and either refuses.
+fn frame_executable(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    match interp.heap.get(receiver).map(|held| &held.body) {
+        Some(Body::Native(native)) => native
+            .entry(key::EXECUTABLE)
+            .map(Some)
+            .ok_or_else(|| Loud::native_method(b"EXECUTABLE", "StackFrame").into()),
+        _ => Err(Loud::receiver_class("a stack frame this crate did not build").into()),
+    }
 }
 
 /// `StackFrameClass::getContext`: the `RexxContext` of the activation this

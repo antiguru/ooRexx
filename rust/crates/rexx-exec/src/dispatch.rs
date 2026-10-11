@@ -139,7 +139,7 @@ use array::{
     array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
     native_array_dimension, native_array_items, native_array_make_string, native_array_new,
     native_array_of, native_array_put, native_array_size, positive_index, request_array,
-    unconverted_array_argument, unsigned_index,
+    unsigned_index,
 };
 
 // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
@@ -2187,13 +2187,6 @@ impl Interp {
         }
     }
 
-    /// The scope a name would resolve to on this receiver, for a caller that
-    /// reports what a send it is not making would have failed with.
-    fn lookup_for_refusal(&mut self, receiver: ObjRef, name: &[u8]) -> Option<String> {
-        let resolution = self.lookup(receiver, name, None)?;
-        Some(self.scope_id(resolution.scope))
-    }
-
     /// The access scope and protection of a resolved method, for the methods
     /// that have one.
     fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
@@ -3989,9 +3982,7 @@ fn native_reference_unknown(
     let Some(Some(arguments)) = args.get(1).copied() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let Some(forwarded) = interp.array_slots_of(arguments) else {
-        return Err(unconverted_array_argument(interp, arguments));
-    };
+    let forwarded = array_argument(interp, arguments, ArrayArgument::Positional)?;
     let referenced = referenced_receiver(interp, receiver)?;
     let caller = interp.caller();
     interp.send_message(referenced, &name, None, &forwarded, caller)

@@ -1884,22 +1884,17 @@ fn the_package_tables_hold_what_their_directives_declare() {
 
 /// An `~UNKNOWN` sent by hand rather than forwarded: its argument list is
 /// an `Array` on every forward and anything at all here, and the oracle
-/// converts what it is given with `requestArray`.
+/// converts what it is given with `requestArray`. Measured, oracle rc 0:
+/// `'y'` converts to a one-item array.
 #[test]
-fn an_unknown_sent_by_hand_needs_an_array_this_crate_does_not_convert() {
+fn an_unknown_sent_by_hand_converts_its_argument_list() {
     assert_eq!(
         run_source("say .environment~unknown('ARRAY', .Array~superClasses)\n"),
         (0, "The Array class\n".to_string(), String::new())
     );
     assert_eq!(
         run_source("say .environment~unknown('ARRAY', 'y')\n"),
-        (
-            120,
-            String::new(),
-            "rexx-exec: method \"MAKEARRAY\" of class \"String\" is not implemented \
-             (Phase 9)\n"
-                .to_string()
-        )
+        (0, "The Array class\n".to_string(), String::new())
     );
 }
 
@@ -1979,6 +1974,51 @@ fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
         (0, "mine\n".to_string(), String::new())
     );
 }
+/// `COPY` and `StackFrame~executable` answer where this crate keeps what
+/// the copy or the frame needs, and refuse where it does not: a `Routine`
+/// copy's own `.context~executable` and a `Package` copy's own tables are
+/// not kept, and neither is a native level's executable. Measured, oracle
+/// rc 0 for each source below.
+#[test]
+fn a_copy_or_frame_executable_this_crate_does_not_keep_is_loud() {
+    assert_eq!(
+        run_source("c = .method~new('m', 'return 1')~copy\nsay c~class\n"),
+        (0, "The Method class\n".to_string(), String::new())
+    );
+    for source in [
+        "c = .routine~new('r', 'return 1')~copy\n",
+        "c = .context~package~copy\n",
+    ] {
+        assert_eq!(
+            run_source(source),
+            (
+                120,
+                String::new(),
+                "rexx-exec: method \"COPY\" of class \"Object\" is not implemented (Phase 9)\n"
+                    .to_string()
+            ),
+            "{source:?}"
+        );
+    }
+    assert_eq!(
+        run_source("say .context~stackFrames[1]~executable~class\n"),
+        (0, "The Routine class\n".to_string(), String::new())
+    );
+    assert_eq!(
+        run_source(
+            "signal on syntax\nx = 'abc'~substr(-1)\nsyntax:\n\
+             say condition('O')['STACKFRAMES']~firstItem~executable~class\n"
+        ),
+        (
+            120,
+            String::new(),
+            "rexx-exec: method \"EXECUTABLE\" of class \"StackFrame\" is not implemented \
+             (Phase 9)\n"
+                .to_string()
+        )
+    );
+}
+
 /// **The required-string protocol answers where it can and refuses where
 /// it cannot, and the refusals are only visible here.**
 #[test]

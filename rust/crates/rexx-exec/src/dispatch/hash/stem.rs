@@ -13,8 +13,8 @@
 //! way `CompoundTableElement`'s does.
 
 use super::{
-    Arity, Body, Cleared, Failure, Interp, NativeMethod, ObjRef, Raised, insert, new_instance,
-    refusal_outside, required_string_argument, unconverted_array_argument,
+    Arity, ArrayArgument, Body, Cleared, Failure, Interp, NativeMethod, ObjRef, Raised,
+    array_argument, insert, new_instance, refusal_outside, required_string_argument,
 };
 
 // ---- `Stem` ----
@@ -481,9 +481,7 @@ fn native_stem_unknown(
     let Some(arguments) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let Some(forwarded) = interp.array_slots_of(arguments) else {
-        return Err(unconverted_array_argument(interp, arguments));
-    };
+    let forwarded = array_argument(interp, arguments, ArrayArgument::Positional)?;
     let value = stem_value(interp, receiver);
     interp.roots.activity_mut().push_temp(value);
     let caller = interp.caller();

@@ -694,14 +694,6 @@ pub(super) fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef
     Ok(sent.unwrap_or(value))
 }
 
-/// The refusal for an `~UNKNOWN` argument list that is not already an `Array`.
-pub(super) fn unconverted_array_argument(interp: &mut Interp, value: ObjRef) -> Failure {
-    match interp.receiver_class_id(value) {
-        Some(id) => Loud::native_method(b"MAKEARRAY", &id).into(),
-        None => Loud::unknown_receiver("a value this phase builds no class for").into(),
-    }
-}
-
 /// `Array~makeString(format, separator)` and `Array~toString(format,
 /// separator)`: the array's items as one string -- `ArrayClass::toString`
 /// (`classes/ArrayClass.cpp:1856`), which `MakeString` and `ToString` both

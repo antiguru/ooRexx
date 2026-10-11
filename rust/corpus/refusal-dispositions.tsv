@@ -21,7 +21,8 @@
 #
 # Probe names: scout A's are in .superpowers/sdd/2026-10-07-phase-6-1/scout-a-report.md,
 # Appendix B; Task 4's in docs/superpowers/plans/phase-6-1-gate.md, "## Task 4"; Task 7's in
-# .superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md.
+# .superpowers/sdd/2026-10-07-phase-6-1/task-7-report.md; Phase 9a Task 5's in
+# .superpowers/sdd/2026-10-11-phase-9a/task-5-report.md.
 array_index_hole	DEVIATION	-	oracle-crashes.txt entry 6 (SF 2085): the oracle dies on an array subscript that is an empty slot
 binary_operator	GUARD	-	internal inconsistency: every Operator belongs to a family of Interp::apply_binary (census class d-guard)
 call_op_off_its_node	GUARD	-	compiler invariant (census d-guard). Reached once, by a concatenation in a non-first call argument (phase-6-gate.md, Task 13 notes); that repro answers `ok` at 6860d4f80 (Task 7 probe cop/s.rex)
@@ -31,7 +32,7 @@ constant_out_of_range	GUARD	-	compiler invariant: a Const op names a constant of
 conversion_raised	GUARD	-	scout A c7: c_native_raised raises the callee's condition on both engines (rc 163); both callers of Interp::refusal answer Refused::Raised before reaching it
 entry_method_without_a_value	DEVIATION	-	Deviation 29: the oracle stores its evaluation stack for a value-less NAME= send
 environment_entry	GUARD	-	scout A b18: envx_* (every .environment and .local index in its own program), env_new_activity, env_reply_activity: with no owner it is an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
-environment_symbol	GUARD	-	scout A b16 and b18: c2_stream_first_clause, c2_address_with_stream_first (.STREAM before StreamClasses.orx), envx_*, env_new_activity, env_reply_activity; only STDQUE (Phase 10) refused
+environment_symbol	GUARD	-	scout A b16 and b18: c2_stream_first_clause, c2_address_with_stream_first (.STREAM before StreamClasses.orx), envx_*, env_new_activity, env_reply_activity; only STDQUE (Phase 10) refused. Phase 9a Task 5 probes nt1, nt2 (Message~notify after removing MESSAGENOTIFICATION from .environment and .local, and from a ::REQUIRES prolog) and info (.rexxinfo~executable and ~libraryPath, which build a .FILE) answer
 expose_receiver	GUARD	-	Task 4 report, "Kept with owner None": EXPOSE from methods of Directory, .local, .environment and a Directory subclass, a borrowed Object RUN row on an instance; all answer, oracle-identical
 expression	GUARD	-	every ExprKind evaluates (expr_owner answers None for each); each site is a match arm for a form its caller routes elsewhere (census d-guard)
 immovable_reply	LIMIT	-	Deviation 15 (spec 2026-09-29 section 5)
@@ -47,7 +48,7 @@ object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .st
 op_not_driven	GUARD	-	driver invariant: every op the compiler emits has a driver arm (census d-guard)
 operator_operand	GUARD	-	scout A b12: spec-op.txt, every dyadic and prefix operator on nine left operands, refused none
 parse_trigger_operand	GUARD	-	parser guarantee: a PARSE trigger that needs an operand carries one (census d-guard)
-receiver_class	DEVIATION	-	oracle-crashes.txt entry 33 and Deviation 28: a primitive's native method run on an object of another class crashes the oracle or answers an accident of memory; Task 4 probes b2_run_*_on_inst, Task 7 probes rc2, rc3
+receiver_class	DEVIATION	-	oracle-crashes.txt entry 33 and Deviation 28: a primitive's native method run on an object of another class crashes the oracle or answers an accident of memory; Task 4 probes b2_run_*_on_inst, Task 7 probes rc2, rc3; oracle-crashes.txt entry 35: a SUPPLIER answer that is not a supplier, walked by ~defineMethods (Phase 9a Task 5 probe dm7)
 register_not_logical	GUARD	-	compiler invariant: a branch reads a register holding a logical (census d-guard)
 scheduler_inconsistency	GUARD	-	scheduler invariant (refusal-sites.tsv: guarded_getter_waits_for_reply.rex agrees)
 select_op_off_its_node	GUARD	-	compiler invariant: a SELECT op names its own SELECT (census d-guard)

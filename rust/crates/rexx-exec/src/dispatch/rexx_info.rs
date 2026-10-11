@@ -12,7 +12,7 @@
 //! `RexxInfo`'s readers -- `classes/RexxInfoClass.cpp`, bound by
 //! `memory/Setup.cpp:1252`-`:1279`.
 
-use super::{Arity, Cleared, Failure, Interp, NativeMethod, ObjRef};
+use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised};
 use crate::plan::Package;
 use crate::version;
 
@@ -26,6 +26,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(0),
         case_sensitive_files,
     ),
+    ("RexxInfo", "COPY", Arity::Fixed(0), copy),
     ("RexxInfo", "DATE", Arity::Fixed(0), date),
     ("RexxInfo", "DEBUG", Arity::Fixed(0), debug),
     ("RexxInfo", "DIGITS", Arity::Fixed(0), digits),
@@ -36,6 +37,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         directory_separator,
     ),
     ("RexxInfo", "ENDOFLINE", Arity::Fixed(0), end_of_line),
+    ("RexxInfo", "EXECUTABLE", Arity::Fixed(0), executable),
     ("RexxInfo", "FORM", Arity::Fixed(0), form),
     ("RexxInfo", "FUZZ", Arity::Fixed(0), fuzz),
     (
@@ -57,6 +59,7 @@ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         internal_min_number,
     ),
     ("RexxInfo", "LANGUAGELEVEL", Arity::Fixed(0), language_level),
+    ("RexxInfo", "LIBRARYPATH", Arity::Fixed(0), library_path),
     ("RexxInfo", "MAJORVERSION", Arity::Fixed(0), major_version),
     ("RexxInfo", "MAXARRAYSIZE", Arity::Fixed(0), max_array_size),
     ("RexxInfo", "MAXEXPONENT", Arity::Fixed(0), max_exponent),
@@ -112,6 +115,68 @@ fn case_sensitive_files(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     Ok(Some(interp.counted(1)))
+}
+
+/// `RexxInfo::copyRexx`, whose whole body is the 93.970 raise.
+fn copy(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let target = interp.string_value_text(receiver);
+    Err(Raised::copy_not_supported(&target).into())
+}
+
+/// `RexxInfo::getRexxExecutable`: a `File` over the running executable's
+/// path with its links resolved, or `.nil` where that cannot be determined.
+fn executable(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let path = executable_path().map(|path| path.into_os_string().into_encoded_bytes());
+    file_object(interp, path)
+}
+
+/// `RexxInfo::getRexxLibrary`: a `File` over the directory the interpreter's
+/// code was loaded from, with a trailing separator. This crate's runtime is
+/// linked into the executable, so that is the executable's own directory.
+fn library_path(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    _receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let directory = executable_path().and_then(|path| {
+        let mut bytes = path.parent()?.as_os_str().as_encoded_bytes().to_vec();
+        bytes.push(std::path::MAIN_SEPARATOR as u8);
+        Some(bytes)
+    });
+    file_object(interp, directory)
+}
+
+/// `SysProcess::getExecutableFullPath`: the running executable, resolved.
+fn executable_path() -> Option<std::path::PathBuf> {
+    std::env::current_exe().and_then(std::fs::canonicalize).ok()
+}
+
+/// `.File~new(path)`, or `.nil` for no path.
+fn file_object(interp: &mut Interp, path: Option<Vec<u8>>) -> Result<Option<ObjRef>, Failure> {
+    let Some(path) = path else {
+        return Ok(Some(ObjRef::NIL));
+    };
+    let Some(class) = interp.rexx_package_class(b"FILE") else {
+        return Err(Loud::environment_symbol(b".FILE", None).into());
+    };
+    let argument = interp.text_built(path);
+    interp.roots.activity_mut().push_temp(argument);
+    let caller = interp.caller();
+    interp
+        .send_message(class, b"NEW", None, &[Some(argument)], caller)?
+        .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))
+        .map(Some)
 }
 
 /// `RexxInfo::getInterpreterDate`: the build date, which is

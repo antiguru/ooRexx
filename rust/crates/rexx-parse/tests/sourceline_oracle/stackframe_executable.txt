@@ -1,0 +1,55 @@
+count 54
+/* StackFrame~executable for a program, an internal call, a routine, a
+   method, an INTERPRET fragment and a COMPILE frame. */
+f = .context~stackFrames[1]
+say f~type f~executable~class (f~executable == .context~executable)
+call r
+say .t~new~m
+signal on syntax name s2
+interpret 'y = 1 + "a"'
+s2:
+c = condition('O')
+do fr over c['STACKFRAMES']
+  say 'S2' fr~type fr~executable~class (fr~executable == .context~executable)
+end
+signal on syntax name s4
+x = .routine~new('bad', 'x = (')
+s4:
+c = condition('O')
+fr = c['STACKFRAMES']~firstItem
+say 'S4' fr~type (fr~executable == .nil) fr~executable~class
+call rr
+say .t~new~m2
+exit
+r:
+  g = .context~stackFrames
+  say g[1]~type g[1]~executable~class g[2]~executable~class (g[1]~executable == g[2]~executable)
+  interpret 'h = .context~stackFrames; say h[1]~type h[1]~executable~class (h[1]~executable == .context~executable)'
+  return
+::routine rr
+  call inner
+  return
+inner:
+  f = .context~stackFrames
+  say 'RR' f[1]~type f[2]~type (f[1]~executable == f[2]~executable) (f[1]~executable == .routines['RR']) f[3]~executable~class
+  return
+::class t
+::method m
+  s = .context~stackFrames
+  say s[1]~type s[1]~executable~class s[2]~executable~class
+  say (s[1]~executable == .context~executable) (s[1]~executable == .t~method('M'))
+  call ir
+  return 'ok'
+ir:
+  s = .context~stackFrames
+  say s[1]~type s[1]~executable~class (s[1]~executable == .context~executable) (.context~executable == .t~method('M'))
+  return
+::method m2
+  signal on syntax name t1
+  x = 1 + 'q'
+t1:
+  c = condition('O')
+  do fr over c['STACKFRAMES']
+    say 'T1' fr~type fr~executable~class (fr~executable == .t~method('M2'))
+  end
+  return 'done'

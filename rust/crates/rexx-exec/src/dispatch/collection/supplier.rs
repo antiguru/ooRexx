@@ -83,6 +83,28 @@ fn supplier_state(
     Ok((items, indexes, position as usize))
 }
 
+/// The pairs `supplier` has left, index then item with an empty slot read as
+/// `.nil`, leaving it at its end -- `createMethodDictionary`'s walk, which
+/// calls `SupplierClass`'s own `available`, `item`, `index` and `next` rather
+/// than sending them.
+pub(in crate::dispatch) fn drain_supplier(
+    interp: &mut Interp,
+    supplier: ObjRef,
+) -> Result<Vec<(ObjRef, ObjRef)>, Failure> {
+    let (items, indexes, position) = supplier_state(interp, supplier)?;
+    let item_slots = array_slots(interp, items)?.to_vec();
+    let index_slots = array_slots(interp, indexes)?;
+    let pairs = (position..item_slots.len())
+        .map(|at| {
+            let index = index_slots.get(at).copied().flatten();
+            let item = item_slots[at];
+            (index.unwrap_or(ObjRef::NIL), item.unwrap_or(ObjRef::NIL))
+        })
+        .collect();
+    store_supplier(interp, supplier, items, indexes, item_slots.len());
+    Ok(pairs)
+}
+
 /// How many pairs the supplier still has, measured from the current position
 /// against its ITEMS array.
 fn supplier_remaining(interp: &mut Interp, receiver: ObjRef) -> Result<usize, Failure> {

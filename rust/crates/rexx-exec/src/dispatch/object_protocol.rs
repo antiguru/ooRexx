@@ -21,8 +21,7 @@ use super::{
     MESSAGE_TARGET, NativeStarted, OBJECTNAME, ObjRef, ObjectMethod, ObjectMethodWrite, Operator,
     Primitive, Raised, Resolution, SourceTaker, Started, Then, UNNAMED_METHOD, class_argument,
     compile_method_source, is_enhanced_instance, method_name_argument, pointer_address,
-    request_array, required_string_argument, required_string_named_argument, scoped_method,
-    unconverted_array_argument,
+    required_string_argument, required_string_named_argument, scoped_method,
 };
 
 /// `RexxObject::initRexx` (`classes/ObjectClass.cpp:2546`-`:2549`): it takes
@@ -618,6 +617,16 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
             return Ok(receiver);
         }
         Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
+        // `StackFrameClass` has no `copy` of its own: measured, oracle rc 0,
+        // a frame's copy is a different object answering the same `~type`,
+        // `~line` and `~context`.
+        Ok(Primitive::StackFrame) => rexx_core::BehaviourId::OBJECT,
+        Ok(Primitive::Method) => {
+            interp.roots.activity_mut().push_temp(receiver);
+            return interp.copy_method_object(receiver).ok_or_else(|| {
+                Loud::unknown_receiver("a method object this crate did not build").into()
+            });
+        }
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
         Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
     };
@@ -1217,7 +1226,7 @@ pub(super) fn native_message_notify(
         return Err(Raised::missing_named_argument(ARGUMENT).into());
     };
     let Some(notification) = interp.rexx_package_class(b"MESSAGENOTIFICATION") else {
-        return Err(Loud::native_method(b"NOTIFY", "Message").into());
+        return Err(Loud::environment_symbol(b".MESSAGENOTIFICATION", None).into());
     };
     let notifiable = interp
         .class_of_value(target)
@@ -1648,28 +1657,38 @@ pub(super) enum ArrayArgument {
     Positional,
 }
 
-/// `arrayArgument`: an argument's message-argument slots.
+/// `arrayArgument`: an argument's message-argument slots, through
+/// `requestArray` where it is not already an array.
+///
+/// A conversion answering an object that is not an array raises what `.nil`
+/// does. The oracle reads that answer through the array layout: measured, a
+/// string answer is 98.913 and a `List` answer kills it
+/// (`corpus/oracle-crashes.txt` entry 34).
 pub(super) fn array_argument(
     interp: &mut Interp,
     value: ObjRef,
     overload: ArrayArgument,
 ) -> Result<Vec<Option<ObjRef>>, Failure> {
-    let value = request_array(interp, value)?;
-    let Some(slots) = interp.array_slots_of(value) else {
-        return Err(unconverted_array_argument(interp, value));
+    let array = if interp.array_slots_of(value).is_some() {
+        Some(value)
+    } else {
+        interp.request_array_value(value)?
     };
-    if interp.is_multi_dimensional_array(value) {
-        return Err(match overload {
-            ArrayArgument::Named(argument) => {
-                Raised::argument_not_single_dimensional(argument).into()
-            }
-            ArrayArgument::Positional => {
-                let found = interp.string_value_text(value);
-                Raised::object_not_single_dimensional(&found).into()
-            }
-        });
+    if let Some(array) = array {
+        interp.roots.activity_mut().push_temp(array);
+        if !interp.is_multi_dimensional_array(array)
+            && let Some(slots) = interp.array_slots_of(array)
+        {
+            return Ok(message_argument_slots(slots));
+        }
     }
-    Ok(message_argument_slots(slots))
+    Err(match overload {
+        ArrayArgument::Named(argument) => Raised::argument_not_single_dimensional(argument).into(),
+        ArrayArgument::Positional => {
+            let found = interp.string_value_text(value);
+            Raised::object_not_single_dimensional(&found).into()
+        }
+    })
 }
 
 /// `Object~request(class)`: the receiver converted to `class`, or `.nil` --

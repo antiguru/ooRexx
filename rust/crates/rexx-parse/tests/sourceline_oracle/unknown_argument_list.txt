@@ -1,0 +1,26 @@
+count 25
+/* An ~UNKNOWN argument list, and the other arrayArgument sites, go through
+   requestArray: a string converts, an object without MAKEARRAY, .nil, a
+   multi-dimensional array and a MAKEARRAY answering .nil do not. */
+say .environment~unknown('ARRAY', 'y')
+say .environment~unknown('ARRAY', .k~new)
+s. = 'abc'
+say s.~unknown('POS', 'b')
+t = .stringtable~new; t['K'] = 'kv'; say t~unknown('K', 'z')
+say 'abc'~sendWith('POS', 'c')
+call try .object~new
+call try .nil
+call try .array~new(2,2)
+call try .kn~new
+exit
+try:
+  signal on syntax
+  say .environment~unknown('ARRAY', arg(1))
+  return
+syntax:
+  say condition('O')['CODE'] condition('O')['MESSAGE']
+  return
+::class k
+::method makearray; return .array~of(1)
+::class kn
+::method makearray; return .nil

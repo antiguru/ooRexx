@@ -518,21 +518,9 @@ pub(super) fn native_define_methods(
     let Some(Some(table)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("methods").into());
     };
-    if !string_keyed_table(interp, table) {
-        return Err(supplier_refusal(interp, table));
-    }
-    // **Asked before the walk**, because the walk cannot see the difference:
-    // a collection whose entries this crate answers per name rather than
-    // storing looks empty to `native_keys`, and a mutation over an empty walk
-    // is a mutation that silently does nothing.
-    if let Some(owner) = interp.unbuilt_collection_owner(table) {
-        return Err(Loud::unreadable_collection(owner).into());
-    }
-    let mut names = interp.native_keys(table);
-    names.sort();
-    let mut entries: Vec<(Box<[u8]>, Option<ObjRef>)> = Vec::with_capacity(names.len());
-    for name in names {
-        let value = interp.native_entry(table, &name).unwrap_or(ObjRef::NIL);
+    let pairs = method_table_pairs(interp, table)?;
+    let mut entries: Vec<(Box<[u8]>, Option<ObjRef>)> = Vec::with_capacity(pairs.len());
+    for (name, value) in pairs {
         if value == ObjRef::NIL {
             entries.push((name, None));
             continue;
@@ -570,16 +558,42 @@ fn string_keyed_table(interp: &mut Interp, value: ObjRef) -> bool {
     hash::owns(interp, value) && hash::string_keyed(interp, value)
 }
 
-/// What a `SUPPLIER` send to `table` would have answered, as the failure
-/// `~defineMethods` reports for a value it cannot walk.
-fn supplier_refusal(interp: &mut Interp, table: ObjRef) -> Failure {
-    match interp.lookup_for_refusal(table, b"SUPPLIER") {
-        Some(scope) => Loud::native_method(b"SUPPLIER", &scope).into(),
-        None => {
-            let target = interp.string_value_text(table);
-            Raised::no_method(&target, b"SUPPLIER").into()
+/// The (name, value) pairs `createMethodDictionary`
+/// (`classes/ClassClass.cpp:1242`) walks `table` for: a string-keyed table's
+/// own entries, sorted, and otherwise the pairs its `SUPPLIER` answers, each
+/// index as its string value, in supplier order.
+fn method_table_pairs(
+    interp: &mut Interp,
+    table: ObjRef,
+) -> Result<Vec<(Box<[u8]>, ObjRef)>, Failure> {
+    if string_keyed_table(interp, table) {
+        // **Asked before the walk**, because the walk cannot see the
+        // difference: a collection whose entries this crate answers per name
+        // rather than storing looks empty to `native_keys`, and a mutation
+        // over an empty walk is a mutation that silently does nothing.
+        if let Some(owner) = interp.unbuilt_collection_owner(table) {
+            return Err(Loud::unreadable_collection(owner).into());
         }
+        let mut names = interp.native_keys(table);
+        names.sort();
+        let mut pairs = Vec::with_capacity(names.len());
+        for name in names {
+            let value = interp.native_entry(table, &name).unwrap_or(ObjRef::NIL);
+            pairs.push((name, value));
+        }
+        return Ok(pairs);
     }
+    let caller = interp.caller();
+    let supplier = interp
+        .send_message(table, b"SUPPLIER", None, &[], caller)?
+        .unwrap_or(ObjRef::NIL);
+    interp.roots.activity_mut().push_temp(supplier);
+    let mut pairs = Vec::new();
+    for (index, item) in super::collection::supplier::drain_supplier(interp, supplier)? {
+        let name = interp.string_value_text(index).into_boxed_slice();
+        pairs.push((name, item));
+    }
+    Ok(pairs)
 }
 
 /// `Class~subclass(id, metaclass, classMethods)`: build a class derived from
@@ -813,20 +827,13 @@ fn enhance_class_methods(
     class: ObjRef,
     enhancing: ObjRef,
 ) -> Result<(), Failure> {
-    if !string_keyed_table(interp, enhancing) {
-        return Err(supplier_refusal(interp, enhancing));
-    }
-    if let Some(owner) = interp.unbuilt_collection_owner(enhancing) {
-        return Err(Loud::unreadable_collection(owner).into());
-    }
-    let mut names = interp.native_keys(enhancing);
-    names.sort();
+    let pairs = method_table_pairs(interp, enhancing)?;
     // One frame around the whole walk, for the reason
     // [`Interp::define_method_table`] has one: each entry allocates the copy
     // `newScope` makes, and the temporary rooting that copy carries until
     // `hold_method_object` roots it as a global has to be released somewhere.
     let frame = interp.roots.activity_mut().push_frame();
-    let installed = install_enhancing_class_methods(interp, class, enhancing, &names);
+    let installed = install_enhancing_class_methods(interp, class, &pairs);
     interp.roots.activity_mut().pop_frame(frame);
     installed
 }
@@ -836,11 +843,10 @@ fn enhance_class_methods(
 fn install_enhancing_class_methods(
     interp: &mut Interp,
     class: ObjRef,
-    enhancing: ObjRef,
-    names: &[Box<[u8]>],
+    pairs: &[(Box<[u8]>, ObjRef)],
 ) -> Result<(), Failure> {
-    for name in names {
-        let value = interp.native_entry(enhancing, name).unwrap_or(ObjRef::NIL);
+    for (name, value) in pairs {
+        let value = *value;
         let value = if interp.receiver_kind(value) == Ok(Primitive::Method) {
             value
         } else {
@@ -1118,17 +1124,10 @@ pub(super) fn native_enhanced(
     let Some(table) = args[0] else {
         return Err(Raised::missing_named_argument("methods").into());
     };
-    if !string_keyed_table(interp, table) {
-        return Err(supplier_refusal(interp, table));
-    }
-    if let Some(owner) = interp.unbuilt_collection_owner(table) {
-        return Err(Loud::unreadable_collection(owner).into());
-    }
-    let mut names = interp.native_keys(table);
-    names.sort();
+    let pairs = method_table_pairs(interp, table)?;
     let object = new_instance(interp, class)?;
     let frame = interp.roots.activity_mut().push_frame();
-    let installed = install_enhancing_object_methods(interp, object, table, &names);
+    let installed = install_enhancing_object_methods(interp, object, &pairs);
     interp.roots.activity_mut().pop_frame(frame);
     installed?;
     // `enhanced_object->behaviour->setEnhanced()` (`:1478`), which
@@ -1174,11 +1173,10 @@ pub(super) fn is_enhanced_instance(interp: &Interp, value: ObjRef) -> bool {
 fn install_enhancing_object_methods(
     interp: &mut Interp,
     object: ObjRef,
-    table: ObjRef,
-    names: &[Box<[u8]>],
+    pairs: &[(Box<[u8]>, ObjRef)],
 ) -> Result<(), Failure> {
-    for name in names {
-        let value = interp.native_entry(table, name).unwrap_or(ObjRef::NIL);
+    for (name, value) in pairs {
+        let value = *value;
         let source = if interp.receiver_kind(value) == Ok(Primitive::Method) {
             value
         } else {

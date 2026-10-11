@@ -352,24 +352,69 @@ impl Interp {
     /// method object with `scope` filled in when it had none, and a copy
     /// carrying `scope` when it already had one.
     fn method_new_scope(&mut self, method: ObjRef, scope: ObjRef) -> Option<ObjRef> {
-        let mut copy = match self.heap.get(method).map(|held| &held.body) {
+        match self.heap.get(method).map(|held| &held.body) {
             Some(Body::Native(native)) if native.scope().is_none() => {
                 let object = self.heap.get_mut(method).expect("read just above");
                 let Body::Native(native) = &mut object.body else {
                     unreachable!("matched as Body::Native just above")
                 };
                 native.set_scope(scope);
-                return Some(method);
+                Some(method)
             }
+            Some(Body::Native(_)) => self.clone_executable(method, Some(scope)),
+            _ => None,
+        }
+    }
+
+    /// `Method~copy`: `BaseExecutable::copy`
+    /// (`execution/BaseExecutable.cpp:58`), a new object reporting on and
+    /// running what `original` does, with a copy of its annotations, under a
+    /// method identity of its own, so a flag written on one leaves the other
+    /// alone. `None` for an object this crate did not build.
+    pub(crate) fn copy_method_object(&mut self, original: ObjRef) -> Option<ObjRef> {
+        let object = self.clone_executable(original, None)?;
+        if let Some(template) = self
+            .executable_sources
+            .get(&object)
+            .and_then(|record| record.installed)
+        {
+            let copy = self.copy_method_identity(template);
+            if let Some(record) = self.executable_sources.get_mut(&object) {
+                record.installed = Some(copy);
+            }
+            self.executable_objects.insert(copy, object);
+        }
+        let annotations = match self.heap.get(object).map(|held| &held.body) {
+            Some(Body::Native(native)) => native.annotations(),
+            _ => None,
+        };
+        if let Some(table) = annotations {
+            let body = self.heap.get(table)?.body.clone();
+            let fresh = self.alloc_with(BehaviourId::OBJECT, body);
+            if let Some(Body::Native(native)) = self.heap.get_mut(object).map(|held| &mut held.body)
+            {
+                native.set_annotations(fresh);
+            }
+        }
+        Some(object)
+    }
+
+    /// A new object over a clone of `original`'s native body, carrying
+    /// `scope` where one is given, and reporting on and flagged as
+    /// `original` is.
+    fn clone_executable(&mut self, original: ObjRef, scope: Option<ObjRef>) -> Option<ObjRef> {
+        let mut copy = match self.heap.get(original).map(|held| &held.body) {
             Some(Body::Native(native)) => native.clone(),
             _ => return None,
         };
-        copy.set_scope(scope);
+        if let Some(scope) = scope {
+            copy.set_scope(scope);
+        }
         // The clone is out of the collector's sight until `alloc_with`
-        // returns, and `alloc_with` can collect. The only arena handle it
-        // carries is its annotation table, which
-        // [`Interp::annotation_table`] roots as a global for the whole run,
-        // so nothing the clone reaches can be swept while it is detached.
+        // returns, and `alloc_with` can collect. Every arena handle it
+        // carries is one `original` holds too, and the caller keeps
+        // `original` live, so nothing the clone reaches can be swept while
+        // it is detached.
         let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(copy));
         self.roots.activity_mut().push_temp(object);
         // The copy reports on the same directive the original did, and
@@ -380,10 +425,10 @@ impl Interp {
         // answers `M`'s own body lines, and the same copy taken after
         // `setPrivate` and `setUnguarded` answers `1 0` for `isPrivate` and
         // `isGuarded` where the directive alone answers `0 1`.
-        if let Some(source) = self.executable_sources.get(&method).copied() {
+        if let Some(source) = self.executable_sources.get(&original).copied() {
             self.executable_sources.insert(object, source);
         }
-        if let Some(writes) = self.method_flag_writes.get(&method).copied() {
+        if let Some(writes) = self.method_flag_writes.get(&original).copied() {
             self.method_flag_writes.insert(object, writes);
         }
         Some(object)

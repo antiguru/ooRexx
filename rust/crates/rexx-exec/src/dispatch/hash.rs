@@ -17,8 +17,8 @@ use rexx_core::Owner;
 use super::collection;
 use super::required_string_named_argument;
 use super::{
-    Arity, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod, ObjRef,
-    Raised, array_slots, new_instance, required_string_argument, unconverted_array_argument,
+    Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod,
+    ObjRef, Raised, array_argument, array_slots, new_instance, required_string_argument,
 };
 
 // `Relation`'s and `Bag`'s own primitive methods, chained into
@@ -1861,9 +1861,7 @@ pub(super) fn native_hash_unknown(
     let Some(Some(arguments)) = args.get(1).copied() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let Some(forwarded) = interp.array_slots_of(arguments) else {
-        return Err(unconverted_array_argument(interp, arguments));
-    };
+    let forwarded = array_argument(interp, arguments, ArrayArgument::Positional)?;
     // [`native_hash_at`]'s split again: a store or `NativeObject`'s map.
     // Measured, a `.Directory` given
     // `setEntry('alpha', 42)` answers `d~alpha` as `42`, and `d~beta = 7`

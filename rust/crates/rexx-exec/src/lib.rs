@@ -545,8 +545,7 @@ impl Loud {
     /// refusing elsewhere: scout A's `b11_ctx_exec_*` (a routine's
     /// `.context~executable` by every route a routine is made) and weak
     /// reference sends (`b_weakref_*`, `b2_run_hasmethod_on_weakref`), and a
-    /// `Method` copy passed to `define`, `setMethod` and `run`, which refuses
-    /// at `COPY` first.
+    /// `Method` copy passed to `define`, `setMethod` and `run`.
     #[cold]
     fn unknown_receiver(kind: &str) -> Loud {
         Loud {

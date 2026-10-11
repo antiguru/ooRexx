@@ -3275,6 +3275,7 @@ impl Interp {
                     .map(|id| self.program_display_name(id).to_vec())
                     .unwrap_or_default(),
             };
+            // `CompileActivationFrame::executable` is `OREF_NULL`.
             if let Ok(frame) = crate::dispatch::context::build_ended_frame(
                 self,
                 b"COMPILE",
@@ -3282,6 +3283,7 @@ impl Interp {
                 line,
                 &[],
                 &trace_line,
+                Some(ObjRef::NIL),
             ) {
                 self.activity.failure_frame = Some(frame);
             }
@@ -3376,9 +3378,9 @@ impl Interp {
         }) else {
             return;
         };
-        let Ok(frame) =
-            crate::dispatch::context::build_ended_frame(self, kind, name, line, arguments, &text)
-        else {
+        let Ok(frame) = crate::dispatch::context::build_ended_frame(
+            self, kind, name, line, arguments, &text, None,
+        ) else {
             return;
         };
         self.activity.failure_frame = Some(frame);

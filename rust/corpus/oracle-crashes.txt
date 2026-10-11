@@ -1275,3 +1275,30 @@ SIGSEGV, rc 139. `expose v (v)` inside a method and `drop (v)` crash the same wa
 layout. This was measured 2026-10-10 by Phase 6.1's Task 11a review and fix round 1. The probes are
 `b08_drop`, `f1c/c11_expose` and `f1c/c05_procexpose`, and were run 2 times on the oracle. This crate
 refuses each with the R11 loud refusal (Deviation 30). No upstream ticket.
+
+## 34. An `arrayArgument` whose `MAKEARRAY` answers a List
+
+    say .environment~unknown('ARRAY', .k~new)
+    ::class k
+    ::method makearray; return .list~of(1,2)
+
+SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr.
+`arrayArgument` (`runtime/MethodArguments.hpp:675`) checks the `requestArray` answer only against
+`TheNilObject` and then reads it through the array layout. The same program with a `MAKEARRAY`
+answering a string raises 98.913 on the oracle. Measured 2026-10-12 by Phase 9a Task 5 (probe
+`ua11`). This crate raises 98.913 for any answer that is not a single-dimensional array. No
+upstream ticket.
+
+## 35. `~defineMethods` over an object whose `SUPPLIER` answers a string
+
+    s = .s~new
+    .k~defineMethods(s); say .k~new~m
+    ::class k
+    ::class s
+    ::method supplier; return 'x'
+
+SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr.
+`RexxClass::createMethodDictionary` (`classes/ClassClass.cpp:1250`-`:1251`) casts the `SUPPLIER`
+answer to `SupplierClass *` and calls its methods directly. Measured 2026-10-12 by Phase 9a Task 5
+(probe `dm7`). This crate refuses with `Loud::receiver_class` (`a message send to a value that is
+not a supplier`). No upstream ticket.

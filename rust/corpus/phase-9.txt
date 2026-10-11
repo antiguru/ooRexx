@@ -4,3 +4,10 @@
 #
 # One path per line, relative to this directory (rust/corpus/). Lines starting
 # with # are comments; blank lines are ignored.
+
+# 9a Task 5: the native_method batch.
+lang/rexxinfo_executable_file.rex
+lang/stackframe_executable.rex
+lang/object_copy_method.rex
+lang/unknown_argument_list.rex
+lang/define_methods_supplier.rex
