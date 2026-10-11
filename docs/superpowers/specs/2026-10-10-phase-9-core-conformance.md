@@ -272,9 +272,9 @@ built from that commit. Their difference is recorded and counted inside the runn
 commit removes `rexx-run`. The running total stays against the base-commit `rexx-run` pin, plus
 that recorded difference.
 
-The budget is a running total of at most +0.5% Ir on every program. It is measured at each
-sub-phase close on all programs, because in 6.1 a subset missed `parse` at +1.78%. The stopping
-rule is 6.1's: three rounds per stage, then the figures go to Moritz. Wall clock is reported, not
+The budget is at most +0.5% Ir on every program against the pin. It is measured once, at the
+Phase 9 close, on all programs (Moritz, 2026-10-11: drift is accepted as a risk). A regression found
+there gets fix rounds under 6.1's stopping rule: three rounds, then the figures go to Moritz. Wall clock is reported, not
 gated.
 
 ## 9. Sub-phases
@@ -286,10 +286,22 @@ closes the phase.
 
 | Sub-phase | Delivers | Its gate shows |
 |---|---|---|
-| 9a Instrument and refusals | Section 7's 9a edits; the perf pin; `tests/suite.rs`, `phase-9-exclusions.txt`, `suite-licences.txt` and `suite-not-run.txt` with their checks (section 2); the D3 classification, relabels and structural test; the four `STREAM` failures explained; the 9d set file; the Phase 9 refusals of section 3; the `Package` hang. | The suite runs whole, and its table is recorded. Every section 3 refusal's witness passes. The exclusion-file test, the D3 test and the denominator check pass. `Package` ends. Perf is within budget. G1-G9 pass. |
-| 9b RexxUtil | Section 4. | The groups section 4 names pass under the suite harness, apart from rows the exclusion test accepts. No `"Phase 10"` site in RexxUtil lacks a D3 reason. Perf and G1-G9 as for 9a. |
-| 9c Binaries | D6's inserts and their scripts; `rexx` and `rexxc` (section 5); the restore surface (D5); the `rexx-run` switch and its A/B; section 7's 9c edit. | Criterion 4. Perf (with the switch's A/B recorded) and G1-G9 as for 9a. |
+| 9a Instrument and refusals | Section 7's 9a edits; the perf pin; `tests/suite.rs`, `phase-9-exclusions.txt`, `suite-licences.txt` and `suite-not-run.txt` with their checks (section 2); the D3 classification, relabels and structural test; the four `STREAM` failures explained; the 9d set file; the Phase 9 refusals of section 3; the `Package` hang. | The suite runs whole, and its table is recorded. Every section 3 refusal's witness passes. The exclusion-file test, the D3 test and the denominator check pass. `Package` ends. `cargo test --workspace --release -j 4` passes. |
+| 9b RexxUtil | Section 4. | The groups section 4 names pass under the suite harness, apart from rows the exclusion test accepts. No `"Phase 10"` site in RexxUtil lacks a D3 reason. The workspace test as for 9a. |
+| 9c Binaries | D6's inserts and their scripts; `rexx` and `rexxc` (section 5); the restore surface (D5); the `rexx-run` switch and its A/B; section 7's 9c edit. | Criterion 4. The switch's A/B is recorded. The workspace test as for 9a. |
 | 9d Divergences and close | Section 3's 9d set. The exclusion files reduced to Phase 10, Deviation, environment and flaky rows. Section 7's 9d edits. Section 10. | Section 10. |
+
+**Checks** (Moritz, 2026-10-11). Three levels:
+
+* **Per task**, at most 5 minutes in all, as each brief states: `cargo fmt`, `clippy -D warnings`
+  on the crates the task touched, the test binaries covering what changed, and the ooTest groups the
+  task touches. A task moves on once its review is approved and these are green. Much of the work is
+  mechanical: a new RexxUtil routine or a missing native method is one function and one witness, and
+  such additions are batched several to a task.
+* **Sub-phase close:** what its gate cell names, which includes `cargo test --workspace --release
+  -j 4`.
+* **Phase 9 close:** G1-G9, the TSan run, the whole-suite gate of criterion 1 and `callgrind.sh` on
+  every program (section 8).
 
 ## 10. Exit criteria
 

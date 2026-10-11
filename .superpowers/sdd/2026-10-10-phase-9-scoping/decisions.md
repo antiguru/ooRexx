@@ -40,3 +40,7 @@ Controller rulings on the spec review (`spec-review.md`), 2026-10-11:
   on `rexx` by zero-change A/B -- finding 10 -- wrong costs restoring a binary name.
 * **Row 9.1 measures wall clock**, with cycles as the stand-in where wall clock is too noisy
   (Moritz, 2026-10-11).
+* **Checks** (Moritz, 2026-10-11): a per-task check of at most 5 minutes (fmt, clippy on touched
+  crates, the touched test binaries and ooTest groups); the workspace test at sub-phase close; G1-G9,
+  TSan, the whole-suite gate and all-program callgrind once at the Phase 9 close. Perf drift between
+  closes is accepted as a risk. Mechanical additions are batched several to a task.
