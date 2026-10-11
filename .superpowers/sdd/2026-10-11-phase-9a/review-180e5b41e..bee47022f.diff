@@ -1,0 +1,637 @@
+# Review package: 180e5b41e..HEAD
+
+## Commits
+bee47022f Phase 9a Task 1: byte-exact group copies, the phase-9 corpus list, the perf pin
+
+## Files changed
+ docs/superpowers/plans/phase-9a-gate.md            |  32 +++++
+ rust/corpus/phase-9.txt                            |   6 +
+ rust/crates/rexx-exec/tests/collect_stress.rs      |   1 +
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   | 145 ++++++++++++++++-----
+ rust/crates/rexx-exec/tests/corpus.rs              |   1 +
+ rust/crates/rexx-exec/tests/coverage.rs            |   1 +
+ rust/crates/rexx-exec/tests/ir_recorded.rs         |   1 +
+ .../crates/rexx-exec/tests/support/group_runner.rs | 111 +++++++++++-----
+ rust/crates/rexx-exec/tests/trace_oracle.rs        |   1 +
+ 9 files changed, 240 insertions(+), 59 deletions(-)
+
+## Diff
+diff --git a/docs/superpowers/plans/phase-9a-gate.md b/docs/superpowers/plans/phase-9a-gate.md
+new file mode 100644
+index 000000000..c83a70a94
+--- /dev/null
++++ b/docs/superpowers/plans/phase-9a-gate.md
+@@ -0,0 +1,32 @@
++# Phase 9a gate: the ooTest suite instrument
++
++This record holds what Phase 9a measures and pins. Sections are added as the plan's tasks land.
++
++## Perf pin
++
++Phase 9's close measures the interpreter against the binary of the last commit before Phase 9
++(`a98238be5`, "Phase 6.1: close the oracle-judged seeded gate item as not wanted"). 9a builds the
++pin once and measures nothing against it. The binary lives outside the tree at
++`/tmp/claude-1000/p9/pin/rexx-run`; if it is lost, rebuild it from the same commit with the
++commands below and compare the sha256.
++
++* sha256: `c97bf40a561cc46a4fa41ac64e7c8a16d42483f3a1869774a1c5e03610e49667`
++* size: 58,283,928 bytes
++* built 2026-10-11, release profile of `rust/Cargo.toml` at that commit (`debug = true` and its `lto`
++  and `codegen-units` settings), `Compiling rexx-exec` present in the build output.
++
++The whole commit is archived, not only `rust/`, because `rexx-inventory`'s build reads files outside
++`rust/`. Run from the worktree:
++
++```sh
++mkdir -p /tmp/claude-1000/p9/pin/src
++git archive a98238be5 | tar -x -C /tmp/claude-1000/p9/pin/src
++find /tmp/claude-1000/p9/pin/src -exec touch {} +
++cd /tmp/claude-1000/p9/pin/src/rust
++CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/claude-1000/p9/pin/target \
++    memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run
++cp /tmp/claude-1000/p9/pin/target/release/rexx-run /tmp/claude-1000/p9/pin/rexx-run
++sha256sum /tmp/claude-1000/p9/pin/rexx-run
++```
++
++The source and target directories were deleted after the copy.
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+new file mode 100644
+index 000000000..f7eccaf82
+--- /dev/null
++++ b/rust/corpus/phase-9.txt
+@@ -0,0 +1,6 @@
++# Phase 9 corpus subset -- witnesses for the ooTest suite gate's findings.
++# The union with the earlier phase-*.txt files is what the harnesses read, not
++# this file alone.
++#
++# One path per line, relative to this directory (rust/corpus/). Lines starting
++# with # are comments; blank lines are ignored.
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index f30303673..20600f11c 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -56,20 +56,21 @@ const SUBSET_FILES: &[&str] = &[
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
+     "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
++    "phase-9.txt",
+ ];
+ 
+ /// The directory one corpus program runs in: its own, under the target
+ /// directory, named by the program's corpus path with `/` spelled `__`. That
+ /// spelling collapses the path to a single component, so no entry can name a
+ /// directory outside this root.
+ fn run_directory(rel_path: &str) -> PathBuf {
+     Path::new(env!("CARGO_TARGET_TMPDIR"))
+         .join("collect-stress-run")
+         .join(rel_path.replace('/', "__"))
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index c5aed3afd..bfe933d27 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -520,20 +520,133 @@ fn the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one() {
+     expect("TEST_ASSIGNED", &["Alarm"]);
+     expect("TEST_MESSAGE", &["Alarm", "~start"]);
+     expect("TEST_CLASS", &["Alarm", "GUARD"]);
+ }
+ 
+ #[path = "support/group_runner.rs"]
+ mod group_runner;
+ mod support;
+ mod watchdog;
+ 
++/// The group runner's copies keep every byte they do not rewrite: a group
++/// file or `ooTest.frm` need not be UTF-8.
++mod byte_exact_copies {
++    use std::collections::BTreeSet;
++    use std::fs;
++
++    use super::group_runner::{mark_starts, skip, without_rxfuncquery, worktree};
++
++    /// A scratch directory of this test's own under the target directory.
++    fn scratch(name: &str) -> std::path::PathBuf {
++        let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("byte-exact-copies");
++        fs::create_dir_all(&dir).expect("the scratch directory");
++        dir.join(name)
++    }
++
++    /// The lines of `bytes`, split on `\n` as the runner splits them.
++    fn lines(bytes: &[u8]) -> Vec<&[u8]> {
++        bytes.split(|&byte| byte == b'\n').collect()
++    }
++
++    /// `skip` over a copy of `C2X.testGroup`, which holds a literal `0xAA`,
++    /// changes the renamed method's line and no other byte.
++    #[test]
++    fn skip_changes_only_the_renamed_methods_line() {
++        let original = fs::read(worktree().join("ootest/ooRexx/base/bif/C2X.testGroup"))
++            .expect("C2X.testGroup");
++        assert!(
++            std::str::from_utf8(&original).is_err(),
++            "C2X.testGroup is expected to hold a byte that is not UTF-8"
++        );
++        let copy = scratch("C2X.testGroup");
++        fs::write(&copy, &original).expect("the copy");
++        let before = lines(&original);
++        let renamed = before
++            .iter()
++            .position(|line| {
++                line.trim_ascii_start()
++                    .to_ascii_lowercase()
++                    .starts_with(b"::method")
++            })
++            .expect("a test method");
++        let name =
++            String::from_utf8_lossy(before[renamed].trim_ascii_start()[8..].trim_ascii_start())
++                .split_whitespace()
++                .next()
++                .expect("a method name")
++                .trim_matches(['\'', '"'])
++                .to_string();
++        let member = format!("C2X.{}", name.to_ascii_uppercase());
++        skip(&copy, "C2X", &BTreeSet::from([member]));
++        let written = fs::read(&copy).expect("the rewritten copy");
++        let after = lines(&written);
++        assert_eq!(before.len(), after.len(), "the line count");
++        for (at, (was, now)) in before.iter().zip(&after).enumerate() {
++            if at == renamed {
++                let marker = b"SKIPPED_";
++                let inserted = now
++                    .windows(marker.len())
++                    .position(|window| window == marker)
++                    .expect("the renamed line carries the marker");
++                let restored = [&now[..inserted], &now[inserted + marker.len()..]].concat();
++                assert_eq!(restored.as_slice(), *was, "the renamed line");
++            } else {
++                assert_eq!(was, now, "line {} changed", at + 1);
++            }
++        }
++        fs::remove_file(&copy).expect("remove the copy");
++    }
++
++    /// `without_rxfuncquery` over a copy of `ooTest.frm` with a `0xFF` in a
++    /// comment does not panic and keeps the byte.
++    #[test]
++    fn without_rxfuncquery_keeps_a_byte_that_is_not_utf_8() {
++        let mut text = fs::read(worktree().join("ootest/ooTest.frm")).expect("ooTest.frm");
++        let at = text
++            .windows(2)
++            .position(|pair| pair == b"--")
++            .expect("a comment");
++        text.insert(at + 2, 0xFF);
++        let copy = scratch("ooTest.frm");
++        fs::write(&copy, &text).expect("the copy");
++        without_rxfuncquery(&copy);
++        let written = fs::read(&copy).expect("the rewritten copy");
++        assert!(written.contains(&0xFF), "the 0xFF byte was lost");
++        assert!(
++            !written.windows(12).any(|window| window == b"rxfuncquery("),
++            "an rxfuncquery test is left"
++        );
++        fs::remove_file(&copy).expect("remove the copy");
++    }
++
++    /// `mark_starts` keeps a byte that is not UTF-8 elsewhere in the file.
++    #[test]
++    fn mark_starts_keeps_a_byte_that_is_not_utf_8() {
++        let at = scratch("mark-starts");
++        fs::create_dir_all(at.join("framework")).expect("the framework directory");
++        let mut text =
++            fs::read(worktree().join("ootest/framework/OOREXXUNIT.CLS")).expect("OOREXXUNIT.CLS");
++        text.insert(0, 0xFF);
++        fs::write(at.join("framework/OOREXXUNIT.CLS"), &text).expect("the copy");
++        mark_starts(&at);
++        let written = fs::read(at.join("framework/OOREXXUNIT.CLS")).expect("the rewritten copy");
++        assert_eq!(written[0], 0xFF, "the leading 0xFF was lost");
++        assert!(
++            written
++                .windows(20)
++                .any(|window| window == b".error~say('started'"),
++            "the start line is not marked"
++        );
++        fs::remove_dir_all(&at).expect("remove the copy");
++    }
++}
++
+ /// One test of criterion 1's derived list, run in process, for the
+ /// instruments that read an `Outcome` field a feature adds.
+ #[cfg(any(feature = "pinning", feature = "sharing"))]
+ mod derived_runs {
+     use std::fs;
+     use std::path::Path;
+ 
+     use rexx_exec::{Invocation, Outcome, SwitchMode};
+ 
+     use super::group_runner::fresh_copy;
+@@ -2461,22 +2574,22 @@ mod group_runs {
+     /// oracle and on this crate in both modes, whole and with only its tests
+     /// of the derived list, the tests reaching rxapi renamed out of both.
+     /// Gate-only.
+     mod whole_groups {
+         use std::collections::BTreeSet;
+         use std::path::{Path, PathBuf};
+         use std::time::{Duration, Instant};
+ 
+         use super::super::group_runner::{
+             GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
+-            group_file, masked, outcome, reaching_rxapi, read_lossy, rows_in_parallel,
+-            run_crate_within, run_oracle_within, skip,
++            group_file, mark_starts, masked, outcome, reaching_rxapi, read_lossy, rows_in_parallel,
++            run_crate_within, run_oracle_within, skip, started,
+         };
+         use super::super::support::oracle;
+         use super::{WALL_CLOCK, inverted};
+ 
+         /// Where the table is written when set.
+         const TABLE_ENV: &str = "REXX_WHOLE_GROUPS_TABLE";
+ 
+         /// A directory each run's descriptors are written to when set.
+         const DUMP_ENV: &str = "REXX_WHOLE_GROUPS_DUMP";
+ 
+@@ -2930,48 +3043,20 @@ mod group_runs {
+             ),
+             (
+                 "doc/rexxref/chapter5/Section1.testGroup",
+                 "whole",
+                 "every",
+                 "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_OBJECT_OBJECTNAMEEQUALS, failing []",
+                 "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
+             ),
+         ];
+ 
+-        /// The line `TestCase~execute` starts each test with, in the copy's
+-        /// `OOREXXUNIT.CLS`, and what it becomes: the same line, which also
+-        /// writes `started NAME` to stderr, so line numbers are unchanged.
+-        const START_LINE: &str = "  aTestResult~startTest(self)       -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
+-        const START_MARKED: &str = "  aTestResult~startTest(self); .error~say('started' fName) -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
+-
+-        fn mark_starts(at: &Path) {
+-            let file = at.join("framework/OOREXXUNIT.CLS");
+-            let text = read_lossy(&file);
+-            assert_eq!(
+-                text.matches(START_LINE).count(),
+-                1,
+-                "one test start in {}",
+-                file.display()
+-            );
+-            std::fs::write(&file, text.replacen(START_LINE, START_MARKED, 1))
+-                .expect("cannot rewrite the copied OOREXXUNIT.CLS");
+-        }
+-
+-        /// The tests `run` started, in order.
+-        fn started(run: &Run) -> Vec<String> {
+-            String::from_utf8_lossy(&run.stderr)
+-                .lines()
+-                .filter_map(|line| line.strip_prefix("started "))
+-                .map(str::to_ascii_uppercase)
+-                .collect()
+-        }
+-
+         /// The tests a run's `-V 2` detail names as failing or in error, in
+         /// order.
+         fn failing(run: &Run) -> Vec<String> {
+             let text = String::from_utf8_lossy(&run.stdout);
+             let mut names = Vec::new();
+             let mut detail = false;
+             for line in text.lines() {
+                 if line.starts_with("[failure] ") || line.starts_with("[error] ") {
+                     detail = true;
+                 } else if let Some(name) =
+diff --git a/rust/crates/rexx-exec/tests/corpus.rs b/rust/crates/rexx-exec/tests/corpus.rs
+index a42f37895..b852278e9 100644
+--- a/rust/crates/rexx-exec/tests/corpus.rs
++++ b/rust/crates/rexx-exec/tests/corpus.rs
+@@ -576,20 +576,21 @@ const SUBSET_FILES: &[&str] = &[
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
+     "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
++    "phase-9.txt",
+ ];
+ 
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+     let entries =
+         fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+     let mut names: Vec<String> = entries
+         .flatten()
+         .filter_map(|entry| entry.file_name().into_string().ok())
+diff --git a/rust/crates/rexx-exec/tests/coverage.rs b/rust/crates/rexx-exec/tests/coverage.rs
+index 3d3ec2410..2dd50b7f2 100644
+--- a/rust/crates/rexx-exec/tests/coverage.rs
++++ b/rust/crates/rexx-exec/tests/coverage.rs
+@@ -499,20 +499,21 @@ const SUBSET_FILES: &[&str] = &[
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
+     "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
++    "phase-9.txt",
+ ];
+ 
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = corpus_dir();
+     let entries =
+         fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+     let mut names: Vec<String> = entries
+         .flatten()
+         .filter_map(|entry| entry.file_name().into_string().ok())
+diff --git a/rust/crates/rexx-exec/tests/ir_recorded.rs b/rust/crates/rexx-exec/tests/ir_recorded.rs
+index a7123f8cc..a65d0e818 100644
+--- a/rust/crates/rexx-exec/tests/ir_recorded.rs
++++ b/rust/crates/rexx-exec/tests/ir_recorded.rs
+@@ -820,20 +820,21 @@ const SUBSET_FILES: &[&str] = &[
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
+     "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
++    "phase-9.txt",
+ ];
+ 
+ fn corpus_dir() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")
+ }
+ 
+ fn ootest_dir(suite: &str) -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR"))
+         .join("../../../ootest/ooRexx/base")
+         .join(suite)
+diff --git a/rust/crates/rexx-exec/tests/support/group_runner.rs b/rust/crates/rexx-exec/tests/support/group_runner.rs
+index af8742eec..9b9de9db7 100644
+--- a/rust/crates/rexx-exec/tests/support/group_runner.rs
++++ b/rust/crates/rexx-exec/tests/support/group_runner.rs
+@@ -124,23 +124,31 @@ pub struct TestResult {
+ 
+ pub fn worktree() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+ }
+ 
+ /// The directory of the ooTest sources the groups are under.
+ fn groups_root() -> PathBuf {
+     worktree().join("ootest/ooRexx")
+ }
+ 
++/// The bytes of `path`. A copy that is written back is read with this: a
++/// group file or framework file may hold bytes that are not UTF-8 (a literal
++/// `0xAA` in `C2X.testGroup`), and the copy must keep them.
++pub fn read_bytes(path: &Path) -> Vec<u8> {
++    fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
++}
++
++/// `path` as text, invalid UTF-8 replaced: for reading only, never for a
++/// file that is written back.
+ pub fn read_lossy(path: &Path) -> String {
+-    let bytes = fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+-    String::from_utf8_lossy(&bytes).into_owned()
++    String::from_utf8_lossy(&read_bytes(path)).into_owned()
+ }
+ 
+ /// Each `::METHOD` and `::ROUTINE` of `text`, lower-cased, with its body.
+ pub fn directive_bodies(text: &str) -> Vec<(String, String)> {
+     let mut bodies: Vec<(String, String)> = Vec::new();
+     let mut current: Option<(String, String)> = None;
+     for line in text.lines() {
+         let trimmed = line.trim_start();
+         if let Some(directive) = trimmed.strip_prefix("::") {
+             bodies.extend(current.take());
+@@ -282,47 +290,55 @@ pub fn fresh_copy(run: &Path, dir: &str) {
+             .unwrap_or_else(|e| panic!("cannot copy {file}: {e}"));
+     }
+     without_rxfuncquery(&run.join("ooTest.frm"));
+     fs::copy(
+         worktree().join("extensions/rxregexp/rxregexp.cls"),
+         run.join("rxregexp.cls"),
+     )
+     .expect("cannot copy rxregexp.cls");
+ }
+ 
++/// Whether `haystack` holds `needle`.
++fn contains(haystack: &[u8], needle: &[u8]) -> bool {
++    haystack
++        .windows(needle.len())
++        .any(|window| window == needle)
++}
++
+ /// Removes each `rxfuncquery` test from the copied `ooTest.frm`, with the
+-/// comment above it and the assignment it guards.
+-fn without_rxfuncquery(frm: &Path) {
+-    let text = fs::read_to_string(frm).expect("the copied ooTest.frm");
+-    let lines: Vec<&str> = text.split('\n').collect();
++/// comment above it and the assignment it guards. The file is read and
++/// written as bytes, so a byte that is not UTF-8 survives.
++pub fn without_rxfuncquery(frm: &Path) {
++    let text = read_bytes(frm);
++    let lines: Vec<&[u8]> = text.split(|&byte| byte == b'\n').collect();
+     let hits: Vec<usize> = (0..lines.len())
+-        .filter(|&at| lines[at].contains("rxfuncquery("))
++        .filter(|&at| contains(lines[at], b"rxfuncquery("))
+         .collect();
+     assert!(!hits.is_empty(), "ooTest.frm has no rxfuncquery to remove");
+     let mut dropped = BTreeSet::new();
+     for at in hits {
+         assert!(
+             at > 0
+-                && lines[at - 1].trim_start().starts_with("--")
++                && lines[at - 1].trim_ascii_start().starts_with(b"--")
+                 && lines
+                     .get(at + 1)
+-                    .is_some_and(|next| next.trim_start().starts_with("versions[")),
++                    .is_some_and(|next| next.trim_ascii_start().starts_with(b"versions[")),
+             "ooTest.frm line {} is not a commented rxfuncquery test guarding one assignment",
+             at + 1
+         );
+         dropped.extend([at - 1, at, at + 1]);
+     }
+-    let kept: Vec<&str> = (0..lines.len())
++    let kept: Vec<&[u8]> = (0..lines.len())
+         .filter(|at| !dropped.contains(at))
+         .map(|at| lines[at])
+         .collect();
+-    fs::write(frm, kept.join("\n")).expect("cannot rewrite the copied ooTest.frm");
++    fs::write(frm, kept.join(&b'\n')).expect("cannot rewrite the copied ooTest.frm");
+ }
+ 
+ /// `stdout` with what differs between any two runs of one side masked: each
+ /// timing line's duration and each detail header's timestamp.
+ pub fn masked(stdout: &[u8]) -> Vec<u8> {
+     let text = String::from_utf8_lossy(stdout);
+     let lines: Vec<&str> = text
+         .split('\n')
+         .map(|line| {
+             TIMINGS
+@@ -657,68 +673,105 @@ fn interpreter_bin(run: &Path) -> PathBuf {
+         Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+             panic!("cannot link {}: {e}", link.display())
+         }
+         _ => {}
+     }
+     bin
+ }
+ 
+ /// Renames each test of `group` that `left_out` names in the copy's group
+ /// file, so the framework no longer counts it a test; each must be found.
++/// The file is matched and rewritten as bytes: only the renamed methods'
++/// lines change, whatever bytes the rest holds.
+ pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTreeSet<S>) {
+-    let text = fs::read(group_file).expect("the copied group file");
+-    let text = String::from_utf8_lossy(&text).into_owned();
++    let text = read_bytes(group_file);
+     let mut skipped = BTreeSet::new();
+-    let lines: Vec<String> = text
+-        .split('\n')
++    let lines: Vec<Vec<u8>> = text
++        .split(|&byte| byte == b'\n')
+         .map(|line| {
+-            let trimmed = line.trim_start();
++            let trimmed = line.trim_ascii_start();
+             let Some(rest) = trimmed
+                 .get(..8)
+-                .filter(|head| head.eq_ignore_ascii_case("::method"))
++                .filter(|head| head.eq_ignore_ascii_case(b"::method"))
+                 .map(|_| &trimmed[8..])
+             else {
+-                return line.to_string();
++                return line.to_vec();
+             };
+-            let rest = rest.trim_start();
+-            let quoted = rest.starts_with(['\'', '"']);
++            let rest = rest.trim_ascii_start();
++            let quoted = rest.starts_with(b"'") || rest.starts_with(b"\"");
+             let name_start = usize::from(quoted);
+-            let name: String = rest[name_start..]
+-                .chars()
+-                .take_while(|c| {
++            let name: Vec<u8> = rest[name_start..]
++                .iter()
++                .copied()
++                .take_while(|&byte| {
+                     if quoted {
+-                        !matches!(c, '\'' | '"')
++                        !matches!(byte, b'\'' | b'"')
+                     } else {
+-                        c.is_ascii_alphanumeric() || matches!(c, '_' | '!' | '?' | '.')
++                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'!' | b'?' | b'.')
+                     }
+                 })
+                 .collect();
+-            let member = format!("{group}.{}", name.to_ascii_uppercase());
++            let member = format!(
++                "{group}.{}",
++                String::from_utf8_lossy(&name).to_ascii_uppercase()
++            );
+             if !left_out.iter().any(|name| name.as_ref() == member) {
+-                return line.to_string();
++                return line.to_vec();
+             }
+             skipped.insert(member);
+             let at = line.len() - rest.len() + name_start;
+-            format!("{}SKIPPED_{}", &line[..at], &line[at..])
++            [&line[..at], b"SKIPPED_".as_slice(), &line[at..]].concat()
+         })
+         .collect();
+     let wanted: BTreeSet<String> = left_out
+         .iter()
+         .map(AsRef::as_ref)
+         .filter(|name| name.starts_with(&format!("{group}.")))
+         .map(str::to_string)
+         .collect();
+     assert_eq!(
+         skipped, wanted,
+         "the left-out tests of {group} renamed in the copy"
+     );
+-    fs::write(group_file, lines.join("\n")).expect("cannot rewrite the copied group file");
++    fs::write(group_file, lines.join(&b'\n')).expect("cannot rewrite the copied group file");
++}
++
++/// The line `TestCase~execute` starts each test with, in the copy's
++/// `OOREXXUNIT.CLS`, and what it becomes: the same line, which also
++/// writes `started NAME` to stderr, so line numbers are unchanged.
++const START_LINE: &[u8] = b"  aTestResult~startTest(self)       -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
++const START_MARKED: &[u8] = b"  aTestResult~startTest(self); .error~say('started' fName) -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n";
++
++/// Makes the copy at `at` write `started NAME` to stderr as each test
++/// starts. The file is read and written as bytes.
++pub fn mark_starts(at: &Path) {
++    let file = at.join("framework/OOREXXUNIT.CLS");
++    let text = read_bytes(&file);
++    let hits: Vec<usize> = text
++        .windows(START_LINE.len())
++        .enumerate()
++        .filter(|(_, window)| *window == START_LINE)
++        .map(|(at, _)| at)
++        .collect();
++    assert_eq!(hits.len(), 1, "one test start in {}", file.display());
++    let at = hits[0];
++    let marked = [&text[..at], START_MARKED, &text[at + START_LINE.len()..]].concat();
++    fs::write(&file, marked).expect("cannot rewrite the copied OOREXXUNIT.CLS");
++}
++
++/// The tests `run` started, in order.
++pub fn started(run: &Run) -> Vec<String> {
++    String::from_utf8_lossy(&run.stderr)
++        .lines()
++        .filter_map(|line| line.strip_prefix("started "))
++        .map(str::to_ascii_uppercase)
++        .collect()
+ }
+ 
+ /// The path of `group`'s file in the copy `run`.
+ pub fn group_file(run: &Path, dir: &str, group: &str) -> String {
+     run.join(format!("ooRexx/{dir}/{group}.testGroup"))
+         .to_string_lossy()
+         .into_owned()
+ }
+ 
+ /// The group's tests in the order the oracle runs them, from `-S`'s lines,
+diff --git a/rust/crates/rexx-exec/tests/trace_oracle.rs b/rust/crates/rexx-exec/tests/trace_oracle.rs
+index 31ad21beb..a2e67f6e3 100644
+--- a/rust/crates/rexx-exec/tests/trace_oracle.rs
++++ b/rust/crates/rexx-exec/tests/trace_oracle.rs
+@@ -459,20 +459,21 @@ const SUBSET_FILES: &[&str] = &[
+     "phase-4c.txt",
+     "phase-5a.txt",
+     "phase-5b.txt",
+     "phase-5c.txt",
+     "phase-5d.txt",
+     "phase-5j.txt",
+     "phase-6-1.txt",
+     "phase-6.txt",
+     "phase-7.txt",
+     "phase-8.txt",
++    "phase-9.txt",
+ ];
+ 
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+     let entries =
+         std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+     let mut names: Vec<String> = entries
+         .flatten()
+         .filter_map(|entry| entry.file_name().into_string().ok())

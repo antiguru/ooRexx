@@ -1,0 +1,3684 @@
+# Review package: 052550e85..598e9f22c
+
+## Commits
+598e9f22c Phase 9a Task 4: D3 reasons on every Phase 10 refusal
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-4-report.md       | 223 ++++++++++++++++
+ docs/superpowers/plans/phase-4-exclusions.txt      |   2 +-
+ docs/superpowers/plans/phase-9-exclusions.txt      |   8 +-
+ rust/corpus/bif-exempt.txt                         |  12 +-
+ rust/corpus/refusal-sites.tsv                      |  68 ++---
+ rust/crates/rexx-api/src/ffi.rs                    |  20 +-
+ rust/crates/rexx-api/src/layout.rs                 |  44 +++-
+ rust/crates/rexx-core/src/lib.rs                   |   2 +
+ rust/crates/rexx-core/src/owner.rs                 | 116 +++++++++
+ rust/crates/rexx-exec/src/directives.rs            |  11 +-
+ rust/crates/rexx-exec/src/dispatch.rs              |   2 +-
+ rust/crates/rexx-exec/src/dispatch/library.rs      |   7 +-
+ rust/crates/rexx-exec/src/dispatch/native.rs       |  77 ++++--
+ rust/crates/rexx-exec/src/dispatch/native/tests.rs |   4 +-
+ rust/crates/rexx-exec/src/dispatch/tests.rs        |   7 +-
+ rust/crates/rexx-exec/src/environment.rs           |   7 +-
+ rust/crates/rexx-exec/src/eval/tests.rs            |   2 +-
+ rust/crates/rexx-exec/src/internal_routines.rs     |  80 +++---
+ rust/crates/rexx-exec/src/lib.rs                   |  32 ++-
+ rust/crates/rexx-exec/src/redirect.rs              |   6 +-
+ rust/crates/rexx-exec/src/run/tests/directives.rs  |  14 +-
+ .../crates/rexx-exec/src/scheduler/tests/native.rs |   2 +-
+ rust/crates/rexx-exec/tests/bif_assertions.rs      |   2 +-
+ rust/crates/rexx-exec/tests/closed_phases.rs       | 188 ++------------
+ rust/crates/rexx-exec/tests/coverage.rs            |   4 +-
+ rust/crates/rexx-exec/tests/internal_routines.rs   |   4 +-
+ rust/crates/rexx-exec/tests/owners.rs              |   4 +-
+ rust/crates/rexx-exec/tests/phase_ten_reasons.rs   | 283 +++++++++++++++++++++
+ .../crates/rexx-exec/tests/refusal_dispositions.rs |  72 +++++-
+ rust/crates/rexx-exec/tests/spike.rs               |   2 +-
+ rust/crates/rexx-exec/tests/suite.rs               |  30 ++-
+ rust/crates/rexx-exec/tests/support/literals.rs    | 171 +++++++++++++
+ rust/crates/rexx-exec/tests/support/suite_rows.rs  |  58 ++---
+ rust/crates/rexx-inventory/src/lib.rs              |  35 +--
+ 34 files changed, 1186 insertions(+), 413 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-4-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-4-report.md
+new file mode 100644
+index 000000000..98e1e688e
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-4-report.md
+@@ -0,0 +1,223 @@
++# Task 4 report: D3 reasons and the relabels
++
++BASE 052550e85. Status: DONE_WITH_CONCERNS (concerns at the end; none is in this task's code).
++
++## What changed
++
++* `rexx-core/src/owner.rs`: `pub enum Deferral { Rxapi, Extension, Row10NativeApi, Embedding }` and
++  `pub enum Owner { Phase9, Phase10(Deferral) }`. `Owner::label()` is the only text naming Phase 10
++  in the crates the structural test scans: `"Phase 9"`, `"Phase 10 Rxapi"`, ... (the controller's
++  ruling, "(Phase 10 <Variant>").
++* Each constructor shape takes an `Owner`: `util`, `deferred` (and `ExternalBody::Deferred`,
++  `deferred_send`), `Loud::internal_routine`, `Loud::redirection`, the `gap` closure. Literal
++  owners are `Owner::...label()`: `named_semaphore`, `package_option_write`, the classic-library
++  site, the `.STDQUE` owed entry.
++* `rexx-inventory`'s `EXCLUDED` is `(name, phase, reason)`, the reason the variant's name as a
++  string; `owner_of` answers `(phase, reason)`; `rexx-exec`'s `excluded_owner` turns it into the
++  label through `Owner::named`.
++* `rexx-api`'s `REFUSING_MEMBERS` is `(&str, Owner)` (rexx-api depends on rexx-core, so the reason
++  column is typed rather than a string); `layout::refusal(what, owner)` is the one constructor of a
++  rexx-api refusal text, used by `refusal_text` and by both `ffi.rs` assertion texts.
++* Test side: `suite_rows::Phase10Reason` is gone; `suite_rows` re-exports `rexx_core::Deferral`
++  (one vocabulary). `refusal_carries(text, reason)` requires `"(" + Owner::Phase10(reason).label()
++  + ")"` in the captured text.
++* `PHASES` (`tests/internal_routines.rs`) and `OPEN` (`src/dispatch/native/tests.rs`) gain
++  `"Phase 9"` and compare `owner.phase()`.
++* New `tests/phase_ten_reasons.rs` (D3's structural test); the literal scanner `closed_phases.rs`
++  used moved unchanged to `tests/support/literals.rs`, which both use.
++
++## Classification
++
++Every `"Phase 10"` site at BASE, plus R4's `"Phase 9"` strings in `rexx-api`.
++
++| Site (BASE line) | Owner | Reason / evidence |
++|---|---|---|
++| `internal_routines.rs` `util` rows `SysAddRexxMacro`, `SysClearRexxMacroSpace`, `SysDropRexxMacro`, `SysLoadRexxMacroSpace`, `SysQueryRexxMacro`, `SysReorderRexxMacro`, `SysSaveRexxMacroSpace` | Phase 10 `Rxapi` | the macro space lives in the RXAPI daemon (brief; spec D7) |
++| `internal_routines.rs` every other `util` row (`SysCls` ... `SysWait`, the rows at :103-164 not named above) | Phase 9 | R2 (brief) |
++| `dispatch/native.rs:301-310` `rexx_*_queue` | Phase 10 `Rxapi` | brief; oracle: `RexxQueueMethods.cpp` calls `RexxAddQueue`/`RexxPullFromQueue`, which are `rexxapi/client/QueuesAPI.cpp` and send to the daemon, the session queue included (`LocalQueueManager.cpp:445` `ADD_TO_SESSION_QUEUE`) |
++| `dispatch/native.rs:264` `handle_set` | Phase 9 | fits no reason. Oracle reading: `StreamClasses.orx:176-177` calls `!handle_set` for a `HANDLE:` name, `StreamNative.cpp:2576` `handle_set` adopts the descriptor (`StreamInfo::setHandle`); no daemon, extension, row 10 group or embedding. Probe (read shape only, `oracle-crashes.txt` entry 12a forbids the write): `s = .Stream~new('HANDLE:1')` / `say s~state` / `say stream('HANDLE:1','C','query streamtype')` -- oracle rc 0, stdout `UNKNOWN` twice; crate rc 120, stderr `rexx-exec: the LIBRARY REXX entry point "handle_set" is not implemented (Phase 9)` |
++| `dispatch/library.rs:838` `Refused::ClassicStyle` | Phase 9 | fits no reason. Oracle reading: `LibraryPackage.cpp:279-281` wraps a `ROUTINE_CLASSIC_STYLE` row in a `RegisteredRoutine`; the call (`NativeActivation.cpp:1527`) reads the queue name through `Interpreter::getCurrentQueue` (`Interpreter.cpp:638`), which sends `GET` to `.STDQUE`, a `RexxQueue~new('SESSION')` whose `init`/`get` (`StreamClasses.orx:445-459`) never reach the daemon. No ooTest group reaches it: `git grep -l 'REXX_CLASSIC_ROUTINE\|ROUTINE_CLASSIC_STYLE'` over `ootest`, `testbinaries`, `extensions`, `samples` finds only `extensions/platform/windows/rxwinsys/rxwinsys.cpp` |
++| `redirect.rs:426`, `:521` `Loud::redirection("RexxQueue", ...)` | Phase 10 `Rxapi` | oracle reading: output, `CommandIOConfiguration.cpp:484-495` builds a `RexxQueueOutputTarget`, whose `writeLine` (`OutputRedirector.cpp:922`) sends `QUEUE`, i.e. `rexx_queue_queue`; input, the `RexxQueue` is asked `makearray` (`StreamClasses.orx` `makearray` -> `queued`/`pull`, `rexx_query_queue`/`rexx_pull_queue`); all through the daemon as above |
++| `directives.rs:80` `gap(... REGISTERED ...)` | Phase 10 `Rxapi` | brief (the routine registry is the daemon's, the site's own comment) |
++| `environment.rs:363` `.STDQUE` owed entry | Phase 10 `Rxapi` | brief; now `Some(Owner::Phase10(Deferral::Rxapi).label())` |
++| `lib.rs:511` `named_semaphore` | Phase 9 | brief |
++| `lib.rs:664` `package_option_write` | Phase 9 | brief, spec D3 |
++| `rexx-inventory` `EXCLUDED` `RXQUEUE`, `RXFUNCADD`, `RXFUNCDROP`, `RXFUNCQUERY`, `QUEUED` | Phase 10 `Rxapi` | queues and the function registry are the daemon's; `QUEUED`'s excluded form is its cross-process half (the row's own comment) |
++| `dispatch/native/tests.rs:150` `OPEN` | vocabulary | test module; gains `"Phase 9"` |
++| `layout.rs:379-383` `REFUSING_MEMBERS` (were `"Phase 9"`) | Phase 10 `Embedding` | R4 |
++| `ffi.rs:4187` `AttachThread`, `:4229` `AddCommandEnvironment from another thread` (were `"Phase 9"`) | Phase 10 `Embedding` | R4 |
++| `phase-4-exclusions.txt:5516` (`TEST_REXXQUEUE`, `rexx_create_queue`) | Phase 10 `Rxapi` | the row's own text: the oracle's RexxQueue creates a named queue in rxapi's daemon. `OWNER: Phase 10.` became `OWNER: Phase 10 Rxapi.`; the quoted 2026-09-28 refusal text is a measurement and stays |
++
++No site moved to Phase 9 had a row depending on it: the four `refusal:` rows in
++`phase-9-exclusions.txt` (`LINEOUT.TEST_QUEUE`, `RexxQueue.TEST_BUG_1379`, `ROUTINE`'s two
++`REGISTERED` tests) are all `Rxapi` sites. `suite-licences.txt` names no Phase 10.
++
++### The grep (Step 2), at BASE
++
++`git grep -n '"Phase 10"' 052550e85 -- rust/crates | grep '/src/'` (61 lines; `git grep` with the
++pathspec `'rust/crates/*/src'` matched nothing, so the filter is on the output):
++
++```
++rust/crates/rexx-exec/src/directives.rs:80:            gap("::ROUTINE EXTERNAL naming REGISTERED", "Phase 10")
++rust/crates/rexx-exec/src/dispatch/library.rs:838:                    message: crate::owned_message(&format!("{refused}"), Some("Phase 10")),
++rust/crates/rexx-exec/src/dispatch/native.rs:264:    deferred("handle_set", Family::Stream, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:301:    deferred("rexx_create_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:302:    deferred("rexx_open_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:303:    deferred("rexx_queue_exists", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:304:    deferred("rexx_delete_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:305:    deferred("rexx_query_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:306:    deferred("rexx_push_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:307:    deferred("rexx_queue_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:308:    deferred("rexx_pull_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:309:    deferred("rexx_linein_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native.rs:310:    deferred("rexx_clear_queue", Family::Queue, "Phase 10"),
++rust/crates/rexx-exec/src/dispatch/native/tests.rs:150:    const OPEN: &[&str] = &["Phase 10"];
++rust/crates/rexx-exec/src/environment.rs:363:        let mut owed = [(ObjRef::NIL, None), (ObjRef::NIL, Some("Phase 10"))];
++rust/crates/rexx-exec/src/internal_routines.rs:99:    util("SysAddRexxMacro", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:100:    util("SysClearRexxMacroSpace", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:103:    util("SysCls", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:112:    util("SysCreatePipe", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:113:    util("SysDropFuncs", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:114:    util("SysDropRexxMacro", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:115:    util("SysDumpVariables", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:116:    util("SysFileCopy", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:119:    util("SysFileMove", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:120:    util("SysFileSearch", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:122:    util("SysFork", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:123:    util("SysFormatMessage", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:124:    util("SysGetErrorText", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:125:    util("SysGetFileDateTime", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:126:    util("SysGetKey", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:127:    util("SysGetMessage", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:128:    util("SysGetMessageX", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:130:    util("SysIsFileDirectory", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:131:    util("SysIsFileLink", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:133:    util("SysLoadFuncs", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:134:    util("SysLoadRexxMacroSpace", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:136:    util("SysOpenEventSem", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:137:    util("SysOpenMutexSem", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:139:    util("SysQueryProcess", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:140:    util("SysQueryRexxMacro", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:145:    util("SysReorderRexxMacro", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:152:    util("SysSaveRexxMacroSpace", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:153:    util("SysSearchPath", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:154:    util("SysSetFileDateTime", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:155:    util("SysSetPriority", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:157:    util("SysStemCopy", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:158:    util("SysStemDelete", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:159:    util("SysStemInsert", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:160:    util("SysStemSort", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:161:    util("SysTempFileName", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:162:    util("SysUtilVersion", "Phase 10"),
++rust/crates/rexx-exec/src/internal_routines.rs:164:    util("SysWait", "Phase 10"),
++rust/crates/rexx-exec/src/lib.rs:511:                Some("Phase 10"),
++rust/crates/rexx-exec/src/lib.rs:664:            message: owned_message("a package settings write", Some("Phase 10")),
++rust/crates/rexx-exec/src/redirect.rs:426:            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
++rust/crates/rexx-exec/src/redirect.rs:521:            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
++rust/crates/rexx-inventory/src/lib.rs:28:        ("RXQUEUE", "Phase 10"),
++rust/crates/rexx-inventory/src/lib.rs:29:        ("RXFUNCADD", "Phase 10"),
++rust/crates/rexx-inventory/src/lib.rs:30:        ("RXFUNCDROP", "Phase 10"),
++rust/crates/rexx-inventory/src/lib.rs:31:        ("RXFUNCQUERY", "Phase 10"),
++rust/crates/rexx-inventory/src/lib.rs:36:        ("QUEUED", "Phase 10"),
++```
++
++R4's `rexx-api` strings, found by the literal scan (`closed_phases`' `literals`/`names` over
++`source_files("rexx-api")`, which reads literals whole), were the five `REFUSING_MEMBERS` rows and
++the two `ffi.rs` texts above; after the change no literal in `rexx-api/src` names any phase.
++
++## Structural test (Step 1)
++
++`tests/phase_ten_reasons.rs`: `no_production_literal_names_phase_10` reads every literal of
++`rexx-exec/src` and `rexx-api/src` outside inline `#[cfg(test)] mod` blocks, `tests.rs` files and
++the files a `#[cfg(test)] mod NAME;` loads, and fails on any naming Phase 10. Controls in the same
++file: the walk with test modules included finds Phase 10 literals, and test files are left out
++while `lib.rs`, `dispatch/native.rs`, `environment.rs` are kept; a fixture for the inline-module
++blanking (neighbours before and after still read, a `#[cfg(test)] fn` is not a module); module-file
++resolution beside `lib.rs` and below `ir.rs`; every `EXCLUDED` reason resolves through
++`Owner::named` and its label is `"{phase} {reason}"`; every `Deferral`'s label is
++`"Phase 10 {name}"`.
++
++Fails on BASE's shape: mutant `named_semaphore`'s owner back to `Some("Phase 10")` ->
++`cargo test --release -p rexx-exec --test phase_ten_reasons` exit 101, `no_production_literal_names_phase_10`
++FAILED naming `"rexx-exec/src/lib.rs:511: \"Phase 10\""`; reversed by the exact edit, `cmp` against
++the saved copy identical.
++
++`refusal_carries` tightening, mutant: body back to `text.contains("(Phase 10")` ->
++`cargo test --release -p rexx-exec --test suite row_checks` exit 101,
++`each_owner_check_passes_its_rows_and_fails_the_others` FAILED on the new FAILING fixture
++`... a queue is not implemented (Phase 10)`; restored from the saved copy, `cmp` identical. The new
++FAILING fixtures are a bare `(Phase 10)`, `(Phase 10 Extension)` on an `Rxapi` row, and
++`(Phase 10 Rxapi2)`.
++
++## refusal-sites.tsv (Review Focus 5)
++
++`REXX_REFUSAL_SITES_REFRESH=1 cargo test --release -p rexx-exec --test refusal_sites -- --test-threads=1`
++exit 0. `git diff --stat`: 34 insertions, 34 deletions. The file holds no refusal text and no phase
++name; a field-by-field comparison of the old and new rows (same row count) found every changed
++field in column 4 (`definition`), and in each the path before the last `:` unchanged: only line
++numbers moved.
++
++The refusal texts themselves, other than the label, are unchanged: every expected-text edit in
++this commit (`src/dispatch/tests.rs`, `src/eval/tests.rs`, `src/run/tests/directives.rs`,
++`src/scheduler/tests/native.rs`, `tests/spike.rs`, `tests/suite.rs`'s `MACRO_REFUSAL`, the four
++`phase-9-exclusions.txt` refusal rows) changes only the parenthesised label (`(Phase 10)` to
++`(Phase 10 Rxapi)` or `(Phase 9)`), and those tests pass against the running crate. The gated suite
++over the three groups whose rows changed captured, byte for byte, BASE's committed baseline
++(`docs/superpowers/records/2026-10-11-phase-9a/suite-baseline/table.tsv`) texts with ` Rxapi`
++inserted:
++
++```
++base/bif/LINEOUT	TEST_QUEUE=rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10 Rxapi)
++base/class/RexxQueue	TEST_BUG_1379=rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTDOTROUTINES=... (Phase 9) | TESTEXTERNALREGISTEREDBADLIBRARYNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi) | TESTEXTERNALREGISTEREDBADNAME=... (Phase 10 Rxapi) | TESTPACKAGE=... (Phase 9)
++```
++
++Verdicts identical to the baseline's `verdicts.tsv` for all three (LINEOUT red: not passed
++TEST_BINARY TEST_INVALID_FILE TEST_LINE_NONNUMERIC TEST_LINE_TOO_LONG; RexxQueue green; ROUTINE
++red: not passed TESTDOTROUTINES TESTPACKAGE), with no row problem reported.
++
++Gate groups reaching a Phase 10 site after the relabel, from the baseline `tests.tsv`: only
++`rexx_clear_queue`, `rexx_query_queue`, `.STDQUE` and `REGISTERED`, all `Rxapi`, all on rowed tests.
++
++## Checks (each run unpiped, output to a file, status echoed)
++
++All cargo commands with `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t4-target CARGO_INCREMENTAL=0 memcap 8G`, `-j 4`.
++
++| Command | Exit |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `cargo clippy -p rexx-core -p rexx-inventory -p rexx-api -p rexx-exec --all-targets -- -D warnings` | 0 |
++| `cargo test --release -p rexx-exec --test owners --test closed_phases --test refusal_dispositions --test refusal_sites --test internal_routines --test phase_ten_reasons --test spike --test native_entries --test suite --no-fail-fast` | 0 (6, 8, 3, 5, 2, 6, 9, 24, 50 passed) |
++| `cargo test --release -p rexx-api -p rexx-core -p rexx-inventory --no-fail-fast` | 0 |
++| `cargo test --release -p rexx-exec --lib` | 101: 1082 passed, 1 failed, pre-existing (concern 1) |
++| `cargo test --release -p rexx-exec --test coverage` (in an earlier combined run) | 101: 20 passed, 1 failed, pre-existing (concern 1) |
++| `REXX_BIF_GATE=1 cargo test --release -p rexx-exec --test bif_assertions` | 0 (5 passed) |
++| `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/bif/LINEOUT,base/class/RexxQueue,base/directives/ROUTINE cargo test --release -p rexx-exec --test suite` | 101: `l3_core_suite` 2 of 3 groups red, the same verdicts as BASE's baseline (above) |
++
++Per-task wall time: about 2 minutes for the final fmt, clippy and test runs over a warm target (the test run 1m54s).
++
++## Concerns
++
++1. **Two failures predate this task**, both from Task 3's `rust/corpus/phase-9d-set.txt`
++   (c0e99bd1d), which matches the `phase-*.txt` glob harnesses use for corpus program lists:
++   `coverage::the_union_reads_every_phase_subset_file` (`SUBSET_FILES` lacks it) and
++   `ir::corpus_shape_tests::every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops`
++   (reads its rows as program paths: `cannot read .../corpus/base/bif/ARG	TEST_EXTERNAL_CALLS`).
++   This task changed neither file's logic (`coverage.rs` only destructures `EXCLUDED`'s new column).
++   Other `phase-*.txt` globs in gated harnesses may trip the same way.
++2. **`handle_set` is now Phase 9's, and its body adopts a raw descriptor**, which needs `unsafe`
++   (`from_raw_fd`) and so a per-site grant from Moritz; the `HANDLE:` write shape kills the oracle
++   (`oracle-crashes.txt` 12a), so its witness can only be a read.
++3. **The classic-style library routine is now Phase 9's**, but its oracle call reads the queue name
++   from `.STDQUE`, which this crate refuses as Phase 10 `Rxapi`; no Linux ooTest group reaches it.
++4. Files the brief did not name, changed because their content derives from the refusal text:
++   `rust/corpus/bif-exempt.txt` (RXQUEUE rows `Phase 10` -> `Phase 10 Rxapi`, and the header line
++   saying so) and `tests/bif_assertions.rs`'s `PHASES`; `tests/coverage.rs`, `tests/owners.rs` for
++   the `EXCLUDED` column; `tests/refusal_dispositions.rs` reads `Owner` forms (an `Owner` parameter's
++   label is the caller's, `Owner::...label()` is that label) and `COMPUTED_OWNERS` names
++   `excluded_owner`; `tests/closed_phases.rs`'s two negative controls were repointed, since
++   `rexx-api` no longer holds a phase literal and `rexx-exec`'s production code no longer holds
++   `"Phase 10"`.
++5. Not touched: `phase-4-exclusions.txt:5284` (the second instance, R4) still reads `OWNER: Phase 10`
++   with no reason; `refusal-dispositions.tsv` records quoting probes that "only STDQUE (Phase 10)
++   refused" are history and stay.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 4828f41b0..7d127830a 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -5506,21 +5506,21 @@ TESTS OF THE METHOD, CONVERSION AND FUNCTION GROUPS THAT DIFFER, measured
+ 2026-09-28 by the surface plan's Task 8 and asserted exactly by
+ rust/crates/rexx-exec/tests/api_group_tests.rs (gate-only): each test run
+ alone through testOORexx.rex -f GROUP.testGroup -U -V 2 -t TEST, both sides
+ from a fresh copy of the framework and ootest/ooRexx/API/oo at the same
+ path, three descriptors separately. Roadmap row 8 makes these groups Phase
+ 8's, and the Task 8 fix rounds fixed every other member; the one left needs
+ the rxapi queue, which is row 10's.
+   RexxQueue. Test:
+     TEST_REXXQUEUE
+   rc 120, `the LIBRARY REXX entry point "rexx_create_queue" is not
+-  implemented (Phase 10)`. OWNER: Phase 10.
++  implemented (Phase 10)`. OWNER: Phase 10 Rxapi.
+   RUN ON NEITHER SIDE SINCE 2026-09-29. The instrument ran it on the oracle,
+   whose RexxQueue creates a named queue in rxapi's daemon, which starts that
+   daemon and keeps the queue between processes. api_group_tests.rs derives
+   the tests whose source uses a named queue or the function and macro-space
+   registries (reaching_rxapi), the daemon's persistent state, and fails
+   before any run unless they are exactly RECORDED's not-run entries; the -S
+   listing run renames them out too (controller's ruling, 2026-09-29). The
+   oracle still asks rxapi's macro space, read-only, on each ::REQUIRES and
+   external call (interpreter/package/PackageManager.cpp:747,
+   interpreter/execution/RexxActivation.cpp:2996, through
+diff --git a/docs/superpowers/plans/phase-9-exclusions.txt b/docs/superpowers/plans/phase-9-exclusions.txt
+index fa1405c40..4a5c79268 100644
+--- a/docs/superpowers/plans/phase-9-exclusions.txt
++++ b/docs/superpowers/plans/phase-9-exclusions.txt
+@@ -220,40 +220,40 @@ API/oo/RexxStart	TESTIOEXITPULL	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTIOEXITSAY	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTIOEXITTRACE	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTQUEUEEXITPULL	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTQUEUEEXITPUSH	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTQUEUEEXITQUEUE	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTQUEUEEXITSET	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTQUEUEEXITSIZE	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTSYNTAXERROR	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTTERMEXIT	Phase 10 Rxapi	reaching_rxapi
+ API/oo/RexxStart	TESTTRACEEXIT	Phase 10 Rxapi	reaching_rxapi
+-base/bif/LINEOUT	TEST_QUEUE	Phase 10 Rxapi	refusal: rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10)
++base/bif/LINEOUT	TEST_QUEUE	Phase 10 Rxapi	refusal: rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10 Rxapi)
+ base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_SESSION	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_CREATE_UNIQUE	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_DELETE	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_EXISTS	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_GET	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_GET_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_NAMES_VALID	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_NAME_INVALID	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_NAME_NULLSTRING	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_NAME_TOO_LONG	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_NOARG	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_OPEN	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_OPTION_INVALID	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_SET	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_SWITCH	Phase 10 Rxapi	reaching_rxapi
+ base/bif/RXQUEUE	TEST_RXQUEUE_THREE_ARGS	Phase 10 Rxapi	reaching_rxapi
+-base/class/RexxQueue	TEST_BUG_1379	Phase 10 Rxapi	refusal: rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10)
++base/class/RexxQueue	TEST_BUG_1379	Phase 10 Rxapi	refusal: rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+ base/class/RexxQueue	TEST_CREATE	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_CREATE_INVALID	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_CREATE_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_DELETE	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_DELETE_CLASS_NO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_DELETE_CLASS_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_DELETE_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_DELETE_WHILE_LINEIN	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_EMPTY	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_EMPTY_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
+@@ -287,22 +287,22 @@ base/class/RexxQueue	TEST_QUEUED_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_QUEUE_FAILURE_BADQNAME	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_QUEUE_FAILURE_NOTREG	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_QUEUE_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_SAY_FAILURE_BADQNAME	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_SAY_FAILURE_NOTREG	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_SAY_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_SET	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_SET_TWO_ARGS	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_STDQUE	Phase 10 Rxapi	reaching_rxapi
+ base/class/RexxQueue	TEST_STRING_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
+-base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)
+-base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
+ base/keyword/ADDRESS	TEST_REXXQUEUE	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_ARG_OPTION_ILLEGAL	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_ARG_PATH_INVALID	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_ARG_PATH_NO_VALID_REXX	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_ARG_PATH_NULL	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_FOUR_ARGS_TOO_MANY	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_NO_ARG_TOO_FEW	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_ONE_ARG_TOO_FEW	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_OTHER_INTERPRETER	Phase 10 Rxapi	reaching_rxapi
+ base/rexxutil/Macrospace	TEST_ADD_THREE_ARGS_OPTION	Phase 10 Rxapi	reaching_rxapi
+diff --git a/rust/corpus/bif-exempt.txt b/rust/corpus/bif-exempt.txt
+index d401b3aea..019470f21 100644
+--- a/rust/corpus/bif-exempt.txt
++++ b/rust/corpus/bif-exempt.txt
+@@ -22,21 +22,21 @@
+ # and a blocker moving between phases goes red here.
+ #
+ # Two limits on that, the same two `keyword-exempt.txt` carries:
+ #
+ #   * A derived owner says what a row hits FIRST, not what would make it pass.
+ #
+ #   * A derived owner is `4c` for every builtin name rexx-exec runs nothing
+ #     for, whichever phase actually owns it: `Loud::unresolved_call` carries a
+ #     fixed "4c". No row below carries it today -- Phase 7 gave the stream
+ #     builtins a refusal that names their real owner, so the rows that were
+-#     `4c` now read `Phase 7`, and the RXQUEUE rows read `Phase 10`. A `4c` row
++#     `4c` now read `Phase 7`, and the RXQUEUE rows read `Phase 10 Rxapi`. A `4c` row
+ #     reappearing means a name reached `unresolved_call` again. Read the owner
+ #     off the run's own "first construct hit" breakdown, not off this file.
+ #
+ #   ANOMALY  Not an attribution at all: the harness's own word for "exited
+ #       non-zero and named no construct". No row carries it today. The three
+ #       that did were all BEEP, which is not a builtin function but a routine
+ #       the interpreter's internal package registers
+ #       (`interpreter/runtime/InternalPackage.cpp:199`) -- correctly absent
+ #       from `rexx_inventory::builtins::NAMES`, and so a 43.1 here until
+ #       Phase 7 gave the `REXX` package's own routines their bodies. The rows
+@@ -45,17 +45,17 @@
+ # THE THREE DERIVED CATEGORIES CARRY PINNED COUNTS, NOT JUST PINNED SPELLINGS.
+ # MISMATCH, RAISE-MISMATCH and ANOMALY name neither an owner nor a construct,
+ # so a row carrying one is a divergence nothing is holding. MISMATCH is the
+ # sharp one: both renderings produced output and they DIFFER, which is the
+ # single thing this whole differential exists to detect.
+ # `every_exempt_attribution_is_a_known_phase_or_a_declared_outcome` pins them
+ # at 0, 0 and 3. If it goes red, the repair is NOT to move the number: rule on
+ # the row first -- give it a phase, or record it as a KNOWN GAP -- and then
+ # move the number to match, deliberately.
+ #
+-RXQUEUE::test_rxqueue_create_one_arg#1	Phase 10
+-RXQUEUE::test_rxqueue_create_session#1	Phase 10
+-RXQUEUE::test_rxqueue_get#1	Phase 10
+-RXQUEUE::test_rxqueue_open#1	Phase 10
+-RXQUEUE::test_rxqueue_switch#1	Phase 10
++RXQUEUE::test_rxqueue_create_one_arg#1	Phase 10 Rxapi
++RXQUEUE::test_rxqueue_create_session#1	Phase 10 Rxapi
++RXQUEUE::test_rxqueue_get#1	Phase 10 Rxapi
++RXQUEUE::test_rxqueue_open#1	Phase 10 Rxapi
++RXQUEUE::test_rxqueue_switch#1	Phase 10 Rxapi
+ STREAM::test_relative_file_exists#1	MISMATCH
+ STREAM::test_relative_file_exists2#1	MISMATCH
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index ba1052f3d..184d2c7e1 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -81,121 +81,121 @@ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	o
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1813	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:619	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:622	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1197	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+ Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:471	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:832	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:756	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:765	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:835	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:759	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:768	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1542	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:840	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:843	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:723	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:726	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+-Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:735	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
++Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:772	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:628	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:598	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:631	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:601	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1807	off-send-surface	-	-	-
+-Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:587	off-send-surface	-	-	-
++Loud	environment_symbol	body	crates/rexx-exec/src/lib.rs:590	off-send-surface	-	-	-
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1748	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:705	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:708	off-send-surface	-	-	-
+ Loud	expression	body	crates/rexx-exec/src/lib.rs:463	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1855	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1753	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:876	off-send-surface	-	-	-
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:879	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1147	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+ Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:410	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+ Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:497	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:864	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:782	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:867	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:785	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:652	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:684	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:655	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:687	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:806	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:809	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1516	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1678	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1248	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1115	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1694	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:748	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:751	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1262	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1476	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1469	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+ Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:506	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+@@ -207,48 +207,48 @@ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1275
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1453	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1421	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1402	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1350	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1279	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1300	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:607	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:610	diverges	yes	of class	m~dimensions, 'abc'~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1523	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1180	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1619	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1553	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1564	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1573	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1083	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1733	off-send-surface	-	-	-
+ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1606	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:713	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:675	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:716	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:678	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:774	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:572	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:662	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:777	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:575	off-send-surface	-	-	-
++Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:665	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:740	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:743	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -270,63 +270,63 @@ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+ Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:522	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+ Loud	redirection	body	crates/rexx-exec/src/lib.rs:561	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:790	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:793	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1785	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:856	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:859	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1213	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1219	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:798	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:801	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:694	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:815	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:697	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:818	off-send-surface	-	-	-
+ Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1383	off-send-surface	-	-	-
+ Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1394	off-send-surface	-	-	-
+ Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1420	off-send-surface	-	-	-
+ Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1372	off-send-surface	-	-	-
+ Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1410	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:732	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:735	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:824	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:827	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+ Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:533	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
+ Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:551	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:643	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:646	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+ Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:848	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:851	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-api/src/ffi.rs b/rust/crates/rexx-api/src/ffi.rs
+index 08174b56a..872a70e46 100644
+--- a/rust/crates/rexx-api/src/ffi.rs
++++ b/rust/crates/rexx-api/src/ffi.rs
+@@ -13,27 +13,29 @@
+ #![allow(unsafe_code)]
+ 
+ //! The inbound FFI boundary: caller-supplied pointers into validated handles.
+ 
+ use std::cell::Cell;
+ use std::ffi::CStr;
+ use std::marker::PhantomData;
+ use std::ptr::NonNull;
+ use std::rc::Rc;
+ 
++use rexx_core::{Deferral, Owner};
++
+ use crate::layout::{
+     CSTRING, CallContextInterface, ExitContextInterface, IORedirectorInterface,
+     MethodContextInterface, Owned, POINTER, REXXPFN, RexxArrayObject, RexxBufferObject,
+     RexxBufferStringObject, RexxCallContext_, RexxCondition, RexxDirectoryObject, RexxExitContext_,
+     RexxIORedirectorContext_, RexxInstance_, RexxInstanceInterface, RexxMethodContext_,
+     RexxMutableBufferObject, RexxObjectPtr, RexxPackageEntry, RexxPointerObject, RexxStringObject,
+-    RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t, stringsize_t,
++    RexxThreadContext_, RexxThreadInterface, ValueDescriptor, logical_t, refusal, stringsize_t,
+     wholenumber_t,
+ };
+ use crate::redirect::Redirector;
+ use crate::values::{Activation, Baton, Converted, Host, MAX_WHOLENUMBER, Repr, Value};
+ 
+ /// The state that owns the context `context` addresses.
+ ///
+ /// `context` must be the public struct at the head of an [`Owned`] we handed
+ /// out, which is how the C++ recovers the owning activation
+ /// (`interpreter/concurrency/Activity.hpp:503`).
+@@ -4177,24 +4179,30 @@ unsafe extern "C" fn attach_thread(
+ ) -> logical_t {
+     // SAFETY: the caller guarantees `instance` is the `instance` field of a
+     // live `Thread`, and it was taken from that whole allocation, so stepping
+     // back to the allocation's start stays inside its provenance.
+     let thread = unsafe {
+         instance
+             .cast::<u8>()
+             .sub(std::mem::offset_of!(Thread, instance))
+             .cast::<Thread>()
+     };
+-    let refused = "RexxInstanceInterface.AttachThread is not implemented (Phase 9)";
+     // SAFETY: as above.
+     let home = unsafe { runs_here(thread) };
+-    assert!(home, "{refused}");
++    assert!(
++        home,
++        "{}",
++        refusal(
++            "RexxInstanceInterface.AttachThread",
++            Owner::Phase10(Deferral::Embedding)
++        )
++    );
+     if !attached.is_null() {
+         // SAFETY: the caller guarantees the write; the context is the
+         // allocation's own `thread` field.
+         unsafe { attached.write((&raw mut (*thread).thread).cast()) };
+     }
+     1
+ }
+ 
+ /// `AddCommandEnvironment` (`interpreter/api/InterpreterInstanceStubs.cpp:89-101`):
+ /// `handler` becomes the handler of the environment `name`, replacing the one
+@@ -4219,21 +4227,25 @@ unsafe extern "C" fn add_command_environment(
+     let thread = unsafe {
+         instance
+             .cast::<u8>()
+             .sub(std::mem::offset_of!(Thread, instance))
+             .cast::<Thread>()
+     };
+     // SAFETY: as in `attach_thread`.
+     let home = unsafe { runs_here(thread) };
+     assert!(
+         home,
+-        "RexxInstanceInterface.AddCommandEnvironment from another thread is not implemented (Phase 9)"
++        "{}",
++        refusal(
++            "RexxInstanceInterface.AddCommandEnvironment from another thread",
++            Owner::Phase10(Deferral::Embedding)
++        )
+     );
+     // SAFETY: as in `attach_thread`; the context is the allocation's own
+     // `thread` field.
+     let activation = unsafe {
+         innermost_activation((&raw mut (*thread).thread).cast(), "AddCommandEnvironment")
+     };
+     let activation = or_nothing!(activation);
+     // SAFETY: the caller guarantees the terminator.
+     let (Some(name), Some(handler)) = (
+         unsafe { name_of(name) },
+diff --git a/rust/crates/rexx-api/src/layout.rs b/rust/crates/rexx-api/src/layout.rs
+index 60567fb81..3d42768d6 100644
+--- a/rust/crates/rexx-api/src/layout.rs
++++ b/rust/crates/rexx-api/src/layout.rs
+@@ -14,20 +14,22 @@
+ // member names `api/oorexxapi.h` gives them. The entry structs moved here from
+ // `load.rs` and keep the Rust spellings they arrived with.
+ #![allow(non_camel_case_types, non_snake_case)]
+ 
+ //! The `#[repr(C)]` surface an extension sees, and the tables it calls
+ //! through.
+ 
+ use std::cell::Cell;
+ use std::ffi::{c_char, c_int, c_void};
+ 
++use rexx_core::{Deferral, Owner};
++
+ /// `wholenumber_t` (`api/rexx.h:237`).
+ pub type wholenumber_t = isize;
+ /// `stringsize_t` (`api/rexx.h:236`).
+ pub type stringsize_t = usize;
+ /// `logical_t` (`api/rexx.h:238`).
+ pub type logical_t = usize;
+ /// `CSTRING` (`api/rexx.h:78`).
+ pub type CSTRING = *const c_char;
+ /// `POINTER` (`api/rexx.h:79`).
+ pub type POINTER = *mut c_void;
+@@ -367,43 +369,63 @@ pub struct RexxIORedirectorContext_ {
+ /// public struct and `ffi::owner_of` recovers `owner` by casting back
+ /// (`interpreter/concurrency/ActivationApiContexts.hpp:58-95`,
+ /// `interpreter/concurrency/Activity.hpp:503`).
+ #[repr(C)]
+ pub struct Owned<C, T> {
+     pub context: C,
+     pub owner: *mut T,
+ }
+ 
+ /// Each member a populated table still refuses, as `Table.Member`, with the
+-/// phase its refusal names.
+-pub const REFUSING_MEMBERS: &[(&str, &str)] = &[
+-    ("RexxInstanceInterface.Terminate", "Phase 9"),
+-    ("RexxInstanceInterface.Halt", "Phase 9"),
+-    ("RexxInstanceInterface.SetTrace", "Phase 9"),
+-    ("RexxThreadInterface.HaltThread", "Phase 9"),
+-    ("RexxThreadInterface.SetThreadTrace", "Phase 9"),
++/// owner and reason its refusal names.
++pub const REFUSING_MEMBERS: &[(&str, Owner)] = &[
++    (
++        "RexxInstanceInterface.Terminate",
++        Owner::Phase10(Deferral::Embedding),
++    ),
++    (
++        "RexxInstanceInterface.Halt",
++        Owner::Phase10(Deferral::Embedding),
++    ),
++    (
++        "RexxInstanceInterface.SetTrace",
++        Owner::Phase10(Deferral::Embedding),
++    ),
++    (
++        "RexxThreadInterface.HaltThread",
++        Owner::Phase10(Deferral::Embedding),
++    ),
++    (
++        "RexxThreadInterface.SetThreadTrace",
++        Owner::Phase10(Deferral::Embedding),
++    ),
+ ];
+ 
+-/// The phase a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
++/// The owner a refusal of `entry` names: its [`REFUSING_MEMBERS`] row, and
+ /// none for a member no row names, which every populated table fills.
+ #[must_use]
+ pub fn refusal_owner(entry: &str) -> Option<&'static str> {
+     REFUSING_MEMBERS
+         .iter()
+         .find(|(member, _)| *member == entry)
+-        .map(|(_, owner)| *owner)
++        .map(|(_, owner)| owner.label())
++}
++
++/// The refusal text for `what`, naming `owner`.
++pub(crate) fn refusal(what: &str, owner: Owner) -> String {
++    format!("{what} is not implemented ({})", owner.label())
+ }
+ 
+ /// The refusal text for `entry`, with its owner when it has one.
+ fn refusal_text(entry: &str) -> String {
+-    match refusal_owner(entry) {
+-        Some(owner) => format!("{entry} is not implemented ({owner})"),
++    match REFUSING_MEMBERS.iter().find(|(member, _)| *member == entry) {
++        Some((_, owner)) => refusal(entry, *owner),
+         None => format!("{entry} is not implemented"),
+     }
+ }
+ 
+ /// Abandon the process, naming the entry the caller reached.
+ ///
+ /// # Panics
+ /// Always. The stubs below call it, and each is an `extern "C"` frame, so the
+ /// panic aborts rather than unwinding into the extension's stack.
+ fn abort(entry: &str) -> ! {
+diff --git a/rust/crates/rexx-core/src/lib.rs b/rust/crates/rexx-core/src/lib.rs
+index 8d0a12bd0..940daccbf 100644
+--- a/rust/crates/rexx-core/src/lib.rs
++++ b/rust/crates/rexx-core/src/lib.rs
+@@ -18,36 +18,38 @@ mod body;
+ // line can exist at all -- the root `Cargo.toml` has why, and why this
+ // attribute is now the record of the grant rather than a lint level somewhere.
+ // `bytes.rs`'s own `Bytes` doc states the invariant, names the only writer and
+ // the only reader, and gives the measurement that bought it;
+ // `tests/unsafe_sites.rs` is what stops a second site appearing quietly.
+ #[allow(unsafe_code)]
+ mod bytes;
+ mod frame;
+ mod handle;
+ mod heap;
++mod owner;
+ mod roots;
+ mod slots;
+ 
+ pub use behaviour::BehaviourTable;
+ pub use body::{
+     AlignedBytes, BehaviourHandle, BehaviourId, Body, BufferBytes, BufferState, MethodId,
+     NativeObject, NativeState, NotNumeric, Object, ObjectMethod, ObjectMethods, OpenFile, OpenMode,
+     SLOT_BYTES, ScopePools, StandardStream, StreamState, StreamStatus, VarRef, VarRefHome,
+     pointer_to_string,
+ };
+ pub use bytes::{Bytes, INLINE_BYTES};
+ pub use frame::{FrameArena, FrameBlock, ParkedFrame, RegFrame};
+ pub use handle::{
+     Decoded, GENERATION_MAX, INLINE_TEXT, InlineText, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
+ };
+ #[cfg(feature = "sharing")]
+ pub use heap::SharingCount;
+ pub use heap::{CollectStats, Heap};
++pub use owner::{Deferral, Owner};
+ pub use roots::{ActivityRoots, FrameAliases, FrameId, Parked, RootSet, SlotFrame, SlotRef};
+ pub use slots::ArraySlots;
+ 
+ /// The hasher behind [`NameMap`].
+ pub type NameHasher = rustc_hash::FxBuildHasher;
+ 
+ /// A map keyed by a name out of the program text.
+ pub type NameMap<K, V> = std::collections::HashMap<K, V, NameHasher>;
+diff --git a/rust/crates/rexx-core/src/owner.rs b/rust/crates/rexx-core/src/owner.rs
+new file mode 100644
+index 000000000..9a77312fc
+--- /dev/null
++++ b/rust/crates/rexx-core/src/owner.rs
+@@ -0,0 +1,116 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The phase a refusal names, and why Phase 10 owes what it owns (spec
++//! `2026-10-10-phase-9-core-conformance.md` D3).
++
++/// Why a refusal is Phase 10's: D3's closed set.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub enum Deferral {
++    /// It needs the RXAPI daemon.
++    Rxapi,
++    /// It needs an extension library.
++    Extension,
++    /// It belongs to a row 10 native-API group.
++    Row10NativeApi,
++    /// It is the embedding API (ruling R4).
++    Embedding,
++}
++
++impl Deferral {
++    pub const ALL: [Deferral; 4] = [
++        Deferral::Rxapi,
++        Deferral::Extension,
++        Deferral::Row10NativeApi,
++        Deferral::Embedding,
++    ];
++
++    /// The variant's name, as a refusal and the row files spell it.
++    #[must_use]
++    pub const fn name(self) -> &'static str {
++        match self {
++            Deferral::Rxapi => "Rxapi",
++            Deferral::Extension => "Extension",
++            Deferral::Row10NativeApi => "Row10NativeApi",
++            Deferral::Embedding => "Embedding",
++        }
++    }
++
++    /// The variant [`Deferral::name`] spells `name`, or `None`.
++    #[must_use]
++    pub fn named(name: &str) -> Option<Deferral> {
++        Deferral::ALL.into_iter().find(|known| known.name() == name)
++    }
++}
++
++/// The open phase that owes a refusal's work.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub enum Owner {
++    Phase9,
++    Phase10(Deferral),
++}
++
++impl Owner {
++    /// The phase's name alone.
++    #[must_use]
++    pub const fn phase(self) -> &'static str {
++        match self {
++            Owner::Phase9 => "Phase 9",
++            Owner::Phase10(_) => "Phase 10",
++        }
++    }
++
++    /// What a refusal prints in its parentheses: the phase's name, then a
++    /// Phase 10 owner's reason.
++    #[must_use]
++    pub const fn label(self) -> &'static str {
++        match self {
++            Owner::Phase9 => "Phase 9",
++            Owner::Phase10(Deferral::Rxapi) => "Phase 10 Rxapi",
++            Owner::Phase10(Deferral::Extension) => "Phase 10 Extension",
++            Owner::Phase10(Deferral::Row10NativeApi) => "Phase 10 Row10NativeApi",
++            Owner::Phase10(Deferral::Embedding) => "Phase 10 Embedding",
++        }
++    }
++
++    /// The owner a table row spells as its phase and, for Phase 10, its
++    /// reason's name, or `None` for a spelling that names neither.
++    #[must_use]
++    pub fn named(phase: &str, reason: Option<&str>) -> Option<Owner> {
++        match (phase, reason) {
++            ("Phase 9", None) => Some(Owner::Phase9),
++            ("Phase 10", Some(reason)) => Deferral::named(reason).map(Owner::Phase10),
++            _ => None,
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::{Deferral, Owner};
++
++    #[test]
++    fn a_phase_10_label_is_the_phase_then_the_reason() {
++        for reason in Deferral::ALL {
++            let owner = Owner::Phase10(reason);
++            assert_eq!(
++                owner.label(),
++                format!("{} {}", owner.phase(), reason.name())
++            );
++            assert_eq!(Owner::named("Phase 10", Some(reason.name())), Some(owner));
++        }
++        assert_eq!(Owner::Phase9.label(), Owner::Phase9.phase());
++        assert_eq!(Owner::named("Phase 9", None), Some(Owner::Phase9));
++        assert_eq!(Owner::named("Phase 10", None), None);
++        assert_eq!(Owner::named("Phase 10", Some("Queue")), None);
++        assert_eq!(Owner::named("Phase 9", Some("Rxapi")), None);
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/directives.rs b/rust/crates/rexx-exec/src/directives.rs
+index c48be7a5c..682709a0d 100644
+--- a/rust/crates/rexx-exec/src/directives.rs
++++ b/rust/crates/rexx-exec/src/directives.rs
+@@ -6,21 +6,21 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! What a program's directives say before any of them is installed.
+ 
+ use crate::plan::ProgramId;
+ use crate::{GeneratedKind, Loud, dispatch, owned_message};
+-use rexx_core::ObjRef;
++use rexx_core::{Deferral, ObjRef, Owner};
+ use rexx_parse::{
+     AnnotationTarget, AttributeDirective, AttributeStyle, ClassDirective, ClassRef, Directive,
+     DirectiveKind, MethodDirective, Program, SymbolId,
+ };
+ use rustc_hash::FxHashMap;
+ use std::rc::Rc;
+ 
+ /// Every class this `::CLASS` names: its `SUBCLASS`/`MIXINCLASS` target (one
+ /// slot, `mixin` telling the two apart), its `METACLASS`, and each entry of
+ /// its `INHERIT` list.
+@@ -53,38 +53,41 @@ fn class_references(class: &ClassDirective) -> impl Iterator<Item = &ClassRef> {
+ // ```
+ // ```text
+ // ::routine r / ::annotate routine r / ::class a subclass zzznotaclass  98.909 rc 158
+ // ::class a / ::constant kk (1/0) / ::routine r / ::annotate routine r  42.3 rc 214
+ // ::routine r / ::annotate routine r / a duplicate ::ROUTINE pair       99.903 rc 157
+ // ::routine r / ::annotate routine r / a class-less ::constant (1/0)    99.906 rc 157
+ // ```
+ /// The gap a `::` directive declares at install time, or `None` for one this
+ /// crate can install.
+ pub(super) fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
+-    let gap = |name: &str, owner: &'static str| {
++    let gap = |name: &str, owner: Owner| {
+         Some(Loud {
+-            message: owned_message(name, Some(owner)),
++            message: owned_message(name, Some(owner.label())),
+         })
+     };
+     match kind {
+         // `REGISTERED` resolves through the RXAPI function registry, and
+         // registers the name there before resolving it
+         // (`PackageManager::resolveRoutine`, `package/PackageManager.cpp:312`):
+         // measured, a later process's `rxfuncquery` answers `0` for a name
+         // such a directive failed to resolve.
+         DirectiveKind::Routine(routine)
+             if routine
+                 .external
+                 .as_ref()
+                 .is_some_and(|spec| spec.registered) =>
+         {
+-            gap("::ROUTINE EXTERNAL naming REGISTERED", "Phase 10")
++            gap(
++                "::ROUTINE EXTERNAL naming REGISTERED",
++                Owner::Phase10(Deferral::Rxapi),
++            )
+         }
+         // `::OPTIONS` installs (`Interp::install_directives`' own walk): it
+         // resolves no name, runs no code, and every setting it writes is one
+         // an activation of this package's code starts from.
+         DirectiveKind::Annotate(_)
+         | DirectiveKind::Attribute(_)
+         | DirectiveKind::Class(_)
+         | DirectiveKind::Constant(_)
+         | DirectiveKind::Method(_)
+         | DirectiveKind::Options(_)
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index dcf0bd3fe..ff0e1dd17 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -2669,21 +2669,21 @@ impl Interp {
+             // `Native` arm of `begin_invoke` this one does not blame the
+             // method for it:
+             // a `Loud` is a report about this crate and carries no traceback
+             // at all. The implemented arm does blame, because its refusals
+             // are the oracle's own -- measured, `.k~sep(1)` on a class method
+             // bound to `file_separator` is `88.922 Too many arguments in
+             // invocation; 0 expected.` at rc 168, under a `Compiled method
+             // "SEP" with scope "K".` line.
+             Invocable::External(entry) => match &entry.body {
+                 native::ExternalBody::Deferred { owner } => {
+-                    Err(native::deferred_send(entry, owner).into())
++                    Err(native::deferred_send(entry, *owner).into())
+                 }
+                 native::ExternalBody::Implemented { arity, run } => {
+                     self.run_external(*arity, resolution, receiver, name, args, |interp| {
+                         pinned!(
+                             interp,
+                             crate::pinning::PinKind::native(name),
+                             run(interp, cleared, receiver, args)
+                         )
+                     })
+                 }
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 6d0879f34..b3bb236f5 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -21,21 +21,21 @@ use std::borrow::Cow;
+ 
+ use rexx_api::handles::Table;
+ use rexx_api::invoke::{self, Completion, NativeCall};
+ use rexx_api::layout::POINTER;
+ use rexx_api::load::{CommandHandler, HeldMethod, HeldRoutine, Hook, Library};
+ use rexx_api::redirect::Redirector;
+ use rexx_api::values::{
+     Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, HostRef,
+     Numeric, Raised as Condition,
+ };
+-use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
++use rexx_core::{BehaviourId, Body, Decoded, ObjRef, Owner};
+ use rexx_num::{DIGITS64, Number};
+ 
+ use super::Resolution;
+ use crate::builtin::datatype::{SymbolKind, classify};
+ use crate::error::Raised;
+ use crate::island::{InterpBaton, Islanded, Lent};
+ use crate::run::Started;
+ use crate::scheduler::{ActivityId, Posted, Recall, Recaller, Scheduler};
+ use crate::sync::Arc;
+ use crate::timer::Inbox;
+@@ -828,21 +828,24 @@ impl Interp {
+             }
+             Refused::TooManyArguments { expected } => Raised::too_many_external_arguments(expected),
+             Refused::Signature | Refused::ResultSignature => {
+                 let number = refused
+                     .error_number(method)
+                     .expect("a signature refusal carries its number");
+                 Raised::incorrect_native_signature(number, refused == Refused::Signature)
+             }
+             Refused::ClassicStyle => {
+                 return Loud {
+-                    message: crate::owned_message(&format!("{refused}"), Some("Phase 10")),
++                    message: crate::owned_message(
++                        &format!("{refused}"),
++                        Some(Owner::Phase9.label()),
++                    ),
+                 }
+                 .into();
+             }
+             Refused::UnfilledSlot { entry } => {
+                 return Loud {
+                     message: crate::owned_message(
+                         &format!("{refused}"),
+                         rexx_api::layout::refusal_owner(entry),
+                     ),
+                 }
+diff --git a/rust/crates/rexx-exec/src/dispatch/native.rs b/rust/crates/rexx-exec/src/dispatch/native.rs
+index 56c791782..2b33583d8 100644
+--- a/rust/crates/rexx-exec/src/dispatch/native.rs
++++ b/rust/crates/rexx-exec/src/dispatch/native.rs
+@@ -21,20 +21,21 @@
+ //! ::attribute at external 'LIBRARY zzznolib zzz'   98.903 rc 158
+ //! ::method m external 'LIBRARY zzznolib zzzr'      98.903 rc 158
+ //! ```
+ 
+ use rexx_parse::{
+     AttributeDirective, AttributeStyle, ExternalSpec, MethodDirective, RoutineDirective,
+ };
+ 
+ use super::{Arity, NativeMethod, ScopedBegin, native_file_path_separator, native_file_separator};
+ use crate::{Loud, accessor_setter_name};
++use rexx_core::{Deferral, Owner};
+ 
+ /// Which part of the interpreter an entry point belongs to, and through that
+ /// which phase owes it a body.
+ #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+ pub(crate) enum Family {
+     /// `platform/unix/TimeSupport.cpp`: the timers `.Alarm` and `.Ticker`
+     /// drive.
+     Timer,
+     /// `streamLibrary/StreamNative.cpp`: `.Stream`'s body.
+     Stream,
+@@ -74,21 +75,21 @@ pub(crate) struct NativeExternal {
+ /// What a send to a method bound to an entry point runs.
+ pub(in crate::dispatch) enum ExternalBody {
+     /// A body this phase runs, with the parameter count the C++ entry
+     /// declares.
+     Implemented { arity: Arity, run: NativeMethod },
+     /// A body that runs in the method's scope, with the parameter count the
+     /// C++ entry declares.
+     Scoped { arity: Arity, begin: ScopedBegin },
+     /// A body some later phase owes, named here. The bind still succeeds;
+     /// the send is loud.
+-    Deferred { owner: &'static str },
++    Deferred { owner: Owner },
+ }
+ 
+ const fn implemented(
+     name: &'static str,
+     family: Family,
+     arity: Arity,
+     run: NativeMethod,
+ ) -> NativeExternal {
+     NativeExternal {
+         name,
+@@ -108,25 +109,21 @@ const fn scoped(
+         family,
+         body: ExternalBody::Scoped { arity, begin },
+     }
+ }
+ 
+ /// A deferred entry, which names the phase that owes it a body.
+ ///
+ /// **Named per row rather than per family**, because the two came apart:
+ /// `handle_set` needs `from_raw_fd` and so stays refused after the stream
+ /// family is built, and a refusal naming a closed phase would be a lie.
+-/// It is owed by the phase that widens D-U1 past `rexx-api`'s `ffi.rs` and
+-/// `load.rs`, which is Phase 10's -- adopting a descriptor the interpreter
+-/// did not open is the same grant RXAPI and the external queues need. It
+-/// never needed the loader.
+-const fn deferred(name: &'static str, family: Family, owner: &'static str) -> NativeExternal {
++const fn deferred(name: &'static str, family: Family, owner: Owner) -> NativeExternal {
+     NativeExternal {
+         name,
+         family,
+         body: ExternalBody::Deferred { owner },
+     }
+ }
+ 
+ /// The `REXX` package's exported method table.
+ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
+     scoped(
+@@ -254,21 +251,21 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
+         Family::Stream,
+         Arity::Fixed(0),
+         super::stream::query_size,
+     ),
+     implemented(
+         "query_time",
+         Family::Stream,
+         Arity::Fixed(0),
+         super::stream::query_time,
+     ),
+-    deferred("handle_set", Family::Stream, "Phase 10"),
++    deferred("handle_set", Family::Stream, Owner::Phase9),
+     implemented(
+         "std_set",
+         Family::Stream,
+         Arity::Fixed(0),
+         super::stream::std_set,
+     ),
+     implemented(
+         "stream_flush",
+         Family::Stream,
+         Arity::Fixed(0),
+@@ -291,30 +288,70 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
+         Family::Stream,
+         Arity::Fixed(0),
+         super::stream::close,
+     ),
+     implemented(
+         "stream_uninit",
+         Family::Stream,
+         Arity::Fixed(0),
+         super::stream::uninit,
+     ),
+-    deferred("rexx_create_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_open_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_queue_exists", Family::Queue, "Phase 10"),
+-    deferred("rexx_delete_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_query_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_push_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_queue_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_pull_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_linein_queue", Family::Queue, "Phase 10"),
+-    deferred("rexx_clear_queue", Family::Queue, "Phase 10"),
++    deferred(
++        "rexx_create_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_open_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_queue_exists",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_delete_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_query_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_push_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_queue_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_pull_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_linein_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
++    deferred(
++        "rexx_clear_queue",
++        Family::Queue,
++        Owner::Phase10(Deferral::Rxapi),
++    ),
+     implemented(
+         "file_separator",
+         Family::File,
+         Arity::Fixed(0),
+         native_file_separator,
+     ),
+     implemented(
+         "file_path_separator",
+         Family::File,
+         Arity::Fixed(0),
+@@ -469,21 +506,21 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
+ /// Every row of the registry, flattened for a caller outside this module --
+ /// `crate::native_entry_points` is the one, and its own doc says why the
+ /// registry's types stay in here.
+ pub(crate) fn entry_points() -> impl Iterator<Item = crate::NativeEntryPoint> {
+     LIBRARY_REXX_METHODS
+         .iter()
+         .map(|entry| crate::NativeEntryPoint {
+             entry: entry.name,
+             family: entry.family.label(),
+             owner: match entry.body {
+-                ExternalBody::Deferred { owner } => Some(owner),
++                ExternalBody::Deferred { owner } => Some(owner.label()),
+                 ExternalBody::Implemented { .. } | ExternalBody::Scoped { .. } => None,
+             },
+             implemented: !matches!(entry.body, ExternalBody::Deferred { .. }),
+         })
+ }
+ 
+ /// The entry point the `REXX` package exports under `name`, or `None` for a
+ /// name it does not export.
+ pub(crate) fn entry_point(name: &[u8]) -> Option<&'static NativeExternal> {
+     LIBRARY_REXX_METHODS
+@@ -725,21 +762,21 @@ pub(crate) fn unresolved_entry(external: Option<&MethodExternal>) -> Option<&[u8
+     match external? {
+         MethodExternal::LibraryRexx(entry) => entry.as_ref().err().map(Vec::as_slice),
+         MethodExternal::Attribute(binds) => binds
+             .iter()
+             .find_map(|bind| bind.entry.as_ref().err().map(Vec::as_slice)),
+         MethodExternal::OtherLibrary { .. } => None,
+     }
+ }
+ 
+ /// The refusal a send to an entry point this phase does not implement gets.
+-pub(crate) fn deferred_send(entry: &NativeExternal, owner: &'static str) -> Loud {
++pub(crate) fn deferred_send(entry: &NativeExternal, owner: Owner) -> Loud {
+     Loud {
+         message: crate::owned_message(
+             &format!("the LIBRARY REXX entry point \"{}\"", entry.name),
+-            Some(owner),
++            Some(owner.label()),
+         ),
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests;
+diff --git a/rust/crates/rexx-exec/src/dispatch/native/tests.rs b/rust/crates/rexx-exec/src/dispatch/native/tests.rs
+index f2948c6d6..7b9195d79 100644
+--- a/rust/crates/rexx-exec/src/dispatch/native/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/native/tests.rs
+@@ -140,29 +140,29 @@ fn the_bootstrap_files_and_the_registry_name_the_same_entry_points() {
+ }
+ 
+ /// Every family has at least one entry point this phase defers, so a
+ /// program pinning that family's refusal can be written at all.
+ #[test]
+ fn every_deferred_entry_point_names_an_open_phase() {
+     // The phases that still owe entry points, and no more: another
+     // spelling is either a typo or work nobody has been assigned, and a
+     // phase that has closed cannot owe anything -- a refusal naming one
+     // is a lie a program can read.
+-    const OPEN: &[&str] = &["Phase 10"];
++    const OPEN: &[&str] = &["Phase 9", "Phase 10"];
+     let mut deferred = 0usize;
+     for entry in LIBRARY_REXX_METHODS {
+         let ExternalBody::Deferred { owner } = entry.body else {
+             continue;
+         };
+         deferred += 1;
+         assert!(
+-            OPEN.contains(&owner),
++            OPEN.contains(&owner.phase()),
+             "{} defers to {owner:?}, which is not one of {OPEN:?}",
+             entry.name
+         );
+     }
+     assert!(
+         deferred > 0,
+         "the registry defers nothing at all, so this test is passing over an empty set"
+     );
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/tests.rs b/rust/crates/rexx-exec/src/dispatch/tests.rs
+index b69915861..ea52a6862 100644
+--- a/rust/crates/rexx-exec/src/dispatch/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/tests.rs
+@@ -1924,31 +1924,32 @@ fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
+         "say .local~remove('STDQUE')\n",
+         "say .local~removeEntry('stdque')\n",
+         "do n over .local~allItems; end\n",
+     ] {
+         let (code, stdout, stderr) = run_source(source);
+         assert_eq!(
+             (code, stdout.as_str(), stderr.as_str()),
+             (
+                 120,
+                 "",
+-                "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
++                "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
+             ),
+             "{source:?}"
+         );
+     }
+     assert_eq!(
+         run_source("say .stdque\n"),
+         (
+             120,
+             String::new(),
+-            "rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10)\n".to_string()
++            "rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10 Rxapi)\n"
++                .to_string()
+         )
+     );
+     // The adjacent successes, each the oracle's own answer: the index and
+     // count reads never touch the item, and once a program has replaced
+     // the entry every item read answers.
+     assert_eq!(
+         run_source(
+             "say .local~items .local~allIndexes~items .local~hasIndex('STDQUE') \
+              .local~hasEntry('stdque')\n\
+              .local['STDQUE'] = 'q'\n\
+@@ -2037,21 +2038,21 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
+ #[test]
+ fn a_reqstr_context_whose_instruction_is_another_phases_is_still_loud() {
+     assert_eq!(
+         run_source(
+             "address 'SYSTEM' .K with output using (.rexxqueue~new)\n::class K\n\
+              ::method makeString class\n  return 'true'\n"
+         ),
+         (
+             120,
+             String::new(),
+-            "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10)\n"
++            "rexx-exec: an ADDRESS WITH RexxQueue redirection is not implemented (Phase 10 Rxapi)\n"
+                 .to_string()
+         )
+     );
+ }
+ 
+ /// An `Interp` whose class registry holds one class awaiting a class-side
+ /// `UNINIT`, which is what a directive install leaves behind.
+ fn interp_awaiting_a_class_uninit() -> Interp {
+     let mut interp = Interp::new();
+     let program = Rc::new(
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 07734453a..ba85fd588 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -8,21 +8,21 @@
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `.environment`, `.local`, `.context` and `.methods` as objects, the order a
+ //! `.NAME` resolves in, and the one chokepoint `.environment` and `.local`
+ //! are read through.
+ 
+ use rustc_hash::FxHashMap;
+ 
+-use rexx_core::{BehaviourId, Body, NativeObject, ObjRef};
++use rexx_core::{BehaviourId, Body, Deferral, NativeObject, ObjRef, Owner};
+ 
+ use crate::dispatch::hash;
+ use crate::plan::{ClassPackage, Package, ProgramId};
+ use crate::{Failure, Interp, Loud};
+ 
+ // Where `SAY` output and trace lines go: the `.OUTPUT` and `.TRACEOUTPUT` routes.
+ mod route;
+ 
+ // Package, `Method` and `Routine` objects and annotation tables, each built once and kept.
+ mod identities;
+@@ -353,21 +353,24 @@ impl Interp {
+             .lookup("RexxContext")
+             .expect("RexxContext is a native class");
+         let object_class = self
+             .classes()
+             .lookup("Object")
+             .expect("Object is a native class");
+ 
+         // Every object below is rooted the instant it exists and before the
+         // next allocation, which can collect.
+         let frame = self.roots.activity_mut().push_frame();
+-        let mut owed = [(ObjRef::NIL, None), (ObjRef::NIL, Some("Phase 10"))];
++        let mut owed = [
++            (ObjRef::NIL, None),
++            (ObjRef::NIL, Some(Owner::Phase10(Deferral::Rxapi).label())),
++        ];
+         for (at, (held, owner)) in owed.iter_mut().enumerate() {
+             let rendered = match owner {
+                 Some(owner) => format!("an entry owed by {owner}"),
+                 None => "an entry the library bootstrap fills".to_string(),
+             };
+             *held = self.alloc_with(
+                 BehaviourId::OBJECT,
+                 Body::Native(Box::new(NativeObject::new(
+                     object_class,
+                     rendered.as_bytes(),
+diff --git a/rust/crates/rexx-exec/src/eval/tests.rs b/rust/crates/rexx-exec/src/eval/tests.rs
+index 66e48095d..ac3a99282 100644
+--- a/rust/crates/rexx-exec/src/eval/tests.rs
++++ b/rust/crates/rexx-exec/src/eval/tests.rs
+@@ -1029,21 +1029,21 @@ fn an_unresolvable_name_raises_43_1() {
+ #[test]
+ fn a_wholly_excluded_builtin_stays_loud_rather_than_raising_43_1() {
+     let outcome = crate::run_program(
+         "call-expr-excluded.rex",
+         b"say rxqueue('G')\n".to_vec(),
+         crate::Invocation::none(),
+     );
+     assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+     assert_eq!(
+         String::from_utf8_lossy(&outcome.stderr),
+-        "rexx-exec: routine \"RXQUEUE\" is not implemented (Phase 10)\n",
++        "rexx-exec: routine \"RXQUEUE\" is not implemented (Phase 10 Rxapi)\n",
+         "the refusal names the phase the exclusion table gives it"
+     );
+ }
+ 
+ /// **`CallTarget::Literal` never searches the label table**, symmetric
+ /// with `CALL "SUB"` (Task 3). Measured independently on the oracle in a
+ /// clean directory (never the scratchpad root, which sits on the
+ /// external-routine search path and holds a stale `f.rex` -- the first
+ /// attempt at exactly this measurement found it and reported the wrong
+ /// answer): `say "f"(1)` with `f:` present is Error 43.1 rc 213, "Routine
+diff --git a/rust/crates/rexx-exec/src/internal_routines.rs b/rust/crates/rexx-exec/src/internal_routines.rs
+index f75db56bd..031d9b4fe 100644
+--- a/rust/crates/rexx-exec/src/internal_routines.rs
++++ b/rust/crates/rexx-exec/src/internal_routines.rs
+@@ -12,20 +12,22 @@
+ //! The routines the oracle's two internal packages export, which are neither
+ //! builtins nor `::ROUTINE`s: `REXX` (`runtime/NativeFunctions.h`) and
+ //! `REXXUTIL` (`runtime/RexxUtilCommon.cpp`'s table plus the platform half in
+ //! `platform/unix/SysRexxUtilFunctions.h`). The oracle consults them after a
+ //! program's own routines and before the external file search, so a name here
+ //! that this crate has no body for must refuse rather than fall through to
+ //! 43.1 -- a "routine not found" a program cannot tell from its own typo.
+ //! `tests/internal_routines.rs` re-derives this table from those three C++
+ //! files.
+ 
++use rexx_core::{Deferral, Owner};
++
+ /// Which internal package exports the routine.
+ #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+ pub(crate) enum Package {
+     /// `runtime/NativeFunctions.h`, loaded as the `REXX` package.
+     Rexx,
+     /// `runtime/RexxUtilCommon.cpp`, loaded as the `REXXUTIL` package.
+     RexxUtil,
+ }
+ 
+ impl Package {
+@@ -49,21 +51,21 @@ pub(crate) type InternalBody = fn(
+ 
+ /// One routine an internal package exports.
+ pub(crate) struct InternalRoutine {
+     /// The name as the C++ registers it; the lookup is caseless, so the
+     /// spelling is for a reader.
+     pub(crate) name: &'static str,
+     pub(crate) package: Package,
+     /// The phase owing a body, or `None` for a row this crate runs. **Not a
+     /// field beside `body`**: a row has one or the other, and an owner on a
+     /// row that runs is a phase name nothing can print.
+-    pub(crate) owner: Option<&'static str>,
++    pub(crate) owner: Option<Owner>,
+     /// The code, once some phase has written it. A row with `None` refuses,
+     /// naming [`InternalRoutine::owner`].
+     pub(crate) body: Option<InternalBody>,
+ }
+ 
+ /// A `REXX`-package row this crate runs.
+ const fn rexx_run(name: &'static str, body: InternalBody) -> InternalRoutine {
+     InternalRoutine {
+         name,
+         package: Package::Rexx,
+@@ -75,100 +77,100 @@ const fn rexx_run(name: &'static str, body: InternalBody) -> InternalRoutine {
+ /// A `REXXUTIL` row this crate runs.
+ const fn util_run(name: &'static str, body: InternalBody) -> InternalRoutine {
+     InternalRoutine {
+         name,
+         package: Package::RexxUtil,
+         owner: None,
+         body: Some(body),
+     }
+ }
+ 
+-const fn util(name: &'static str, owner: &'static str) -> InternalRoutine {
++const fn util(name: &'static str, owner: Owner) -> InternalRoutine {
+     InternalRoutine {
+         name,
+         package: Package::RexxUtil,
+         owner: Some(owner),
+         body: None,
+     }
+ }
+ 
+ /// Every name the two packages register on Linux.
+ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
+     rexx_run("Directory", crate::builtin::platform::directory),
+     rexx_run("Filespec", crate::builtin::platform::filespec),
+     rexx_run("Beep", crate::builtin::platform::beep),
+-    util("SysAddRexxMacro", "Phase 10"),
+-    util("SysClearRexxMacroSpace", "Phase 10"),
++    util("SysAddRexxMacro", Owner::Phase10(Deferral::Rxapi)),
++    util("SysClearRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
+     util_run("SysCloseEventSem", crate::builtin::rexxutil::close_sem),
+     util_run("SysCloseMutexSem", crate::builtin::rexxutil::close_sem),
+-    util("SysCls", "Phase 10"),
++    util("SysCls", Owner::Phase9),
+     util_run(
+         "SysCreateEventSem",
+         crate::builtin::rexxutil::create_event_sem,
+     ),
+     util_run(
+         "SysCreateMutexSem",
+         crate::builtin::rexxutil::create_mutex_sem,
+     ),
+-    util("SysCreatePipe", "Phase 10"),
+-    util("SysDropFuncs", "Phase 10"),
+-    util("SysDropRexxMacro", "Phase 10"),
+-    util("SysDumpVariables", "Phase 10"),
+-    util("SysFileCopy", "Phase 10"),
++    util("SysCreatePipe", Owner::Phase9),
++    util("SysDropFuncs", Owner::Phase9),
++    util("SysDropRexxMacro", Owner::Phase10(Deferral::Rxapi)),
++    util("SysDumpVariables", Owner::Phase9),
++    util("SysFileCopy", Owner::Phase9),
+     util_run("SysFileDelete", crate::builtin::rexxutil::file_delete),
+     util_run("SysFileExists", crate::builtin::rexxutil::file_exists),
+-    util("SysFileMove", "Phase 10"),
+-    util("SysFileSearch", "Phase 10"),
++    util("SysFileMove", Owner::Phase9),
++    util("SysFileSearch", Owner::Phase9),
+     util_run("SysFileTree", crate::builtin::rexxutil::file_tree),
+-    util("SysFork", "Phase 10"),
+-    util("SysFormatMessage", "Phase 10"),
+-    util("SysGetErrorText", "Phase 10"),
+-    util("SysGetFileDateTime", "Phase 10"),
+-    util("SysGetKey", "Phase 10"),
+-    util("SysGetMessage", "Phase 10"),
+-    util("SysGetMessageX", "Phase 10"),
++    util("SysFork", Owner::Phase9),
++    util("SysFormatMessage", Owner::Phase9),
++    util("SysGetErrorText", Owner::Phase9),
++    util("SysGetFileDateTime", Owner::Phase9),
++    util("SysGetKey", Owner::Phase9),
++    util("SysGetMessage", Owner::Phase9),
++    util("SysGetMessageX", Owner::Phase9),
+     util_run("SysIsFile", crate::builtin::rexxutil::is_file),
+-    util("SysIsFileDirectory", "Phase 10"),
+-    util("SysIsFileLink", "Phase 10"),
++    util("SysIsFileDirectory", Owner::Phase9),
++    util("SysIsFileLink", Owner::Phase9),
+     util_run("SysLinVer", crate::builtin::rexxutil::version),
+-    util("SysLoadFuncs", "Phase 10"),
+-    util("SysLoadRexxMacroSpace", "Phase 10"),
++    util("SysLoadFuncs", Owner::Phase9),
++    util("SysLoadRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
+     util_run("SysMkDir", crate::builtin::rexxutil::mk_dir),
+-    util("SysOpenEventSem", "Phase 10"),
+-    util("SysOpenMutexSem", "Phase 10"),
++    util("SysOpenEventSem", Owner::Phase9),
++    util("SysOpenMutexSem", Owner::Phase9),
+     util_run("SysPostEventSem", crate::builtin::rexxutil::post_event_sem),
+-    util("SysQueryProcess", "Phase 10"),
+-    util("SysQueryRexxMacro", "Phase 10"),
++    util("SysQueryProcess", Owner::Phase9),
++    util("SysQueryRexxMacro", Owner::Phase10(Deferral::Rxapi)),
+     util_run(
+         "SysReleaseMutexSem",
+         crate::builtin::rexxutil::release_mutex_sem,
+     ),
+-    util("SysReorderRexxMacro", "Phase 10"),
++    util("SysReorderRexxMacro", Owner::Phase10(Deferral::Rxapi)),
+     util_run("SysRequestMutexSem", crate::builtin::rexxutil::wait_sem),
+     util_run(
+         "SysResetEventSem",
+         crate::builtin::rexxutil::reset_event_sem,
+     ),
+     util_run("SysRmDir", crate::builtin::rexxutil::rm_dir),
+-    util("SysSaveRexxMacroSpace", "Phase 10"),
+-    util("SysSearchPath", "Phase 10"),
+-    util("SysSetFileDateTime", "Phase 10"),
+-    util("SysSetPriority", "Phase 10"),
++    util("SysSaveRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
++    util("SysSearchPath", Owner::Phase9),
++    util("SysSetFileDateTime", Owner::Phase9),
++    util("SysSetPriority", Owner::Phase9),
+     util_run("SysSleep", crate::builtin::rexxutil::sleep),
+-    util("SysStemCopy", "Phase 10"),
+-    util("SysStemDelete", "Phase 10"),
+-    util("SysStemInsert", "Phase 10"),
+-    util("SysStemSort", "Phase 10"),
+-    util("SysTempFileName", "Phase 10"),
+-    util("SysUtilVersion", "Phase 10"),
++    util("SysStemCopy", Owner::Phase9),
++    util("SysStemDelete", Owner::Phase9),
++    util("SysStemInsert", Owner::Phase9),
++    util("SysStemSort", Owner::Phase9),
++    util("SysTempFileName", Owner::Phase9),
++    util("SysUtilVersion", Owner::Phase9),
+     util_run("SysVersion", crate::builtin::rexxutil::version),
+-    util("SysWait", "Phase 10"),
++    util("SysWait", Owner::Phase9),
+     util_run("SysWaitEventSem", crate::builtin::rexxutil::wait_sem),
+ ];
+ 
+ /// The `REXX` package's row `name` names, found as
+ /// `LibraryPackage::resolveRoutine` finds a routine table entry
+ /// (`interpreter/package/LibraryPackage.cpp:410-435`): by exact spelling, then
+ /// without regard to case.
+ pub(crate) fn rexx_package_routine(name: &[u8]) -> Option<&'static InternalRoutine> {
+     let rows = || {
+         INTERNAL_ROUTINES
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index e78c28081..a5e4926c4 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -9,21 +9,21 @@
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The executor.
+ 
+ // Under `--cfg loom` only `tests/loom.rs` runs: the unit tests would meet
+ // `loom`'s primitives outside a model (`sync.rs`).
+ #![cfg(not(all(loom, test)))]
+ 
+ use rexx_classes::MethodId;
+-use rexx_core::{Heap, NameMap, ObjRef, RootSet, SlotRef};
++use rexx_core::{Heap, NameMap, ObjRef, Owner, RootSet, SlotRef};
+ use rexx_num::Settings;
+ use rexx_parse::{
+     CodeBody, ExprKind, InstructionKind, Operator, Program, SymbolId, SymbolTable, compound_parts,
+     parse_program,
+ };
+ use rustc_hash::FxHashMap;
+ use std::rc::Rc;
+ 
+ // `pinned!` and `park_point!`, ahead of every module that uses them.
+ #[macro_use]
+@@ -477,45 +477,45 @@ impl Loud {
+     /// A call that resolved to a **builtin this crate runs nothing for**. The
+     /// owner comes from the same table the exclusion itself does, so a
+     /// delivered exclusion takes its blame with it.
+     fn unresolved_call(name: &[u8]) -> Loud {
+         const LIMIT: usize = 128;
+         let shown = if name.len() > LIMIT {
+             format!("{}...", String::from_utf8_lossy(&name[..LIMIT]))
+         } else {
+             String::from_utf8_lossy(name).into_owned()
+         };
+-        let owner = rexx_inventory::builtins::owner_of(&shown);
++        let owner = excluded_owner(&shown);
+         Loud {
+             message: owned_message(&format!("routine \"{shown}\""), owner),
+         }
+     }
+ 
+     /// A call that resolved to a routine one of the oracle's internal packages
+     /// exports and this crate has no body for. Distinct from
+     /// [`Loud::unresolved_call`] only in where the name and the owner come
+     /// from; the message a program sees is the same shape.
+-    fn internal_routine(name: &[u8], owner: &'static str) -> Loud {
++    fn internal_routine(name: &[u8], owner: Owner) -> Loud {
+         let shown = String::from_utf8_lossy(name).into_owned();
+         Loud {
+-            message: owned_message(&format!("routine \"{shown}\""), Some(owner)),
++            message: owned_message(&format!("routine \"{shown}\""), Some(owner.label())),
+         }
+     }
+ 
+     /// A `Sys*Sem` routine given a name: a named semaphore is `sem_open`'s,
+     /// shared between processes (roadmap D11).
+     fn named_semaphore(name: &[u8]) -> Loud {
+         let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
+         Loud {
+             message: owned_message(
+                 &format!("routine \"{shown}\" with a named semaphore"),
+-                Some("Phase 10"),
++                Some(Owner::Phase9.label()),
+             ),
+         }
+     }
+ 
+     /// A native method whose receiver is not of the type the method reads,
+     /// reached by running a primitive's own row on an object of another class.
+     /// The oracle reads such a receiver through the wrong layout: it crashes
+     /// (`corpus/oracle-crashes.txt` entry 33) or answers an accident of memory
+     /// (Deviation 28).
+     #[cold]
+@@ -551,23 +551,26 @@ impl Loud {
+     fn unknown_receiver(kind: &str) -> Loud {
+         Loud {
+             message: owned_message(&format!("a message send to {kind}"), None),
+         }
+     }
+ 
+     /// An `ADDRESS ... WITH` redirection whose target this crate accepts in
+     /// the grammar and does not yet build. `owner` is the phase that owes it,
+     /// which is not always this one: a `RexxQueue` target waits on the queues
+     /// themselves.
+-    fn redirection(what: &str, owner: &'static str) -> Loud {
++    fn redirection(what: &str, owner: Owner) -> Loud {
+         Loud {
+-            message: owned_message(&format!("an ADDRESS WITH {what} redirection"), Some(owner)),
++            message: owned_message(
++                &format!("an ADDRESS WITH {what} redirection"),
++                Some(owner.label()),
++            ),
+         }
+     }
+ 
+     /// An operator whose **left** operand is an object that answers no
+     /// operator message. No program reaches it: scout A's `spec-op.txt`
+     /// probes, every dyadic and prefix operator on `.array`, `.local`,
+     /// `.context`, `.methods`, an instance, an array, a variable reference, a
+     /// stem holding an array and `.stdout`, refused none.
+     fn operator_operand(op: &str, kind: &str) -> Loud {
+         Loud {
+@@ -654,21 +657,21 @@ impl Loud {
+             message: "a library procedure that resolved when it was bound no longer resolves"
+                 .to_string(),
+         }
+     }
+ 
+     /// `Package~options(name, value)` and `Package~defaultOptions(name,
+     /// value)`, each of which writes a package setting rather than reading
+     /// one.
+     fn package_option_write() -> Loud {
+         Loud {
+-            message: owned_message("a package settings write", Some("Phase 10")),
++            message: owned_message("a package settings write", Some(Owner::Phase9.label())),
+         }
+     }
+ 
+     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
+     /// nor a class object, the two kinds that hold methods of their own here.
+     /// No program reaches it: the routes tried are `SETMETHOD` sent to an
+     /// `Array` and a `String` (private, 97.2 on both engines),
+     /// a `define` or `inherit` on `.Object` and `.String` (98.985), and a
+     /// borrowed `Object` `SETMETHOD` row a `Directory`'s own method sends to
+     /// that `Directory` (88.901, the entry method arrives with no arguments).
+@@ -925,27 +928,34 @@ pub(crate) mod paths;
+ pub fn internal_routine_names() -> Vec<&'static str> {
+     internal_routines::INTERNAL_ROUTINES
+         .iter()
+         .map(|row| row.name)
+         .collect()
+ }
+ 
+ /// Every internal-package routine as `(name, package, owner)`, for the test
+ /// that re-derives the two packages from the C++ tree separately. The owner
+ /// is `None` for a row this crate runs.
+-pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, Option<&'static str>)> {
++pub fn internal_routine_rows() -> Vec<(&'static str, &'static str, Option<Owner>)> {
+     internal_routines::INTERNAL_ROUTINES
+         .iter()
+         .map(|row| (row.name, row.package.label(), row.owner))
+         .collect()
+ }
+ 
++/// The owner [`rexx_inventory::builtins::EXCLUDED`] gives the builtin
++/// `name`, or `None` for a name it does not list.
++fn excluded_owner(name: &str) -> Option<&'static str> {
++    let (phase, reason) = rexx_inventory::builtins::owner_of(name)?;
++    Owner::named(phase, Some(reason)).map(Owner::label)
++}
++
+ /// Appends the owner phase to a loud message, `"{name} is not implemented
+ /// ({owner})"`, or leaves it unsuffixed (`"{name} is not implemented"`) when
+ /// [`instruction_owner`]/[`expr_owner`] answer `None` -- meaning "this crate
+ /// implements that variant", not "the owner is some particular phase".
+ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
+     match owner {
+         None => format!("{name} is not implemented"),
+         Some(owner) => format!("{name} is not implemented ({owner})"),
+     }
+ }
+@@ -3216,22 +3226,22 @@ pub fn render_ir(text: Vec<u8>, setting: &[u8]) -> Result<String, String> {
+ /// One row of the `LIBRARY REXX` entry-point registry (D37), for a caller
+ /// that walks it.
+ pub struct NativeEntryPoint {
+     /// The name the `REXX` package exports the entry point under, spelled as
+     /// `interpreter/runtime/NativeMethods.h` spells it. The lookup that
+     /// matches it is caseless.
+     pub entry: &'static str,
+     /// The family it belongs to, lower case: the interpreter subsystem whose
+     /// C++ translation unit defines it.
+     pub family: &'static str,
+-    /// The phase that owes this entry point a body, or `None` for one this
+-    /// crate runs. Spelled as every other owner string in this crate is.
++    /// The label of the owner that owes this entry point a body, as its
++    /// refusal prints it, or `None` for one this crate runs.
+     pub owner: Option<&'static str>,
+     /// Whether this phase runs the entry point rather than refusing a send to
+     /// it. A bind succeeds either way -- what it decides is whether the
+     /// declaring *file* installs.
+     pub implemented: bool,
+ }
+ 
+ /// Every entry point a `::METHOD ... EXTERNAL 'LIBRARY REXX name'` can bind
+ /// to. See [`NativeEntryPoint`].
+ pub fn native_entry_points() -> Vec<NativeEntryPoint> {
+diff --git a/rust/crates/rexx-exec/src/redirect.rs b/rust/crates/rexx-exec/src/redirect.rs
+index 1312fc8a9..e45d8ab02 100644
+--- a/rust/crates/rexx-exec/src/redirect.rs
++++ b/rust/crates/rexx-exec/src/redirect.rs
+@@ -14,21 +14,21 @@
+ //! go.
+ //!
+ //! The oracle splits these the same way. A `CommandIOConfiguration` is what
+ //! the parser built and what an `ADDRESS env WITH ...` stores under the
+ //! environment name; a `CommandIOContext` is built at **issue** time by
+ //! evaluating that configuration's sources and targets in the variable
+ //! context then in force.
+ 
+ use std::rc::Rc;
+ 
+-use rexx_core::{Body, Decoded, ObjRef};
++use rexx_core::{Body, Decoded, Deferral, ObjRef, Owner};
+ use rexx_parse::{AddressIo, Expr, OutputOption, Redirection, SymbolId};
+ 
+ use crate::activation::{ActivationId, IoConfigs};
+ use crate::error::{Failure, Raised};
+ use crate::{Code, Interp, Loud};
+ 
+ /// Which of a command's three streams a redirection names -- the word its
+ /// `>K>` line carries and the one its errors are worded for.
+ #[derive(Copy, Clone, PartialEq, Eq)]
+ enum Stream {
+@@ -416,21 +416,21 @@ impl Interp {
+     /// does not answer one -- measured, `.nil` and `42` are the two ends of
+     /// that, `42` being a String.
+     fn using_input_lines(&mut self, object: ObjRef) -> Result<Vec<Vec<u8>>, Failure> {
+         if is_string(self, object) {
+             return Ok(vec![self.string_value_text(object)]);
+         }
+         if self.is_stem_object(object) {
+             return self.stem_input_lines(object);
+         }
+         if self.is_rexx_queue(object) {
+-            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
++            return Err(Loud::redirection("RexxQueue", Owner::Phase10(Deferral::Rxapi)).into());
+         }
+         if self.is_stream_object(object) {
+             return self.read_stream_lines(object);
+         }
+         if let Some(path) = self.file_object_path(object)? {
+             let stream = self.open_named_stream(&path, b"READ", true)?;
+             let lines = self.read_stream_lines(stream)?;
+             let caller = self.caller();
+             self.send_message(stream, b"CLOSE", None, &[], caller)?;
+             return Ok(lines);
+@@ -511,21 +511,21 @@ impl Interp {
+         // Neither `REPLACE` nor `APPEND` means anything to an object that is
+         // not a file, and the oracle refuses both rather than ignoring them.
+         let optioned = option != OutputOption::Default;
+         if self.is_stem_object(object) {
+             return Ok(Target::Stem { object, append });
+         }
+         if self.is_rexx_queue(object) {
+             if optioned {
+                 return Err(Raised::queue_target_option().into());
+             }
+-            return Err(Loud::redirection("RexxQueue", "Phase 10").into());
++            return Err(Loud::redirection("RexxQueue", Owner::Phase10(Deferral::Rxapi)).into());
+         }
+         if self.is_stream_object(object) {
+             if optioned {
+                 return Err(Raised::stream_target_option().into());
+             }
+             return Ok(Target::Stream {
+                 object,
+                 qualified: None,
+             });
+         }
+diff --git a/rust/crates/rexx-exec/src/run/tests/directives.rs b/rust/crates/rexx-exec/src/run/tests/directives.rs
+index a6579d5b2..b067a40a9 100644
+--- a/rust/crates/rexx-exec/src/run/tests/directives.rs
++++ b/rust/crates/rexx-exec/src/run/tests/directives.rs
+@@ -230,21 +230,21 @@ fn every_directive_this_crate_can_install_leaves_the_program_alone() {
+         assert!(outcome.stderr.is_empty(), "{what}: stderr must be empty");
+     }
+ }
+ 
+ /// The refusals Task 21 leaves where the oracle answers, asserted here
+ /// because nothing else can assert them.
+ #[test]
+ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
+     let cases: &[(&[u8], &str)] = &[(
+         b".K~defineMethods(.local)\n::class K\n",
+-        "a directory whose entries this crate does not fill is not implemented (Phase 10)",
++        "a directory whose entries this crate does not fill is not implemented (Phase 10 Rxapi)",
+     )];
+     for (source, message) in cases {
+         let outcome = routine_program(source);
+         assert_eq!(
+             outcome.exit_code,
+             crate::NOT_IMPLEMENTED_EXIT,
+             "{message}: exit code"
+         );
+         assert_eq!(
+             String::from_utf8_lossy(&outcome.stderr),
+@@ -258,21 +258,21 @@ fn the_refusals_this_task_leaves_where_the_oracle_answers_still_fire() {
+ /// refuses the program before its first clause, naming the owning phase.
+ #[test]
+ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
+     // **The row that says which `EXTERNAL` form is still refused**:
+     // `REGISTERED`, naming a library and a procedure that resolve, so the only
+     // thing left to refuse it is the directive. The `LIBRARY <other>` forms
+     // are `a_directive_naming_a_library_that_is_not_there_is_98_903`'s, where
+     // the oracle's own condition is what answers.
+     let cases: &[(&[u8], &str)] = &[(
+         b"say 'main ran'\n::routine r external \"REGISTERED rxmath RxCalcSqrt\"\n",
+-        "::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10)",
++        "::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)",
+     )];
+     for (source, message) in cases {
+         let outcome = routine_program(source);
+         assert_eq!(
+             outcome.exit_code,
+             crate::NOT_IMPLEMENTED_EXIT,
+             "{message}: exit code"
+         );
+         assert_eq!(
+             outcome.stdout, b"",
+@@ -310,37 +310,37 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
+             0,
+             "{}",
+             String::from_utf8_lossy(&outcome.stderr)
+         );
+         assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected);
+     }
+ 
+     let cases: &[(&[u8], &str)] = &[
+         (
+             b"say SysStemSort('a.')\n",
+-            "routine \"SYSSTEMSORT\" is not implemented (Phase 10)",
++            "routine \"SYSSTEMSORT\" is not implemented (Phase 9)",
+         ),
+         (
+             b"say SysOpenEventSem('sem')\n",
+-            "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 10)",
++            "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 9)",
+         ),
+         (
+             b"say SysCreateEventSem('sem')\n",
+-            "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 10)",
++            "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 9)",
+         ),
+         (
+             b"say SysCreateMutexSem('sem')\n",
+-            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore is not implemented (Phase 10)",
++            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore is not implemented (Phase 9)",
+         ),
+         (
+             b"say rxqueue('G')\n",
+-            "routine \"RXQUEUE\" is not implemented (Phase 10)",
++            "routine \"RXQUEUE\" is not implemented (Phase 10 Rxapi)",
+         ),
+     ];
+     for (source, message) in cases {
+         let outcome = routine_program(source);
+         assert_eq!(
+             outcome.exit_code,
+             crate::NOT_IMPLEMENTED_EXIT,
+             "{message}: exit code"
+         );
+         assert_eq!(outcome.stdout, b"", "{message}: stdout");
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/native.rs b/rust/crates/rexx-exec/src/scheduler/tests/native.rs
+index d89e1b0ba..f1502286a 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/native.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/native.rs
+@@ -415,14 +415,14 @@ fn a_failure_ending_a_native_park_abandons_the_call() {
+         "o = .t~new\nm = o~start('boom')\nsay TestIntArg(5)\nsay 'after'\n\
+          ::requires 'orxfunction' LIBRARY\n::class t\n::method boom\n  \
+          x = .local['STDQUE']\n",
+         false,
+         bounded(),
+     );
+     assert_eq!(run.outcome.exit_code, 120);
+     assert_eq!(run.stdout(), "");
+     assert_eq!(
+         run.stderr(),
+-        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
++        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
+     );
+     assert_eq!(run.exits, 1);
+ }
+diff --git a/rust/crates/rexx-exec/tests/bif_assertions.rs b/rust/crates/rexx-exec/tests/bif_assertions.rs
+index bee93864d..b3dcc7e42 100644
+--- a/rust/crates/rexx-exec/tests/bif_assertions.rs
++++ b/rust/crates/rexx-exec/tests/bif_assertions.rs
+@@ -770,21 +770,21 @@ fn a_raise_row_needs_the_sub_number_too() {
+     );
+ }
+ 
+ /// The exempt file's `unblocked_by` column is in the vocabulary
+ /// `phase-4-exclusions.txt` fixes for owner strings, or is one of the four
+ /// categories [`RowOutcome::attribution`] emits for a row that neither passes
+ /// nor names a construct. Nothing else, so a typo cannot quietly become a new
+ /// category that the set-equality test then happily matches against itself.
+ #[test]
+ fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
+-    const PHASES: &[&str] = &["4b", "4c", "Phase 10"];
++    const PHASES: &[&str] = &["4b", "4c", "Phase 10 Rxapi"];
+ 
+     // The count is the whole point of this table, not decoration on it.
+     // `ANOMALY` moved 3 -> 0 on 2026-09-12: all three were `BEEP`, and Phase 7
+     // gave the `REXX` package's internal routines their bodies, so the rows
+     // pass and the category is empty rather than swept aside.
+     //
+     // `MISMATCH` moved 0 -> 2 on 2026-09-12, and neither remedy the panic
+     // below offers fits these two. They are `STREAM::test_relative_file_exists`
+     // and `...2`, which the stream builtins made reachable. Both assert
+     // against `.ooTest.dir`, and measured, that symbol does not resolve
+diff --git a/rust/crates/rexx-exec/tests/closed_phases.rs b/rust/crates/rexx-exec/tests/closed_phases.rs
+index 744c90a54..9e9bb8982 100644
+--- a/rust/crates/rexx-exec/tests/closed_phases.rs
++++ b/rust/crates/rexx-exec/tests/closed_phases.rs
+@@ -21,188 +21,38 @@
+ //! because an owner reaches a refusal three ways: as a row in a table, as a
+ //! literal argument to a `Loud` constructor, and as a match arm. Only the
+ //! first is enumerable. A literal is read whole, so an owner inside a longer
+ //! refusal text (`"... is not implemented (Phase 8)"`) is found too. The
+ //! owner tables in `tests/` are scanned the same way, and the exclusions
+ //! file's OWNER rows are held to the same rule.
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ 
++#[path = "support/literals.rs"]
++mod source_literals;
++
++use source_literals::{literals, names, shown, source_files};
++
+ /// The phases whose work is finished and which this assertion covers.
+ const CLOSED: &[&str] = &["Phase 5", "Phase 6", "Phase 7", "Phase 8"];
+ 
+ /// This crate's test files holding owner tables: the instruction and
+ /// expression tags, the assertion harnesses' exempt rows and the phase
+ /// vocabularies their attributions are checked against.
+ const OWNER_TABLES: &[&str] = &[
+     "owners.rs",
+     "assertions.rs",
+     "bif_assertions.rs",
+     "keyword_assertions.rs",
+ ];
+ 
+-/// Every `.rs` file under one crate's `src/`, recursively.
+-fn source_files(crate_dir: &str) -> Vec<PathBuf> {
+-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+-        let entries = fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
+-        for entry in entries {
+-            let path = entry.expect("a readable directory entry").path();
+-            if path.is_dir() {
+-                walk(&path, out);
+-            } else if path.extension().is_some_and(|e| e == "rs") {
+-                out.push(path);
+-            }
+-        }
+-    }
+-    let src = Path::new(env!("CARGO_MANIFEST_DIR"))
+-        .join("..")
+-        .join(crate_dir)
+-        .join("src");
+-    let mut out = Vec::new();
+-    walk(&src, &mut out);
+-    out.sort();
+-    assert!(
+-        !out.is_empty(),
+-        "the scan found no sources under {}, so its result would be a vacuous \
+-         zero rather than a measurement",
+-        src.display()
+-    );
+-    out
+-}
+-
+-/// The path as it reads in a failure: the crate-relative tail.
+-fn shown(path: &Path) -> String {
+-    let text = path.display().to_string();
+-    match text.rfind("/src/").or_else(|| text.rfind("/tests/")) {
+-        Some(at) => text[at + 1..].to_string(),
+-        None => text,
+-    }
+-}
+-
+-/// Every string literal in `text`, as its starting line and its contents,
+-/// comments skipped: a comment naming a phase is prose about the code, and
+-/// the rules elsewhere govern that.
+-fn literals(text: &str) -> Vec<(usize, String)> {
+-    let chars: Vec<char> = text.chars().collect();
+-    let mut found = Vec::new();
+-    let (mut at, mut line) = (0, 1);
+-    while at < chars.len() {
+-        match chars[at] {
+-            '\n' => line += 1,
+-            '/' if chars.get(at + 1) == Some(&'/') => {
+-                while at < chars.len() && chars[at] != '\n' {
+-                    at += 1;
+-                }
+-                continue;
+-            }
+-            '/' if chars.get(at + 1) == Some(&'*') => {
+-                at += 2;
+-                while at < chars.len() && !(chars[at] == '*' && chars.get(at + 1) == Some(&'/')) {
+-                    line += usize::from(chars[at] == '\n');
+-                    at += 1;
+-                }
+-                at += 2;
+-                continue;
+-            }
+-            '\'' => {
+-                // A character literal, which may be a quote; otherwise a lifetime.
+-                if chars.get(at + 1) == Some(&'\\') {
+-                    at += 3;
+-                    while at < chars.len() && chars[at] != '\'' {
+-                        at += 1;
+-                    }
+-                } else if chars.get(at + 2) == Some(&'\'') {
+-                    at += 2;
+-                }
+-            }
+-            'r' if matches!(chars.get(at + 1), Some('"' | '#')) && starts_word(&chars, at) => {
+-                let hashes = chars[at + 1..].iter().take_while(|c| **c == '#').count();
+-                if chars.get(at + 1 + hashes) == Some(&'"') {
+-                    let start = line;
+-                    let mut body = String::new();
+-                    at += hashes + 2;
+-                    while at < chars.len()
+-                        && !(chars[at] == '"'
+-                            && chars[at + 1..]
+-                                .iter()
+-                                .take(hashes)
+-                                .filter(|c| **c == '#')
+-                                .count()
+-                                == hashes)
+-                    {
+-                        line += usize::from(chars[at] == '\n');
+-                        body.push(chars[at]);
+-                        at += 1;
+-                    }
+-                    found.push((start, body));
+-                    at += hashes + 1;
+-                    continue;
+-                }
+-            }
+-            '"' => {
+-                let start = line;
+-                let mut body = String::new();
+-                at += 1;
+-                while at < chars.len() && chars[at] != '"' {
+-                    if chars[at] == '\\' {
+-                        if chars.get(at + 1) == Some(&'\n') {
+-                            // A continued literal drops the line break and the
+-                            // next line's indentation.
+-                            at += 2;
+-                            line += 1;
+-                            while at < chars.len() && chars[at].is_whitespace() {
+-                                line += usize::from(chars[at] == '\n');
+-                                at += 1;
+-                            }
+-                            continue;
+-                        }
+-                        body.push(chars[at]);
+-                        at += 1;
+-                    }
+-                    if at < chars.len() {
+-                        line += usize::from(chars[at] == '\n');
+-                        body.push(chars[at]);
+-                        at += 1;
+-                    }
+-                }
+-                found.push((start, body));
+-            }
+-            _ => {}
+-        }
+-        at += 1;
+-    }
+-    found
+-}
+-
+-/// Whether the `r` at `at` opens a raw literal rather than ending a name;
+-/// `br"..."` is one too.
+-fn starts_word(chars: &[char], at: usize) -> bool {
+-    let ident = |c: char| c.is_alphanumeric() || c == '_';
+-    match at.checked_sub(1).map(|before| chars[before]) {
+-        None => true,
+-        Some('b') => at < 2 || !ident(chars[at - 2]),
+-        Some(before) => !ident(before),
+-    }
+-}
+-
+-/// Whether `text` names `phase` as a whole word: `Phase 1` is not in
+-/// `Phase 10`.
+-fn names(text: &str, phase: &str) -> bool {
+-    text.match_indices(phase).any(|(at, _)| {
+-        !text[at + phase.len()..]
+-            .chars()
+-            .next()
+-            .is_some_and(|c| c.is_ascii_digit())
+-    })
+-}
+-
+ /// Every string literal naming a closed phase, alone (`"Phase 8"`) or
+ /// inside a longer text (`"... not implemented (Phase 8)"`), which is what a
+ /// refusal is built from.
+ fn mentions(crate_dir: &str) -> Vec<String> {
+     mentions_in(source_files(crate_dir))
+ }
+ 
+ /// [`mentions`] over `paths`.
+ fn mentions_in(paths: Vec<PathBuf>) -> Vec<String> {
+     let mut found = Vec::new();
+@@ -430,32 +280,25 @@ fn the_row_check_reads_only_a_resolution_that_opens_a_clause() {
+         open_owners(rows),
+         ["OWNER: Phase 8 for the rest", "OWNER: Phase 8 for the rest"]
+     );
+ }
+ 
+ /// The negative control for the scan: a phase that is still open is found by
+ /// the same walk, so an empty result above means the sites are gone and not
+ /// that the scan is looking in the wrong place.
+ #[test]
+ fn the_scan_finds_an_open_phase_it_is_not_asked_about() {
+-    let mut open = 0usize;
+-    for path in source_files("rexx-exec") {
+-        let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+-        for line in text.lines() {
+-            if line.trim_start().starts_with("//") {
+-                continue;
+-            }
+-            if line.contains("\"Phase 10\"") {
+-                open += 1;
+-            }
+-        }
+-    }
++    let open = source_files("rexx-exec")
++        .iter()
++        .flat_map(|path| literals(&fs::read_to_string(path).expect("a source")))
++        .filter(|(_, literal)| names(literal, "Phase 10"))
++        .count();
+     assert!(
+         open >= 2,
+         "the scan found {open} refusals naming a phase that is still open, so it \
+          is not reading the sources the other test clears"
+     );
+ }
+ 
+ /// The literal scan reads a phase inside a longer refusal text, across a
+ /// continued line, and not in a comment, a character or a lifetime.
+ #[test]
+@@ -473,21 +316,22 @@ let r = r#"raw "q" Phase 8"#; let u = "Phase 80";
+         .into_iter()
+         .filter(|(_, literal)| names(literal, "Phase 8"))
+         .map(|(line, _)| line)
+         .collect();
+     assert_eq!(named, [4, 5, 7]);
+     let found = mentions("rexx-api")
+         .into_iter()
+         .filter(|site| site.starts_with("src/ffi.rs:"))
+         .count();
+     assert_eq!(found, 0, "rexx-api's ffi.rs names no closed phase");
+-    let open = source_files("rexx-api")
++    let read = source_files("rexx-api")
+         .iter()
++        .filter(|path| shown(path) == "src/ffi.rs")
+         .flat_map(|path| literals(&fs::read_to_string(path).expect("a source")))
+-        .filter(|(_, literal)| literal != "Phase 9" && names(literal, "Phase 9"))
++        .filter(|(_, literal)| literal.starts_with("RexxInstanceInterface.AttachThread"))
+         .count();
+     assert!(
+-        open >= 1,
+-        "the scan found no longer text naming the open Phase 9 in rexx-api, where \
+-         the boundary's thread refusals name it"
++        read >= 1,
++        "the scan read no literal naming the member ffi.rs refuses, so it is not \
++         reading the file it clears"
+     );
+ }
+diff --git a/rust/crates/rexx-exec/tests/coverage.rs b/rust/crates/rexx-exec/tests/coverage.rs
+index 2dd50b7f2..247a0fe60 100644
+--- a/rust/crates/rexx-exec/tests/coverage.rs
++++ b/rust/crates/rexx-exec/tests/coverage.rs
+@@ -1447,21 +1447,21 @@ use rexx_inventory::builtins::EXCLUDED as EXCLUDED_BUILTINS;
+ fn the_builtin_exclusion_set_matches_the_committed_file() {
+     let names = rexx_inventory::builtins::NAMES;
+     assert_eq!(
+         names.len(),
+         81,
+         "BuiltinFunctions.cpp's table moved off 81 entries -- phase-4-exclusions.txt's \
+          \"66 of the 81\" line and this test's own derivation below both need revisiting"
+     );
+ 
+     let mut seen = HashSet::new();
+-    for (excluded, _owner) in EXCLUDED_BUILTINS {
++    for (excluded, _owner, _reason) in EXCLUDED_BUILTINS {
+         assert!(
+             names.contains(excluded),
+             "{excluded} is listed in phase-4-exclusions.txt but is not in \
+              BuiltinFunctions.cpp's builtin table at all"
+         );
+         assert!(
+             seen.insert(*excluded),
+             "{excluded} is listed twice in EXCLUDED_BUILTINS"
+         );
+     }
+@@ -1471,21 +1471,21 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
+         "the whole exclusions plus the partial rows -- Phase 7 deleted a row \
+          for each name it delivered, ending with VALUE's external selector \
+          and ADDRESS's command issuing, which leaves QUEUED the only partial \
+          row"
+     );
+ 
+     // Every partial row must also be an excluded row, or `wholly_excluded`
+     // subtracts a name that was never in the set and silently returns 16.
+     for partial in rexx_inventory::builtins::PARTIALLY_EXCLUDED {
+         assert!(
+-            EXCLUDED_BUILTINS.iter().any(|(name, _)| name == partial),
++            EXCLUDED_BUILTINS.iter().any(|(name, _, _)| name == partial),
+             "{partial} is a partial exclusion but is not in EXCLUDED at all"
+         );
+     }
+     assert_eq!(
+         rexx_inventory::builtins::wholly_excluded().len(),
+         4,
+         "the whole exclusions are EXCLUDED less the partial rows"
+     );
+     assert_eq!(
+         rexx_inventory::builtins::PARTIALLY_EXCLUDED.len(),
+diff --git a/rust/crates/rexx-exec/tests/internal_routines.rs b/rust/crates/rexx-exec/tests/internal_routines.rs
+index d8c877346..31dd31d87 100644
+--- a/rust/crates/rexx-exec/tests/internal_routines.rs
++++ b/rust/crates/rexx-exec/tests/internal_routines.rs
+@@ -97,25 +97,25 @@ fn the_table_names_exactly_what_the_two_internal_packages_register() {
+         );
+         assert!(!oracle.is_empty(), "{package} derived no names at all");
+     }
+ }
+ 
+ /// A row this crate does not run names a phase that owes it, and the phase is
+ /// one that is still open: a refusal naming a closed phase is a lie a program
+ /// can read.
+ #[test]
+ fn every_unimplemented_row_names_an_open_phase_that_owes_it() {
+-    const PHASES: &[&str] = &["Phase 10"];
++    const PHASES: &[&str] = &["Phase 9", "Phase 10"];
+     let mut owed = 0usize;
+     for (name, _package, owner) in rexx_exec::internal_routine_rows() {
+         let Some(owner) = owner else { continue };
+         owed += 1;
+         assert!(
+-            PHASES.contains(&owner),
++            PHASES.contains(&owner.phase()),
+             "{name} names owner {owner:?}, which is not one of {PHASES:?}"
+         );
+     }
+     assert!(
+         owed > 0,
+         "no row names an owner at all, so this test is passing over an empty set"
+     );
+ }
+diff --git a/rust/crates/rexx-exec/tests/owners.rs b/rust/crates/rexx-exec/tests/owners.rs
+index da3e056ee..73847ef71 100644
+--- a/rust/crates/rexx-exec/tests/owners.rs
++++ b/rust/crates/rexx-exec/tests/owners.rs
+@@ -319,28 +319,28 @@ pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c"];
+ /// Phase 4 sub-phase would not be excluded from Phase 4, and Phase 7, which
+ /// held the rest, has closed and delivered them.
+ pub(crate) const EXCLUSION_PHASES: &[&str] = &["Phase 10"];
+ 
+ /// Every excluded builtin names the phase that owes it, and that phase is one
+ /// the exclusions file uses. Without this the owner is whatever the refusal's
+ /// constructor happens to hardcode -- which is how every one of them said
+ /// `4c` until Phase 7.
+ #[test]
+ fn every_excluded_builtin_names_a_phase_that_owes_it() {
+-    for (name, owner) in rexx_inventory::builtins::EXCLUDED {
++    for (name, owner, reason) in rexx_inventory::builtins::EXCLUDED {
+         assert!(
+             EXCLUSION_PHASES.contains(owner),
+             "{name} names owner {owner:?}, which is not one of {EXCLUSION_PHASES:?}"
+         );
+         assert_eq!(
+             rexx_inventory::builtins::owner_of(name),
+-            Some(*owner),
++            Some((*owner, *reason)),
+             "{name}'s owner must be reachable through owner_of, which is what the \
+              refusal reads"
+         );
+     }
+     assert_eq!(
+         rexx_inventory::builtins::owner_of("LENGTH"),
+         None,
+         "a builtin this crate implements owes nobody anything"
+     );
+ }
+diff --git a/rust/crates/rexx-exec/tests/phase_ten_reasons.rs b/rust/crates/rexx-exec/tests/phase_ten_reasons.rs
+new file mode 100644
+index 000000000..57da41b82
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/phase_ten_reasons.rs
+@@ -0,0 +1,283 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! **A refusal naming Phase 10 carries a reason from D3's closed set**
++//! (spec `2026-10-10-phase-9-core-conformance.md` D3).
++//!
++//! The reason is a `rexx_core::Deferral` inside `rexx_core::Owner::Phase10`,
++//! whose label is the only text that names Phase 10. So no string literal in
++//! the production sources of the crates `closed_phases.rs` scans for refusals
++//! (`rexx-exec`, `rexx-api`) may name Phase 10: one that does is a phase name
++//! that reached a refusal without a reason. Test modules hold vocabularies
++//! and are out of scope.
++
++use std::collections::BTreeSet;
++use std::fs;
++use std::path::{Path, PathBuf};
++
++#[path = "support/literals.rs"]
++mod source_literals;
++
++use rexx_core::{Deferral, Owner};
++use source_literals::{literals, names, shown, source_files};
++
++/// The crates whose refusals the scan covers.
++const SCANNED: &[&str] = &["rexx-exec", "rexx-api"];
++
++/// `text` with the body of every inline `#[cfg(test)] mod NAME {` blanked,
++/// line breaks kept so line numbers hold. The block ends at the `}` on its
++/// own line at the `mod` line's indent, as rustfmt writes it.
++fn without_test_modules(text: &str) -> String {
++    let lines: Vec<&str> = text.lines().collect();
++    let mut out = Vec::with_capacity(lines.len());
++    let mut at = 0;
++    while at < lines.len() {
++        if lines[at].trim() == "#[cfg(test)]" {
++            let mut opener = at + 1;
++            while opener < lines.len() && lines[opener].trim_start().starts_with("#[") {
++                opener += 1;
++            }
++            if let Some(line) = lines.get(opener)
++                && module_name(line).is_some()
++                && line.trim_end().ends_with('{')
++            {
++                let indent = &line[..line.len() - line.trim_start().len()];
++                let closing = format!("{indent}}}");
++                let mut close = opener;
++                while close < lines.len() && lines[close] != closing {
++                    close += 1;
++                }
++                out.extend(std::iter::repeat_n("", close + 1 - at));
++                at = close + 1;
++                continue;
++            }
++        }
++        out.push(lines[at]);
++        at += 1;
++    }
++    out.join("\n")
++}
++
++/// The module `line` declares, inline or as a file.
++fn module_name(line: &str) -> Option<&str> {
++    let line = line.trim_start();
++    let line = line
++        .strip_prefix("pub(crate) ")
++        .or_else(|| line.strip_prefix("pub(super) "))
++        .or_else(|| line.strip_prefix("pub "))
++        .unwrap_or(line);
++    let rest = line.strip_prefix("mod ")?;
++    let end = rest
++        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
++        .unwrap_or(rest.len());
++    (end > 0).then(|| &rest[..end])
++}
++
++/// The files and directories the `#[cfg(test)] mod NAME;` declarations in
++/// `path` load.
++fn test_module_paths(path: &Path, text: &str) -> Vec<PathBuf> {
++    let directory = path.parent().expect("a file in a directory");
++    let stem = path.file_stem().and_then(|s| s.to_str()).expect("a name");
++    let base = if matches!(stem, "lib" | "main" | "mod") {
++        directory.to_path_buf()
++    } else {
++        directory.join(stem)
++    };
++    let lines: Vec<&str> = text.lines().collect();
++    let mut found = Vec::new();
++    for (at, line) in lines.iter().enumerate() {
++        if line.trim() != "#[cfg(test)]" {
++            continue;
++        }
++        let mut opener = at + 1;
++        while opener < lines.len() && lines[opener].trim_start().starts_with("#[") {
++            opener += 1;
++        }
++        let Some(declared) = lines.get(opener) else {
++            continue;
++        };
++        if let Some(name) = module_name(declared)
++            && declared.trim_end().ends_with(';')
++        {
++            found.push(base.join(format!("{name}.rs")));
++            found.push(base.join(name));
++        }
++    }
++    found
++}
++
++/// The production sources of `crate_dir`: every file under `src/` but a
++/// `tests.rs` and the files a `#[cfg(test)] mod NAME;` loads, as each path
++/// and its text with inline test modules blanked.
++fn production_sources(crate_dir: &str) -> Vec<(PathBuf, String)> {
++    let files = source_files(crate_dir);
++    let mut excluded: Vec<PathBuf> = Vec::new();
++    for path in &files {
++        let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
++        excluded.extend(test_module_paths(path, &text));
++    }
++    files
++        .into_iter()
++        .filter(|path| {
++            path.file_name().is_none_or(|name| name != "tests.rs")
++                && !excluded.iter().any(|test| path.starts_with(test))
++        })
++        .map(|path| {
++            let text = fs::read_to_string(&path).expect("a source");
++            let kept = without_test_modules(&text);
++            (path, kept)
++        })
++        .collect()
++}
++
++/// Every production literal of `crate_dir` naming Phase 10, as `file:line`.
++fn phase_ten_literals(crate_dir: &str) -> Vec<String> {
++    let mut found = Vec::new();
++    for (path, text) in production_sources(crate_dir) {
++        for (line, literal) in literals(&text) {
++            if names(&literal, "Phase 10") {
++                found.push(format!("{crate_dir}/{}:{line}: {literal:?}", shown(&path)));
++            }
++        }
++    }
++    found
++}
++
++/// The whole claim.
++#[test]
++fn no_production_literal_names_phase_10() {
++    let found: Vec<String> = SCANNED
++        .iter()
++        .flat_map(|crate_dir| phase_ten_literals(crate_dir))
++        .collect();
++    assert!(
++        found.is_empty(),
++        "these literals name Phase 10 without a reason; build the owner as \
++         `Owner::Phase10(Deferral::...)` and print its `label()`:\n{found:#?}"
++    );
++}
++
++/// The negative control: the same walk over every file, test modules
++/// included, finds the vocabularies the claim leaves out, so an empty result
++/// above is not a scan of nothing.
++#[test]
++fn the_scan_reads_the_test_modules_it_leaves_out() {
++    let everywhere = source_files("rexx-exec")
++        .iter()
++        .flat_map(|path| literals(&fs::read_to_string(path).expect("a source")))
++        .filter(|(_, literal)| names(literal, "Phase 10"))
++        .count();
++    assert!(
++        everywhere >= 1,
++        "no literal in rexx-exec names Phase 10 at all, so the scan reads nothing"
++    );
++    let kept: BTreeSet<String> = production_sources("rexx-exec")
++        .iter()
++        .map(|(path, _)| shown(path))
++        .collect();
++    for test in [
++        "src/dispatch/tests.rs",
++        "src/run/tests/directives.rs",
++        "src/scheduler/tests/native.rs",
++        "src/ir/golden_tests.rs",
++    ] {
++        assert!(!kept.contains(test), "{test} is a test module");
++    }
++    for production in ["src/lib.rs", "src/dispatch/native.rs", "src/environment.rs"] {
++        assert!(kept.contains(production), "{production} was left out");
++    }
++}
++
++/// An inline test module is blanked to its closing brace and nothing past
++/// it; a literal before or after it is still read, on its own line.
++#[test]
++fn an_inline_test_module_is_left_out_and_its_neighbours_are_not() {
++    let source = "\
++fn a() -> &'static str { \"Phase 10 before\" }
++#[cfg(test)]
++#[allow(dead_code)]
++mod tests {
++    fn b() -> &'static str { \"Phase 10 inside\" }
++    mod inner {
++    }
++}
++fn c() -> &'static str { \"Phase 10 after\" }
++#[cfg(test)]
++fn d() -> &'static str { \"Phase 10 test fn\" }
++";
++    let named: Vec<(usize, String)> = literals(&without_test_modules(source))
++        .into_iter()
++        .filter(|(_, literal)| names(literal, "Phase 10"))
++        .collect();
++    assert_eq!(
++        named,
++        [
++            (1, "Phase 10 before".to_string()),
++            (9, "Phase 10 after".to_string()),
++            (11, "Phase 10 test fn".to_string()),
++        ]
++    );
++}
++
++/// A `#[cfg(test)] mod NAME;` resolves beside a `mod.rs` or `lib.rs`, and
++/// below the declaring file's own directory otherwise.
++#[test]
++fn a_test_module_file_resolves_where_rustc_finds_it() {
++    let text = "#[cfg(test)]\nmod tests;\n#[cfg(test)]\n#[allow(dead_code)]\npub(crate) mod fake;\nmod live;\n";
++    assert_eq!(
++        test_module_paths(Path::new("/c/src/lib.rs"), text),
++        [
++            PathBuf::from("/c/src/tests.rs"),
++            PathBuf::from("/c/src/tests"),
++            PathBuf::from("/c/src/fake.rs"),
++            PathBuf::from("/c/src/fake"),
++        ]
++    );
++    assert_eq!(
++        test_module_paths(
++            Path::new("/c/src/ir.rs"),
++            "#[cfg(test)]\nmod golden_tests;\n"
++        ),
++        [
++            PathBuf::from("/c/src/ir/golden_tests.rs"),
++            PathBuf::from("/c/src/ir/golden_tests"),
++        ]
++    );
++}
++
++/// `rexx-inventory` depends on no crate holding the enum, so its `EXCLUDED`
++/// table spells each reason as the variant's name; every one names a
++/// variant, and the owner the refusal prints is that variant's label.
++#[test]
++fn every_excluded_builtin_names_a_reason_the_enum_knows() {
++    for (name, phase, reason) in rexx_inventory::builtins::EXCLUDED {
++        let owner = Owner::named(phase, Some(reason)).unwrap_or_else(|| {
++            panic!("{name}'s owner {phase:?} with reason {reason:?} is not a D3 owner")
++        });
++        assert_eq!(owner.label(), format!("{phase} {reason}"));
++    }
++    assert!(
++        !rexx_inventory::builtins::EXCLUDED.is_empty(),
++        "the table is empty, so this test passes over nothing"
++    );
++}
++
++/// The test-side vocabulary is the production one: a Phase 10 label is the
++/// phase's name, a space and the variant's name, for every variant.
++#[test]
++fn a_phase_10_label_carries_the_variant_name() {
++    for reason in Deferral::ALL {
++        assert_eq!(
++            Owner::Phase10(reason).label(),
++            format!("Phase 10 {}", reason.name())
++        );
++    }
++}
+diff --git a/rust/crates/rexx-exec/tests/refusal_dispositions.rs b/rust/crates/rexx-exec/tests/refusal_dispositions.rs
+index a465f2f42..f2638edba 100644
+--- a/rust/crates/rexx-exec/tests/refusal_dispositions.rs
++++ b/rust/crates/rexx-exec/tests/refusal_dispositions.rs
+@@ -16,41 +16,45 @@
+ //! every `Loud` constructor in `src/` and requires each one that can build a
+ //! message with no owner to have a row in `corpus/refusal-dispositions.tsv`,
+ //! saying why no phase owes it: GUARD (no program reaches it; the record names
+ //! the probes that tried), DEVIATION (matching the oracle is wrong; the record
+ //! cites an `oracle-crashes.txt` entry or an exclusions row), LIMIT (a design
+ //! limit; the record cites the deviation or the design document that licenses
+ //! it), or REHOME (a remaining phase owes it, and the constructor names that
+ //! phase).
+ //!
+ //! An owner is read from the constructor's own `owned_message` call: `None`, or
+-//! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N; an
+-//! `Option` a caller passes in is no owner, since a caller can pass `None`; and
+-//! an owner computed by a function is no owner unless [`COMPUTED_OWNERS`] names
+-//! the function and the test that holds it to `Some`.
++//! no `owned_message` at all, is no owner; `Some("Phase N")` is phase N, and
++//! `Some(Owner::...label())` is the label that `rexx_core::Owner` value
++//! prints; an `Owner` or `&'static str` parameter is the caller's; an `Option`
++//! a caller passes in is no owner, since a caller can pass `None`; and an owner
++//! computed by a function is no owner unless [`COMPUTED_OWNERS`] names the
++//! function and the test that holds it to `Some`.
+ //! Every `message:` field of a constructor is read, and the constructor has
+ //! an owner only when each of them does. A `Loud` struct literal
+ //! outside a constructor must carry an owner, so an ownerless refusal always
+ //! has a constructor name to key a row on.
+ 
+ use std::collections::BTreeMap;
+ use std::fs;
+ use std::path::{Path, PathBuf};
+ 
+ /// Owners computed by a function that never answers `None` where the refusal
+ /// is built, with the test that holds it so.
+ const COMPUTED_OWNERS: &[(&str, &str)] = &[
+     (
+-        "rexx_inventory::builtins::owner_of",
++        "excluded_owner",
+         "`unresolved_call` is built for an excluded builtin, whose owner \
+-         owners.rs's every_excluded_builtin_names_a_phase_that_owes_it requires, \
+-         and for `BuiltinTarget::Gap`, which builtin/tests.rs asserts no name reaches",
++         owners.rs's every_excluded_builtin_names_a_phase_that_owes_it requires \
++         and whose reason phase_ten_reasons.rs's \
++         every_excluded_builtin_names_a_reason_the_enum_knows requires, and for \
++         `BuiltinTarget::Gap`, which builtin/tests.rs asserts no name reaches",
+     ),
+     (
+         "rexx_api::layout::refusal_owner",
+         "an unfilled slot is a refusing stub, and rexx-api's \
+          a_populated_table_refuses_exactly_the_members_it_names holds the refusing \
+          stubs to the `REFUSING_MEMBERS` rows, each of which names its phase",
+     ),
+ ];
+ 
+ /// The phases a REHOME row may name: the ones still open.
+@@ -451,32 +455,56 @@ fn message_owner(field: &str, body: &str, params: &str) -> Owner {
+     if let Some(inner) = owner
+         .strip_prefix("Some(")
+         .and_then(|s| s.strip_suffix(')'))
+     {
+         if let Some(literal) = inner.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+             return Owner::Phase(literal.to_string());
+         }
+         if param(inner, "&'staticstr") {
+             return Owner::Given;
+         }
++        if let Some(value) = inner.strip_suffix(".label()") {
++            if param(value, "Owner") {
++                return Owner::Given;
++            }
++            if let Some(label) = owner_label(value) {
++                return Owner::Phase(label);
++            }
++        }
+     }
+     if COMPUTED_OWNERS
+         .iter()
+         .any(|(function, _)| owner.starts_with(&format!("{function}(")))
+     {
+         return Owner::Given;
+     }
+     // `None`, an `Option` parameter, a function this file does not vouch
+     // for, or anything else: a caller or a branch can make it `None`.
+     Owner::None
+ }
+ 
++/// The label the `rexx_core::Owner` value spelled `value` prints, or `None`
++/// for a spelling that is not one.
++fn owner_label(value: &str) -> Option<String> {
++    let value = value.strip_prefix("rexx_core::").unwrap_or(value);
++    let owner = if value == "Owner::Phase9" {
++        rexx_core::Owner::Phase9
++    } else {
++        let reason = value.strip_prefix("Owner::Phase10(")?.strip_suffix(')')?;
++        let reason = reason.strip_prefix("rexx_core::").unwrap_or(reason);
++        rexx_core::Owner::Phase10(rexx_core::Deferral::named(
++            reason.strip_prefix("Deferral::")?,
++        )?)
++    };
++    Some(owner.label().to_string())
++}
++
+ /// Every `Loud { ... }` struct literal outside a constructor, and `Self {
+ /// ... }` inside `impl Loud`, as its site and the owner it carries. The
+ /// literal is read to its matching brace. The parameters an owner may come
+ /// from are read from the nearest enclosing signature or closure header
+ /// above the literal.
+ fn literals(
+     files: &[(String, Vec<(usize, String)>)],
+     constructors: &[Constructor],
+ ) -> Vec<(String, Owner)> {
+     let mut found = Vec::new();
+@@ -761,25 +789,27 @@ fn every_ownerless_refusal_has_a_disposition() {
+ #[test]
+ fn the_scanner_reads_each_owner_form() {
+     let constructors = constructors(&sources());
+     let owners = owners(&constructors);
+     assert_eq!(
+         owners.get("native_method").map(|(owner, _)| owner),
+         Some(&Owner::Phase("Phase 9".to_string()))
+     );
+     assert_eq!(
+         owners.get("named_semaphore").map(|(owner, _)| owner),
+-        Some(&Owner::Phase("Phase 10".to_string()))
++        Some(&Owner::Phase("Phase 9".to_string())),
++        "a label printed by an `Owner` value"
+     );
+     assert_eq!(
+         owners.get("internal_routine").map(|(owner, _)| owner),
+-        Some(&Owner::Given)
++        Some(&Owner::Given),
++        "an `Owner` parameter's label"
+     );
+     assert_eq!(
+         owners.get("deferred_send").map(|(owner, _)| owner),
+         Some(&Owner::Given),
+         "a constructor outside lib.rs is found"
+     );
+     assert_eq!(
+         owners.get("unresolved_call").map(|(owner, _)| owner),
+         Some(&Owner::Given),
+         "an owner read through a local binding"
+@@ -854,42 +884,63 @@ fn elsewhere() -> Result<(), Failure> {
+ }
+ fn adjacent(r: u8) -> Failure {
+     match r {
+         0 => return Loud { message: String::new() }.into(),
+         _ => Loud {
+             message: owned_message(\"t\", Some(\"Phase 10\")),
+         }
+         .into(),
+     }
+ }
++fn typed(owner: Owner) -> Loud {
++    Loud {
++        message: owned_message(\"s\", Some(owner.label())),
++    }
++}
++fn rxapi() -> Loud {
++    Loud {
++        message: owned_message(\"r\", Some(Owner::Phase10(Deferral::Rxapi).label())),
++    }
++}
++fn unknown() -> Loud {
++    Loud {
++        message: owned_message(\"q\", Some(Owner::Phase10(Deferral::Queue).label())),
++    }
++}
+ ";
+     let files = vec![("src/lib.rs".to_string(), code_lines(source))];
+     let constructors = constructors(&files);
+     let owners = owners(&constructors);
+     let literals = literals(&files, &constructors);
+-    assert_eq!(owners.len(), 7);
++    assert_eq!(owners.len(), 10);
+     assert_eq!(owners["optional"].0, Owner::None);
+     assert_eq!(owners["given"].0, Owner::Given);
++    assert_eq!(owners["typed"].0, Owner::Given);
++    assert_eq!(
++        owners["rxapi"].0,
++        Owner::Phase("Phase 10 Rxapi".to_string())
++    );
+     assert_eq!(owners["mutant_self"].0, Owner::None);
+     assert_eq!(owners["mixed"].0, Owner::None);
+     let documents = Documents {
+         crashes: "\n## 6. An array\n".to_string(),
+         exclusions: " 20. A WAIT NOTHING LEFT TO RUN CAN END IS REFUSED\n".to_string(),
+         roadmap: "the row's text".to_string(),
+         repository: rust_root().parent().expect("the repository").to_path_buf(),
+     };
+     let table = "\
+ plain\tGUARD\t-\tprobe p1
+ none\tDEVIATION\t-\toracle-crashes.txt entry 6
+ optional\tLIMIT\t-\tDeviation 20
+ mutant_self\tGUARD\t-\tprobe p4
+ mixed\tGUARD\t-\tprobe p5
++unknown\tGUARD\t-\tprobe p6
+ ";
+     assert!(
+         problems(&owners, &[], &parse_table(table), &documents).is_empty(),
+         "{:?}",
+         problems(&owners, &[], &parse_table(table), &documents)
+     );
+     let wrong = "\
+ plain\tGUARD\t-\tprobe p1
+ none\tDEVIATION\t-\toracle-crashes.txt entry 7
+ gone\tGUARD\t-\tprobe p2
+@@ -900,19 +951,20 @@ given\tGUARD\t-\tprobe p3
+     let expect = [
+         "src/lib.rs:44: a `Loud` struct literal",
+         "src/lib.rs:51: a `Loud` struct literal",
+         "mutant_self (src/lib.rs:27): no owner and no disposition row",
+         "mixed (src/lib.rs:32): no owner and no disposition row",
+         "none: cites oracle-crashes.txt entry 7",
+         "gone: a row with no constructor",
+         "nine: REHOME to Phase 10, but the constructor",
+         "given: a GUARD row for a constructor",
+         "optional (src/lib.rs:22): no owner and no disposition row",
++        "unknown (src/lib.rs:68): no owner and no disposition row",
+     ];
+     for needle in expect {
+         assert!(
+             found.iter().any(|problem| problem.starts_with(needle)),
+             "{needle:?} not among {found:#?}"
+         );
+     }
+     assert_eq!(found.len(), expect.len(), "{found:#?}");
+ }
+diff --git a/rust/crates/rexx-exec/tests/spike.rs b/rust/crates/rexx-exec/tests/spike.rs
+index 4735b9cb1..d28e687e6 100644
+--- a/rust/crates/rexx-exec/tests/spike.rs
++++ b/rust/crates/rexx-exec/tests/spike.rs
+@@ -68,21 +68,21 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
+         "256 - major lives in 157..=253 for majors 3 to 99"
+     );
+     let outcome = run_program(
+         SPIKE_PATH,
+         b"say .local['STDQUE']\n".to_vec(),
+         rexx_exec::Invocation::none(),
+     );
+     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
+     assert_eq!(
+         String::from_utf8(outcome.stderr).expect("the loud message is ASCII"),
+-        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10)\n"
++        "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
+     );
+ }
+ 
+ /// A loud failure names the **form** and never formats the node, so the
+ /// message stays a constant size however big the expression behind it is.
+ #[test]
+ fn a_loud_failure_message_does_not_grow_with_the_expression() {
+     const BOUND: usize = 300;
+ 
+     let small = run_program(
+diff --git a/rust/crates/rexx-exec/tests/suite.rs b/rust/crates/rexx-exec/tests/suite.rs
+index 784785c57..3fb446c91 100644
+--- a/rust/crates/rexx-exec/tests/suite.rs
++++ b/rust/crates/rexx-exec/tests/suite.rs
+@@ -1178,27 +1178,29 @@ mod judging {
+ 
+         let mut cut = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
+         cut.ended_normally = false;
+         assert_eq!(judge(&oracle, &cut, &[]).len(), 1);
+     }
+ 
+     #[test]
+     fn a_row_whose_refusal_or_claim_the_run_contradicts_reddens_its_group() {
+         let refused = row(
+             "TEST_R",
+-            Owner::Phase10(super::suite_rows::Phase10Reason::Rxapi),
+-            "refusal: rexx-exec: x (Phase 10)",
++            Owner::Phase10(super::suite_rows::Deferral::Rxapi),
++            "refusal: rexx-exec: x (Phase 10 Rxapi)",
+         );
+         let oracle = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
+         let mut ours = run(&["TEST_A"], &["TEST_A", "TEST_R"], &["TEST_A"]);
+-        ours.blocked
+-            .insert("TEST_R".to_string(), "rexx-exec: x (Phase 10)".to_string());
++        ours.blocked.insert(
++            "TEST_R".to_string(),
++            "rexx-exec: x (Phase 10 Rxapi)".to_string(),
++        );
+         assert_eq!(judge(&oracle, &ours, &[&refused]), Vec::<String>::new());
+         ours.blocked
+             .insert("TEST_R".to_string(), "rexx-exec: y (Phase 9)".to_string());
+         assert_eq!(judge(&oracle, &ours, &[&refused]).len(), 1);
+         let failed = run(&["TEST_A"], &["TEST_A", "TEST_R"], &["TEST_A"]);
+         assert_eq!(
+             judge(&oracle, &failed, &[&refused]).len(),
+             1,
+             "a refusal row whose test ran without refusing"
+         );
+@@ -1325,21 +1327,21 @@ mod row_checks {
+         (
+             EXCLUSIONS,
+             "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Rxapi\treaching_rxapi",
+         ),
+         (
+             EXCLUSIONS,
+             "extensions/json/json\tTEST_INVALID_EMPTY\tPhase 10 Extension\tgroup",
+         ),
+         (
+             EXCLUSIONS,
+-            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10)",
++            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10 Rxapi)",
+         ),
+         (
+             LICENCES,
+             "base/bif/CHAROUT\tTEST_STDOUT_START\tFlaky\tcommon.txt: CHAROUT.testGroup/TEST_STDOUT_START",
+         ),
+         (
+             LICENCES,
+             "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation 4\tidentity",
+         ),
+         (
+@@ -1372,42 +1374,54 @@ mod row_checks {
+         (
+             EXCLUSIONS,
+             "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Extension\treaching_rxapi",
+         ),
+         (
+             EXCLUSIONS,
+             "base/bif/CHAROUT\tTEST_STDOUT_START\tPhase 10 Rxapi\treaching_rxapi",
+         ),
+         (
+             EXCLUSIONS,
+-            "base/bif/CHAROUT\tTEST_NO_SUCH_TEST\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10)",
++            "base/bif/CHAROUT\tTEST_NO_SUCH_TEST\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10 Rxapi)",
+         ),
+         (
+             EXCLUSIONS,
+-            "base/bif/NO_SUCH_GROUP\tTEST_A\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10)",
++            "base/bif/NO_SUCH_GROUP\tTEST_A\tPhase 10 Rxapi\trefusal: rexx-exec: x (Phase 10 Rxapi)",
+         ),
+         (
+             EXCLUSIONS,
+             "base/bif/CHAROUT\tTEST_STDOUT_START\tPhase 10 Extension\tgroup",
+         ),
+         (
+             EXCLUSIONS,
+             "API/oo/RexxStart\tTEST_A\tPhase 10 Extension\tgroup",
+         ),
+         (
+             EXCLUSIONS,
+             "utilities/rxapi\tTEST_A\tPhase 10 Extension\tgroup",
+         ),
+         (
+             EXCLUSIONS,
+             "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: Object~copy is not implemented (Phase 9)",
+         ),
++        (
++            EXCLUSIONS,
++            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10)",
++        ),
++        (
++            EXCLUSIONS,
++            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10 Extension)",
++        ),
++        (
++            EXCLUSIONS,
++            "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\trefusal: rexx-exec: a queue is not implemented (Phase 10 Rxapi2)",
++        ),
+         (
+             EXCLUSIONS,
+             "base/class/RexxQueue\tTEST_CREATE\tPhase 10 Rxapi\tit needs the daemon",
+         ),
+         (
+             LICENCES,
+             "base/bif/CHAROUT\tTEST_STDOUT_START\tDeviation 5\twithdrawn",
+         ),
+         (
+             LICENCES,
+@@ -1578,21 +1592,21 @@ mod fixtures {
+ 
+     fn crate_run(settings: &CrateSettings, group: &str) -> GroupRun {
+         run_group_on_crate_within(settings, "", group, &BTreeSet::new(), settings.floor)
+     }
+ 
+     fn names(names: &[&str]) -> BTreeSet<String> {
+         names.iter().map(|name| (*name).to_string()).collect()
+     }
+ 
+     const MACRO_REFUSAL: &str =
+-        "rexx-exec: routine \"SYSQUERYREXXMACRO\" is not implemented (Phase 10)";
++        "rexx-exec: routine \"SYSQUERYREXXMACRO\" is not implemented (Phase 10 Rxapi)";
+ 
+     #[test]
+     fn a_refusal_ends_the_run_and_the_next_run_goes_past_it() {
+         let run = crate_run(&settings(), "RefusedCall");
+         assert_eq!(run.group, "RefusedCall");
+         assert_eq!(run.iterations, 2);
+         assert_eq!(
+             run.blocked,
+             BTreeMap::from([("TEST_B".to_string(), MACRO_REFUSAL.to_string())])
+         );
+diff --git a/rust/crates/rexx-exec/tests/support/literals.rs b/rust/crates/rexx-exec/tests/support/literals.rs
+new file mode 100644
+index 000000000..b00009bea
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/support/literals.rs
+@@ -0,0 +1,171 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! Reading a crate's sources as string literals, for the scans that hold
++//! what a refusal may name.
++
++use std::fs;
++use std::path::{Path, PathBuf};
++
++/// Every `.rs` file under one crate's `src/`, recursively.
++pub fn source_files(crate_dir: &str) -> Vec<PathBuf> {
++    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
++        let entries = fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
++        for entry in entries {
++            let path = entry.expect("a readable directory entry").path();
++            if path.is_dir() {
++                walk(&path, out);
++            } else if path.extension().is_some_and(|e| e == "rs") {
++                out.push(path);
++            }
++        }
++    }
++    let src = Path::new(env!("CARGO_MANIFEST_DIR"))
++        .join("..")
++        .join(crate_dir)
++        .join("src");
++    let mut out = Vec::new();
++    walk(&src, &mut out);
++    out.sort();
++    assert!(
++        !out.is_empty(),
++        "the scan found no sources under {}, so its result would be a vacuous \
++         zero rather than a measurement",
++        src.display()
++    );
++    out
++}
++
++/// The path as it reads in a failure: the crate-relative tail.
++pub fn shown(path: &Path) -> String {
++    let text = path.display().to_string();
++    match text.rfind("/src/").or_else(|| text.rfind("/tests/")) {
++        Some(at) => text[at + 1..].to_string(),
++        None => text,
++    }
++}
++
++/// Every string literal in `text`, as its starting line and its contents,
++/// comments skipped: a comment naming a phase is prose about the code, and
++/// the rules elsewhere govern that.
++pub fn literals(text: &str) -> Vec<(usize, String)> {
++    let chars: Vec<char> = text.chars().collect();
++    let mut found = Vec::new();
++    let (mut at, mut line) = (0, 1);
++    while at < chars.len() {
++        match chars[at] {
++            '\n' => line += 1,
++            '/' if chars.get(at + 1) == Some(&'/') => {
++                while at < chars.len() && chars[at] != '\n' {
++                    at += 1;
++                }
++                continue;
++            }
++            '/' if chars.get(at + 1) == Some(&'*') => {
++                at += 2;
++                while at < chars.len() && !(chars[at] == '*' && chars.get(at + 1) == Some(&'/')) {
++                    line += usize::from(chars[at] == '\n');
++                    at += 1;
++                }
++                at += 2;
++                continue;
++            }
++            '\'' => {
++                // A character literal, which may be a quote; otherwise a lifetime.
++                if chars.get(at + 1) == Some(&'\\') {
++                    at += 3;
++                    while at < chars.len() && chars[at] != '\'' {
++                        at += 1;
++                    }
++                } else if chars.get(at + 2) == Some(&'\'') {
++                    at += 2;
++                }
++            }
++            'r' if matches!(chars.get(at + 1), Some('"' | '#')) && starts_word(&chars, at) => {
++                let hashes = chars[at + 1..].iter().take_while(|c| **c == '#').count();
++                if chars.get(at + 1 + hashes) == Some(&'"') {
++                    let start = line;
++                    let mut body = String::new();
++                    at += hashes + 2;
++                    while at < chars.len()
++                        && !(chars[at] == '"'
++                            && chars[at + 1..]
++                                .iter()
++                                .take(hashes)
++                                .filter(|c| **c == '#')
++                                .count()
++                                == hashes)
++                    {
++                        line += usize::from(chars[at] == '\n');
++                        body.push(chars[at]);
++                        at += 1;
++                    }
++                    found.push((start, body));
++                    at += hashes + 1;
++                    continue;
++                }
++            }
++            '"' => {
++                let start = line;
++                let mut body = String::new();
++                at += 1;
++                while at < chars.len() && chars[at] != '"' {
++                    if chars[at] == '\\' {
++                        if chars.get(at + 1) == Some(&'\n') {
++                            // A continued literal drops the line break and the
++                            // next line's indentation.
++                            at += 2;
++                            line += 1;
++                            while at < chars.len() && chars[at].is_whitespace() {
++                                line += usize::from(chars[at] == '\n');
++                                at += 1;
++                            }
++                            continue;
++                        }
++                        body.push(chars[at]);
++                        at += 1;
++                    }
++                    if at < chars.len() {
++                        line += usize::from(chars[at] == '\n');
++                        body.push(chars[at]);
++                        at += 1;
++                    }
++                }
++                found.push((start, body));
++            }
++            _ => {}
++        }
++        at += 1;
++    }
++    found
++}
++
++/// Whether the `r` at `at` opens a raw literal rather than ending a name;
++/// `br"..."` is one too.
++fn starts_word(chars: &[char], at: usize) -> bool {
++    let ident = |c: char| c.is_alphanumeric() || c == '_';
++    match at.checked_sub(1).map(|before| chars[before]) {
++        None => true,
++        Some('b') => at < 2 || !ident(chars[at - 2]),
++        Some(before) => !ident(before),
++    }
++}
++
++/// Whether `text` names `phase` as a whole word: `Phase 1` is not in
++/// `Phase 10`.
++pub fn names(text: &str, phase: &str) -> bool {
++    text.match_indices(phase).any(|(at, _)| {
++        !text[at + phase.len()..]
++            .chars()
++            .next()
++            .is_some_and(|c| c.is_ascii_digit())
++    })
++}
+diff --git a/rust/crates/rexx-exec/tests/support/suite_rows.rs b/rust/crates/rexx-exec/tests/support/suite_rows.rs
+index 43d1730be..8ca5d628b 100644
+--- a/rust/crates/rexx-exec/tests/support/suite_rows.rs
++++ b/rust/crates/rexx-exec/tests/support/suite_rows.rs
+@@ -82,64 +82,38 @@ pub fn table_path() -> PathBuf {
+         || {
+             PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+                 .parent()
+                 .expect("the target directory")
+                 .join("suite/table.tsv")
+         },
+         PathBuf::from,
+     )
+ }
+ 
+-/// Why a test is Phase 10's: spec D3's closed set.
+-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+-pub enum Phase10Reason {
+-    Rxapi,
+-    Extension,
+-    Row10NativeApi,
+-    Embedding,
+-}
+-
+-impl Phase10Reason {
+-    pub const ALL: [Phase10Reason; 4] = [
+-        Phase10Reason::Rxapi,
+-        Phase10Reason::Extension,
+-        Phase10Reason::Row10NativeApi,
+-        Phase10Reason::Embedding,
+-    ];
+-
+-    pub fn name(self) -> &'static str {
+-        match self {
+-            Phase10Reason::Rxapi => "Rxapi",
+-            Phase10Reason::Extension => "Extension",
+-            Phase10Reason::Row10NativeApi => "Row10NativeApi",
+-            Phase10Reason::Embedding => "Embedding",
+-        }
+-    }
+-}
++/// Why a test is Phase 10's: spec D3's closed set, the one the refusals
++/// print.
++pub use rexx_core::Deferral;
+ 
+ /// A row's owner.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub enum Owner {
+-    Phase10(Phase10Reason),
++    Phase10(Deferral),
+     Deviation(u32),
+     Environment,
+     Flaky,
+     NotRun,
+ }
+ 
+ impl Owner {
+     pub fn parse(text: &str) -> Option<Owner> {
+         if let Some(reason) = text.strip_prefix("Phase 10 ") {
+-            return Phase10Reason::ALL
+-                .into_iter()
+-                .find(|known| known.name() == reason)
+-                .map(Owner::Phase10);
++            return Deferral::named(reason).map(Owner::Phase10);
+         }
+         if let Some(number) = text.strip_prefix("Deviation ") {
+             return number
+                 .parse()
+                 .ok()
+                 .filter(|_| number.bytes().all(|byte| byte.is_ascii_digit()))
+                 .map(Owner::Deviation);
+         }
+         match text {
+             "Environment" => Some(Owner::Environment),
+@@ -294,38 +268,38 @@ pub const ROW_10_GROUPS: &[&str] = &[
+ ];
+ 
+ /// The `utilities` groups ruling R1 makes Phase 10's.
+ pub const R1_GROUPS: &[&str] = &[
+     "utilities/rxapi",
+     "utilities/rxqueue/rxQueue",
+     "utilities/rxsubcom/rxsubcom",
+ ];
+ 
+ /// The reason a group the roadmap makes Phase 10's is, or `None`.
+-pub fn phase_10_group(group: &str) -> Option<Phase10Reason> {
++pub fn phase_10_group(group: &str) -> Option<Deferral> {
+     if group.starts_with("extensions/") {
+-        Some(Phase10Reason::Extension)
++        Some(Deferral::Extension)
+     } else if ROW_10_GROUPS.contains(&group) {
+-        Some(Phase10Reason::Row10NativeApi)
++        Some(Deferral::Row10NativeApi)
+     } else if R1_GROUPS.contains(&group) {
+-        Some(Phase10Reason::Rxapi)
++        Some(Deferral::Rxapi)
+     } else {
+         None
+     }
+ }
+ 
+ /// Whether a captured refusal `text` carries a row owned by Phase 10 for
+-/// `reason`: it names Phase 10. The one place the check of a refusal row's
+-/// reason is decided.
+-pub fn refusal_carries(text: &str, reason: Phase10Reason) -> bool {
+-    let _ = reason;
+-    text.contains("(Phase 10")
++/// `reason`: it names Phase 10 with that reason in parentheses, as
++/// `rexx_core::Owner::label` prints it. The one place the check of a refusal
++/// row's reason is decided.
++pub fn refusal_carries(text: &str, reason: Deferral) -> bool {
++    text.contains(&format!("({})", rexx_core::Owner::Phase10(reason).label()))
+ }
+ 
+ /// What the owner checks need besides the rows.
+ pub struct Context {
+     /// The directory the groups' `dir`s are below.
+     pub root: PathBuf,
+     /// Every group, as `dir/group`.
+     pub groups: BTreeSet<String>,
+     /// `reaching_rxapi` over every group, as `(dir/group, TEST)`.
+     pub rxapi: BTreeSet<(String, String)>,
+@@ -527,23 +501,23 @@ pub fn check_row(row: &Row, context: &Context) -> Result<(), String> {
+             } else if entry != format!("{stem}.TESTGROUP/{}", row.test).to_ascii_uppercase() {
+                 Err(format!("{entry} is not this row's test"))
+             } else {
+                 Ok(())
+             }
+         }
+         Owner::NotRun => check_not_run(row, &text, context),
+     }
+ }
+ 
+-fn check_phase_10(row: &Row, reason: Phase10Reason, context: &Context) -> Result<(), String> {
++fn check_phase_10(row: &Row, reason: Deferral, context: &Context) -> Result<(), String> {
+     if row.reason == "reaching_rxapi" {
+-        return if reason != Phase10Reason::Rxapi {
++        return if reason != Deferral::Rxapi {
+             Err("a reaching_rxapi row is owned by Phase 10 Rxapi".to_string())
+         } else if context
+             .rxapi
+             .contains(&(row.group.clone(), row.test.clone()))
+         {
+             Ok(())
+         } else {
+             Err("reaching_rxapi does not rename it out".to_string())
+         };
+     }
+diff --git a/rust/crates/rexx-inventory/src/lib.rs b/rust/crates/rexx-inventory/src/lib.rs
+index 57cf1a4b5..ae0d2d9b1 100644
+--- a/rust/crates/rexx-inventory/src/lib.rs
++++ b/rust/crates/rexx-inventory/src/lib.rs
+@@ -13,63 +13,64 @@
+ //! list that indexes into them.
+ 
+ pub mod errors {
+     include!(concat!(env!("OUT_DIR"), "/errors.rs"));
+ }
+ 
+ pub mod builtins {
+     include!(concat!(env!("OUT_DIR"), "/builtins.rs"));
+ 
+     /// The builtins `docs/superpowers/plans/phase-4-exclusions.txt` excludes
+-    /// from Phase 4, whole or in part, each with the phase that file gives it:
+-    /// its fifteen whole exclusions followed by its three partial rows. The
+-    /// owner rides here rather than in the refusal, so a name and the phase
+-    /// blamed for it cannot drift apart.
+-    pub const EXCLUDED: &[(&str, &str)] = &[
+-        ("RXQUEUE", "Phase 10"),
+-        ("RXFUNCADD", "Phase 10"),
+-        ("RXFUNCDROP", "Phase 10"),
+-        ("RXFUNCQUERY", "Phase 10"),
++    /// from Phase 4, whole or in part, each with the phase that file gives it
++    /// and the name of the `rexx_core::Deferral` that makes it Phase 10's:
++    /// its whole exclusions followed by its partial rows. The owner rides here
++    /// rather than in the refusal, so a name and the phase blamed for it
++    /// cannot drift apart.
++    pub const EXCLUDED: &[(&str, &str, &str)] = &[
++        ("RXQUEUE", "Phase 10", "Rxapi"),
++        ("RXFUNCADD", "Phase 10", "Rxapi"),
++        ("RXFUNCDROP", "Phase 10", "Rxapi"),
++        ("RXFUNCQUERY", "Phase 10", "Rxapi"),
+         // Partial: in scope in one form, excluded in another. The owner is
+         // the excluded form's -- `QUEUED`'s cross-process half is the RXAPI
+         // daemon's. `VALUE`'s external selector and `ADDRESS`'s command
+         // issuing were here too and are gone: both forms run now.
+-        ("QUEUED", "Phase 10"),
++        ("QUEUED", "Phase 10", "Rxapi"),
+     ];
+ 
+-    /// The phase owing `name`'s excluded form, or `None` for a name
+-    /// [`EXCLUDED`] does not list.
+-    pub fn owner_of(name: &str) -> Option<&'static str> {
++    /// The phase owing `name`'s excluded form and its reason, or `None` for
++    /// a name [`EXCLUDED`] does not list.
++    pub fn owner_of(name: &str) -> Option<(&'static str, &'static str)> {
+         EXCLUDED
+             .iter()
+-            .find(|(excluded, _)| *excluded == name)
+-            .map(|(_, owner)| *owner)
++            .find(|(excluded, _, _)| *excluded == name)
++            .map(|(_, owner, reason)| (*owner, *reason))
+     }
+ 
+     /// Every excluded name, in [`EXCLUDED`] order.
+     pub fn excluded_names() -> Vec<&'static str> {
+-        EXCLUDED.iter().map(|(name, _)| *name).collect()
++        EXCLUDED.iter().map(|(name, _, _)| *name).collect()
+     }
+ 
+     /// The subset of [`EXCLUDED`] that is excluded only in part, and so is
+     /// still in scope in its other form. Named rather than written as a
+     /// literal `3` at the two places that subtract it, because "in
+     /// `EXCLUDED`" and "excluded outright" are different sets and the
+     /// difference is exactly these names.
+     pub const PARTIALLY_EXCLUDED: &[&str] = &["QUEUED"];
+ 
+     /// The builtins excluded outright: [`EXCLUDED`] less
+     /// [`PARTIALLY_EXCLUDED`], in `EXCLUDED` order.
+     pub fn wholly_excluded() -> Vec<&'static str> {
+         EXCLUDED
+             .iter()
+-            .map(|(name, _)| *name)
++            .map(|(name, _, _)| *name)
+             .filter(|name| !PARTIALLY_EXCLUDED.contains(name))
+             .collect()
+     }
+ 
+     /// The builtins Phase 4 must be able to run: every name in [`NAMES`] that
+     /// is not excluded outright, in `NAMES` order. A partially excluded name
+     /// is in here, because its in-scope form still has to work.
+     pub fn in_scope() -> Vec<&'static str> {
+         let whole = wholly_excluded();
+         NAMES
