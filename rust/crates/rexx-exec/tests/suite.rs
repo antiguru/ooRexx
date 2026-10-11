@@ -1058,6 +1058,123 @@ fn the_row_files_hold_only_checked_rows() {
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
+/// D1's judgement and the renaming rows ask for, on runs built by hand.
+mod judging {
+    use std::collections::BTreeSet;
+
+    use super::suite_rows::{Owner, Row};
+    use super::{CapKind, GroupRun, judge, oracle_denominator, renamed_out_by_rows};
+
+    fn set(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(|name| (*name).to_string()).collect()
+    }
+
+    /// A run that ended normally, expecting `expected`, starting
+    /// `started` and passing `passed`.
+    fn run(expected: &[&str], started: &[&str], passed: &[&str]) -> GroupRun {
+        let mut run = GroupRun::new("base/x/G".to_string(), CapKind::Memcap);
+        run.expected = set(expected);
+        run.started = set(started);
+        run.passed = set(passed);
+        run.ended_normally = true;
+        run.iterations = 1;
+        run
+    }
+
+    fn row(test: &str, owner: Owner, reason: &str) -> Row {
+        Row {
+            file: "f".to_string(),
+            line: 1,
+            group: "base/x/G".to_string(),
+            test: test.to_string(),
+            owner,
+            reason: reason.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_group_is_green_only_when_every_expected_test_ran_and_passed_and_it_ended() {
+        let oracle = run(&["TEST_A", "TEST_B"], &["TEST_A", "TEST_B", "TEST_R"], &[]);
+        let flaky = row("TEST_R", Owner::Flaky, "common.txt: G.testGroup/TEST_R");
+        let green = run(
+            &["TEST_A", "TEST_B"],
+            &["TEST_A", "TEST_B", "TEST_R"],
+            &["TEST_A", "TEST_B"],
+        );
+        assert_eq!(judge(&oracle, &green, &[&flaky]), Vec::<String>::new());
+
+        let unstarted = run(&["TEST_A", "TEST_B"], &["TEST_A"], &["TEST_A"]);
+        assert_eq!(judge(&oracle, &unstarted, &[]), ["not started: TEST_B"]);
+
+        let failing = run(&["TEST_A", "TEST_B"], &["TEST_A", "TEST_B"], &["TEST_A"]);
+        assert_eq!(judge(&oracle, &failing, &[]), ["not passed: TEST_B"]);
+
+        let unrowed = run(&["TEST_A"], &["TEST_A", "TEST_R"], &["TEST_A", "TEST_R"]);
+        assert_eq!(
+            judge(&oracle, &unrowed, &[]),
+            ["started outside the expected set and the rows: TEST_R"]
+        );
+
+        let mut cut = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
+        cut.ended_normally = false;
+        assert_eq!(judge(&oracle, &cut, &[]).len(), 1);
+    }
+
+    #[test]
+    fn a_row_whose_refusal_or_claim_the_run_contradicts_reddens_its_group() {
+        let refused = row(
+            "TEST_R",
+            Owner::Phase10(super::suite_rows::Phase10Reason::Rxapi),
+            "refusal: rexx-exec: x (Phase 10)",
+        );
+        let oracle = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
+        let mut ours = run(&["TEST_A"], &["TEST_A", "TEST_R"], &["TEST_A"]);
+        ours.blocked
+            .insert("TEST_R".to_string(), "rexx-exec: x (Phase 10)".to_string());
+        assert_eq!(judge(&oracle, &ours, &[&refused]), Vec::<String>::new());
+        ours.blocked
+            .insert("TEST_R".to_string(), "rexx-exec: y (Phase 9)".to_string());
+        assert_eq!(judge(&oracle, &ours, &[&refused]).len(), 1);
+
+        let not_run = row("TEST_N", Owner::NotRun, "restrictOS line 1");
+        let ours = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
+        assert_eq!(judge(&oracle, &ours, &[&not_run]), Vec::<String>::new());
+        let started = run(&["TEST_A"], &["TEST_A", "TEST_N"], &["TEST_A"]);
+        assert_eq!(judge(&started, &ours, &[&not_run]).len(), 1);
+    }
+
+    #[test]
+    fn the_oracle_denominator_reports_both_directions() {
+        let rowed = row("TEST_R", Owner::Flaky, "common.txt: G.testGroup/TEST_R");
+        let equal = run(&["TEST_A"], &["TEST_A", "TEST_R"], &[]);
+        assert_eq!(oracle_denominator(&equal, &[&rowed]), "equal");
+        let both = run(&["TEST_A"], &["TEST_X"], &[]);
+        assert_eq!(
+            oracle_denominator(&both, &[]),
+            "started, not expected: [TEST_X]; expected, not started: [TEST_A]"
+        );
+    }
+
+    #[test]
+    fn only_an_environment_row_whose_test_hangs_is_renamed_out() {
+        let hangs = row(
+            "TEST_H",
+            Owner::Environment,
+            "hangs; record: r; ruled: Moritz 2000-01-01",
+        );
+        let fails = row(
+            "TEST_F",
+            Owner::Environment,
+            "fails; record: r; ruled: Moritz 2000-01-01",
+        );
+        let flaky = row("TEST_L", Owner::Flaky, "hangs");
+        assert_eq!(
+            renamed_out_by_rows("G", &[&hangs, &fails, &flaky]),
+            set(&["G.TEST_H"])
+        );
+    }
+}
+
 /// Each owner's check, on rows each of which passes or fails it.
 mod row_checks {
     use std::collections::BTreeSet;
