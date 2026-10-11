@@ -1,0 +1,22 @@
+#!/usr/bin/env rexx
+/* TEST_B never ends. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.Hangs.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "Hangs.testGroup" subclass ooTestCase public
+
+::method test_a
+  self~assertSame(1, 1)
+
+::method test_b
+  do forever
+  end
+
+::method test_c
+  self~assertSame(1, 1)

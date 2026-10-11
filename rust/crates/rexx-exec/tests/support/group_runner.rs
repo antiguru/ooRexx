@@ -127,7 +127,7 @@ pub fn worktree() -> PathBuf {
 }
 
 /// The directory of the ooTest sources the groups are under.
-fn groups_root() -> PathBuf {
+pub fn groups_root() -> PathBuf {
     worktree().join("ootest/ooRexx")
 }
 
@@ -216,7 +216,12 @@ pub fn uses_rxapi(line: &str) -> bool {
 /// or through a `::METHOD` or `::ROUTINE` of the group file, or of a file it
 /// requires or loads from its own directory, that does.
 pub fn reaching_rxapi(dir: &str, groups: &[&str]) -> BTreeSet<String> {
-    let dir = groups_root().join(dir);
+    reaching_rxapi_in(&groups_root(), dir, groups)
+}
+
+/// [`reaching_rxapi`] over the groups below `root` instead of `ootest/ooRexx`.
+pub fn reaching_rxapi_in(root: &Path, dir: &str, groups: &[&str]) -> BTreeSet<String> {
+    let dir = root.join(dir);
     let mut found = BTreeSet::new();
     for group in groups {
         let group_file = dir.join(format!("{group}.testGroup"));
@@ -276,15 +281,18 @@ pub fn copy_tree(from: &Path, to: &Path) {
 /// into it. `rxregexp.cls`, which `ooTest.frm` requires, sits beside the
 /// driver.
 pub fn fresh_copy(run: &Path, dir: &str) {
+    fresh_copy_from(run, &groups_root(), dir);
+}
+
+/// [`fresh_copy`] with `dir` taken from below `root` instead of
+/// `ootest/ooRexx`; the framework is still `ootest`'s.
+pub fn fresh_copy_from(run: &Path, root: &Path, dir: &str) {
     if run.exists() {
         fs::remove_dir_all(run).unwrap_or_else(|e| panic!("cannot empty {}: {e}", run.display()));
     }
     let ootest = worktree().join("ootest");
     copy_tree(&ootest.join("framework"), &run.join("framework"));
-    copy_tree(
-        &ootest.join("ooRexx").join(dir),
-        &run.join("ooRexx").join(dir),
-    );
+    copy_tree(&root.join(dir), &run.join("ooRexx").join(dir));
     for file in ["testOORexx.rex", "worker.rex", "ooTest.frm"] {
         fs::copy(ootest.join(file), run.join(file))
             .unwrap_or_else(|e| panic!("cannot copy {file}: {e}"));
@@ -483,12 +491,21 @@ pub fn run_crate_within(
 /// starts it), then the
 /// oracle's library directory and [`interpreter_bin`] ahead of `PATH`.
 fn crate_environment(run: &Path) -> Vec<(Vec<u8>, Vec<u8>)> {
+    crate_environment_with_path(
+        run,
+        env::var_os("PATH")
+            .iter()
+            .flat_map(env::split_paths)
+            .collect(),
+    )
+}
+
+/// [`crate_environment`] with `rest` after [`interpreter_bin`] on `PATH`
+/// instead of the process's own `PATH`.
+pub fn crate_environment_with_path(run: &Path, rest: Vec<PathBuf>) -> Vec<(Vec<u8>, Vec<u8>)> {
     let lib = oracle::oracle_root().join("lib");
     let bin = interpreter_bin(run);
-    let path = env::join_paths(
-        std::iter::once(bin).chain(env::var_os("PATH").iter().flat_map(env::split_paths)),
-    )
-    .expect("a PATH");
+    let path = env::join_paths(std::iter::once(bin).chain(rest)).expect("a PATH");
     let mut environment: Vec<(Vec<u8>, Vec<u8>)> = env::vars()
         .filter(|(name, _)| {
             !matches!(
@@ -554,10 +571,6 @@ pub struct ProcessRun {
 /// of its own, which that kill does not reach. `environment`
 /// replaces the process's own where given, else is inherited; `stdin` is
 /// written to its standard input, which is otherwise empty.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "this harness bounds a real process"
-)]
 pub fn run_crate_process(
     words: &[String],
     cwd: &Path,
@@ -566,26 +579,54 @@ pub fn run_crate_process(
     stdin: Option<&[u8]>,
     deadline: std::time::Duration,
 ) -> ProcessRun {
-    use std::io::{Read as _, Write as _};
-    use std::os::unix::ffi::OsStringExt as _;
-    use std::os::unix::process::{CommandExt as _, ExitStatusExt as _};
-    use std::process::{Command, Stdio};
-
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_rexx-run"));
     if let Some(environment) = environment {
-        command
-            .env_clear()
-            .envs(environment.into_iter().map(|(name, value)| {
-                (
-                    std::ffi::OsString::from_vec(name),
-                    std::ffi::OsString::from_vec(value),
-                )
-            }));
+        set_environment(&mut command, environment);
     }
     command
         .args(words)
         .current_dir(cwd)
-        .env("REXX_SWITCH_MODE", mode)
+        .env("REXX_SWITCH_MODE", mode);
+    run_process(command, stdin, deadline)
+}
+
+/// Replaces `command`'s environment with `environment`.
+pub fn set_environment(command: &mut std::process::Command, environment: Vec<(Vec<u8>, Vec<u8>)>) {
+    use std::os::unix::ffi::OsStringExt as _;
+    command
+        .env_clear()
+        .envs(environment.into_iter().map(|(name, value)| {
+            (
+                std::ffi::OsString::from_vec(name),
+                std::ffi::OsString::from_vec(value),
+            )
+        }));
+}
+
+/// Runs `command` in a process group of its own that is killed at
+/// `deadline`, and again once it has ended, so a process it left running
+/// does not hold its pipes open; a command it starts in a group of its own is
+/// not reached by that kill. `stdin` is written to its standard input, which
+/// is otherwise empty.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "this harness bounds a real process"
+)]
+pub fn run_process(
+    mut command: std::process::Command,
+    stdin: Option<&[u8]>,
+    deadline: std::time::Duration,
+) -> ProcessRun {
+    use std::io::{Read as _, Write as _};
+    use std::os::unix::process::{CommandExt as _, ExitStatusExt as _};
+    use std::process::Stdio;
+
+    let words = format!(
+        "{:?} {:?}",
+        command.get_program(),
+        command.get_args().collect::<Vec<_>>()
+    );
+    command
         .process_group(0)
         .stdin(if stdin.is_some() {
             Stdio::piped()
@@ -597,7 +638,7 @@ pub fn run_crate_process(
     let start = std::time::Instant::now();
     let mut child = command
         .spawn()
-        .unwrap_or_else(|e| panic!("cannot start rexx-run on {words:?}: {e}"));
+        .unwrap_or_else(|e| panic!("cannot start {words}: {e}"));
     let group = rustix::process::Pid::from_child(&child);
     let kill_group = || {
         // The group may be gone already; that is the outcome wanted.
@@ -639,7 +680,7 @@ pub fn run_crate_process(
                 break Ended::Killed;
             }
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(5)),
-            Err(e) => panic!("cannot wait for rexx-run on {words:?}: {e}"),
+            Err(e) => panic!("cannot wait for {words}: {e}"),
         }
     };
     let took = start.elapsed();
@@ -665,7 +706,7 @@ pub fn run_crate_process(
 /// A directory beside `run` holding `rexx`, a link to this crate's `rexx-run`,
 /// so a test running `rexx` as a command runs the side under test; the
 /// oracle's side gets its own `bin` directory instead.
-fn interpreter_bin(run: &Path) -> PathBuf {
+pub fn interpreter_bin(run: &Path) -> PathBuf {
     let bin = run.parent().expect("a parent").join("bin-rexx");
     fs::create_dir_all(&bin).expect("the interpreter bin directory");
     let link = bin.join("rexx");
@@ -683,7 +724,27 @@ fn interpreter_bin(run: &Path) -> PathBuf {
 /// The file is matched and rewritten as bytes: only the renamed methods'
 /// lines change, whatever bytes the rest holds.
 pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTreeSet<S>) {
-    let text = read_bytes(group_file);
+    let (text, skipped) = renamed(&read_bytes(group_file), group, left_out);
+    let wanted: BTreeSet<String> = left_out
+        .iter()
+        .map(AsRef::as_ref)
+        .filter(|name| name.starts_with(&format!("{group}.")))
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        skipped, wanted,
+        "the left-out tests of {group} renamed in the copy"
+    );
+    fs::write(group_file, text).expect("cannot rewrite the copied group file");
+}
+
+/// The group file `text` with each test of `group` that `left_out` names
+/// renamed as [`skip`] renames it, and the `GROUP.TEST` names it renamed.
+pub fn renamed<S: AsRef<str> + Ord>(
+    text: &[u8],
+    group: &str,
+    left_out: &BTreeSet<S>,
+) -> (Vec<u8>, BTreeSet<String>) {
     let mut skipped = BTreeSet::new();
     let lines: Vec<Vec<u8>> = text
         .split(|&byte| byte == b'\n')
@@ -722,17 +783,7 @@ pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTre
             [&line[..at], b"SKIPPED_".as_slice(), &line[at..]].concat()
         })
         .collect();
-    let wanted: BTreeSet<String> = left_out
-        .iter()
-        .map(AsRef::as_ref)
-        .filter(|name| name.starts_with(&format!("{group}.")))
-        .map(str::to_string)
-        .collect();
-    assert_eq!(
-        skipped, wanted,
-        "the left-out tests of {group} renamed in the copy"
-    );
-    fs::write(group_file, lines.join(&b'\n')).expect("cannot rewrite the copied group file");
+    (lines.join(&b'\n'), skipped)
 }
 
 /// The line `TestCase~execute` starts each test with, in the copy's
@@ -744,6 +795,25 @@ const START_MARKED: &[u8] = b"  aTestResult~startTest(self); .error~say('started
 /// Makes the copy at `at` write `started NAME` to stderr as each test
 /// starts. The file is read and written as bytes.
 pub fn mark_starts(at: &Path) {
+    mark_starts_with(at, START_MARKED);
+}
+
+/// Makes the copy at `at` append `started NAME` to `marker` as each test
+/// starts, closing it after each line, so the line is on disk before the
+/// test runs. `marker`'s path holds no quote.
+pub fn mark_starts_in_file(at: &Path, marker: &Path) {
+    let marker = marker.to_str().expect("a UTF-8 marker path");
+    assert!(
+        !marker.contains(['\'', '"']),
+        "a marker path without quotes"
+    );
+    let marked = format!(
+        "  aTestResult~startTest(self); .stream~new('{marker}')~~lineout('started' fName)~close -- remember test started\n  self~setUp                        -- make sure setup is invoked before test\n"
+    );
+    mark_starts_with(at, marked.as_bytes());
+}
+
+fn mark_starts_with(at: &Path, marked: &[u8]) {
     let file = at.join("framework/OOREXXUNIT.CLS");
     let text = read_bytes(&file);
     let hits: Vec<usize> = text
@@ -754,17 +824,52 @@ pub fn mark_starts(at: &Path) {
         .collect();
     assert_eq!(hits.len(), 1, "one test start in {}", file.display());
     let at = hits[0];
-    let marked = [&text[..at], START_MARKED, &text[at + START_LINE.len()..]].concat();
+    let marked = [&text[..at], marked, &text[at + START_LINE.len()..]].concat();
     fs::write(&file, marked).expect("cannot rewrite the copied OOREXXUNIT.CLS");
 }
 
 /// The tests `run` started, in order.
 pub fn started(run: &Run) -> Vec<String> {
-    String::from_utf8_lossy(&run.stderr)
+    started_lines(&run.stderr)
+}
+
+/// The tests [`mark_starts_in_file`]'s `marker` names, in order; none where
+/// it does not exist.
+pub fn started_in_file(marker: &Path) -> Vec<String> {
+    started_lines(&fs::read(marker).unwrap_or_default())
+}
+
+fn started_lines(bytes: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(bytes)
         .lines()
         .filter_map(|line| line.strip_prefix("started "))
         .map(str::to_ascii_uppercase)
         .collect()
+}
+
+/// The tests a run's `-V 2` detail names as failing or in error, in
+/// order.
+pub fn failing(run: &Run) -> Vec<String> {
+    let text = String::from_utf8_lossy(&run.stdout);
+    let mut names = Vec::new();
+    let mut detail = false;
+    for line in text.lines() {
+        if line.starts_with("[failure] ") || line.starts_with("[error] ") {
+            detail = true;
+        } else if let Some(name) = line.trim_start().strip_prefix("Test:").filter(|_| detail) {
+            names.push(name.trim().to_string());
+            detail = false;
+        }
+    }
+    names
+}
+
+/// The first `rexx-exec: ` line of a run's stderr: this crate's refusal.
+pub fn refusal(run: &Run) -> Option<String> {
+    String::from_utf8_lossy(&run.stderr)
+        .lines()
+        .find(|line| line.starts_with("rexx-exec: "))
+        .map(str::to_string)
 }
 
 /// The path of `group`'s file in the copy `run`.

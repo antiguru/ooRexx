@@ -1,0 +1,24 @@
+#!/usr/bin/env rexx
+/* No test ends. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.HangsEverywhere.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "HangsEverywhere.testGroup" subclass ooTestCase public
+
+::method test_a
+  do forever
+  end
+
+::method test_b
+  do forever
+  end
+
+::method test_c
+  do forever
+  end

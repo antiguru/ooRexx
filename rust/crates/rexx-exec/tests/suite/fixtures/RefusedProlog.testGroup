@@ -1,0 +1,17 @@
+#!/usr/bin/env rexx
+/* The prolog calls a routine this crate refuses, before any test starts. */
+  name = 'SysQueryRexx' || 'Macro'
+  interpret 'r =' name || '(''x'')'
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.RefusedProlog.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "RefusedProlog.testGroup" subclass ooTestCase public
+
+::method test_a
+  self~assertSame(1, 1)

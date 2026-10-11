@@ -2580,9 +2580,9 @@ mod group_runs {
         use std::time::{Duration, Instant};
 
         use super::super::group_runner::{
-            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, first_difference, fresh_copy, gate_mode,
-            group_file, mark_starts, masked, outcome, reaching_rxapi, read_lossy, rows_in_parallel,
-            run_crate_within, run_oracle_within, skip, started,
+            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, failing, first_difference, fresh_copy,
+            gate_mode, group_file, mark_starts, masked, outcome, reaching_rxapi, read_lossy,
+            refusal, rows_in_parallel, run_crate_within, run_oracle_within, skip, started,
         };
         use super::super::support::oracle;
         use super::{WALL_CLOCK, inverted};
@@ -3049,32 +3049,6 @@ mod group_runs {
                 "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
             ),
         ];
-
-        /// The tests a run's `-V 2` detail names as failing or in error, in
-        /// order.
-        fn failing(run: &Run) -> Vec<String> {
-            let text = String::from_utf8_lossy(&run.stdout);
-            let mut names = Vec::new();
-            let mut detail = false;
-            for line in text.lines() {
-                if line.starts_with("[failure] ") || line.starts_with("[error] ") {
-                    detail = true;
-                } else if let Some(name) =
-                    line.trim_start().strip_prefix("Test:").filter(|_| detail)
-                {
-                    names.push(name.trim().to_string());
-                    detail = false;
-                }
-            }
-            names
-        }
-
-        fn refusal(run: &Run) -> Option<String> {
-            String::from_utf8_lossy(&run.stderr)
-                .lines()
-                .find(|line| line.starts_with("rexx-exec: "))
-                .map(str::to_string)
-        }
 
         /// A run's refusal or summary, its status, the last test it started
         /// and the tests failing in it.

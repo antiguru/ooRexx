@@ -1,0 +1,19 @@
+#!/usr/bin/env rexx
+/* TEST_LIMIT passes only under the fallback's address-space limit. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.AddressSpace.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class "AddressSpace.testGroup" subclass ooTestCase public
+
+::method test_limit
+  limit = ''
+  do line over .stream~new('/proc/self/limits')~arrayIn
+    if line~pos('Max address space') = 1 then limit = line~word(4)
+  end
+  self~assertSame(4294967296, limit)
