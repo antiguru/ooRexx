@@ -238,8 +238,9 @@ Moritz, 2026-10-10 and 2026-10-11, on the survey and the review (`decisions.md`)
   in Phase 9".
 * **The crate tree (:780).** The `rexx-cli/` line is removed (D4).
 * **A new row 9.1, "Performance to 2x (optional)".** It targets every benchmark axis at 2x the
-  oracle or better, with 1x as the stretch goal (R3). Its entry phase, its instrument (cycles or wall
-  clock) and whether L3-full waits for it are left for Moritz. Its inputs:
+  oracle or better, with 1x as the stretch goal (R3). It measures wall clock, with cycles as the
+  stand-in where wall clock is too noisy (Moritz, 2026-10-11). Its entry phase and whether L3-full
+  waits for it are left for Moritz. Its inputs:
   * scout B's table;
   * `dirread` (4.84x wall) and `extcall` (2.02x), which no record attributes;
   * `startup`, at 12.9x instructions;

@@ -38,3 +38,5 @@ Controller rulings on the spec review (`spec-review.md`), 2026-10-11:
   reads "no exclusions but the licences file" -- finding 13 -- wrong costs a file rename.
 * Ruling: D4 stands (`rexx-run` removed, approved by Moritz), as its own 9c task with a perf re-pin
   on `rexx` by zero-change A/B -- finding 10 -- wrong costs restoring a binary name.
+* **Row 9.1 measures wall clock**, with cycles as the stand-in where wall clock is too noisy
+  (Moritz, 2026-10-11).
