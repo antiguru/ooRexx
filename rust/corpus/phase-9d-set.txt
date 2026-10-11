@@ -9,6 +9,10 @@
 #
 #   awk -F'\t' '$3=="-" && $4=="passed" && $5=="failed" && $1!="utilities/rexx/rexx_command" && $1!="utilities/rexxc/rexxc" && $1!="base/rexxutil/SysFileTree" && !($1=="API/oo/METHOD" && $2=="TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA") && !(($1=="base/class/Method" || $1=="base/class/Routine") && ($2=="TEST_NEW_ARRAY_FROM_FILE" || $2=="TEST_NEW_FILE_COMPILED")) {print $1"\t"$2}' tests.tsv
 #
+# base/class/Package TEST_PACKAGE_FINDPROGRAM_REXXTRY is left out of the command's
+# output: it passes here once the crate side's bin holds the oracle bin's
+# class files (suite.rs `lay_class_files`).
+#
 # ootest revision 13178
 base/bif/ARG	TEST_EXTERNAL_CALLS
 base/bif/CHAROUT	TEST_POSITIONING_1_BIN
@@ -57,7 +61,6 @@ base/class/Object	TEST_RUN
 base/class/Object	TEST_SETMETHOD
 base/class/Object	TEST_SETMETHOD_SCOPE
 base/class/Object	TEST_UNINIT
-base/class/Package	TEST_PACKAGE_FINDPROGRAM_REXXTRY
 base/class/Package	TEST_PROLOG
 base/class/Queue	TEST_DIFFERENCE
 base/class/Queue	TEST_XOR

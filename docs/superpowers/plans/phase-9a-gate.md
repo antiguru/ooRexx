@@ -133,18 +133,16 @@ opens a group file outside its own group's directory by a relative path
 in this run, and `the_relative_path_tests_pass_on_the_oracle_with_their_neighbours_copied` fails
 with the copy disabled.
 
-## Environment candidates, for Moritz's ruling
+## The socket sample groups run alone
 
-No Environment row is added. The candidates are the socket sample groups' `TEST_04` tests,
-`samples/scclient`, `samples/scserver`, `samples/sfclient` and `samples/sfserver`, with their oracle
-run records in `rust/corpus/suite-oracle-runs/samples-*.txt`. Each record holds four oracle runs:
-scout A's, this task's two whole runs, and one run of the four groups alone, one after another.
-Alone, all four pass. Beside each other, at eight groups at once, they fail or hang in a different
-combination each time: scout A's run fails both servers' `TEST_04` (`EADDRINUSE` from a bind)
-and kills both clients at 300 s; the `717ab354b` run fails `sfserver` only; the `2415e1733` run fails
-`scserver` and `sfclient` and kills `sfserver` at 300 s. The tests drive the samples on fixed ports.
-The alternative to Environment rows is a harness rule that runs these groups one at a time. In the
-`2415e1733` run no other test without a Phase 10 row failed on the oracle.
+Controller ruling, Task 3 fix round 1: `samples/scclient`, `samples/scserver`, `samples/sfclient`
+and `samples/sfserver` run one group at a time, after the others and beside none (`suite.rs`'s
+`ALONE`), on both sides, and get no Environment row. Their `TEST_04` binds fixed ports: beside each
+other at eight groups at once they failed or hung on the oracle in a different combination in each
+of scout A's run and this task's two whole runs (`EADDRINUSE` from a bind in scout A's), and run
+alone they pass. The records are `rust/corpus/suite-oracle-runs/samples-*.txt`. Run alone through
+`REXX_SUITE_GROUPS` at the fix round's tree, all four `TEST_04` pass on the oracle. No Environment
+candidate remains; in the `2415e1733` run no other test without a Phase 10 row failed on the oracle.
 
 ## DIFFERING cross-check
 
@@ -176,6 +174,7 @@ TEST_OBJECT_OBJECTNAMEEQUALS.
 
 `rust/corpus/phase-9d-set.txt`, derived from this run's `tests.tsv` by the command in its header. It
 holds the TSV's `tests_wrong` tests less the 52 witnesses spec section 3 names, and two tests the
-TSV does not have, both `base/class/Package`: `TEST_PROLOG`, which scout A's run reached only as a
-timeout, and `TEST_PACKAGE_FINDPROGRAM_REXXTRY`, which asks `findProgram` for `mime.cls`, which
-the oracle finds in its `bin` on `PATH` and the crate side's `PATH` does not hold.
+TSV does not have: `base/class/Package`'s `TEST_PROLOG`, which scout A's run reached only as a
+timeout. `TEST_PACKAGE_FINDPROGRAM_REXXTRY` asks `findProgram` for `mime.cls`, which the oracle
+finds in its `bin` on `PATH`; the crate side's `bin` now holds the oracle `bin`'s `*.cls` files, the
+test passes on the crate through `REXX_SUITE_GROUPS`, and the set leaves it out, as its header says.

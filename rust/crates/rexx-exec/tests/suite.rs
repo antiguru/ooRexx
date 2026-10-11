@@ -93,6 +93,24 @@ pub const NEIGHBOURS: &[(&str, &[&str])] = &[
     ("base/class/Stream", &["base/bif/STREAM.testGroup"]),
 ];
 
+/// The groups that run one at a time, after the others and beside none: each
+/// binds a fixed port, so two at once fail with `EADDRINUSE` on the oracle
+/// (`rust/corpus/suite-oracle-runs/samples-*.txt`), and each passes alone.
+pub const ALONE: &[&str] = &[
+    "samples/scclient",
+    "samples/scserver",
+    "samples/sfclient",
+    "samples/sfserver",
+];
+
+/// `groups` split into those that run [`GROUPS_AT_ONCE`] at a time and those
+/// [`ALONE`] names, each in `groups`' order.
+pub fn schedule(groups: Vec<(String, String)>) -> (Vec<(String, String)>, Vec<(String, String)>) {
+    groups
+        .into_iter()
+        .partition(|(dir, group)| !ALONE.contains(&group_path(dir, group).as_str()))
+}
+
 /// What bounded a side's memory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CapKind {
@@ -278,8 +296,19 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
 }
 
 /// Whether the crate side's `path` resolves `rexx` inside `bin` and `rexxc`
-/// nowhere.
+/// nowhere, and `bin` holds no ELF file but this crate's `rexx`.
 pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
+    let ours = fs::canonicalize(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run");
+    for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
+        let file = entry.map_err(|e| e.to_string())?.path();
+        let elf = fs::read(&file).is_ok_and(|bytes| bytes.starts_with(b"\x7fELF"));
+        if elf && fs::canonicalize(&file).ok().as_ref() != Some(&ours) {
+            return Err(format!(
+                "{} is a binary other than this crate's",
+                file.display()
+            ));
+        }
+    }
     let rexx = resolve("rexx", path);
     if rexx.as_deref() != Some(bin.join("rexx").as_path()) {
         return Err(format!(
@@ -290,6 +319,21 @@ pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
     match resolve("rexxc", path) {
         Some(rexxc) => Err(format!("rexxc resolves to {} on {path}", rexxc.display())),
         None => Ok(()),
+    }
+}
+
+/// Copies the oracle `bin`'s Rexx class files (`*.cls`) into the crate
+/// side's `bin`, so a program searching `PATH` for one finds it on both sides.
+fn lay_class_files(bin: &Path) {
+    let from = oracle_root().join("bin");
+    for entry in
+        fs::read_dir(&from).unwrap_or_else(|e| panic!("cannot read {}: {e}", from.display()))
+    {
+        let file = entry.expect("a directory entry").path();
+        if file.extension().is_some_and(|extension| extension == "cls") {
+            let to = bin.join(file.file_name().expect("a file name"));
+            fs::copy(&file, &to).unwrap_or_else(|e| panic!("cannot copy {}: {e}", file.display()));
+        }
     }
 }
 
@@ -642,6 +686,7 @@ pub fn crate_run_once(
     let group_file = prepare(root, run, dir, group, left_out);
     let environment = crate_side_environment(run);
     let bin = interpreter_bin(run);
+    lay_class_files(&bin);
     let path = environment
         .iter()
         .find(|(name, _)| name == b"PATH")
@@ -796,6 +841,14 @@ fn selected(groups: Vec<(String, String)>) -> Vec<(String, String)> {
     chosen
 }
 
+/// The per-test record's groups line for this run.
+fn groups_line() -> String {
+    std::env::var(GROUPS_ENV).map_or_else(
+        |_| suite_rows::ALL_GROUPS_LINE.to_string(),
+        |names| format!("# groups {names}"),
+    )
+}
+
 fn suite_gate() -> bool {
     std::env::var(GATE_ENV).is_ok_and(|value| !value.is_empty() && value != "0")
 }
@@ -863,13 +916,15 @@ pub fn judge(oracle: &GroupRun, ours: &GroupRun, rows: &[&Row]) -> Vec<String> {
         ));
     }
     for row in rows {
-        if let (Some(recorded), Some(captured)) = (row.refusal(), ours.blocked.get(&row.test))
-            && recorded != captured
-        {
-            problems.push(format!(
-                "{}'s refusal is not the one captured: {captured}",
-                row.at()
-            ));
+        if let Some(recorded) = row.refusal() {
+            match ours.blocked.get(&row.test) {
+                Some(captured) if captured == recorded => {}
+                Some(captured) => problems.push(format!(
+                    "{}'s refusal is not the one captured: {captured}",
+                    row.at()
+                )),
+                None => problems.push(format!("{}'s refusal not captured", row.at())),
+            }
         }
         if row.owner == Owner::NotRun && oracle.started.contains(&row.test) {
             problems.push(format!("{}'s test started on the oracle", row.at()));
@@ -906,8 +961,14 @@ pub fn oracle_denominator(oracle: &GroupRun, rows: &[&Row]) -> String {
 
 /// Every test either side started or blocked, or the group expects or rows,
 /// with its row's owner and each side's verdict.
-pub fn per_test(revision: &str, results: &[(GroupRun, GroupRun)], rows: &[Row]) -> String {
-    let mut report = format!("# ootest revision {revision}\ngroup\ttest\trow\toracle\tcrate\n");
+pub fn per_test(
+    revision: &str,
+    groups_line: &str,
+    results: &[(GroupRun, GroupRun)],
+    rows: &[Row],
+) -> String {
+    let mut report =
+        format!("# ootest revision {revision}\n{groups_line}\ngroup\ttest\trow\toracle\tcrate\n");
     for (oracle, ours) in results {
         let group_rows = rows_of(rows, &oracle.group);
         let tests: BTreeSet<&String> = [oracle, ours]
@@ -957,29 +1018,29 @@ fn l3_core_suite() {
         .thread_name(|at| format!("suite-group-{at}"))
         .build()
         .expect("cannot build the group pool");
-    let results: Vec<(GroupRun, GroupRun)> = pool.install(|| {
+    let judged = |(dir, group): &(String, String)| {
+        let path = group_path(dir, group);
+        let group_rows = rows_of(&rows, &path);
+        let (mut oracle, mut ours) = run_group(
+            &settings,
+            dir,
+            group,
+            &renamed_out_by_rows(group, &group_rows),
+        );
+        let mut expected = expected_set(dir, group);
+        for row in &group_rows {
+            expected.remove(&row.test);
+        }
+        oracle.expected = expected.clone();
+        ours.expected = expected;
+        (oracle, ours)
+    };
+    let (pooled, alone) = schedule(groups);
+    let mut results: Vec<(GroupRun, GroupRun)> = pool.install(|| {
         use rayon::prelude::*;
-        groups
-            .par_iter()
-            .map(|(dir, group)| {
-                let path = group_path(dir, group);
-                let group_rows = rows_of(&rows, &path);
-                let (mut oracle, mut ours) = run_group(
-                    &settings,
-                    dir,
-                    group,
-                    &renamed_out_by_rows(group, &group_rows),
-                );
-                let mut expected = expected_set(dir, group);
-                for row in &group_rows {
-                    expected.remove(&row.test);
-                }
-                oracle.expected = expected.clone();
-                ours.expected = expected;
-                (oracle, ours)
-            })
-            .collect()
+        pooled.par_iter().map(judged).collect()
     });
+    results.extend(alone.iter().map(judged));
     let path = table_path();
     fs::create_dir_all(path.parent().expect("a directory")).expect("the table's directory");
     fs::write(&path, table(&revision, &results)).expect("cannot write the table");
@@ -991,7 +1052,7 @@ fn l3_core_suite() {
     .expect("cannot write the oracle-difference report");
     fs::write(
         beside(suite_rows::TESTS_FILE),
-        per_test(&revision, &results, &rows),
+        per_test(&revision, &groups_line(), &results, &rows),
     )
     .expect("cannot write the per-test record");
     let mut verdicts =
@@ -1135,6 +1196,12 @@ mod judging {
         ours.blocked
             .insert("TEST_R".to_string(), "rexx-exec: y (Phase 9)".to_string());
         assert_eq!(judge(&oracle, &ours, &[&refused]).len(), 1);
+        let failed = run(&["TEST_A"], &["TEST_A", "TEST_R"], &["TEST_A"]);
+        assert_eq!(
+            judge(&oracle, &failed, &[&refused]).len(),
+            1,
+            "a refusal row whose test ran without refusing"
+        );
 
         let not_run = row("TEST_N", Owner::NotRun, "restrictOS line 1");
         let ours = run(&["TEST_A"], &["TEST_A"], &["TEST_A"]);
@@ -1173,6 +1240,39 @@ mod judging {
             set(&["G.TEST_H"])
         );
     }
+}
+
+#[test]
+fn the_port_binding_groups_run_alone_and_the_rest_together() {
+    let groups = discover_groups();
+    let (pooled, alone) = schedule(groups.clone());
+    let paths = |list: &[(String, String)]| -> Vec<String> {
+        list.iter()
+            .map(|(dir, group)| group_path(dir, group))
+            .collect()
+    };
+    assert_eq!(paths(&alone), ALONE);
+    assert_eq!(pooled.len() + alone.len(), groups.len());
+    assert!(
+        paths(&pooled)
+            .iter()
+            .all(|path| !ALONE.contains(&path.as_str()))
+    );
+}
+
+#[test]
+fn only_a_record_of_every_group_at_the_recorded_revision_is_a_full_run() {
+    use suite_rows::{ALL_GROUPS_LINE, full_run_record};
+    let header = |revision: &str, groups: &str| {
+        format!("# ootest revision {revision}\n{groups}\ngroup\ttest\trow\toracle\tcrate\n")
+    };
+    assert_eq!(
+        full_run_record(&header("13178", ALL_GROUPS_LINE), "13178"),
+        Ok(())
+    );
+    assert!(full_run_record(&header("13178", "# groups base/bif/C2X"), "13178").is_err());
+    assert!(full_run_record(&header("13177", ALL_GROUPS_LINE), "13178").is_err());
+    assert!(full_run_record("# ootest revision 13178\ngroup\ttest\n", "13178").is_err());
 }
 
 /// Each owner's check, on rows each of which passes or fails it.
@@ -1783,6 +1883,39 @@ mod fixtures {
                 assert!(run.passed.contains(test), "{group} {test}");
             }
         }
+    }
+
+    /// The `*.cls` file names in `dir`.
+    fn class_files(dir: &std::path::Path) -> BTreeSet<String> {
+        fs::read_dir(dir)
+            .expect("a directory")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".cls"))
+            .collect()
+    }
+
+    #[test]
+    fn the_crate_side_bin_holds_the_oracle_bins_class_files_and_no_other_binary() {
+        let run = scratch_run("class-files");
+        crate_run_once(
+            &root(),
+            &run,
+            "",
+            "ChildPath",
+            &BTreeSet::new(),
+            memcap().as_deref(),
+            Duration::from_secs(60),
+        );
+        let bin = interpreter_bin(&run);
+        let oracle_bin = super::oracle_root().join("bin");
+        assert!(class_files(&oracle_bin).contains("mime.cls"));
+        assert_eq!(class_files(&bin), class_files(&oracle_bin));
+        let path = format!("{}:/usr/bin:/bin", bin.display());
+        assert_eq!(check_path(&path, &bin), Ok(()));
+        fs::copy(oracle_bin.join("rxqueue"), bin.join("rxqueue")).expect("an oracle binary");
+        assert!(check_path(&path, &bin).is_err(), "an oracle ELF in the bin");
+        fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }
 
     #[test]

@@ -3480,12 +3480,16 @@ mod group_runs {
         }
 
         /// Spec 2026-10-10 section 2: every test a [`DIFFERING`] key names as
-        /// failing or last started passes in the suite gate's last per-test
-        /// record, or has a row in one of the three row files. Gate-only,
-        /// under the suite gate's variable, since it reads that record.
+        /// failing or last started passes in the per-test record of the suite
+        /// gate's last run of every group, at the recorded ootest revision, or
+        /// has a row in one of the three row files. Gate-only, under the suite
+        /// gate's variable, since it reads that record; a record of a
+        /// `REXX_SUITE_GROUPS` run or of another revision fails it.
         #[test]
         fn every_differing_test_is_fixed_or_has_a_row() {
-            use super::super::suite_rows::{TESTS_FILE, by_test, read_rows, table_path};
+            use super::super::suite_rows::{
+                REVISION, TESTS_FILE, by_test, full_run_record, read_rows, table_path,
+            };
             if std::env::var("REXX_SUITE_GATE")
                 .map_or(true, |value| value.is_empty() || value == "0")
             {
@@ -3493,6 +3497,10 @@ mod group_runs {
             }
             let record = table_path().with_file_name(TESTS_FILE);
             let text = read_lossy(&record);
+            let revision = read_lossy(&super::super::group_runner::worktree().join(REVISION));
+            if let Err(problem) = full_run_record(&text, revision.trim()) {
+                panic!("{}: {problem}", record.display());
+            }
             let passed: BTreeSet<(String, String)> = text
                 .lines()
                 .filter(|line| !line.starts_with('#'))

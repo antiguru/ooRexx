@@ -57,6 +57,25 @@ pub const TABLE_ENV: &str = "REXX_SUITE_TABLE";
 /// owner or `-`, and each side's verdict.
 pub const TESTS_FILE: &str = "tests.tsv";
 
+/// The per-test record's line naming a run of every group; a run restricted
+/// by `REXX_SUITE_GROUPS` writes `# groups ` and the names instead.
+pub const ALL_GROUPS_LINE: &str = "# groups all";
+
+/// Whether the per-test record `text` is of a run of every group at the ootest
+/// revision `revision`.
+pub fn full_run_record(text: &str, revision: &str) -> Result<(), String> {
+    let wanted = format!("# ootest revision {revision}");
+    if !text.lines().any(|line| line == wanted) {
+        return Err(format!("the record does not say `{wanted}`"));
+    }
+    if !text.lines().any(|line| line == ALL_GROUPS_LINE) {
+        return Err(format!(
+            "the record is not of every group (no `{ALL_GROUPS_LINE}`)"
+        ));
+    }
+    Ok(())
+}
+
 /// Where the table goes: [`TABLE_ENV`]'s path, else `target/suite/table.tsv`.
 pub fn table_path() -> PathBuf {
     std::env::var_os(TABLE_ENV).map_or_else(

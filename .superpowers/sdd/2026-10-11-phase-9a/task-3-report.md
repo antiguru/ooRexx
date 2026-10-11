@@ -192,3 +192,46 @@ the TSV: the TSV's `tests_wrong` has 249 distinct (group, test) pairs, all in ru
 * The TSV's `tests_wrong` is 249 tests in 49 groups (`awk -F'\t' 'NR>1 && $25!=""'`), as the spec
   says; scout A's report says 36 groups. Not reconciled.
 * The socket candidates make the gate's verdict for four groups depend on scheduling until ruled.
+
+## Fix round 1
+
+Base `c161c39ee`. Each item's test was red before its change (`CARGO_INCREMENTAL=0 memcap 8G cargo
+test --release -j 4 -p rexx-exec --test suite -- <filter>`, exit 101), green after.
+
+1. **A refusal row no longer certifies itself.** `judge` requires the crate to have blocked the
+   row's test with exactly the recorded text; a run that started it and did not block it is red
+   ("refusal not captured"). Red first: the added case (test started and failed, not blocked) in
+   `a_row_whose_refusal_or_claim_the_run_contradicts_reddens_its_group` gave `left: 0, right: 1`.
+2. **Socket samples run alone** (controller ruling). `ALONE` names the four groups with the reason;
+   `schedule` splits them off and `l3_core_suite` runs them one at a time after the pooled groups,
+   both sides of each in turn. Red first: `the_port_binding_groups_run_alone_and_the_rest_together`
+   against a `schedule` that pooled everything (`left: []`). The gate record's Environment section
+   is replaced by the ruling and its reason; no Environment candidate remains.
+3. **Class files on the crate side.** `lay_class_files` copies the oracle `bin`'s `*.cls` into the
+   crate side's `bin` before each crate run. `check_path` also refuses any ELF file in that `bin`
+   other than one resolving to this crate's `rexx-run`. Red first:
+   `the_crate_side_bin_holds_the_oracle_bins_class_files_and_no_other_binary` (`left: {}` against
+   the oracle's class files); it also copies the oracle's `rxqueue` into the `bin` and asserts the
+   check refuses it. `TEST_PACKAGE_FINDPROGRAM_REXXTRY` passes on the crate (run below), so
+   `phase-9d-set.txt` leaves it out and its header says why.
+4. **The cross-check judges the last full run.** `per_test` writes `# groups all`, or `# groups`
+   and the `REXX_SUITE_GROUPS` names; `suite_rows::full_run_record` requires that line and the
+   recorded revision, and `every_differing_test_is_fixed_or_has_a_row` panics on any other record;
+   its doc says so. Red first: `only_a_record_of_every_group_at_the_recorded_revision_is_a_full_run`
+   against a stub answering `Ok`. Run against the baseline record, which predates the line, the
+   cross-check now exits 101 with "the record is not of every group".
+
+Checks, at the commit below:
+
+* `cargo fmt -p rexx-exec`: 0.
+* `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: 0.
+* `CARGO_INCREMENTAL=0 memcap 8G cargo test --release -j 4 -p rexx-exec --test suite --test concurrency_tests`:
+  0; `suite` 50 passed, `concurrency_tests` 54 passed.
+* `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package,samples/scclient,samples/scserver,samples/sfclient,samples/sfserver
+  REXX_SUITE_TABLE=/tmp/claude-1000/p9/t3/fr1run/table.tsv CARGO_INCREMENTAL=0 memcap 8G cargo test --release -j 4
+  -p rexx-exec --test suite l3_core_suite`: exit 101, 88 s, the five groups red as expected (the
+  four samples blocked at load on the crate by `RexxInfo~executable`; `Package` by its 9d tests and
+  the program-end hang). Oracle side: every socket `TEST_04` passed; denominator `equal` on all five.
+  Crate side: `TEST_PACKAGE_FINDPROGRAM_REXXTRY` passed, `TEST_PROLOG` still failed.
+
+The whole suite was not re-run; the baseline record stays the `2415e1733` run.
