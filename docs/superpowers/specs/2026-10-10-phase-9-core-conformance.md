@@ -59,7 +59,8 @@ below comes from scout A section 3 or from the reviews:
   test. A test is "ran" if any iteration started it, and it passed only if it passed in the iteration
   that ran it.
 * **What a test is.** A test is its uppercased method name within its group. Ran is the set of names
-  in the `started` markers, as `whole_groups`' `mark_starts` writes them. The framework's own
+  in the `started` markers, which the suite writes to a file outside the copy, closed after each test,
+  so a killed run keeps them (amended 2026-10-11: a killed `rexx-run` loses buffered stderr). The framework's own
   tests-run figure is reported in the table and is not the denominator. The denominator check is:
   the set of names started equals the expected set. Pass or fail is criterion 1's.
 * **Denominator.** A group's expected set is its test methods, enumerated statically by
