@@ -45,7 +45,8 @@ below comes from scout A section 3 or from the reviews:
   `skip`, `read_lossy` and `without_rxfuncquery` change from UTF-8 to byte reads and writes, and
   `whole_groups` runs on the same code.
 * **Crate side.** This side is a child process of this crate's `rexx`, reached through a `bin`
-  directory in the copy that also holds this crate's `rexxc`. Its `PATH` contains no directory holding
+  directory beside the copy (so a test listing its own directory sees the same files on both sides)
+  that also holds this crate's `rexxc`. Its `PATH` contains no directory holding
   an oracle binary. The harness asserts on each run that `rexx` resolves inside that `bin`, and that
   `rexxc` resolves nowhere on the crate side's `PATH` until 9c delivers it and inside that `bin` from
   then on. Until 9c, `rexx` is a symlink to `rexx-run`.
