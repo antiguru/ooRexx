@@ -24,7 +24,7 @@ pub(super) fn arglist_to_native(
     _position: usize,
 ) -> Result<Value, Failure> {
     let arguments = cx.host.arguments();
-    Ok(Value::Object(cx.host.locals().register(arguments)))
+    Ok(Value::Object(cx.host.register_local(arguments)))
 }
 
 /// `REXX_VALUE_NAME` (`NativeActivation.cpp:317`).
@@ -47,7 +47,7 @@ pub(super) fn scope_to_native(
         return Err(Failure::Signature);
     }
     let scope = cx.host.scope();
-    Ok(Value::Object(cx.host.locals().register(scope)))
+    Ok(Value::Object(cx.host.register_local(scope)))
 }
 
 /// `REXX_VALUE_CSELF` (`NativeActivation.cpp:294`).
@@ -74,7 +74,7 @@ pub(super) fn oself_to_native(
         return Err(Failure::Signature);
     }
     let receiver = cx.host.receiver();
-    Ok(Value::Object(cx.host.locals().register(receiver)))
+    Ok(Value::Object(cx.host.register_local(receiver)))
 }
 
 /// `REXX_VALUE_SUPER` (`NativeActivation.cpp:281`).
@@ -87,7 +87,7 @@ pub(super) fn super_to_native(
         return Err(Failure::Signature);
     }
     let scope = cx.host.super_scope();
-    Ok(Value::Object(cx.host.locals().register(scope)))
+    Ok(Value::Object(cx.host.register_local(scope)))
 }
 
 /// `REXX_VALUE_RexxObjectPtr` (`NativeActivation.cpp:335`).
@@ -96,7 +96,7 @@ pub(super) fn object_to_native(
     argument: ObjRef,
     _position: usize,
 ) -> Result<Value, Failure> {
-    Ok(Value::Object(cx.host.locals().register(argument)))
+    Ok(Value::Object(cx.host.register_local(argument)))
 }
 
 /// A row `signedIntegerValue(argument, position, max, min)` converts
@@ -367,7 +367,7 @@ pub(super) fn string_object_to_native(
     // The C++ registers a local reference only for a string the conversion
     // had to create. Minting a handle is registering it, so here every one is
     // rooted and the "was it created" question does not arise.
-    Ok(Value::Object(cx.host.locals().register(string)))
+    Ok(Value::Object(cx.host.register_local(string)))
 }
 
 /// `REXX_VALUE_RexxArrayObject` (`NativeActivation.cpp:488`).
@@ -380,7 +380,7 @@ pub(super) fn array_to_native(
         .host
         .array_value(argument)?
         .ok_or(Failure::NotArray { argument })?;
-    Ok(Value::Object(cx.host.locals().register(array)))
+    Ok(Value::Object(cx.host.register_local(array)))
 }
 
 /// `REXX_VALUE_RexxStemObject` (`NativeActivation.cpp:502`): a stem, or in a
@@ -399,7 +399,7 @@ pub(super) fn stem_to_native(
             .context_stem(argument)?
             .ok_or(Failure::NoStem { position, argument })?
     };
-    Ok(Value::Object(cx.host.locals().register(stem)))
+    Ok(Value::Object(cx.host.register_local(stem)))
 }
 
 /// An argument that must be an instance of `class`, handed over as it is.
@@ -412,7 +412,7 @@ fn instance(
     if !cx.host.is_instance_of(argument, class) {
         return Err(Failure::NotInstance { position, class });
     }
-    Ok(Value::Object(cx.host.locals().register(argument)))
+    Ok(Value::Object(cx.host.register_local(argument)))
 }
 
 /// `REXX_VALUE_RexxClassObject` (`NativeActivation.cpp:549`).

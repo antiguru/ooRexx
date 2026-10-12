@@ -312,7 +312,7 @@ impl Activation<'_> {
 
     /// `object` registered as a local reference.
     fn register(&self, object: ObjRef) -> RexxObjectPtr {
-        self.conversion().host.locals().register(object)
+        self.conversion().host.register_local(object)
     }
 
     /// `Int64ToObject`, `IntptrToObject` and `Int32ToObject`, which are
@@ -321,7 +321,7 @@ impl Activation<'_> {
         let mut cx = self.conversion();
         let value = isize::try_from(value).expect("a pointer is 64 bits");
         let object = cx.host.whole_number(value);
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `UnsignedInt64ToObject`, `UintptrToObject`, `StringSizeToObject` and
@@ -329,7 +329,7 @@ impl Activation<'_> {
     pub fn unsigned_object(&self, value: u64) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.unsigned_number(value);
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `handle`'s value as a whole number from `min` to `max`, which is
@@ -374,7 +374,7 @@ impl Activation<'_> {
         } else {
             constants.false_object
         };
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `DoubleToObject`.
@@ -386,7 +386,7 @@ impl Activation<'_> {
     pub fn string_object(&self, bytes: &[u8]) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.new_string(bytes);
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `valueToObject` over one descriptor an extension filled, whose
@@ -429,7 +429,7 @@ impl Activation<'_> {
             |cx| {
                 let surface = cx.host.surface().expect("checked by with_surface");
                 let array = surface.new_array(&items);
-                cx.host.locals().register(array)
+                cx.host.register_local(array)
             },
         )
     }
@@ -522,7 +522,7 @@ impl Activation<'_> {
             |cx| {
                 let surface = cx.host.surface().expect("checked by with_surface");
                 match surface.condition_object() {
-                    Some(object) => cx.host.locals().register(object),
+                    Some(object) => cx.host.register_local(object),
                     None => std::ptr::null_mut(),
                 }
             },
@@ -552,7 +552,7 @@ impl Activation<'_> {
                     .surface()
                     .expect("checked by with_surface")
                     .directory_entry(directory, name)?;
-                Some((object, cx.host.locals().register(object)))
+                Some((object, cx.host.register_local(object)))
             };
             let code = entry(b"CODE");
             let rc = entry(b"RC");
@@ -612,7 +612,7 @@ impl Activation<'_> {
             |cx, object| {
                 let surface = cx.host.surface().expect("checked by with_surface");
                 match surface.request_string(object) {
-                    Some(string) => cx.host.locals().register(string),
+                    Some(string) => cx.host.register_local(string),
                     None => std::ptr::null_mut(),
                 }
             },
@@ -631,7 +631,7 @@ impl Activation<'_> {
                 let Some(string) = surface.request_string(object) else {
                     return std::ptr::null();
                 };
-                cx.host.locals().register(string);
+                cx.host.register_local(string);
                 let bytes = cx.host.string_value_text(string);
                 cx.c_string_for(string, &bytes)
             },
@@ -705,7 +705,7 @@ impl Activation<'_> {
                     .expect("checked by with_surface")
                     .new_raw_string(length);
                 cx.strings.writable(string, length);
-                cx.host.locals().register(string)
+                cx.host.register_local(string)
             },
         )
     }
@@ -767,7 +767,7 @@ impl Activation<'_> {
                     .surface()
                     .expect("checked by with_surface")
                     .new_buffer(length);
-                cx.host.locals().register(buffer)
+                cx.host.register_local(buffer)
             },
         )
     }
@@ -797,7 +797,7 @@ impl Activation<'_> {
                     .surface()
                     .expect("checked by with_surface")
                     .new_mutable_buffer(capacity);
-                cx.host.locals().register(buffer)
+                cx.host.register_local(buffer)
             },
         )
     }
@@ -910,14 +910,14 @@ impl Activation<'_> {
                 Argument::Text(bytes) => {
                     let mut cx = self.conversion();
                     let string = cx.host.new_string(bytes);
-                    cx.host.locals().register(string);
+                    cx.host.register_local(string);
                     Some(string)
                 }
                 Argument::Number(number) => {
                     let mut cx = self.conversion();
                     let value = isize::try_from(*number).unwrap_or(isize::MAX);
                     let object = cx.host.whole_number(value);
-                    cx.host.locals().register(object);
+                    cx.host.register_local(object);
                     Some(object)
                 }
             });
@@ -930,7 +930,7 @@ impl Activation<'_> {
                 .send(receiver, name, None, &objects)
                 .ok()
                 .flatten()?;
-            cx.host.locals().register(answer);
+            cx.host.register_local(answer);
             Some(answer)
         })
     }
@@ -1028,7 +1028,7 @@ impl Activation<'_> {
         let position = {
             let mut cx = self.conversion();
             let object = cx.host.whole_number(isize::try_from(position).unwrap_or(0));
-            cx.host.locals().register(object)
+            cx.host.register_local(object)
         };
         self.raise_with(slot, INCORRECT_METHOD_POSITIVE, &[position]);
     }
@@ -1114,7 +1114,7 @@ impl Activation<'_> {
                 .surface()
                 .expect("checked by with_surface")
                 .new_array(&items);
-            cx.host.locals().register(array)
+            cx.host.register_local(array)
         })
     }
 
@@ -1207,7 +1207,7 @@ impl Activation<'_> {
                 collection,
             )?;
             Some(match answered {
-                Ok(Some(object)) => cx.host.locals().register(object),
+                Ok(Some(object)) => cx.host.register_local(object),
                 Ok(None) | Err(()) => std::ptr::null_mut(),
             })
         })
@@ -1304,7 +1304,7 @@ impl Activation<'_> {
     ) -> RexxObjectPtr {
         self.with_surface(slot, std::ptr::null_mut(), |cx| {
             match serve(cx.host.surface().expect("checked by with_surface")) {
-                Some(object) => cx.host.locals().register(object),
+                Some(object) => cx.host.register_local(object),
                 None => std::ptr::null_mut(),
             }
         })
@@ -1397,7 +1397,7 @@ impl Activation<'_> {
             cx.host.context_stem(object).ok().flatten()
         };
         match stem {
-            Some(stem) => cx.host.locals().register(stem),
+            Some(stem) => cx.host.register_local(stem),
             None => std::ptr::null_mut(),
         }
     }
@@ -1499,7 +1499,7 @@ impl Activation<'_> {
             let array = {
                 let mut cx = self.conversion();
                 let array = cx.host.arguments();
-                cx.host.locals().register(array)
+                cx.host.register_local(array)
             };
             self.arguments_of(array)
         } else {
@@ -1528,7 +1528,7 @@ impl Activation<'_> {
     pub fn arguments(&self) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let array = cx.host.arguments();
-        cx.host.locals().register(array)
+        cx.host.register_local(array)
     }
 
     /// `GetArgument`: null for an omitted or absent argument.
@@ -1560,7 +1560,7 @@ impl Activation<'_> {
             MethodObject::Scope => cx.host.scope(),
             MethodObject::Super => cx.host.super_scope(),
         };
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// [`Surface::kept_numeric`] for `frame`, `None` without one.
@@ -1574,7 +1574,7 @@ impl Activation<'_> {
     pub fn kept_executable(&self, frame: Option<u64>) -> Option<RexxObjectPtr> {
         let mut cx = self.conversion();
         let object = cx.host.surface()?.kept_executable(frame?)?;
-        Some(cx.host.locals().register(object))
+        Some(cx.host.register_local(object))
     }
 
     /// `GetMethod` and `GetRoutine`.
@@ -1795,12 +1795,11 @@ impl Activation<'_> {
         })
     }
 
-    /// `ReleaseLocalReference`: the handle stays resolvable and rooted until
-    /// the call ends. The oracle's release leaves the object to its next
-    /// collection, so an extension that returns or uses the handle afterwards
-    /// is answered there unless a collection intervenes, and collection
-    /// timing is not a specified observable.
-    pub fn release_local_reference(&self, _handle: RexxObjectPtr) {}
+    /// `ReleaseLocalReference`: the handle no longer roots its object, and
+    /// answers until a collection takes it, as the oracle's does.
+    pub fn release_local_reference(&self, handle: RexxObjectPtr) {
+        self.conversion().host.release_local(handle);
+    }
 
     /// `AllocateObjectMemory`.
     pub fn allocate_object_memory(&self, size: usize) -> POINTER {

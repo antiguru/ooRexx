@@ -117,25 +117,70 @@ fn a_handle_that_outlived_its_activation_misses_the_slots_next_occupant() {
     assert_ne!(stale, live);
 }
 
+/// A release takes that handle alone out of the roots; it still resolves
+/// while its object lives; a second release, or one of a handle the table
+/// does not hold, changes nothing (`NativeActivation::removeLocalReference`,
+/// `interpreter/execution/NativeActivation.cpp:1219`).
 #[test]
-fn remove_drops_one_registration_and_clear_drops_them_all() {
+fn release_unroots_one_registration_and_clear_drops_them_all() {
     let mut heap = Heap::new();
     let first = heap.alloc(array(1));
     let second = heap.alloc(array(2));
+    let stranger = heap.alloc(array(3));
 
     let mut table = Table::new();
     let first_handle = table.register(first);
     let second_handle = table.register(second);
+    let stranger_handle = Table::new().register(stranger);
 
-    table.remove(first_handle);
-    assert_eq!(table.resolve(first_handle), None);
-    assert_eq!(table.resolve(second_handle), Some(second));
-    // As `removeLocalReference` ignores an object it does not hold.
-    table.remove(first_handle);
+    table.release(first_handle, |_| true);
+    assert_eq!(table.roots().collect::<Vec<_>>(), vec![second]);
+    assert_eq!(table.resolve(first_handle), Some(first));
+    assert_eq!(table.resolve_live(first_handle, |_| false), None);
+    assert_eq!(table.resolve_live(second_handle, |_| false), Some(second));
 
+    table.release(first_handle, |_| true);
+    table.release(stranger_handle, |_| true);
+    assert_eq!(table.roots().collect::<Vec<_>>(), vec![second]);
+    assert_eq!(table.resolve(stranger_handle), None);
+
+    // Registered again, it is held again.
+    assert_eq!(table.register(first), first_handle);
+    assert_eq!(table.roots().count(), 2);
+    assert_eq!(table.resolve_live(first_handle, |_| false), Some(first));
+
+    table.release(first_handle, |_| true);
     table.clear();
+    assert_eq!(table.resolve(first_handle), None);
     assert_eq!(table.resolve(second_handle), None);
     assert_eq!(table.roots().count(), 0);
+}
+
+/// Released handles whose object is gone are forgotten once enough pile up,
+/// and one whose object lives is kept.
+#[test]
+fn released_handles_of_swept_objects_are_forgotten() {
+    let mut heap = Heap::new();
+    let mut table = Table::new();
+    let kept = heap.alloc(array(1));
+    let kept_handle = table.register(kept);
+    table.release(kept_handle, |_| true);
+    let mut gone = Vec::new();
+    for _ in 0..10_000 {
+        let object = heap.alloc(array(0));
+        let handle = table.register(object);
+        table.release(handle, |candidate| candidate == kept);
+        gone.push(handle);
+    }
+    assert_eq!(table.resolve(kept_handle), Some(kept));
+    let remembered = gone
+        .iter()
+        .filter(|handle| table.resolve(**handle).is_some())
+        .count();
+    assert!(
+        remembered < 8192,
+        "{remembered} released handles of swept objects are still remembered"
+    );
 }
 
 #[test]

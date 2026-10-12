@@ -1020,6 +1020,7 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         id: 0,
         packaged: false,
         reserved: false,
+        temps_floor: 0,
     };
     let handle = frame.locals.register(object);
     interp.activity.native_handles.push(frame);
@@ -1079,6 +1080,7 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
         id: 0,
         packaged: false,
         reserved: false,
+        temps_floor: 0,
     });
     let held = [
         (receiver, "receiver"),

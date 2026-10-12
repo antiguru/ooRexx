@@ -124,6 +124,7 @@ impl Interp {
         scope: ObjRef,
         packaged: bool,
     ) -> Result<Option<ObjRef>, Failure> {
+        self.root_native_answer(&answered);
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
@@ -212,6 +213,7 @@ impl Interp {
         program: Option<crate::ProgramId>,
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
+        self.root_native_answer(&answered);
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
@@ -668,6 +670,7 @@ impl Interp {
                 id: 0,
                 packaged: false,
                 reserved: false,
+                temps_floor: 0,
             });
         frame.owner = owner;
         frame.scope = scope;
@@ -678,9 +681,18 @@ impl Interp {
         frame.id = self.next_native_id();
         frame.packaged = false;
         frame.reserved = false;
+        frame.temps_floor = self.roots.activity().temps_len();
         frame.name.extend_from_slice(name);
         frame.arguments.extend_from_slice(args);
         self.activity.native_handles.push(frame);
+    }
+
+    /// Roots the object a native call answered as a temporary, which its
+    /// frame's `locals` may have been alone in rooting.
+    fn root_native_answer(&mut self, answered: &Result<Option<ObjRef>, Refused>) {
+        if let Ok(Some(object)) = answered {
+            self.roots.activity_mut().push_temp(*object);
+        }
     }
 
     /// Pops the innermost native frame, answering the condition it holds and
@@ -1320,6 +1332,11 @@ impl rexx_api::values::Baton for InterpBaton {
 
 /// The condition an extension raised, whose number is the major and the minor
 /// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
+/// Whether `object` is one the heap has not swept.
+fn lives(heap: &rexx_core::Heap, object: ObjRef) -> bool {
+    !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) || heap.peek(object).is_some()
+}
+
 fn condition_of(number: usize) -> Failure {
     let major = u16::try_from(number / 1000).unwrap_or(u16::MAX);
     let minor = u16::try_from(number % 1000).unwrap_or(0);
@@ -1649,9 +1666,37 @@ impl Host for Interp {
     }
 
     fn resolve(&mut self, handle: rexx_api::layout::RexxObjectPtr) -> Option<ObjRef> {
-        self.locals()
-            .resolve(handle)
+        let heap = &self.heap;
+        self.activity
+            .native_handles
+            .last()
+            .expect("a native activation is running")
+            .locals
+            .resolve_live(handle, |object| lives(heap, object))
             .or_else(|| self.global_references.resolve(handle))
+    }
+
+    fn register_local(&mut self, object: ObjRef) -> rexx_api::layout::RexxObjectPtr {
+        let frame = self
+            .activity
+            .native_handles
+            .last_mut()
+            .expect("a native activation is running");
+        let handle = frame.locals.register(object);
+        self.roots
+            .activity_mut()
+            .pop_temp_above(frame.temps_floor, object);
+        handle
+    }
+
+    fn release_local(&mut self, handle: rexx_api::layout::RexxObjectPtr) {
+        let heap = &self.heap;
+        self.activity
+            .native_handles
+            .last_mut()
+            .expect("a native activation is running")
+            .locals
+            .release(handle, |object| lives(heap, object));
     }
 
     fn surface(&mut self) -> Option<&mut dyn rexx_api::callbacks::Surface> {

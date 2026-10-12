@@ -6193,14 +6193,17 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   each identical on all three descriptors).
 
   A RELEASED LOCAL REFERENCE RETURNED BY A NATIVE ROUTINE WAS REFUSED.
-  CLOSED at Phase 8's close (Task 9, ruling 3): ReleaseLocalReference keeps
-  the handle resolvable and rooted until the call ends. The forge's
+  CLOSED at Phase 8's close (Task 9, ruling 3): a released handle resolves
+  while its object lives. The forge's
   StaleRet makes a string, releases its local reference and returns it
   (stale.rex): "got released" and "after", rc 0, on both. The oracle's
   release leaves the object to its next collection, so where a collection
   runs mid-call the two may differ, which Moritz's ruling of 2026-09-01
   licenses ("anything that depends on gc ordering is inherently
-  unpredictable", docs/superpowers/plans/2026-08-27-phase-5b.md). No
+  unpredictable", docs/superpowers/plans/2026-08-27-phase-5b.md). Where a
+  collection here takes the released object first, the use is refused
+  loudly (rc 120, release_local_reference.rs's stress test): a use after
+  release is outside the API contract, as the kept handle's below is. No
   oracle-built extension on this host releases a local reference (only
   ooDialog does), so the witnesses are rexx-api's
   a_released_local_reference_still_answers, red with the old removal
@@ -6231,4 +6234,7 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   (NativeActivation::removeLocalReference,
   interpreter/execution/NativeActivation.cpp:1219). Output and rc agree.
   OWNER: Phase 9 (peak memory stops growing with the loop count, Phase 9 spec
-  section 3).
+  section 3). DELIVERED, Phase 9a Task 9: a release unroots that handle, a
+  local registered from a temporary the call pushed pops it, and the loop
+  peaks at 32168 KB at 200,000 passes and 32220 KB at 2,000,000 (oracle 19980
+  and 20864); rust/crates/rexx-exec/tests/release_local_reference.rs.

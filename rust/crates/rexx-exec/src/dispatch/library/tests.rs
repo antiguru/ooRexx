@@ -837,6 +837,75 @@ fn a_handle_carried_values_copy_lasts_until_a_collection() {
     assert!(interp.kept_strings.contains_key(&held));
 }
 
+/// **A released local reference stops rooting its object while the call
+/// runs**, the others staying rooted, and resolves only until a collection
+/// takes the object.
+#[test]
+fn a_released_local_reference_is_collectable_inside_its_call() {
+    use rexx_api::values::Host;
+    use rexx_core::ObjRef;
+    let mut interp = Interp::new();
+    let fresh = |interp: &mut Interp| {
+        interp.heap.alloc(rexx_core::Body::Array {
+            slots: Vec::new().into(),
+            dimensions: None,
+        })
+    };
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    let (released, held) = (fresh(&mut interp), fresh(&mut interp));
+    let (released_handle, held_handle) =
+        (interp.register_local(released), interp.register_local(held));
+    interp.release_local(released_handle);
+    assert_eq!(Host::resolve(&mut interp, released_handle), Some(released));
+    interp.collect_now();
+    assert!(
+        interp.heap.get(released).is_none(),
+        "the released object lived"
+    );
+    assert!(
+        interp.heap.get(held).is_some(),
+        "the held object was collected"
+    );
+    assert_eq!(Host::resolve(&mut interp, released_handle), None);
+    assert_eq!(Host::resolve(&mut interp, held_handle), Some(held));
+    interp.pop_native_frame();
+}
+
+/// **Registering an object the call pushed as a temporary pops it**, so the
+/// call's `locals` alone root it, and leaves one pushed before the call.
+#[test]
+fn registering_a_local_pops_only_the_calls_own_temporary() {
+    use rexx_api::values::Host;
+    use rexx_core::ObjRef;
+    let mut interp = Interp::new();
+    let fresh = |interp: &mut Interp| {
+        interp.heap.alloc(rexx_core::Body::Array {
+            slots: Vec::new().into(),
+            dimensions: None,
+        })
+    };
+    let before = fresh(&mut interp);
+    interp.roots.activity_mut().push_temp(before);
+    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+    let floor = interp.roots.activity().temps_len();
+    let during = fresh(&mut interp);
+    interp.roots.activity_mut().push_temp(during);
+    interp.register_local(during);
+    assert_eq!(interp.roots.activity().temps_len(), floor);
+    interp.register_local(before);
+    assert_eq!(interp.roots.activity().temps_len(), floor);
+    interp.pop_native_frame();
+    interp.collect_now();
+    assert!(
+        interp.heap.get(during).is_none(),
+        "a temporary kept the call's object"
+    );
+    assert!(
+        interp.heap.get(before).is_some(),
+        "the caller's temporary was popped"
+    );
+}
+
 /// **A buffer's storage moved out from under a call lives until that call
 /// ends**, and a second call holding it keeps it past the first's end.
 #[test]

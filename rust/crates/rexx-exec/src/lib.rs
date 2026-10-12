@@ -1969,6 +1969,9 @@ struct NativeFrame {
     packaged: bool,
     /// Whether a method's call holds its guard lock (`objectScope`).
     reserved: bool,
+    /// The temporaries' length when the call began: one pushed since, and
+    /// registered in `locals`, is rooted by `locals` alone.
+    temps_floor: usize,
 }
 
 impl NativeFrame {

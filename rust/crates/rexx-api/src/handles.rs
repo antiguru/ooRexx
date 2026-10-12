@@ -30,25 +30,52 @@ const _: () = assert!(usize::BITS == u64::BITS);
 #[derive(Default)]
 pub struct Table {
     entries: FxHashMap<usize, ObjRef>,
+    /// Handles [`Table::release`] dropped, which root nothing and resolve
+    /// while their object lives.
+    released: FxHashMap<usize, ObjRef>,
+    /// The size of `released` at which [`Table::release`] next drops the
+    /// handles whose object is gone.
+    released_limit: usize,
 }
+
+/// The least `released_limit`.
+const RELEASED_FLOOR: usize = 4096;
 
 impl Table {
     pub fn new() -> Table {
         Table::default()
     }
 
-    /// The handle for `object`, valid until [`Table::remove`] or
+    /// The handle for `object`, held until [`Table::release`] or
     /// [`Table::clear`]. Registering an object this table already holds
     /// answers the same handle and changes nothing.
     pub fn register(&mut self, object: ObjRef) -> RexxObjectPtr {
         let address = address_of(object);
         self.entries.insert(address, object);
+        self.released.remove(&address);
         std::ptr::without_provenance_mut(address)
     }
 
-    /// The object `handle` names, or `None` if this table does not hold it.
+    /// The object `handle` names, held or released, or `None` if this table
+    /// has neither.
     pub fn resolve(&self, handle: RexxObjectPtr) -> Option<ObjRef> {
-        self.entries.get(&handle.addr()).copied()
+        self.resolve_live(handle, |_| true)
+    }
+
+    /// [`Table::resolve`], a released handle answered only where `live`
+    /// says its object is.
+    pub fn resolve_live(
+        &self,
+        handle: RexxObjectPtr,
+        live: impl Fn(ObjRef) -> bool,
+    ) -> Option<ObjRef> {
+        let address = handle.addr();
+        self.entries.get(&address).copied().or_else(|| {
+            self.released
+                .get(&address)
+                .copied()
+                .filter(|object| live(*object))
+        })
     }
 
     /// Whether this table holds `object`.
@@ -56,15 +83,30 @@ impl Table {
         self.entries.contains_key(&address_of(object))
     }
 
-    /// Drops `handle`'s registration. A handle this table never held is
-    /// ignored, as `NativeActivation::removeLocalReference` ignores one.
-    pub fn remove(&mut self, handle: RexxObjectPtr) {
-        self.entries.remove(&handle.addr());
+    /// Drops `handle`'s registration, so it no longer roots its object
+    /// (`NativeActivation::removeLocalReference`,
+    /// `interpreter/execution/NativeActivation.cpp:1219`). A handle this table
+    /// does not hold is ignored, as the oracle ignores one. Each time the
+    /// released handles pass their limit, those whose object `live` says is
+    /// gone are forgotten.
+    pub fn release(&mut self, handle: RexxObjectPtr, live: impl Fn(ObjRef) -> bool) {
+        let address = handle.addr();
+        let Some(object) = self.entries.remove(&address) else {
+            return;
+        };
+        self.released.insert(address, object);
+        if self.released.len() >= self.released_limit.max(RELEASED_FLOOR) {
+            self.released.retain(|_, object| live(*object));
+            self.released_limit = self.released.len() * 2;
+        }
     }
 
-    /// Drops every registration, which is what the end of an activation does.
+    /// Drops every registration and every released handle, which is what
+    /// the end of an activation does.
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.released.clear();
+        self.released_limit = 0;
     }
 
     /// Every object this table holds, for the collector.

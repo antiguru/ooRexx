@@ -674,6 +674,18 @@ pub trait Host {
         self.locals().resolve(handle)
     }
 
+    /// Registers `object` as a local reference, which roots it for the rest
+    /// of the call; a host may stop rooting it any other way.
+    fn register_local(&mut self, object: ObjRef) -> RexxObjectPtr {
+        self.locals().register(object)
+    }
+
+    /// `ReleaseLocalReference`: [`Table::release`], against the host's own
+    /// view of which objects live.
+    fn release_local(&mut self, handle: RexxObjectPtr) {
+        self.locals().release(handle, |_| true);
+    }
+
     /// What the callback tables reach beyond the conversions, or `None` for a
     /// host that serves only the conversions, whose callbacks then refuse.
     fn surface(&mut self) -> Option<&mut dyn Surface> {
@@ -985,7 +997,7 @@ impl<'a> Activation<'a> {
     pub fn whole_number(&self, value: isize) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.whole_number(value);
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `DoubleToObjectWithPrecision`, registered as
@@ -993,7 +1005,7 @@ impl<'a> Activation<'a> {
     pub fn double_object(&self, value: f64, precision: usize) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.double_object(value, precision);
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `GetContextDigits`, `GetContextFuzz` and `GetContextForm`.
@@ -1005,7 +1017,7 @@ impl<'a> Activation<'a> {
     pub fn new_pointer(&self, value: POINTER) -> RexxObjectPtr {
         let mut cx = self.conversion();
         let object = cx.host.new_pointer(value);
-        cx.host.locals().register(object)
+        cx.host.register_local(object)
     }
 
     /// `StringData`: one address per object, kept as by
@@ -1039,10 +1051,10 @@ impl<'a> Activation<'a> {
         let mut cx = self.conversion();
         let objects = cx.host.constants();
         Constants {
-            nil: cx.host.locals().register(objects.nil),
-            true_object: cx.host.locals().register(objects.true_object),
-            false_object: cx.host.locals().register(objects.false_object),
-            null_string: cx.host.locals().register(objects.null_string),
+            nil: cx.host.register_local(objects.nil),
+            true_object: cx.host.register_local(objects.true_object),
+            false_object: cx.host.register_local(objects.false_object),
+            null_string: cx.host.register_local(objects.null_string),
         }
     }
 }

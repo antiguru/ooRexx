@@ -5716,7 +5716,7 @@ mod tests {
         assert_eq!(host.bytes(doubled), Some(b"0.5 at 9".to_vec()));
     }
 
-    /// **A released local reference still answers until the call ends**,
+    /// **A released local reference still answers while its object lives**,
     /// as the oracle's does until its next collection.
     #[test]
     fn a_released_local_reference_still_answers() {

@@ -365,6 +365,16 @@ impl ActivityRoots {
         self.temps.push(value);
     }
 
+    /// Pops the top temporary if it is `value` and sits at or above `floor`,
+    /// a length [`ActivityRoots::temps_len`] answered.
+    pub fn pop_temp_above(&mut self, floor: usize, value: ObjRef) -> bool {
+        let popped = self.temps.len() > floor && self.temps.last() == Some(&value);
+        if popped {
+            self.temps.pop();
+        }
+        popped
+    }
+
     /// The register frame arena, whose frames are roots while reserved. A
     /// frame borrows the handle this answers, not `self`.
     pub fn frames(&self) -> Rc<FrameArena> {
