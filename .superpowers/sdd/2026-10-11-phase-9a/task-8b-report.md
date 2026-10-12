@@ -305,3 +305,25 @@ phase_ten_reasons` 0 after the literal fix; every other rexx-exec test binary no
 task, in two `-j 2` batches, 0 (`collection_arity` and `introspection_arity` with the temporary
 `rust/target/release/rexx-run` link, removed). One `--tests` run of all binaries at `-j 4` was
 OOM-killed at the 8G cap while compiling.
+
+### Further rulings, 2026-10-12
+
+1. Deviations 31 and 32 were already in at `30daf690d` (the section above).
+2. **Deviation 33, hash iteration order: `241d32944`.** After 32 in `phase-4-exclusions.txt`, scope
+   order only (not which entries, how many, or repeats). `corpus.rs` has `HASH_ORDERED_STDOUT`
+   (`lang/package_writes.rex`) and `stdout_mode` back, the selection control
+   `the_multiset_stdout_mode_is_selected_for_exactly_the_listed_programs`, and the licence control
+   `the_multiset_stdout_licence_covers_order_and_nothing_else`, which requires non-empty oracle stdout
+   and agreeing multisets and, as ruled, no longer a raw difference. Deviation 8's withdrawn entry
+   points at 33, and `phase-5c.txt`'s comment names 33. `REXX_CORPUS_GATE=1 --test corpus --test
+   suite`: 0 (29 passed 1 ignored, 50); `suite_rows::deviations` reads 31 to 33 by its existing rule
+   (a heading line indented at most two spaces, a number, ". ").
+3. **Package~copy sub-structs: `1270124be`.** `Activity`, `ObjectModel` and `EnvironmentModel` each
+   get a `copy_package` whose body names every field with no `..`, and `copy_package` calls them;
+   `OptionWrites` is destructured in place (its `initial` map was already cloned). None of them holds
+   per-program state today. `lang/package_copy.rex` still byte-identical. The REXX package's copy stays
+   refused: the REXX package is no `ProgramId` here, and its tables are built from the class registry
+   and the library programs (`rexx_package_class_table`) rather than held per program, so there is
+   no state for a clone to copy into; answering `.object~package~copy` needs a package kind of its
+   own.
+4. Full `--lib` at the final commit: below.
