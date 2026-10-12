@@ -79,9 +79,7 @@ fn native_stem_at(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"[]"));
-    }
+    let receiver = stem_of(interp, receiver, b"[]")?;
     let tail = stem_tail(interp, args)?;
     Ok(Some(stem_read(interp, receiver, &tail)))
 }
@@ -94,9 +92,7 @@ fn native_stem_put(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"[]="));
-    }
+    let receiver = stem_of(interp, receiver, b"[]=")?;
     let value = super::collection::item_argument(args)?;
     // No tail: `StemClass::bracketEqual` (`classes/StemClass.cpp:476`) makes
     // `value` the default and clears every tail.
@@ -138,6 +134,38 @@ fn is_stem(interp: &Interp, receiver: ObjRef) -> bool {
         interp.heap.get(receiver).map(|object| &object.body),
         Some(Body::Stem { .. })
     )
+}
+
+/// The scope-pool entry, under `Stem`'s scope, that holds a `Stem` subclass
+/// instance's `Body::Stem`.
+pub(in crate::dispatch) const STEM_STORE: &[u8] = b"STEM";
+
+impl Interp {
+    /// The `Body::Stem` a `Stem` subclass instance holds, or `None` for any
+    /// other value.
+    pub(crate) fn stem_subclass_store(&self, value: ObjRef) -> Option<ObjRef> {
+        match &self.heap.get(value)?.body {
+            Body::Instance { pools, .. } => self.stem_store_in(pools),
+            _ => None,
+        }
+    }
+
+    /// [`Interp::stem_subclass_store`] over an instance's pools.
+    pub(crate) fn stem_store_in(&self, pools: &rexx_core::ScopePools) -> Option<ObjRef> {
+        pools.get(self.object_model.as_ref()?.stem, STEM_STORE)
+    }
+}
+
+/// The `Body::Stem` a `Stem` method works on: the receiver itself, or the
+/// store a subclass instance holds; anything else is refused.
+fn stem_of(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Result<ObjRef, Failure> {
+    if is_stem(interp, receiver) {
+        return Ok(receiver);
+    }
+    match interp.stem_subclass_store(receiver) {
+        Some(store) => Ok(store),
+        None => Err(stem_refusal(interp, receiver, method)),
+    }
 }
 
 fn stem_refusal(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
@@ -355,9 +383,7 @@ fn native_stem_all_indexes(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"ALLINDEXES"));
-    }
+    let receiver = stem_of(interp, receiver, b"ALLINDEXES")?;
     // **Rooted as they are built**, for `ordered_pairs`'s reason: each name is
     // a fresh allocation and the next one collects, so an unrooted earlier
     // name is swept before the array holds it. Measured -- without these,
@@ -377,9 +403,7 @@ fn native_stem_all_items(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"ALLITEMS"));
-    }
+    let receiver = stem_of(interp, receiver, b"ALLITEMS")?;
     let items: Vec<ObjRef> = stem_live(interp, receiver)
         .into_iter()
         .map(|(_, value)| value)
@@ -413,9 +437,7 @@ fn native_stem_request(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"REQUEST"));
-    }
+    let store = stem_of(interp, receiver, b"REQUEST")?;
     let Some(wanted) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
     };
@@ -428,7 +450,7 @@ fn native_stem_request(
         let caller = interp.caller();
         return interp.send_message(receiver, b"MAKEARRAY", None, &[], caller);
     }
-    let value = stem_value(interp, receiver);
+    let value = stem_value(interp, store);
     interp.roots.activity_mut().push_temp(value);
     let forwarded = interp.text_built(upper);
     interp.roots.activity_mut().push_temp(forwarded);
@@ -445,9 +467,7 @@ fn native_stem_to_directory(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"TODIRECTORY"));
-    }
+    let receiver = stem_of(interp, receiver, b"TODIRECTORY")?;
     let class = interp
         .classes()
         .lookup("Directory")
@@ -470,9 +490,7 @@ fn native_stem_unknown(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"UNKNOWN"));
-    }
+    let receiver = stem_of(interp, receiver, b"UNKNOWN")?;
     let Some(message) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
     };
@@ -503,9 +521,7 @@ fn native_stem_supplier(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"SUPPLIER"));
-    }
+    let receiver = stem_of(interp, receiver, b"SUPPLIER")?;
     let live = stem_live(interp, receiver);
     let items: Vec<ObjRef> = live.iter().map(|(_, value)| *value).collect();
     for item in &items {
@@ -529,9 +545,7 @@ fn native_stem_items(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"ITEMS"));
-    }
+    let receiver = stem_of(interp, receiver, b"ITEMS")?;
     let count = stem_live(interp, receiver).len();
     Ok(Some(interp.counted(count)))
 }
@@ -542,9 +556,7 @@ fn native_stem_is_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"ISEMPTY"));
-    }
+    let receiver = stem_of(interp, receiver, b"ISEMPTY")?;
     let empty = stem_live(interp, receiver).is_empty();
     Ok(Some(crate::eval::logical(empty)))
 }
@@ -571,9 +583,7 @@ fn native_stem_has_index(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"HASINDEX"));
-    }
+    let receiver = stem_of(interp, receiver, b"HASINDEX")?;
     // **No subscripts is true.** Measured, `obj~hasIndex()` on a stem holding
     // one tail answers `1` -- the stem itself is the index a bare `hasIndex`
     // asks about, and none of `Stem`'s rows treats a missing subscript as an
@@ -597,9 +607,7 @@ fn native_stem_has_item(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"HASITEM"));
-    }
+    let receiver = stem_of(interp, receiver, b"HASITEM")?;
     // Optional, unlike every other class's, where a missing item is 93.903.
     let Some(wanted) = args.first().copied().flatten() else {
         return Ok(Some(crate::eval::logical(false)));
@@ -618,9 +626,7 @@ fn native_stem_index(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"INDEX"));
-    }
+    let receiver = stem_of(interp, receiver, b"INDEX")?;
     let Some(wanted) = args.first().copied().flatten() else {
         return Ok(Some(ObjRef::NIL));
     };
@@ -654,14 +660,30 @@ fn native_stem_remove(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"REMOVE"));
-    }
-    // No subscripts names the stem itself, which is not a tail: measured,
-    // `obj~remove()` answers `S.` and takes nothing out, where
+    let receiver = stem_of(interp, receiver, b"REMOVE")?;
+    // No subscripts names the stem's value: `StemClass::remove`
+    // (`classes/StemClass.cpp:346`) answers it and makes the stem's name its
+    // value, which an unset tail of a stem that had a value then reads as.
     // `obj~remove('ZZ')` answers `.nil`.
     if args.is_empty() {
-        return Ok(Some(stem_read(interp, receiver, b"")));
+        let value = stem_value(interp, receiver);
+        let name = match interp.heap.get(receiver).map(|object| &object.body) {
+            Some(Body::Stem {
+                name,
+                default: Some(_),
+                ..
+            }) => name.to_vec(),
+            _ => return Ok(Some(value)),
+        };
+        interp.roots.activity_mut().push_temp(value);
+        let name = interp.text_built(name);
+        interp.roots.activity_mut().push_temp(name);
+        if let Some(Body::Stem { default, .. }) =
+            interp.heap.get_mut(receiver).map(|held| &mut held.body)
+        {
+            *default = Some(name);
+        }
+        return Ok(Some(value));
     }
     let tail = stem_tail(interp, args)?;
     let held = match exposed_tail(interp, receiver, &tail) {
@@ -683,9 +705,7 @@ fn native_stem_remove_item(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"REMOVEITEM"));
-    }
+    let receiver = stem_of(interp, receiver, b"REMOVEITEM")?;
     let wanted = super::collection::item_argument(args)?;
     for (name, value) in stem_live(interp, receiver) {
         if super::collection::same_item(interp, wanted, value)? {
@@ -705,21 +725,19 @@ fn native_stem_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if !is_stem(interp, receiver) {
-        return Err(stem_refusal(interp, receiver, b"EMPTY"));
-    }
+    let store = stem_of(interp, receiver, b"EMPTY")?;
     // **Deleted, not dropped.** A tombstone reads as the tail's own derived
     // name; the oracle's `empty` leaves the tails never-assigned, so they
     // read as the stem's default. Measured: `u. = 5` with one tail set
     // answers `items` 0 after `empty` and `u~at('K')` still answers `5`,
     // where writing tombstones answered `U.K`.
-    interp.detach_exposed_tails(receiver);
-    let default = match interp.heap.get(receiver).map(|object| &object.body) {
+    interp.detach_exposed_tails(store);
+    let default = match interp.heap.get(store).map(|object| &object.body) {
         Some(Body::Stem { default, .. }) => *default,
         _ => None,
     };
     if let Some(Body::Stem { tails, exposed, .. }) =
-        interp.heap.get_mut(receiver).map(|held| &mut held.body)
+        interp.heap.get_mut(store).map(|held| &mut held.body)
     {
         *tails = rexx_core::NameMap::default();
         *exposed = None;

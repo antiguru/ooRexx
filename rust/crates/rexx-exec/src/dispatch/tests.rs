@@ -1632,14 +1632,10 @@ fn a_stem_receiver_answers_stem_and_renders_its_own_value() {
             "{send}"
         );
     }
-    // A subclass would need the body to carry a class of its own, which
-    // `Body::Stem` does not, so the constructor refuses rather than
-    // answering an object whose `~class~id` is `Stem`.
-    let (code, stdout, stderr) = run_source("say .K~new~class~id\n::class K subclass Stem\n");
-    assert_eq!((code, stdout.as_str()), (120, ""));
+    // A subclass's instance holds a stem of its own and answers its class.
     assert_eq!(
-        stderr,
-        "rexx-exec: method \"NEW\" of class \"K\" is not implemented (Phase 9)\n"
+        run_source("k = .K~new('K.')\nsay k~class~id k\n::class K subclass Stem\n"),
+        (0, "K K.\n".to_string(), String::new())
     );
 }
 

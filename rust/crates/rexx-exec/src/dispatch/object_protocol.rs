@@ -206,6 +206,12 @@ pub(super) fn hash_value(interp: &mut Interp, receiver: ObjRef) -> u64 {
     match interp.receiver_kind(receiver) {
         Ok(Primitive::String | Primitive::SmallInt) => string_hash(&interp.to_text(receiver)),
         Ok(Primitive::Class(class)) => string_hash(interp.classes().id_string(class).as_bytes()),
+        // `RexxString::getHashValue` is the bytes' hash for a subclass
+        // instance as well.
+        Ok(Primitive::Instance { .. }) => match super::string::subclass_text(interp, receiver) {
+            Some(text) => string_hash(text),
+            None => receiver.bits(),
+        },
         _ => receiver.bits(),
     }
 }
@@ -300,6 +306,15 @@ pub(super) fn native_string(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // `RexxString::stringValue` answers a `String` subclass instance's bytes,
+    // and `StemClass::stringValue` a `Stem` subclass instance's stem's.
+    if super::string::subclass_text(interp, receiver).is_some() {
+        return Ok(Some(super::string::base_string(interp, receiver)));
+    }
+    if let Some(store) = interp.stem_subclass_store(receiver) {
+        let text = interp.to_text(store).into_owned();
+        return Ok(Some(interp.text_built(text)));
+    }
     // `PointerClass::stringValue` (`classes/PointerClass.cpp:152`) overrides
     // the send below: measured, oracle rc 0, `p~objectName = 'zzz'` leaves
     // `p~string` answering the address.
@@ -646,6 +661,7 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     let copy = interp.alloc_charged(behaviour, body);
     interp.roots.activity_mut().push_temp(copy);
     duplicate_collection_stores(interp, copy);
+    duplicate_stem_store(interp, copy);
     if interp.is_message(copy) {
         reset_copied_message(interp, copy);
     }
@@ -710,6 +726,25 @@ fn duplicate_collection_stores(interp: &mut Interp, copy: ObjRef) {
         interp.roots.activity_mut().push_temp(fresh);
         interp.set_pool_variable(copy, scope, entry, fresh);
     }
+}
+
+/// Replaces a `Stem` subclass instance's stem on `copy` with one of its own,
+/// whose tails hold the same values, as `StemClass::copy` makes it.
+fn duplicate_stem_store(interp: &mut Interp, copy: ObjRef) {
+    let Some(store) = interp.stem_subclass_store(copy) else {
+        return;
+    };
+    let Some(held) = interp.heap.get(store) else {
+        return;
+    };
+    let mut body = held.body.clone();
+    if let Body::Stem { exposed, .. } = &mut body {
+        *exposed = None;
+    }
+    let fresh = interp.alloc_charged(BehaviourId::STEM, body);
+    interp.roots.activity_mut().push_temp(fresh);
+    let scope = interp.object_model().stem;
+    interp.set_pool_variable(copy, scope, super::hash::stem::STEM_STORE, fresh);
 }
 
 /// `Object~run(method [, option [, argument ...]])`: run a method on this

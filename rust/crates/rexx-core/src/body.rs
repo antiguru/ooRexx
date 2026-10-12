@@ -182,6 +182,10 @@ pub enum NativeState {
     /// extension writes through the address `BufferData` handed it for as long
     /// as the object lives, so the storage is never resized.
     Data(AlignedBytes),
+    /// A `String` subclass instance's bytes, the `RexxString` body that
+    /// `RexxString::newRexx` (`interpreter/classes/StringClass.cpp:2352`)
+    /// gives the subclass's behaviour.
+    Text(Box<[u8]>),
 }
 
 /// One 16-byte unit of [`AlignedBytes`], aligned as `malloc` aligns on
@@ -258,7 +262,10 @@ impl NativeState {
     pub fn buffer(&self) -> Option<&BufferState> {
         match self {
             NativeState::Buffer(state) => Some(state),
-            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
+            NativeState::Stream(_)
+            | NativeState::Pointer(_)
+            | NativeState::Data(_)
+            | NativeState::Text(_) => None,
         }
     }
 
@@ -266,7 +273,10 @@ impl NativeState {
     pub fn buffer_mut(&mut self) -> Option<&mut BufferState> {
         match self {
             NativeState::Buffer(state) => Some(state),
-            NativeState::Stream(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
+            NativeState::Stream(_)
+            | NativeState::Pointer(_)
+            | NativeState::Data(_)
+            | NativeState::Text(_) => None,
         }
     }
 
@@ -274,7 +284,10 @@ impl NativeState {
     pub fn stream(&self) -> Option<&StreamState> {
         match self {
             NativeState::Stream(state) => Some(state),
-            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
+            NativeState::Buffer(_)
+            | NativeState::Pointer(_)
+            | NativeState::Data(_)
+            | NativeState::Text(_) => None,
         }
     }
 
@@ -283,7 +296,10 @@ impl NativeState {
     pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
         match self {
             NativeState::Stream(state) => Some(state),
-            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Data(_) => None,
+            NativeState::Buffer(_)
+            | NativeState::Pointer(_)
+            | NativeState::Data(_)
+            | NativeState::Text(_) => None,
         }
     }
 
@@ -294,7 +310,10 @@ impl NativeState {
     pub fn pointer(&self) -> Option<*mut std::ffi::c_void> {
         match self {
             NativeState::Pointer(address) => Some(*address),
-            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Data(_) => None,
+            NativeState::Buffer(_)
+            | NativeState::Stream(_)
+            | NativeState::Data(_)
+            | NativeState::Text(_) => None,
         }
     }
 
@@ -302,7 +321,10 @@ impl NativeState {
     pub fn data(&self) -> Option<&AlignedBytes> {
         match self {
             NativeState::Data(bytes) => Some(bytes),
-            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
+            NativeState::Buffer(_)
+            | NativeState::Stream(_)
+            | NativeState::Pointer(_)
+            | NativeState::Text(_) => None,
         }
     }
 
@@ -311,7 +333,22 @@ impl NativeState {
     pub fn data_address(&mut self) -> Option<*mut std::ffi::c_void> {
         match self {
             NativeState::Data(bytes) => Some(bytes.as_mut_ptr().cast()),
-            NativeState::Buffer(_) | NativeState::Stream(_) | NativeState::Pointer(_) => None,
+            NativeState::Buffer(_)
+            | NativeState::Stream(_)
+            | NativeState::Pointer(_)
+            | NativeState::Text(_) => None,
+        }
+    }
+
+    /// A `String` subclass instance's bytes, or `None` for state of another
+    /// kind.
+    pub fn text(&self) -> Option<&[u8]> {
+        match self {
+            NativeState::Text(bytes) => Some(bytes),
+            NativeState::Buffer(_)
+            | NativeState::Stream(_)
+            | NativeState::Pointer(_)
+            | NativeState::Data(_) => None,
         }
     }
 
@@ -325,7 +362,7 @@ impl NativeState {
     /// state added here has to decide.
     pub fn renders_its_own_string_value(&self) -> bool {
         match self {
-            NativeState::Buffer(_) | NativeState::Pointer(_) => true,
+            NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Text(_) => true,
             NativeState::Stream(_) | NativeState::Data(_) => false,
         }
     }
@@ -1025,8 +1062,9 @@ impl Body {
     }
 
     /// The bytes this body holds in an allocation of its own: a `Text`'s
-    /// bytes when they do not fit inline, an `Array`'s slot capacity, and a
-    /// `MutableBuffer`'s capacity. Nothing for every other body.
+    /// bytes when they do not fit inline, an `Array`'s slot capacity, a
+    /// `MutableBuffer`'s capacity and a `String` subclass instance's bytes.
+    /// Nothing for every other body.
     pub fn held_bytes(&self) -> usize {
         match self {
             Body::Text { bytes, .. } => bytes.heap_len(),
@@ -1036,6 +1074,7 @@ impl Body {
                 ..
             } => match &**native {
                 NativeState::Buffer(state) => state.capacity,
+                NativeState::Text(bytes) => bytes.len(),
                 _ => 0,
             },
             _ => 0,

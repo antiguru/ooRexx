@@ -1,0 +1,61 @@
+/* NEW on a Stem subclass: the instance holds a stem of its own, every Stem
+   method works on that stem, its string value is the stem's value, it is
+   not itself a stem where the language asks for one (assignment to a stem
+   and USE ARG take it as a default value), COPY gives it a stem of its own
+   and EMPTY answers the instance. Also Stem~remove with no tail on a base
+   stem: it answers the value and makes the name the value. */
+x = .k~new('S.')
+say x~class~id
+x[1] = 'a'; say x[1] x~items x~hasindex(1)
+say x
+x~put('b', 2); say x~at(2)
+say x~allindexes~makestring(, ',')
+s. = x; say s.1 s.~class~id (s. == x)
+call r x
+x2 = .k~new; say '['x2']' x2[7]
+x3 = .k~new('T.'); say x3[9]
+say x~supplier~class~id x~toDirectory~items
+say x~copy~class~id x~copy[1]
+c = x~copy; c[1] = 'changed'; say x[1] c[1]
+x4 = .k~new; say x4~request('STEM')~class~id
+say x~request('STRING') x~string x~objectName x~makestring
+say x~isEmpty x~empty~class~id x~isEmpty x~items
+x[5] = 5; x~remove(5); say x~hasindex(5) x~hasItem('b') x~index('b')
+x['b'] = 'bee'; x[1] = 'one'
+do t over x; say 'over' t; end
+say x~makearray~makestring('L', ',') x~request('ARRAY')~items
+x~removeItem('bee'); say x~items x~allitems~items
+x~put('dflt')
+say x x[99] x~items x~string
+x~objectName = 'named'; say x x~objectName
+say x~hasindex() x~remove()
+say length(x) x || '!' (x = 'dflt')
+say x~copy~items x~copy x~copy~class~id
+y = .k~new(5); say y y~class~id
+z = .k~new; z[1] = .k~new('IN.'); say z[1]~class~id z[1]
+w = .k~new('W.'); w[] = 'v'; say w w[3]
+q = .k~new('Q.'); q['a'] = 1; say q['A'] q['a']
+say .k~new~hashcode == .k~new~hashcode
+i = .ki~new('N.', 'more', 2); say i~class~id i
+/* Stem~remove with no tail on a base stem */
+b. = 5; b.1 = 'one'
+say b.~remove() b.2 b.1 b.~items
+say b.~remove()
+n = .stem~new('X.'); say n~remove() n[1]
+v = .k~new(.array~of(1, 2)); say v~class~id v~items
+v = .k~new('A.'); v[] = .k~new('B.'); say v
+say .k~new('E.')~at
+signal on syntax name e3
+v = .k~new('A.'); u. = .stem~new('Z.'); v[] = u.; say v
+e3: say 'e3' condition('O')~code condition('O')~message
+signal on syntax name e4
+say .ka~new
+e4: say 'e4' condition('O')~code condition('O')~message
+exit
+r: use arg p.; say 'r' p.1 p.~class~id; return
+::class k subclass stem
+::class ka subclass stem abstract
+::class ki subclass stem
+::method init
+  say 'init' arg() arg(1) arg(2)
+  self~init:super

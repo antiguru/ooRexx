@@ -404,7 +404,19 @@ pub(super) fn native_string_new(
     };
     let text = required_string_argument(interp, value, 1)?;
     if class != interp.object_model().string {
-        return Err(unbuilt_new(interp, class));
+        let bytes: Box<[u8]> = interp.to_text(text).into();
+        let held = bytes.len();
+        let object = new_instance(interp, class)?;
+        let Some(rexx_core::Object {
+            body: Body::Instance { native, .. },
+            ..
+        }) = interp.heap.get_mut(object)
+        else {
+            unreachable!("new_instance allocates a Body::Instance")
+        };
+        *native = Some(Box::new(rexx_core::NativeState::Text(bytes)));
+        interp.charge_growth(held);
+        return super::begin_init(interp, object, &args[1..]);
     }
     let bytes = interp.to_text(text).to_vec();
     let object = interp.text_built(bytes);
@@ -428,9 +440,7 @@ pub(super) fn native_stem_new(
         }
         None => Vec::new(),
     };
-    if class != interp.object_model().stem {
-        return Err(unbuilt_new(interp, class));
-    }
+    let stem_class = interp.object_model().stem;
     let object = interp.alloc_with(
         rexx_core::BehaviourId::STEM,
         Body::Stem {
@@ -441,6 +451,13 @@ pub(super) fn native_stem_new(
         },
     );
     interp.roots.activity_mut().push_temp(object);
+    let object = if class == stem_class {
+        object
+    } else {
+        let instance = new_instance(interp, class)?;
+        interp.set_pool_variable(instance, stem_class, super::hash::stem::STEM_STORE, object);
+        instance
+    };
     let rest = args.get(1..).unwrap_or_default();
     super::begin_init(interp, object, rest)
 }

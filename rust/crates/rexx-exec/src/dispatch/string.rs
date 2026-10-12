@@ -652,6 +652,9 @@ fn native_string_delstr(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (begin, range) = delete_arguments(interp, args)?;
+    if begin >= interp.text_len(receiver) {
+        return Ok(Some(receiver));
+    }
     let mut out = interp.take_result_buffer();
     {
         let bytes = interp.to_text(receiver);
@@ -674,7 +677,13 @@ fn native_string_delword(
         let bytes = interp.to_text(receiver);
         out.extend_from_slice(&bytes);
     }
+    let length = out.len();
     crate::builtin::word::delword_bytes(&mut out, position, count);
+    // `delword_bytes` removes at least one byte whenever it removes anything.
+    if length > 0 && out.len() == length {
+        interp.give_result_buffer(out);
+        return Ok(Some(receiver));
+    }
     Ok(Some(interp.text_built(out)))
 }
 
@@ -690,6 +699,7 @@ fn native_string_changestr(
         receiver,
         args,
         crate::builtin::string::changestr_bytes,
+        crate::builtin::string::find_forward,
     )
 }
 
@@ -705,6 +715,7 @@ fn native_string_caselesschangestr(
         receiver,
         args,
         crate::builtin::string::caseless_changestr_bytes,
+        crate::builtin::string::caseless_find_forward,
     )
 }
 
@@ -717,11 +728,21 @@ fn string_changestr(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
     change: ChangeStr,
+    find: fn(&[u8], &[u8], usize, usize) -> usize,
 ) -> Result<Option<ObjRef>, Failure> {
     let (needle, replacement, limit) = changestr_arguments(interp, args)?;
     let mut out = interp.take_result_buffer();
     {
         let bytes = interp.to_text(receiver);
+        // `RexxString::changeStr` answers the receiver itself when it
+        // changes nothing.
+        if limit == 0 || find(&bytes, &needle, 0, bytes.len()) == 0 {
+            drop(bytes);
+            interp.give_result_buffer(out);
+            interp.give_result_buffer(needle);
+            interp.give_result_buffer(replacement);
+            return Ok(Some(receiver));
+        }
         change(&mut out, &bytes, &needle, &replacement, limit)?;
     }
     interp.give_result_buffer(needle);
@@ -740,6 +761,9 @@ fn native_string_translate(
         return string_case_shift(interp, receiver, args, 3, u8::to_ascii_uppercase);
     }
     let (out_table, in_table, pad, start, range) = translate_arguments(interp, args)?;
+    if untouched_window(interp.text_len(receiver), start, range) {
+        return Ok(Some(receiver));
+    }
     let mut out = interp.take_result_buffer();
     {
         let bytes = interp.to_text(receiver);
@@ -775,6 +799,9 @@ fn string_case_shift(
     shift: fn(&u8) -> u8,
 ) -> Result<Option<ObjRef>, Failure> {
     let (start, range) = case_shift_arguments(interp, args, first)?;
+    if untouched_window(interp.text_len(receiver), start, range) {
+        return Ok(Some(receiver));
+    }
     let mut out = interp.take_result_buffer();
     {
         let bytes = interp.to_text(receiver);
@@ -816,11 +843,7 @@ fn native_string_append(
     let Some(tail) = args.first().copied().flatten() else {
         return Err(super::Raised::missing_method_argument(1).into());
     };
-    Ok(Some(interp.apply_binary(
-        rexx_parse::Operator::Concatenate,
-        receiver,
-        tail,
-    )?))
+    concatenation_or_this(interp, Operator::Concatenate, receiver, tail)
 }
 
 /// Every binary operator `String` answers as a message, and the
@@ -1177,6 +1200,7 @@ fn string_arithmetic_operator(
     args: &[Option<ObjRef>],
     op: Operator,
 ) -> Result<Option<ObjRef>, Failure> {
+    let receiver = base_string(interp, receiver);
     if args.first().copied().flatten().is_none() {
         match op {
             // **`+` and `-` sent with no operand are the prefix forms, not an
@@ -1219,7 +1243,34 @@ fn string_binary_operator(
     op: Operator,
 ) -> Result<Option<ObjRef>, Failure> {
     let other = super::operator_argument(args)?;
-    Ok(Some(interp.apply_binary(op, receiver, other)?))
+    concatenation_or_this(interp, op, receiver, other)
+}
+
+/// `op` applied to `receiver`'s string value and `other`, where a
+/// concatenation that adds nothing answers the receiver itself, as
+/// `RexxString::concatRexx` (`classes/StringClass.cpp:1361`) does.
+fn concatenation_or_this(
+    interp: &mut Interp,
+    op: Operator,
+    receiver: ObjRef,
+    other: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
+    let base = base_string(interp, receiver);
+    let answer = interp.apply_binary(op, base, other)?;
+    if base != receiver
+        && matches!(op, Operator::Concatenate | Operator::Abuttal)
+        && interp.text_len(answer) == interp.text_len(base)
+    {
+        return Ok(Some(receiver));
+    }
+    Ok(Some(answer))
+}
+
+/// Whether a range of `length` bytes from 0-based `start` changes nothing:
+/// the case `RexxString::upperRexx`, `lowerRexx` and `translate` answer the
+/// receiver itself for.
+fn untouched_window(length: usize, start: usize, range: Option<usize>) -> bool {
+    start >= length || range == Some(0)
 }
 
 /// `String~"\\"`, the prefix `\` as a message.
@@ -1229,6 +1280,7 @@ fn native_string_op_not(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    let receiver = base_string(interp, receiver);
     Ok(Some(
         interp.apply_prefix(rexx_parse::PrefixOp::Not, receiver)?,
     ))
@@ -1324,6 +1376,9 @@ fn native_string_strip(
     let (option, set) = strip_arguments(interp, args)?;
     let bytes = interp.to_text(receiver).to_vec();
     let kept = crate::builtin::string::strip_bytes(&bytes, option, set.as_deref());
+    if kept.len() == bytes.len() && !kept.is_empty() {
+        return Ok(Some(receiver));
+    }
     Ok(Some(interp.text(kept)))
 }
 
@@ -1460,6 +1515,7 @@ fn string_d2x_d2c(
     args: &[Option<ObjRef>],
     character: bool,
 ) -> Result<Option<ObjRef>, Failure> {
+    let receiver = base_string(interp, receiver);
     let numeric = interp.to_number(receiver).is_ok();
     let text = interp.to_text(receiver).to_vec();
     let value =
@@ -1550,6 +1606,7 @@ fn numeric_receiver(
     receiver: ObjRef,
     method: &[u8],
 ) -> Result<rexx_num::Number, Failure> {
+    let receiver = base_string(interp, receiver);
     match interp.to_number(receiver) {
         Ok(number) => Ok(number),
         Err(_) => {
@@ -1864,13 +1921,41 @@ pub(super) fn native_string_sign(
 /// `String~makeString`: a string is its own string value --
 /// `RexxString::makeString` (`classes/StringClass.hpp`), which
 /// `Object~request("STRING")` is what finds.
+/// A `String` subclass instance answers a new `String` holding its bytes,
+/// since only a base-class string is its own string value.
 pub(super) fn native_string_make_string(
-    _interp: &mut Interp,
+    interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(receiver))
+    Ok(Some(base_string(interp, receiver)))
+}
+
+/// A `String` subclass instance's bytes, or `None` for any other value.
+pub(crate) fn subclass_text(interp: &Interp, value: ObjRef) -> Option<&[u8]> {
+    if !matches!(value.decode(), super::Decoded::Heap { .. }) {
+        return None;
+    }
+    match &interp.heap.get(value)?.body {
+        Body::Instance {
+            native: Some(state),
+            ..
+        } => state.text(),
+        _ => None,
+    }
+}
+
+/// `value` as a base-class string: a `String` subclass instance's bytes in a
+/// new rooted `String`, and any other value unchanged.
+pub(super) fn base_string(interp: &mut Interp, value: ObjRef) -> ObjRef {
+    let Some(bytes) = subclass_text(interp, value) else {
+        return value;
+    };
+    let bytes = bytes.to_vec();
+    let text = interp.text_built(bytes);
+    interp.roots.activity_mut().push_temp(text);
+    text
 }
 
 /// `String~upper([n [, length]])`: the receiver with a range of it
@@ -1911,13 +1996,10 @@ pub(super) fn native_string_upper(
         }
         None => text.len(),
     };
-    if start >= text.len() {
-        return Ok(Some(interp.text(&text)));
+    if untouched_window(text.len(), start, Some(range)) {
+        return Ok(Some(receiver));
     }
     let range = range.min(text.len() - start);
-    if range == 0 {
-        return Ok(Some(interp.text(&text)));
-    }
     let mut result = text;
     for byte in &mut result[start..start + range] {
         *byte = byte.to_ascii_uppercase();
@@ -1985,6 +2067,9 @@ pub(super) fn native_reverse(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if interp.text_len(receiver) <= 1 {
+        return Ok(Some(receiver));
+    }
     let mut bytes = interp.to_text(receiver).to_vec();
     bytes.reverse();
     Ok(Some(interp.text_built(bytes)))

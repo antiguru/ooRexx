@@ -1,0 +1,138 @@
+/* NEW on a String subclass: the instance holds the bytes and carries the
+   subclass's behaviour, INIT gets the arguments after the first, every
+   string operation reads the bytes, and the methods whose C++ answers
+   `this` when nothing changes answer the instance itself, each beside a
+   call that changes something and answers a new String. */
+x = .k~new('abc')
+say x~class~id x x~length x~objectName
+say (x == 'abc') (x = 'abc') (x || 'd') (x'd') (x 'd')
+say x~upper x~reverse x~left(2) x~substr(2) x~pos('c')
+say x~makestring~class~id x~string~class~id x~request('STRING')~class~id
+say datatype(x) length(x) pos('b', x) translate(x) left(x, 5)'|'
+parse var x a 2 b; say a b
+s.x = 1; say s.abc
+z = x~copy; say z~class~id z
+say x~isA(.string) x~isInstanceOf(.k) x~init_count
+y = .k~new('12')
+say y + 1 1 + y y * 2 (y > 5) (12 == y) y // 5 y % 5 y ** 2 y / 4 -y (+y)
+say y~'+'(1) y~'='(12) y~sign y~abs y~format(4, 2) y~d2x y~d2c~c2x
+say (y + 0)~class~id y~abs~class~id y~format~class~id (y~'+'())~class~id
+one = .k~new('1'); say \one (one & 1) (1 & one) (one | 0) (one && 1) one~'?'('t', 'f')
+say datatype(y, 'W') abs(y) max(y, 3) y~max(3, 20)
+numeric digits y - 7; say y * 123456 digits()
+numeric digits
+n = .k~new(5); say n~class~id n
+n = .k~new(1.50); say n n + 0
+d = .kk~new('deep'); say d~class~id d~class~superclass~id d
+do i = 1 to .k~new('3'); call charout , i; end; say
+if .k~new('1') then say 'true'
+parse value .k~new('p q r') with p q r; say r q p
+interpret .k~new("say 'interpreted'")
+call sub .k~new('arg'); say result~class~id
+lg = .k~new('a value longer than an inline string')
+say lg~upper (lg || '!') lg~'='(lg) (lg~'<'('b')) lg~changestr('longer', 'LONGER') lg~length
+/* Hash keys: the bytes' hash, and equality through the instance's == */
+t = .table~new; t[x] = 'v'; say t['abc'] t~hasindex('abc')
+t2 = .table~new; t2['abc'] = 'w'; say t2[x]
+say x~hashcode~c2x = 'abc'~hashcode~c2x
+/* A subclass's own MAKESTRING and STRING are what a string context reads */
+o = .ks~new('abc'); say 'a' || o; say o; say length(o) o~length (o || 'q')
+/* INIT */
+i = .ki~new('12', 'extra', 3); say i i~class~id
+/* `this` sites, each with a neighbour that builds */
+w = .k~new('a b')
+call t 'concat empty', x || ''
+call t 'concat', x || 'z'
+call t 'abuttal empty', x''
+call t 'append empty', x~append('')
+call t 'append', x~append('z')
+call t 'blank empty', x ''
+call t 'empty concat', .k~new('') || 'abc'
+call t 'center 3', x~center(3)
+call t 'centre 3', x~centre(3)
+call t 'center 4', x~center(4)
+call t 'right 3', x~right(3)
+call t 'right 5', x~right(5)
+call t 'right 0 empty', .k~new('')~right(0)
+call t 'copies 1', x~copies(1)
+call t 'copies 2', x~copies(2)
+call t 'copies 1 empty', .k~new('')~copies(1)
+call t 'reverse 1', .k~new('a')~reverse
+call t 'reverse 3', x~reverse
+call t 'reverse aba', .k~new('aba')~reverse
+call t 'delstr 9', x~delstr(9)
+call t 'delstr 2 0', x~delstr(2, 0)
+call t 'delstr empty', .k~new('')~delstr(1)
+call t 'delword 5', w~delword(5)
+call t 'delword 1 0', w~delword(1, 0)
+call t 'delword 1', w~delword(1)
+call t 'delword empty', .k~new('')~delword(1)
+call t 'strip', x~strip
+call t 'strip t', x~strip('t')
+call t 'strip blanks', .k~new(' a ')~strip
+call t 'strip empty', .k~new('')~strip
+call t 'changestr none', x~changestr('z', 'y')
+call t 'changestr empty', x~changestr('', 'q')
+call t 'changestr 0', x~changestr('a', 'q', 0)
+call t 'changestr same', x~changestr('a', 'a')
+call t 'caseless none', x~caselessChangeStr('z', 'y')
+call t 'caseless 0', x~caselessChangeStr('A', 'q', 0)
+call t 'caseless hit', x~caselessChangeStr('A', 'q')
+call t 'upper 5', x~upper(5)
+call t 'upper 1 0', x~upper(1, 0)
+call t 'upper', x~upper
+call t 'upper ABC', .k~new('ABC')~upper
+call t 'upper empty', .k~new('')~upper
+call t 'lower 5', x~lower(5)
+call t 'lower 2 0', x~lower(2, 0)
+call t 'lower abc', x~lower
+call t 'translate', x~translate
+call t 'translate 9', x~translate(, , , 9)
+call t 'translate tables 9', x~translate('x', 'a', , 9)
+call t 'translate tables 1 0', x~translate('x', 'a', , 1, 0)
+call t 'translate tables', x~translate('x', 'a')
+call t 'space', x~space
+call t 'substr 1', x~substr(1)
+call t 'left 3', x~left(3)
+call t 'subword 1', w~subword(1)
+call t 'word 1', .k~new('a')~word(1)
+call t 'insert', x~insert('')
+call t 'overlay', x~overlay('', 4)
+call t 'brackets', x~'[]'(1)
+call t 'x2c', .k~new('41')~x2c
+call t 'bitand', x~bitand
+call t 'max', .k~new('5')~max
+call t 'plus', .k~new('5')~'+'()
+call t 'encodebase64', x~encodebase64
+signal on syntax name e1
+v = .k~new
+e1: say 'e1' condition('O')~code condition('O')~message
+signal on syntax name e2
+say .k~new('abc')~abs
+e2: say 'e2' condition('O')~code condition('O')~message
+signal on syntax name e3
+say .k~new('abc') + 1
+e3: say 'e3' condition('O')~code condition('O')~message
+signal on syntax name e4
+say 1 + .k~new('abc')
+e4: say 'e4' condition('O')~code condition('O')~message
+signal on syntax name e5
+say .ka~new('x')
+e5: say 'e5' condition('O')~code condition('O')~message
+exit
+t: say left(arg(1), 22) arg(2)~class~id '['arg(2)']'; return
+sub: use arg u; say u~class~id u; return u
+::class k subclass string
+::method init_count
+  return 'ic'
+::class kk subclass k
+::class ka subclass string abstract
+::class ks subclass string
+::method makestring
+  return 'MS'
+::method string
+  return 'STR'
+::class ki subclass string
+::method init
+  say 'init' arg() arg(1) arg(2)
+  self~init:super

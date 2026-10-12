@@ -303,7 +303,9 @@ impl Interp {
             self.redirect_of(&object.body)
         };
         match redirect {
-            Redirect::StemDefault(default) => return self.text_len_inner(default),
+            Redirect::StemDefault(default) | Redirect::StemSubclass(default) => {
+                return self.text_len_inner(default);
+            }
             Redirect::VarRefValue(referenced) => return self.string_value_text(referenced).len(),
             Redirect::VarRefUnset => {
                 return match &self.heap.get(value).expect("a live value").body {
@@ -351,6 +353,7 @@ impl Interp {
             } => match (state.buffer(), state.pointer()) {
                 (Some(buffer), _) => buffer.bytes.len(),
                 (_, Some(address)) => rexx_core::pointer_to_string(address).len(),
+                _ if let Some(text) = state.text() => text.len(),
                 _ => match name {
                     Some(bytes) => bytes.len(),
                     None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
@@ -544,7 +547,7 @@ impl Interp {
             // `Cow::Owned`: the borrow this recursive call returns is tied
             // to `self`, not to `value`'s own object, so the two Cows
             // cannot share one lifetime.
-            Redirect::StemDefault(default) => {
+            Redirect::StemDefault(default) | Redirect::StemSubclass(default) => {
                 return Cow::Owned(self.to_text(default).into_owned());
             }
             // **`string_value_text` and not `to_text`**, which is the
@@ -618,6 +621,8 @@ impl Interp {
                 // (`classes/PointerClass.cpp:152`), held nowhere, which is
                 // why `try_text` answers `None` for one.
                 (_, Some(address)) => Cow::Owned(rexx_core::pointer_to_string(address)),
+                // `RexxString::stringValue` for a `String` subclass instance.
+                _ if let Some(text) = state.text() => Cow::Borrowed(text),
                 _ => match name {
                     Some(bytes) => Cow::Borrowed(bytes),
                     None => unreachable!("Redirect::InstanceDefault answers an unnamed instance"),
@@ -682,7 +687,12 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } => state.buffer().map(|buffer| &buffer.bytes[..]),
+            } => state
+                .text()
+                .or_else(|| state.buffer().map(|buffer| &buffer.bytes[..])),
+            Body::Instance { pools, .. } if let Some(store) = self.stem_store_in(pools) => {
+                self.try_text(store)
+            }
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
             Body::Instance { name, .. } => name.as_deref(),
@@ -867,6 +877,12 @@ impl Interp {
             // it is reached only where this answers `NotNumeric` -- the
             // premise `a_value_the_operator_gap_names_parses_as_no_number`
             // holds.
+            // `RexxString::numberString` reads a `String` subclass
+            // instance's bytes as it reads a base string's.
+            Body::Instance {
+                native: Some(state),
+                ..
+            } if let Some(text) = state.text() => Number::parse_bytes(text).ok_or(NotNumeric),
             Body::Array { .. } | Body::Instance { .. } => Err(NotNumeric),
             other => {
                 unreachable!(
@@ -1001,6 +1017,8 @@ enum Redirect {
     /// An instance nothing has named, which renders as its class's id with an
     /// article in front and stores those bytes nowhere.
     InstanceDefault(ObjRef),
+    /// A `Stem` subclass instance answers as the `Body::Stem` it holds.
+    StemSubclass(ObjRef),
     /// The object's own body holds the text.
     None,
 }
@@ -1021,6 +1039,10 @@ impl Interp {
                 native: Some(state),
                 ..
             } if state.renders_its_own_string_value() => Redirect::None,
+            // `StemClass::stringValue` for a `Stem` subclass instance.
+            Body::Instance { pools, .. } if let Some(store) = self.stem_store_in(pools) => {
+                Redirect::StemSubclass(store)
+            }
             Body::Instance {
                 class, name: None, ..
             } => Redirect::InstanceDefault(*class),

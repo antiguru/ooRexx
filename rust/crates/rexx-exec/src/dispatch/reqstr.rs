@@ -427,6 +427,11 @@ impl Interp {
                         let text = crate::value::string_value_of_reference(self, value);
                         return StringConversion::Bytes(text);
                     }
+                    // `StemClass::request` forwards to the stem's value for a
+                    // `Stem` subclass instance too.
+                    Body::Instance { pools, .. } if let Some(store) = self.stem_store_in(pools) => {
+                        Some(store)
+                    }
                     _ => return self.make_string_or_none(value),
                 },
             },
