@@ -136,9 +136,9 @@ pub(crate) mod library;
 mod array;
 use array::{
     IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_size_argument,
-    array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
-    native_array_dimension, native_array_items, native_array_make_string, native_array_new,
-    native_array_of, native_array_put, native_array_size, positive_index, unsigned_index,
+    array_slots, array_slots_owned, native_array_at, native_array_at_for, native_array_dimension,
+    native_array_items, native_array_make_string, native_array_new, native_array_of,
+    native_array_put, native_array_size, positive_index, unsigned_index,
 };
 
 // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers

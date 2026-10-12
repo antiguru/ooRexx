@@ -354,6 +354,9 @@ impl Interp {
         self.library_routine_codes.extend(routine_codes);
         self.rexx_routine_rows.extend(rexx_routines);
         self.untranslated.remove(&id);
+        // Where the translation ends and before any `::REQUIRES` loads, which
+        // is where `generateProgram` and `installPackage` run it.
+        self.override_package_settings(id);
 
         // **A second pass, because the oracle's own translation-time
         // refusals above happen before every install-time one below**
@@ -1675,6 +1678,7 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
+        self.override_package_settings(program_id);
         // `generateMethod` and `generateRoutine` give the executable's own
         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
         // which its routine and class lookups walk.
@@ -1809,6 +1813,7 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
+        self.override_package_settings(program_id);
         // `generateMethod` and `generateRoutine` give the executable's own
         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
         // which its routine and class lookups walk.

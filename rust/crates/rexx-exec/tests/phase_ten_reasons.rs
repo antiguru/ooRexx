@@ -205,7 +205,7 @@ fn the_scan_reads_the_test_modules_it_leaves_out() {
     assert!(
         literals(&lib)
             .iter()
-            .any(|(_, literal)| literal == "a package settings write"),
+            .any(|(_, literal)| literal == "a write to a package's .ROUTINES table"),
         "lib.rs's production text was blanked"
     );
 }

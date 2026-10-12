@@ -256,16 +256,6 @@ fn multi_dimension_position(
     Ok(Some(offset + 1))
 }
 
-/// Whether `value` is a whole number at `Numerics::ARGUMENT_DIGITS`, which is
-/// what `numberArgument` accepts.
-pub(super) fn is_whole_method_argument(interp: &mut Interp, value: ObjRef) -> bool {
-    interp
-        .to_number(value)
-        .ok()
-        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
-        .is_some()
-}
-
 /// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under
 /// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
 /// whole number of at least 1.

@@ -13,8 +13,11 @@
 
 use rexx_num::{Form, Settings, SettingsError};
 use rexx_parse::{ConditionOption, OptionsForm, PackageOption};
+use rustc_hash::FxHashMap;
 
+use crate::error::{Failure, Raised};
 use crate::trace::{TraceMode, mode_from_setting};
+use crate::{Interp, ProgramId};
 
 /// The six conditions `::OPTIONS` can turn from a condition into a SYNTAX
 /// error, in `subDirectives[]` order.
@@ -82,6 +85,14 @@ const EXPLICIT_WORDS: [&str; 13] = [
 ];
 
 impl Explicit {
+    /// Whether the directives named `word`, an [`EXPLICIT_WORDS`] entry.
+    fn named(self, word: &str) -> bool {
+        EXPLICIT_WORDS
+            .iter()
+            .position(|candidate| *candidate == word)
+            .is_some_and(|which| self.named[which])
+    }
+
     /// The blank-delimited subkeyword list, empty for a package whose
     /// directives named none -- measured, oracle rc 0, a file with no
     /// `::OPTIONS` renders the null string.
@@ -161,6 +172,20 @@ impl PackageOptions {
                 .position(|candidate| *candidate == word)
                 .expect("every name passed here is an EXPLICIT_WORDS entry");
             self.explicit.named[which] = true;
+            // `PROLOG` and `NOPROLOG` clear each other: the directive parser
+            // keeps one of the two flags (`parser/DirectiveParser.cpp:1315`).
+            let other = match word {
+                "PROLOG" => Some("NOPROLOG"),
+                "NOPROLOG" => Some("PROLOG"),
+                _ => None,
+            };
+            if let Some(other) = other
+                && let Some(other) = EXPLICIT_WORDS
+                    .iter()
+                    .position(|candidate| *candidate == other)
+            {
+                self.explicit.named[other] = false;
+            }
         };
         match option {
             PackageOption::Digits(_) => names("DIGITS"),
@@ -254,69 +279,209 @@ NOSTRING {} NOTREADY {} NOVALUE {} {} TRACE {}",
         .into_bytes()
     }
 
-    /// What `Package~options(name)` answers for one option name.
-    pub(crate) fn option_query(&self, name: &[u8], trace: Option<TraceMode>) -> OptionQuery {
-        let upper: Vec<u8> = name.to_ascii_uppercase();
+    /// What `Package~options(name)` answers for `which`: the value a read
+    /// returns and a write returns as the previous one. `trace` is the
+    /// setting `TRACE` renders.
+    pub(crate) fn value_of(&self, which: OptionName, trace: Option<TraceMode>) -> Vec<u8> {
         let condition = |which: &[u8]| {
-            OptionQuery::Value(
-                if self.syntax.raises(which) {
-                    "SYNTAX"
+            if self.syntax.raises(which) {
+                "SYNTAX"
+            } else {
+                "CONDITION"
+            }
+        };
+        let text = match which {
+            OptionName::All => {
+                return ESCALATABLE
+                    .iter()
+                    .map(|name| format!("{} {}", String::from_utf8_lossy(name), condition(name)))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .into_bytes();
+            }
+            OptionName::Digits => return self.numeric.digits().to_string().into_bytes(),
+            OptionName::Fuzz => return self.numeric.fuzz().to_string().into_bytes(),
+            OptionName::Condition(which) => condition(ESCALATABLE[which]),
+            OptionName::Form => form_word(self.numeric.form()),
+            OptionName::NumericInherit => {
+                if self.numeric_inherit {
+                    "INHERIT"
                 } else {
-                    "CONDITION"
+                    "NOINHERIT"
                 }
-                .as_bytes()
-                .to_vec(),
-            )
+            }
+            OptionName::Prolog => {
+                if self.suppress_prolog {
+                    "NOPROLOG"
+                } else {
+                    "PROLOG"
+                }
+            }
+            OptionName::Initial | OptionName::Reset | OptionName::SetOptions => {
+                return self.to_options_string(trace);
+            }
+            OptionName::Trace => trace.map_or("?n/a?", trace_word),
+            OptionName::Explicit => return self.explicit.to_text(),
         };
-        let text = |value: &str| OptionQuery::Value(value.as_bytes().to_vec());
-        let Some(first) = upper.first() else {
-            return OptionQuery::Unknown;
-        };
-        match (first, upper.get(1), upper.get(2)) {
-            (b'A', _, _) => OptionQuery::NeedsValue,
-            (b'D', _, _) => text(&self.numeric.digits().to_string()),
-            (b'E', _, _) => condition(b"ERROR"),
-            (b'F', Some(b'A'), _) => condition(b"FAILURE"),
-            (b'F', Some(b'O'), _) => text(form_word(self.numeric.form())),
-            (b'F', Some(b'U'), _) => text(&self.numeric.fuzz().to_string()),
-            (b'I' | b'R', _, _) => OptionQuery::ReadOnly1(self.to_options_string(trace)),
-            (b'L', _, _) => condition(b"LOSTDIGITS"),
-            (b'N', Some(b'U'), _) => text(if self.numeric_inherit {
-                "INHERIT"
-            } else {
-                "NOINHERIT"
-            }),
-            (b'N', Some(b'O'), Some(b'S')) => condition(b"NOSTRING"),
-            (b'N', Some(b'O'), Some(b'T')) => condition(b"NOTREADY"),
-            (b'N', Some(b'O'), Some(b'V')) => condition(b"NOVALUE"),
-            (b'P', _, _) => text(if self.suppress_prolog {
-                "NOPROLOG"
-            } else {
-                "PROLOG"
-            }),
-            (b'S', _, _) => OptionQuery::MissingSecond,
-            (b'T', _, _) => text(trace.map_or("?n/a?", trace_word)),
-            (b'X', _, _) => OptionQuery::ReadOnly1(self.explicit.to_text()),
-            _ => OptionQuery::Unknown,
+        text.as_bytes().to_vec()
+    }
+
+    /// The setting switch's arms that take a value's first letter --
+    /// `PackageClass::options` (`classes/PackageClass.cpp:2418`). `Err` is
+    /// the list the 93.914 for any other letter names.
+    pub(crate) fn set_by_letter(
+        &mut self,
+        which: OptionName,
+        letter: u8,
+    ) -> Result<(), &'static str> {
+        let letter = letter.to_ascii_uppercase();
+        match which {
+            OptionName::All | OptionName::Condition(_) => {
+                if !matches!(letter, b'S' | b'C') {
+                    return Err("\"C[ondition] or S[yntax]\"");
+                }
+                let syntax = letter == b'S';
+                match which {
+                    OptionName::Condition(which) => self.syntax.escalated[which] = syntax,
+                    _ => self.syntax.escalated = [syntax; 6],
+                }
+            }
+            OptionName::Form => match letter {
+                b'E' => self.numeric.set_form(Form::Engineering),
+                b'S' => self.numeric.set_form(Form::Scientific),
+                _ => return Err("\"E[ngineering] or S[cientific]\""),
+            },
+            OptionName::NumericInherit => match letter {
+                b'I' => self.numeric_inherit = true,
+                b'N' => self.numeric_inherit = false,
+                _ => return Err("\"I[nherit] or N[oInherit]\""),
+            },
+            OptionName::Prolog => match letter {
+                b'P' => self.suppress_prolog = false,
+                b'N' => self.suppress_prolog = true,
+                _ => return Err("\"N[oprolog] or P[rolog]\""),
+            },
+            _ => unreachable!("only the letter-valued options are set here"),
         }
+        Ok(())
+    }
+
+    /// `PackageClass::overridePackageSettings`: every setting this package's
+    /// own `::OPTIONS` did not name, taken from `defaults`. Only `PROLOG`
+    /// guards the prologue setting -- a package naming `NOPROLOG` takes it
+    /// too, as `isExplicitPrologOption` reads one flag.
+    pub(crate) fn take_defaults(&mut self, defaults: &PackageOptions) {
+        let named = |word: &str| self.explicit.named(word);
+        let pick = |word: &str, own: u64, other: u64| if named(word) { own } else { other };
+        let digits = pick("DIGITS", self.numeric.digits(), defaults.numeric.digits());
+        let fuzz = pick("FUZZ", self.numeric.fuzz(), defaults.numeric.fuzz());
+        let form = if named("FORM") {
+            self.numeric.form()
+        } else {
+            defaults.numeric.form()
+        };
+        let inherit = named("NUMERIC");
+        let prolog = named("PROLOG");
+        let trace = named("TRACE");
+        let conditions: Vec<bool> = ESCALATABLE
+            .iter()
+            .map(|name| named(&String::from_utf8_lossy(name)))
+            .collect();
+        self.numeric = Settings::from_parts(digits, fuzz, form);
+        if !inherit {
+            self.numeric_inherit = defaults.numeric_inherit;
+        }
+        for (which, named) in conditions.into_iter().enumerate() {
+            if !named {
+                self.syntax.escalated[which] = defaults.syntax.escalated[which];
+            }
+        }
+        if !prolog {
+            self.suppress_prolog = defaults.suppress_prolog;
+        }
+        if !trace {
+            self.trace = defaults.trace;
+        }
+    }
+
+    /// `package->packageSettings = newSettings`: every setting `settings`
+    /// holds, and not which options this package's own directives named.
+    pub(crate) fn take_settings(&mut self, settings: &PackageOptions) {
+        *self = PackageOptions {
+            explicit: self.explicit,
+            ..settings.clone()
+        };
     }
 }
 
-/// What one `Package~options(name)` send answers, or which refusal it earns.
-pub(crate) enum OptionQuery {
-    /// The option's current value.
-    Value(Vec<u8>),
-    /// An option that answers a value and refuses to be set: `I`, `R` and
-    /// `X`, each of which is 93.902 `1 expected` when a second argument
-    /// arrives. Measured at rc 163, one send each.
-    ReadOnly1(Vec<u8>),
-    /// `S[etOptions]`, which reads nothing and needs the second argument --
-    /// `stringArgument(strNewValue, ARG_TWO)`, 93.901.
-    MissingSecond,
-    /// `A[ll]`, whose own arm raises before the switch -- 93.903.
-    NeedsValue,
-    /// A name none of the arms accept -- 93.914, naming the whole list.
-    Unknown,
+/// One `Package~options` option name, by the letters `PackageClass::options`
+/// switches on.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum OptionName {
+    /// `A[ll]`, which only a write accepts.
+    All,
+    Digits,
+    /// One of [`ESCALATABLE`], by its index there.
+    Condition(usize),
+    Form,
+    Fuzz,
+    /// `I[nitialOptions]`.
+    Initial,
+    /// `NU[meric]`.
+    NumericInherit,
+    Prolog,
+    /// `R[esetOptions]`.
+    Reset,
+    /// `S[etOptions]`, whose value is an `::OPTIONS` directive.
+    SetOptions,
+    Trace,
+    /// `X`, the options the package's directives named.
+    Explicit,
+}
+
+impl OptionName {
+    /// The option `name` names, or `None` for one none of the arms accept.
+    pub(crate) fn parse(name: &[u8]) -> Option<OptionName> {
+        let upper: Vec<u8> = name.to_ascii_uppercase();
+        Some(match (upper.first()?, upper.get(1), upper.get(2)) {
+            (b'A', _, _) => OptionName::All,
+            (b'D', _, _) => OptionName::Digits,
+            (b'E', _, _) => OptionName::Condition(0),
+            (b'F', Some(b'A'), _) => OptionName::Condition(1),
+            (b'F', Some(b'O'), _) => OptionName::Form,
+            (b'F', Some(b'U'), _) => OptionName::Fuzz,
+            (b'I', _, _) => OptionName::Initial,
+            (b'L', _, _) => OptionName::Condition(2),
+            (b'N', Some(b'U'), _) => OptionName::NumericInherit,
+            (b'N', Some(b'O'), Some(b'S')) => OptionName::Condition(3),
+            (b'N', Some(b'O'), Some(b'T')) => OptionName::Condition(4),
+            (b'N', Some(b'O'), Some(b'V')) => OptionName::Condition(5),
+            (b'P', _, _) => OptionName::Prolog,
+            (b'R', _, _) => OptionName::Reset,
+            (b'S', _, _) => OptionName::SetOptions,
+            (b'T', _, _) => OptionName::Trace,
+            (b'X', _, _) => OptionName::Explicit,
+            _ => return None,
+        })
+    }
+}
+
+/// What `Package~options` and `.Package~defaultOptions` writes keep: the
+/// statics `PackageClass` holds (`classes/PackageClass.cpp:70`), and each
+/// package's settings as they stood before their first change.
+#[derive(Default)]
+pub(crate) struct OptionWrites {
+    /// The REXX package's own settings, which a write reaches as it reaches
+    /// a file's.
+    pub(crate) rexx: PackageOptions,
+    /// `PackageClass::initialPackageSettings`, entered at a package's first
+    /// change. `None` is the REXX package.
+    pub(crate) initial: FxHashMap<Option<ProgramId>, PackageOptions>,
+    /// `psOverridePackageSettings`.
+    pub(crate) defaults: PackageOptions,
+    /// `overrideCount`: a package compiled while it is not zero takes
+    /// [`OptionWrites::defaults`] and moves it one down.
+    pub(crate) count: i64,
 }
 
 /// `NUMERIC FORM`'s two words, as `PackageSetting::toString` writes them.
@@ -339,6 +504,99 @@ fn trace_word(mode: TraceMode) -> &'static str {
         b'O' => "OFF",
         b'R' => "RESULTS",
         _ => "NORMAL",
+    }
+}
+
+impl Interp {
+    /// `program`'s settings for a change, whose first change enters what
+    /// `~options('I')` answers from then on. `None` is the REXX package.
+    pub(crate) fn package_settings_mut(
+        &mut self,
+        program: Option<ProgramId>,
+    ) -> &mut PackageOptions {
+        let settings = match program {
+            Some(program) => self.package_options.entry(program).or_default(),
+            None => &mut self.option_writes.rexx,
+        };
+        self.option_writes
+            .initial
+            .entry(program)
+            .or_insert_with(|| settings.clone());
+        settings
+    }
+
+    /// The latches `Interp::install_directives` arms for an escalated
+    /// `NOSTRING` or `LOSTDIGITS`, armed for a change that escalates one.
+    pub(crate) fn arm_option_latches(&mut self, program: Option<ProgramId>) {
+        let settings = match program {
+            Some(program) => self.package_options.get(&program),
+            None => Some(&self.option_writes.rexx),
+        };
+        let Some(settings) = settings else {
+            return;
+        };
+        let (nostring, lostdigits) = (
+            settings.escalates_nostring(),
+            settings.escalates_lostdigits(),
+        );
+        self.reqstr_armed |= nostring;
+        self.lostdigits_armed |= lostdigits;
+    }
+
+    /// `PackageClass::overridePackageSettings`, which every compile of a
+    /// package runs (`parser/LanguageParser.cpp:658`, `:856`) and an
+    /// `INTERPRET` does not.
+    pub(crate) fn override_package_settings(&mut self, id: ProgramId) {
+        if self.option_writes.count == 0 {
+            return;
+        }
+        // No latch to arm: the defaults are an `::OPTIONS` directive's,
+        // whose own install armed any they escalate.
+        let defaults = self.option_writes.defaults.clone();
+        self.package_settings_mut(Some(id)).take_defaults(&defaults);
+        self.option_writes.count = self.option_writes.count.wrapping_sub(1);
+    }
+
+    /// `PackageClass::setPackageSettings`: the settings `text`, a single
+    /// `::OPTIONS` directive, gives a routine compiled from it. That compile
+    /// is a package's like any other, so it takes the override too.
+    pub(crate) fn settings_from_directive(
+        &mut self,
+        text: &[u8],
+    ) -> Result<PackageOptions, Failure> {
+        let mut colon = false;
+        for &byte in text.iter().take_while(|byte| **byte != 0) {
+            if matches!(byte, b' ' | b'\t') {
+                continue;
+            }
+            if !colon {
+                if byte != b':' {
+                    return Err(Raised::method_user_defined(
+                        "argument is not an ::OPTIONS directive",
+                    )
+                    .into());
+                }
+                colon = true;
+                continue;
+            }
+            let hint = match byte {
+                b';' => "\";\" (end of clause)",
+                b'\r' => "\"0d\"x (CR)",
+                b'\n' => "\"0a\"x (LF)",
+                _ => continue,
+            };
+            return Err(Raised::method_user_defined(&format!(
+                "argument must not contain a semi-colon, CR, or LF, found: {hint}"
+            ))
+            .into());
+        }
+        let name = b"PackageSettingsFromOptionsDirectiveString";
+        let parsed = self.parse_file(text.to_vec(), name)?;
+        let mut compiled = None;
+        self.install_executable(parsed, name, true, None, |_, id| compiled = Some(id))?;
+        Ok(compiled
+            .and_then(|id| self.package_options.get(&id).cloned())
+            .unwrap_or_default())
     }
 }
 

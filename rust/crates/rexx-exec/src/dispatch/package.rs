@@ -19,7 +19,7 @@ use rexx_core::ObjRef;
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, required_string_named_argument};
 use crate::environment::PackageTable;
 use crate::error::Raised;
-use crate::options::{OptionQuery, PackageOptions};
+use crate::options::{OptionName, PackageOptions};
 use crate::plan::Package;
 use crate::trace::TraceMode;
 use crate::{InstalledRoutine, ProgramId};
@@ -143,16 +143,33 @@ fn writable_package_of(interp: &Interp, receiver: ObjRef) -> Result<ProgramId, F
 /// `~trace` reports.
 fn settings_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
     match program {
-        None => (PackageOptions::default(), None),
-        Some(program) => {
-            let options = interp.package_options.get(&program).cloned();
-            let trace = options.as_ref().and_then(|options| options.trace);
-            (
-                options.unwrap_or_default(),
-                Some(trace.unwrap_or(TraceMode::NORMAL)),
-            )
+        None => {
+            let options = interp.option_writes.rexx.clone();
+            let trace = options.trace;
+            (options, trace)
         }
+        Some(program) => shown(interp.package_options.get(&program).cloned()),
     }
+}
+
+/// [`settings_of`] as the package's first change found them --
+/// `PackageClass::getInitialPackageSettings`.
+fn initial_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
+    match interp.option_writes.initial.get(&program) {
+        None => settings_of(interp, program),
+        Some(options) if program.is_none() => (options.clone(), options.trace),
+        Some(options) => shown(Some(options.clone())),
+    }
+}
+
+/// A file's package's settings with the trace setting its `~trace` reports,
+/// which is `NORMAL` where it names none.
+fn shown(options: Option<PackageOptions>) -> (PackageOptions, Option<TraceMode>) {
+    let trace = options.as_ref().and_then(|options| options.trace);
+    (
+        options.unwrap_or_default(),
+        Some(trace.unwrap_or(TraceMode::NORMAL)),
+    )
 }
 
 /// `PackageClass::digitsRexx`: the package's own `DIGITS`.
@@ -210,14 +227,15 @@ fn trace(
 }
 
 /// `PackageClass::options(optionName, newValue)`: the whole `::OPTIONS`
-/// string, or one option's value, or a write.
+/// string, or one option's value, or a write answering the value it replaced.
 fn options(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let (options, trace) = settings_of(interp, package_of(interp, receiver)?);
+    let program = package_of(interp, receiver)?;
+    let (options, trace) = settings_of(interp, program);
     let value = args.get(1).copied().flatten();
     let Some(name) = args.first().copied().flatten() else {
         if value.is_some() {
@@ -227,34 +245,107 @@ fn options(
     };
     let name = required_string_named_argument(interp, name, "optionName")?;
     let name = interp.to_text(name).to_vec();
-    let query = options.option_query(&name, trace);
+    let which = OptionName::parse(&name);
     let Some(value) = value else {
-        return match query {
-            OptionQuery::Value(value) | OptionQuery::ReadOnly1(value) => {
-                Ok(Some(interp.text_built(value)))
+        let answer = match which {
+            None => return Err(unknown_option(&name, false)),
+            Some(OptionName::All) => return Err(Raised::missing_method_argument(2).into()),
+            Some(OptionName::SetOptions) => {
+                return Err(Raised::not_enough_method_arguments(2).into());
             }
-            OptionQuery::MissingSecond => Err(Raised::not_enough_method_arguments(2).into()),
-            OptionQuery::NeedsValue => Err(Raised::missing_method_argument(2).into()),
-            OptionQuery::Unknown => Err(unknown_option(&name, false)),
+            Some(OptionName::Initial) => {
+                let (initial, trace) = initial_of(interp, program);
+                initial.value_of(OptionName::Initial, trace)
+            }
+            Some(OptionName::Reset) => {
+                let (initial, _) = initial_of(interp, program);
+                interp.package_settings_mut(program).take_settings(&initial);
+                interp.arm_option_latches(program);
+                options.value_of(OptionName::Reset, trace)
+            }
+            Some(which) => options.value_of(which, trace),
         };
+        return Ok(Some(interp.text_built(answer)));
     };
     let value = required_string_named_argument(interp, value, "newValue")?;
-    let value = interp.to_text(value).to_vec();
-    if matches!(query, OptionQuery::Unknown) {
+    let Some(which) = which else {
         return Err(unknown_option(&name, true));
-    }
+    };
+    let text = interp.to_text(value).to_vec();
     // The empty check stands ahead of the per-option switch, so it fires even
     // for an option that cannot be set at all: measured at rc 163,
     // `p~options('X', '')` is 93.900 and `p~options('X', 'Y')` is 93.902.
-    if value.is_empty() {
+    let Some(&letter) = text.first() else {
         return Err(Raised::method_user_defined("argument 2 must not be empty").into());
+    };
+    let previous = options.value_of(which, trace);
+    let mut changed = options;
+    match which {
+        OptionName::Initial | OptionName::Reset | OptionName::Explicit => {
+            return Err(Raised::too_many_method_arguments(1).into());
+        }
+        OptionName::Digits => {
+            let Some(digits) = whole_argument(interp, value) else {
+                return Err(Raised::method_argument_not_whole(2, &text).into());
+            };
+            if digits < 1 {
+                return Err(Raised::method_argument_not_positive(2, &text).into());
+            }
+            let digits = digits as u64;
+            let fuzz = changed.numeric.fuzz();
+            if digits <= fuzz {
+                return Err(crate::run::raised_from_settings(
+                    rexx_num::SettingsError::FuzzNotBelowDigits { digits, fuzz },
+                )
+                .into());
+            }
+            changed.numeric = rexx_num::Settings::from_parts(digits, fuzz, changed.numeric.form());
+        }
+        OptionName::Fuzz => {
+            let Some(fuzz) = whole_argument(interp, value).filter(|fuzz| *fuzz >= 0) else {
+                return Err(Raised::argument_not_non_negative(2, &text).into());
+            };
+            let fuzz = fuzz as u64;
+            let digits = changed.numeric.digits();
+            if fuzz >= digits {
+                return Err(Raised::whole_number_user_defined(&format!(
+                    "NUMERIC FUZZ value (\"{fuzz}\") must be smaller than NUMERIC DIGITS (\"{digits}\")"
+                ))
+                .into());
+            }
+            changed.numeric = rexx_num::Settings::from_parts(digits, fuzz, changed.numeric.form());
+        }
+        OptionName::Trace => {
+            let mode = crate::trace::mode_from_setting(&text)
+                .map_err(crate::trace::raised_invalid_trace_letter)?;
+            changed.trace = Some(mode);
+        }
+        OptionName::SetOptions => {
+            let settings = interp.settings_from_directive(&text)?;
+            changed.take_settings(&settings);
+        }
+        OptionName::All
+        | OptionName::Condition(_)
+        | OptionName::Form
+        | OptionName::NumericInherit
+        | OptionName::Prolog => {
+            if let Err(list) = changed.set_by_letter(which, letter) {
+                return Err(Raised::method_argument_not_in_list(2, list, &text).into());
+            }
+        }
     }
-    // `I`, `R` and `X` are invariants: the setting switch answers 93.902 for
-    // each rather than writing anything.
-    if matches!(query, OptionQuery::ReadOnly1(_)) {
-        return Err(Raised::too_many_method_arguments(1).into());
-    }
-    Err(Loud::package_option_write().into())
+    *interp.package_settings_mut(program) = changed;
+    interp.arm_option_latches(program);
+    Ok(Some(interp.text_built(previous)))
+}
+
+/// `numberArgument`'s conversion: `value` as a whole number at
+/// `Numerics::ARGUMENT_DIGITS`.
+fn whole_argument(interp: &mut Interp, value: ObjRef) -> Option<i64> {
+    interp
+        .to_number(value)
+        .ok()
+        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
 }
 
 /// `Error_Incorrect_method_list` for an option name `~options` does not
@@ -273,8 +364,9 @@ fn unknown_option(name: &[u8], setting: bool) -> Failure {
     Raised::method_argument_not_in_list(1, list, name).into()
 }
 
-/// `PackageClass::clzOptions`: the class-level override settings, which are
-/// what a package that names an option itself does *not* get.
+/// `PackageClass::clzOptions`: the override settings a package compiled
+/// while the override count is not zero takes for every option it does not
+/// name itself, and that count.
 fn default_options(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -296,25 +388,36 @@ fn default_options(
         )
         .into());
     }
-    if let Some(value) = value {
-        let value = required_string_named_argument(interp, value, "newValue")?;
-        let text = interp.to_text(value).to_vec();
-        if text.is_empty() {
-            return Err(Raised::method_user_defined("argument 2 must not be empty").into());
-        }
-        // `C[ountOverrides]` converts its value with `numberArgument` before
-        // it stores it, and the conversion failure is the oracle's own:
-        // measured at rc 163, `.Package~defaultOptions('C', 'x')` is 93.905.
-        if which == Some(b'C') && !super::is_whole_method_argument(interp, value) {
-            return Err(Raised::method_argument_not_whole(2, &text).into());
-        }
-        return Err(Loud::package_option_write().into());
+    // The previous value is built last: the `D` write compiles, and a
+    // string made before it would be unrooted across that.
+    let count = interp.option_writes.count;
+    let defaults = &interp.option_writes.defaults;
+    let previous_defaults = (which == Some(b'D'))
+        .then(|| defaults.to_options_string(Some(defaults.trace.unwrap_or(TraceMode::NORMAL))));
+    let answer = |interp: &mut Interp| match previous_defaults {
+        Some(text) => interp.text_built(text),
+        None => ObjRef::small_int(count)
+            .unwrap_or_else(|| interp.text_built(count.to_string().into_bytes())),
+    };
+    let Some(value) = value else {
+        return Ok(Some(answer(interp)));
+    };
+    let value = required_string_named_argument(interp, value, "newValue")?;
+    let text = interp.to_text(value).to_vec();
+    if text.is_empty() {
+        return Err(Raised::method_user_defined("argument 2 must not be empty").into());
     }
     if which == Some(b'C') {
-        return Ok(Some(interp.counted(0)));
+        // `numberArgument`, whose failure is the oracle's own: measured at
+        // rc 163, `.Package~defaultOptions('C', 'x')` is 93.905.
+        let Some(count) = whole_argument(interp, value) else {
+            return Err(Raised::method_argument_not_whole(2, &text).into());
+        };
+        interp.option_writes.count = count;
+    } else {
+        interp.option_writes.defaults = interp.settings_from_directive(&text)?;
     }
-    let text = PackageOptions::default().to_options_string(Some(TraceMode::NORMAL));
-    Ok(Some(interp.text_built(text)))
+    Ok(Some(answer(interp)))
 }
 
 /// `PackageClass::getSourceSizeRexx`: the package's own line count, and zero

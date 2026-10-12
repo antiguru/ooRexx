@@ -667,15 +667,6 @@ impl Loud {
         }
     }
 
-    /// `Package~options(name, value)` and `Package~defaultOptions(name,
-    /// value)`, each of which writes a package setting rather than reading
-    /// one.
-    fn package_option_write() -> Loud {
-        Loud {
-            message: owned_message("a package settings write", Some(Owner::Phase9)),
-        }
-    }
-
     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
     /// nor a class object, the two kinds that hold methods of their own here.
     /// No program reaches it: the routes tried are `SETMETHOD` sent to an
@@ -1261,6 +1252,9 @@ struct Interp {
     /// entered by `Interp::install_directives` and read by every activation
     /// of that program's code.
     package_options: FxHashMap<ProgramId, PackageOptions>,
+    /// What `Package~options` and `.Package~defaultOptions` writes keep
+    /// beside [`Interp::package_options`].
+    option_writes: crate::options::OptionWrites,
     /// The security manager each package carries, written by all three
     /// `setSecurityManager` setters and read by every checkpoint.
     security_managers: FxHashMap<ProgramId, ObjRef>,
@@ -2061,6 +2055,7 @@ impl Interp {
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
             programs: Vec::new(),
             package_options: FxHashMap::default(),
+            option_writes: crate::options::OptionWrites::default(),
             security_managers: FxHashMap::default(),
             plans: NameMap::default(),
             last_plan: None,
@@ -2836,6 +2831,7 @@ impl Interp {
             next_invocation: _,
             programs: _,
             package_options: _,
+            option_writes: _,
             security_managers,
             plans: _,
             last_plan: _,
