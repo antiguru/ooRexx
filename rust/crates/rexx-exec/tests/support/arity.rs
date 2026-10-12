@@ -253,9 +253,34 @@ impl Layout {
     }
 }
 
+/// Rows whose answer is a path naming the interpreter that ran, so neither
+/// side's value can match the other's: their `VALUE` line is the answer's
+/// class and whether the file it names exists.
+const PATH_VALUED: &[(&str, &str)] = &[("RexxInfo", "executable"), ("RexxInfo", "libraryPath")];
+
+/// What a row's `VALUE` line prints of the answer `vv`.
+pub fn rendering(class: &str, method: &str) -> &'static str {
+    if PATH_VALUED.contains(&(class, method)) {
+        "vv~class vv~exists"
+    } else {
+        "vv~string"
+    }
+}
+
 /// The probe for one row: build the receiver, announce it, send, announce
 /// that.
 pub fn program(receiver: &Receiver, method: &str, arguments: &str, values: bool) -> String {
+    program_rendering(receiver, method, arguments, values, "vv~string")
+}
+
+/// [`program`] with the `VALUE` line printing `rendering`.
+pub fn program_rendering(
+    receiver: &Receiver,
+    method: &str,
+    arguments: &str,
+    values: bool,
+    rendering: &str,
+) -> String {
     let call = if arguments == NONE {
         format!("r~'{method}'")
     } else {
@@ -267,9 +292,9 @@ pub fn program(receiver: &Receiver, method: &str, arguments: &str, values: bool)
         format!("{call}\n")
     };
     let announce = if values {
-        "say 'SENT'\nsay 'VALUE' vv~string\nexit\n"
+        format!("say 'SENT'\nsay 'VALUE' {rendering}\nexit\n")
     } else {
-        "say 'SENT'\nexit\n"
+        "say 'SENT'\nexit\n".to_string()
     };
     let trap = if values {
         "oops:\nvc = rc || '.' || condition('E')\nif vc = '91.999' then do\nsay 'SENT'\n\
@@ -286,7 +311,7 @@ pub fn program(receiver: &Receiver, method: &str, arguments: &str, values: bool)
     if receiver.wrapped() {
         text.push_str("signal on syntax name oops\n");
         text.push_str("call probe 'a1', 'a2'\n");
-        text.push_str(announce);
+        text.push_str(&announce);
         text.push_str(trap);
         text.push_str("probe:\n");
         text.push_str(&setup);
@@ -298,7 +323,7 @@ pub fn program(receiver: &Receiver, method: &str, arguments: &str, values: bool)
         text.push_str("say 'SETUP-OK'\n");
         text.push_str("signal on syntax name oops\n");
         text.push_str(&send);
-        text.push_str(announce);
+        text.push_str(&announce);
         text.push_str(trap);
     }
     if receiver.directives != NONE {
@@ -402,7 +427,8 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
             list
         };
         let values = layout.compare_values && !unstable;
-        fs::write(&path, program(receiver, &method, &list, values)).expect("the probe is writable");
+        let text = program_rendering(receiver, &method, &list, values, rendering(&class, &method));
+        fs::write(&path, text).expect("the probe is writable");
         let cpp = scrub(run(&mut oracle_command(&oracle, &path, &dir)), &dir);
         // **The same `LD_LIBRARY_PATH` the oracle child is given**, so a row
         // whose method loads one of the oracle's own extensions is measuring

@@ -703,16 +703,40 @@ pub fn run_process(
     }
 }
 
-/// A directory beside `run` holding `rexx`, a link to this crate's `rexx-run`,
-/// so a test running `rexx` as a command runs the side under test; the
-/// oracle's side gets its own `bin` directory instead.
+/// A directory beside `run` holding `rexx`, this crate's `rexx-run`, so a
+/// test running `rexx` as a command runs the side under test; the oracle's
+/// side gets its own `bin` directory instead.
+///
+/// `rexx` is a hard link (a copy where one cannot be made), not a symlink,
+/// because `.RexxInfo~executable` resolves links: the test framework finds
+/// the samples at `../samples` from the executable's own directory, which
+/// is the oracle's install layout, and a `samples` link beside this
+/// directory names the oracle's.
 pub fn interpreter_bin(run: &Path) -> PathBuf {
     let bin = run.parent().expect("a parent").join("bin-rexx");
     fs::create_dir_all(&bin).expect("the interpreter bin directory");
-    let link = bin.join("rexx");
-    match std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx-run"), &link) {
+    let rexx = bin.join("rexx");
+    let ours = env!("CARGO_BIN_EXE_rexx-run");
+    let current = fs::metadata(&rexx)
+        .ok()
+        .zip(fs::metadata(ours).ok())
+        .is_some_and(|(theirs, ours)| {
+            use std::os::unix::fs::MetadataExt as _;
+            (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
+        });
+    if !current {
+        // A copy or an older link left by an earlier build is replaced.
+        let _ = fs::remove_file(&rexx);
+        if let Err(link) = fs::hard_link(ours, &rexx) {
+            fs::copy(ours, &rexx).unwrap_or_else(|copy| {
+                panic!("cannot link ({link}) or copy ({copy}) {}", rexx.display())
+            });
+        }
+    }
+    let samples = bin.parent().expect("a parent").join("samples");
+    match std::os::unix::fs::symlink(oracle::oracle_root().join("samples"), &samples) {
         Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
-            panic!("cannot link {}: {e}", link.display())
+            panic!("cannot link {}: {e}", samples.display())
         }
         _ => {}
     }

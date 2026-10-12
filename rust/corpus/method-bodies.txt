@@ -1182,14 +1182,14 @@ RexxInfo	debug	instance	answers	rc 0
 RexxInfo	digits	instance	answers	rc 0
 RexxInfo	directorySeparator	instance	answers	rc 0
 RexxInfo	endofline	instance	answers	rc 0
-RexxInfo	executable	instance	loud	method "EXECUTABLE" of class "RexxInfo"
+RexxInfo	executable	instance	answers	rc 0
 RexxInfo	form	instance	answers	rc 0
 RexxInfo	fuzz	instance	answers	rc 0
 RexxInfo	internalDigits	instance	answers	rc 0
 RexxInfo	internalMaxNumber	instance	answers	rc 0
 RexxInfo	internalMinNumber	instance	answers	rc 0
 RexxInfo	languageLevel	instance	answers	rc 0
-RexxInfo	libraryPath	instance	loud	method "LIBRARYPATH" of class "RexxInfo"
+RexxInfo	libraryPath	instance	answers	rc 0
 RexxInfo	majorVersion	instance	answers	rc 0
 RexxInfo	maxArraySize	instance	answers	rc 0
 RexxInfo	maxExponent	instance	answers	rc 0

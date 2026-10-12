@@ -178,3 +178,17 @@ TSV does not have: `base/class/Package`'s `TEST_PROLOG`, which scout A's run rea
 timeout. `TEST_PACKAGE_FINDPROGRAM_REXXTRY` asks `findProgram` for `mime.cls`, which the oracle
 finds in its `bin` on `PATH`; the crate side's `bin` now holds the oracle `bin`'s `*.cls` files, the
 test passes on the crate through `REXX_SUITE_GROUPS`, and the set leaves it out, as its header says.
+
+## Task 5: path-valued rows and the crate's `bin`
+
+`.RexxInfo~executable` and `~libraryPath` answer the running interpreter's own path, so no value
+can match between the two. Their rows in `rust/corpus/method-bodies.txt` and
+`rust/corpus/introspection-arity.tsv` compare the answer's class and whether the file it names
+exists (`PATH_VALUED` in `tests/method_bodies.rs` and `tests/support/arity.rs`), not the path; the
+corpus witness `lang/rexxinfo_executable_file.rex` compares the same properties.
+
+The suite harness's crate-side `bin-rexx/rexx` is a hard link (a copy where a link cannot be made)
+to `rexx-run`, with `samples` beside it linked to the oracle's `build/samples`: the test framework
+finds the samples at `../samples` from `.RexxInfo~executable`, which resolves a symlink.
+`samples/samples` through `REXX_SUITE_GROUPS` at Task 5's ruling commit: red, 27 of 29 pass;
+TEST_FACTOR refuses `NEW` on a `String` subclass and TEST_MAKESTRING refuses `SysTempFileName`.

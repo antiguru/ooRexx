@@ -336,6 +336,11 @@ const ORACLE_CRASHING_SENDS: &[(&str, &str)] = &[
     ("String", "\\>>"),
 ];
 
+/// Rows whose answer is a path naming the interpreter that ran, so neither
+/// side's rendering can match the other's: the probe prints the answer's
+/// class and whether the file it names exists.
+const PATH_VALUED: &[(&str, &str)] = &[("RexxInfo", "executable"), ("RexxInfo", "libraryPath")];
+
 const RECEIVER_OVERRIDES: &[(&str, &str)] = &[
     (
         "DateTime",
@@ -478,7 +483,12 @@ fn probe_text(class: &ClassRow, row: &MethodRow) -> String {
         class.name, row.method, row.arm
     );
     text.push_str(&format!("o = {receiver}\n"));
-    text.push_str(&format!("say o~'{}'()\n", method_name_literal(&row.method)));
+    let send = format!("o~'{}'()", method_name_literal(&row.method));
+    if PATH_VALUED.contains(&(class.name.as_str(), row.method.as_str())) {
+        text.push_str(&format!("v = {send}\nsay v~class v~exists\n"));
+    } else {
+        text.push_str(&format!("say {send}\n"));
+    }
     if row.arm != "class"
         && let Some(directive) = &class.directive
     {

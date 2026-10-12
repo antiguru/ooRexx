@@ -296,13 +296,13 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
 }
 
 /// Whether the crate side's `path` resolves `rexx` inside `bin` and `rexxc`
-/// nowhere, and `bin` holds no ELF file but this crate's `rexx`.
+/// nowhere, and `bin` holds no ELF file but copies of this crate's `rexx`.
 pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
-    let ours = fs::canonicalize(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run");
+    let ours = fs::read(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run");
     for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
         let file = entry.map_err(|e| e.to_string())?.path();
-        let elf = fs::read(&file).is_ok_and(|bytes| bytes.starts_with(b"\x7fELF"));
-        if elf && fs::canonicalize(&file).ok().as_ref() != Some(&ours) {
+        let bytes = fs::read(&file).unwrap_or_default();
+        if bytes.starts_with(b"\x7fELF") && bytes != ours {
             return Err(format!(
                 "{} is a binary other than this crate's",
                 file.display()
@@ -1724,8 +1724,17 @@ mod fixtures {
         assert_eq!(check_path(&path, &bin), Ok(()));
         assert_eq!(resolve("rexx", &path), Some(bin.join("rexx")));
         assert_eq!(
-            fs::canonicalize(bin.join("rexx")).expect("the link"),
-            fs::canonicalize(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run")
+            fs::read(bin.join("rexx")).expect("the crate's rexx"),
+            fs::read(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run")
+        );
+        assert_eq!(
+            fs::canonicalize(bin.join("rexx")).expect("the crate's rexx"),
+            bin.canonicalize().expect("the bin").join("rexx"),
+            "a symlink resolves to the target directory, where no samples are"
+        );
+        assert!(
+            bin.join("../samples/factor.rex").is_file(),
+            "the samples beside the bin"
         );
         assert_eq!(resolve("rexxc", &path), None);
         assert!(check_path("/usr/bin:/bin", &bin).is_err());

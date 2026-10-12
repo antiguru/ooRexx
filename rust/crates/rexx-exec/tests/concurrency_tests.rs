@@ -2598,6 +2598,10 @@ mod group_runs {
         /// Where the tests each run here started are written when set.
         const STARTED_ENV: &str = "REXX_WHOLE_GROUPS_STARTED";
 
+        /// A comma-separated list of group files (`base/class/Message.testGroup`)
+        /// to run alone when set, for re-deriving their rows.
+        const ONLY_ENV: &str = "REXX_WHOLE_GROUPS_ONLY";
+
         /// Oracle runs per group, and per group whose oracle outcome varies or
         /// differs from ours (ruling P83).
         const ORACLE_RUNS: usize = 5;
@@ -2715,34 +2719,6 @@ mod group_runs {
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
-                "base/class/Message.testGroup",
-                "whole",
-                "normal",
-                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
-                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
-            ),
-            (
-                "base/class/Message.testGroup",
-                "whole",
-                "every",
-                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
-                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
-            ),
-            (
-                "base/class/Message.testGroup",
-                "derived",
-                "normal",
-                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
-                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
-            ),
-            (
-                "base/class/Message.testGroup",
-                "derived",
-                "every",
-                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_REPLYWITH_NOT_ARRAY, failing []",
-                "TEST_REPLYWITH_NOT_ARRAY refuses, as alone (Phase 9)",
-            ),
-            (
                 "base/class/Method.testGroup",
                 "whole",
                 "normal",
@@ -2788,56 +2764,28 @@ mod group_runs {
                 "base/class/Object.testGroup",
                 "whole",
                 "normal",
-                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_RUN_ARRAY_ARGUMENT, failing []",
-                "a test outside the derived list refuses: TEST_RUN_ARRAY_ARGUMENT, Phase 9",
+                "failure, assertions 252, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
                 "base/class/Object.testGroup",
                 "whole",
                 "every",
-                "rexx-exec: method \"MAKEARRAY\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_RUN_ARRAY_ARGUMENT, failing []",
-                "a test outside the derived list refuses: TEST_RUN_ARRAY_ARGUMENT, Phase 9",
-            ),
-            (
-                "base/class/Object.testGroup",
-                "rest",
-                "normal",
-                "failure, assertions 250, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
-            ),
-            (
-                "base/class/Object.testGroup",
-                "rest",
-                "every",
-                "failure, assertions 250, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
+                "failure, assertions 252, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
                 "base/class/RexxContext.testGroup",
                 "whole",
                 "normal",
-                "rexx-exec: method \"COPY\" of class \"RexxContext\" is not implemented (Phase 9), rc 120, last started TESTCOPY01, failing []",
-                "a test outside the derived list refuses: TESTCOPY01, RexxContext COPY (Phase 9)",
+                "failure, assertions 358, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
                 "base/class/RexxContext.testGroup",
                 "whole",
                 "every",
-                "rexx-exec: method \"COPY\" of class \"RexxContext\" is not implemented (Phase 9), rc 120, last started TESTCOPY01, failing []",
-                "a test outside the derived list refuses: TESTCOPY01, RexxContext COPY (Phase 9)",
-            ),
-            (
-                "base/class/RexxContext.testGroup",
-                "rest",
-                "normal",
-                "failure, assertions 357, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
-            ),
-            (
-                "base/class/RexxContext.testGroup",
-                "rest",
-                "every",
-                "failure, assertions 357, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                "failure, assertions 358, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
@@ -3470,7 +3418,7 @@ mod group_runs {
                 ("base/bif/STREAM", "TEST_RELATIVE_FILE_EXISTS2"),
                 ("base/bif/STREAM", "TEST_WRONG_TOO_MANY_ARGS_S"),
                 ("base/bif/TIME", "TEST_VALIDOPT_BIGCHAR_R"),
-                ("base/class/Message", "TEST_REPLYWITH_NOT_ARRAY"),
+                ("base/class/RexxContext", "TESTRS01"),
             ] {
                 assert!(
                     tests.contains(&(group.to_string(), test.to_string())),
@@ -3588,6 +3536,9 @@ mod group_runs {
                 .collect();
             let mut files: Vec<String> = list.iter().map(|row| row.group.clone()).collect();
             files.dedup();
+            if let Ok(only) = std::env::var(ONLY_ENV) {
+                files.retain(|file| only.split(',').any(|group| group == file));
+            }
             let parts: Vec<(&String, Part)> = files
                 .iter()
                 .flat_map(|file| [(file, Part::Whole), (file, Part::Derived)])
