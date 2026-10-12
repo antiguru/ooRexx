@@ -144,3 +144,38 @@ new dependency. No `.rex` file added (the test programs are inline).
    rests on "a use after release is outside the API contract", as the kept-handle row does. That is a
    ruling for the controller to confirm.
 4. The crate still peaks 32 MB against the oracle's 20 MB for this loop, flat in the pass count.
+
+## Fix round 1
+
+On top of `6e0395fdf` (review `task-9-review.md`).
+
+* **I1, the answer temp witnessed.** `end_library_method` and `end_library_routine` call
+  `collect_under_stress` after `pop_native_frame` and `pin_leave!`: a `collect_now` when
+  `stress_collect` is set, so the collect-every-allocation runs collect while the answer is rooted
+  only as a temp. Mutant, `root_native_answer`'s push replaced by `let _ = answered;`, then restored
+  from a copy (`git diff --stat` back to 12+/2- on `library.rs`, the push present once):
+  `cargo test --release -p rexx-exec --test release_local_reference --test collect_stress
+  --no-fail-fast` exit 101, `collect_stress`'s `the_l0_subset_passes_again_under_collect_on_every_allocation`
+  and `under_a_collection_at_every_allocation_only_the_released_string_goes` both panicking at
+  `dispatch.rs:1712`. With the push both are green.
+* **Cost with stress off.** `bench-programs/callgrind.sh -r 3 -j 8 -p "extcall emptyloop"
+  base=<ccd4d4f02 rexx-run> head=<this tree's>` (rounds interleaved by the script, libc and ld
+  subtracted): `extcall` 7954127408 to 7960127408, +0.0754%, spread 0.0000 on both, which is
+  6,000,000 instructions over 3,000,000 native calls, two per call; `emptyloop` +0.0000. `extcall` is
+  the only bench program making a library call.
+* **M1** `lives` moved above `condition_of`'s doc block. **M2** the stress test's doc rests the rc 120
+  on "a use after release being outside the API contract". **M3** `register_local` roots "until it is
+  released or the call ends". **M4** `temps_floor` is "the floor below which `register_local` pops
+  nothing".
+
+Checks, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t9-target CARGO_INCREMENTAL=0 memcap 8G`, statuses
+unpiped:
+
+| command | status |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-api -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --lib --test release_local_reference --test collect_stress --test corpus --test api_group_tests --test library_routine_memory --no-fail-fast` | 0 (lib 1087, collect_stress 37, corpus 29 + 1 ignored, api groups 24, release 3) |
+| `cargo test --release -p rexx-api` | 0 |
+
+Concern: the two instructions per native call with stress off (above).

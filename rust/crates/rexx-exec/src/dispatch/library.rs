@@ -128,6 +128,7 @@ impl Interp {
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
+        self.collect_under_stress();
         if popped.reserved {
             self.release_guard(crate::guards::GuardKey {
                 object: receiver,
@@ -217,6 +218,7 @@ impl Interp {
         let trapped = self.call_trapped_native_condition();
         let popped = self.pop_native_frame();
         pin_leave!(self);
+        self.collect_under_stress();
         let outcome = match (pending, trapped) {
             (Some(number), _) => {
                 self.activity.native_reraise = true;
@@ -692,6 +694,14 @@ impl Interp {
     fn root_native_answer(&mut self, answered: &Result<Option<ObjRef>, Refused>) {
         if let Ok(Some(object)) = answered {
             self.roots.activity_mut().push_temp(*object);
+        }
+    }
+
+    /// Under the collect stress mode, a collection once a native call's frame
+    /// has popped, while its answer is rooted only as a temporary.
+    fn collect_under_stress(&mut self) {
+        if self.stress_collect {
+            self.collect_now();
         }
     }
 
@@ -1330,13 +1340,13 @@ impl rexx_api::values::Baton for InterpBaton {
     }
 }
 
-/// The condition an extension raised, whose number is the major and the minor
-/// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
 /// Whether `object` is one the heap has not swept.
 fn lives(heap: &rexx_core::Heap, object: ObjRef) -> bool {
     !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) || heap.peek(object).is_some()
 }
 
+/// The condition an extension raised, whose number is the major and the minor
+/// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
 fn condition_of(number: usize) -> Failure {
     let major = u16::try_from(number / 1000).unwrap_or(u16::MAX);
     let minor = u16::try_from(number % 1000).unwrap_or(0);

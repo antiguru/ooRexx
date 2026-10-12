@@ -674,8 +674,8 @@ pub trait Host {
         self.locals().resolve(handle)
     }
 
-    /// Registers `object` as a local reference, which roots it for the rest
-    /// of the call; a host may stop rooting it any other way.
+    /// Registers `object` as a local reference, which roots it until it is
+    /// released or the call ends; a host may stop rooting it any other way.
     fn register_local(&mut self, object: ObjRef) -> RexxObjectPtr {
         self.locals().register(object)
     }

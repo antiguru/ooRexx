@@ -1969,8 +1969,8 @@ struct NativeFrame {
     packaged: bool,
     /// Whether a method's call holds its guard lock (`objectScope`).
     reserved: bool,
-    /// The temporaries' length when the call began: one pushed since, and
-    /// registered in `locals`, is rooted by `locals` alone.
+    /// The temporaries' length when the call began, below which
+    /// `register_local` pops nothing.
     temps_floor: usize,
 }
 
