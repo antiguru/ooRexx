@@ -326,4 +326,5 @@ OOM-killed at the 8G cap while compiling.
    and the library programs (`rexx_package_class_table`) rather than held per program, so there is
    no state for a clone to copy into; answering `.object~package~copy` needs a package kind of its
    own.
-4. Full `--lib` at the final commit: below.
+4. Full `cargo test --release -j 4 -p rexx-exec --lib` at `cee92ba71`: exit 0, 1085 passed. The
+   commit recording this changes only this file.
