@@ -1,0 +1,582 @@
+# Review package: d2f89f559..cd171c821
+
+## Commits
+cd171c821 Phase 9a Task 5 fix round 1: Supplier~new conversion, arrayArgument witness
+
+## Files changed
+ rust/corpus/lang/array_argument_callers.rex        | 34 +++++++++++++++++++++
+ rust/corpus/lang/unknown_argument_list.rex         |  4 +--
+ rust/corpus/phase-9.txt                            |  1 +
+ rust/corpus/refusal-dispositions.tsv               |  2 +-
+ rust/corpus/refusal-sites.tsv                      |  2 +-
+ rust/crates/rexx-exec/src/dispatch.rs              |  9 +++---
+ rust/crates/rexx-exec/src/dispatch/array.rs        | 14 ---------
+ rust/crates/rexx-exec/src/dispatch/collection.rs   |  4 +--
+ .../rexx-exec/src/dispatch/collection/supplier.rs  | 12 ++++----
+ rust/crates/rexx-exec/src/dispatch/context.rs      |  6 ++--
+ .../rexx-exec/src/dispatch/object_protocol.rs      | 18 ++++++++---
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   |  9 +++++-
+ rust/crates/rexx-exec/tests/suite.rs               | 10 +++++--
+ .../crates/rexx-exec/tests/support/group_runner.rs | 16 ++++++++--
+ .../sourceline_oracle/array_argument_callers.txt   | 35 ++++++++++++++++++++++
+ .../sourceline_oracle/unknown_argument_list.txt    |  4 +--
+ 16 files changed, 135 insertions(+), 45 deletions(-)
+
+## Diff
+diff --git a/rust/corpus/lang/array_argument_callers.rex b/rust/corpus/lang/array_argument_callers.rex
+new file mode 100644
+index 000000000..167b783ab
+--- /dev/null
++++ b/rust/corpus/lang/array_argument_callers.rex
+@@ -0,0 +1,34 @@
++/* sendWith, startWith, run, Message~new, callWith and both Supplier~new
++   arguments convert through requestArray: an object without MAKEARRAY,
++   MAKEARRAY answering .nil and a multi-dimensional array raise; MAKEARRAY
++   answering an array and a string convert. */
++r = .routine~new('r', 'return arg()')
++m = .method~new('m', 'return arg()')
++o = .object~new
++k = .kk~new
++n = .kn~new
++do v over .array~of(o, k, n, 'ab', .array~new(2,2))
++  call t "say 'abc'~sendWith('POS', v)", v
++  call t "say 'abc'~startWith('POS', v)~result", v
++  call t "say .runner~new~go(m, v)", v
++  call t "say .message~new('abc', 'POS', 'A', v)~send", v
++  call t "say r~callWith(v)", v
++  call t "say .supplier~new(v, .array~of(1))~item", v
++  call t "say .supplier~new(.array~of(1), v)~index", v
++end
++exit
++t:
++  signal on syntax
++  interpret arg(1)
++  return
++syntax:
++  say condition('O')['CODE'] condition('O')['MESSAGE']
++  return
++::class kk
++::method makearray; return .array~of(7)
++::class kn
++::method makearray; return .nil
++::class runner
++::method go
++  use arg m, v
++  return self~run(m, 'A', v)
+diff --git a/rust/corpus/lang/unknown_argument_list.rex b/rust/corpus/lang/unknown_argument_list.rex
+index 4471e2963..8897323b0 100644
+--- a/rust/corpus/lang/unknown_argument_list.rex
++++ b/rust/corpus/lang/unknown_argument_list.rex
+@@ -1,12 +1,12 @@
+-/* An ~UNKNOWN argument list, and the other arrayArgument sites, go through
+-   requestArray: a string converts, an object without MAKEARRAY, .nil, a
++/* An ~UNKNOWN argument list goes through requestArray, and so does one
++   sendWith argument list: a string converts, an object without MAKEARRAY, .nil, a
+    multi-dimensional array and a MAKEARRAY answering .nil do not. */
+ say .environment~unknown('ARRAY', 'y')
+ say .environment~unknown('ARRAY', .k~new)
+ s. = 'abc'
+ say s.~unknown('POS', 'b')
+ t = .stringtable~new; t['K'] = 'kv'; say t~unknown('K', 'z')
+ say 'abc'~sendWith('POS', 'c')
+ call try .object~new
+ call try .nil
+ call try .array~new(2,2)
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 17039f30c..b0093a8e9 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -4,10 +4,11 @@
+ #
+ # One path per line, relative to this directory (rust/corpus/). Lines starting
+ # with # are comments; blank lines are ignored.
+ 
+ # 9a Task 5: the native_method batch.
+ lang/rexxinfo_executable_file.rex
+ lang/stackframe_executable.rex
+ lang/object_copy_method.rex
+ lang/unknown_argument_list.rex
+ lang/define_methods_supplier.rex
++lang/array_argument_callers.rex
+diff --git a/rust/corpus/refusal-dispositions.tsv b/rust/corpus/refusal-dispositions.tsv
+index 6dbfb39a1..a5931a4ab 100644
+--- a/rust/corpus/refusal-dispositions.tsv
++++ b/rust/corpus/refusal-dispositions.tsv
+@@ -56,13 +56,13 @@ setup_method	GUARD	-	scout A b15: b_define_class_method_setup, b_inherit_instanc
+ signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNAL's form (census d-guard)
+ sim_blocked_command	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (a wait only a command's peer can end is refused in sim): a command runs on the baton under a real-time bound, block= (2 s by default), and any command slower than it is refused, whether it waits on another activity or is only slow; timing-dependent by nature, and block= is how a program with slow commands runs under sim
+ sim_blocked_native	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (a wait only a native's own thread or a peer can end is refused in sim): a native call that leaves its driver runs on the baton under block=, past which the interpreter's thread is signalled once and the call refused once it returns; any such call slower than the bound is refused, timing-dependent by nature; a native that retries on EINTR or blocks outside a system call stays unbounded, and so does a native call under a pin, which does not leave its driver (it hangs on the oracle too)
+ sim_endless_wait	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: a deadlock in the simulation mode is a loud refusal; virtual time cannot end a wait only a real signal can
+ sim_foreign_post	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: any inbox post other than a signal's halt, and a callback from a thread running none of the interpreter's native calls, is a determinism breach, refused loudly
+ sim_replay_diverged	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (trace and replay): a replay takes the trace's decisions in order, and one the run takes otherwise (another program, a damaged or edited file) is refused rather than run on a schedule the trace does not hold
+ sim_trace_unwritten	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (trace and replay): a run asked for a decision trace that it cannot write fails, so a harness that checks the status learns it has none
+ stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
+ store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
+ string_answer_not_a_string	DEVIATION	-	Deviation 30: a user STRING method answering an object with no string value, which the oracle converts to .nil, read by a consumer of its bytes; Task 11a probes bytes_dir, bytes_nil, bytes_queue, bytes_obj
+-unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probes rc4 (a Method copy refuses at COPY first); the rest are handles whose object is gone or kinds receiver_kind has no arm for
++unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probe rc4 and Phase 9a Task 5 probe copy8 (a Method copy passed to define, setMethod and run answers); the rest are handles whose object is gone or kinds receiver_kind has no arm for
+ unreadable_collection	GUARD	-	scout A b18: env_supplier; with no owner it is a directory holding an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
+ unsatisfiable_wait	LIMIT	-	Deviation 20 (rulings P27, P65, P77)
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index e64725b10..68382b128 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -313,20 +313,20 @@ Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:533	recorded	ye
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
+-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:550	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:550	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+ Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:642	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+ Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
+ Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:847	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index 499fd4f1d..d6a805c8b 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -131,22 +131,21 @@ use package::{native_package_local, native_package_name};
+ // Running a procedure of a loaded shared library, and the `Host` the boundary
+ // reaches this interpreter through.
+ pub(crate) mod library;
+ 
+ // Array slot and subscript arithmetic, and `Array`'s primitive methods.
+ mod array;
+ use array::{
+     IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_size_argument,
+     array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
+     native_array_dimension, native_array_items, native_array_make_string, native_array_new,
+-    native_array_of, native_array_put, native_array_size, positive_index, request_array,
+-    unsigned_index,
++    native_array_of, native_array_put, native_array_size, positive_index, unsigned_index,
+ };
+ 
+ // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
+ // the other primitive methods share, chained the same way.
+ mod buffer;
+ use buffer::{
+     abbrev_arguments, array_of_texts, backward_search, backward_search_arguments, bit_arguments,
+     case_shift_arguments, changestr_arguments, compare_arguments, compare_to_arguments,
+     conversion_length_argument, copies_argument, count_method_argument, datatype_option_argument,
+     delete_arguments, delword_arguments, ends_with, equals_argument, forward_search,
+@@ -183,23 +182,23 @@ use class_protocol::{
+ mod construct;
+ use construct::{
+     native_capacity_init, native_directory_new, native_executable_new, native_hash_collection_new,
+     native_load_external, native_message_new, native_new_file, native_package_new, native_stem_new,
+     native_string_new, native_unsupported_new, native_weak_reference_new, pointer_address,
+ };
+ 
+ // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
+ mod object_protocol;
+ use object_protocol::{
+-    ArrayArgument, array_argument, decode_message_name, hash_value, invoke_executable,
+-    native_class, native_copy, native_default_name, native_has_method, native_hash_code,
+-    native_identity_hash, native_is_a, native_is_nil, native_message_arguments,
++    ArrayArgument, array_argument, array_argument_object, decode_message_name, hash_value,
++    invoke_executable, native_class, native_copy, native_default_name, native_has_method,
++    native_hash_code, native_identity_hash, native_is_a, native_is_nil, native_message_arguments,
+     native_message_completed, native_message_error_condition, native_message_halt,
+     native_message_has_error, native_message_has_result, native_message_message_complete,
+     native_message_name, native_message_notify, native_message_reply, native_message_reply_with,
+     native_message_result, native_message_send, native_message_send_with, native_message_start,
+     native_message_start_with, native_message_target, native_message_wait, native_no_op,
+     native_object_concat, native_object_concat_blank, native_object_different,
+     native_object_identical, native_object_name, native_object_name_set, native_request,
+     native_run, native_send, native_send_with, native_set_method, native_start, native_start_with,
+     native_string, native_unset_method, operator_argument, string_hash,
+ };
+diff --git a/rust/crates/rexx-exec/src/dispatch/array.rs b/rust/crates/rexx-exec/src/dispatch/array.rs
+index 6f336e24f..56b7cc7ba 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array.rs
+@@ -673,34 +673,20 @@ pub(super) fn native_array_size(
+ pub(super) fn native_array_items(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let items = array_slots(interp, receiver)?.iter().flatten().count();
+     Ok(Some(interp.counted(items)))
+ }
+ 
+-/// `RexxObject::requestArray` (`runtime/MethodArguments.hpp:683`): the value
+-/// itself when it already is an array, and its `MAKEARRAY` otherwise.
+-pub(super) fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Failure> {
+-    if interp.array_slots_of(value).is_some() {
+-        return Ok(value);
+-    }
+-    if interp.lookup(value, b"MAKEARRAY", None).is_none() {
+-        return Ok(value);
+-    }
+-    let caller = interp.caller();
+-    let sent = interp.send_message(value, b"MAKEARRAY", None, &[], caller)?;
+-    Ok(sent.unwrap_or(value))
+-}
+-
+ /// `Array~makeString(format, separator)` and `Array~toString(format,
+ /// separator)`: the array's items as one string -- `ArrayClass::toString`
+ /// (`classes/ArrayClass.cpp:1856`), which `MakeString` and `ToString` both
+ /// name at the same arity (`memory/Setup.cpp:733`-`:734`), which is why one
+ /// function answers both rows.
+ pub(super) fn native_array_make_string(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+diff --git a/rust/crates/rexx-exec/src/dispatch/collection.rs b/rust/crates/rexx-exec/src/dispatch/collection.rs
+index 5dd0ad808..d0ee4b396 100644
+--- a/rust/crates/rexx-exec/src/dispatch/collection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/collection.rs
+@@ -6,22 +6,22 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The collection classes' primitive methods.
+ 
+ use super::{
+     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, IndexUse, Interp, Loud,
+-    NativeMethod, ObjRef, Raised, array_argument, array_dimensions, array_position, array_slots,
+-    array_slots_owned, new_instance, request_array,
++    NativeMethod, ObjRef, Raised, array_argument_object, array_dimensions, array_position,
++    array_slots, array_slots_owned, new_instance,
+ };
+ use super::{INIT, array_size_argument, optional_length_argument, unsigned_index};
+ use super::{native_array_at_for, positive_index};
+ use rexx_parse::Operator;
+ 
+ // `List`'s primitive methods, chained into `ObjectModel::build` ahead of
+ // `Queue`'s.
+ pub(super) mod list;
+ use super::array::surface::native_array_delete;
+ use list::{is_list, list_insert_at, list_state};
+diff --git a/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs b/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs
+index 079d027ad..2a9061393 100644
+--- a/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs
++++ b/rust/crates/rexx-exec/src/dispatch/collection/supplier.rs
+@@ -7,21 +7,21 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `Supplier`'s primitive methods, and the constructor every collection's
+ //! `supplier` method builds one with.
+ 
+ use super::{
+     Arity, ArrayArgument, Cleared, Decoded, Failure, Interp, Loud, NativeMethod, ObjRef, Raised,
+-    array_argument, array_slots, new_instance, pool_variable, request_array,
++    array_argument_object, array_slots, new_instance, pool_variable,
+ };
+ 
+ /// The `Supplier` state's three names, bound in the receiver's own pool under
+ /// the `Supplier` class as scope.
+ const SUPPLIER_ITEMS: &[u8] = b"ITEMS";
+ 
+ const SUPPLIER_INDEXES: &[u8] = b"INDEXES";
+ 
+ const SUPPLIER_POSITION: &[u8] = b"POSITION";
+ 
+@@ -186,25 +186,25 @@ fn native_supplier_init(
+     for position in [1, 2] {
+         let Some(value) = args.get(position - 1).copied().flatten() else {
+             return Err(Raised::missing_method_argument(position).into());
+         };
+         // `arrayArgument` is `requestArray`
+         // (`runtime/MethodArguments.hpp:683`), so a `List` or a `Queue` is
+         // converted and the CONVERTED array is what the supplier keeps --
+         // measured, `.Supplier~new(.List~of('a'), .List~of('h'))` answers
+         // `1 a h`. An argument that already is an array is kept as it
+         // stands, object identity and all.
+-        let value = request_array(interp, value)?;
+-        // Validated for the argument error it raises, after the conversion
+-        // that upstream makes first.
+-        array_argument(interp, value, ArrayArgument::Positional)?;
+-        sides.push(value);
++        sides.push(array_argument_object(
++            interp,
++            value,
++            ArrayArgument::Positional,
++        )?);
+     }
+     store_supplier(interp, receiver, sides[0], sides[1], 0);
+     Ok(None)
+ }
+ 
+ /// `Supplier`'s primitive methods, chained into `ObjectModel::build` beside
+ /// [`super::super::NATIVE_METHODS`].
+ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     (
+         "Supplier",
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index d6548cf56..bd5a9a93a 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -1050,23 +1050,23 @@ fn frame_target(
+ fn frame_arguments(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     frame_entry(interp, receiver, key::ARGUMENTS).map(Some)
+ }
+ 
+ /// `StackFrameClass::getExecutable`: the `Method` or `Routine` the frame's
+-/// level was running, `.nil` for a `COMPILE` frame. A native level's is not
+-/// kept, nor one [`executable_at`] could not answer when the frame was
+-/// built, and either refuses.
++/// level was running, `.nil` for a `COMPILE` frame. A frame built without
++/// one refuses: a native level's, one built from a failure's site rather
++/// than from an activation, and one whose [`executable_at`] failed.
+ fn frame_executable(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     match interp.heap.get(receiver).map(|held| &held.body) {
+         Some(Body::Native(native)) => native
+             .entry(key::EXECUTABLE)
+             .map(Some)
+diff --git a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+index 915696c15..847c6d721 100644
+--- a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+@@ -1662,31 +1662,41 @@ pub(super) enum ArrayArgument {
+ ///
+ /// A conversion answering an object that is not an array raises what `.nil`
+ /// does. The oracle reads that answer through the array layout: measured, a
+ /// string answer is 98.913 and a `List` answer kills it
+ /// (`corpus/oracle-crashes.txt` entry 34).
+ pub(super) fn array_argument(
+     interp: &mut Interp,
+     value: ObjRef,
+     overload: ArrayArgument,
+ ) -> Result<Vec<Option<ObjRef>>, Failure> {
++    let array = array_argument_object(interp, value, overload)?;
++    let slots = interp.array_slots_of(array).unwrap_or_default();
++    Ok(message_argument_slots(slots))
++}
++
++/// [`array_argument`]'s converted array itself, rooted: `value` where it
++/// already is one.
++pub(super) fn array_argument_object(
++    interp: &mut Interp,
++    value: ObjRef,
++    overload: ArrayArgument,
++) -> Result<ObjRef, Failure> {
+     let array = if interp.array_slots_of(value).is_some() {
+         Some(value)
+     } else {
+         interp.request_array_value(value)?
+     };
+     if let Some(array) = array {
+         interp.roots.activity_mut().push_temp(array);
+-        if !interp.is_multi_dimensional_array(array)
+-            && let Some(slots) = interp.array_slots_of(array)
+-        {
+-            return Ok(message_argument_slots(slots));
++        if !interp.is_multi_dimensional_array(array) && interp.array_slots_of(array).is_some() {
++            return Ok(array);
+         }
+     }
+     Err(match overload {
+         ArrayArgument::Named(argument) => Raised::argument_not_single_dimensional(argument).into(),
+         ArrayArgument::Positional => {
+             let found = interp.string_value_text(value);
+             Raised::object_not_single_dimensional(&found).into()
+         }
+     })
+ }
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 701c871a9..6b44a615c 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -3530,21 +3530,28 @@ mod group_runs {
+                 .iter()
+                 .map(|row| {
+                     let group = row.group.trim_end_matches(".testGroup");
+                     let group = group.rsplit_once('/').map_or(group, |(_, name)| name);
+                     format!("{group}.{}", row.test)
+                 })
+                 .collect();
+             let mut files: Vec<String> = list.iter().map(|row| row.group.clone()).collect();
+             files.dedup();
+             if let Ok(only) = std::env::var(ONLY_ENV) {
+-                files.retain(|file| only.split(',').any(|group| group == file));
++                let named: Vec<&str> = only.split(',').collect();
++                for group in &named {
++                    assert!(
++                        files.iter().any(|file| file == group),
++                        "{ONLY_ENV}: {group:?} is no group file of the derived list"
++                    );
++                }
++                files.retain(|file| named.contains(&file.as_str()));
+             }
+             let parts: Vec<(&String, Part)> = files
+                 .iter()
+                 .flat_map(|file| [(file, Part::Whole), (file, Part::Derived)])
+                 .collect();
+             let oracle = oracle::locate();
+             let results = rows_in_parallel(
+                 "whole-groups",
+                 &parts,
+                 |(file, _)| {
+diff --git a/rust/crates/rexx-exec/tests/suite.rs b/rust/crates/rexx-exec/tests/suite.rs
+index c97a0ea42..5a60dc489 100644
+--- a/rust/crates/rexx-exec/tests/suite.rs
++++ b/rust/crates/rexx-exec/tests/suite.rs
+@@ -291,25 +291,31 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
+     }
+     path.split(':')
+         .filter(|dir| !dir.is_empty())
+         .map(|dir| Path::new(dir).join(name))
+         .find(|candidate| executable(candidate))
+ }
+ 
+ /// Whether the crate side's `path` resolves `rexx` inside `bin` and `rexxc`
+ /// nowhere, and `bin` holds no ELF file but copies of this crate's `rexx`.
+ pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
+-    let ours = fs::read(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run");
++    use std::os::unix::fs::MetadataExt as _;
++    let identity = |path: &Path| fs::metadata(path).ok().map(|meta| (meta.dev(), meta.ino()));
++    let ours_path = Path::new(env!("CARGO_BIN_EXE_rexx-run"));
++    let ours_identity = identity(ours_path);
+     for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
+         let file = entry.map_err(|e| e.to_string())?.path();
++        if identity(&file).is_some() && identity(&file) == ours_identity {
++            continue;
++        }
+         let bytes = fs::read(&file).unwrap_or_default();
+-        if bytes.starts_with(b"\x7fELF") && bytes != ours {
++        if bytes.starts_with(b"\x7fELF") && bytes != fs::read(ours_path).unwrap_or_default() {
+             return Err(format!(
+                 "{} is a binary other than this crate's",
+                 file.display()
+             ));
+         }
+     }
+     let rexx = resolve("rexx", path);
+     if rexx.as_deref() != Some(bin.join("rexx").as_path()) {
+         return Err(format!(
+             "rexx resolves to {rexx:?} on {path}, not inside {}",
+diff --git a/rust/crates/rexx-exec/tests/support/group_runner.rs b/rust/crates/rexx-exec/tests/support/group_runner.rs
+index 8d1e4e67b..a8faff44f 100644
+--- a/rust/crates/rexx-exec/tests/support/group_runner.rs
++++ b/rust/crates/rexx-exec/tests/support/group_runner.rs
+@@ -718,23 +718,35 @@ pub fn interpreter_bin(run: &Path) -> PathBuf {
+     let rexx = bin.join("rexx");
+     let ours = env!("CARGO_BIN_EXE_rexx-run");
+     let current = fs::metadata(&rexx)
+         .ok()
+         .zip(fs::metadata(ours).ok())
+         .is_some_and(|(theirs, ours)| {
+             use std::os::unix::fs::MetadataExt as _;
+             (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
+         });
+     if !current {
+-        // A copy or an older link left by an earlier build is replaced.
+-        let _ = fs::remove_file(&rexx);
++        // A copy or an older link left by an earlier build is replaced, and
++        // the copy below never writes onto an existing file, which could be
++        // a link to `ours` itself.
++        match fs::remove_file(&rexx) {
++            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
++                panic!("cannot replace {}: {e}", rexx.display())
++            }
++            _ => {}
++        }
+         if let Err(link) = fs::hard_link(ours, &rexx) {
++            assert!(
++                !rexx.exists(),
++                "{} appeared while it was replaced",
++                rexx.display()
++            );
+             fs::copy(ours, &rexx).unwrap_or_else(|copy| {
+                 panic!("cannot link ({link}) or copy ({copy}) {}", rexx.display())
+             });
+         }
+     }
+     let samples = bin.parent().expect("a parent").join("samples");
+     match std::os::unix::fs::symlink(oracle::oracle_root().join("samples"), &samples) {
+         Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+             panic!("cannot link {}: {e}", samples.display())
+         }
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/array_argument_callers.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/array_argument_callers.txt
+new file mode 100644
+index 000000000..7c6feccd8
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/array_argument_callers.txt
+@@ -0,0 +1,35 @@
++count 34
++/* sendWith, startWith, run, Message~new, callWith and both Supplier~new
++   arguments convert through requestArray: an object without MAKEARRAY,
++   MAKEARRAY answering .nil and a multi-dimensional array raise; MAKEARRAY
++   answering an array and a string convert. */
++r = .routine~new('r', 'return arg()')
++m = .method~new('m', 'return arg()')
++o = .object~new
++k = .kk~new
++n = .kn~new
++do v over .array~of(o, k, n, 'ab', .array~new(2,2))
++  call t "say 'abc'~sendWith('POS', v)", v
++  call t "say 'abc'~startWith('POS', v)~result", v
++  call t "say .runner~new~go(m, v)", v
++  call t "say .message~new('abc', 'POS', 'A', v)~send", v
++  call t "say r~callWith(v)", v
++  call t "say .supplier~new(v, .array~of(1))~item", v
++  call t "say .supplier~new(.array~of(1), v)~index", v
++end
++exit
++t:
++  signal on syntax
++  interpret arg(1)
++  return
++syntax:
++  say condition('O')['CODE'] condition('O')['MESSAGE']
++  return
++::class kk
++::method makearray; return .array~of(7)
++::class kn
++::method makearray; return .nil
++::class runner
++::method go
++  use arg m, v
++  return self~run(m, 'A', v)
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/unknown_argument_list.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/unknown_argument_list.txt
+index e9c25a481..646e97eb2 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/unknown_argument_list.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/unknown_argument_list.txt
+@@ -1,13 +1,13 @@
+ count 25
+-/* An ~UNKNOWN argument list, and the other arrayArgument sites, go through
+-   requestArray: a string converts, an object without MAKEARRAY, .nil, a
++/* An ~UNKNOWN argument list goes through requestArray, and so does one
++   sendWith argument list: a string converts, an object without MAKEARRAY, .nil, a
+    multi-dimensional array and a MAKEARRAY answering .nil do not. */
+ say .environment~unknown('ARRAY', 'y')
+ say .environment~unknown('ARRAY', .k~new)
+ s. = 'abc'
+ say s.~unknown('POS', 'b')
+ t = .stringtable~new; t['K'] = 'kv'; say t~unknown('K', 'z')
+ say 'abc'~sendWith('POS', 'c')
+ call try .object~new
+ call try .nil
+ call try .array~new(2,2)
