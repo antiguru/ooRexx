@@ -742,7 +742,8 @@ fn duplicate_stem_store(interp: &mut Interp, copy: ObjRef) {
     if let Body::Stem { exposed, .. } = &mut body {
         *exposed = None;
     }
-    let fresh = interp.alloc_charged(BehaviourId::STEM, body);
+    // A stem's body holds nothing outside its slot, so nothing is charged.
+    let fresh = interp.alloc_with(BehaviourId::STEM, body);
     interp.roots.activity_mut().push_temp(fresh);
     let scope = interp.object_model().stem;
     interp.set_pool_variable(copy, scope, super::hash::stem::STEM_STORE, fresh);

@@ -1308,7 +1308,17 @@ impl Interp {
             && let Body::Native(native) = &mut held.body
         {
             native.set_entry(index, value);
-        } else if let Some(scope) = self.message_entry_scope(object) {
+        } else {
+            self.set_message_subclass_entry(object, index, value);
+        }
+    }
+
+    /// [`Interp::set_native_entry`] for a `Message` subclass instance, out of
+    /// line so that the `Body::Native` write stays as small as it was.
+    #[cold]
+    #[inline(never)]
+    fn set_message_subclass_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
+        if let Some(scope) = self.message_entry_scope(object) {
             self.set_pool_variable(object, scope, index, value);
         }
     }

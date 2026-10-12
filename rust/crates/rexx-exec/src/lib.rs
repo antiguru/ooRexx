@@ -2793,6 +2793,15 @@ impl Interp {
         self.collect_due |= since >= self.bytes_due;
     }
 
+    /// Counts `bytes` a body holds outside its slot toward the next
+    /// collection without holding them, for a body whose
+    /// [`rexx_core::Body::held_bytes`] does not report them: a `String`
+    /// subclass instance's text.
+    pub(crate) fn charge_unheld(&mut self, bytes: usize) {
+        let since = self.heap.charge_body_bytes(bytes);
+        self.collect_due |= since >= self.bytes_due;
+    }
+
     /// [`Interp::charge_body_bytes`] for a body that may have grown by
     /// nothing.
     pub(crate) fn charge_growth(&mut self, bytes: usize) {

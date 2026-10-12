@@ -1062,9 +1062,8 @@ impl Body {
     }
 
     /// The bytes this body holds in an allocation of its own: a `Text`'s
-    /// bytes when they do not fit inline, an `Array`'s slot capacity, a
-    /// `MutableBuffer`'s capacity and a `String` subclass instance's bytes.
-    /// Nothing for every other body.
+    /// bytes when they do not fit inline, an `Array`'s slot capacity, and a
+    /// `MutableBuffer`'s capacity. Nothing for every other body.
     pub fn held_bytes(&self) -> usize {
         match self {
             Body::Text { bytes, .. } => bytes.heap_len(),
@@ -1074,7 +1073,6 @@ impl Body {
                 ..
             } => match &**native {
                 NativeState::Buffer(state) => state.capacity,
-                NativeState::Text(bytes) => bytes.len(),
                 _ => 0,
             },
             _ => 0,

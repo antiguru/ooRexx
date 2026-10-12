@@ -427,11 +427,7 @@ impl Interp {
                         let text = crate::value::string_value_of_reference(self, value);
                         return StringConversion::Bytes(text);
                     }
-                    // `StemClass::request` forwards to the stem's value for a
-                    // `Stem` subclass instance too.
-                    Body::Instance { pools, .. } if let Some(store) = self.stem_store_in(pools) => {
-                        Some(store)
-                    }
+                    Body::Instance { .. } => return self.instance_conversion(value),
                     _ => return self.make_string_or_none(value),
                 },
             },
@@ -447,6 +443,19 @@ impl Interp {
     fn string_conversion_array_text(&mut self, value: ObjRef) -> Vec<u8> {
         let items = self.array_slots_of(value).unwrap_or_default();
         self.array_string(&items, b"\n")
+    }
+
+    /// [`Interp::classify_string_conversion`]'s instance arm, out of line so
+    /// that the arms a string takes stay as small as they were: a `Stem`
+    /// subclass instance answers as its stem, which is where
+    /// `StemClass::request` forwards, and any other instance as
+    /// [`Interp::make_string_or_none`] finds it.
+    #[inline(never)]
+    fn instance_conversion(&mut self, value: ObjRef) -> StringConversion {
+        match self.stem_subclass_store(value) {
+            Some(store) => self.classify_string_conversion(store),
+            None => self.make_string_or_none(value),
+        }
     }
 
     /// Whether the receiver's own behaviour answers `MAKESTRING`.

@@ -484,7 +484,7 @@ pub(super) fn native_string_new(
             unreachable!("new_instance allocates a Body::Instance")
         };
         *native = Some(Box::new(rexx_core::NativeState::Text(bytes)));
-        interp.charge_growth(held);
+        interp.charge_unheld(held);
         return super::begin_init(interp, object, &args[1..]);
     }
     let bytes = interp.to_text(text).to_vec();
