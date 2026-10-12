@@ -1009,11 +1009,12 @@ impl Interp {
         self.build_package_string_table(program, kind, false)
     }
 
-    /// Whether `table` is some package's `.ROUTINES` table.
-    pub(crate) fn is_package_routines_table(&self, table: ObjRef) -> bool {
+    /// The program whose `.ROUTINES` table `table` is.
+    pub(crate) fn package_routines_program(&self, table: ObjRef) -> Option<ProgramId> {
         self.package_tables
             .iter()
-            .any(|(&(_, kind), &held)| held == table && kind == PackageTable::Routines)
+            .find(|((_, kind), held)| **held == table && *kind == PackageTable::Routines)
+            .map(|((program, _), _)| *program)
     }
 
     /// [`Interp::package_string_table`] for a caller that is about to write an

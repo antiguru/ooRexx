@@ -39,3 +39,4 @@ lang/enhanced_primitive_receivers.rex
 lang/metaclass_new.rex
 lang/executable_copies.rex
 lang/package_store_tables.rex
+lang/routines_table_resolution.rex

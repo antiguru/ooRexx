@@ -655,18 +655,6 @@ impl Loud {
         }
     }
 
-    /// A write to a package's `.ROUTINES` table, which the oracle's routine
-    /// resolution reads (`PackageClass::findLocalRoutine`) and this crate's
-    /// does not.
-    fn package_routines_write() -> Loud {
-        Loud {
-            message: owned_message(
-                "a write to a package's .ROUTINES table",
-                Some(Owner::Phase9),
-            ),
-        }
-    }
-
     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
     /// nor a class object, the two kinds that hold methods of their own here.
     /// No program reaches it: the routes tried are `SETMETHOD` sent to an
@@ -1305,6 +1293,10 @@ struct Interp {
     /// the routine's **upcased** name, holding its index in
     /// `Program::directives`.
     routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
+    /// The programs whose `.ROUTINES` table a program has written, whose
+    /// routine lookups read that table in place of [`routines`] --
+    /// `PackageClass::findLocalRoutine` (`classes/PackageClass.cpp:822`).
+    routines_written: rustc_hash::FxHashSet<ProgramId>,
     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
     /// oracle's `publicRoutines`, a second table beside `routines` exactly as
     /// [`package_public_classes`] is beside [`package_classes`].
@@ -1692,6 +1684,15 @@ enum MergedRoutine {
     Library(usize),
 }
 
+/// What a routine lookup through a package whose `.ROUTINES` table a
+/// program wrote finds: a routine the tables beside it hold, or the object
+/// the written table holds.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum FoundRoutine {
+    Merged(MergedRoutine),
+    Object(ObjRef),
+}
+
 impl MergedRoutine {
     /// What a call that finds this entry runs.
     pub(crate) fn resolved(self) -> run::Resolved {
@@ -2072,6 +2073,7 @@ impl Interp {
             chunks: NameMap::default(),
             chunks_refused: 0,
             routines: FxHashMap::default(),
+            routines_written: rustc_hash::FxHashSet::default(),
             package_public_routines: FxHashMap::default(),
             merged_public_routines: FxHashMap::default(),
             merged_public_classes: NameMap::default(),
@@ -2859,6 +2861,7 @@ impl Interp {
             chunks: _,
             chunks_refused: _,
             routines: _,
+            routines_written: _,
             package_public_routines: _,
             merged_public_routines: _,
             merged_public_classes,

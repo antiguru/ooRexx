@@ -568,33 +568,34 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
     );
 }
 
-/// Every mutator a `StringTable` answers refuses on a package's `.ROUTINES`,
-/// whose contents the oracle's `CALL` resolves through: measured, after
-/// `.routines~put(.routines~bar, 'FOO')` the oracle's `call foo` runs `BAR`.
-/// Reads, `~addRoutine` and a `.METHODS` write still answer.
+/// Every mutator a `StringTable` answers changes what a package's routine
+/// names resolve to once written, as `PackageClass::findLocalRoutine` reads
+/// the same table: each answer measured on the oracle.
 #[test]
-fn a_write_to_a_packages_routines_table_refuses() {
+fn a_write_to_a_packages_routines_table_moves_call_resolution() {
     let tail =
         "call foo\nsay result\n::routine foo\n  return 'foo'\n::routine bar\n  return 'bar'\n";
-    for write in [
-        ".routines~put(.routines~bar, 'FOO')",
-        ".routines['FOO'] = .routines~bar",
-        ".routines~foo = .routines~bar",
-        ".routines~remove('BAR')",
-        ".routines~removeItem(.routines~bar)",
-        ".routines~empty",
-        ".routines~setEntry('FOO', .routines~bar)",
-        ".routines~removeEntry('BAR')",
-        ".routines~putAll(.stringtable~new~~put(1, 'X'))",
+    let missing = "     2 *-* call foo\nError 43 running /t.rex line 2:  Routine not found.\n\
+                   Error 43.1:  Could not find routine \"FOO\".\n";
+    for (write, expected) in [
+        (".routines~put(.routines~bar, 'FOO')", (0, "bar\n", "")),
+        (".routines['FOO'] = .routines~bar", (0, "bar\n", "")),
+        (".routines~foo = .routines~bar", (0, "bar\n", "")),
+        (".routines~setEntry('FOO', .routines~bar)", (0, "bar\n", "")),
+        (".routines~remove('BAR')", (0, "foo\n", "")),
+        (".routines~removeItem(.routines~bar)", (0, "foo\n", "")),
+        (".routines~removeEntry('BAR')", (0, "foo\n", "")),
+        (
+            ".routines~putAll(.stringtable~new~~put(1, 'X'))",
+            (0, "foo\n", ""),
+        ),
+        (".routines~empty", (213, "", missing)),
+        (".routines~remove('FOO')", (213, "", missing)),
     ] {
+        let (code, stdout, stderr) = expected;
         assert_eq!(
             run_source(&format!("{write}\n{tail}")),
-            (
-                120,
-                String::new(),
-                "rexx-exec: a write to a package's .ROUTINES table is not implemented (Phase 9)\n"
-                    .to_owned()
-            ),
+            (code, stdout.to_owned(), stderr.to_owned()),
             "{write}"
         );
     }

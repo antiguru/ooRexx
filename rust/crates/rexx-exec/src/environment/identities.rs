@@ -824,6 +824,15 @@ impl Interp {
         let Some(program) = package else {
             return ObjRef::NIL;
         };
+        if !self.routines_written.is_empty() {
+            return match self.find_written_routine(program, upper) {
+                Some(crate::FoundRoutine::Merged(merged)) => {
+                    self.merged_routine_object(merged).unwrap_or(ObjRef::NIL)
+                }
+                Some(crate::FoundRoutine::Object(object)) => object,
+                None => ObjRef::NIL,
+            };
+        }
         match self.find_routine(program, upper) {
             Some(merged) => self.merged_routine_object(merged).unwrap_or(ObjRef::NIL),
             None => ObjRef::NIL,
@@ -919,6 +928,69 @@ impl Interp {
                         .copied()
                 })
             })
+    }
+
+    /// [`Interp::find_routine`] where a package in the lineage is one whose
+    /// `.ROUTINES` table a program wrote: that table is read in place of the
+    /// package's own routines.
+    pub(crate) fn find_written_routine(
+        &mut self,
+        program: ProgramId,
+        upper: &[u8],
+    ) -> Option<crate::FoundRoutine> {
+        let lineage: Vec<ProgramId> = self.package_lineage(program).collect();
+        for package in lineage.iter().copied() {
+            if self.routines_written.contains(&package) {
+                let table =
+                    self.package_string_table(package, crate::environment::PackageTable::Routines)?;
+                if let Some(object) = self.native_entry(table, upper) {
+                    return Some(crate::FoundRoutine::Object(object));
+                }
+            } else if let Some(installed) =
+                self.routines.get(&package).and_then(|held| held.get(upper))
+            {
+                return Some(crate::FoundRoutine::Merged(
+                    crate::MergedRoutine::Installed(*installed),
+                ));
+            }
+        }
+        lineage
+            .into_iter()
+            .find_map(|package| {
+                self.merged_public_routines
+                    .get(&package)?
+                    .get(upper)
+                    .copied()
+            })
+            .map(crate::FoundRoutine::Merged)
+    }
+
+    /// What a call runs for a `Routine` object a written `.ROUTINES` table
+    /// holds. The oracle casts the entry unchecked
+    /// (`classes/PackageClass.cpp:827`), so anything else is refused.
+    pub(crate) fn routine_object_resolution(
+        &self,
+        object: ObjRef,
+    ) -> Result<crate::run::Resolved, crate::error::Failure> {
+        let record = self.executable_sources.get(&object).copied();
+        match record {
+            Some(crate::ExecutableRecord {
+                routine: Some((program, directive)),
+                ..
+            }) => Ok(crate::run::Resolved::Routine(crate::InstalledRoutine {
+                program,
+                directive,
+            })),
+            Some(crate::ExecutableRecord {
+                source: crate::ExecutableSource::Loaded { code },
+                installed: None,
+                ..
+            }) => Ok(crate::run::Resolved::MergedLibraryRoutine(code)),
+            _ => Err(crate::Loud::receiver_class(
+                "a .ROUTINES entry that is not a routine this crate built",
+            )
+            .into()),
+        }
     }
 
     /// The `Routine` object one imported routine is: the `::ROUTINE`'s own,

@@ -152,7 +152,7 @@ impl Interp {
     /// evaluated and nothing entered: [`Interp::resolve_fixed_call`], then
     /// [`Interp::resolve_routine_call`].
     pub(crate) fn resolve_call(
-        &self,
+        &mut self,
         name: &[u8],
         search_labels: bool,
     ) -> Result<Resolved, Failure> {
@@ -216,8 +216,8 @@ impl Interp {
     /// arguments have run (`RexxActivation::externalCall`,
     /// `execution/RexxActivation.cpp:3062-3105`), for a name
     /// [`Interp::resolve_fixed_call`] answered `None` for.
-    pub(crate) fn resolve_routine_call(&self, name: &[u8]) -> Result<Resolved, Failure> {
-        let resolved = match self.package_routine_lookup(name) {
+    pub(crate) fn resolve_routine_call(&mut self, name: &[u8]) -> Result<Resolved, Failure> {
+        let resolved = match self.package_routine_lookup(name)? {
             Some(resolved) => resolved,
             // **Ahead of the external file search and behind
             // everything above it.** `Setup.cpp` resolves
@@ -277,10 +277,23 @@ impl Interp {
     /// *call* records none, so it still sees its own package alone --
     /// measured, the same body finds the caller's `::ROUTINE` through
     /// `Routine~newFile` and raises 43.1 through `call`.
-    fn package_routine_lookup(&self, name: &[u8]) -> Option<Resolved> {
-        let program = self.running_activation()?.program_id;
-        self.find_routine(program, &name.to_ascii_uppercase())
-            .map(crate::MergedRoutine::resolved)
+    fn package_routine_lookup(&mut self, name: &[u8]) -> Result<Option<Resolved>, Failure> {
+        let Some(program) = self.running_activation().map(|running| running.program_id) else {
+            return Ok(None);
+        };
+        let upper = name.to_ascii_uppercase();
+        if self.routines_written.is_empty() {
+            return Ok(self
+                .find_routine(program, &upper)
+                .map(crate::MergedRoutine::resolved));
+        }
+        match self.find_written_routine(program, &upper) {
+            Some(crate::FoundRoutine::Merged(merged)) => Ok(Some(merged.resolved())),
+            Some(crate::FoundRoutine::Object(object)) => {
+                self.routine_object_resolution(object).map(Some)
+            }
+            None => Ok(None),
+        }
     }
 
     /// Takes the shared value buffer **with the caller's run intact**, and the
@@ -421,7 +434,7 @@ impl Interp {
 
     /// What a call runs, once its arguments have run.
     fn settle_after_arguments(
-        &self,
+        &mut self,
         resolution: CallResolution<'_>,
         name: &[u8],
     ) -> Result<Resolved, Failure> {

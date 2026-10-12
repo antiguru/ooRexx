@@ -217,14 +217,12 @@ fn refusal_outside(
     }
 }
 
-/// Refuses a program's write to a package's `.ROUTINES` table: the table is
-/// what the oracle resolves a `CALL` through, and this crate resolves it
-/// elsewhere, so a kept write would answer wrongly.
-fn refuse_routines_write(interp: &Interp, receiver: ObjRef) -> Result<(), Failure> {
-    if interp.is_package_routines_table(receiver) {
-        return Err(Loud::package_routines_write().into());
+/// Records a write to a package's `.ROUTINES` table, which is what the
+/// oracle resolves that package's routine names through from then on.
+fn note_routines_write(interp: &mut Interp, receiver: ObjRef) {
+    if let Some(program) = interp.package_routines_program(receiver) {
+        interp.routines_written.insert(program);
     }
-    Ok(())
 }
 
 /// The classes whose instances get a store, named rather than derived for
@@ -1104,7 +1102,7 @@ pub(crate) fn store_remove(
     receiver: ObjRef,
     index: ObjRef,
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     take_merged(interp, receiver, index, Removal::Answered)
 }
 
@@ -1246,7 +1244,7 @@ pub(super) fn store_put(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     let Some(item) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("item").into());
     };
@@ -1394,7 +1392,7 @@ fn native_hash_empty(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"EMPTY"));
     }
@@ -1460,7 +1458,7 @@ fn native_hash_remove(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"REMOVE"));
     }
@@ -1477,7 +1475,7 @@ fn native_hash_remove_item(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"REMOVEITEM"));
     }
@@ -1637,7 +1635,7 @@ pub(crate) fn native_put(
     name: &[u8],
     item: ObjRef,
 ) -> Result<(), Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     let index = interp.text(name);
     interp.roots.activity_mut().push_temp(index);
     if multi_value(interp, receiver) {
@@ -1812,7 +1810,7 @@ pub(super) fn store_entry_write(
     index: ObjRef,
     item: ObjRef,
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     insert(interp, receiver, index, Some(item))?;
     Ok(None)
 }
@@ -1966,7 +1964,7 @@ fn native_hash_set_entry(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"SETENTRY"));
     }
@@ -1989,7 +1987,7 @@ fn native_directory_set_method(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"SETMETHOD"));
     }
@@ -2039,7 +2037,7 @@ fn native_directory_unset_method(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"UNSETMETHOD"));
     }
@@ -2058,7 +2056,7 @@ fn native_hash_remove_entry(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    refuse_routines_write(interp, receiver)?;
+    note_routines_write(interp, receiver);
     if !owns(interp, receiver) {
         return Err(not_this_task(interp, receiver, b"REMOVEENTRY"));
     }
