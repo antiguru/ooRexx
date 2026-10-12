@@ -231,3 +231,54 @@ stale (gate-only, re-derived at the phase close).
    the oracle lists its method dictionary's hash order with shadowed entries repeated; enhancing names
    now appear in both (pre-existing ordering divergence, `ord.rex`).
 6. Annotation tables are built eagerly for every `Method`/`Routine` object, now as stores; measured at most +28k Ir on `startup` and part of `Body::trace` in collections.
+
+## Rulings applied
+
+On top of `cfb8af83f`, one commit per item.
+
+1. **`Package~copy`, option (a): `48326cad0`.** `Interp::copy_package` mints a `ProgramId` over the
+   same `Rc<Program>` and destructures every `Interp` field by name with no `..`, so a field added
+   later does not compile until the copy decides about it; `routine_generation`, missing from my
+   first list, was the compiler's catch. Cloned to the copy: options, initial option settings,
+   security manager, routine, public-routine, imported-routine, class, public-class, imported-class
+   and namespace maps, the written-`.ROUTINES` mark, imports, parent, compiled-method name, required
+   path, untranslated mark. `.ROUTINES` and the package annotation table are `COPY` sends; `.METHODS`,
+   `.RESOURCES`, the local directory (when built) and the prolog object are shared, which is
+   `RexxObject::copy` plus `PackageClass::deepCopy` (`classes/PackageClass.cpp:362`-`:412`). Sub-structs
+   (`activity`, `object_model`, `environment`, `option_writes` beyond its `initial` map) are not
+   destructured. The REXX package's copy stays refused (`.object~package~copy`: oracle rc 0); it is
+   now the `native_method` row's example in `refusal-sites.tsv` and the refusal
+   `a_refusal_after_main_ended_in_a_nested_round_is_reported` uses. Witness `lang/package_copy.rex`
+   from `pcopy.rex`/`pcopy2.rex` without `~loadLibrary('rxmath')` (no `rxmath` loads here, on either
+   copy or original).
+2. **Native routine frame `~executable`: `28bf0c253`.** Probes `nframes4.rex`, `nframes5.rex`,
+   `nframes6.rex` (with `~firstItem`: a frames list indexes from 0, so the report's earlier `[1]`
+   readings were the second frame). Oracle: one source-less `Routine` per name (`SysSleep` twice and
+   as a function answer one object, `SysFileDelete` another), package the REXX package, not
+   `.context~package`. `Interp::rexx_routine_executable` keeps one per upcased name, rooted globally,
+   for a native routine level whose package is the REXX package. A library routine level still
+   refuses (oracle: `e~package` is `.nil`; no library loads here to compare). Witness
+   `lang/rexx_routine_frame_executable.rex`.
+3. **`.nil`'s behaviour: `78d84b7e6`.** `ObjectModel::nil_behaviour`, a copy of `Object`'s instance
+   behaviour with `COPY`, `START` and `OBJECTNAME=` hidden in front, built with the model, as
+   `memory/Setup.cpp:1758`-`:1760` does before the library loads. Callgrind against `31e88f857`
+   (`-p "dispatch dispatchclass sendloop rexxcps startup"`, `t8b-cg/n1`): +0.0000% on the four send
+   programs, startup +0.011%. `.nil~instanceMethods` lists 29 names here and 32 on the oracle, which
+   lists the `Object` entries the hidden names shadow (concern 5 above). Witness
+   `lang/nil_hidden_methods.rex`.
+4. **`whole_groups` Object rows: `946ac3834`.** `REXX_CORPUS_GATE=1
+   REXX_WHOLE_GROUPS_ONLY=base/class/Object.testGroup ... --test concurrency_tests
+   each_group_of_the_derived_list_in_one_run_in_both_modes`: both modes now `failure, assertions 272,
+   rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_SETMETHOD]`; rows
+   rewritten. The same command failed in 2 of 4 runs before any edit with `bin-rexx/rexx appeared
+   while it was replaced` (`interpreter_bin`, two runs linking one directory's binary at once); a link
+   that finds the same binary already in place now stands, and 4 of 4 runs pass.
+5. `OBJECTNAME=` on strings and small integers, and R16: unchanged, awaiting Moritz.
+
+Checks (statuses unpiped): `cargo fmt --all --check` 0; `cargo clippy -j 4 -p rexx-exec
+--all-targets -- -D warnings` 0 (and `-p rexx-classes` at `78d84b7e6`: 0); `--lib` of rexx-exec 0
+(1085 passed, after moving the scheduler test's refusal); `-p rexx-parse --test sourceline_oracle` 0;
+`REXX_CORPUS_GATE=1 --test corpus --test collect_stress` 0 at `48326cad0` (27+1 ignored, 37);
+`--test refusal_sites --test refusal_dispositions` 0; `--test concurrency_tests --test suite` 0
+(54, 50); suite groups `base/class/Package,base/class/Object,base/class/StackFrame`: same not-passed
+sets as the earlier final run, no test newly failing.
