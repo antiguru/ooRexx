@@ -999,6 +999,13 @@ static RESUMABLE_CLASS_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
         native_hash_collection_new,
     ),
     ("Directory", "NEW", Arity::Counted, native_directory_new),
+    // `AddClassMethod("New", MethodClass::newRexx, A_COUNT)` and
+    // `RoutineClass::newRexx`, `memory/Setup.cpp:1091` and `:1128`, and the
+    // two `newFile` rows beside them: a compiled executable, then `INIT`.
+    ("Method", "NEW", Arity::Counted, native_executable_new),
+    ("Routine", "NEW", Arity::Counted, native_executable_new),
+    ("Method", "NEWFILE", Arity::Fixed(2), native_new_file),
+    ("Routine", "NEWFILE", Arity::Fixed(2), native_new_file),
     // Every class whose own `newRexx` is an allocation followed by
     // `completeNewObject` and nothing else -- `memory/Setup.cpp:766`, `:821`,
     // `:902`, `:953`, `:982`, `:1006`, `:1327`, `:1350`, `:1618`.
@@ -1073,19 +1080,14 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
     // the mapped classes whose `of` is `MapCollection~OF` in Rexx.
     ("Set", "OF", Arity::Counted, hash::native_set_of),
-    // The classes whose own `newRexx` checks its arguments and then builds
-    // something this crate does not -- a compiled executable, a loaded
-    // package (`memory/Setup.cpp:1091`, `:1128`, `:1156`). Each checks
-    // exactly what the C++ checks before that point and refuses loudly past
-    // it.
+    // `loadExternalMethod`, `loadExternalRoutine` and `Package~new`
+    // (`memory/Setup.cpp:1093`, `:1130`, `:1156`).
     (
         "Method",
         "LOADEXTERNALMETHOD",
         Arity::Fixed(2),
         native_load_external,
     ),
-    ("Method", "NEW", Arity::Counted, native_executable_new),
-    ("Method", "NEWFILE", Arity::Fixed(2), native_new_file),
     ("Package", "NEW", Arity::Counted, native_package_new),
     (
         "Routine",
@@ -1093,8 +1095,6 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
         Arity::Fixed(2),
         native_load_external,
     ),
-    ("Routine", "NEW", Arity::Counted, native_executable_new),
-    ("Routine", "NEWFILE", Arity::Fixed(2), native_new_file),
     // The classes whose `newRexx` is the refusal and nothing else, because
     // their instances come only from native code (`utilityclasses.xml:429`,
     // `:6910`) or from the `>name` operator

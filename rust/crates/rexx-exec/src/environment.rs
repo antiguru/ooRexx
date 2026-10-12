@@ -1274,6 +1274,9 @@ impl Interp {
     pub(crate) fn native_entry(&mut self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
         match &self.heap.get(object)?.body {
             Body::Native(native) => native.entry(index),
+            Body::Instance { pools, .. } if let Some(scope) = self.message_entry_scope(object) => {
+                pools.get(scope, index)
+            }
             Body::Instance { .. } => {
                 for held in self.store_indexes(object) {
                     if self.to_text(held).as_ref() == index {
@@ -1286,8 +1289,8 @@ impl Interp {
         }
     }
 
-    /// Stores one entry on a `Body::Native`, and does nothing for a receiver
-    /// that is not one.
+    /// Stores one entry on a `Body::Native` or a `Message` subclass instance,
+    /// and does nothing for a receiver that is neither.
     pub(crate) fn set_native_entry(&mut self, object: ObjRef, index: &[u8], value: ObjRef) {
         #[cfg(test)]
         NATIVE_ENTRY_WRITES.with(|writes| {
@@ -1298,16 +1301,23 @@ impl Interp {
             && let Body::Native(native) = &mut held.body
         {
             native.set_entry(index, value);
+        } else if let Some(scope) = self.message_entry_scope(object) {
+            self.set_pool_variable(object, scope, index, value);
         }
     }
 
-    /// Removes one entry from a `Body::Native`, and does nothing for a
-    /// receiver that is not one.
+    /// Removes one entry from a `Body::Native` or a `Message` subclass
+    /// instance, and does nothing for a receiver that is neither.
     pub(crate) fn remove_native_entry(&mut self, object: ObjRef, index: &[u8]) {
-        if let Some(held) = self.heap.get_mut(object)
-            && let Body::Native(native) = &mut held.body
-        {
-            native.remove_entry(index);
+        let scope = self.message_entry_scope(object);
+        match self.heap.get_mut(object).map(|held| &mut held.body) {
+            Some(Body::Native(native)) => native.remove_entry(index),
+            Some(Body::Instance { pools, .. }) => {
+                if let Some(scope) = scope {
+                    pools.clear(scope, index);
+                }
+            }
+            _ => {}
         }
     }
 

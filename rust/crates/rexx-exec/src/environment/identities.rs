@@ -399,6 +399,26 @@ impl Interp {
         Some(object)
     }
 
+    /// The executable records [`Interp::copy_method_object`] carries over,
+    /// for `object`, an instance copy of `original`, a `Method` or `Routine`
+    /// subclass instance; nothing for any other `original`.
+    pub(crate) fn copy_executable_records(&mut self, original: ObjRef, object: ObjRef) {
+        let Some(source) = self.executable_sources.get(&original).copied() else {
+            return;
+        };
+        self.executable_sources.insert(object, source);
+        if let Some(writes) = self.method_flag_writes.get(&original).copied() {
+            self.method_flag_writes.insert(object, writes);
+        }
+        if let Some(template) = source.installed {
+            let copy = self.copy_method_identity(template);
+            if let Some(record) = self.executable_sources.get_mut(&object) {
+                record.installed = Some(copy);
+            }
+            self.executable_objects.insert(copy, object);
+        }
+    }
+
     /// A new object over a clone of `original`'s native body, carrying
     /// `scope` where one is given, and reporting on and flagged as
     /// `original` is.
@@ -625,6 +645,7 @@ impl Interp {
         }
         match self.heap.get(receiver).map(|held| &held.body) {
             Some(Body::Native(native)) => native.annotations(),
+            Some(Body::Instance { pools, .. }) => self.executable_subclass_annotations(pools),
             _ => None,
         }
         .ok_or_else(|| Loud::receiver_class("a value that carries no annotations").into())
@@ -635,6 +656,13 @@ impl Interp {
     pub(crate) fn method_scope(&self, receiver: ObjRef) -> Result<ObjRef, Failure> {
         match self.heap.get(receiver).map(|held| &held.body) {
             Some(Body::Native(native)) => Ok(native.scope().unwrap_or(ObjRef::NIL)),
+            // A subclass instance is never installed at a class: `define` and
+            // `setMethod` refuse it (93.974).
+            Some(Body::Instance { pools, .. })
+                if self.executable_subclass_annotations(pools).is_some() =>
+            {
+                Ok(ObjRef::NIL)
+            }
             _ => Err(Loud::receiver_class("a value that carries no method scope").into()),
         }
     }

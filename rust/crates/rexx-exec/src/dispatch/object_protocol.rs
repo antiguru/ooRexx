@@ -662,6 +662,7 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     interp.roots.activity_mut().push_temp(copy);
     duplicate_collection_stores(interp, copy);
     duplicate_stem_store(interp, copy);
+    duplicate_executable(interp, receiver, copy);
     if interp.is_message(copy) {
         reset_copied_message(interp, copy);
     }
@@ -745,6 +746,26 @@ fn duplicate_stem_store(interp: &mut Interp, copy: ObjRef) {
     interp.roots.activity_mut().push_temp(fresh);
     let scope = interp.object_model().stem;
     interp.set_pool_variable(copy, scope, super::hash::stem::STEM_STORE, fresh);
+}
+
+/// Carries a `Method` or `Routine` subclass instance's executable records,
+/// and an annotation table of its own, over to `copy`, as
+/// [`Interp::copy_method_object`] does for a base one.
+fn duplicate_executable(interp: &mut Interp, original: ObjRef, copy: ObjRef) {
+    interp.copy_executable_records(original, copy);
+    let model = interp.object_model();
+    for scope in [model.method, model.routine] {
+        let held = interp
+            .pools_of(copy)
+            .and_then(|pools| pools.get(scope, super::construct::EXECUTABLE_ANNOTATIONS));
+        let Some(body) = held.and_then(|table| interp.heap.get(table).map(|t| t.body.clone()))
+        else {
+            continue;
+        };
+        let fresh = interp.alloc_with(BehaviourId::OBJECT, body);
+        interp.roots.activity_mut().push_temp(fresh);
+        interp.set_pool_variable(copy, scope, super::construct::EXECUTABLE_ANNOTATIONS, fresh);
+    }
 }
 
 /// `Object~run(method [, option [, argument ...]])`: run a method on this
@@ -1385,7 +1406,32 @@ impl Interp {
         matches!(
             self.heap.get(object).map(|held| &held.body),
             Some(Body::Native(native)) if native.class() == message
-        )
+        ) || self.message_entry_scope(object).is_some()
+    }
+
+    /// The annotation table a `Method` or `Routine` subclass instance holds
+    /// in `pools`, or `None` for any other instance.
+    pub(crate) fn executable_subclass_annotations(
+        &self,
+        pools: &rexx_core::ScopePools,
+    ) -> Option<ObjRef> {
+        let model = self.object_model.as_ref()?;
+        let entry = super::construct::EXECUTABLE_ANNOTATIONS;
+        pools
+            .get(model.method, entry)
+            .or_else(|| pools.get(model.routine, entry))
+    }
+
+    /// The scope a `Message` subclass instance keeps its message's entries
+    /// under, or `None` for any other value.
+    pub(crate) fn message_entry_scope(&self, object: ObjRef) -> Option<ObjRef> {
+        let model = self.object_model.as_ref()?;
+        match &self.heap.get(object)?.body {
+            Body::Instance { class, .. } if model.classes.is_a(*class, model.message) => {
+                Some(model.message)
+            }
+            _ => None,
+        }
     }
 
     /// `MessageClass::sendNotification` (`classes/MessageClass.cpp:645`) once

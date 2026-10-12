@@ -137,10 +137,11 @@ pub(super) fn native_message_new(
             _ => args[3..].to_vec(),
         },
     };
-    if class != interp.object_model().message {
-        return Err(unbuilt_new(interp, class));
-    }
-    let object = interp.native_instance(class);
+    let object = if class == interp.object_model().message {
+        interp.native_instance(class)
+    } else {
+        new_instance(interp, class)?
+    };
     let target = args[0].expect("checked above");
     interp.set_native_entry(object, MESSAGE_TARGET, target);
     let name = interp.text(&name);
@@ -153,9 +154,10 @@ pub(super) fn native_message_new(
     super::begin_init(interp, object, &[])
 }
 
-/// `Method~new(name, source [, context])` and `Routine~new(name, source [,
-/// context])`: the first two are required, and the context is resolved as
-/// `newFile`'s is -- `BaseExecutable::processNewExecutableArgs`
+/// `Method~new(name, source [, context] ...)` and `Routine~new(name, source
+/// [, context] ...)`: the first two are required, the context is resolved as
+/// `newFile`'s is, and `INIT` gets the arguments after it --
+/// `BaseExecutable::processNewExecutableArgs`
 /// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
 /// `RoutineClass::newRexx` share.
 pub(super) fn native_executable_new(
@@ -163,16 +165,13 @@ pub(super) fn native_executable_new(
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let name = executable_name_argument(interp, args)?;
     let Some(source) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_named_argument("source").into());
     };
-    let routine = class == interp.routine_class();
-    if args.len() > 3 || !(routine || class == interp.method_class()) {
-        return Err(unbuilt_new(interp, class));
-    }
+    let (routine, base) = executable_base(interp, class);
     let parent = match args.get(2).copied().flatten() {
         Some(context) => executable_context(interp, context, b"NEW", 3)?,
         None => None,
@@ -190,31 +189,93 @@ pub(super) fn native_executable_new(
             parent,
         )?
     };
-    Ok(Some(object))
+    if class != base {
+        executable_as_instance(interp, object, class, base)?;
+    }
+    super::begin_init(interp, object, args.get(3..).unwrap_or_default())
+}
+
+/// The scope-pool entry, under `Method`'s or `Routine`'s scope, that holds a
+/// subclass instance's annotation table.
+pub(super) const EXECUTABLE_ANNOTATIONS: &[u8] = b"ANNOTATIONS";
+
+/// `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) for an
+/// executable `object` that `base`'s compile built: it becomes an instance of
+/// `class`, a subclass of `base`, keeping its identity, so every record kept
+/// against the object still reaches it.
+fn executable_as_instance(
+    interp: &mut Interp,
+    object: ObjRef,
+    class: ObjRef,
+    base: ObjRef,
+) -> Result<(), Failure> {
+    if interp.classes().is_abstract(class) {
+        let id = interp.classes().id_string(class).as_bytes().to_vec();
+        return Err(Raised::abstract_class(&id).into());
+    }
+    let behaviour = interp.classes().instance_behaviour_handle(class);
+    let Some(held) = interp.heap.get_mut(object) else {
+        return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
+    };
+    let annotations = match &held.body {
+        Body::Native(native) => native.annotations(),
+        _ => None,
+    };
+    let mut pools = rexx_core::ScopePools::new();
+    if let Some(table) = annotations {
+        pools.set(base, EXECUTABLE_ANNOTATIONS, table);
+    }
+    held.body = Body::Instance {
+        class,
+        behaviour,
+        name: None,
+        pools,
+        own: None,
+        native: None,
+    };
+    // See `Interp::reqstr_armed`, which `new_instance` arms for the same
+    // reason.
+    interp.reqstr_armed = true;
+    if interp.classes().has_uninit(class) {
+        interp.heap.set_uninit(object);
+    }
+    Ok(())
 }
 
 /// `Method~newFile(name [, context])` and `Routine~newFile(name [, context])`:
-/// the executable a file's own text becomes -- `MethodClass::newFileRexx`
-/// (`classes/MethodClass.cpp:521`) and `RoutineClass::newFileRexx`
-/// (`classes/RoutineClass.cpp:341`).
+/// the executable a file's own text becomes, then `INIT` with no arguments
+/// -- `MethodClass::newFileRexx` (`classes/MethodClass.cpp:521`) and
+/// `RoutineClass::newFileRexx` (`classes/RoutineClass.cpp:341`).
 pub(super) fn native_new_file(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
+) -> Result<super::NativeStarted, Failure> {
     let class = class_receiver(interp, receiver)?;
     let name = executable_name_argument(interp, args)?;
-    let routine = class == interp.routine_class();
-    if !routine && class != interp.method_class() {
-        return Err(unbuilt_new(interp, class));
-    }
+    let (routine, base) = executable_base(interp, class);
     let parent = match args.get(1).copied().flatten() {
         Some(context) => executable_context(interp, context, b"NEWFILE", 2)?,
         None => None,
     };
     let name = interp.to_text(name).to_vec();
-    interp.new_file_executable(&name, routine, parent).map(Some)
+    let object = interp.new_file_executable(&name, routine, parent)?;
+    if class != base {
+        executable_as_instance(interp, object, class, base)?;
+    }
+    super::begin_init(interp, object, &[])
+}
+
+/// Whether `class` is `Routine` or a subclass of it, and the base class,
+/// `Routine` or `Method`, whose executable it builds.
+fn executable_base(interp: &mut Interp, class: ObjRef) -> (bool, ObjRef) {
+    let routine_class = interp.routine_class();
+    if interp.classes().is_a(class, routine_class) {
+        (true, routine_class)
+    } else {
+        (false, interp.method_class())
+    }
 }
 
 /// `newFile`'s and `new`'s context argument, at `position` of `method`,
@@ -261,19 +322,18 @@ fn executable_context(
 }
 
 /// `MethodClass::loadExternalMethod(name, descriptor)` and
-/// `RoutineClass::loadExternalRoutine` (`memory/Setup.cpp:1091`, `:1130`).
+/// `RoutineClass::loadExternalRoutine` (`memory/Setup.cpp:1093`, `:1130`).
+/// Neither completes a subclass's object: sent to one, each answers the base
+/// class's.
 pub(super) fn native_load_external(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let class = class_receiver(interp, receiver)?;
+    let receiver_class = class_receiver(interp, receiver)?;
     let name = executable_name_argument(interp, args)?;
-    let routine = class == interp.routine_class();
-    if !routine && class != interp.method_class() {
-        return Err(unbuilt_new(interp, class));
-    }
+    let (routine, class) = executable_base(interp, receiver_class);
     let Some(descriptor) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_named_argument("descriptor").into());
     };

@@ -24,3 +24,5 @@ lang/package_default_options.rex
 # 9a Task 8: NEW on subclasses of String, Stem, Method, Routine and Message.
 lang/string_subclass_new.rex
 lang/stem_subclass_new.rex
+lang/executable_subclass_new.rex
+lang/message_subclass_new.rex

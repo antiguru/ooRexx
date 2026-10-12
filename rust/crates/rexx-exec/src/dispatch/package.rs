@@ -933,11 +933,17 @@ fn install_routine(
     let Some(routine) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_named_argument("routine").into());
     };
+    // `classArgument` (`PackageClass::addRoutineRexx`) admits a subclass
+    // instance as well.
+    let routine_class = interp.routine_class();
+    let admitted = interp
+        .class_of_value(routine)
+        .is_some_and(|class| interp.classes().is_a(class, routine_class));
     let Some(installed) = interp
         .executable_sources
         .get(&routine)
         .and_then(|record| record.routine)
-        .filter(|_| interp.class_of_value(routine) == Some(interp.routine_class()))
+        .filter(|_| admitted)
     else {
         return Err(Raised::argument_not_an_instance("routine", "Routine").into());
     };

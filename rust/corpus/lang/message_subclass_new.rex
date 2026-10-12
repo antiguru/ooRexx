@@ -1,0 +1,29 @@
+/* NEW on a Message subclass: the instance keeps the message's target, name
+   and arguments, INIT runs with no arguments, and every Message method works
+   on it, including START, WAIT and COPY. */
+mm = .kmsg~new(.array~of(1, 2), 'items'); say mm~class~id mm~send mm~target~class~id mm~messagename mm~arguments~items
+mm2 = .kmsg~new('abc', 'length'); mm2~start; say mm2~result mm2~completed mm2~hasResult mm2~hasError
+mm3 = .kmsg~new('abc', 'pos', 'I', 'b'); say mm3~send mm3~result
+mm4 = .kmsg~new('abc', 'nosuch'); mm4~start; mm4~wait; say mm4~hasError mm4~errorCondition~code
+say mm4
+mm5 = .kmsg~new('abc', 'pos', 'A', .array~of('c')); say mm5~send
+c = mm3~copy; say c~class~id c~hasResult c~target
+mm6 = .kmsg~new('abcd', 'substr', 'I', 2); say mm6~send
+mm7 = .kmsg~new(.kmsg, 'class'); say mm7~send~id
+mm8 = .kmsg~new('xy', ('LENGTH', .string)); say mm8~send
+say mm~objectName mm~string
+mm9 = .kx~new('hello', 'upper'); say mm9~send mm9~v
+signal on syntax name e1
+x = .kmsg~new('abc')
+e1: say 'e1' condition('O')~code condition('O')~message
+exit
+::class kmsg subclass message
+::method init
+  say 'init' arg()
+::class kx subclass message
+::method init
+  expose v
+  v = 'set'
+::method v
+  expose v
+  return v
