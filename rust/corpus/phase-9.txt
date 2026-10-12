@@ -47,5 +47,7 @@ lang/package_copy.rex
 # 9a Task 10 fix: class-side Method objects keyed by their defining class.
 lang/class_side_method_objects.rex
 
-# 9a final review fixes: a package's store-backed local in the class search.
+# 9a final review fixes: a package's store-backed local in the class search,
+# and a Method/Routine subclass copy's own annotation table.
 lang/package_local_find_class.rex
+lang/executable_subclass_copy_annotations.rex

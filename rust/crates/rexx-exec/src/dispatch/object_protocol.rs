@@ -802,6 +802,7 @@ fn duplicate_executable(interp: &mut Interp, original: ObjRef, copy: ObjRef) {
         };
         let fresh = interp.alloc_with(BehaviourId::OBJECT, body);
         interp.roots.activity_mut().push_temp(fresh);
+        duplicate_collection_stores(interp, fresh);
         interp.set_pool_variable(copy, scope, super::construct::SUBCLASS_ANNOTATIONS, fresh);
     }
 }
