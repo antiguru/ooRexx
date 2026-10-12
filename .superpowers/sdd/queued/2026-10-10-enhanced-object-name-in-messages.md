@@ -28,3 +28,5 @@ This crate (`rexx-run` at `6a87cd616`), rc 159:
     Error 97.1:  Object "an Object" does not understand message "NOSUCH".
 
 Suspected site: the default object name of a `Class~enhanced` instance (`dispatch/class_protocol.rs` `native_enhanced` and the object-name rendering): the oracle prefixes `enhanced`.
+
+Closed 2026-10-12 by Phase 9a Task 8b at `70d314bac`: an unnamed enhanced instance renders `enhanced <id>` wherever its string value is read. Witness `rust/corpus/lang/enhanced_runs_new.rex` (`Object "enhanced THING" does not understand message "NOPE".`); `t4b.rex` itself is byte-identical on the three descriptors.

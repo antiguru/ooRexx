@@ -51,3 +51,5 @@ This crate (`rexx-run` at `6a87cd616`), rc 163:
     Error 93.902:  Too many arguments in invocation of method; 0 expected.
 
 Suspected site: `dispatch/class_protocol.rs` `native_enhanced`, which calls `new_instance` and then INIT with every argument; the oracle (`ClassClass.cpp:1470`) sends NEW to the receiver.
+
+Closed 2026-10-12 by Phase 9a Task 8b at `70d314bac`: `enhanced` sends NEW to an Enhanced Subclass of the receiver. Witness `rust/corpus/lang/enhanced_primitive_receivers.rex` (its first two lines are `b7_enhanced_array` and `b7_enhanced_string`).
