@@ -251,11 +251,9 @@ fn an_object_as_a_do_over_target_is_array_requested() {
         "a class object must raise the oracle's own noarray, got {stderr:?}"
     );
 
-    // The adjacent successes: `.environment` has a store and iterates
-    // through `MAKEARRAY` (measured, oracle `69` at rc 0), and a
-    // `StringTable` built on the map iterates by its own walk, whose count
-    // is order-independent for the reason `Interp::hash_collection_indexes`
-    // gives.
+    // The adjacent successes: `.environment` and `.methods` have a store and
+    // iterate through `MAKEARRAY` (measured, oracle `69` at rc 0 for
+    // `.environment`).
     assert_eq!(
         run_source(b"n = 0\ndo e over .environment\n  n = n + 1\nend\nsay n\n"),
         (0, "69\n".to_string(), String::new())

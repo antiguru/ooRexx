@@ -12,3 +12,7 @@ lang/object_copy_method.rex
 lang/unknown_argument_list.rex
 lang/define_methods_supplier.rex
 lang/array_argument_callers.rex
+
+# 9a Task 6: hash methods on the condition object and the package tables.
+lang/condition_object_hash.rex
+lang/package_tables_hash.rex

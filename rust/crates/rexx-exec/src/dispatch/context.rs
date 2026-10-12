@@ -469,12 +469,9 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             let table = interp
                 .package_string_table(program, crate::environment::PackageTable::Routines)
                 .ok_or_else(|| Loud::unknown_receiver("a routine whose package has no table"))?;
-            match interp.heap.get(table).map(|held| &held.body) {
-                Some(Body::Native(native)) => native.entry(&name).ok_or_else(|| {
-                    Loud::unknown_receiver("a routine with no package entry").into()
-                }),
-                _ => Err(Loud::unknown_receiver("a package table this crate did not build").into()),
-            }
+            interp
+                .native_entry(table, &name)
+                .ok_or_else(|| Loud::unknown_receiver("a routine with no package entry").into())
         }
         // An internal call runs its caller's code, and answers its caller's
         // executable: measured, oracle rc 0, an internal routine called from

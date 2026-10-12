@@ -555,10 +555,7 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
             "{class}~{method}"
         );
     }
-    let (code, _, stderr) = run_source(
-        "m = .t~new~start('boom')\nm~wait\nc = m~errorCondition\nsay c~items\n\
-         ::class t\n::method boom unguarded\n  return 1/0\n",
-    );
+    let (code, _, stderr) = run_source("say .context~package~local~items\n");
     assert_eq!(code, 120);
     assert!(
         stderr.ends_with(

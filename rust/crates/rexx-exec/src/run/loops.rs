@@ -825,9 +825,9 @@ impl Interp {
         )
     }
 
-    /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
-    /// `.resources`, or a package's `~publicClasses` -- or a `Directory` built
-    /// on the same map, a package's `~local`.
+    /// Whether `value` is a `StringTable` or a `Directory` built on
+    /// `NativeObject`'s map, such as an `~annotations` table or a package's
+    /// `~local`.
     fn is_hash_collection(&mut self, value: ObjRef) -> bool {
         let Some(Body::Native(native)) = self.heap.get(value).map(|object| &object.body) else {
             return false;

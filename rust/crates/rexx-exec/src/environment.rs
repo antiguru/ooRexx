@@ -1036,12 +1036,10 @@ impl Interp {
         if entries.is_empty() && !force {
             return None;
         }
-        let class = self.environment_model().string_table;
         // The table is rooted before anything it will hold is allocated, and
         // each value goes into it as soon as it exists: `alloc_with` collects
-        // before it allocates, and a `Body::Native`'s entries are traced, so
-        // a value stored here survives the next value's allocation.
-        let table = self.native_instance(class);
+        // before it allocates.
+        let table = crate::dispatch::hash::new_string_table(self).ok()?;
         self.roots
             .add_global(&package_table_root_key(program, kind), table);
         self.package_tables.insert((program, kind), table);
@@ -1094,11 +1092,11 @@ impl Interp {
                 }
                 TableValue::Lines(lines) => self.line_array(&lines),
             };
-            let object = self.heap.get_mut(table).expect("just allocated and rooted");
-            let Body::Native(native) = &mut object.body else {
-                unreachable!("allocated as Body::Native by native_instance")
-            };
-            native.set_entry(&name, value);
+            self.roots.activity_mut().push_temp(value);
+            if crate::dispatch::hash::directory_put(self, table, &name, value).is_err() {
+                self.roots.activity_mut().pop_frame(frame);
+                return None;
+            }
         }
         self.roots.activity_mut().pop_frame(frame);
         Some(table)

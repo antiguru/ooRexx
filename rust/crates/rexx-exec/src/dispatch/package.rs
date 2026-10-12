@@ -14,7 +14,7 @@
 
 use rustc_hash::FxHashMap;
 
-use rexx_core::{Body, ObjRef};
+use rexx_core::ObjRef;
 
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, required_string_named_argument};
 use crate::environment::PackageTable;
@@ -628,22 +628,15 @@ fn package_table_entries(
     let Some(table) = interp.package_string_table(program, kind) else {
         return Ok(Vec::new());
     };
-    Ok(table_pairs(interp, table))
-}
-
-/// Every (key, value) a `Body::Native` table holds.
-fn table_pairs(interp: &Interp, table: ObjRef) -> Vec<(Box<[u8]>, ObjRef)> {
-    let Some(object) = interp.heap.get(table) else {
-        return Vec::new();
-    };
-    let Body::Native(native) = &object.body else {
-        return Vec::new();
-    };
-    native
-        .keys()
-        .into_iter()
-        .filter_map(|key| native.entry(&key).map(|value| (key, value)))
-        .collect()
+    let mut pairs = Vec::new();
+    for index in super::hash::store_indexes(interp, table) {
+        let Some(value) = super::hash::store_item(interp, table, index) else {
+            continue;
+        };
+        let key = interp.to_text(index).into_owned().into_boxed_slice();
+        pairs.push((key, value));
+    }
+    Ok(pairs)
 }
 
 /// `PackageClass::getNamespacesRexx`: the qualifiers this package's
@@ -867,11 +860,8 @@ fn install_routine(
     // `.ROUTINES` answers this same table, so the write has to reach it --
     // measured, oracle rc 0, `.routines~allIndexes` carries a name added by
     // `~addRoutine`.
-    if let Some(table) = interp.package_string_table_for_write(program, PackageTable::Routines)
-        && let Some(object) = interp.heap.get_mut(table)
-        && let Body::Native(native) = &mut object.body
-    {
-        native.set_entry(&name, routine);
+    if let Some(table) = interp.package_string_table_for_write(program, PackageTable::Routines) {
+        super::hash::directory_put(interp, table, &name, routine)?;
     }
     Ok(Some(receiver))
 }

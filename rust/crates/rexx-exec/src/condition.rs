@@ -13,7 +13,7 @@
 //! the Directory `Activity::createConditionObject` builds, with the entries
 //! the raised condition's own kind carries.
 
-use rexx_core::{Body, ObjRef};
+use rexx_core::ObjRef;
 
 use crate::Interp;
 use crate::dispatch::context::LiveLevel;
@@ -166,18 +166,18 @@ impl Interp {
         };
         if let Some(line) = line {
             let position = self.counted(line);
-            self.hash_entry_write(object, key::POSITION, position)?;
+            self.condition_put(object, key::POSITION, position)?;
         }
         let program = match package {
             Package::Program(id) => self.program_display_name(id).to_vec(),
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
         };
         let program = self.text_built(program);
-        self.hash_entry_write(object, key::PROGRAM, program)?;
+        self.condition_put(object, key::PROGRAM, program)?;
         let package = self.package_object(package);
-        self.hash_entry_write(object, key::PACKAGE, package)?;
+        self.condition_put(object, key::PACKAGE, package)?;
         let propagated = self.text(b"1");
-        self.hash_entry_write(object, key::PROPAGATED, propagated)?;
+        self.condition_put(object, key::PROPAGATED, propagated)?;
         Ok(object)
     }
 
@@ -312,8 +312,15 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let object = self.reraise_condition_object(object, origin)?;
         let instruction = self.text(b"SIGNAL");
-        self.hash_entry_write(object, key::INSTRUCTION, instruction)?;
+        self.condition_put(object, key::INSTRUCTION, instruction)?;
         Ok(object)
+    }
+
+    /// `put` of `value` under `name` on a condition object, rooting `value`
+    /// across the index's allocation.
+    fn condition_put(&mut self, object: ObjRef, name: &[u8], value: ObjRef) -> Result<(), Failure> {
+        self.roots.activity_mut().push_temp(value);
+        crate::dispatch::hash::directory_put(self, object, name, value)
     }
 
     /// [`Interp::build_condition_object`] for a condition the innermost
@@ -484,47 +491,20 @@ impl Interp {
             None => {}
         }
 
-        // A native call's object is handed to the extension as it is, so it
-        // gets the `Directory` a program can use; a trapped one is only ever
-        // seen through `condition_copy`.
-        let object = if native && call.is_none() {
-            let order = key::order(syntax);
-            entries.sort_by_key(|(name, _)| order.iter().position(|k| k == name));
-            self.store_directory(&entries)?
-        } else {
-            let class = self
-                .classes()
-                .lookup("Directory")
-                .expect("Directory is a native class");
-            let object = self.native_instance(class);
-            for (name, value) in entries {
-                self.hash_entry_write(object, name, value)?;
-            }
-            object
-        };
+        let order = key::order(syntax);
+        entries.sort_by_key(|(name, _)| order.iter().position(|k| k == name));
+        let object = self.store_directory(&entries)?;
         self.roots.activity_mut().pop_frame(frame);
         self.roots.activity_mut().push_temp(object);
         Ok(object)
     }
 
-    /// `conditionobj->copy()`, what `CONDITION('O')` answers: a new
-    /// store-backed `Directory` holding the same items.
+    /// `conditionobj->copy()`, what `CONDITION('O')` answers.
     pub(crate) fn condition_copy(&mut self, object: ObjRef) -> Result<ObjRef, Failure> {
-        let Some(Body::Native(native)) = self.heap.get(object).map(|held| &held.body) else {
-            let caller = self.caller();
-            let copy = self
-                .send_message(object, b"COPY", None, &[], caller)?
-                .unwrap_or(ObjRef::NIL);
-            self.roots.activity_mut().push_temp(copy);
-            return Ok(copy);
-        };
-        let entries: Vec<(&[u8], ObjRef)> = key::order(native.entry(key::CODE).is_some())
-            .iter()
-            .filter_map(|name| Some((*name, native.entry(name)?)))
-            .collect();
-        let frame = self.roots.activity_mut().push_frame();
-        let copy = self.store_directory(&entries)?;
-        self.roots.activity_mut().pop_frame(frame);
+        let caller = self.caller();
+        let copy = self
+            .send_message(object, b"COPY", None, &[], caller)?
+            .unwrap_or(ObjRef::NIL);
         self.roots.activity_mut().push_temp(copy);
         Ok(copy)
     }
@@ -637,9 +617,6 @@ impl Interp {
     /// `CONDITION('A')` reads `ADDITIONAL` back through this rather than
     /// re-deriving it, so the two cannot disagree.
     pub(crate) fn condition_entry(&mut self, object: ObjRef, name: &[u8]) -> Option<ObjRef> {
-        if let Some(Body::Native(native)) = self.heap.get(object).map(|held| &held.body) {
-            return native.entry(name).filter(|answer| *answer != ObjRef::NIL);
-        }
         let index = self.text(name);
         self.roots.activity_mut().push_temp(index);
         let caller = self.caller();
