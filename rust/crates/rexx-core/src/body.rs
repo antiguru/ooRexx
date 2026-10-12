@@ -822,58 +822,47 @@ pub struct ObjectMethod {
 #[derive(Clone, Debug, Default)]
 pub struct ObjectMethods {
     set: Vec<(Box<[u8]>, Option<ObjectMethod>)>,
-    enhanced: Vec<(Box<[u8]>, ObjectMethod)>,
-    /// `RexxBehaviour::setEnhanced`, which `RexxClass::enhanced` sets on the
-    /// object it returns (`classes/ClassClass.cpp:1478`) and
-    /// `RexxObject::defaultName` reads to answer `enhanced <id>` in place of
-    /// the article form (`classes/ObjectClass.cpp:1763`-`:1767`).
-    enhanced_instance: bool,
+    /// The "Enhanced Subclass" `Class~enhanced` built this object from, whose
+    /// instance behaviour the object dispatches against while its `class` is
+    /// the receiver: `setOwningClass` and `setEnhanced`
+    /// (`classes/ClassClass.cpp:1474`-`:1476`). Held so the object keeps it
+    /// alive; `RexxObject::defaultName` answers `enhanced <id>` for such an
+    /// object (`classes/ObjectClass.cpp:1763`-`:1767`).
+    enhanced_by: Option<ObjRef>,
 }
 
 impl ObjectMethods {
     pub fn new() -> ObjectMethods {
         ObjectMethods {
             set: Vec::new(),
-            enhanced: Vec::new(),
-            enhanced_instance: false,
+            enhanced_by: None,
         }
     }
 
-    /// Marks the object one `Class~enhanced` built.
-    pub fn mark_enhanced_instance(&mut self) {
-        self.enhanced_instance = true;
+    /// Marks the object one `Class~enhanced` built from `dummy`.
+    pub fn mark_enhanced_by(&mut self, dummy: ObjRef) {
+        self.enhanced_by = Some(dummy);
     }
 
     /// Whether `Class~enhanced` built this object.
     pub fn is_enhanced_instance(&self) -> bool {
-        self.enhanced_instance
+        self.enhanced_by.is_some()
     }
 
-    /// Every name either level defines, upper case, `setMethod`'s hidden
-    /// entries excluded -- what `Object~instanceMethods(.nil)` walks.
+    /// Every name `setMethod` defines, upper case, hidden entries excluded.
     pub fn defined_names(&self) -> Vec<Box<[u8]>> {
-        let mut names: Vec<Box<[u8]>> = self
-            .set
+        self.set
             .iter()
             .filter(|(_, entry)| entry.is_some())
             .map(|(name, _)| name.clone())
-            .collect();
-        for (name, _) in &self.enhanced {
-            if Self::find(&self.set, name).is_none() {
-                names.push(name.clone());
-            }
-        }
-        names
+            .collect()
     }
 
-    /// What this object answers for `name`: `None` when neither level holds
-    /// an entry under it, `Some(None)` for a hidden name, and
-    /// `Some(Some(method))` for one it defines.
+    /// What this object answers for `name`: `None` when it holds no entry
+    /// under it, `Some(None)` for a hidden name, and `Some(Some(method))` for
+    /// one it defines.
     pub fn get(&self, name: &[u8]) -> Option<Option<ObjectMethod>> {
-        match Self::find(&self.set, name) {
-            Some(entry) => Some(*entry),
-            None => Self::find(&self.enhanced, name).map(|method| Some(*method)),
-        }
+        Self::find(&self.set, name).copied()
     }
 
     /// Adds or replaces `setMethod`'s entry for `name`, which
@@ -883,32 +872,25 @@ impl ObjectMethods {
         Self::write(&mut self.set, name, entry);
     }
 
-    /// Adds `Class~enhanced`'s entry for `name`, behind `setMethod`'s.
-    pub fn enhance(&mut self, name: &[u8], method: ObjectMethod) {
-        Self::write(&mut self.enhanced, name, method);
-    }
-
-    /// Removes `setMethod`'s entry for `name`, revealing an enhancing method
-    /// of the same name.
+    /// Removes `setMethod`'s entry for `name`.
     pub fn remove(&mut self, name: &[u8]) {
         self.set.retain(|(key, _)| !key.eq_ignore_ascii_case(name));
     }
 
     /// Appends every object these entries reach, which is each defined
-    /// method's scope and `Method` object -- [`ScopePools::trace`]'s
-    /// position and its reason.
+    /// method's scope and `Method` object, and the enhancing class --
+    /// [`ScopePools::trace`]'s position and its reason.
     fn trace(&self, out: &mut Vec<ObjRef>) {
-        let entries = (self.set.iter().filter_map(|(_, entry)| *entry))
-            .chain(self.enhanced.iter().map(|(_, entry)| *entry));
         for ObjectMethod {
             method: _,
             scope,
             executable,
-        } in entries
+        } in self.set.iter().filter_map(|(_, entry)| *entry)
         {
             out.push(scope);
             out.push(executable);
         }
+        out.extend(self.enhanced_by);
     }
 
     fn find<'a, T>(level: &'a [(Box<[u8]>, T)], name: &[u8]) -> Option<&'a T> {

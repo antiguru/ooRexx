@@ -143,6 +143,9 @@ struct ClassDef {
     /// the interpreter's own Rexx-written library declares alike. A `::CLASS`
     /// a program declares does not carry it.
     rexx_defined: bool,
+    /// Built by [`ClassGraph::define_cloned_class`] and not yet given a
+    /// superclass by [`ClassGraph::reparent`].
+    cloned: bool,
 }
 
 /// The class graph and its behaviour storage.
@@ -216,6 +219,7 @@ impl ClassGraph {
                 parent_has_uninit,
                 is_abstract: false,
                 rexx_defined: false,
+                cloned: false,
             },
         );
         if let Some(sup) = superclass {
@@ -257,6 +261,7 @@ impl ClassGraph {
                 parent_has_uninit: false,
                 is_abstract: false,
                 rexx_defined: false,
+                cloned: true,
             },
         );
         self.rebuild_behaviour(id, Side::Instance);
@@ -265,6 +270,90 @@ impl ClassGraph {
         let behaviour = &mut self.behaviours[class_behaviour.index()];
         behaviour.dict = dict;
         behaviour.version += 1;
+    }
+
+    /// How many names `class`'s two behaviours hold entries under.
+    pub fn behaviour_names(&self, class: ObjRef) -> usize {
+        let def = &self.classes[&class];
+        self.behaviours[def.instance_behaviour.index()].dict.len()
+            + self.behaviours[def.class_behaviour.index()].dict.len()
+    }
+
+    /// Whether `class` is one [`Self::define_cloned_class`] built that
+    /// [`Self::reparent`] has not yet rewired.
+    pub fn is_cloned(&self, class: ObjRef) -> bool {
+        self.classes[&class].cloned
+    }
+
+    /// `RexxClass::subclass`'s rewiring of the class its metaclass's `NEW`
+    /// answered (`ClassClass.cpp:1585`-`:1626`): `superclass` becomes its
+    /// only superclass, it becomes a metaclass when `superclass` is one,
+    /// `metaclass` owns its class behaviour, and both behaviours are rebuilt
+    /// in place. Its own method dictionaries are kept.
+    pub fn reparent(&mut self, id: ObjRef, superclass: ObjRef, kind: ClassKind, metaclass: ObjRef) {
+        let derived_from_metaclass = self.classes[&superclass].is_metaclass;
+        let base_class = match kind {
+            ClassKind::Regular => id,
+            ClassKind::Mixin => self.classes[&superclass].base_class,
+        };
+        let parent_has_uninit = self.uninit_reaches(superclass);
+        let old = std::mem::take(&mut self.classes.get_mut(&id).unwrap().superclasses);
+        for sup in old {
+            if let Some(def) = self.classes.get_mut(&sup) {
+                def.subclasses.retain(|sub| *sub != id);
+            }
+        }
+        let def = self.classes.get_mut(&id).unwrap();
+        def.kind = kind;
+        def.superclasses = vec![superclass];
+        def.base_class = base_class;
+        if derived_from_metaclass {
+            def.is_metaclass = true;
+            def.metaclass = superclass;
+        }
+        def.owning_class = metaclass;
+        def.parent_has_uninit = parent_has_uninit;
+        def.cloned = false;
+        self.classes
+            .get_mut(&superclass)
+            .unwrap()
+            .subclasses
+            .push(id);
+        self.rebuild_behaviour(id, Side::Instance);
+        self.rebuild_behaviour(id, Side::Class);
+    }
+
+    /// `RexxClass::enhanced`'s merge of its methods into the dummy subclass's
+    /// own instance dictionary, each defined at `scope`, `None` hiding the
+    /// name, then the instance behaviour rebuilt in place
+    /// (`ClassClass.cpp:1456`-`:1463`).
+    pub fn enhance_instance_methods(
+        &mut self,
+        class: ObjRef,
+        scope: ObjRef,
+        methods: &[(String, Option<MethodId>)],
+    ) {
+        let def = self
+            .classes
+            .get_mut(&class)
+            .expect("enhance_instance_methods: unknown class");
+        for (name, method) in methods {
+            match method {
+                Some(id) => def.own_instance_methods.add_method(name, scope, *id),
+                None => def.own_instance_methods.add_hidden(name),
+            }
+        }
+        self.rebuild_behaviour(class, Side::Instance);
+    }
+
+    /// `enhanced_object->behaviour->setOwningClass(this)`
+    /// (`ClassClass.cpp:1474`) for an enhanced object that is a class: what
+    /// its `~class` answers.
+    pub fn set_owning_class(&mut self, class: ObjRef, owner: ObjRef) {
+        self.classes
+            .get_mut(&class)
+            .expect("set_owning_class: unknown class")
+            .owning_class = owner;
     }
 
     /// Oracle's `hasUninitDefined() || parentHasUninitDefined()`, the exact

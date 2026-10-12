@@ -135,6 +135,36 @@ impl ClassRegistry {
         id
     }
 
+    /// See [`ClassGraph::behaviour_names`].
+    pub fn behaviour_names(&self, class: ObjRef) -> usize {
+        self.graph.behaviour_names(class)
+    }
+
+    /// See [`ClassGraph::is_cloned`].
+    pub fn is_cloned(&self, class: ObjRef) -> bool {
+        self.graph.is_cloned(class)
+    }
+
+    /// See [`ClassGraph::reparent`].
+    pub fn reparent(&mut self, id: ObjRef, superclass: ObjRef, kind: ClassKind, metaclass: ObjRef) {
+        self.graph.reparent(id, superclass, kind, metaclass);
+    }
+
+    /// See [`ClassGraph::enhance_instance_methods`].
+    pub fn enhance_instance_methods(
+        &mut self,
+        class: ObjRef,
+        scope: ObjRef,
+        methods: &[(String, Option<MethodId>)],
+    ) {
+        self.graph.enhance_instance_methods(class, scope, methods);
+    }
+
+    /// See [`ClassGraph::set_owning_class`].
+    pub fn set_owning_class(&mut self, class: ObjRef, owner: ObjRef) {
+        self.graph.set_owning_class(class, owner);
+    }
+
     /// Allocate a fresh identity and give it an id string, registered in the
     /// **kernel** directory rather than the environment one -- oracle's
     /// `addToSystem(name, currentClass)`, which is what

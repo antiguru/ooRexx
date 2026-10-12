@@ -1854,25 +1854,31 @@ fn an_entry_method_send_with_no_value_is_loud() {
 }
 
 /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
-/// and this crate has no `NEW` to run -- see [`class_protocol::factory_metaclass`] for why
-/// that is a loud refusal rather than a class built from `.Class`'s path.
+/// and an answer that is not a class `Class~new` just built is refused: the
+/// oracle casts it unchecked (`oracle-crashes.txt` entry 8).
 #[test]
-fn a_metaclass_with_its_own_new_is_loud() {
-    let (code, stdout, stderr) = run_source(
-        "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
-         ::CLASS MyMeta SUBCLASS Class\n\
-         ::METHOD new CLASS\n\
-         forward class (super)\n",
-    );
-    assert_eq!((code, stdout.as_str()), (120, ""));
-    assert_eq!(
-        stderr,
-        "rexx-exec: method \"NEW\" of class \"MYMETA\" is not implemented (Phase 9)\n"
-    );
+fn a_metaclass_new_answering_no_new_class_is_loud() {
+    for answer in ["'x'", ".array"] {
+        let (code, stdout, stderr) = run_source(&format!(
+            "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
+             ::CLASS MyMeta SUBCLASS Class\n\
+             ::METHOD new CLASS\n\
+             return {answer}\n"
+        ));
+        assert_eq!((code, stdout.as_str()), (120, ""), "{answer}");
+        assert_eq!(
+            stderr,
+            "rexx-exec: a message send to a metaclass whose NEW answers something other than \
+             a new class is not implemented\n",
+            "{answer}"
+        );
+    }
     assert_eq!(
         run_source(
             "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
-             ::CLASS MyMeta SUBCLASS Class\n"
+             ::CLASS MyMeta SUBCLASS Class\n\
+             ::METHOD new CLASS\n\
+             forward class (super)\n"
         ),
         (0, "id k\n".to_string(), String::new())
     );

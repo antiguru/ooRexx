@@ -1,0 +1,58 @@
+/* Class~enhanced builds its object by NEW sent to an "Enhanced Subclass"
+   of the receiver, whose instance behaviour holds the methods at scope .nil;
+   the object then reports the receiver as its class. */
+d = .directory~new
+d~foo = "return 'foo:' self~class~id"
+d~sup = "return 'super=' super~string"
+d~sm = "use arg n, s; self~setMethod(n, s)"
+d~base = "return 'enh base then' self~base:super"
+o = .Thing~enhanced(d)
+say 'class:' o~class~id (o~class == .Thing) o~class~superclass~id
+say 'isA:' o~isA(.Thing) o~isA(.Object) o~isInstanceOf(.Thing)
+say 'names:' o~string '|' o~defaultName '|' o~objectName
+say o~foo '|' o~sup '|' o~base
+say 'method scope:' o~instanceMethod('FOO')~scope
+o~sm('SUP2', "return 'super=' super~string")
+say 'setMethod SUPER:' o~sup2
+p = .Thing~new
+p~setMethodPublic('SUP3', "return 'super=' super~string")
+say 'plain setMethod SUPER:' p~sup3
+q = .Thing~enhanced(d)
+s = .Thing~subclasses
+say 'subclasses:' s~items
+do c over s; say '  ' c~id '|' c~superclass~id '|' c~class~id '|' c~isMetaClass; end
+c = o~copy
+say 'copy:' c~string c~foo (c~class == .Thing) c~hasMethod('sm')
+signal on syntax
+o~nope
+syntax:
+say condition('O')~message
+e = .directory~new
+e~init = "say 'enh INIT:' self~class~id '|' self~string '|' self~isA(.Thing) arg(); self~init:super"
+o = .Thing~enhanced(e, 'x', 'y')
+say 'after:' o~class~id '|' o~string '|' (.saved == o)
+o = .Other~enhanced(d, 'a')
+say 'other:' o~string o~foo
+f = .directory~new; f~a = 'return ('
+signal on syntax name bad
+r = .Other~enhanced(f)
+bad:
+say 'trapped' condition('O')~code 'dummy left:' (.Other~subclasses~items >= 1)
+exit
+::class Thing
+::method init class
+  say 'Thing class INIT for' self~id
+::method init
+  say 'Thing INIT:' self~class~id '|' self~string arg()
+  .local~saved = self
+::method base
+  return 'base in Thing'
+::method setMethodPublic
+  use arg n, s
+  self~setMethod(n, s)
+::class Other
+::method new class
+  say 'Other NEW class, self=' self~id 'args' arg()
+  forward class (super)
+::method init
+  say 'Other INIT' arg()

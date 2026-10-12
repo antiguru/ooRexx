@@ -326,6 +326,9 @@ impl Interp {
                 return crate::environment::default_object_name(self.classes().id_string(class))
                     .len();
             }
+            Redirect::EnhancedDefault(class) => {
+                return enhanced_object_name(self.classes().id_string(class)).len();
+            }
             Redirect::None => {}
         }
 
@@ -585,6 +588,10 @@ impl Interp {
             // array's own string value is in.
             Redirect::InstanceDefault(class) => {
                 let id = crate::environment::default_object_name(self.classes().id_string(class));
+                return Cow::Owned(id.into_bytes());
+            }
+            Redirect::EnhancedDefault(class) => {
+                let id = enhanced_object_name(self.classes().id_string(class));
                 return Cow::Owned(id.into_bytes());
             }
             Redirect::None => {}
@@ -1020,10 +1027,19 @@ enum Redirect {
     /// An instance nothing has named, which renders as its class's id with an
     /// article in front and stores those bytes nowhere.
     InstanceDefault(ObjRef),
+    /// The same for an instance `Class~enhanced` built, which renders as
+    /// `enhanced` and its class's id.
+    EnhancedDefault(ObjRef),
     /// A `Stem` subclass instance answers as the `Body::Stem` it holds.
     StemSubclass(ObjRef),
     /// The object's own body holds the text.
     None,
+}
+
+/// `RexxObject::defaultName` for an object `Class~enhanced` built, which
+/// takes no article (`classes/ObjectClass.cpp:1763`-`:1767`).
+pub(crate) fn enhanced_object_name(id: &str) -> String {
+    format!("enhanced {id}")
 }
 
 impl Interp {
@@ -1056,7 +1072,11 @@ impl Interp {
     #[inline(never)]
     fn instance_redirect(&self, body: &Body) -> Redirect {
         let Body::Instance {
-            class, name, pools, ..
+            class,
+            name,
+            pools,
+            own,
+            ..
         } = body
         else {
             return Redirect::None;
@@ -1066,6 +1086,9 @@ impl Interp {
             return Redirect::StemSubclass(store);
         }
         match name {
+            None if own.as_ref().is_some_and(|own| own.is_enhanced_instance()) => {
+                Redirect::EnhancedDefault(*class)
+            }
             None => Redirect::InstanceDefault(*class),
             Some(_) => Redirect::None,
         }

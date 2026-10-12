@@ -111,7 +111,7 @@ impl MethodDict {
     /// whatever was already there behind it -- `addMethod`'s own no-method
     /// branch, which is an unconditional `addFront(TheNilObject, name)`
     /// (`MethodDictionary.cpp:166`-`:171`).
-    fn add_hidden(&mut self, name: &str) {
+    pub fn add_hidden(&mut self, name: &str) {
         let key = name.to_ascii_uppercase();
         self.entries
             .entry(key)
@@ -230,6 +230,16 @@ impl MethodDict {
                 }
             }
         }
+    }
+
+    /// How many names hold an entry, tombstones included.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether no name holds an entry.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     /// True if `name` resolves -- `RexxBehaviour::hasMethod`, which is

@@ -14,8 +14,8 @@
 
 use super::{
     BehaviourId, Body, ClassKind, Cleared, Failure, INIT, InheritRefusal, Interp, Loud, MethodSlot,
-    NativeStarted, ObjRef, Object, ObjectMethod, ObjectMethodWrite, ObjectMethods, Package,
-    Primitive, Raised, Started, Then, hash, required_string_named_argument,
+    NativeStarted, ObjRef, Object, ObjectMethods, Package, Primitive, Raised, Started, Then, hash,
+    required_string_named_argument,
 };
 
 /// `Class~baseClass`: `RexxClass::getBaseClass`, bound as a method of
@@ -730,31 +730,99 @@ fn class_factory(
     let class = class_receiver(interp, receiver)?;
     let metaclass = factory_metaclass(interp, class, args)?;
     let name = class_id_argument(interp, metaclass, args)?;
-    let id = interp.mint_class();
-    interp.classes().define_unregistered_class(
-        id,
-        &String::from_utf8_lossy(&name),
-        Some(class),
-        kind,
-        metaclass,
-    );
+    let id = new_subclass(interp, class, &name, metaclass, kind)?;
+    charge_class(interp, id);
     interp.record_packageless_class(id);
     if let Some(enhancing) = args.get(2).copied().flatten() {
         enhance_class_methods(interp, id, enhancing)?;
     }
-    // `RexxClass::subclass`'s own tail, in its order (`:1615`-`:1637`), which
-    // is the same sequence `Interp::install_class_at` makes for a directive.
+    finish_subclass(interp, id)?;
+    Ok(Some(id))
+}
+
+/// The body bytes a class's two behaviours are charged toward the next
+/// collection, per method name they resolve.
+const CLASS_BYTES_PER_METHOD: usize = 128;
+
+/// `RexxClass::subclass` up to its enhancing methods (`:1579`-`:1626`): the
+/// class `metaclass`'s `NEW` answers for `name`, made a subclass of `class`,
+/// rooted. Where `NEW` is `Class`'s own and the metaclass's instances take
+/// `Object`'s `INIT`, the class is built in place, which nothing can tell
+/// from the clone `Class~new` makes and the rewiring that follows.
+pub(crate) fn new_subclass(
+    interp: &mut Interp,
+    class: ObjRef,
+    name: &[u8],
+    metaclass: ObjRef,
+    kind: ClassKind,
+) -> Result<ObjRef, Failure> {
+    let id = if builds_in_place(interp, metaclass) {
+        let id = interp.mint_class();
+        interp.classes().define_unregistered_class(
+            id,
+            &String::from_utf8_lossy(name),
+            Some(class),
+            kind,
+            metaclass,
+        );
+        id
+    } else {
+        let argument = interp.text(name);
+        interp.roots.activity_mut().push_temp(argument);
+        let caller = interp.caller();
+        let answer = interp.send_message(metaclass, b"NEW", None, &[Some(argument)], caller)?;
+        // Measured, oracle rc 139 (`oracle-crashes.txt` entry 8): the answer
+        // is cast to a class unchecked.
+        let Some(id) = answer
+            .filter(|answer| interp.heap.is_class(*answer) && interp.classes().is_cloned(*answer))
+        else {
+            return Err(Loud::receiver_class(
+                "a metaclass whose NEW answers something other than a new class",
+            )
+            .into());
+        };
+        interp.roots.activity_mut().push_temp(id);
+        interp.classes().reparent(id, class, kind, metaclass);
+        id
+    };
+    Ok(id)
+}
+
+/// Charges a class a program built at run time toward the next collection,
+/// which its behaviours' weight would otherwise not reach.
+fn charge_class(interp: &mut Interp, class: ObjRef) {
+    let methods = interp.classes().behaviour_names(class);
+    interp.charge_unheld(methods * CLASS_BYTES_PER_METHOD);
+}
+
+/// Whether `metaclass`'s `NEW` is `Class`'s own and its instances take
+/// `Object`'s `INIT`, so the `INIT` `Class~new` sends does nothing.
+pub(crate) fn builds_in_place(interp: &mut Interp, metaclass: ObjRef) -> bool {
+    let modelled = interp.object_model().metaclass;
+    let object = interp.object_model().object;
+    let classes = interp.classes();
+    classes
+        .lookup_class_method(metaclass, "NEW")
+        .map(|(scope, _)| scope)
+        == Some(modelled)
+        && classes.lookup_instance_method(metaclass, "INIT")
+            == classes.lookup_instance_method(object, "INIT")
+}
+
+/// `RexxClass::subclass`'s own tail, in its order (`:1628`-`:1637`), which is
+/// the same sequence `Interp::install_class_at` makes for a directive.
+fn finish_subclass(interp: &mut Interp, id: ObjRef) -> Result<(), Failure> {
     interp.classes().check_uninit(id);
     interp.flag_class_uninit(id);
     let caller = interp.caller();
     interp.send_message(id, INIT, None, &[], caller)?;
     interp.classes().refresh_parent_has_uninit(id);
-    Ok(Some(id))
+    Ok(())
 }
 
 /// The metaclass a class factory builds from: the second argument, or the
 /// receiver's own where the send omits it (`classes/ClassClass.cpp:1566`-
-/// `:1569`).
+/// `:1569`), which has to be a metaclass (`:1572`).
 fn factory_metaclass(
     interp: &mut Interp,
     class: ObjRef,
@@ -768,24 +836,6 @@ fn factory_metaclass(
     if !is_class || !interp.classes().is_metaclass(metaclass) {
         let shown = interp.string_value_text(metaclass);
         return Err(Raised::bad_metaclass(&shown).into());
-    }
-    // **The class object itself is built by a `NEW` send to the metaclass**
-    // (`:1579`), so a metaclass carrying its own `NEW` decides what gets
-    // built and what its arguments mean. This crate implements no `NEW` at
-    // all; what it models is the one `.Class` declares, by constructing the
-    // class in `class_factory` instead of sending. A resolution landing
-    // anywhere else is a class this crate cannot build, and it refuses rather
-    // than build the one `.Class` would have -- measured, oracle rc 0:
-    // `::CLASS MyMeta SUBCLASS Class` with `::METHOD new CLASS` runs that
-    // body for `.object~subclass("k", .MyMeta)`.
-    let modelled = interp.object_model().metaclass;
-    let resolved = interp
-        .classes()
-        .lookup_class_method(metaclass, "NEW")
-        .map(|(scope, _)| scope);
-    if resolved != Some(modelled) {
-        let scope = interp.classes().id_string(metaclass).to_string();
-        return Err(Loud::native_method(b"NEW", &scope).into());
     }
     Ok(metaclass)
 }
@@ -1104,7 +1154,9 @@ pub(super) fn native_class_copy(
 
 /// `Class~enhanced(methods, ...)`: an instance of the receiver carrying
 /// methods of its own -- `RexxClass::enhanced`
-/// (`classes/ClassClass.cpp:1440`).
+/// (`classes/ClassClass.cpp:1440`): `NEW` sent to a subclass whose instance
+/// behaviour holds the methods at scope `.nil`, and the object it answers
+/// then reporting the receiver as its class.
 pub(super) fn native_enhanced(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1124,36 +1176,55 @@ pub(super) fn native_enhanced(
     let Some(table) = args[0] else {
         return Err(Raised::missing_named_argument("methods").into());
     };
+    let metaclass = interp.classes().metaclass(class);
+    let dummy = new_subclass(
+        interp,
+        class,
+        b"Enhanced Subclass",
+        metaclass,
+        ClassKind::Regular,
+    )?;
+    charge_class(interp, dummy);
+    interp.record_packageless_class(dummy);
+    finish_subclass(interp, dummy)?;
     let pairs = method_table_pairs(interp, table)?;
-    let object = new_instance(interp, class)?;
     let frame = interp.roots.activity_mut().push_frame();
-    let installed = install_enhancing_object_methods(interp, object, &pairs);
+    let installed = install_enhancing_methods(interp, dummy, &pairs);
     interp.roots.activity_mut().pop_frame(frame);
     installed?;
-    // `enhanced_object->behaviour->setEnhanced()` (`:1478`), which
-    // `RexxObject::defaultName` reads. **Unconditional, and not folded into
-    // the walk above**: an empty table installs no method and still renders
-    // `enhanced <id>` -- measured, oracle rc 0, `k~enhanced(.StringTable~new)`
-    // answers `enhanced K` for `~string` and `~defaultName` alike.
-    mark_enhanced_instance(interp, object);
-    // `dummy_subclass->sendMessage(GlobalNames::NEW, args + 1, ...)`
-    // (`:1470`), whose `INIT` send is `completeNewObject`'s -- the enhancing
-    // `INIT` by then, since it is already in the behaviour.
+    interp.classes().check_uninit(dummy);
     let caller = interp.caller();
-    interp.send_message(object, INIT, None, &args[1..], caller)?;
-    Ok(Some(object))
+    let answer = interp
+        .send_message(dummy, b"NEW", None, &args[1..], caller)?
+        .ok_or_else(|| Failure::from(Raised::no_result(b"NEW")))?;
+    interp.roots.activity_mut().push_temp(answer);
+    mark_enhanced(interp, answer, dummy, class);
+    Ok(Some(answer))
 }
 
-/// Marks `object` as one [`native_enhanced`] built, creating its
-/// [`ObjectMethods`] when an empty enhancing table left it without one.
-fn mark_enhanced_instance(interp: &mut Interp, object: ObjRef) {
+/// `setOwningClass(this)` and `setEnhanced()` on what the dummy's `NEW`
+/// answered (`:1474`-`:1476`), where the dummy built it. An answer built
+/// from anywhere else is handed back untouched, where the oracle writes into
+/// whatever behaviour that object shares with every other of its class.
+fn mark_enhanced(interp: &mut Interp, answer: ObjRef, dummy: ObjRef, class: ObjRef) {
+    if interp.heap.is_class(answer) {
+        if interp.classes().class_of(answer) == dummy {
+            interp.classes().set_owning_class(answer, class);
+            interp.class_owns(answer, dummy);
+        }
+        return;
+    }
     if let Some(Object {
-        body: Body::Instance { own, .. },
+        body: Body::Instance {
+            class: held, own, ..
+        },
         ..
-    }) = interp.heap.get_mut(object)
+    }) = interp.heap.get_mut(answer)
+        && *held == dummy
     {
+        *held = class;
         own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
-            .mark_enhanced_instance();
+            .mark_enhanced_by(dummy);
     }
 }
 
@@ -1167,16 +1238,24 @@ pub(super) fn is_enhanced_instance(interp: &Interp, value: ObjRef) -> bool {
     )
 }
 
-/// [`native_enhanced`]'s walk, split out so the root frame it runs inside is
-/// released on the failure path too --
-/// [`install_enhancing_class_methods`]'s shape.
-fn install_enhancing_object_methods(
+/// [`native_enhanced`]'s methods into `dummy`'s own instance dictionary,
+/// split out so the root frame it runs inside is released on the failure
+/// path too, as in [`install_enhancing_class_methods`].
+fn install_enhancing_methods(
     interp: &mut Interp,
-    object: ObjRef,
+    dummy: ObjRef,
     pairs: &[(Box<[u8]>, ObjRef)],
 ) -> Result<(), Failure> {
+    let mut methods = Vec::with_capacity(pairs.len());
+    let mut objects = Vec::with_capacity(pairs.len());
     for (name, value) in pairs {
         let value = *value;
+        let name_text = String::from_utf8_lossy(name).to_ascii_uppercase();
+        // A `.nil` item hides the name (`ClassClass.cpp:1260`-`:1262`).
+        if value == ObjRef::NIL {
+            methods.push((name_text, None));
+            continue;
+        }
         let source = if interp.receiver_kind(value) == Ok(Primitive::Method) {
             value
         } else {
@@ -1185,15 +1264,15 @@ fn install_enhancing_object_methods(
         // `createMethodDictionary`'s `newMethodObject`, which takes a copy of
         // a method object some class already holds (`ClassClass.cpp:1265`).
         let (executable, method) = scoped_method(interp, source, ObjRef::NIL)?;
-        interp.write_object_method(
-            object,
-            name,
-            ObjectMethodWrite::Enhance(ObjectMethod {
-                method,
-                scope: ObjRef::NIL,
-                executable,
-            }),
-        )?;
+        interp.roots.activity_mut().push_temp(executable);
+        methods.push((name_text, Some(method)));
+        objects.push((name.to_ascii_uppercase(), executable));
+    }
+    interp
+        .classes()
+        .enhance_instance_methods(dummy, ObjRef::NIL, &methods);
+    for (name, executable) in objects {
+        interp.hold_method_object(dummy, &name, executable);
     }
     Ok(())
 }

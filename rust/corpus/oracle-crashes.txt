@@ -277,10 +277,10 @@ The neighbour that bounds it: the same metaclass whose `NEW` forwards
 the cast inside `subclass`, not the overridden `NEW` itself, and a reader
 shortening this program to the direct send measures the wrong thing.
 
-Consequence for this crate: none to match. `rexx-exec` refuses a metaclass
-whose `NEW` resolves anywhere other than `.Class` at rc 120 before it builds
-anything -- `dispatch/class_protocol.rs`'s `factory_metaclass`, whose doc carries the reason
--- so the crashing shape is one this crate cannot reach.
+Consequence for this crate: none to match. `rexx-exec` sends the `NEW` and
+refuses an answer that is not a class `Class~new` just built, at rc 120
+(`Loud::receiver_class`, `dispatch/class_protocol.rs`'s `new_subclass`), so the
+crashing shape is one this crate reports rather than reaches.
 
 Found 2026-08-26 while building `Class~subclass`. **No upstream ticket.**
 

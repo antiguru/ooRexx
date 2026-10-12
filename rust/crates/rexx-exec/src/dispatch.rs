@@ -176,6 +176,7 @@ use class_protocol::{
     native_package_add_class, native_package_add_public_class, native_scope, native_subclass,
     native_superclass, native_superclasses, native_uninherit, new_instance, scoped_method,
 };
+pub(crate) use class_protocol::{builds_in_place, new_subclass};
 
 // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
 // chained the same way.
@@ -1442,8 +1443,6 @@ enum ObjectMethodWrite {
     /// `setMethod`, whose `None` is the no-method form: it stores the
     /// oracle's `.nil` and hides the name rather than removing anything.
     Set(Option<ObjectMethod>),
-    /// `Class~enhanced`, which no `unsetMethod` reaches.
-    Enhance(ObjectMethod),
     /// `unsetMethod`, which reveals whatever is behind the entry it takes.
     Remove,
 }
@@ -2138,11 +2137,6 @@ impl Interp {
                     .set(name, entry);
                 self.object_methods = true;
             }
-            ObjectMethodWrite::Enhance(method) => {
-                own.get_or_insert_with(|| Box::new(ObjectMethods::new()))
-                    .enhance(name, method);
-                self.object_methods = true;
-            }
         }
         self.check_uninit(receiver, name);
         Ok(())
@@ -2361,10 +2355,17 @@ impl Interp {
         self.super_scope_in(behaviour, scope)
     }
 
-    /// [`Interp::super_scope_of`] in `behaviour`, the receiver's.
+    /// [`Interp::super_scope_of`] in `behaviour`, the receiver's. A method of
+    /// scope `.nil` (`setMethod`, `Class~enhanced`) sees the behaviour's
+    /// owning class, as `RexxBehaviour::superScope` does
+    /// (`behaviour/RexxBehaviour.cpp:549`-`:557`).
     fn super_scope_in(&mut self, behaviour: Behaviour, scope: ObjRef) -> Option<ObjRef> {
         match behaviour {
+            Behaviour::Instance { owner, .. } if scope == ObjRef::NIL => Some(owner),
             Behaviour::Instance { methods, .. } => self.classes().super_scope_at(methods, scope),
+            Behaviour::ClassSide(class) if scope == ObjRef::NIL => {
+                Some(self.classes().class_of(class))
+            }
             Behaviour::ClassSide(class) => self.classes().class_super_scope(class, scope),
         }
     }

@@ -34,3 +34,6 @@ lang/hash_subclass_init_capacity.rex
 
 # 9a Task 8b: object names, metaclass NEW and enhanced, copies, tables, .ROUTINES.
 lang/object_name_set_values.rex
+lang/enhanced_runs_new.rex
+lang/enhanced_primitive_receivers.rex
+lang/metaclass_new.rex

@@ -172,7 +172,13 @@ fn instance_methods(
     let selection = receiver_selection(interp, receiver)?;
     let owner = interp.class_of_value(receiver).unwrap_or(ObjRef::NIL);
     let entries = if scope == Some(ObjRef::NIL) {
-        object_level_entries(interp, receiver)
+        let mut entries = object_level_entries(interp, receiver);
+        for entry in behaviour_entries(interp, selection, scope) {
+            if !entries.iter().any(|(name, ..)| *name == entry.0) {
+                entries.push(entry);
+            }
+        }
+        entries
     } else {
         behaviour_entries(interp, selection, scope)
     };
@@ -228,8 +234,7 @@ fn behaviour_entries(
     entries
 }
 
-/// The receiver's own `setMethod` and `Class~enhanced` level, which a `.nil`
-/// scope selects.
+/// The receiver's own `setMethod` level, which a `.nil` scope selects.
 fn object_level_entries(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjRef, MethodId)> {
     let Some(rexx_core::Object {
         body: rexx_core::Body::Instance { own: Some(own), .. },
@@ -284,6 +289,13 @@ fn method_object_for(
     scope: ObjRef,
     method: MethodId,
 ) -> ObjRef {
+    // A `.nil`-scoped entry is one `setMethod` or `Class~enhanced` installed
+    // from an object of its own, which is what the oracle's behaviour holds.
+    if scope == ObjRef::NIL
+        && let Some(object) = interp.executable_objects.get(&method).copied()
+    {
+        return object;
+    }
     let record = crate::ExecutableRecord {
         source: interp.installed_executable_source(method),
         installed: Some(method),

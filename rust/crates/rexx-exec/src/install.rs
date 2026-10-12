@@ -1193,7 +1193,7 @@ impl Interp {
         class: &ClassDirective,
         superclass: ObjRef,
         metaclass: ObjRef,
-    ) -> ObjRef {
+    ) -> Result<ObjRef, Failure> {
         let name = String::from_utf8_lossy(&class.name).into_owned();
         // `define_unregistered_class`, not `define_class`: an installed class
         // does not go into `.environment`, and registering it there would let
@@ -1204,9 +1204,7 @@ impl Interp {
         } else {
             ClassKind::Regular
         };
-        let id = self.mint_class();
-        self.classes()
-            .define_unregistered_class(id, &name, Some(superclass), kind, metaclass);
+        let id = dispatch::new_subclass(self, superclass, name.as_bytes(), metaclass, kind)?;
         // **A class the interpreter's own library declares is a class in the
         // image**, and `RexxClass::liveGeneral` sets `REXX_DEFINED` on every
         // class in the image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-
@@ -1225,7 +1223,7 @@ impl Interp {
         // every other class in one (`classes/PackageClass.cpp:1410`-`:1419`).
         // That is the difference `~publicClasses` reads back.
         self.record_package_class(program, &class.name, id, class.access == Access::Public);
-        id
+        Ok(id)
     }
 
     /// Installs the `::CLASS` at `index`, whose declared targets
@@ -1285,7 +1283,21 @@ impl Interp {
             self.blame_directive(program, directive);
             return Err(Raised::bad_metaclass(&name).into());
         }
+        // A metaclass `NEW` that runs is a send from the directive.
+        let sends = !dispatch::builds_in_place(self, metaclass);
+        let frame = sends.then(|| self.push_directive_activation(program_id, program));
         let id = self.install_class(program_id, class, superclass, metaclass);
+        if let Some(frame) = frame {
+            self.pop_directive_activation(frame);
+        }
+        let id = match id {
+            Ok(id) => id,
+            Err(failure) => {
+                self.seal_site_level();
+                self.blame_directive(program, directive);
+                return Err(failure);
+            }
+        };
         self.record_literal_constants(program_id, program, attached);
         // **The class-side members are the enhancing methods the class is
         // built with**: `ClassDirective::install` hands `classMethods` to

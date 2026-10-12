@@ -563,7 +563,7 @@ impl Interp {
 
     /// Make [`Interp::method_object`] answer `object` for this dictionary
     /// entry, and root it the way one this crate built is rooted.
-    fn hold_method_object(&mut self, class: ObjRef, name: &[u8], object: ObjRef) {
+    pub(crate) fn hold_method_object(&mut self, class: ObjRef, name: &[u8], object: ObjRef) {
         self.class_owns(class, object);
         self.method_objects.insert((class, name.into()), object);
     }

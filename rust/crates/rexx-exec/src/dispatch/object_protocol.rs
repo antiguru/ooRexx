@@ -94,7 +94,7 @@ pub(super) fn native_default_name(
     let enhanced = is_enhanced_instance(interp, receiver);
     let id = interp.classes().id_string(class);
     let name = if enhanced {
-        format!("enhanced {id}")
+        crate::value::enhanced_object_name(id)
     } else {
         crate::environment::default_object_name(id)
     };
