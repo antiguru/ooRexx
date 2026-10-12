@@ -4182,8 +4182,10 @@ mod group_runs {
                 if sim_line(&run.stderr).is_none() {
                     return red(Kind::NoReport, "no rexx-sim line ends stderr");
                 }
+                let differing: Vec<&str> = differing_keys(row).collect();
                 if !row.injects()
-                    && let Some(line) = early_end(row, policy, run, seen.unwrap_or_default())
+                    && let Some(line) =
+                        early_end(row, policy, run, seen.unwrap_or_default(), &differing)
                 {
                     return red(Kind::Abort, &line);
                 }
@@ -4230,11 +4232,17 @@ mod group_runs {
             }
 
             /// Why a run ended where none of the part's oracle outcomes and
-            /// [`DIFFERING`] keys does: a refusal none of them names, or, but
-            /// under `pct`, no ooTest summary, or a status none of them has in
-            /// a run naming no failing test.
-            fn early_end(row: &Row, policy: &str, run: &Run, seen: &[Seen]) -> Option<String> {
-                let mut keys: Vec<&str> = differing_keys(row).collect();
+            /// [`DIFFERING`] keys `differing` does: a refusal none of them
+            /// names, or, but under `pct`, no ooTest summary, or a status none
+            /// of them has in a run naming no failing test.
+            fn early_end(
+                row: &Row,
+                policy: &str,
+                run: &Run,
+                seen: &[Seen],
+                differing: &[&str],
+            ) -> Option<String> {
+                let mut keys: Vec<&str> = differing.to_vec();
                 keys.extend(seen.iter().map(|one| one.key.as_str()));
                 let status = run
                     .status
@@ -4254,7 +4262,9 @@ mod group_runs {
                     return Some("no ooTest summary".to_string());
                 }
                 let listed = seen.iter().any(|one| one.status == status)
-                    || differing_keys(row).any(|key| key.contains(&format!(", rc {status},")));
+                    || differing
+                        .iter()
+                        .any(|key| key.contains(&format!(", rc {status},")));
                 (!listed && (row.program() || failing(run).is_empty())).then(|| {
                     format!("rc {status}, which no oracle outcome or DIFFERING key of the part has")
                 })
@@ -4963,6 +4973,9 @@ mod group_runs {
                     )]
                 );
                 assert_eq!(kinds(&finished(PASSED, None, 1), &row, "pct:3,k=1"), []);
+                // Object whole's DIFFERING key ends at rc 1.
+                let object = group_row("base/class/Object.testGroup");
+                assert_eq!(kinds(&finished(PASSED, None, 1), &object, "pre:1,k=1"), []);
                 assert_eq!(
                     kinds(&finished("", None, 0), &row, "pre:1,k=1"),
                     [(Kind::Abort, "no ooTest summary".to_string())]
@@ -4971,41 +4984,34 @@ mod group_runs {
                               implemented (Phase 9)";
                 let other = "rexx-exec: method \"COPY\" of class \"Object\" is not implemented \
                              (Phase 9)";
-                let section = group_row("doc/rexxref/chapter5/Section1.testGroup");
+                let key = format!("{listed}, rc 120, last started T, failing []");
+                let differing = [key.as_str()];
+                let early = |line: &str, status: i32, policy: &str| {
+                    early_end(
+                        &row,
+                        policy,
+                        &finished("", Some(line), status).run,
+                        &seen,
+                        &differing,
+                    )
+                };
+                let unlisted = |line: &str, status: i32| {
+                    Some(format!(
+                        "{line}, rc {status}: no oracle outcome or DIFFERING key of the part ends so"
+                    ))
+                };
+                assert_eq!(early(listed, 120, "pre:1,k=1"), None);
+                assert_eq!(early(other, 120, "pre:1,k=1"), unlisted(other, 120));
+                assert_eq!(early(other, 120, "pct:3,k=1"), unlisted(other, 120));
                 assert_eq!(
-                    kinds(&finished("", Some(listed), 120), &section, "pre:1,k=1"),
-                    []
+                    kinds(&finished("", Some(listed), 120), &row, "pre:1,k=1"),
+                    [(Kind::Abort, unlisted(listed, 120).expect("a line"))]
                 );
-                for (row, policy) in [
-                    (&section, "pre:1,k=1"),
-                    (&section, "pct:3,k=1"),
-                    (&row, "pre:1,k=1"),
-                ] {
-                    assert_eq!(
-                        kinds(&finished("", Some(other), 120), row, policy),
-                        [(
-                            Kind::Abort,
-                            format!(
-                                "{other}, rc 120: no oracle outcome or DIFFERING key of the part \
-                                 ends so"
-                            )
-                        )]
-                    );
-                }
                 // A strict prefix of the listed refusal, and the listed refusal
                 // at another status, are not the listed outcome.
                 let prefix = listed.trim_end_matches(" (Phase 9)");
                 for (line, status) in [(prefix, 120), (listed, 1)] {
-                    assert_eq!(
-                        kinds(&finished("", Some(line), status), &section, "pre:1,k=1"),
-                        [(
-                            Kind::Abort,
-                            format!(
-                                "{line}, rc {status}: no oracle outcome or DIFFERING key of the \
-                                 part ends so"
-                            )
-                        )]
-                    );
+                    assert_eq!(early(line, status, "pre:1,k=1"), unlisted(line, status));
                 }
                 // A program's status is judged against its oracle set's.
                 let program = Row {
