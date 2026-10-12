@@ -2677,34 +2677,6 @@ mod group_runs {
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt), and TEST_RELATIVE_FILE_EXISTS and _EXISTS2, which fail on the oracle too",
             ),
             (
-                "base/bif/TIME.testGroup",
-                "whole",
-                "normal",
-                "failure, assertions 506, rc 1, last started TEST_9, failing [TEST_VALIDOPT_BIGCHAR_R TEST_VALIDOPT_LITTLECHAR_R TEST_10 TEST_11 TEST_4 TEST_5]",
-                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone, and TEST_VALIDOPT_*_R, which pass alone, after earlier tests (whole-groups/clock)",
-            ),
-            (
-                "base/bif/TIME.testGroup",
-                "whole",
-                "every",
-                "failure, assertions 506, rc 1, last started TEST_9, failing [TEST_VALIDOPT_BIGCHAR_R TEST_VALIDOPT_LITTLECHAR_R TEST_10 TEST_11 TEST_4 TEST_5]",
-                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone, and TEST_VALIDOPT_*_R, which pass alone, after earlier tests (whole-groups/clock)",
-            ),
-            (
-                "base/bif/TIME.testGroup",
-                "derived",
-                "normal",
-                "failure, assertions 65, rc 1, last started TEST_9, failing [TEST_10 TEST_11 TEST_4 TEST_5]",
-                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone",
-            ),
-            (
-                "base/bif/TIME.testGroup",
-                "derived",
-                "every",
-                "failure, assertions 65, rc 1, last started TEST_9, failing [TEST_10 TEST_11 TEST_4 TEST_5]",
-                "elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset: TEST_4, 5, 10, 11 as alone",
-            ),
-            (
                 "base/class/Class.testGroup",
                 "whole",
                 "normal",
@@ -2730,20 +2702,6 @@ mod group_runs {
                 "whole",
                 "every",
                 "error, assertions 92, rc 2, last started TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
-                "tests outside the derived list that fail alone too: Method NEW's array and compiled-file shapes",
-            ),
-            (
-                "base/class/Method.testGroup",
-                "rest",
-                "normal",
-                "error, assertions 85, rc 2, last started TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
-                "tests outside the derived list that fail alone too: Method NEW's array and compiled-file shapes",
-            ),
-            (
-                "base/class/Method.testGroup",
-                "rest",
-                "every",
-                "error, assertions 85, rc 2, last started TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
                 "tests outside the derived list that fail alone too: Method NEW's array and compiled-file shapes",
             ),
             (
@@ -2815,34 +2773,6 @@ mod group_runs {
                 "every",
                 "error, assertions 173, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
-            ),
-            (
-                "base/directives/CONSTANT.testGroup",
-                "rest",
-                "normal",
-                "error, assertions 170, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
-            ),
-            (
-                "base/directives/CONSTANT.testGroup",
-                "rest",
-                "every",
-                "error, assertions 170, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
-                "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
-            ),
-            (
-                "base/keyword/CALL.testGroup",
-                "derived",
-                "normal",
-                "failure, assertions 7, rc 1, last started TEST_4, failing [TEST_4]",
-                "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
-            ),
-            (
-                "base/keyword/CALL.testGroup",
-                "derived",
-                "every",
-                "failure, assertions 7, rc 1, last started TEST_4, failing [TEST_4]",
-                "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
             ),
             (
                 "base/keyword/RAISE.testGroup",
@@ -2927,20 +2857,6 @@ mod group_runs {
                 "every",
                 "error, assertions 2, rc 2, last started TEST_TRACEOBJECT_COLLECTOR, failing [TEST_CALLER_STACK_FRAME_REPLY_START TEST_TRACEOBJECT_COLLECTOR]",
                 "tests that fail alone too, measured 2026-10-07: TraceObject CALLERSTACKFRAME THREAD entries and collected trace lines",
-            ),
-            (
-                "doc/rexxref/chapter5/Section1.testGroup",
-                "whole",
-                "normal",
-                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_OBJECT_OBJECTNAMEEQUALS, failing []",
-                "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
-            ),
-            (
-                "doc/rexxref/chapter5/Section1.testGroup",
-                "whole",
-                "every",
-                "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented (Phase 9), rc 120, last started TEST_OBJECT_OBJECTNAMEEQUALS, failing []",
-                "a test outside the derived list refuses: TEST_OBJECT_OBJECTNAMEEQUALS, Phase 9",
             ),
         ];
 
@@ -3361,7 +3277,7 @@ mod group_runs {
             for (group, test) in [
                 ("base/bif/STREAM", "TEST_RELATIVE_FILE_EXISTS2"),
                 ("base/bif/STREAM", "TEST_WRONG_TOO_MANY_ARGS_S"),
-                ("base/bif/TIME", "TEST_VALIDOPT_BIGCHAR_R"),
+                ("base/keyword/TRACE", "TEST_TRACE_DROP"),
                 ("base/class/RexxContext", "TESTRS01"),
             ] {
                 assert!(

@@ -33,34 +33,28 @@ base/class/DateTime.testGroup	whole	0	70	0	5007	8107	-	-
 base/class/DateTime.testGroup	derived	0	70	14	55	61	-	-
 base/class/EventSemaphore.testGroup	whole	6	70	0	50	55	-	-
 base/class/EventSemaphore.testGroup	derived	6	70	14	50	56	-	-
-base/class/Message.testGroup	whole	409	70	0	56	66	-	-
-base/class/Message.testGroup	rest	1192	70	0	61	71	-	TEST_REPLYWITH_NOT_ARRAY TEST_SENDWITH_NOT_ARRAY TEST_STARTWITH_NOT_ARRAY
-base/class/Message.testGroup	derived	409	70	14	55	61	-	-
+base/class/Message.testGroup	whole	1192	70	0	66	66	-	-
+base/class/Message.testGroup	derived	1192	70	14	61	61	-	-
 base/class/Method.testGroup	whole	0	70	0	61	71	-	-
-base/class/Method.testGroup	rest	0	70	0	66	71	-	TEST_NEW_CONTEXT_FLOATINGMETHOD TEST_NEW_CONTEXT_IMPORTEDPACKAGE TEST_NEW_CONTEXT_METHOD TEST_NEW_CONTEXT_METHODINHERITED TEST_NEW_CONTEXT_METHODPUBLIC TEST_NEW_CONTEXT_METHODPUBLICINHERITED TEST_NEW_CONTEXT_PROGRAMSCOPE TEST_NEW_CONTEXT_REXXPACKAGE TEST_NEW_CONTEXT_ROUTINE TEST_NEW_CONTEXT_THISPACKAGE TEST_NEW_FOUR_ARGS TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER TEST_NEW_THREE_ARGS_STRING_STRING_NULL TEST_ROUTINE_SOURCE_COMMENT TEST_ROUTINE_SOURCE_NOP TEST_ROUTINE_SOURCE_WHITESPACE
 base/class/Method.testGroup	derived	0	70	14	56	55	-	-
-base/class/MethodArgs.testGroup	whole	48479	70	0	142	167	-	-
-base/class/MethodArgs.testGroup	derived	48468	70	14	141	172	-	-
+base/class/MethodArgs.testGroup	whole	48486	70	0	152	167	-	-
+base/class/MethodArgs.testGroup	derived	48485	70	14	163	172	-	-
 # MutexSemaphore leaves TEST_EXCLUSION out of whole and derived and runs it alone (single):
 # its worker can wait forever on the mutex main took (ruling P46, corpus/sim-exempt.tsv).
 base/class/MutexSemaphore.testGroup	whole	0	70	0	51	55	-	TEST_EXCLUSION
 base/class/MutexSemaphore.testGroup	derived	0	70	14	50	56	-	TEST_EXCLUSION
 base/class/MutexSemaphore.testGroup	single	21	70	14	51	70	-	TEST_EXCLUSION
-base/class/Object.testGroup	whole	2	70	0	66	71	-	-
-base/class/Object.testGroup	rest	320	70	0	81	91	-	TEST_RUN_ARRAY_ARGUMENT TEST_RUN_NO_METHOD TEST_SENDWITH_NOT_ARRAY
+base/class/Object.testGroup	whole	320	70	0	81	71	-	-
 base/class/Object.testGroup	derived	320	70	14	66	71	-	-
-base/class/RexxContext.testGroup	whole	0	70	0	50	50	-	-
-base/class/RexxContext.testGroup	rest	7	70	0	61	66	-	TESTCOPY01
+base/class/RexxContext.testGroup	whole	7	70	0	61	50	-	-
 base/class/RexxContext.testGroup	derived	7	70	14	51	56	-	-
 base/class/Ticker.testGroup	whole	5752	70	0	55	61	-	-
 base/class/Ticker.testGroup	derived	5752	70	14	55	66	-	-
 base/directives/ATTRIBUTE.testGroup	whole	0	70	0	71	76	-	-
 base/directives/ATTRIBUTE.testGroup	derived	0	70	14	56	61	-	-
 base/directives/CONSTANT.testGroup	whole	0	70	0	50	56	-	-
-base/directives/CONSTANT.testGroup	rest	0	70	0	56	61	-	TEST_EXPRESSION_ACTIVATE TEST_EXPRESSION_SELF
 base/directives/CONSTANT.testGroup	derived	0	70	14	50	55	-	-
 base/directives/METHOD.testGroup	whole	8	70	0	61	66	-	-
-base/directives/METHOD.testGroup	rest	8	70	0	66	71	-	TESTPACKAGE
 base/directives/METHOD.testGroup	derived	8	70	14	55	61	-	-
 base/keyword/CALL.testGroup	whole	0	70	0	172	187	-	-
 base/keyword/CALL.testGroup	derived	0	70	14	50	55	-	-
@@ -78,8 +72,7 @@ base/rexxutil/SysSleep.testGroup	whole	19	70	0	51	56	-	-
 base/rexxutil/SysSleep.testGroup	derived	19	70	14	50	55	-	-
 base/special.variables/RESULT_RC_SIGL.testGroup	whole	49	70	0	76	81	-	-
 base/special.variables/RESULT_RC_SIGL.testGroup	derived	49	70	14	51	55	-	-
-doc/rexxref/chapter5/Section1.testGroup	whole	0	70	0	51	50	-	-
-doc/rexxref/chapter5/Section1.testGroup	rest	15	70	0	50	56	-	TEST_OBJECT_OBJECTNAMEEQUALS
+doc/rexxref/chapter5/Section1.testGroup	whole	15	70	0	50	50	-	-
 doc/rexxref/chapter5/Section1.testGroup	derived	15	70	14	50	55	-	-
 regressions/bug2003_guard_when.testGroup	whole	0	70	0	76	86	-	-
 regressions/bug2003_guard_when.testGroup	derived	0	70	14	76	81	-	-
