@@ -1390,7 +1390,8 @@ DEVIATIONS -- permanent, chosen
 
      The number is kept and the body removed rather than the row being deleted
      outright, so that every later row keeps the identity other documents cite
-     it by.
+     it by. Deviation 33 licenses hash iteration order in general and puts
+     the multiset comparison back.
 
   9. A NATIVE CALL'S OLD MUTABLEBUFFER STORAGE OUTLIVES A COLLECTION
      (spec 2026-09-29 2.5). OWNER: none.
@@ -1994,6 +1995,41 @@ DEVIATIONS -- permanent, chosen
      crate marks only an object the dummy built and hands any other answer
      back as it is. The oracle's answer is damage to a shared behaviour, not
      a specified observable. Moritz 2026-10-12. Not witnessed in the corpus.
+
+ 33. HASH ITERATION ORDER IS NOT A SPECIFIED OBSERVABLE (Phase 9a).
+     OWNER: none.
+
+     The order in which a hash collection yields its entries, and the order
+     of anything that lists one (`allIndexes`, `allItems`, `supplier`,
+     `makeArray`, `DO OVER`, `instanceMethods`), is not part of what this
+     crate owes. Moritz 2026-10-12: "hash iteration order isn't specified,
+     and ideally changes on every run. The Oracle has more predictable
+     iteration order, but that is a mis feature in my eyes."
+
+     SCOPE -- ORDER ONLY. It does NOT license a difference in which entries
+     are yielded, how many, or how often an entry repeats; nor any difference
+     in stderr or exit status.
+
+     The oracle walks a `HashContents` bucket-ascending, which reproduces run
+     to run for string keys (string hashes are unseeded) and does not for
+     identity keys. This crate's hash stores walk in the same bucket order
+     where they model the same geometry (Task 6: `.METHODS`, `.ROUTINES`,
+     `.RESOURCES` agree byte for byte today), and its `instanceMethods`
+     lists in name order where the oracle lists its method dictionary's
+     bucket order with shadowed entries repeated (Task 8b probe `ord.rex`:
+     oracle `MANGO UM ALPHA QUUX BETA ZETA FOO`, this crate `ALPHA BETA FOO
+     MANGO QUUX UM ZETA`). Agreeing today does not make a program's order
+     specified.
+
+     MECHANISM. `rust/crates/rexx-exec/tests/corpus.rs`'s `HASH_ORDERED_STDOUT`
+     names the corpus programs whose stdout prints hash-ordered output, and
+     `stdout_mode` compares their stdout as a multiset of lines on both sides
+     (`support::oracle::stdout_multiset`, which splits on `\n` so a lost final
+     newline still differs). Its control requires each listed program's
+     oracle stdout to be non-empty and the two sides' multisets to agree; it
+     does not require the raw stdout to differ, since a program may match
+     today and still depend on unspecified order. Listed:
+     `lang/package_writes.rex`.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
