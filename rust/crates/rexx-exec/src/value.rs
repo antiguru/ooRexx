@@ -402,7 +402,10 @@ impl Interp {
             self.heap.get(value).map(|object| &object.body),
             Some(Body::Array { .. })
         ) {
-            return crate::dispatch::ARRAY_DEFAULT_NAME.to_vec();
+            return match self.heap.object_name(value) {
+                Some(name) => name.to_vec(),
+                None => crate::dispatch::ARRAY_DEFAULT_NAME.to_vec(),
+            };
         }
         self.to_text(value).to_vec()
     }

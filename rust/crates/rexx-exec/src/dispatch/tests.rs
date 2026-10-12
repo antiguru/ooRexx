@@ -2070,6 +2070,11 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
             "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
              (Phase 9)\n",
         ),
+        (
+            "s = 'a string longer than a handle holds'\ns~objectName = 'x'\n",
+            "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
+             (Phase 9)\n",
+        ),
     ] {
         assert_eq!(
             run_source(source),
@@ -2091,6 +2096,10 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
             "14\n",
         ),
         (".K~objectName = 'named'\nsay .K\n::class K\n", "named\n"),
+        (
+            "a = .array~new\na~objectName = 'named'\nsay a~string a~copy~objectName\n",
+            "named named\n",
+        ),
         (
             ".environment~objectName = 'named'\nsay .environment\n",
             "named\n",

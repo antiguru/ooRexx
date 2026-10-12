@@ -1,0 +1,40 @@
+count 39
+/* OBJECTNAME= on an Array, a Stem and a VariableReference, read back
+   through ~objectName, ~string, a copy, an argument and an error message. */
+a = .array~of('N','S','E','W')
+say a~objectName '|' a~defaultName '|' a~string
+a~objectName = 'compass'
+say a~objectName '|' a~defaultName '|' a~string '|' a[3]
+c = a~copy
+say c~objectName c~string a~makeArray~objectName
+c~objectName = 'other'
+say a~objectName c~objectName .array~new~string
+call ra a
+a~objectName = 7
+say a~objectName
+s.1 = 'x'
+s.~objectName = 'my stem'
+say s.~objectName '|' s.~string '|' s.~defaultName
+call rs s.
+call ex
+say s.~copy~objectName
+s. = 'dflt'
+say s.~objectName '|' s.~string
+q = 7
+v = >q
+v~objectName = 'my ref'
+say v~objectName '|' v~string '|' v '|' v~defaultName
+w = >q
+say w~objectName
+call rv v
+signal on syntax
+x = .array~new
+x~objectName = 'named arr'
+say x~nosuch
+syntax:
+say condition('O')~message
+exit
+ra: procedure; use arg b; say b~objectName; return
+rs: procedure; use arg z.; say z.~objectName; return
+ex: procedure expose s.; say s.~objectName; return
+rv: procedure; use arg r; say r~objectName; return

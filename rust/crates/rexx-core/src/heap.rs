@@ -80,6 +80,9 @@ pub struct Heap {
     held_bytes: usize,
     /// The most body bytes held at once as of the last collection.
     peak_bytes: usize,
+    /// The names `~objectName=` gave objects whose body has no field for
+    /// one. Each collection drops the rows of objects it swept.
+    names: crate::NameMap<ObjRef, Box<[u8]>>,
     #[cfg(feature = "sharing")]
     sharing: Sharing,
 }
@@ -133,9 +136,23 @@ impl Heap {
             live_bytes: 0,
             held_bytes: 0,
             peak_bytes: 0,
+            names: crate::NameMap::default(),
             #[cfg(feature = "sharing")]
             sharing: Sharing::default(),
         }
+    }
+
+    /// The name [`Heap::set_object_name`] gave `r`, if any.
+    pub fn object_name(&self, r: ObjRef) -> Option<&[u8]> {
+        if self.names.is_empty() {
+            return None;
+        }
+        self.names.get(&r).map(|name| &name[..])
+    }
+
+    /// Names `r`, an object whose body has no field for a name.
+    pub fn set_object_name(&mut self, r: ObjRef, name: &[u8]) {
+        self.names.insert(r, name.into());
     }
 
     pub fn slot_capacity(&self) -> usize {
@@ -394,6 +411,17 @@ impl Heap {
                 "the survivors hold {survivor_bytes} body bytes, the running figure says {}",
                 self.held_bytes
             );
+        }
+        if !self.names.is_empty() {
+            let marks = &self.marks;
+            let slots = &self.slots;
+            self.names.retain(|r, _| {
+                let Decoded::Heap { slot, generation } = r.decode() else {
+                    return false;
+                };
+                let slot = slot as usize;
+                marks.get(slot).copied().unwrap_or(false) && slots[slot].generation() == generation
+            });
         }
         self.held_bytes = survivor_bytes;
         self.peak_bytes = self.peak_body_bytes();

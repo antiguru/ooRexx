@@ -353,9 +353,8 @@ pub(super) fn native_object_name(
         .receiver_kind(receiver)
         .map_err(|kind| Failure::from(Loud::unknown_receiver(kind)))?;
     let name = match kind {
-        // `defaultName` from `.String`'s own id, which no object of this kind
-        // carries a stored name for -- there is nowhere on a string to put
-        // one, which is also why `native_object_name_set` refuses it.
+        // `defaultName` from `.String`'s own id; `native_object_name_set`
+        // names no string.
         Primitive::String | Primitive::SmallInt => b"a String".to_vec(),
         // **A set name, or the answer to a `DEFAULTNAME` send.** The oracle
         // reads the object's own `Object`-scope variable and, for anything
@@ -379,9 +378,10 @@ pub(super) fn native_object_name(
         // one of the names its `UNKNOWN` never sees. Measured, oracle rc 0:
         // `vr = 5; o = >vr; say o~objectName` is `a VariableReference` where
         // `say o~string` is `5`.
-        Primitive::VariableReference => {
-            crate::environment::default_object_name("VariableReference").into_bytes()
-        }
+        Primitive::VariableReference => match interp.heap.object_name(receiver) {
+            Some(name) => name.to_vec(),
+            None => crate::environment::default_object_name("VariableReference").into_bytes(),
+        },
         // The object's own `rendered` bytes rather than `string_value_text`,
         // which for this receiver answers the **traceback line**:
         // `StackFrameClass` overrides `stringValue()` and leaves
@@ -401,7 +401,10 @@ pub(super) fn native_object_name(
         // stem's `string_value_text` is its default. Measured, oracle rc 0:
         // `s. = 'dflt'; o = s.; say o~objectName` is `a Stem` where
         // `say o~string` is `dflt`.
-        Primitive::Stem => crate::environment::default_object_name("Stem").into_bytes(),
+        Primitive::Stem => match interp.heap.object_name(receiver) {
+            Some(name) => name.to_vec(),
+            None => crate::environment::default_object_name("Stem").into_bytes(),
+        },
         Primitive::Object
         | Primitive::Array
         | Primitive::Class(_)
@@ -471,12 +474,15 @@ pub(super) fn native_object_name_set(
                 }
             }
         }
-        Primitive::String
-        | Primitive::SmallInt
-        | Primitive::Object
-        | Primitive::Array
-        | Primitive::VariableReference
-        | Primitive::Stem => {
+        Primitive::Array | Primitive::VariableReference | Primitive::Stem => {
+            interp.heap.set_object_name(receiver, &name);
+        }
+        // A string's name is shared by every value the oracle's identities
+        // make the same object: a package's literals, its integer cache, and
+        // the operations that answer their receiver, none of which this
+        // crate's strings and numbers keep. `.nil` is the oracle's 97.1, from
+        // a behaviour without `OBJECTNAME=` this crate does not model.
+        Primitive::String | Primitive::SmallInt | Primitive::Object => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }
     }
@@ -673,6 +679,9 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     duplicate_collection_stores(interp, copy);
     duplicate_stem_store(interp, copy);
     duplicate_executable(interp, receiver, copy);
+    if let Some(name) = interp.heap.object_name(receiver).map(<[u8]>::to_vec) {
+        interp.heap.set_object_name(copy, &name);
+    }
     if interp.is_message(copy) {
         reset_copied_message(interp, copy);
     }
