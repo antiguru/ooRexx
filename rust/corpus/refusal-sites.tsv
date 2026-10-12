@@ -320,7 +320,7 @@ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	ag
 Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
 Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
 Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:550	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers, and a copy of a Method object refuses at COPY before it can be passed on	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:550	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
 Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:642	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
 Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
 Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:847	off-send-surface	-	-	-

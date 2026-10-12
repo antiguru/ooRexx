@@ -1057,9 +1057,9 @@ fn frame_arguments(
 }
 
 /// `StackFrameClass::getExecutable`: the `Method` or `Routine` the frame's
-/// level was running, `.nil` for a `COMPILE` frame. A native level's is not
-/// kept, nor one [`executable_at`] could not answer when the frame was
-/// built, and either refuses.
+/// level was running, `.nil` for a `COMPILE` frame. A frame built without
+/// one refuses: a native level's, one built from a failure's site rather
+/// than from an activation, and one whose [`executable_at`] failed.
 fn frame_executable(
     interp: &mut Interp,
     _cleared: Cleared,

@@ -138,8 +138,7 @@ use array::{
     IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_size_argument,
     array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
     native_array_dimension, native_array_items, native_array_make_string, native_array_new,
-    native_array_of, native_array_put, native_array_size, positive_index, request_array,
-    unsigned_index,
+    native_array_of, native_array_put, native_array_size, positive_index, unsigned_index,
 };
 
 // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
@@ -190,9 +189,9 @@ use construct::{
 // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
 mod object_protocol;
 use object_protocol::{
-    ArrayArgument, array_argument, decode_message_name, hash_value, invoke_executable,
-    native_class, native_copy, native_default_name, native_has_method, native_hash_code,
-    native_identity_hash, native_is_a, native_is_nil, native_message_arguments,
+    ArrayArgument, array_argument, array_argument_object, decode_message_name, hash_value,
+    invoke_executable, native_class, native_copy, native_default_name, native_has_method,
+    native_hash_code, native_identity_hash, native_is_a, native_is_nil, native_message_arguments,
     native_message_completed, native_message_error_condition, native_message_halt,
     native_message_has_error, native_message_has_result, native_message_message_complete,
     native_message_name, native_message_notify, native_message_reply, native_message_reply_with,

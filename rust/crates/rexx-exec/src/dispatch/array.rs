@@ -680,20 +680,6 @@ pub(super) fn native_array_items(
     Ok(Some(interp.counted(items)))
 }
 
-/// `RexxObject::requestArray` (`runtime/MethodArguments.hpp:683`): the value
-/// itself when it already is an array, and its `MAKEARRAY` otherwise.
-pub(super) fn request_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Failure> {
-    if interp.array_slots_of(value).is_some() {
-        return Ok(value);
-    }
-    if interp.lookup(value, b"MAKEARRAY", None).is_none() {
-        return Ok(value);
-    }
-    let caller = interp.caller();
-    let sent = interp.send_message(value, b"MAKEARRAY", None, &[], caller)?;
-    Ok(sent.unwrap_or(value))
-}
-
 /// `Array~makeString(format, separator)` and `Array~toString(format,
 /// separator)`: the array's items as one string -- `ArrayClass::toString`
 /// (`classes/ArrayClass.cpp:1856`), which `MakeString` and `ToString` both

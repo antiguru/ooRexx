@@ -14,7 +14,7 @@
 
 use super::{
     Arity, ArrayArgument, Cleared, Decoded, Failure, Interp, Loud, NativeMethod, ObjRef, Raised,
-    array_argument, array_slots, new_instance, pool_variable, request_array,
+    array_argument_object, array_slots, new_instance, pool_variable,
 };
 
 /// The `Supplier` state's three names, bound in the receiver's own pool under
@@ -193,11 +193,11 @@ fn native_supplier_init(
         // measured, `.Supplier~new(.List~of('a'), .List~of('h'))` answers
         // `1 a h`. An argument that already is an array is kept as it
         // stands, object identity and all.
-        let value = request_array(interp, value)?;
-        // Validated for the argument error it raises, after the conversion
-        // that upstream makes first.
-        array_argument(interp, value, ArrayArgument::Positional)?;
-        sides.push(value);
+        sides.push(array_argument_object(
+            interp,
+            value,
+            ArrayArgument::Positional,
+        )?);
     }
     store_supplier(interp, receiver, sides[0], sides[1], 0);
     Ok(None)

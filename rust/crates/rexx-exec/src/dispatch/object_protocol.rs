@@ -1669,6 +1669,18 @@ pub(super) fn array_argument(
     value: ObjRef,
     overload: ArrayArgument,
 ) -> Result<Vec<Option<ObjRef>>, Failure> {
+    let array = array_argument_object(interp, value, overload)?;
+    let slots = interp.array_slots_of(array).unwrap_or_default();
+    Ok(message_argument_slots(slots))
+}
+
+/// [`array_argument`]'s converted array itself, rooted: `value` where it
+/// already is one.
+pub(super) fn array_argument_object(
+    interp: &mut Interp,
+    value: ObjRef,
+    overload: ArrayArgument,
+) -> Result<ObjRef, Failure> {
     let array = if interp.array_slots_of(value).is_some() {
         Some(value)
     } else {
@@ -1676,10 +1688,8 @@ pub(super) fn array_argument(
     };
     if let Some(array) = array {
         interp.roots.activity_mut().push_temp(array);
-        if !interp.is_multi_dimensional_array(array)
-            && let Some(slots) = interp.array_slots_of(array)
-        {
-            return Ok(message_argument_slots(slots));
+        if !interp.is_multi_dimensional_array(array) && interp.array_slots_of(array).is_some() {
+            return Ok(array);
         }
     }
     Err(match overload {

@@ -13,8 +13,8 @@
 
 use super::{
     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, IndexUse, Interp, Loud,
-    NativeMethod, ObjRef, Raised, array_argument, array_dimensions, array_position, array_slots,
-    array_slots_owned, new_instance, request_array,
+    NativeMethod, ObjRef, Raised, array_argument_object, array_dimensions, array_position,
+    array_slots, array_slots_owned, new_instance,
 };
 use super::{INIT, array_size_argument, optional_length_argument, unsigned_index};
 use super::{native_array_at_for, positive_index};

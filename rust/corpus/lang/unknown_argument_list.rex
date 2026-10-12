@@ -1,5 +1,5 @@
-/* An ~UNKNOWN argument list, and the other arrayArgument sites, go through
-   requestArray: a string converts, an object without MAKEARRAY, .nil, a
+/* An ~UNKNOWN argument list goes through requestArray, and so does one
+   sendWith argument list: a string converts, an object without MAKEARRAY, .nil, a
    multi-dimensional array and a MAKEARRAY answering .nil do not. */
 say .environment~unknown('ARRAY', 'y')
 say .environment~unknown('ARRAY', .k~new)

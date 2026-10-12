@@ -298,11 +298,17 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
 /// Whether the crate side's `path` resolves `rexx` inside `bin` and `rexxc`
 /// nowhere, and `bin` holds no ELF file but copies of this crate's `rexx`.
 pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
-    let ours = fs::read(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run");
+    use std::os::unix::fs::MetadataExt as _;
+    let identity = |path: &Path| fs::metadata(path).ok().map(|meta| (meta.dev(), meta.ino()));
+    let ours_path = Path::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let ours_identity = identity(ours_path);
     for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
         let file = entry.map_err(|e| e.to_string())?.path();
+        if identity(&file).is_some() && identity(&file) == ours_identity {
+            continue;
+        }
         let bytes = fs::read(&file).unwrap_or_default();
-        if bytes.starts_with(b"\x7fELF") && bytes != ours {
+        if bytes.starts_with(b"\x7fELF") && bytes != fs::read(ours_path).unwrap_or_default() {
             return Err(format!(
                 "{} is a binary other than this crate's",
                 file.display()

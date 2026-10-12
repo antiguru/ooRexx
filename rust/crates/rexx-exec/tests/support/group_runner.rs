@@ -725,9 +725,21 @@ pub fn interpreter_bin(run: &Path) -> PathBuf {
             (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
         });
     if !current {
-        // A copy or an older link left by an earlier build is replaced.
-        let _ = fs::remove_file(&rexx);
+        // A copy or an older link left by an earlier build is replaced, and
+        // the copy below never writes onto an existing file, which could be
+        // a link to `ours` itself.
+        match fs::remove_file(&rexx) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                panic!("cannot replace {}: {e}", rexx.display())
+            }
+            _ => {}
+        }
         if let Err(link) = fs::hard_link(ours, &rexx) {
+            assert!(
+                !rexx.exists(),
+                "{} appeared while it was replaced",
+                rexx.display()
+            );
             fs::copy(ours, &rexx).unwrap_or_else(|copy| {
                 panic!("cannot link ({link}) or copy ({copy}) {}", rexx.display())
             });

@@ -3537,7 +3537,14 @@ mod group_runs {
             let mut files: Vec<String> = list.iter().map(|row| row.group.clone()).collect();
             files.dedup();
             if let Ok(only) = std::env::var(ONLY_ENV) {
-                files.retain(|file| only.split(',').any(|group| group == file));
+                let named: Vec<&str> = only.split(',').collect();
+                for group in &named {
+                    assert!(
+                        files.iter().any(|file| file == group),
+                        "{ONLY_ENV}: {group:?} is no group file of the derived list"
+                    );
+                }
+                files.retain(|file| named.contains(&file.as_str()));
             }
             let parts: Vec<(&String, Part)> = files
                 .iter()

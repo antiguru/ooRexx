@@ -11,3 +11,4 @@ lang/stackframe_executable.rex
 lang/object_copy_method.rex
 lang/unknown_argument_list.rex
 lang/define_methods_supplier.rex
+lang/array_argument_callers.rex
