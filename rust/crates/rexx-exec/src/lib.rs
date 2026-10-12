@@ -525,6 +525,18 @@ impl Loud {
         }
     }
 
+    /// A metaclass `NEW` answering a class `Class~new` did not just build,
+    /// which the oracle rewires into a subclass in place (Deviation 32).
+    #[cold]
+    fn metaclass_new_reused_class() -> Loud {
+        Loud {
+            message: owned_message(
+                "a metaclass NEW answering a class it did not just build",
+                None,
+            ),
+        }
+    }
+
     /// `OBJECTNAME=` on a string or a small integer, whose name the oracle
     /// shares across every value its object identity makes the same object
     /// (Deviation 31).

@@ -771,16 +771,19 @@ pub(crate) fn new_subclass(
         interp.roots.activity_mut().push_temp(argument);
         let caller = interp.caller();
         let answer = interp.send_message(metaclass, b"NEW", None, &[Some(argument)], caller)?;
-        // Measured, oracle rc 139 (`oracle-crashes.txt` entry 8): the answer
-        // is cast to a class unchecked.
-        let Some(id) = answer
-            .filter(|answer| interp.heap.is_class(*answer) && interp.classes().is_cloned(*answer))
-        else {
+        // Measured, oracle rc 139 (`oracle-crashes.txt` entry 8): an answer
+        // that is not a class is cast to one unchecked.
+        let Some(id) = answer.filter(|answer| interp.heap.is_class(*answer)) else {
             return Err(Loud::receiver_class(
-                "a metaclass whose NEW answers something other than a new class",
+                "a metaclass whose NEW answers something other than a class",
             )
             .into());
         };
+        // A class `Class~new` did not just build is rewired in place by the
+        // oracle, which damages a class others hold (Deviation 32).
+        if !interp.classes().is_cloned(id) {
+            return Err(Loud::metaclass_new_reused_class().into());
+        }
         interp.roots.activity_mut().push_temp(id);
         interp.classes().reparent(id, class, kind, metaclass);
         id

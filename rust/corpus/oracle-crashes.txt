@@ -278,9 +278,10 @@ the cast inside `subclass`, not the overridden `NEW` itself, and a reader
 shortening this program to the direct send measures the wrong thing.
 
 Consequence for this crate: none to match. `rexx-exec` sends the `NEW` and
-refuses an answer that is not a class `Class~new` just built, at rc 120
-(`Loud::receiver_class`, `dispatch/class_protocol.rs`'s `new_subclass`), so the
-crashing shape is one this crate reports rather than reaches.
+refuses an answer that is not a class, at rc 120 (`Loud::receiver_class`,
+`dispatch/class_protocol.rs`'s `new_subclass`), so the crashing shape is one
+this crate reports rather than reaches. A class answer is not this entry: the
+oracle answers rc 0 and rewires that class, Deviation 32.
 
 Found 2026-08-26 while building `Class~subclass`. **No upstream ticket.**
 

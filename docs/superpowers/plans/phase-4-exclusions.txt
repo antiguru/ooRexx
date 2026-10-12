@@ -1384,14 +1384,11 @@ DEVIATIONS -- permanent, chosen
      `corpus/lang/package_writes.rex`, the only program the licence named, now
      agrees with the oracle byte for byte: `.METHODS`, `.ROUTINES` and
      `.RESOURCES` are StringTables with a hash store, which iterates in the
-     oracle's own bucket order. `HASH_ORDERED_STDOUT`, `stdout_mode` and the
-     licence's control are deleted from `rust/crates/rexx-exec/tests/corpus.rs`;
-     `support::oracle::stdout_multiset` and its own controls stay.
+     oracle's own bucket order.
 
      The number is kept and the body removed rather than the row being deleted
      outright, so that every later row keeps the identity other documents cite
-     it by. Deviation 33 licenses hash iteration order in general and puts
-     the multiset comparison back.
+     it by. Hash iteration order is Deviation 33.
 
   9. A NATIVE CALL'S OLD MUTABLEBUFFER STORAGE OUTLIVES A COLLECTION
      (spec 2026-09-29 2.5). OWNER: none.
@@ -1993,8 +1990,26 @@ DEVIATIONS -- permanent, chosen
 
      So after one such call every `String` reports the user's class. This
      crate marks only an object the dummy built and hands any other answer
-     back as it is. The oracle's answer is damage to a shared behaviour, not
-     a specified observable. Moritz 2026-10-12. Not witnessed in the corpus.
+     back as it is.
+
+     The same holds one level up. `RexxClass::subclass` sends `NEW` to the
+     metaclass and rewires whatever class answers into the new subclass
+     (interpreter/classes/ClassClass.cpp:1579-1626), so a metaclass `NEW`
+     answering a class `Class~new` did not just build rewires a class others
+     hold. Measured, Phase 9a Task 8b review probes, oracle rc 0:
+
+       `metaarr.rex`, `NEW` answers `.array`:
+         `.object~subclass("k", .MyMeta)~id`        id Array
+       `metaold.rex`, `NEW` answers `.Foo` (`SUBCLASS Directory`):
+         `k~id k~superclass~id (k == .Foo)`         id FOO Object 1
+         a second `~subclass("k2", ...)`            id FOO 1
+
+     This crate refuses that answer, rc 120, "a metaclass NEW answering a
+     class it did not just build is not implemented"; an answer that is not
+     a class is corpus/oracle-crashes.txt entry 8. The oracle's answers are
+     damage to a shared behaviour or class, not specified observables.
+     Moritz 2026-10-12. Not witnessed in the corpus; pinned by
+     `a_metaclass_new_answering_no_new_class_is_loud`.
 
  33. HASH ITERATION ORDER IS NOT A SPECIFIED OBSERVABLE (Phase 9a).
      OWNER: none.
@@ -2013,13 +2028,12 @@ DEVIATIONS -- permanent, chosen
      The oracle walks a `HashContents` bucket-ascending, which reproduces run
      to run for string keys (string hashes are unseeded) and does not for
      identity keys. This crate's hash stores walk in the same bucket order
-     where they model the same geometry (Task 6: `.METHODS`, `.ROUTINES`,
-     `.RESOURCES` agree byte for byte today), and its `instanceMethods`
-     lists in name order where the oracle lists its method dictionary's
-     bucket order with shadowed entries repeated (Task 8b probe `ord.rex`:
-     oracle `MANGO UM ALPHA QUUX BETA ZETA FOO`, this crate `ALPHA BETA FOO
-     MANGO QUUX UM ZETA`). Agreeing today does not make a program's order
-     specified.
+     where they model the same geometry, and its `instanceMethods` lists in
+     name order where the oracle lists its method dictionary's bucket order
+     with shadowed entries repeated (Task 8b probe `ord.rex`: oracle `MANGO
+     UM ALPHA QUUX BETA ZETA FOO`, this crate `ALPHA BETA FOO MANGO QUUX UM
+     ZETA`). A program whose order agrees still depends on an order that is
+     not specified.
 
      MECHANISM. `rust/crates/rexx-exec/tests/corpus.rs`'s `HASH_ORDERED_STDOUT`
      names the corpus programs whose stdout prints hash-ordered output, and
@@ -2027,9 +2041,9 @@ DEVIATIONS -- permanent, chosen
      (`support::oracle::stdout_multiset`, which splits on `\n` so a lost final
      newline still differs). Its control requires each listed program's
      oracle stdout to be non-empty and the two sides' multisets to agree; it
-     does not require the raw stdout to differ, since a program may match
-     today and still depend on unspecified order. Listed:
-     `lang/package_writes.rex`.
+     does not require the raw stdout to differ, since a program may agree on
+     an order that is not specified. The programs are the ones that const
+     lists.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

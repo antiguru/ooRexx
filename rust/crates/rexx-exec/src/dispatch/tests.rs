@@ -1851,32 +1851,46 @@ fn an_entry_method_send_with_no_value_is_loud() {
 }
 
 /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
-/// and an answer that is not a class `Class~new` just built is refused: the
-/// oracle casts it unchecked (`oracle-crashes.txt` entry 8).
+/// and two answers are refused: one that is not a class, which the oracle
+/// casts unchecked (`oracle-crashes.txt` entry 8), and a class `Class~new`
+/// did not just build, which the oracle rewires in place (Deviation 32).
 #[test]
 fn a_metaclass_new_answering_no_new_class_is_loud() {
-    for answer in ["'x'", ".array"] {
-        let (code, stdout, stderr) = run_source(&format!(
+    let program = |body: &str| {
+        format!(
             "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
              ::CLASS MyMeta SUBCLASS Class\n\
              ::METHOD new CLASS\n\
-             return {answer}\n"
-        ));
-        assert_eq!((code, stdout.as_str()), (120, ""), "{answer}");
+             {body}\n\
+             ::CLASS Foo SUBCLASS Directory\n"
+        )
+    };
+    for (answer, refusal) in [
+        (
+            "return 'x'",
+            "a message send to a metaclass whose NEW answers something other than a class",
+        ),
+        (
+            "return .array",
+            "a metaclass NEW answering a class it did not just build",
+        ),
+        (
+            "return .Foo",
+            "a metaclass NEW answering a class it did not just build",
+        ),
+    ] {
         assert_eq!(
-            stderr,
-            "rexx-exec: a message send to a metaclass whose NEW answers something other than \
-             a new class is not implemented\n",
+            run_source(&program(answer)),
+            (
+                120,
+                String::new(),
+                format!("rexx-exec: {refusal} is not implemented\n")
+            ),
             "{answer}"
         );
     }
     assert_eq!(
-        run_source(
-            "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
-             ::CLASS MyMeta SUBCLASS Class\n\
-             ::METHOD new CLASS\n\
-             forward class (super)\n"
-        ),
+        run_source(&program("forward class (super)")),
         (0, "id k\n".to_string(), String::new())
     );
 }
