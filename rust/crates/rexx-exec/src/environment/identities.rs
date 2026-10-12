@@ -1025,8 +1025,9 @@ impl Interp {
     /// tables, settings and annotations are its own copies, sharing the
     /// objects they hold, its `.METHODS`, `.RESOURCES`, local directory and
     /// prolog. The copy is a new [`ProgramId`] over the same `Program`;
-    /// every field of [`Interp`] is named below so that a field added later
-    /// decides what a copy does with it.
+    /// every field of [`Interp`], and of the structs it holds that a program
+    /// could key, is named so that a field added later decides what a copy
+    /// does with it.
     pub(crate) fn copy_package(&mut self, program: ProgramId) -> Result<ObjRef, Failure> {
         let copy = ProgramId(self.programs.len());
         let frame = self.roots.activity_mut().push_frame();
@@ -1036,7 +1037,7 @@ impl Interp {
         let Interp {
             heap: _,
             roots: _,
-            activity: _,
+            activity,
             key_buffer: _,
             parse_buffers: _,
             text_scratch: _,
@@ -1072,8 +1073,8 @@ impl Interp {
             rexx_class_cache: _,
             package_namespaces,
             package_locals,
-            object_model: _,
-            environment: _,
+            object_model,
+            environment,
             class_variables: _,
             package_classes,
             package_public_classes,
@@ -1171,8 +1172,21 @@ impl Interp {
         if let Some(options) = package_options.get(&program).cloned() {
             package_options.insert(copy, options);
         }
-        if let Some(initial) = option_writes.initial.get(&Some(program)).cloned() {
-            option_writes.initial.insert(Some(copy), initial);
+        let crate::options::OptionWrites {
+            rexx: _,
+            initial,
+            defaults: _,
+            count: _,
+        } = option_writes;
+        if let Some(settings) = initial.get(&Some(program)).cloned() {
+            initial.insert(Some(copy), settings);
+        }
+        activity.copy_package();
+        if let Some(model) = object_model {
+            model.copy_package();
+        }
+        if let Some(model) = environment {
+            model.copy_package();
         }
         if let Some(manager) = security_managers.get(&program).copied() {
             security_managers.insert(copy, manager);

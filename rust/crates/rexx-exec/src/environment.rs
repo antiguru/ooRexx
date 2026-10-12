@@ -265,6 +265,20 @@ pub(crate) struct EnvironmentModel {
     context: ObjRef,
 }
 
+impl EnvironmentModel {
+    /// `Package~copy`'s decision about `.environment` and `.local`, which hold
+    /// nothing per program: every field is named so that one added later
+    /// does not compile until it is decided.
+    pub(crate) fn copy_package(&self) {
+        let EnvironmentModel {
+            directories: _,
+            owed: _,
+            views: _,
+            context: _,
+        } = self;
+    }
+}
+
 /// What one `::ANNOTATE` directive's pairs belong to, once the object that
 /// carries them exists.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
