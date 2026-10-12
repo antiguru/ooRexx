@@ -1,6 +1,7 @@
 # Phase 9a Task 6 report: hash methods on the condition object and the package tables
 
-Base `c515bac3a`. Status: NEEDS_CONTEXT on Deviation 8 (below); everything else done.
+Base `c515bac3a`. Status: DONE_WITH_CONCERNS. Commits `cecec0830` (code, witnesses) and a second one (Deviation 8
+withdrawal, `sourceline_oracle` expectations).
 
 Probes ran from fresh empty directories under `/tmp/claude-1000/p9/t6-probe*` and
 `/tmp/claude-1000/p9/t6-w-*`, the oracle under the standard wrapper with `timeout -k 5 20`, the
@@ -84,14 +85,26 @@ crate did not build") is deleted; the constructor stays.
 order, which is the oracle's. `corpus.rs`'s control
 `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else` fails because of it
 ("agrees on stdout byte for byte, so it does not need Deviation 8"); it is `HASH_ORDERED_STDOUT`'s
-only entry. Ruling requested from the controller and not yet answered at commit; the control is
-red in this commit. Recommended: retire Deviation 8 (delete `HASH_ORDERED_STDOUT`, `stdout_mode`
-and the control from `tests/corpus.rs`, keep `support/oracle.rs`'s multiset machinery and its own
-controls, drop the licence lines in `phase-5c.txt`).
+only entry.
 
-`corpus/lang/package_tables.rex`'s comment (and its `sourceline_oracle/package_tables.txt` copy)
-speaks of "this crate's sorted walk"; that is no longer how `.ROUTINES` and friends iterate. The
-file cannot be edited (`sourceline_matches_the_interpreter_for_every_corpus_program`).
+Controller ruling A, applied in the second commit: Deviation 8 is withdrawn in
+`docs/superpowers/plans/phase-4-exclusions.txt` in Deviation 5's form (number and heading kept, one
+paragraph, body removed). `HASH_ORDERED_STDOUT`, `stdout_mode`,
+`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else` and
+`the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list` (which asserted the list
+non-empty) are deleted from `tests/corpus.rs`, which now passes `StdoutComparison::Raw`;
+`support::oracle::stdout_multiset` and its controls stay. The licence lines in `phase-5c.txt` are
+dropped. `suite_rows::deviations` skips a `WITHDRAWN` heading, and `--test suite` passes.
+
+`corpus/lang/package_tables.rex`'s "this crate's sorted walk" paragraph is rewritten in place in
+both it and `crates/rexx-parse/tests/sourceline_oracle/package_tables.txt`, keeping the line count
+(101). The expectation was then regenerated with the module comment's oracle driver and is identical
+to the hand edit. The paragraph below it (a DO OVER rooting workaround citing a record that
+reproduced with `.methods`) is history about a native table and was left alone.
+
+**A check missed in the first commit**: `cecec0830` added two `corpus/lang/*.rex` programs without
+their `sourceline_oracle` expectations, so `cargo test -p rexx-parse --test sourceline_oracle` was
+red there. Both expectations are generated with the oracle driver in the second commit; exit 0.
 
 ## Group verdicts
 
@@ -132,6 +145,11 @@ baseline's own tests.
 * `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -j 4 -p rexx-exec --test corpus --test
   collect_stress --test refusal_sites --no-fail-fast`: exit 101. `collect_stress` 37 passed,
   `refusal_sites` 5 passed, `corpus` 28 passed 1 failed: the Deviation 8 control above.
+* After the ruling: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 -p rexx-exec -p
+  rexx-parse --all-targets -- -D warnings` exit 0; `memcap 8G cargo test --release -j 4 -p
+  rexx-parse --test sourceline_oracle` exit 0; `REXX_CORPUS_GATE=1 timeout 590 memcap 8G cargo test
+  --release -j 4 -p rexx-exec --test corpus --test suite --test refusal_dispositions --no-fail-fast`
+  exit 0 (corpus 27 passed 1 ignored, suite 50, refusal_dispositions 3).
 * `memcap 8G cargo test --release -j 4 -p rexx-exec --test coverage --test trace_oracle --test
   ir_recorded --test closed_phases --test owners --no-fail-fast`: exit 0 (21, 41, 28, 8, 6 passed).
 

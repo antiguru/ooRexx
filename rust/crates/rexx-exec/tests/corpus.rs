@@ -253,21 +253,6 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
 /// trace lines and their interleaving is not a specified observable.
 const CONCURRENTLY_TRACED: &[&str] = &["lang/directive_options_trace_reply.rex"];
 
-/// Corpus programs whose `stdout` is compared as a multiset of lines, per
-/// DEVIATION 8: what they print is the contents of a hash-ordered
-/// `StringTable`, whose iteration order is a bucket walk on both sides and
-/// reproduces on neither.
-const HASH_ORDERED_STDOUT: &[&str] = &["lang/package_writes.rex"];
-
-/// The `stdout` comparison one corpus entry gets.
-fn stdout_mode(rel_path: &str) -> StdoutComparison {
-    if HASH_ORDERED_STDOUT.contains(&rel_path) {
-        StdoutComparison::Multiset
-    } else {
-        StdoutComparison::Raw
-    }
-}
-
 /// The `stderr` comparison one corpus entry gets, and no entry may ask for two.
 fn stderr_mode(rel_path: &str) -> StderrComparison {
     match (
@@ -284,8 +269,8 @@ fn stderr_mode(rel_path: &str) -> StderrComparison {
     }
 }
 
-/// Every entry in [`RAW_STDERR_COMPARISON`], [`CONCURRENTLY_TRACED`] and
-/// [`HASH_ORDERED_STDOUT`] is a line some phase subset file actually names.
+/// Every entry in [`RAW_STDERR_COMPARISON`] and [`CONCURRENTLY_TRACED`] is a
+/// line some phase subset file actually names.
 #[test]
 fn every_opted_in_comparison_names_a_program_the_subset_runs() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -297,7 +282,6 @@ fn every_opted_in_comparison_names_a_program_the_subset_runs() {
     for (list, opted_into) in [
         (RAW_STDERR_COMPARISON, "raw"),
         (CONCURRENTLY_TRACED, "multiset"),
-        (HASH_ORDERED_STDOUT, "sorted stdout"),
     ] {
         for listed in list {
             assert!(
@@ -307,72 +291,6 @@ fn every_opted_in_comparison_names_a_program_the_subset_runs() {
                  normalised comparison instead of the one it is supposed to opt into"
             );
         }
-    }
-}
-
-/// [`stdout_mode`] answers the multiset mode for exactly the licensed list.
-#[test]
-fn the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list() {
-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
-    let paths: Vec<PathBuf> = SUBSET_FILES
-        .iter()
-        .map(|name| corpus_dir.join(name))
-        .collect();
-    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
-    assert!(
-        !HASH_ORDERED_STDOUT.is_empty() && HASH_ORDERED_STDOUT.len() < subset.len(),
-        "the licensed list is empty or is the whole subset, so this control          separates nothing"
-    );
-    for entry in &subset {
-        let listed = HASH_ORDERED_STDOUT.contains(&entry.as_str());
-        let mode = stdout_mode(entry);
-        assert_eq!(
-            mode == StdoutComparison::Multiset,
-            listed,
-            "{entry} is compared as {mode:?} and is {} on HASH_ORDERED_STDOUT",
-            if listed { "" } else { "not" }
-        );
-    }
-}
-
-/// DEVIATION 8's own control: for every program on [`HASH_ORDERED_STDOUT`],
-/// the two sides' `stdout` **differs** raw and **agrees** sorted.
-#[test]
-fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
-    let oracle = support::oracle::locate();
-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
-    assert!(
-        !HASH_ORDERED_STDOUT.is_empty(),
-        "the licensed list is empty, so this control iterates over nothing"
-    );
-    for listed in HASH_ORDERED_STDOUT {
-        let abs = fs::canonicalize(corpus_dir.join(listed))
-            .unwrap_or_else(|e| panic!("cannot resolve {listed}: {e}"));
-        let dir = run_directory(listed);
-        empty_run_directory(&dir);
-        let cpp = oracle.run_in(&abs, &dir, &[]);
-        empty_run_directory(&dir);
-        let rust = run_rust(&abs, &dir, &[], None);
-        assert!(
-            !cpp.stdout.is_empty(),
-            "{listed}: on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so \
-the sorted comparison would agree with anything"
-        );
-        // Both compared as booleans rather than with `assert_ne!`/`assert_eq!`
-        // on the transcripts: the message is the useful part, and those macros
-        // would print two whole `Vec<u8>`s as byte arrays.
-        assert!(
-            rust.stdout != cpp.stdout,
-            "{listed}: agrees on stdout byte for byte, so it does not need \
-Deviation 8 and must not carry a relaxation that hides an ordering defect"
-        );
-        assert!(
-            support::oracle::stdout_multiset(&rust.stdout)
-                == support::oracle::stdout_multiset(&cpp.stdout),
-            "{listed}: differs on stdout as a MULTISET of lines, which \
-Deviation 8 does not license -- the two sides printed different content, not \
-the same content in a different order"
-        );
     }
 }
 
@@ -438,7 +356,7 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
 
     let rust_exit = wrapped_exit_code(rust.exit_code);
 
-    let diffs = descriptor_diffs_modes(&rust, &cpp, stdout_mode(rel_path), stderr_mode(rel_path));
+    let diffs = descriptor_diffs_modes(&rust, &cpp, StdoutComparison::Raw, stderr_mode(rel_path));
     if diffs.is_empty() {
         return None;
     }
