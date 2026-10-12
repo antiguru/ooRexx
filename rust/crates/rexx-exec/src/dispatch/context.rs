@@ -454,6 +454,9 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             Ok(executable)
         }
         (Entry::Routine, Some(directive), _) => {
+            if let Some(executable) = activation.cold.as_deref().and_then(|cold| cold.executable) {
+                return Ok(executable);
+            }
             // A routine built from source text is a synthetic directive in no
             // package table, and is its own executable: measured, oracle rc
             // 0, `.routine~new('r', 'return .context~executable~class~id')~call`
@@ -764,6 +767,7 @@ pub(crate) fn build_ended_frame(
     let trace_line = interp.text(trace_text);
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments.to_vec());
+    interp.roots.activity_mut().push_temp(arguments);
     let mut entries = vec![
         (key::TYPE, kind),
         (key::NAME, name),
@@ -796,6 +800,7 @@ pub(crate) fn build_native_level_frame(
     target: ObjRef,
     arguments: &[Option<ObjRef>],
     trace_text: &[u8],
+    executable: Option<ObjRef>,
 ) -> ObjRef {
     let context = if !method {
         interp.context_object_at(0).unwrap_or(ObjRef::NIL)
@@ -810,7 +815,7 @@ pub(crate) fn build_native_level_frame(
     let trace_line = interp.text(trace_text);
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments.to_vec());
-    let entries = [
+    let mut entries = vec![
         (key::TYPE, kind),
         (key::NAME, name),
         (key::LINE, ObjRef::NIL),
@@ -820,7 +825,22 @@ pub(crate) fn build_native_level_frame(
         (key::CONTEXT, context),
         (key::TRACE_LINE, trace_line),
     ];
+    entries.extend(executable.map(|executable| (key::EXECUTABLE, executable)));
     frame_object(interp, frame, &entries, trace_text)
+}
+
+/// The `Method` object a native method level runs: the dictionary entry
+/// `name` resolves to for `target`, which is what `Class~method` answers.
+/// Measured, oracle rc 0: a `CHARIN` frame's executable is
+/// `.Stream~method('CHARIN')` and a `SORTWITH` frame's
+/// `.Array~method('SORTWITH')`.
+pub(crate) fn native_method_executable(
+    interp: &mut Interp,
+    target: ObjRef,
+    name: &[u8],
+) -> Option<ObjRef> {
+    let resolution = interp.lookup(target, name, None)?;
+    interp.method_executable(resolution.scope, name).ok()
 }
 
 /// The `StackFrame` of the native call in row `row` of
@@ -868,7 +888,14 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
     let trace_line = interp.text(&trace_text);
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, arguments);
-    let entries = [
+    interp.roots.activity_mut().push_temp(arguments);
+    let executable = if method {
+        let name = interp.to_text(name).to_vec();
+        interp.method_executable(scope, &name).ok()
+    } else {
+        None
+    };
+    let mut entries = vec![
         (key::TYPE, kind),
         (key::NAME, name),
         (key::LINE, ObjRef::NIL),
@@ -878,6 +905,7 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
         (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
         (key::TRACE_LINE, trace_line),
     ];
+    entries.extend(executable.map(|executable| (key::EXECUTABLE, executable)));
     Ok(frame_object(interp, frame, &entries, &trace_text))
 }
 
@@ -1055,8 +1083,8 @@ fn frame_arguments(
 
 /// `StackFrameClass::getExecutable`: the `Method` or `Routine` the frame's
 /// level was running, `.nil` for a `COMPILE` frame. A frame built without
-/// one refuses: a native level's, one built from a failure's site rather
-/// than from an activation, and one whose [`executable_at`] failed.
+/// one refuses: a native routine level's, one built from a failure's site
+/// rather than from an activation, and one whose [`executable_at`] failed.
 fn frame_executable(
     interp: &mut Interp,
     _cleared: Cleared,

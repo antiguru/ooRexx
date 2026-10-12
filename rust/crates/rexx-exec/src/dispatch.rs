@@ -367,11 +367,17 @@ impl Interp {
         );
         let scope_name = self.scope_id(scope);
         let trace_text = Raised::compiled_method_line(&name, &scope_name);
-        let frame =
-            context::build_native_level_frame(self, true, &name, receiver, &args, &trace_text);
-        let executable = self.method_executable(scope, &name).unwrap_or(ObjRef::NIL);
-        self.roots.activity_mut().push_temp(executable);
-        Some((frame, executable))
+        let executable = self.method_executable(scope, &name).ok();
+        let frame = context::build_native_level_frame(
+            self,
+            true,
+            &name,
+            receiver,
+            &args,
+            &trace_text,
+            executable,
+        );
+        Some((frame, executable.unwrap_or(ObjRef::NIL)))
     }
 }
 
@@ -3846,6 +3852,11 @@ impl Interp {
         if self.activity.failure_site.is_some() {
             return;
         }
+        let executable = if level.method {
+            context::native_method_executable(self, level.target, level.name)
+        } else {
+            None
+        };
         let frame = crate::dispatch::context::build_native_level_frame(
             self,
             level.method,
@@ -3853,6 +3864,7 @@ impl Interp {
             level.target,
             level.arguments,
             &text,
+            executable,
         );
         self.activity.failure_frame = Some(frame);
         match level.activation {

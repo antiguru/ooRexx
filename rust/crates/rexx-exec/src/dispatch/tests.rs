@@ -2020,32 +2020,45 @@ fn a_directory_entry_the_oracle_has_and_this_crate_does_not_is_loud() {
 /// rc 0 for each source below.
 #[test]
 fn a_copy_or_frame_executable_this_crate_does_not_keep_is_loud() {
-    assert_eq!(
-        run_source("c = .method~new('m', 'return 1')~copy\nsay c~class\n"),
-        (0, "The Method class\n".to_string(), String::new())
-    );
-    for source in [
-        "c = .routine~new('r', 'return 1')~copy\n",
-        "c = .context~package~copy\n",
+    for (source, expected) in [
+        (
+            "c = .method~new('m', 'return 1')~copy\nsay c~class\n",
+            "The Method class\n",
+        ),
+        (
+            "r = .routine~new('r', 'return .context~executable')\nc = r~copy\nsay (c~call == c)\n",
+            "1\n",
+        ),
+        (
+            "signal on syntax\nx = 'abc'~substr(-1)\nsyntax:\n\
+             say condition('O')['STACKFRAMES']~firstItem~executable~class\n",
+            "The Method class\n",
+        ),
+        (
+            "say .context~stackFrames[1]~executable~class\n",
+            "The Routine class\n",
+        ),
     ] {
         assert_eq!(
             run_source(source),
-            (
-                120,
-                String::new(),
-                "rexx-exec: method \"COPY\" of class \"Object\" is not implemented (Phase 9)\n"
-                    .to_string()
-            ),
+            (0, expected.to_string(), String::new()),
             "{source:?}"
         );
     }
     assert_eq!(
-        run_source("say .context~stackFrames[1]~executable~class\n"),
-        (0, "The Routine class\n".to_string(), String::new())
+        run_source("c = .context~package~copy\n"),
+        (
+            120,
+            String::new(),
+            "rexx-exec: method \"COPY\" of class \"Object\" is not implemented (Phase 9)\n"
+                .to_string()
+        ),
     );
+    // A native routine level's executable is a `Routine` object the oracle
+    // keeps per package and name, with no source: measured, oracle rc 0.
     assert_eq!(
         run_source(
-            "signal on syntax\nx = 'abc'~substr(-1)\nsyntax:\n\
+            "signal on syntax\ncall sysSleep 'x'\nsyntax:\n\
              say condition('O')['STACKFRAMES']~firstItem~executable~class\n"
         ),
         (

@@ -642,11 +642,20 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         // a frame's copy is a different object answering the same `~type`,
         // `~line` and `~context`.
         Ok(Primitive::StackFrame) => rexx_core::BehaviourId::OBJECT,
-        Ok(Primitive::Method) => {
+        // Measured, oracle rc 0: a copy reads and writes the variable the
+        // original names.
+        Ok(Primitive::VariableReference) => rexx_core::BehaviourId::OBJECT,
+        Ok(Primitive::Method | Primitive::Routine) => {
             interp.roots.activity_mut().push_temp(receiver);
-            return interp.copy_method_object(receiver).ok_or_else(|| {
-                Loud::unknown_receiver("a method object this crate did not build").into()
-            });
+            let copy = interp.copy_method_object(receiver).ok_or_else(|| {
+                Failure::from(Loud::unknown_receiver(
+                    "a method object this crate did not build",
+                ))
+            })?;
+            if let Some(row) = interp.rexx_routine_object(receiver) {
+                interp.record_rexx_routine_object(copy, row);
+            }
+            return Ok(copy);
         }
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
         Err(kind) => return Err(Loud::unknown_receiver(kind).into()),

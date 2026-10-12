@@ -1,0 +1,38 @@
+/* Routine~copy and VariableReference~copy, and the Method object a
+   native method level's StackFrame answers for ~executable. */
+r = .routine~new('r', 'return .context~executable')
+c = r~copy
+say (c == r) c~class~id (c~source == r~source) (c~package == r~package) (c~source[1] == r~source[1])
+say (r~call == r) (c~call == c) (c~call == r)
+e = .routines~e
+f = e~copy
+say (e~call('x') == e) (f~call('x') == f)
+say (r~callWith(.array~new) == r) (c~callWith(.array~new) == c)
+call e
+say (result == e) (.context~package~findRoutine('E') == e)
+h = c~copy
+say (h~call == h) (h~call == c)
+q = 7
+v = >q
+w = v~copy
+say w~class~id w~name w~value
+w~value = 9
+say q v~value w~value
+drop q
+say v~value w~value
+s.1 = 'a'
+x = >s.
+y = x~copy
+say y~name y~value~class~id (y~value == s.)
+v~objectName = 'named'
+say v~copy~objectName
+signal on syntax name s4
+s = .stream~new('/nonexistent/dir/file')
+s~charin('abc')
+s4:
+do f over condition('O')['STACKFRAMES']
+  say f~type f~executable~class~id (f~executable == .Stream~method('CHARIN'))
+end
+exit
+::routine e
+  return .context~executable

@@ -623,5 +623,11 @@ fn begin_routine(
             .call_program_main(program, values, name)
             .map(NativeStarted::Ran);
     };
-    interp.begin_installed_routine(program, directive, &values, name)
+    let started = interp.begin_installed_routine(program, directive, &values, name)?;
+    // `.context~executable` inside answers the object the call came through:
+    // measured, oracle rc 0, `r~call == r` and `r~copy~call == r~copy`.
+    if let NativeStarted::Entered(_) = started {
+        interp.activation_mut().cold_mut().executable = Some(receiver);
+    }
+    Ok(started)
 }
