@@ -328,3 +328,58 @@ OOM-killed at the 8G cap while compiling.
    own.
 4. Full `cargo test --release -j 4 -p rexx-exec --lib` at `cee92ba71`: exit 0, 1085 passed. The
    commit recording this changes only this file.
+
+## Fix round 1
+
+Review `task-8b-review.md`, on top of `823db3ab0`.
+
+* **I1 (ruling: refusal stays), `b20e3da44`.** A metaclass `NEW` answering a class `Class~new` did not
+  just build is refused by its own owner-less constructor `Loud::metaclass_new_reused_class` ("a
+  metaclass NEW answering a class it did not just build is not implemented"), with a DEVIATION row in
+  `refusal-dispositions.tsv` citing Deviation 32 and a recorded row in `refusal-sites.tsv`. Deviation 32
+  now covers it with the review's probes, re-run here: `metaarr.rex` oracle rc 0 `id Array`, crate
+  rc 120; `metaold.rex` oracle rc 0 `id FOO Object 1` / `id FOO 1`, crate rc 120. An answer that is
+  not a class keeps `Loud::receiver_class` ("... other than a class"), and its comment, its record
+  and crash entry 8's consequence paragraph now name only that case. Pin
+  `a_metaclass_new_answering_no_new_class_is_loud`: `'x'`, `.array`, `.Foo`, and the forwarding
+  neighbour answering `id k`. The same commit carries minor 6: Deviation 33 names no list and no time
+  word, and Deviation 8 loses its narrated sentence and the sentence the restored list made false.
+* **I2, `5a1053b52`.** Measured first: callgrind over 8000 copies at `823db3ab0` put about 90% of
+  instructions in `RootSet::add_global`'s string scan (memcmp 42%, the scan's own lines 45%). Globals
+  are a `NameMap` keyed by name now. A second profile then showed `copy_object` scanning
+  `package_objects` through `which_package`; an `object_packages` reverse map answers it.
+  `pcopyloop.rex`, RSS of `rexx-run` itself under `memcap 2G timeout`:
+
+  | copies | before (`823db3ab0`) | after (`68f768cb6`) | oracle (review) |
+  |---|---|---|---|
+  | 20000 | 131848 kB, 2.37 s | 133972 kB, 0.22 s | 20316 kB, 0.01 s |
+  | 80000 | 466328 kB, 75.66 s | 479528 kB, 0.90 s | 20324 kB, 0.02 s |
+
+  Retention stays: each copy is a `ProgramId` with cloned maps and global roots, and releasing it
+  needs the program table to drop entries, a shared change. Recorded as a sibling item in
+  `queued/2026-10-12-gc-trigger-blind-to-class-weight.md`.
+* **Minors 1, 4, 5, `c67544252`.** `copy_package` asserts `programs.len() == copy.0` before the push;
+  the cold block's `executable` doc names `Routine~call`; the three `' --'` comments are reworded.
+* **Minor 2, `68f768cb6`.** `Heap::names` is a `NameMap` behind the same `is_empty` early-out.
+
+Callgrind, `bench-programs/callgrind.sh -r 1 -j 10`, three binaries interleaved: before
+(`823db3ab0`), pre (`c67544252`, I1, I2, minors 1/4/5), map (pre plus minor 2; byte-identical to the
+committed `68f768cb6` build), outputs `t8b-cg/k1`, `k2`, `k3`. map and pre agree on every program to
+within 0.0005%. Against before, the changes over 0.1%: dispatchclass -2.58%, fibcall -2.05%, fibfunc
+-2.09% (`add_global`, which `Interp::root_exit_value` calls on every return, no longer scans by
+string: fibcall `add_global` 331.8M to 158.2M Ir, memcmp 170.8M to 62.4M), and pingmsg +0.46%
+(hashbrown's `fallible_with_capacity` out of line in `NativeObject` rehashes, +28.0M, the codegen
+effect `cce984dd3` found for the first `NameMap` in `rexx-core`). Two alternatives were measured and
+not kept: `BTreeMap` globals (fibcall +2.92%, dispatchclass +3.68%, pingmsg +0.63%) and a dedicated
+`RootSet` exit-value slot (fibcall -3.87%, dispatchclass -4.91%, but alloc4c +0.65% and decloop
++0.50% in `ops_loop_steady`, with no change to that function's source).
+
+Checks at `68f768cb6` (statuses unpiped): `cargo fmt --all --check` 0; `cargo clippy -j 4 -p rexx-core
+-p rexx-classes -p rexx-exec --all-targets -- -D warnings` 0; `--lib` of rexx-core, rexx-classes and
+rexx-exec 0 (rexx-exec 1085 passed); `REXX_CORPUS_GATE=1 --test corpus --test collect_stress --test
+refusal_sites --test refusal_dispositions --test closed_phases --test owners --test loud --test
+phase_ten_reasons` 0 (29+1 ignored, 37, 5, 3, 8, 6, 9, 5); every other rexx-exec test binary in four
+`-j 2` batches, 0 (`collection_arity` and `introspection_arity` with the temporary
+`rust/target/release/rexx-run` link, removed); rexx-classes `--tests` 0. Two batch attempts hit the
+590 s bound under load 20 (one compiling, one that ran every binary by a mistaken `--tests`); each
+was re-run in smaller batches to exit 0.
