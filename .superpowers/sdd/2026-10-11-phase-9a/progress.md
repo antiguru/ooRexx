@@ -95,3 +95,12 @@ Task 6: re-review dispatched (sonnet).
 Task 6: fix round 1/5 (all addressed, 0 open; commits 6dc1c95..9e8da28); re-review (sonnet) clean, ~40 crate probes, no mutator gap.
 Task 6: minor (deferred, perf-relevant): refuse_routines_write scans package_tables on every StringTable/Directory put/remove/empty (hash.rs ~1245, 1794, 1619); a hot-path cost the Phase 9 close callgrind must look at first; fix shape is a per-object flag, not a scan.
 Task 6: complete (commits c515bac..9e8da28, review clean after fix round 1)
+Task 7: dispatched (implementer opus, BASE e0f3ee495)
+Task 7: implementer DONE_WITH_CONCERNS, 40278c99e. Package_Options 0/54 -> 54/54, green. Oracle crash entry 36 (.object~package~options('T','r') rc 139). Checks overran 5 minutes.
+Task 7: minor (deferred, 9d): external CALL under package TRACE R prints no >I>/<I< lines; Routine~new routine's >I> names caller's package; parse error from Routine~new shows "&1" in CONDITION('O')~message (D6).
+Task 7: review dispatched (opus); focus: Settings::from_parts unchecked constructor, per-Interp override state vs C++ process statics, PROLOG/NOPROLOG change, hot path.
+Task 7: review (opus): spec COMPLIANT, quality fixes. Important 1 (prose): install.rs:263 and lib.rs:1655 false after arm_option_latches writes lostdigits_armed. Minors: introspection-arguments.tsv stale loud list; from_parts doc; three unwitnessed override cases; 35.1 "&1" also in main program (9d, D6).
+Task 7: fix round 1 dispatched (resume implementer): Important 1, minors 1-3.
+Task 7: fix round 1 implementer DONE 1ff284fd9; re-review dispatched (sonnet).
+Task 7: fix round 1/5 (all addressed, 0 open; commits 40278c9..1ff284f); re-review (sonnet) clean.
+Task 7: complete (commits e0f3ee4..1ff284f, review clean after fix round 1)

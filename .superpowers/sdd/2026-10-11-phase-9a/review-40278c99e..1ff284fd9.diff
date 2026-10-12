@@ -1,0 +1,364 @@
+# Review package: 40278c99e..1ff284fd9
+
+## Commits
+1ff284fd9 Phase 9a Task 7 fix round 1: latch prose, three pinned cases
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-7-report.md       | 34 ++++++++++++++++++++++
+ rust/corpus/introspection-arguments.tsv            |  6 ++--
+ rust/corpus/lang/package_default_options.rex       | 27 +++++++++++++++++
+ rust/crates/rexx-exec/src/install.rs               |  6 ++--
+ rust/crates/rexx-exec/src/lib.rs                   |  5 ++--
+ rust/crates/rexx-exec/src/run/condition.rs         |  2 +-
+ rust/crates/rexx-num/src/settings.rs               |  6 ++--
+ .../sourceline_oracle/package_default_options.txt  | 29 +++++++++++++++++-
+ 8 files changed, 102 insertions(+), 13 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md
+index dd6850b86..0040673fa 100644
+--- a/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md
+@@ -140,10 +140,44 @@ rows were re-run after it. Together these took longer than the 5-minute per-task
+    `>I>`/`<I<` routine lines here where the oracle does (`t7-probe5`, no write involved).
+ 2. Pre-existing: a `Routine~new` routine's `>I>` line names the caller's package here and the
+    routine's own name (`"x"`) in the oracle (`t7-probe5`).
+ 3. Pre-existing: a parse error raised by `Routine~new` source (and so by `S`/`D` directive text)
+    carries `&1` unsubstituted in `CONDITION('O')~message` (`26.5 ... found "&1"` against `found
+    "ABC"`); code and error text agree. The witnesses print no such message.
+ 4. The override state is per `Interp`; the C++ keeps it in `PackageClass` statics, process-wide.
+    The same for one interpreter per process, which is what `rexx -o` uses.
+ 5. `rexx-run` has no `-o`/`-od` switch; the witness drives the same two `defaultOptions` sends the
+    C++ launcher makes.
++
++## Fix round 1
++
++Review: `task-7-review.md`, fixed on top of `40278c99e`.
++
++* Important 1: `install.rs`'s "`Interp::lostdigits_armed`'s only write" now says only what that
++  site does, and `lib.rs`'s field doc names both arming routes (an installed `::OPTIONS ...
++  LOSTDIGITS SYNTAX`, or a `Package~options` write). Two neighbouring sentences counted the
++  required-string protocol's arming routes ("third", "other"), and `arm_option_latches` adds one;
++  both now say "An arming route" (`install.rs`, `run/condition.rs`).
++* Minor 1: `Package~defaultOptions` removed from `introspection-arguments.tsv`'s list of this
++  phase's `loud` rows.
++* Minor 2: `Settings::from_parts`'s doc says the caller owns `digits >= 1`, and that
++  `fuzz >= digits` is allowed through.
++* Minor 3: `lang/package_default_options.rex` now pins an override `FUZZ 5` over explicit `DIGITS
++  3` and `DIGITS 5` (comparisons `3 5 0 0 1` and `5 5 1 1 0`, and a bare `NUMERIC DIGITS` there is
++  33.1), an override naming `NUMERIC INHERIT` (`inherited: 14 ENGINEERING INHERIT`, then `not
++  inherited: 9 SCIENTIFIC` once the count is spent), and `D`/`C` written from a started activity,
++  seen by compiles on the main activity and on a third one (`7 ENGINEERING`, counts -2 and -3).
++  Oracle rc 0, crate rc 0, stdout identical (each line above read), stderr identical (empty). Its
++  `sourceline_oracle` expectation was regenerated through the oracle driver (count 106).
++
++Checks at the final edit, each unpiped, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t7-target`,
++`memcap 8G`, `-j 4`, `CARGO_INCREMENTAL=0`:
++
++| command | exit |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `cargo clippy -j 4 -p rexx-exec -p rexx-num --all-targets -- -D warnings` | 0 |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus --test refusal_sites --test closed_phases --test owners --test phase_ten_reasons` | 0 (`1001 of 1001 matching`) |
++| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
++
++Review Minor 4 (the unsubstituted `&1` in a main-program parse error) is outside this diff and goes
++to the 9d ledger with concern 3.
+diff --git a/rust/corpus/introspection-arguments.tsv b/rust/corpus/introspection-arguments.tsv
+index 8a38b1cff..b41436c8d 100644
+--- a/rust/corpus/introspection-arguments.tsv
++++ b/rust/corpus/introspection-arguments.tsv
+@@ -2,23 +2,23 @@
+ # corpus/introspection-arity.tsv's probe (Phase 5i Task 0).
+ #
+ # class<TAB>method<TAB>arm<TAB>arguments, where `--` is a send with none.
+ #
+ # A LIST IS ONLY REAL IF THE ORACLE COMPLETES THE SEND. Any row the oracle
+ # refuses is a harness failure for that row and not a data point;
+ # introspection_arity.rs makes that a test failure. Without the rule the
+ # instrument reads green having sent nothing that could work.
+ #
+ # THE CLASS ARM IS HERE and corpus/collection-arguments.tsv's is not. This
+-# phase's own `loud` rows that live on it -- Package~defaultOptions,
+-# Method~loadExternalMethod, Method~newFile, Routine~loadExternalRoutine and
+-# Routine~newFile -- are named by the plan's Tasks 4 and 7; an instance-only
++# phase's own `loud` rows that live on it -- Method~loadExternalMethod,
++# Method~newFile, Routine~loadExternalRoutine and Routine~newFile -- are
++# named by the plan's Tasks 4 and 7; an instance-only
+ # table would leave them unsized.
+ #
+ # `UNSTABLE:` marks a row whose answered value the ORACLE does not reproduce
+ # between two of its own runs, so no value comparison could say anything
+ # about it. The value is not printed for such a row and the verdict is
+ # `unstable`; the marker is earned by running the oracle twice and is a test
+ # failure on a row whose two answers agree. Object~hashCode is address-derived
+ # and answers RAW BYTES rather than a printable number -- measured, three runs
+ # of one program put three different unprintable octet strings on stdout --
+ # so a probe of its own must not print one.
+diff --git a/rust/corpus/lang/package_default_options.rex b/rust/corpus/lang/package_default_options.rex
+index 83e03d3d6..140355871 100644
+--- a/rust/corpus/lang/package_default_options.rex
++++ b/rust/corpus/lang/package_default_options.rex
+@@ -45,20 +45,42 @@ say 'C after D' cls~defaultOptions('C')
+ say 'D now [' || cls~defaultOptions('D') || ']'
+ say 'set C' cls~defaultOptions('C', 0)
+ say 'D at count 0 [' || cls~defaultOptions('D', '::options digits 8') || ']'
+ say 'D now [' || cls~defaultOptions('D') || ']'
+ say 'C' cls~defaultOptions('C')
+ say 'set C' cls~defaultOptions('C', 2)
+ np = .context~package~loadPackage(dir || 'package_default_options_noprolog.cls')
+ say 'NOPROLOG package:' np~options('P') np~options('X') np~digits
+ say 'C' cls~defaultOptions('C', ' 0 ')
+ 
++say 'fuzz over an explicit DIGITS:' cls~defaultOptions('D', '::options fuzz 5') cls~defaultOptions('C', 3)
++f = .routine~new('f', ('return digits() fuzz() (1 = 1.01) (12 = 13) (100 > 101)', '::options digits 3'))
++say '  digits 3 fuzz 5:' f~call
++f = .routine~new('f', ('return digits() fuzz() (1 = 1.01) (12 = 13) (100 > 101)', '::options digits 5'))
++say '  digits 5 fuzz 5:' f~call
++call try ".routine~new('f', ('numeric digits; return digits()', '::options digits 3'))~call"
++say 'C' cls~defaultOptions('C')
++
++say 'NUMERIC INHERIT:' cls~defaultOptions('D', '::options numeric inherit') cls~defaultOptions('C', 1)
++ni = .routine~new('ni', 'return digits() form()')
++numeric digits 14
++numeric form engineering
++say '  inherited:' ni~call ni~package~options('NU')
++say '  not inherited:' .routine~new('no', 'return digits() form()')~call
++numeric digits 9
++numeric form scientific
++
++say 'from another activity:' .k~start('setBoth')~result
++say '  main activity:' .routine~new('m', 'return digits() form()')~call 'C' cls~defaultOptions('C')
++say '  third activity:' .k~start('compile')~result 'C' cls~defaultOptions('C')
++say 'C' cls~defaultOptions('C', 0)
++
+ call try "cls~defaultOptions('D', 'digits 5')"
+ call try "cls~defaultOptions('D', '::options digits 5;')"
+ call try "cls~defaultOptions('D', '')"
+ call try "cls~defaultOptions('D', .nil)"
+ call try "cls~defaultOptions('C', 1.5)"
+ call try "cls~defaultOptions('C', 'x')"
+ call try "cls~defaultOptions('A', 1)"
+ say 'D [' || cls~defaultOptions('D') || ']'
+ say 'C' cls~defaultOptions('C')
+ exit
+@@ -70,10 +92,15 @@ called:
+ try:
+   signal on syntax name refused
+   interpret 'say' arg(1)
+   return
+ refused:
+   c = condition('o')
+   say '  ' arg(1) '->' c~code c~errortext c~message
+   return
+ 
+ ::class k
++::method setBoth class
++  .Package~defaultOptions('D', '::options digits 7 form engineering')
++  return .Package~defaultOptions('C', -1)
++::method compile class
++  return .routine~new('t', 'return digits() form()')~call
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index 0292e2933..998d83e4b 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -243,32 +243,32 @@ impl Interp {
+                 // and never runs code, so this is the whole of installing it.
+                 DirectiveKind::Options(options) => {
+                     let outcome = {
+                         let package = self.package_options.entry(id).or_default();
+                         options.iter().try_for_each(|option| package.apply(option))
+                     };
+                     if let Err(error) = outcome {
+                         self.blame_directive(program, directive);
+                         return Err(run::raised_from_settings(error).into());
+                     }
+-                    // The required-string protocol's third arming route:
++                    // An arming route of the required-string protocol:
+                     // `::OPTIONS NOSTRING SYNTAX` turns a rendering into a
+                     // raise exactly as a `NOSTRING` trap does. See
+                     // [`Interp::reqstr_armed`] for why this only ever sets.
+                     if self
+                         .options_of(id)
+                         .is_some_and(PackageOptions::escalates_nostring)
+                     {
+                         self.reqstr_armed = true;
+                     }
+-                    // `Interp::lostdigits_armed`'s only write, and the same
+-                    // set-once rule: the arithmetic path's gate.
++                    // `Interp::lostdigits_armed`, under the same set-once
++                    // rule: the arithmetic path's gate.
+                     if self
+                         .options_of(id)
+                         .is_some_and(PackageOptions::escalates_lostdigits)
+                     {
+                         self.lostdigits_armed = true;
+                     }
+                 }
+                 _ => {}
+             }
+ 
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index f45789a83..71b0e282b 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1645,22 +1645,23 @@ struct Interp {
+     /// live standard input, or `None` for an embedding that reads them out of
+     /// the `Outcome` at the end. See [`crate::Sinks`].
+     sinks: Option<crate::invocation::Sinks>,
+     /// The command-line words `.SYSCARGS` answers, before they become the one
+     /// `Array` `.local` holds -- see `Invocation::words` for why the joined
+     /// argument string cannot supply them.
+     command_words: Vec<Vec<u8>>,
+     /// Whether the required-string protocol can answer anything other than
+     /// the value it was handed -- `Interp::required_string_value`'s gate.
+     reqstr_armed: bool,
+-    /// Whether any program in this run installed `::OPTIONS ... LOSTDIGITS
+-    /// SYNTAX`, which is the gate on [`Interp::lostdigits_check`].
++    /// Whether any package in this run has escalated `LOSTDIGITS`, by an
++    /// installed `::OPTIONS ... LOSTDIGITS SYNTAX` or a `Package~options`
++    /// write; the gate on [`Interp::lostdigits_check`].
+     lostdigits_armed: bool,
+     /// The running program's own location, as `PARSE SOURCE`'s third word.
+     program_path: String,
+     /// The resolved location of each program a `::REQUIRES` loaded, which is
+     /// what that program's own `PARSE SOURCE`, `~package~name` and traceback
+     /// report in place of [`Interp::program_path`].
+     required_paths: FxHashMap<ProgramId, Box<str>>,
+     /// The package each `::REQUIRES` name has already loaded, keyed both by
+     /// the name as written and by the file it resolved to.
+     required_packages: FxHashMap<Box<[u8]>, ProgramId>,
+diff --git a/rust/crates/rexx-exec/src/run/condition.rs b/rust/crates/rexx-exec/src/run/condition.rs
+index 60a65d8a7..ed6a9b149 100644
+--- a/rust/crates/rexx-exec/src/run/condition.rs
++++ b/rust/crates/rexx-exec/src/run/condition.rs
+@@ -20,21 +20,21 @@ use super::{
+ impl Interp {
+     /// `SIGNAL ON`/`OFF` and `CALL ON`/`OFF`, which are one instruction with
+     /// one flag between them.
+     pub(crate) fn exec_condition_trap(
+         &mut self,
+         trap: &ConditionTrap,
+         call: bool,
+     ) -> Result<Flow, Failure> {
+         match &trap.label {
+             Some(label) => {
+-                // The required-string protocol's other arming route: a
++                // An arming route of the required-string protocol: a
+                 // NOSTRING trap is what turns an object with no string value
+                 // from a rendering into a raise. `ANY` counts, measured --
+                 // `signal on any` over `say .environment` runs the handler
+                 // with `CONDITION('C')` `NOSTRING`. See
+                 // `Interp::reqstr_armed` for why this only ever sets.
+                 if matches!(&trap.condition[..], b"NOSTRING" | b"ANY") {
+                     self.reqstr_armed = true;
+                 }
+                 let entry = Trap {
+                     call,
+diff --git a/rust/crates/rexx-num/src/settings.rs b/rust/crates/rexx-num/src/settings.rs
+index 787f9cd25..59dbbecb2 100644
+--- a/rust/crates/rexx-num/src/settings.rs
++++ b/rust/crates/rexx-num/src/settings.rs
+@@ -202,23 +202,23 @@ fn create_unsigned_value(digits: &[u8], carry: bool, exponent: i64, max_value: u
+     if carry {
+         value = value.checked_add(1)?;
+     }
+     for _ in 0..exponent {
+         value = value.checked_mul(10)?;
+     }
+     (value <= max_value).then_some(value)
+ }
+ 
+ impl Settings {
+-    /// The three settings as given, the pair not compared:
+-    /// `PackageSetting::setDigits` and `setFuzz` store without the check
+-    /// `NUMERIC` makes.
++    /// The three settings as given, unchecked: `PackageSetting::setDigits`
++    /// and `setFuzz` store without the check `NUMERIC` makes. The caller
++    /// owns `digits >= 1`; `fuzz >= digits` is allowed through.
+     pub fn from_parts(digits: u64, fuzz: u64, form: Form) -> Settings {
+         Settings { digits, fuzz, form }
+     }
+ 
+     pub fn digits(&self) -> u64 {
+         self.digits
+     }
+ 
+     pub fn fuzz(&self) -> u64 {
+         self.fuzz
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt
+index 32ad050e8..daed4fb13 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt
+@@ -1,11 +1,11 @@
+-count 79
++count 106
+ /* .Package~defaultOptions(name, value): the override settings and the count.
+    While the count is not zero, every compile of a package takes the override
+    for each option its own ::OPTIONS did not name, and the count moves one
+    down: a called file, a loaded package, Routine~new, Method~new,
+    Package~new, a DEFINE from source, and the compile the D write itself
+    makes. INTERPRET compiles no package. A count of 1 is what `rexx -o` sets,
+    the next program alone; -1 is `rexx -od`, every one. */
+ parse source . . me
+ dir = left(me, lastpos('/', me))
+ cls = .Package
+@@ -46,20 +46,42 @@ say 'C after D' cls~defaultOptions('C')
+ say 'D now [' || cls~defaultOptions('D') || ']'
+ say 'set C' cls~defaultOptions('C', 0)
+ say 'D at count 0 [' || cls~defaultOptions('D', '::options digits 8') || ']'
+ say 'D now [' || cls~defaultOptions('D') || ']'
+ say 'C' cls~defaultOptions('C')
+ say 'set C' cls~defaultOptions('C', 2)
+ np = .context~package~loadPackage(dir || 'package_default_options_noprolog.cls')
+ say 'NOPROLOG package:' np~options('P') np~options('X') np~digits
+ say 'C' cls~defaultOptions('C', ' 0 ')
+ 
++say 'fuzz over an explicit DIGITS:' cls~defaultOptions('D', '::options fuzz 5') cls~defaultOptions('C', 3)
++f = .routine~new('f', ('return digits() fuzz() (1 = 1.01) (12 = 13) (100 > 101)', '::options digits 3'))
++say '  digits 3 fuzz 5:' f~call
++f = .routine~new('f', ('return digits() fuzz() (1 = 1.01) (12 = 13) (100 > 101)', '::options digits 5'))
++say '  digits 5 fuzz 5:' f~call
++call try ".routine~new('f', ('numeric digits; return digits()', '::options digits 3'))~call"
++say 'C' cls~defaultOptions('C')
++
++say 'NUMERIC INHERIT:' cls~defaultOptions('D', '::options numeric inherit') cls~defaultOptions('C', 1)
++ni = .routine~new('ni', 'return digits() form()')
++numeric digits 14
++numeric form engineering
++say '  inherited:' ni~call ni~package~options('NU')
++say '  not inherited:' .routine~new('no', 'return digits() form()')~call
++numeric digits 9
++numeric form scientific
++
++say 'from another activity:' .k~start('setBoth')~result
++say '  main activity:' .routine~new('m', 'return digits() form()')~call 'C' cls~defaultOptions('C')
++say '  third activity:' .k~start('compile')~result 'C' cls~defaultOptions('C')
++say 'C' cls~defaultOptions('C', 0)
++
+ call try "cls~defaultOptions('D', 'digits 5')"
+ call try "cls~defaultOptions('D', '::options digits 5;')"
+ call try "cls~defaultOptions('D', '')"
+ call try "cls~defaultOptions('D', .nil)"
+ call try "cls~defaultOptions('C', 1.5)"
+ call try "cls~defaultOptions('C', 'x')"
+ call try "cls~defaultOptions('A', 1)"
+ say 'D [' || cls~defaultOptions('D') || ']'
+ say 'C' cls~defaultOptions('C')
+ exit
+@@ -71,10 +93,15 @@ called:
+ try:
+   signal on syntax name refused
+   interpret 'say' arg(1)
+   return
+ refused:
+   c = condition('o')
+   say '  ' arg(1) '->' c~code c~errortext c~message
+   return
+ 
+ ::class k
++::method setBoth class
++  .Package~defaultOptions('D', '::options digits 7 form engineering')
++  return .Package~defaultOptions('C', -1)
++::method compile class
++  return .routine~new('t', 'return digits() form()')~call

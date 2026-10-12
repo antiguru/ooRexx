@@ -1,0 +1,2181 @@
+# Review package: e0f3ee495..40278c99e
+
+## Commits
+40278c99e Phase 9a Task 7: package setting writes
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-7-report.md       | 149 +++++++++
+ rust/corpus/lang/package_default_options.rex       |  79 +++++
+ .../corpus/lang/package_default_options_called.cls |   5 +
+ .../lang/package_default_options_noprolog.cls      |   4 +
+ rust/corpus/lang/package_default_options_req.cls   |   3 +
+ rust/corpus/lang/package_option_writes.rex         | 109 ++++++
+ rust/corpus/oracle-crashes.txt                     |   9 +
+ rust/corpus/phase-9.txt                            |   4 +
+ rust/corpus/refusal-sites.tsv                      | 214 ++++++------
+ rust/crates/rexx-exec/src/dispatch.rs              |   6 +-
+ rust/crates/rexx-exec/src/dispatch/array.rs        |  10 -
+ rust/crates/rexx-exec/src/dispatch/package.rs      | 195 ++++++++---
+ rust/crates/rexx-exec/src/error.rs                 |   6 +
+ rust/crates/rexx-exec/src/install.rs               |   5 +
+ rust/crates/rexx-exec/src/lib.rs                   |  14 +-
+ rust/crates/rexx-exec/src/options.rs               | 368 ++++++++++++++++++---
+ rust/crates/rexx-exec/tests/phase_ten_reasons.rs   |   2 +-
+ rust/crates/rexx-num/src/settings.rs               |   7 +
+ .../sourceline_oracle/package_default_options.txt  |  80 +++++
+ .../sourceline_oracle/package_option_writes.txt    | 110 ++++++
+ 20 files changed, 1148 insertions(+), 231 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md
+new file mode 100644
+index 000000000..dd6850b86
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-7-report.md
+@@ -0,0 +1,149 @@
++# Phase 9a Task 7 report: package setting writes
++
++Base `e0f3ee495`. Status: DONE_WITH_CONCERNS. One commit (code, witnesses, tables, this report).
++
++Probes ran from fresh empty directories under `/tmp/claude-1000/p9/t7-probe*`, `t7-w1`, `t7-w2`,
++`t7-crash`, the oracle under the standard wrapper with `timeout -k 5 20`, the crate's `rexx-run`
++(release, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t7-target`) under `memcap 2G` and `timeout 20`.
++`oracle-crashes.txt` was read first; entry 9 (`::OPTIONS TRACE ?<letter>`) is the nearby hazard and
++no probe writes a `?` trace setting. stdout, stderr and status were compared separately, and every
++witness's stdout was read on both sides.
++
++## Oracle probes
++
++* `t7-probe1`: `.context~package~options(name, value)` for `D`, `FO`, `FU`, `T`, `NU`, `E`, `NOV`,
++  `I`, `X`, `R`, `S`, `A`, with `::routine r1` called between writes. rc 0. A write answers the
++  previous value (`9 12 9` for `D 12` read back, the running activation still at 9); a routine
++  called afterwards starts from the written settings (`r1 12 ENGINEERING 3`); `NU I` then `numeric
++  digits 20` makes `r1` answer `20 SCIENTIFIC 0`; `I` answers the settings before the first write;
++  `R` answers the current settings and restores the initial ones; `S` replaces the settings from an
++  `::OPTIONS` directive and `X` stays empty. Crate after: identical on all three descriptors.
++* `t7-probe2`: `.Package~defaultOptions`. `D` answers the previous override; with the count not
++  zero, the `D` write's own compile consumes one (`C after D 1` from 2) and the new override is the
++  old one plus what the string names (`D2` keeps `DIGITS 5 FORM ENGINEERING`, adds `TRACE RESULTS`).
++  A called file, `Routine~new`, `Package~new` and `Method~new` each consume one; `INTERPRET` does
++  not. Crate after: stdout identical; stderr differs only in two pre-existing trace divergences
++  (concerns 1 and 2).
++* `t7-probe3`: the write errors. `D -1`/`D 0` 93.907, `D abc` 93.905, `FU -1`/`FU abc` 93.906,
++  `FU 19` 26.900 `NUMERIC FUZZ value ("19") must be smaller than NUMERIC DIGITS ("9")`, `D 4` over
++  fuzz 5 33.1, `FO`/`NU`/`E`/`P`/`A` with a bad letter 93.914 naming each arm's list, `T wrong`
++  24.1 found `w`, `S wrong` 93.900 `argument is not an ::OPTIONS directive`, `;` 93.900 `... found:
++  ";" (end of clause)`, `S '::options digits abc'` 26.5, `D '::routine foo'` accepted, leading
++  blanks accepted, `D ':'` 35.1, `D .nil` 88.909, `D 1.0` and `D ' 7 '` accepted, `C 1.5` 93.905.
++  Crate after: identical except the `c~message` of the two parse errors (concern 3).
++* `t7-probe4`: the REXX package. `.object~package~options('D', 12)` answers `9` and reads back
++  `12`; repeated calls of one file consume a count each (`-1` to `-3` over two calls). Crate after:
++  identical.
++* `t7-crash`: `.object~package~options('T', 'r')` is SIGSEGV rc 139, 3 runs of 3; recorded as entry
++  36 of `rust/corpus/oracle-crashes.txt`. The crate stores the setting.
++* `t7-probe6`: trace letters `E`, `F`, `C`, `O`, `N` print no `>I>`/`<I<` lines for a routine; `L`
++  does. The witnesses use these to witness a trace override without the pre-existing divergences.
++
++C++ read: `PackageClass::options` and `clzOptions`, `overridePackageSettings` (only the `PROLOG`
++flag guards the prologue setting, so a package naming `NOPROLOG` takes an override), and
++`setPackageSettings`, which compiles the directive with `createRoutine` and so runs
++`installPackage`'s override. `LanguageParser::generateProgram` and `installPackage` are the two
++override sites: every compile of a file, a loaded package, `Routine~new`, `Method~new`,
++`Package~new` and a `DEFINE` from source.
++
++## Implemented
++
++* `options.rs`: `OptionName` (the letter switch both reads and writes use, replacing
++  `OptionQuery`), `PackageOptions::value_of`, `set_by_letter`, `take_defaults` (the override),
++  `take_settings` (`S`, keeping the explicit flags), and `OptionWrites` on `Interp` holding the REXX
++  package's settings, each package's initial settings (entered at its first change), the override
++  settings and the count. `Interp::package_settings_mut`, `arm_option_latches` (a write escalating
++  `NOSTRING` or `LOSTDIGITS` arms the latch `install_directives` arms),
++  `override_package_settings`, and `settings_from_directive` (the 93.900 checks, then the directive
++  compiled through `install_executable` as `PackageSettingsFromOptionsDirectiveString`).
++* `::OPTIONS PROLOG` and `NOPROLOG` now clear each other's explicit flag, as
++  `DirectiveParser.cpp:1315` does; before, `::options noprolog prolog` rendered `X` as `NOPROLOG
++  PROLOG` (witnessed, and its mutation reverts the witness line).
++* `install.rs`: `override_package_settings` runs where the first walk ends (after the
++  translation-time refusals, before any `::REQUIRES` loads) and in `record_compiled_body` and
++  `record_compiled_routine`, the directive-less compiles.
++* `dispatch/package.rs`: `options` and `default_options` writes; `R` now restores. The previous value
++  `D` answers is built after the compile.
++* `rexx-num`: `Settings::from_parts`, an unchecked constructor (`setDigits`/`setFuzz` store without
++  comparing the pair).
++* `error.rs`: `Raised::whole_number_user_defined` (26.900).
++* Deleted: `Loud::package_option_write`; `dispatch/array.rs`'s `is_whole_method_argument`, unused
++  after it. `tests/phase_ten_reasons.rs` sampled the deleted literal as a lib.rs production literal
++  and now samples `"a write to a package's .ROUTINES table"`.
++
++Hot path: nothing per clause or per call changed. `start_from_package` reads the same map; the
++override check is one branch per package compile.
++
++## Witnesses (`rust/corpus/phase-9.txt`)
++
++* `lang/package_option_writes.rex`: every option name with a value, the previous value and the
++  read-back, the effect on `::routine calc` started afterwards (digits, form, fuzz, trace,
++  numeric inherit), `NOVALUE`/`LOSTDIGITS` escalation by a write and its removal by `A C`, `I`, `X`,
++  `R`, `S` (including a directive that is not `::OPTIONS`), the REXX package's `D` write, the
++  PROLOG/NOPROLOG naming order, and every write error above with its message. Oracle rc 0, crate rc
++  0, stdout identical, stderr identical.
++* `lang/package_default_options.rex` with `package_default_options_called.cls`,
++  `_req.cls`, `_noprolog.cls`: `D` and `C` read and written; the `'C'` count of 1 that `rexx -o`
++  sets (the next called file takes digits 6 / ENGINEERING / its own fuzz 2 and trace N; the
++  following call does not); count -1 consumed by `Routine~new` with and without directives,
++  `Method~new`, `DEFINE` from source, `Package~new`, `loadPackage`, the `D` write, and not by
++  `INTERPRET`; `I` of an overridden package is the pre-override settings; explicit `DIGITS`/`TRACE`
++  kept; the override's `NOPROLOG` suppressing a loaded package's prologue; an explicit `NOPROLOG`
++  not keeping out the override's `PROLOG`; `NOVALUE`/`LOSTDIGITS` escalation by the override; the
++  errors. Oracle rc 0, crate rc 0, stdout identical, stderr identical (empty).
++* `sourceline_oracle` expectations for both `.rex` files, from the module comment's `.Package~new`
++  driver against the oracle.
++
++Mutations (each reversed from a copy, confirmed with `git diff --stat`): latches not armed by a
++write turns `lost() -> 98.972` into `1.2346E+6` in witness 1; dropping the PROLOG/NOPROLOG clearing
++changes both naming lines. The latch arm inside the override was dropped instead of kept: witness 2
++stayed identical without it, because the override's settings come from an `::OPTIONS` install that
++arms the latches itself (comment at the site).
++
++## Refusal tables
++
++`REXX_REFUSAL_SITES_REFRESH=1 cargo test -p rexx-exec --test refusal_sites` re-derived
++`refusal-sites.tsv`: the `package_option_write` row is gone, `whole_number_user_defined` is new
++(`agrees yes 26.900`, witness `.context~package~options('FUZZ', 9)`), `method_user_defined`'s
++surface became `body+send` (it is now also raised from `options.rs`), and the rest are line-number
++shifts in `lib.rs` and `error.rs`. `refusal-dispositions.tsv` had no row for it. `closed_phases`,
++`owners`, `phase_ten_reasons` green.
++
++## Package_Options
++
++Before (Task 3's baseline, `docs/superpowers/records/2026-10-11-phase-9a/suite-baseline/table.tsv`):
++crate 54 started, 0 passed, 54 blocked by `a package settings write`, 55 runs. After
++(`/tmp/claude-1000/p9/t7-target/suite/table.tsv`): oracle 54/54 passed, crate 54/54 passed in one
++run, verdict `green`, `oracle-differences.tsv` empty. No test the oracle passes fails, so nothing
++needs `suite-9d-set.txt`.
++
++## Checks (each unpiped, on the final tree)
++
++| command | exit |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `cargo clippy -j 4 -p rexx-exec -p rexx-num --all-targets -- -D warnings` | 0 |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus --test refusal_sites --test closed_phases --test owners --test phase_ten_reasons` | 0 (`1001 of 1001 matching`) |
++| `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package_Options cargo test --release -p rexx-exec --test suite` | 0 |
++| `cargo test --release -p rexx-exec --test collect_stress --test trace_oracle --test ir_recorded --test coverage` | 0 |
++| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
++| `cargo test --release -p rexx-exec --lib options` | 0 |
++
++All under `memcap 8G`, `-j 4`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t7-target`.
++The harness, sourceline and `--lib` runs were taken before the last edit (the `D` answer built after
++the compile, the dropped override latch arm, a citation); the corpus, tables, suite, fmt and clippy
++rows were re-run after it. Together these took longer than the 5-minute per-task budget.
++
++## Concerns
++
++1. Pre-existing: a file reached by an external `CALL` under a package `TRACE R` prints no
++   `>I>`/`<I<` routine lines here where the oracle does (`t7-probe5`, no write involved).
++2. Pre-existing: a `Routine~new` routine's `>I>` line names the caller's package here and the
++   routine's own name (`"x"`) in the oracle (`t7-probe5`).
++3. Pre-existing: a parse error raised by `Routine~new` source (and so by `S`/`D` directive text)
++   carries `&1` unsubstituted in `CONDITION('O')~message` (`26.5 ... found "&1"` against `found
++   "ABC"`); code and error text agree. The witnesses print no such message.
++4. The override state is per `Interp`; the C++ keeps it in `PackageClass` statics, process-wide.
++   The same for one interpreter per process, which is what `rexx -o` uses.
++5. `rexx-run` has no `-o`/`-od` switch; the witness drives the same two `defaultOptions` sends the
++   C++ launcher makes.
+diff --git a/rust/corpus/lang/package_default_options.rex b/rust/corpus/lang/package_default_options.rex
+new file mode 100644
+index 000000000..83e03d3d6
+--- /dev/null
++++ b/rust/corpus/lang/package_default_options.rex
+@@ -0,0 +1,79 @@
++/* .Package~defaultOptions(name, value): the override settings and the count.
++   While the count is not zero, every compile of a package takes the override
++   for each option its own ::OPTIONS did not name, and the count moves one
++   down: a called file, a loaded package, Routine~new, Method~new,
++   Package~new, a DEFINE from source, and the compile the D write itself
++   makes. INTERPRET compiles no package. A count of 1 is what `rexx -o` sets,
++   the next program alone; -1 is `rexx -od`, every one. */
++parse source . . me
++dir = left(me, lastpos('/', me))
++cls = .Package
++say 'D [' || cls~defaultOptions('D') || ']'
++say 'C' cls~defaultOptions('C')
++override = '::options digits 6 form engineering fuzz 1 trace e',
++  'novalue syntax lostdigits syntax noprolog'
++say 'set D [' || cls~defaultOptions('D', override) || ']'
++say 'D [' || cls~defaultOptions('D') || ']'
++say 'count 0 routine:' .routine~new('r0', 'return digits() form() fuzz() trace()')~call
++say 'set C' cls~defaultOptions('C', 1)
++say 'called:' called()
++say 'C' cls~defaultOptions('C')
++say 'called again:' called()
++
++say 'set C' cls~defaultOptions('countOverrides', -1)
++r = .routine~new('r1', 'return digits() form() fuzz() trace()')
++say 'routine:' r~call 'C' cls~defaultOptions('C')
++say 'routine I [' || r~package~options('I') || ']'
++say 'routine [' || r~package~options || ']'
++r = .routine~new('r2', ('return digits() form() fuzz() trace()', '::options digits 11 trace c'))
++say 'routine naming DIGITS and TRACE:' r~call r~package~options('X') 'C' cls~defaultOptions('C')
++m = .method~new('m', 'return digits()')
++say 'method C' cls~defaultOptions('C')
++.k~define('d', 'return digits() form()')
++say 'define:' .k~new~d 'C' cls~defaultOptions('C')
++pk = .Package~new('pk', 'return')
++say 'package:' pk~digits pk~form pk~fuzz 'C' cls~defaultOptions('C')
++req = .context~package~loadPackage(dir || 'package_default_options_req.cls')
++say 'loaded:' req~digits req~form req~options('P') 'C' cls~defaultOptions('C')
++interpret 'say "interpret:" digits()'
++say 'C' cls~defaultOptions('C')
++call try ".routine~new('nv', 'return zzunset')~call"
++call try ".routine~new('ld', 'return 1234567 + 1')~call"
++
++say 'D again [' || cls~defaultOptions('D', '::options digits 8') || ']'
++say 'C after D' cls~defaultOptions('C')
++say 'D now [' || cls~defaultOptions('D') || ']'
++say 'set C' cls~defaultOptions('C', 0)
++say 'D at count 0 [' || cls~defaultOptions('D', '::options digits 8') || ']'
++say 'D now [' || cls~defaultOptions('D') || ']'
++say 'C' cls~defaultOptions('C')
++say 'set C' cls~defaultOptions('C', 2)
++np = .context~package~loadPackage(dir || 'package_default_options_noprolog.cls')
++say 'NOPROLOG package:' np~options('P') np~options('X') np~digits
++say 'C' cls~defaultOptions('C', ' 0 ')
++
++call try "cls~defaultOptions('D', 'digits 5')"
++call try "cls~defaultOptions('D', '::options digits 5;')"
++call try "cls~defaultOptions('D', '')"
++call try "cls~defaultOptions('D', .nil)"
++call try "cls~defaultOptions('C', 1.5)"
++call try "cls~defaultOptions('C', 'x')"
++call try "cls~defaultOptions('A', 1)"
++say 'D [' || cls~defaultOptions('D') || ']'
++say 'C' cls~defaultOptions('C')
++exit
++
++called:
++  call (dir || 'package_default_options_called.cls')
++  return result
++
++try:
++  signal on syntax name refused
++  interpret 'say' arg(1)
++  return
++refused:
++  c = condition('o')
++  say '  ' arg(1) '->' c~code c~errortext c~message
++  return
++
++::class k
+diff --git a/rust/corpus/lang/package_default_options_called.cls b/rust/corpus/lang/package_default_options_called.cls
+new file mode 100644
+index 000000000..97c7042df
+--- /dev/null
++++ b/rust/corpus/lang/package_default_options_called.cls
+@@ -0,0 +1,5 @@
++/* Called by package_default_options.rex: what this file's own package took. */
++pk = .context~package
++return digits() form() fuzz() trace() pk~options('NU') pk~options('NOV') pk~options('P'),
++  '[' || pk~options('X') || ']'
++::options fuzz 2 trace n
+diff --git a/rust/corpus/lang/package_default_options_noprolog.cls b/rust/corpus/lang/package_default_options_noprolog.cls
+new file mode 100644
+index 000000000..14da1f127
+--- /dev/null
++++ b/rust/corpus/lang/package_default_options_noprolog.cls
+@@ -0,0 +1,4 @@
++/* Loaded by package_default_options.rex: NOPROLOG named here does not keep
++   an override's PROLOG out. */
++say 'noprolog prologue ran'
++::options noprolog
+diff --git a/rust/corpus/lang/package_default_options_req.cls b/rust/corpus/lang/package_default_options_req.cls
+new file mode 100644
+index 000000000..6df4dc8d2
+--- /dev/null
++++ b/rust/corpus/lang/package_default_options_req.cls
+@@ -0,0 +1,3 @@
++/* Loaded by package_default_options.rex, whose override names NOPROLOG. */
++say 'req prologue ran'
++::options digits 12
+diff --git a/rust/corpus/lang/package_option_writes.rex b/rust/corpus/lang/package_option_writes.rex
+new file mode 100644
+index 000000000..6d44507ac
+--- /dev/null
++++ b/rust/corpus/lang/package_option_writes.rex
+@@ -0,0 +1,109 @@
++/* Package~options(name, value): each option name the setting switch takes,
++   the previous value it answers, the value read back, and the effect on an
++   activation of this package's code started afterwards. ~options('I') keeps
++   the settings as they stood before the first write, R restores them, S
++   replaces them from an ::OPTIONS directive and leaves X alone. */
++p = .context~package
++say 'start [' || p~options || ']'
++say 'D' p~options('D', 12) p~options('D') 'here' digits()
++call show
++say 'FO' p~options('FO', 'eng') p~options('form')
++say 'FU' p~options('fu', ' 3 ') p~options('FUZZ')
++call show
++say 'NU' p~options('NU', 'inherit') p~options('numeric')
++numeric digits 20
++call show
++say 'NU' p~options('nu', 'N') p~options('nu')
++call show
++say 'E' p~options('E', 'syntax') p~options('error')
++say 'FA' p~options('fa', 's') p~options('failure')
++say 'L' p~options('L', 'S') p~options('lostdigits')
++say 'NOS' p~options('nos', 's') p~options('nostring')
++say 'NOT' p~options('not', 's') p~options('notready')
++say 'NOV' p~options('nov', 'S') p~options('novalue')
++call try 'unset()'
++call try 'lost()'
++say 'NOV' p~options('nov', 'c') p~options('novalue')
++say 'A' p~options('A', 'C')
++call try 'unset()'
++call try 'lost()'
++say 'A' p~options('all', 'syntax')
++say 'P' p~options('P', 'noprolog') p~options('prolog')
++say 'T' p~options('T', 'labels') p~options('trace') p~trace
++call show
++say 'T' p~options('trace', 'O') p~options('T') p~trace
++call show
++say 'now [' || p~options || ']'
++say 'I [' || p~options('I') || ']'
++say 'X [' || p~options('X') || ']'
++say 'R [' || p~options('R') || ']'
++say 'after R [' || p~options || ']'
++call show
++say 'S [' || p~options('S', '  ::options digits 7 form engineering trace e') || ']'
++say 'after S [' || p~options || ']'
++say 'X after S [' || p~options('X') || ']'
++call show
++say 'S of no directive [' || p~options('S', '::routine nothing') || ']'
++say 'after it [' || p~options || ']'
++say 'D 1.0' p~options('D', 1.0) p~options('D')
++say 'D back' p~options('D', 9) p~options('D')
++np = .routine~new('np', ('return', '::options noprolog prolog'))~package
++say 'NOPROLOG then PROLOG names [' || np~options('X') || ']' np~options('P')
++pn = .routine~new('pn', ('return', '::options prolog noprolog'))~package
++say 'PROLOG then NOPROLOG names [' || pn~options('X') || ']' pn~options('P')
++
++rexx = .object~package
++say 'rexx D' rexx~options('D', 15) rexx~options('D') rexx~digits
++say 'rexx I [' || rexx~options('I') || ']'
++say 'rexx [' || rexx~options || ']'
++
++call try "p~options('D', -1)"
++call try "p~options('D', 0)"
++call try "p~options('D', 'abc')"
++call try "p~options('FU', -1)"
++call try "p~options('FU', 'x')"
++call try "p~options('FU', 9)"
++call try "p~options('FU', 5) p~options('D', 5)"
++call try "p~options('FU', 0)"
++call try "p~options('FO', 'wrong')"
++call try "p~options('NU', 'x')"
++call try "p~options('E', 'wrong')"
++call try "p~options('A', 'wrong')"
++call try "p~options('P', 'wrong')"
++call try "p~options('T', 'wrong')"
++call try "p~options('I', 'x')"
++call try "p~options('R', 'x')"
++call try "p~options('X', 'x')"
++call try "p~options('D', '')"
++call try "p~options('ZZZ', 'x')"
++call try "p~options('S', 'digits 5')"
++call try "p~options('S', '::options digits 5; say 1')"
++call try "p~options('S', '::options digits 5' || '0a'x)"
++call try "p~options('S', '::options digits 5' || '0d'x)"
++call try "p~options('S', '::options digits 3 fuzz 5')"
++call try "p~options('S', .nil)"
++say 'unchanged [' || p~options || ']'
++exit
++
++show:
++  say '  routine' calc()
++  return
++
++try:
++  signal on syntax name refused
++  interpret 'say' arg(1)
++  return
++refused:
++  c = condition('o')
++  say '  ' arg(1) '->' c~code c~errortext c~message
++  return
++
++::routine calc
++  return digits() form() fuzz() trace()
++
++::routine unset
++  return zzunset
++
++::routine lost
++  numeric digits 5
++  return 1234567 + 1
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index 54265c129..1eb9afa46 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1295,10 +1295,19 @@ upstream ticket.
+     .k~defineMethods(s); say .k~new~m
+     ::class k
+     ::class s
+     ::method supplier; return 'x'
+ 
+ SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr.
+ `RexxClass::createMethodDictionary` (`classes/ClassClass.cpp:1250`-`:1251`) casts the `SUPPLIER`
+ answer to `SupplierClass *` and calls its methods directly. Measured 2026-10-12 by Phase 9a Task 5
+ (probe `dm7`). This crate refuses with `Loud::receiver_class` (`a message send to a value that is
+ not a supplier`). No upstream ticket.
++
++## 36. A `TRACE` write to the REXX package's settings
++
++    say .object~package~options('T', 'r')
++
++SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper, nothing on stdout or stderr. The read
++`.object~package~options('T')` answers `?n/a?` and a `DIGITS` write to the same package answers,
++so it is the trace write that crashes. Measured 2026-10-12 by Phase 9a Task 7 (probe `t7-crash`).
++This crate stores the setting and answers `?n/a?`. Cause not read. No upstream ticket.
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 09fcd2548..f8a934389 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -9,10 +9,14 @@
+ lang/rexxinfo_executable_file.rex
+ lang/stackframe_executable.rex
+ lang/object_copy_method.rex
+ lang/unknown_argument_list.rex
+ lang/define_methods_supplier.rex
+ lang/array_argument_callers.rex
+ 
+ # 9a Task 6: hash methods on the condition object and the package tables.
+ lang/condition_object_hash.rex
+ lang/package_tables_hash.rex
++
++# 9a Task 7: package setting writes.
++lang/package_option_writes.rex
++lang/package_default_options.rex
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index 7e1f85337..ca4d90f10 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -64,194 +64,193 @@
+ # `REXX_REFUSAL_SITES_REFRESH=1 cargo test -p rexx-exec --test refusal_sites --
+ # --test-threads=1`. It carries every measured column forward by name, drops a
+ # constructor the source no longer defines, and leaves a new send-surface row's
+ # measured columns empty for the next run to reject by name. A refresh run's own
+ # green is meaningless: the other tests in the binary read the file before it is
+ # written, so what the refresh found shows up on the run after it.
+ #
+ # kind	name	surface	definition	verdict	reached	answer	witness
+ Raised	abstract_class	send	crates/rexx-exec/src/error.rs:461	agrees	yes	98.989	say .K~new over ::class K abstract
+ Raised	abstract_metaclass	body	crates/rexx-exec/src/error.rs:431	off-send-surface	-	-	-
+-Raised	abstract_method	send	crates/rexx-exec/src/error.rs:1124	agrees	yes	93.965	.K~new~m over ::method m abstract
++Raised	abstract_method	send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.965	.K~new~m over ::method m abstract
+ Raised	address_input_source	body	crates/rexx-exec/src/error.rs:791	off-send-surface	-	-	-
+ Raised	address_output_target	body	crates/rexx-exec/src/error.rs:797	off-send-surface	-	-	-
+-Raised	argument_needs_a_string_value	body+send	crates/rexx-exec/src/error.rs:1320	agrees	yes	88.909	o~hasMethod(o)
+-Raised	argument_not_a_class	send	crates/rexx-exec/src/error.rs:1225	agrees	yes	88.914	o~isA(5)
++Raised	argument_needs_a_string_value	body+send	crates/rexx-exec/src/error.rs:1326	agrees	yes	88.909	o~hasMethod(o)
++Raised	argument_not_a_class	send	crates/rexx-exec/src/error.rs:1231	agrees	yes	88.914	o~isA(5)
+ Raised	argument_not_a_pad	body	crates/rexx-exec/src/error.rs:650	off-send-surface	-	-	-
+ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:929	off-send-surface	-	-	-
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:671	off-send-surface	-	-	-
+-Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1236	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
++Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1242	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1097	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:727	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:900	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1013	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:686	off-send-surface	-	-	-
+-Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1813	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
++Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1819	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:635	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:712	off-send-surface	-	-	-
+ Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:618	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+-Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1197	agrees	yes	93.959	.array~new(100000000000000001)
++Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:551	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:424	agrees	yes	99.927	.Object~subclass('K', 5)
+ Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:471	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:974	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:843	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:767	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:776	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:834	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:758	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:767	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:557	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+-Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+-Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
++Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1175	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
++Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1181	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:564	off-send-surface	-	-	-
+-Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1542	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:851	off-send-surface	-	-	-
++Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1548	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:842	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:514	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:734	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+-Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.970	.K~copy
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:725	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:526	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:963	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:956	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:814	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:772	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+ Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:627	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+ Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:597	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+-Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1807	off-send-surface	-	-	-
++Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1813	off-send-surface	-	-	-
+ Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:586	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
+-Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
++Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:544	off-send-surface	-	-	-
+-Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+-Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1748	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:716	off-send-surface	-	-	-
++Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
++Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1754	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:707	off-send-surface	-	-	-
+ Loud	expression	body	crates/rexx-exec/src/lib.rs:463	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+-Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1589	off-send-surface	-	-	-
++Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1595	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:850	off-send-surface	-	-	-
+-Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
+-Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1763	off-send-surface	-	-	-
+-Raised	from	body	crates/rexx-exec/src/error.rs:1855	off-send-surface	-	-	-
+-Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1753	off-send-surface	-	-	-
++Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
++Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1769	off-send-surface	-	-	-
++Raised	from	body	crates/rexx-exec/src/error.rs:1861	off-send-surface	-	-	-
++Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1759	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:887	off-send-surface	-	-	-
+-Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1147	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:878	off-send-surface	-	-	-
++Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1153	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:889	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+-Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+-Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1163	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
++Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
++Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1169	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:482	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:475	agrees	yes	98.942	.K~inherit(.Array)
+ Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:410	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+ Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:497	off-send-surface	-	-	-
+-Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.962	'YW==YWJj'~decodeBase64
++Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1706	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:820	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:992	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1002	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:871	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:912	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:801	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:875	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:793	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:866	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:784	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:947	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+ Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:651	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:695	off-send-surface	-	-	-
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:686	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:817	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:808	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:469	off-send-surface	-	-	-
+-Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1516	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+-Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1509	agrees	yes	93.972	o~sendWith(o, (1))
++Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1522	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
++Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1515	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:509	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:418	off-send-surface	-	-	-
+-Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1678	off-send-surface	-	-	-
+-Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1248	agrees	yes	93.914	.Package~defaultOptions('FORM')
+-Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1203	agrees	yes	93.907	(1,2,3)~at(0)
+-Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1115	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+-Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	93.915	(1,2)~makeString('X')
++Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1684	off-send-surface	-	-	-
++Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1254	agrees	yes	93.914	.Package~defaultOptions('FORM')
++Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1209	agrees	yes	93.907	(1,2,3)~at(0)
++Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1121	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
++Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1503	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1071	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+-Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1689	agrees	yes	93.943	'abc'~sign
+-Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1694	agrees	yes	93.940	'1.5'~modulo(3)
+-Raised	method_user_defined	send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
++Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1695	agrees	yes	93.943	'abc'~sign
++Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1700	agrees	yes	93.940	'1.5'~modulo(3)
++Raised	method_user_defined	body+send	crates/rexx-exec/src/error.rs:1110	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:981	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:577	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:619	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1059	agrees	yes	93.903	s~seek('write') over a stream opened read
+-Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:759	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:750	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1049	agrees	yes	93.903	o~hasMethod
+-Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1262	agrees	yes	88.901	self~setMethod with no arguments
++Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1268	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+-Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+-Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1476	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+-Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+-Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1469	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
++Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1489	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
++Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1482	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
++Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1496	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
++Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1475	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+ Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:506	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+-Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1327	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+-Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1337	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+-Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1275	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+-Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+-Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1453	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+-Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+-Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1421	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+-Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1402	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+-Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+-Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1350	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+-Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1279	off-send-surface	-	-	-
+-Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1300	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+-Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
++Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1333	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
++Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1343	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
++Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1281	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
++Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1441	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
++Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1459	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
++Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1418	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
++Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1427	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
++Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1408	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
++Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1370	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
++Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1356	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
++Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1285	off-send-surface	-	-	-
++Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1306	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
++Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1384	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+ Loud	native_method	send	crates/rexx-exec/src/lib.rs:606	diverges	yes	of class	m~dimensions, .context~package~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+-Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1523	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+-Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1180	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+-Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1619	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+-Raised	nomethod	send	crates/rexx-exec/src/error.rs:1553	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
++Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1529	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
++Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1186	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
++Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1625	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
++Raised	nomethod	send	crates/rexx-exec/src/error.rs:1559	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+-Raised	nostring	send	crates/rexx-exec/src/error.rs:1564	agrees	yes	NOSTRING	substr('abcdef', o)
+-Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1573	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
++Raised	nostring	send	crates/rexx-exec/src/error.rs:1570	agrees	yes	NOSTRING	substr('abcdef', o)
++Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1579	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1083	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+-Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1733	off-send-surface	-	-	-
+-Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
+-Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
++Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1739	off-send-surface	-	-	-
++Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1729	off-send-surface	-	-	-
++Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1713	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:598	off-send-surface	-	-	-
+-Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1130	agrees	yes	93.901	(1,2,3)~at()
+-Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.925	.array~new(2,2)~at(1)
++Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1136	agrees	yes	93.901	(1,2,3)~at()
++Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1196	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:496	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:439	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+-Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1606	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:724	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:686	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+-Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1820	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:785	off-send-surface	-	-	-
++Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1612	off-send-surface	-	-	-
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:715	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:677	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1826	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:776	off-send-surface	-	-	-
+ Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:571	off-send-surface	-	-	-
+-Loud	package_option_write	send	crates/rexx-exec/src/lib.rs:673	recorded	yes	a package settings write	say .context~package~options('DIGITS', 5) -- the one-argument form is implemented and answers, so the witness has to pass a value
+ Loud	package_routines_write	send	crates/rexx-exec/src/lib.rs:661	recorded	yes	a write to a package's .ROUTINES table	.routines~put(.routines~bar, 'FOO') over ::routine foo and ::routine bar -- the oracle's CALL FOO then runs BAR; reads such as .routines~items still answer
+-Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:751	off-send-surface	-	-	-
++Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1541	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:742	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+-Raised	private_method	send	crates/rexx-exec/src/error.rs:1529	agrees	yes	97.2	.K~new~p over ::method p private
++Raised	private_method	send	crates/rexx-exec/src/error.rs:1535	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:591	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:768	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+ Raised	raised_from_settings	body	crates/rexx-exec/src/run/raised.rs:159	off-send-surface	-	-	-
+ Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run/raised.rs:47	off-send-surface	-	-	-
+@@ -270,64 +269,65 @@ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-sen
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1032	off-send-surface	-	-	-
+ Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:522	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:489	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+ Loud	redirection	body	crates/rexx-exec/src/lib.rs:560	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:774	off-send-surface	-	-	-
+-Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1596	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:801	off-send-surface	-	-	-
+-Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1758	off-send-surface	-	-	-
+-Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1780	off-send-surface	-	-	-
++Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1602	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:792	off-send-surface	-	-	-
++Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1764	off-send-surface	-	-	-
++Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1786	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:533	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:454	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+-Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1785	off-send-surface	-	-	-
++Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1791	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:503	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:520	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:867	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+-Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1213	agrees	yes	88.914	o~m:v with v holding 5
+-Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1219	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:809	off-send-surface	-	-	-
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:858	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1219	agrees	yes	88.914	o~m:v with v holding 5
++Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1225	agrees	yes	93.957	o~m:.Array
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:800	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:826	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:705	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:826	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:696	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:817	off-send-surface	-	-	-
+ Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1383	off-send-surface	-	-	-
+ Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1394	off-send-surface	-	-	-
+ Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1420	off-send-surface	-	-	-
+ Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1372	off-send-surface	-	-	-
+ Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1410	off-send-surface	-	-	-
+-Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1158	agrees	yes	93.954	.Array~new(2,3)~delete(1)
++Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1164	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1077	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:701	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:743	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:734	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:785	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:780	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:835	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:826	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:752	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:757	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:763	off-send-surface	-	-	-
+ Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:533	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+-Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1775	off-send-surface	-	-	-
++Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1781	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:923	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:608	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+-Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
++Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1191	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1066	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+-Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1613	off-send-surface	-	-	-
++Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1619	off-send-surface	-	-	-
+ Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:550	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+ Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:642	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+ Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:859	off-send-surface	-	-	-
+-Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1142	agrees	yes	93.967	.Pointer~new
+-Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+-Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1796	off-send-surface	-	-	-
+-Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1743	off-send-surface	-	-	-
+-Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:850	off-send-surface	-	-	-
++Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1148	agrees	yes	93.967	.Pointer~new
++Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1808	off-send-surface	-	-	-
++Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
++Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1749	off-send-surface	-	-	-
++Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1723	off-send-surface	-	-	-
++Raised	whole_number_user_defined	send	crates/rexx-exec/src/error.rs:1116	agrees	yes	26.900	.context~package~options('FUZZ', 9) at DIGITS 9 (lang/package_option_writes.rex)
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:969	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index bf994508f..2d200a50a 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -129,23 +129,23 @@ mod package;
+ use package::{native_package_local, native_package_name};
+ 
+ // Running a procedure of a loaded shared library, and the `Host` the boundary
+ // reaches this interpreter through.
+ pub(crate) mod library;
+ 
+ // Array slot and subscript arithmetic, and `Array`'s primitive methods.
+ mod array;
+ use array::{
+     IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_size_argument,
+-    array_slots, array_slots_owned, is_whole_method_argument, native_array_at, native_array_at_for,
+-    native_array_dimension, native_array_items, native_array_make_string, native_array_new,
+-    native_array_of, native_array_put, native_array_size, positive_index, unsigned_index,
++    array_slots, array_slots_owned, native_array_at, native_array_at_for, native_array_dimension,
++    native_array_items, native_array_make_string, native_array_new, native_array_of,
++    native_array_put, native_array_size, positive_index, unsigned_index,
+ };
+ 
+ // `MutableBuffer`'s primitive methods, and the argument and byte-search helpers
+ // the other primitive methods share, chained the same way.
+ mod buffer;
+ use buffer::{
+     abbrev_arguments, array_of_texts, backward_search, backward_search_arguments, bit_arguments,
+     case_shift_arguments, changestr_arguments, compare_arguments, compare_to_arguments,
+     conversion_length_argument, copies_argument, count_method_argument, datatype_option_argument,
+     delete_arguments, delword_arguments, ends_with, equals_argument, forward_search,
+diff --git a/rust/crates/rexx-exec/src/dispatch/array.rs b/rust/crates/rexx-exec/src/dispatch/array.rs
+index 56b7cc7ba..da0b80808 100644
+--- a/rust/crates/rexx-exec/src/dispatch/array.rs
++++ b/rust/crates/rexx-exec/src/dispatch/array.rs
+@@ -249,30 +249,20 @@ fn multi_dimension_position(
+                     multi_dimension_position(interp, receiver, subscripts, index_use, &grown)
+                 }
+             };
+         }
+         offset += multiplier * (position - 1);
+         multiplier *= dimension;
+     }
+     Ok(Some(offset + 1))
+ }
+ 
+-/// Whether `value` is a whole number at `Numerics::ARGUMENT_DIGITS`, which is
+-/// what `numberArgument` accepts.
+-pub(super) fn is_whole_method_argument(interp: &mut Interp, value: ObjRef) -> bool {
+-    interp
+-        .to_number(value)
+-        .ok()
+-        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
+-        .is_some()
+-}
+-
+ /// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under
+ /// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
+ /// whole number of at least 1.
+ fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
+     // A tagged integer already is the answer when it is narrow enough that
+     // the rounding rule would change nothing, the same shortcut
+     // `builtin::whole_number` takes against the same width.
+     if let Decoded::SmallInt(small) = value.decode()
+         && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
+         && let Ok(index) = usize::try_from(whole)
+diff --git a/rust/crates/rexx-exec/src/dispatch/package.rs b/rust/crates/rexx-exec/src/dispatch/package.rs
+index 1db9434d7..6e5c79083 100644
+--- a/rust/crates/rexx-exec/src/dispatch/package.rs
++++ b/rust/crates/rexx-exec/src/dispatch/package.rs
+@@ -12,21 +12,21 @@
+ //! `Package`'s readers and its four writes -- `classes/PackageClass.cpp`,
+ //! bound by `memory/Setup.cpp`'s `Package` block.
+ 
+ use rustc_hash::FxHashMap;
+ 
+ use rexx_core::ObjRef;
+ 
+ use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, required_string_named_argument};
+ use crate::environment::PackageTable;
+ use crate::error::Raised;
+-use crate::options::{OptionQuery, PackageOptions};
++use crate::options::{OptionName, PackageOptions};
+ use crate::plan::Package;
+ use crate::trace::TraceMode;
+ use crate::{InstalledRoutine, ProgramId};
+ 
+ /// `Package`'s instance methods. Chained into `ObjectModel::build` beside
+ /// [`super::NATIVE_METHODS`].
+ pub(super) static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     ("Package", "ADDPACKAGE", Arity::Fixed(2), add_package),
+     (
+         "Package",
+@@ -136,32 +136,49 @@ fn writable_package_of(interp: &Interp, receiver: ObjRef) -> Result<ProgramId, F
+     match package_of(interp, receiver)? {
+         Some(program) => Ok(program),
+         None => Err(Raised::rexx_package_addition().into()),
+     }
+ }
+ 
+ /// The `::OPTIONS` settings a package carries, and the trace setting its
+ /// `~trace` reports.
+ fn settings_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
+     match program {
+-        None => (PackageOptions::default(), None),
+-        Some(program) => {
+-            let options = interp.package_options.get(&program).cloned();
+-            let trace = options.as_ref().and_then(|options| options.trace);
+-            (
+-                options.unwrap_or_default(),
+-                Some(trace.unwrap_or(TraceMode::NORMAL)),
+-            )
++        None => {
++            let options = interp.option_writes.rexx.clone();
++            let trace = options.trace;
++            (options, trace)
+         }
++        Some(program) => shown(interp.package_options.get(&program).cloned()),
+     }
+ }
+ 
++/// [`settings_of`] as the package's first change found them --
++/// `PackageClass::getInitialPackageSettings`.
++fn initial_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
++    match interp.option_writes.initial.get(&program) {
++        None => settings_of(interp, program),
++        Some(options) if program.is_none() => (options.clone(), options.trace),
++        Some(options) => shown(Some(options.clone())),
++    }
++}
++
++/// A file's package's settings with the trace setting its `~trace` reports,
++/// which is `NORMAL` where it names none.
++fn shown(options: Option<PackageOptions>) -> (PackageOptions, Option<TraceMode>) {
++    let trace = options.as_ref().and_then(|options| options.trace);
++    (
++        options.unwrap_or_default(),
++        Some(trace.unwrap_or(TraceMode::NORMAL)),
++    )
++}
++
+ /// `PackageClass::digitsRexx`: the package's own `DIGITS`.
+ fn digits(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let (options, _) = settings_of(interp, package_of(interp, receiver)?);
+     let text = options.numeric.digits().to_string();
+     Ok(Some(interp.text(text.as_bytes())))
+@@ -203,85 +220,160 @@ fn trace(
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let (_, trace) = settings_of(interp, package_of(interp, receiver)?);
+     let text = trace.map(|mode| vec![mode.letter]).unwrap_or_default();
+     Ok(Some(interp.text_built(text)))
+ }
+ 
+ /// `PackageClass::options(optionName, newValue)`: the whole `::OPTIONS`
+-/// string, or one option's value, or a write.
++/// string, or one option's value, or a write answering the value it replaced.
+ fn options(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+-    let (options, trace) = settings_of(interp, package_of(interp, receiver)?);
++    let program = package_of(interp, receiver)?;
++    let (options, trace) = settings_of(interp, program);
+     let value = args.get(1).copied().flatten();
+     let Some(name) = args.first().copied().flatten() else {
+         if value.is_some() {
+             return Err(Raised::missing_method_argument(1).into());
+         }
+         return Ok(Some(interp.text_built(options.to_options_string(trace))));
+     };
+     let name = required_string_named_argument(interp, name, "optionName")?;
+     let name = interp.to_text(name).to_vec();
+-    let query = options.option_query(&name, trace);
++    let which = OptionName::parse(&name);
+     let Some(value) = value else {
+-        return match query {
+-            OptionQuery::Value(value) | OptionQuery::ReadOnly1(value) => {
+-                Ok(Some(interp.text_built(value)))
++        let answer = match which {
++            None => return Err(unknown_option(&name, false)),
++            Some(OptionName::All) => return Err(Raised::missing_method_argument(2).into()),
++            Some(OptionName::SetOptions) => {
++                return Err(Raised::not_enough_method_arguments(2).into());
+             }
+-            OptionQuery::MissingSecond => Err(Raised::not_enough_method_arguments(2).into()),
+-            OptionQuery::NeedsValue => Err(Raised::missing_method_argument(2).into()),
+-            OptionQuery::Unknown => Err(unknown_option(&name, false)),
++            Some(OptionName::Initial) => {
++                let (initial, trace) = initial_of(interp, program);
++                initial.value_of(OptionName::Initial, trace)
++            }
++            Some(OptionName::Reset) => {
++                let (initial, _) = initial_of(interp, program);
++                interp.package_settings_mut(program).take_settings(&initial);
++                interp.arm_option_latches(program);
++                options.value_of(OptionName::Reset, trace)
++            }
++            Some(which) => options.value_of(which, trace),
+         };
++        return Ok(Some(interp.text_built(answer)));
+     };
+     let value = required_string_named_argument(interp, value, "newValue")?;
+-    let value = interp.to_text(value).to_vec();
+-    if matches!(query, OptionQuery::Unknown) {
++    let Some(which) = which else {
+         return Err(unknown_option(&name, true));
+-    }
++    };
++    let text = interp.to_text(value).to_vec();
+     // The empty check stands ahead of the per-option switch, so it fires even
+     // for an option that cannot be set at all: measured at rc 163,
+     // `p~options('X', '')` is 93.900 and `p~options('X', 'Y')` is 93.902.
+-    if value.is_empty() {
++    let Some(&letter) = text.first() else {
+         return Err(Raised::method_user_defined("argument 2 must not be empty").into());
++    };
++    let previous = options.value_of(which, trace);
++    let mut changed = options;
++    match which {
++        OptionName::Initial | OptionName::Reset | OptionName::Explicit => {
++            return Err(Raised::too_many_method_arguments(1).into());
++        }
++        OptionName::Digits => {
++            let Some(digits) = whole_argument(interp, value) else {
++                return Err(Raised::method_argument_not_whole(2, &text).into());
++            };
++            if digits < 1 {
++                return Err(Raised::method_argument_not_positive(2, &text).into());
++            }
++            let digits = digits as u64;
++            let fuzz = changed.numeric.fuzz();
++            if digits <= fuzz {
++                return Err(crate::run::raised_from_settings(
++                    rexx_num::SettingsError::FuzzNotBelowDigits { digits, fuzz },
++                )
++                .into());
++            }
++            changed.numeric = rexx_num::Settings::from_parts(digits, fuzz, changed.numeric.form());
++        }
++        OptionName::Fuzz => {
++            let Some(fuzz) = whole_argument(interp, value).filter(|fuzz| *fuzz >= 0) else {
++                return Err(Raised::argument_not_non_negative(2, &text).into());
++            };
++            let fuzz = fuzz as u64;
++            let digits = changed.numeric.digits();
++            if fuzz >= digits {
++                return Err(Raised::whole_number_user_defined(&format!(
++                    "NUMERIC FUZZ value (\"{fuzz}\") must be smaller than NUMERIC DIGITS (\"{digits}\")"
++                ))
++                .into());
++            }
++            changed.numeric = rexx_num::Settings::from_parts(digits, fuzz, changed.numeric.form());
++        }
++        OptionName::Trace => {
++            let mode = crate::trace::mode_from_setting(&text)
++                .map_err(crate::trace::raised_invalid_trace_letter)?;
++            changed.trace = Some(mode);
++        }
++        OptionName::SetOptions => {
++            let settings = interp.settings_from_directive(&text)?;
++            changed.take_settings(&settings);
++        }
++        OptionName::All
++        | OptionName::Condition(_)
++        | OptionName::Form
++        | OptionName::NumericInherit
++        | OptionName::Prolog => {
++            if let Err(list) = changed.set_by_letter(which, letter) {
++                return Err(Raised::method_argument_not_in_list(2, list, &text).into());
++            }
++        }
+     }
+-    // `I`, `R` and `X` are invariants: the setting switch answers 93.902 for
+-    // each rather than writing anything.
+-    if matches!(query, OptionQuery::ReadOnly1(_)) {
+-        return Err(Raised::too_many_method_arguments(1).into());
+-    }
+-    Err(Loud::package_option_write().into())
++    *interp.package_settings_mut(program) = changed;
++    interp.arm_option_latches(program);
++    Ok(Some(interp.text_built(previous)))
++}
++
++/// `numberArgument`'s conversion: `value` as a whole number at
++/// `Numerics::ARGUMENT_DIGITS`.
++fn whole_argument(interp: &mut Interp, value: ObjRef) -> Option<i64> {
++    interp
++        .to_number(value)
++        .ok()
++        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
+ }
+ 
+ /// `Error_Incorrect_method_list` for an option name `~options` does not
+ /// accept, in the two spellings the C++ has: the list a no-value send names
+ /// and the list a setting send names are not the same set.
+ fn unknown_option(name: &[u8], setting: bool) -> Failure {
+     let list = if setting {
+         "\"A[ll], D[igits], E[rror], FA[ilure], FO[rm], FU[zz], I[nitialOptions], \
+          L[ostdigits], NU[meric], NOS[tring], NOT[ready], NOV[alue], P[rolog], \
+          R[esetOptions], S[etOptions] or T[race]\""
+     } else {
+         "\"D[igits], E[rror], FA[ilure], FO[rm], FU[zz], I[nitialOptions], L[ostdigits], \
+          NU[meric], NOS[tring], NOT[ready], NOV[alue], P[rolog], R[esetOptions], \
+          S[etOptions], T[race] or X[explicitlyDefined]\""
+     };
+     Raised::method_argument_not_in_list(1, list, name).into()
+ }
+ 
+-/// `PackageClass::clzOptions`: the class-level override settings, which are
+-/// what a package that names an option itself does *not* get.
++/// `PackageClass::clzOptions`: the override settings a package compiled
++/// while the override count is not zero takes for every option it does not
++/// name itself, and that count.
+ fn default_options(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     _receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let Some(name) = args.first().copied().flatten() else {
+         return Err(Raised::missing_named_argument("optionName").into());
+     };
+     let name = required_string_named_argument(interp, name, "optionName")?;
+@@ -289,39 +381,50 @@ fn default_options(
+     let value = args.get(1).copied().flatten();
+     let which = name.first().map(u8::to_ascii_uppercase);
+     if !matches!(which, Some(b'D' | b'C')) {
+         return Err(Raised::method_argument_not_in_list(
+             1,
+             "\"D[efineDefaultOptions] or C[ountOverrides]\"",
+             &name,
+         )
+         .into());
+     }
+-    if let Some(value) = value {
+-        let value = required_string_named_argument(interp, value, "newValue")?;
+-        let text = interp.to_text(value).to_vec();
+-        if text.is_empty() {
+-            return Err(Raised::method_user_defined("argument 2 must not be empty").into());
+-        }
+-        // `C[ountOverrides]` converts its value with `numberArgument` before
+-        // it stores it, and the conversion failure is the oracle's own:
+-        // measured at rc 163, `.Package~defaultOptions('C', 'x')` is 93.905.
+-        if which == Some(b'C') && !super::is_whole_method_argument(interp, value) {
+-            return Err(Raised::method_argument_not_whole(2, &text).into());
+-        }
+-        return Err(Loud::package_option_write().into());
++    // The previous value is built last: the `D` write compiles, and a
++    // string made before it would be unrooted across that.
++    let count = interp.option_writes.count;
++    let defaults = &interp.option_writes.defaults;
++    let previous_defaults = (which == Some(b'D'))
++        .then(|| defaults.to_options_string(Some(defaults.trace.unwrap_or(TraceMode::NORMAL))));
++    let answer = |interp: &mut Interp| match previous_defaults {
++        Some(text) => interp.text_built(text),
++        None => ObjRef::small_int(count)
++            .unwrap_or_else(|| interp.text_built(count.to_string().into_bytes())),
++    };
++    let Some(value) = value else {
++        return Ok(Some(answer(interp)));
++    };
++    let value = required_string_named_argument(interp, value, "newValue")?;
++    let text = interp.to_text(value).to_vec();
++    if text.is_empty() {
++        return Err(Raised::method_user_defined("argument 2 must not be empty").into());
+     }
+     if which == Some(b'C') {
+-        return Ok(Some(interp.counted(0)));
++        // `numberArgument`, whose failure is the oracle's own: measured at
++        // rc 163, `.Package~defaultOptions('C', 'x')` is 93.905.
++        let Some(count) = whole_argument(interp, value) else {
++            return Err(Raised::method_argument_not_whole(2, &text).into());
++        };
++        interp.option_writes.count = count;
++    } else {
++        interp.option_writes.defaults = interp.settings_from_directive(&text)?;
+     }
+-    let text = PackageOptions::default().to_options_string(Some(TraceMode::NORMAL));
+-    Ok(Some(interp.text_built(text)))
++    Ok(Some(answer(interp)))
+ }
+ 
+ /// `PackageClass::getSourceSizeRexx`: the package's own line count, and zero
+ /// for the REXX package, which holds no source.
+ fn source_size(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+diff --git a/rust/crates/rexx-exec/src/error.rs b/rust/crates/rexx-exec/src/error.rs
+index 3c76669db..d49428259 100644
+--- a/rust/crates/rexx-exec/src/error.rs
++++ b/rust/crates/rexx-exec/src/error.rs
+@@ -1104,20 +1104,26 @@ impl Raised {
+             ],
+         )
+     }
+ 
+     /// 93.900: `Error_Incorrect_method_user_defined`, whose whole message the
+     /// raise site supplies.
+     pub(crate) fn method_user_defined(text: &str) -> Raised {
+         Raised::syntax(93, 900, vec![text.as_bytes().to_vec()])
+     }
+ 
++    /// 26.900: `Error_Invalid_whole_number_user_defined`, whose whole
++    /// message the raise site supplies.
++    pub(crate) fn whole_number_user_defined(text: &str) -> Raised {
++        Raised::syntax(26, 900, vec![text.as_bytes().to_vec()])
++    }
++
+     /// 93.905: a method argument that has to be a whole number is not one.
+     pub(crate) fn method_argument_not_whole(position: usize, found: &[u8]) -> Raised {
+         Raised::syntax(
+             93,
+             905,
+             vec![position.to_string().into_bytes(), found.to_vec()],
+         )
+     }
+ 
+     /// 93.965: a message resolved to an `ABSTRACT` method.
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index f8bf09792..0292e2933 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -347,20 +347,23 @@ impl Interp {
+         }
+         if !public_routines.is_empty() {
+             self.package_public_routines
+                 .entry(id)
+                 .or_default()
+                 .extend(public_routines);
+         }
+         self.library_routine_codes.extend(routine_codes);
+         self.rexx_routine_rows.extend(rexx_routines);
+         self.untranslated.remove(&id);
++        // Where the translation ends and before any `::REQUIRES` loads, which
++        // is where `generateProgram` and `installPackage` run it.
++        self.override_package_settings(id);
+ 
+         // **A second pass, because the oracle's own translation-time
+         // refusals above happen before every install-time one below**
+         // (98.9xx/43.901/the `::CONSTANT` expression evaluation), so a
+         // program with both gets the translation error -- which is what
+         // running the whole first pass before any of this reproduces.
+         let mut declared: FxHashMap<Box<[u8]>, usize> = FxHashMap::default();
+         for (index, directive) in program.directives.iter().enumerate() {
+             if let DirectiveKind::Class(class) = &directive.kind {
+                 declared
+@@ -1668,20 +1671,21 @@ impl Interp {
+                     delegate: None,
+                     body: Some(main),
+                 })),
+                 clause_span: 0..0,
+             }],
+             symbols,
+         });
+         let program_id = ProgramId(self.programs.len());
+         self.programs.push(program);
+         self.compiled_method_names.insert(program_id, name.into());
++        self.override_package_settings(program_id);
+         // `generateMethod` and `generateRoutine` give the executable's own
+         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+         // which its routine and class lookups walk.
+         if let Some(parent) = parent {
+             self.set_package_parent(program_id, parent);
+         }
+         let method = self.mint_unattached_body(
+             object,
+             InstalledMethodBody {
+                 program: program_id,
+@@ -1802,20 +1806,21 @@ impl Interp {
+                     external: None,
+                     body: Some(main),
+                 })),
+                 clause_span: 0..0,
+             }],
+             symbols,
+         });
+         let program_id = ProgramId(self.programs.len());
+         self.programs.push(program);
+         self.compiled_method_names.insert(program_id, name.into());
++        self.override_package_settings(program_id);
+         // `generateMethod` and `generateRoutine` give the executable's own
+         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+         // which its routine and class lookups walk.
+         if let Some(parent) = parent {
+             self.set_package_parent(program_id, parent);
+         }
+         self.executable_sources.insert(
+             object,
+             ExecutableRecord {
+                 source: ExecutableSource::Main {
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 6b22190be..f45789a83 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -660,29 +660,20 @@ impl Loud {
+     /// does not.
+     fn package_routines_write() -> Loud {
+         Loud {
+             message: owned_message(
+                 "a write to a package's .ROUTINES table",
+                 Some(Owner::Phase9),
+             ),
+         }
+     }
+ 
+-    /// `Package~options(name, value)` and `Package~defaultOptions(name,
+-    /// value)`, each of which writes a package setting rather than reading
+-    /// one.
+-    fn package_option_write() -> Loud {
+-        Loud {
+-            message: owned_message("a package settings write", Some(Owner::Phase9)),
+-        }
+-    }
+-
+     /// A `SETMETHOD` or `UNSETMETHOD` whose receiver is neither an instance
+     /// nor a class object, the two kinds that hold methods of their own here.
+     /// No program reaches it: the routes tried are `SETMETHOD` sent to an
+     /// `Array` and a `String` (private, 97.2 on both engines),
+     /// a `define` or `inherit` on `.Object` and `.String` (98.985), and a
+     /// borrowed `Object` `SETMETHOD` row a `Directory`'s own method sends to
+     /// that `Directory` (88.901, the entry method arrives with no arguments).
+     fn object_method(what: &str) -> Loud {
+         Loud {
+             message: owned_message(what, None),
+@@ -1254,20 +1245,23 @@ struct Interp {
+     next_activation_id: u64,
+     /// The counter `RexxContext~invocation` mints from --
+     /// `RexxActivation.cpp:94`'s file-scope `counter`.
+     next_invocation: u32,
+     /// Every program the loader has issued an id for, indexed by that id.
+     programs: Vec<Rc<Program>>,
+     /// What each program's `::OPTIONS` directives left on its package,
+     /// entered by `Interp::install_directives` and read by every activation
+     /// of that program's code.
+     package_options: FxHashMap<ProgramId, PackageOptions>,
++    /// What `Package~options` and `.Package~defaultOptions` writes keep
++    /// beside [`Interp::package_options`].
++    option_writes: crate::options::OptionWrites,
+     /// The security manager each package carries, written by all three
+     /// `setSecurityManager` setters and read by every checkpoint.
+     security_managers: FxHashMap<ProgramId, ObjRef>,
+     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
+     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
+     /// pair of small integers this interpreter mints itself, so the
+     /// chosen-collision resistance `RandomState` buys is resistance to an
+     /// input nothing outside can choose, and SipHash's setup dominates a key
+     /// this short. Measured on a probe whose loop is one `CALL` into a label
+     /// that returns at once, the two lookups here and on `chunks` cost 9.7% of
+@@ -2054,20 +2048,21 @@ impl Interp {
+             key_buffer: Vec::new(),
+             parse_buffers: Vec::new(),
+             text_scratch: [0; crate::value::TEXT_SCRATCH],
+             text_numbers: crate::value::TextNumbers::new(),
+             result_buffer: std::cell::Cell::new(Vec::new()),
+             library_search: library_search_of(&env),
+             env,
+             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
+             programs: Vec::new(),
+             package_options: FxHashMap::default(),
++            option_writes: crate::options::OptionWrites::default(),
+             security_managers: FxHashMap::default(),
+             plans: NameMap::default(),
+             last_plan: None,
+             deadline: None,
+             clause_countdown: crate::clause::Deadline::CLAUSES_PER_CHECK,
+             stack_base: 0,
+             stack_room: usize::MAX,
+             timer,
+             baton,
+             switch: None,
+@@ -2829,20 +2824,21 @@ impl Interp {
+             parse_buffers: _,
+             text_scratch: _,
+             // Handle-inline strings, which are their own bytes and have no
+             // slot to recycle.
+             text_numbers: _,
+             result_buffer: _,
+             next_activation_id: _,
+             next_invocation: _,
+             programs: _,
+             package_options: _,
++            option_writes: _,
+             security_managers,
+             plans: _,
+             last_plan: _,
+             deadline: _,
+             clause_countdown: _,
+             stack_base: _,
+             stack_room: _,
+             timer: _,
+             baton: _,
+             pool: _,
+diff --git a/rust/crates/rexx-exec/src/options.rs b/rust/crates/rexx-exec/src/options.rs
+index 01295b693..c0186fe80 100644
+--- a/rust/crates/rexx-exec/src/options.rs
++++ b/rust/crates/rexx-exec/src/options.rs
+@@ -6,22 +6,25 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `::OPTIONS`: what a file's directives leave on its own package.
+ 
+ use rexx_num::{Form, Settings, SettingsError};
+ use rexx_parse::{ConditionOption, OptionsForm, PackageOption};
++use rustc_hash::FxHashMap;
+ 
++use crate::error::{Failure, Raised};
+ use crate::trace::{TraceMode, mode_from_setting};
++use crate::{Interp, ProgramId};
+ 
+ /// The six conditions `::OPTIONS` can turn from a condition into a SYNTAX
+ /// error, in `subDirectives[]` order.
+ const ESCALATABLE: [&[u8]; 6] = [
+     b"ERROR",
+     b"FAILURE",
+     b"LOSTDIGITS",
+     b"NOSTRING",
+     b"NOTREADY",
+     b"NOVALUE",
+@@ -75,20 +78,28 @@ const EXPLICIT_WORDS: [&str; 13] = [
+     "LOSTDIGITS",
+     "NOSTRING",
+     "NOTREADY",
+     "NOVALUE",
+     "NOPROLOG",
+     "PROLOG",
+     "TRACE",
+ ];
+ 
+ impl Explicit {
++    /// Whether the directives named `word`, an [`EXPLICIT_WORDS`] entry.
++    fn named(self, word: &str) -> bool {
++        EXPLICIT_WORDS
++            .iter()
++            .position(|candidate| *candidate == word)
++            .is_some_and(|which| self.named[which])
++    }
++
+     /// The blank-delimited subkeyword list, empty for a package whose
+     /// directives named none -- measured, oracle rc 0, a file with no
+     /// `::OPTIONS` renders the null string.
+     fn to_text(self) -> Vec<u8> {
+         let named: Vec<&str> = EXPLICIT_WORDS
+             .iter()
+             .zip(self.named)
+             .filter(|(_, named)| *named)
+             .map(|(word, _)| *word)
+             .collect();
+@@ -154,20 +165,34 @@ impl ConditionSyntax {
+ 
+ impl PackageOptions {
+     /// Folds one `::OPTIONS` option into these settings.
+     pub(crate) fn apply(&mut self, option: &PackageOption) -> Result<(), SettingsError> {
+         let mut names = |word: &str| {
+             let which = EXPLICIT_WORDS
+                 .iter()
+                 .position(|candidate| *candidate == word)
+                 .expect("every name passed here is an EXPLICIT_WORDS entry");
+             self.explicit.named[which] = true;
++            // `PROLOG` and `NOPROLOG` clear each other: the directive parser
++            // keeps one of the two flags (`parser/DirectiveParser.cpp:1315`).
++            let other = match word {
++                "PROLOG" => Some("NOPROLOG"),
++                "NOPROLOG" => Some("PROLOG"),
++                _ => None,
++            };
++            if let Some(other) = other
++                && let Some(other) = EXPLICIT_WORDS
++                    .iter()
++                    .position(|candidate| *candidate == other)
++            {
++                self.explicit.named[other] = false;
++            }
+         };
+         match option {
+             PackageOption::Digits(_) => names("DIGITS"),
+             PackageOption::Fuzz(_) => names("FUZZ"),
+             PackageOption::Form(_) => names("FORM"),
+             PackageOption::Trace(_) => names("TRACE"),
+             PackageOption::Condition { which, .. } => match which {
+                 ConditionOption::All => {
+                     for name in ESCALATABLE {
+                         names(&String::from_utf8_lossy(name));
+@@ -247,83 +272,223 @@ NOSTRING {} NOTREADY {} NOVALUE {} {} TRACE {}",
+             if self.suppress_prolog {
+                 "NOPROLOG"
+             } else {
+                 "PROLOG"
+             },
+             trace.map_or("?n/a?", trace_word),
+         )
+         .into_bytes()
+     }
+ 
+-    /// What `Package~options(name)` answers for one option name.
+-    pub(crate) fn option_query(&self, name: &[u8], trace: Option<TraceMode>) -> OptionQuery {
+-        let upper: Vec<u8> = name.to_ascii_uppercase();
++    /// What `Package~options(name)` answers for `which`: the value a read
++    /// returns and a write returns as the previous one. `trace` is the
++    /// setting `TRACE` renders.
++    pub(crate) fn value_of(&self, which: OptionName, trace: Option<TraceMode>) -> Vec<u8> {
+         let condition = |which: &[u8]| {
+-            OptionQuery::Value(
+-                if self.syntax.raises(which) {
+-                    "SYNTAX"
++            if self.syntax.raises(which) {
++                "SYNTAX"
++            } else {
++                "CONDITION"
++            }
++        };
++        let text = match which {
++            OptionName::All => {
++                return ESCALATABLE
++                    .iter()
++                    .map(|name| format!("{} {}", String::from_utf8_lossy(name), condition(name)))
++                    .collect::<Vec<_>>()
++                    .join(" ")
++                    .into_bytes();
++            }
++            OptionName::Digits => return self.numeric.digits().to_string().into_bytes(),
++            OptionName::Fuzz => return self.numeric.fuzz().to_string().into_bytes(),
++            OptionName::Condition(which) => condition(ESCALATABLE[which]),
++            OptionName::Form => form_word(self.numeric.form()),
++            OptionName::NumericInherit => {
++                if self.numeric_inherit {
++                    "INHERIT"
+                 } else {
+-                    "CONDITION"
++                    "NOINHERIT"
+                 }
+-                .as_bytes()
+-                .to_vec(),
+-            )
++            }
++            OptionName::Prolog => {
++                if self.suppress_prolog {
++                    "NOPROLOG"
++                } else {
++                    "PROLOG"
++                }
++            }
++            OptionName::Initial | OptionName::Reset | OptionName::SetOptions => {
++                return self.to_options_string(trace);
++            }
++            OptionName::Trace => trace.map_or("?n/a?", trace_word),
++            OptionName::Explicit => return self.explicit.to_text(),
+         };
+-        let text = |value: &str| OptionQuery::Value(value.as_bytes().to_vec());
+-        let Some(first) = upper.first() else {
+-            return OptionQuery::Unknown;
+-        };
+-        match (first, upper.get(1), upper.get(2)) {
+-            (b'A', _, _) => OptionQuery::NeedsValue,
+-            (b'D', _, _) => text(&self.numeric.digits().to_string()),
+-            (b'E', _, _) => condition(b"ERROR"),
+-            (b'F', Some(b'A'), _) => condition(b"FAILURE"),
+-            (b'F', Some(b'O'), _) => text(form_word(self.numeric.form())),
+-            (b'F', Some(b'U'), _) => text(&self.numeric.fuzz().to_string()),
+-            (b'I' | b'R', _, _) => OptionQuery::ReadOnly1(self.to_options_string(trace)),
+-            (b'L', _, _) => condition(b"LOSTDIGITS"),
+-            (b'N', Some(b'U'), _) => text(if self.numeric_inherit {
+-                "INHERIT"
+-            } else {
+-                "NOINHERIT"
+-            }),
+-            (b'N', Some(b'O'), Some(b'S')) => condition(b"NOSTRING"),
+-            (b'N', Some(b'O'), Some(b'T')) => condition(b"NOTREADY"),
+-            (b'N', Some(b'O'), Some(b'V')) => condition(b"NOVALUE"),
+-            (b'P', _, _) => text(if self.suppress_prolog {
+-                "NOPROLOG"
+-            } else {
+-                "PROLOG"
+-            }),
+-            (b'S', _, _) => OptionQuery::MissingSecond,
+-            (b'T', _, _) => text(trace.map_or("?n/a?", trace_word)),
+-            (b'X', _, _) => OptionQuery::ReadOnly1(self.explicit.to_text()),
+-            _ => OptionQuery::Unknown,
++        text.as_bytes().to_vec()
++    }
++
++    /// The setting switch's arms that take a value's first letter --
++    /// `PackageClass::options` (`classes/PackageClass.cpp:2418`). `Err` is
++    /// the list the 93.914 for any other letter names.
++    pub(crate) fn set_by_letter(
++        &mut self,
++        which: OptionName,
++        letter: u8,
++    ) -> Result<(), &'static str> {
++        let letter = letter.to_ascii_uppercase();
++        match which {
++            OptionName::All | OptionName::Condition(_) => {
++                if !matches!(letter, b'S' | b'C') {
++                    return Err("\"C[ondition] or S[yntax]\"");
++                }
++                let syntax = letter == b'S';
++                match which {
++                    OptionName::Condition(which) => self.syntax.escalated[which] = syntax,
++                    _ => self.syntax.escalated = [syntax; 6],
++                }
++            }
++            OptionName::Form => match letter {
++                b'E' => self.numeric.set_form(Form::Engineering),
++                b'S' => self.numeric.set_form(Form::Scientific),
++                _ => return Err("\"E[ngineering] or S[cientific]\""),
++            },
++            OptionName::NumericInherit => match letter {
++                b'I' => self.numeric_inherit = true,
++                b'N' => self.numeric_inherit = false,
++                _ => return Err("\"I[nherit] or N[oInherit]\""),
++            },
++            OptionName::Prolog => match letter {
++                b'P' => self.suppress_prolog = false,
++                b'N' => self.suppress_prolog = true,
++                _ => return Err("\"N[oprolog] or P[rolog]\""),
++            },
++            _ => unreachable!("only the letter-valued options are set here"),
+         }
++        Ok(())
++    }
++
++    /// `PackageClass::overridePackageSettings`: every setting this package's
++    /// own `::OPTIONS` did not name, taken from `defaults`. Only `PROLOG`
++    /// guards the prologue setting -- a package naming `NOPROLOG` takes it
++    /// too, as `isExplicitPrologOption` reads one flag.
++    pub(crate) fn take_defaults(&mut self, defaults: &PackageOptions) {
++        let named = |word: &str| self.explicit.named(word);
++        let pick = |word: &str, own: u64, other: u64| if named(word) { own } else { other };
++        let digits = pick("DIGITS", self.numeric.digits(), defaults.numeric.digits());
++        let fuzz = pick("FUZZ", self.numeric.fuzz(), defaults.numeric.fuzz());
++        let form = if named("FORM") {
++            self.numeric.form()
++        } else {
++            defaults.numeric.form()
++        };
++        let inherit = named("NUMERIC");
++        let prolog = named("PROLOG");
++        let trace = named("TRACE");
++        let conditions: Vec<bool> = ESCALATABLE
++            .iter()
++            .map(|name| named(&String::from_utf8_lossy(name)))
++            .collect();
++        self.numeric = Settings::from_parts(digits, fuzz, form);
++        if !inherit {
++            self.numeric_inherit = defaults.numeric_inherit;
++        }
++        for (which, named) in conditions.into_iter().enumerate() {
++            if !named {
++                self.syntax.escalated[which] = defaults.syntax.escalated[which];
++            }
++        }
++        if !prolog {
++            self.suppress_prolog = defaults.suppress_prolog;
++        }
++        if !trace {
++            self.trace = defaults.trace;
++        }
++    }
++
++    /// `package->packageSettings = newSettings`: every setting `settings`
++    /// holds, and not which options this package's own directives named.
++    pub(crate) fn take_settings(&mut self, settings: &PackageOptions) {
++        *self = PackageOptions {
++            explicit: self.explicit,
++            ..settings.clone()
++        };
+     }
+ }
+ 
+-/// What one `Package~options(name)` send answers, or which refusal it earns.
+-pub(crate) enum OptionQuery {
+-    /// The option's current value.
+-    Value(Vec<u8>),
+-    /// An option that answers a value and refuses to be set: `I`, `R` and
+-    /// `X`, each of which is 93.902 `1 expected` when a second argument
+-    /// arrives. Measured at rc 163, one send each.
+-    ReadOnly1(Vec<u8>),
+-    /// `S[etOptions]`, which reads nothing and needs the second argument --
+-    /// `stringArgument(strNewValue, ARG_TWO)`, 93.901.
+-    MissingSecond,
+-    /// `A[ll]`, whose own arm raises before the switch -- 93.903.
+-    NeedsValue,
+-    /// A name none of the arms accept -- 93.914, naming the whole list.
+-    Unknown,
++/// One `Package~options` option name, by the letters `PackageClass::options`
++/// switches on.
++#[derive(Copy, Clone, PartialEq, Eq, Debug)]
++pub(crate) enum OptionName {
++    /// `A[ll]`, which only a write accepts.
++    All,
++    Digits,
++    /// One of [`ESCALATABLE`], by its index there.
++    Condition(usize),
++    Form,
++    Fuzz,
++    /// `I[nitialOptions]`.
++    Initial,
++    /// `NU[meric]`.
++    NumericInherit,
++    Prolog,
++    /// `R[esetOptions]`.
++    Reset,
++    /// `S[etOptions]`, whose value is an `::OPTIONS` directive.
++    SetOptions,
++    Trace,
++    /// `X`, the options the package's directives named.
++    Explicit,
++}
++
++impl OptionName {
++    /// The option `name` names, or `None` for one none of the arms accept.
++    pub(crate) fn parse(name: &[u8]) -> Option<OptionName> {
++        let upper: Vec<u8> = name.to_ascii_uppercase();
++        Some(match (upper.first()?, upper.get(1), upper.get(2)) {
++            (b'A', _, _) => OptionName::All,
++            (b'D', _, _) => OptionName::Digits,
++            (b'E', _, _) => OptionName::Condition(0),
++            (b'F', Some(b'A'), _) => OptionName::Condition(1),
++            (b'F', Some(b'O'), _) => OptionName::Form,
++            (b'F', Some(b'U'), _) => OptionName::Fuzz,
++            (b'I', _, _) => OptionName::Initial,
++            (b'L', _, _) => OptionName::Condition(2),
++            (b'N', Some(b'U'), _) => OptionName::NumericInherit,
++            (b'N', Some(b'O'), Some(b'S')) => OptionName::Condition(3),
++            (b'N', Some(b'O'), Some(b'T')) => OptionName::Condition(4),
++            (b'N', Some(b'O'), Some(b'V')) => OptionName::Condition(5),
++            (b'P', _, _) => OptionName::Prolog,
++            (b'R', _, _) => OptionName::Reset,
++            (b'S', _, _) => OptionName::SetOptions,
++            (b'T', _, _) => OptionName::Trace,
++            (b'X', _, _) => OptionName::Explicit,
++            _ => return None,
++        })
++    }
++}
++
++/// What `Package~options` and `.Package~defaultOptions` writes keep: the
++/// statics `PackageClass` holds (`classes/PackageClass.cpp:70`), and each
++/// package's settings as they stood before their first change.
++#[derive(Default)]
++pub(crate) struct OptionWrites {
++    /// The REXX package's own settings, which a write reaches as it reaches
++    /// a file's.
++    pub(crate) rexx: PackageOptions,
++    /// `PackageClass::initialPackageSettings`, entered at a package's first
++    /// change. `None` is the REXX package.
++    pub(crate) initial: FxHashMap<Option<ProgramId>, PackageOptions>,
++    /// `psOverridePackageSettings`.
++    pub(crate) defaults: PackageOptions,
++    /// `overrideCount`: a package compiled while it is not zero takes
++    /// [`OptionWrites::defaults`] and moves it one down.
++    pub(crate) count: i64,
+ }
+ 
+ /// `NUMERIC FORM`'s two words, as `PackageSetting::toString` writes them.
+ fn form_word(form: Form) -> &'static str {
+     match form {
+         Form::Scientific => "SCIENTIFIC",
+         Form::Engineering => "ENGINEERING",
+     }
+ }
+ 
+@@ -335,20 +500,113 @@ fn trace_word(mode: TraceMode) -> &'static str {
+         b'E' => "ERROR",
+         b'F' => "FAILURE",
+         b'I' => "INTERMEDIATES",
+         b'L' => "LABELS",
+         b'O' => "OFF",
+         b'R' => "RESULTS",
+         _ => "NORMAL",
+     }
+ }
+ 
++impl Interp {
++    /// `program`'s settings for a change, whose first change enters what
++    /// `~options('I')` answers from then on. `None` is the REXX package.
++    pub(crate) fn package_settings_mut(
++        &mut self,
++        program: Option<ProgramId>,
++    ) -> &mut PackageOptions {
++        let settings = match program {
++            Some(program) => self.package_options.entry(program).or_default(),
++            None => &mut self.option_writes.rexx,
++        };
++        self.option_writes
++            .initial
++            .entry(program)
++            .or_insert_with(|| settings.clone());
++        settings
++    }
++
++    /// The latches `Interp::install_directives` arms for an escalated
++    /// `NOSTRING` or `LOSTDIGITS`, armed for a change that escalates one.
++    pub(crate) fn arm_option_latches(&mut self, program: Option<ProgramId>) {
++        let settings = match program {
++            Some(program) => self.package_options.get(&program),
++            None => Some(&self.option_writes.rexx),
++        };
++        let Some(settings) = settings else {
++            return;
++        };
++        let (nostring, lostdigits) = (
++            settings.escalates_nostring(),
++            settings.escalates_lostdigits(),
++        );
++        self.reqstr_armed |= nostring;
++        self.lostdigits_armed |= lostdigits;
++    }
++
++    /// `PackageClass::overridePackageSettings`, which every compile of a
++    /// package runs (`parser/LanguageParser.cpp:658`, `:856`) and an
++    /// `INTERPRET` does not.
++    pub(crate) fn override_package_settings(&mut self, id: ProgramId) {
++        if self.option_writes.count == 0 {
++            return;
++        }
++        // No latch to arm: the defaults are an `::OPTIONS` directive's,
++        // whose own install armed any they escalate.
++        let defaults = self.option_writes.defaults.clone();
++        self.package_settings_mut(Some(id)).take_defaults(&defaults);
++        self.option_writes.count = self.option_writes.count.wrapping_sub(1);
++    }
++
++    /// `PackageClass::setPackageSettings`: the settings `text`, a single
++    /// `::OPTIONS` directive, gives a routine compiled from it. That compile
++    /// is a package's like any other, so it takes the override too.
++    pub(crate) fn settings_from_directive(
++        &mut self,
++        text: &[u8],
++    ) -> Result<PackageOptions, Failure> {
++        let mut colon = false;
++        for &byte in text.iter().take_while(|byte| **byte != 0) {
++            if matches!(byte, b' ' | b'\t') {
++                continue;
++            }
++            if !colon {
++                if byte != b':' {
++                    return Err(Raised::method_user_defined(
++                        "argument is not an ::OPTIONS directive",
++                    )
++                    .into());
++                }
++                colon = true;
++                continue;
++            }
++            let hint = match byte {
++                b';' => "\";\" (end of clause)",
++                b'\r' => "\"0d\"x (CR)",
++                b'\n' => "\"0a\"x (LF)",
++                _ => continue,
++            };
++            return Err(Raised::method_user_defined(&format!(
++                "argument must not contain a semi-colon, CR, or LF, found: {hint}"
++            ))
++            .into());
++        }
++        let name = b"PackageSettingsFromOptionsDirectiveString";
++        let parsed = self.parse_file(text.to_vec(), name)?;
++        let mut compiled = None;
++        self.install_executable(parsed, name, true, None, |_, id| compiled = Some(id))?;
++        Ok(compiled
++            .and_then(|id| self.package_options.get(&id).cloned())
++            .unwrap_or_default())
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::{ConditionSyntax, ESCALATABLE, PackageOptions};
+     use rexx_parse::{ConditionOption, PackageOption};
+ 
+     /// `ALL` writes every one of the six and nothing outside them, asserted
+     /// over [`ESCALATABLE`] rather than over a list written here -- a name
+     /// added to that array with no arm in `ConditionSyntax::set` fails this
+     /// instead of passing unnoticed.
+     #[test]
+diff --git a/rust/crates/rexx-exec/tests/phase_ten_reasons.rs b/rust/crates/rexx-exec/tests/phase_ten_reasons.rs
+index cf8c0db0d..ec72a9406 100644
+--- a/rust/crates/rexx-exec/tests/phase_ten_reasons.rs
++++ b/rust/crates/rexx-exec/tests/phase_ten_reasons.rs
+@@ -198,21 +198,21 @@ fn the_scan_reads_the_test_modules_it_leaves_out() {
+     for production in ["src/lib.rs", "src/dispatch/native.rs", "src/environment.rs"] {
+         assert!(kept.contains(production), "{production} was left out");
+     }
+     let (_, lib) = production_sources("rexx-exec")
+         .into_iter()
+         .find(|(path, _)| shown(path) == "src/lib.rs")
+         .expect("lib.rs is kept");
+     assert!(
+         literals(&lib)
+             .iter()
+-            .any(|(_, literal)| literal == "a package settings write"),
++            .any(|(_, literal)| literal == "a write to a package's .ROUTINES table"),
+         "lib.rs's production text was blanked"
+     );
+ }
+ 
+ /// An inline test module is blanked to its closing brace and nothing past
+ /// it; a literal before or after it is still read, on its own line.
+ #[test]
+ fn an_inline_test_module_is_left_out_and_its_neighbours_are_not() {
+     let source = "\
+ fn a() -> &'static str { \"Phase 10 before\" }
+diff --git a/rust/crates/rexx-num/src/settings.rs b/rust/crates/rexx-num/src/settings.rs
+index 34e540620..787f9cd25 100644
+--- a/rust/crates/rexx-num/src/settings.rs
++++ b/rust/crates/rexx-num/src/settings.rs
+@@ -202,20 +202,27 @@ fn create_unsigned_value(digits: &[u8], carry: bool, exponent: i64, max_value: u
+     if carry {
+         value = value.checked_add(1)?;
+     }
+     for _ in 0..exponent {
+         value = value.checked_mul(10)?;
+     }
+     (value <= max_value).then_some(value)
+ }
+ 
+ impl Settings {
++    /// The three settings as given, the pair not compared:
++    /// `PackageSetting::setDigits` and `setFuzz` store without the check
++    /// `NUMERIC` makes.
++    pub fn from_parts(digits: u64, fuzz: u64, form: Form) -> Settings {
++        Settings { digits, fuzz, form }
++    }
++
+     pub fn digits(&self) -> u64 {
+         self.digits
+     }
+ 
+     pub fn fuzz(&self) -> u64 {
+         self.fuzz
+     }
+ 
+     pub fn form(&self) -> Form {
+         self.form
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt
+new file mode 100644
+index 000000000..32ad050e8
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_default_options.txt
+@@ -0,0 +1,80 @@
++count 79
++/* .Package~defaultOptions(name, value): the override settings and the count.
++   While the count is not zero, every compile of a package takes the override
++   for each option its own ::OPTIONS did not name, and the count moves one
++   down: a called file, a loaded package, Routine~new, Method~new,
++   Package~new, a DEFINE from source, and the compile the D write itself
++   makes. INTERPRET compiles no package. A count of 1 is what `rexx -o` sets,
++   the next program alone; -1 is `rexx -od`, every one. */
++parse source . . me
++dir = left(me, lastpos('/', me))
++cls = .Package
++say 'D [' || cls~defaultOptions('D') || ']'
++say 'C' cls~defaultOptions('C')
++override = '::options digits 6 form engineering fuzz 1 trace e',
++  'novalue syntax lostdigits syntax noprolog'
++say 'set D [' || cls~defaultOptions('D', override) || ']'
++say 'D [' || cls~defaultOptions('D') || ']'
++say 'count 0 routine:' .routine~new('r0', 'return digits() form() fuzz() trace()')~call
++say 'set C' cls~defaultOptions('C', 1)
++say 'called:' called()
++say 'C' cls~defaultOptions('C')
++say 'called again:' called()
++
++say 'set C' cls~defaultOptions('countOverrides', -1)
++r = .routine~new('r1', 'return digits() form() fuzz() trace()')
++say 'routine:' r~call 'C' cls~defaultOptions('C')
++say 'routine I [' || r~package~options('I') || ']'
++say 'routine [' || r~package~options || ']'
++r = .routine~new('r2', ('return digits() form() fuzz() trace()', '::options digits 11 trace c'))
++say 'routine naming DIGITS and TRACE:' r~call r~package~options('X') 'C' cls~defaultOptions('C')
++m = .method~new('m', 'return digits()')
++say 'method C' cls~defaultOptions('C')
++.k~define('d', 'return digits() form()')
++say 'define:' .k~new~d 'C' cls~defaultOptions('C')
++pk = .Package~new('pk', 'return')
++say 'package:' pk~digits pk~form pk~fuzz 'C' cls~defaultOptions('C')
++req = .context~package~loadPackage(dir || 'package_default_options_req.cls')
++say 'loaded:' req~digits req~form req~options('P') 'C' cls~defaultOptions('C')
++interpret 'say "interpret:" digits()'
++say 'C' cls~defaultOptions('C')
++call try ".routine~new('nv', 'return zzunset')~call"
++call try ".routine~new('ld', 'return 1234567 + 1')~call"
++
++say 'D again [' || cls~defaultOptions('D', '::options digits 8') || ']'
++say 'C after D' cls~defaultOptions('C')
++say 'D now [' || cls~defaultOptions('D') || ']'
++say 'set C' cls~defaultOptions('C', 0)
++say 'D at count 0 [' || cls~defaultOptions('D', '::options digits 8') || ']'
++say 'D now [' || cls~defaultOptions('D') || ']'
++say 'C' cls~defaultOptions('C')
++say 'set C' cls~defaultOptions('C', 2)
++np = .context~package~loadPackage(dir || 'package_default_options_noprolog.cls')
++say 'NOPROLOG package:' np~options('P') np~options('X') np~digits
++say 'C' cls~defaultOptions('C', ' 0 ')
++
++call try "cls~defaultOptions('D', 'digits 5')"
++call try "cls~defaultOptions('D', '::options digits 5;')"
++call try "cls~defaultOptions('D', '')"
++call try "cls~defaultOptions('D', .nil)"
++call try "cls~defaultOptions('C', 1.5)"
++call try "cls~defaultOptions('C', 'x')"
++call try "cls~defaultOptions('A', 1)"
++say 'D [' || cls~defaultOptions('D') || ']'
++say 'C' cls~defaultOptions('C')
++exit
++
++called:
++  call (dir || 'package_default_options_called.cls')
++  return result
++
++try:
++  signal on syntax name refused
++  interpret 'say' arg(1)
++  return
++refused:
++  c = condition('o')
++  say '  ' arg(1) '->' c~code c~errortext c~message
++  return
++
++::class k
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_option_writes.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_option_writes.txt
+new file mode 100644
+index 000000000..76a06cc49
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_option_writes.txt
+@@ -0,0 +1,110 @@
++count 109
++/* Package~options(name, value): each option name the setting switch takes,
++   the previous value it answers, the value read back, and the effect on an
++   activation of this package's code started afterwards. ~options('I') keeps
++   the settings as they stood before the first write, R restores them, S
++   replaces them from an ::OPTIONS directive and leaves X alone. */
++p = .context~package
++say 'start [' || p~options || ']'
++say 'D' p~options('D', 12) p~options('D') 'here' digits()
++call show
++say 'FO' p~options('FO', 'eng') p~options('form')
++say 'FU' p~options('fu', ' 3 ') p~options('FUZZ')
++call show
++say 'NU' p~options('NU', 'inherit') p~options('numeric')
++numeric digits 20
++call show
++say 'NU' p~options('nu', 'N') p~options('nu')
++call show
++say 'E' p~options('E', 'syntax') p~options('error')
++say 'FA' p~options('fa', 's') p~options('failure')
++say 'L' p~options('L', 'S') p~options('lostdigits')
++say 'NOS' p~options('nos', 's') p~options('nostring')
++say 'NOT' p~options('not', 's') p~options('notready')
++say 'NOV' p~options('nov', 'S') p~options('novalue')
++call try 'unset()'
++call try 'lost()'
++say 'NOV' p~options('nov', 'c') p~options('novalue')
++say 'A' p~options('A', 'C')
++call try 'unset()'
++call try 'lost()'
++say 'A' p~options('all', 'syntax')
++say 'P' p~options('P', 'noprolog') p~options('prolog')
++say 'T' p~options('T', 'labels') p~options('trace') p~trace
++call show
++say 'T' p~options('trace', 'O') p~options('T') p~trace
++call show
++say 'now [' || p~options || ']'
++say 'I [' || p~options('I') || ']'
++say 'X [' || p~options('X') || ']'
++say 'R [' || p~options('R') || ']'
++say 'after R [' || p~options || ']'
++call show
++say 'S [' || p~options('S', '  ::options digits 7 form engineering trace e') || ']'
++say 'after S [' || p~options || ']'
++say 'X after S [' || p~options('X') || ']'
++call show
++say 'S of no directive [' || p~options('S', '::routine nothing') || ']'
++say 'after it [' || p~options || ']'
++say 'D 1.0' p~options('D', 1.0) p~options('D')
++say 'D back' p~options('D', 9) p~options('D')
++np = .routine~new('np', ('return', '::options noprolog prolog'))~package
++say 'NOPROLOG then PROLOG names [' || np~options('X') || ']' np~options('P')
++pn = .routine~new('pn', ('return', '::options prolog noprolog'))~package
++say 'PROLOG then NOPROLOG names [' || pn~options('X') || ']' pn~options('P')
++
++rexx = .object~package
++say 'rexx D' rexx~options('D', 15) rexx~options('D') rexx~digits
++say 'rexx I [' || rexx~options('I') || ']'
++say 'rexx [' || rexx~options || ']'
++
++call try "p~options('D', -1)"
++call try "p~options('D', 0)"
++call try "p~options('D', 'abc')"
++call try "p~options('FU', -1)"
++call try "p~options('FU', 'x')"
++call try "p~options('FU', 9)"
++call try "p~options('FU', 5) p~options('D', 5)"
++call try "p~options('FU', 0)"
++call try "p~options('FO', 'wrong')"
++call try "p~options('NU', 'x')"
++call try "p~options('E', 'wrong')"
++call try "p~options('A', 'wrong')"
++call try "p~options('P', 'wrong')"
++call try "p~options('T', 'wrong')"
++call try "p~options('I', 'x')"
++call try "p~options('R', 'x')"
++call try "p~options('X', 'x')"
++call try "p~options('D', '')"
++call try "p~options('ZZZ', 'x')"
++call try "p~options('S', 'digits 5')"
++call try "p~options('S', '::options digits 5; say 1')"
++call try "p~options('S', '::options digits 5' || '0a'x)"
++call try "p~options('S', '::options digits 5' || '0d'x)"
++call try "p~options('S', '::options digits 3 fuzz 5')"
++call try "p~options('S', .nil)"
++say 'unchanged [' || p~options || ']'
++exit
++
++show:
++  say '  routine' calc()
++  return
++
++try:
++  signal on syntax name refused
++  interpret 'say' arg(1)
++  return
++refused:
++  c = condition('o')
++  say '  ' arg(1) '->' c~code c~errortext c~message
++  return
++
++::routine calc
++  return digits() form() fuzz() trace()
++
++::routine unset
++  return zzunset
++
++::routine lost
++  numeric digits 5
++  return 1234567 + 1
