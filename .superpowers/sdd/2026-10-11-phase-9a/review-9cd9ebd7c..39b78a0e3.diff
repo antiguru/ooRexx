@@ -1,0 +1,810 @@
+# Review package: 9cd9ebd7c..39b78a0e3
+
+## Commits
+39b78a0e3 Phase 9a Task 10 fix report
+18bd99117 Phase 9a Task 10 fix: whole_groups rows for ATTRIBUTE and METHOD re-derived
+dbec28ca8 Phase 9a Task 10 fix: class-side Method objects keyed by their defining class
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-10-fix-report.md  | 83 ++++++++++++++++++++++
+ rust/corpus/lang/class_side_method_objects.rex     | 35 +++++++++
+ rust/corpus/phase-9.txt                            |  3 +
+ .../rexx-exec/src/dispatch/class_protocol.rs       |  6 +-
+ .../crates/rexx-exec/src/dispatch/introspection.rs | 24 +++++--
+ .../crates/rexx-exec/src/environment/identities.rs | 39 ++++++----
+ rust/crates/rexx-exec/src/lib.rs                   | 11 +--
+ rust/crates/rexx-exec/tests/concurrency_tests.rs   | 72 +++----------------
+ .../class_side_method_objects.txt                  | 36 ++++++++++
+ 9 files changed, 216 insertions(+), 93 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-10-fix-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-10-fix-report.md
+new file mode 100644
+index 000000000..db1700e28
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-10-fix-report.md
+@@ -0,0 +1,83 @@
++# Task 10 fix report: the close run's concurrency_tests failures
++
++Base 9cd9ebd7c. Commits dbec28ca8 (fix, witness, Method rows) and 18bd99117 (ATTRIBUTE and METHOD
++rows). Probes ran from fresh directories under /tmp/claude-1000/p9/t10fix/.
++
++## directives/METHOD TESTDELEGATE: fixed
++
++Cause: `Object~instanceMethod` and `~instanceMethods` on a class object keyed the `Method` object
++by `class_of_value(receiver)`, which is `.Class` for every class object. So the first class method
++named `CD` that any class built became the answer for every class's `CD`, with its flags. The test
++builds several packages each with a class `test` whose `classDelegate` has different options, so
++the later blocks read the first block's `isPrivate`/`isProtected`/`isGuarded`.
++
++Oracle vs crate (before the fix), `.package~new` twice with `::method cd class guarded` and then
++`::method cd class protected unguarded`, `isProtected isGuarded` of the second: oracle `1 0`, crate
++`0 1`. stdout differed, stderr empty on both, rc 0 on both. A two-class program (`.E` and `.C` each
++with a class method `M`): `.E~instanceMethod('M') == .C~instanceMethod('M')` oracle `0`, crate `1`.
++
++Fix: `method_objects` is keyed by (class, class side, name). Class-side entries from
++`instanceMethod`/`instanceMethods` key by the defining class (the lookup's scope) on the class side;
++`defineClassMethod` holds its object under the class side too; instance-side keys are unchanged.
++Measured against the oracle on the fixed binary, all equal: a subclass reaches its superclass's
++class-method object (`.D~instanceMethod('M') == .C~instanceMethod('M')` is `1`), the class-side and
++instance-side objects of one name stay distinct, `instanceMethods` items equal `instanceMethod`'s,
++and `.Array~instanceMethod('NEW') == .List~instanceMethod('NEW')` is `0` while `METHOD`'s is `1`.
++
++The same fix passes directives/ATTRIBUTE TESTDELEGATE.
++
++Witness: `rust/corpus/lang/class_side_method_objects.rex` in `phase-9.txt`, sourceline expectation
++generated with the `.Package~new` driver. Its oracle and crate stdout, stderr and rc are identical
++(rc 0, stderr empty). The pre-fix binary was not run on the witness file itself; its statements
++were run on it as the probes above, which differed.
++
++## base/class/Method TEST_NEW_ARRAY_FROM_FILE and TEST_NEW_FILE_COMPILED: not fixed
++
++Cause: both tests run `address system "rexxc"` to compile a source file into an encoded and a
++binary compiled image, then load each through `.Method~new(name, array)` and `.Method~newFile`.
++The crate side's PATH resolves no `rexxc` by design (suite.rs `check_path`), and the crate does not
++load the C++ interpreter's compiled image format. Measured: with the oracle's `rexxc` output in
++place, the crate raises 13.1 on the encoded image through both `new` and `newFile` where the oracle
++answers `43`/`47`; with no `rexxc` the command is rc 127 and the files are missing.
++
++Not listed in `suite-9d-set.txt`: spec section 3 names both tests as 9b/9c witnesses, and the
++file's header excludes them by name. They reach the gates through the existing `DIFFERING`
++mechanism: the Method `whole` rows now carry their outcome, which `sim_gate` reads through
++`failing_unswitched`.
++
++## Re-derived DIFFERING rows (concurrency_tests.rs)
++
++* base/class/Method whole, normal and every: `error, assertions 92, rc 2, last started
++  TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]`.
++* base/directives/ATTRIBUTE whole, normal and every: `error, assertions 303, rc 2, last started
++  TEST_SET_RETURN, failing [TESTMISPLACEDCLASSMETHOD]`.
++* Removed, each part now agreeing with the oracle: ATTRIBUTE derived; METHOD whole, rest and
++  derived.
++
++## Checks (all from rust/, exit status read unpiped)
++
++* `cargo fmt --all --check`: 0.
++* `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: 0
++  (log shows `Checking rexx-exec`), at both commits.
++* `REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_ONLY=base/class/Method.testGroup,base/directives/METHOD.testGroup,base/directives/ATTRIBUTE.testGroup memcap 8G cargo test -j 4 --release -p rexx-exec --test concurrency_tests each_group_of_the_derived_list_in_one_run_in_both_modes`:
++  101 at dbec28ca8 (ATTRIBUTE whole rows stale), 0 at 18bd99117 with `listed as differing,
++  agreeing: []`.
++* `REXX_CORPUS_GATE=1 REXX_SIM_ONLY=<group> memcap 8G cargo test -j 4 --release -p rexx-exec --test concurrency_tests the_seeded_gate -- --nocapture`,
++  once per group: Method 0 (210 runs, 0 reds), METHOD 0 (210 runs, 0 reds), ATTRIBUTE 0 (140 runs,
++  0 reds).
++* `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Method,base/directives/METHOD,base/directives/ATTRIBUTE memcap 8G cargo test -j 4 --release -p rexx-exec --test suite`:
++  101; METHOD green, Method red on the two rexxc tests, ATTRIBUTE red on TESTMISPLACEDCLASSMETHOD.
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus`: 0 (29
++  passed, 1 ignored).
++* `memcap 8G cargo test -j 4 --release -p rexx-parse --test sourceline_oracle`: 0.
++* `memcap 8G cargo test -j 4 --release -p rexx-exec --lib`: 0 (1087 passed).
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test bootstrap_install_oracle --test introspection_scopes --test collection_scopes`: 0.
++
++## Left open
++
++* `suite-9d-set.txt` still lists METHOD and ATTRIBUTE TESTDELEGATE. It is derived from the run at
++  2415e1733 by its header's command and was not edited; both now pass.
++* Instance-side identity across a subclass still differs: `.D~new~instanceMethod('M') ==
++  .C~method('M')` (M defined on C) is `1` on the oracle and `0` here. Unchanged by this fix.
++* Found while probing: a label inside a `DO` block reports `47.2 ... found "&1"` here where the
++  oracle names the label (`found "S1"`).
+diff --git a/rust/corpus/lang/class_side_method_objects.rex b/rust/corpus/lang/class_side_method_objects.rex
+new file mode 100644
+index 000000000..524ed16bb
+--- /dev/null
++++ b/rust/corpus/lang/class_side_method_objects.rex
+@@ -0,0 +1,35 @@
++/* instanceMethod on a class object answers one Method object per class-side
++   entry: two classes' class methods of one name are two objects with their
++   own flags, and a subclass reaches its superclass's. */
++say (.E~instanceMethod('M') == .C~instanceMethod('M')) .E~instanceMethod('M')~isProtected
++say (.D~instanceMethod('M') == .C~instanceMethod('M')) .C~instanceMethod('M')~isProtected
++say (.C~instanceMethod('M') == .C~instanceMethod('M')) (.C~instanceMethod('M') == .C~method('M'))
++s = .E~instanceMethods(.E)
++do while s~available
++  say s~index (s~item == .E~instanceMethod(s~index))
++  s~next
++end
++say (.Array~instanceMethod('NEW') == .List~instanceMethod('NEW')) -
++    (.Array~instanceMethod('METHOD') == .List~instanceMethod('METHOD'))
++p = .package~new('first', ("::class test", "::method cd class guarded"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isProtected m~isGuarded
++p = .package~new('second', ("::class test", "::method cd class protected unguarded"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isProtected m~isGuarded
++p = .package~new('third', ("::class test", -
++    "::method cd delegate target class private protected unguarded"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isPrivate m~isProtected m~isGuarded
++p = .package~new('fourth', ("::class test", -
++    "::method cd public delegate target guarded class unprotected"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isPrivate m~isProtected m~isGuarded
++exit
++
++::class C
++::method m class protected
++::method m
++::class D subclass C
++::class E
++::method m class
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 8c259f7a2..ebd5b3c88 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -36,10 +36,13 @@ lang/hash_subclass_init_capacity.rex
+ lang/object_name_set_values.rex
+ lang/enhanced_runs_new.rex
+ lang/enhanced_primitive_receivers.rex
+ lang/metaclass_new.rex
+ lang/executable_copies.rex
+ lang/package_store_tables.rex
+ lang/routines_table_resolution.rex
+ lang/nil_hidden_methods.rex
+ lang/rexx_routine_frame_executable.rex
+ lang/package_copy.rex
++
++# 9a Task 10 fix: class-side Method objects keyed by their defining class.
++lang/class_side_method_objects.rex
+diff --git a/rust/crates/rexx-exec/src/dispatch/class_protocol.rs b/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+index 967dc67f5..8508f750f 100644
+--- a/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+@@ -199,21 +199,23 @@ pub(super) fn native_method(
+             let target = interp.class_default_name(class).to_vec();
+             Err(Raised::no_method(&target, &name).into())
+         }
+         Some(MethodSlot::Hidden) => Ok(Some(ObjRef::NIL)),
+         Some(MethodSlot::Defined { scope, method }) => {
+             let record = crate::ExecutableRecord {
+                 source: interp.installed_executable_source(method),
+                 installed: Some(method),
+                 routine: None,
+             };
+-            Ok(Some(interp.method_object(class, &name, scope, record)))
++            Ok(Some(
++                interp.method_object(class, false, &name, scope, record),
++            ))
+         }
+     }
+ }
+ 
+ /// `Method~scope`: the class the method object was defined at, `.nil` for a
+ /// method object no class has taken -- [`Interp::method_scope`] carries the
+ /// C++ and the measurements.
+ pub(super) fn native_scope(
+     interp: &mut Interp,
+     _cleared: Cleared,
+@@ -1269,14 +1271,14 @@ fn install_enhancing_methods(
+         // a method object some class already holds (`ClassClass.cpp:1265`).
+         let (executable, method) = scoped_method(interp, source, ObjRef::NIL)?;
+         interp.roots.activity_mut().push_temp(executable);
+         methods.push((name_text, Some(method)));
+         objects.push((name.to_ascii_uppercase(), executable));
+     }
+     interp
+         .classes()
+         .enhance_instance_methods(dummy, ObjRef::NIL, &methods);
+     for (name, executable) in objects {
+-        interp.hold_method_object(dummy, &name, executable);
++        interp.hold_method_object(dummy, false, &name, executable);
+     }
+     Ok(())
+ }
+diff --git a/rust/crates/rexx-exec/src/dispatch/introspection.rs b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+index 074a61e79..5a4d029fe 100644
+--- a/rust/crates/rexx-exec/src/dispatch/introspection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+@@ -103,22 +103,23 @@ fn methods(
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let class = class_receiver(interp, receiver)?;
+     // `.nil` selects the receiving class, which is the whole of what this
+     // adds over `Object~instanceMethods` (`:1022`-`:1025`).
+     let scope = match args.first().copied().flatten() {
+         Some(ObjRef::NIL) => Some(class),
+         other => other,
+     };
+     let handle = interp.classes().instance_behaviour_handle(class);
+-    let entries = behaviour_entries(interp, Selection::Behaviour(handle), scope);
+-    supplier_of(interp, class, entries)
++    let selection = Selection::Behaviour(handle);
++    let entries = behaviour_entries(interp, selection, scope);
++    supplier_of(interp, selection, class, entries)
+ }
+ 
+ /// `Object~isInstanceOf(class)`: `RexxObject::isInstanceOfRexx`
+ /// (`classes/ObjectClass.cpp:258`), which is the receiver's class compared
+ /// against `class` through `isCompatibleWith`.
+ fn is_instance_of(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+@@ -150,21 +151,23 @@ fn instance_method(
+     let Some(Some(argument)) = args.first().copied() else {
+         return Err(Raised::missing_method_argument(1).into());
+     };
+     let argument = super::required_string_named_argument(interp, argument, "method name")?;
+     let name = interp.to_text(argument).to_ascii_uppercase();
+     let selection = receiver_selection(interp, receiver)?;
+     let owner = interp.class_of_value(receiver).unwrap_or(ObjRef::NIL);
+     let Some((scope, method)) = lookup(interp, selection, &String::from_utf8_lossy(&name)) else {
+         return Ok(Some(ObjRef::NIL));
+     };
+-    Ok(Some(method_object_for(interp, owner, &name, scope, method)))
++    Ok(Some(method_object_for(
++        interp, selection, owner, &name, scope, method,
++    )))
+ }
+ 
+ /// `Object~instanceMethods(scope)`: `RexxObject::instanceMethodsRexx`
+ /// (`classes/ObjectClass.cpp:387`).
+ fn instance_methods(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+@@ -175,21 +178,21 @@ fn instance_methods(
+         let mut entries = object_level_entries(interp, receiver);
+         for entry in behaviour_entries(interp, selection, scope) {
+             if !entries.iter().any(|(name, ..)| *name == entry.0) {
+                 entries.push(entry);
+             }
+         }
+         entries
+     } else {
+         behaviour_entries(interp, selection, scope)
+     };
+-    supplier_of(interp, owner, entries)
++    supplier_of(interp, selection, owner, entries)
+ }
+ 
+ /// Which table a receiver's methods are read out of: an instance's own
+ /// behaviour, or a class object's class-side one.
+ #[derive(Copy, Clone)]
+ enum Selection {
+     Behaviour(rexx_classes::BehaviourHandle),
+     ClassSide(ObjRef),
+ }
+ 
+@@ -250,56 +253,63 @@ fn object_level_entries(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjR
+             Some((name.into_vec(), entry.scope, entry.method))
+         })
+         .collect()
+ }
+ 
+ /// A `Supplier` whose items are `Method` objects and whose indexes are their
+ /// names, which is what the oracle's own supplier carries -- measured, its
+ /// `~index` is the name and its `~item~class~id` is `Method`.
+ fn supplier_of(
+     interp: &mut Interp,
++    selection: Selection,
+     owner: ObjRef,
+     entries: Vec<(Vec<u8>, ObjRef, MethodId)>,
+ ) -> Result<Option<ObjRef>, Failure> {
+     let mut items = Vec::with_capacity(entries.len());
+     let mut indexes = Vec::with_capacity(entries.len());
+     for (name, scope, method) in entries {
+         // Rooted as each is built rather than at the end: every allocation
+         // below can collect, and a handle held only by these `Vec`s is one
+         // the collector cannot see.
+-        let object = method_object_for(interp, owner, &name, scope, method);
++        let object = method_object_for(interp, selection, owner, &name, scope, method);
+         interp.roots.activity_mut().push_temp(object);
+         items.push(object);
+         let index = interp.text_built(name);
+         interp.roots.activity_mut().push_temp(index);
+         indexes.push(index);
+     }
+     let items = array_of(interp, items);
+     interp.roots.activity_mut().push_temp(items);
+     let indexes = array_of(interp, indexes);
+     interp.roots.activity_mut().push_temp(indexes);
+     new_supplier(interp, items, indexes).map(Some)
+ }
+ 
+ /// The `Method` object for one resolved entry, built the way `Class~method`
+-/// builds its own.
++/// builds its own. A class-side entry is keyed by the class that defines it,
++/// so two classes' class methods of one name are two objects and a subclass
++/// reaches its superclass's.
+ fn method_object_for(
+     interp: &mut Interp,
++    selection: Selection,
+     owner: ObjRef,
+     name: &[u8],
+     scope: ObjRef,
+     method: MethodId,
+ ) -> ObjRef {
+     // A `.nil`-scoped entry is one `setMethod` or `Class~enhanced` installed
+     // from an object of its own, which is what the oracle's behaviour holds.
+     if scope == ObjRef::NIL
+         && let Some(object) = interp.executable_objects.get(&method).copied()
+     {
+         return object;
+     }
+     let record = crate::ExecutableRecord {
+         source: interp.installed_executable_source(method),
+         installed: Some(method),
+         routine: None,
+     };
+-    interp.method_object(owner, name, scope, record)
++    match selection {
++        Selection::ClassSide(_) => interp.method_object(scope, true, name, scope, record),
++        Selection::Behaviour(_) => interp.method_object(owner, false, name, scope, record),
++    }
+ }
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index 28f03f359..ab96ed2db 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -140,49 +140,51 @@ impl Interp {
+         // A package object outlives every send that can reach it and is
+         // reachable from no other object, so the root is a global rather than
+         // a temp -- the position `.environment` and `.local` are in.
+         self.roots.add_global(&package_root_key(package), object);
+         self.package_objects.insert(package, object);
+         self.object_packages.insert(object, package);
+         self.attach_annotations(object, Annotated::Package(package));
+         object
+     }
+ 
+-    /// `Class~method`'s answer: the one `Method` object this class's instance
+-    /// dictionary entry named `name` has, built on first ask and kept.
++    /// `Class~method`'s answer: the one `Method` object the dictionary entry
++    /// named `name` on `class`'s instance side, or its class side where
++    /// `class_side`, has, built on first ask and kept.
+     pub(crate) fn method_object(
+         &mut self,
+         class: ObjRef,
++        class_side: bool,
+         name: &[u8],
+         scope: ObjRef,
+         record: crate::ExecutableRecord,
+     ) -> ObjRef {
+-        let key = (class, Box::<[u8]>::from(name));
++        let key = (class, class_side, Box::<[u8]>::from(name));
+         if let Some(found) = self.method_objects.get(&key).copied() {
+             return found;
+         }
+         let method_class = self.method_class();
+         let object = self.native_instance(method_class);
+         self.executable_sources.insert(object, record);
+         if let Some(method) = record.installed {
+             self.executable_objects.entry(method).or_insert(object);
+         }
+         let held = self.heap.get_mut(object).expect("just allocated");
+         let Body::Native(native) = &mut held.body else {
+             unreachable!("allocated as Body::Native by native_instance")
+         };
+         native.set_scope(scope);
+         self.class_owns(class, object);
+         self.method_objects.insert(key, object);
+         // The dictionary entry the caller found, which is what its
+-        // annotations are keyed by: this class, the instance side, this name.
+-        self.attach_annotations(object, Annotated::Member(class, false, name.into()));
++        // annotations are keyed by.
++        self.attach_annotations(object, Annotated::Member(class, class_side, name.into()));
+         object
+     }
+ 
+     /// The one `Method` object for the method `name` defined at `scope` --
+     /// what `RexxContext~executable` answers from a `::METHOD` context.
+     pub(crate) fn method_executable(
+         &mut self,
+         scope: ObjRef,
+         name: &[u8],
+     ) -> Result<ObjRef, crate::error::Failure> {
+@@ -193,21 +195,21 @@ impl Interp {
+         } else {
+             None
+         };
+         match found {
+             Some(rexx_classes::MethodSlot::Defined { scope, method }) => {
+                 let record = crate::ExecutableRecord {
+                     source: self.installed_executable_source(method),
+                     installed: Some(method),
+                     routine: None,
+                 };
+-                Ok(self.method_object(scope, name, scope, record))
++                Ok(self.method_object(scope, false, name, scope, record))
+             }
+             _ => Err(crate::Loud::unknown_receiver(
+                 "a method context whose scope no longer defines it",
+             )
+             .into()),
+         }
+     }
+ 
+     /// What `RexxContext~executable` answers from a method activation
+     /// running `body` for a send to `receiver` under `name` at `scope`: the
+@@ -237,21 +239,21 @@ impl Interp {
+             && let Some(rexx_classes::MethodSlot::Defined { scope, method }) = self
+                 .classes()
+                 .own_instance_slot(scope, &String::from_utf8_lossy(name))
+             && runs(self, method)
+         {
+             let record = crate::ExecutableRecord {
+                 source: self.installed_executable_source(method),
+                 installed: Some(method),
+                 routine: None,
+             };
+-            return self.method_object(scope, name, scope, record);
++            return self.method_object(scope, false, name, scope, record);
+         }
+         // A `run`'s activation carries its own object, so what is left is a
+         // directive's body a class no longer reaches by this name: the
+         // object standing for its identity, the first minted where a copy
+         // shares the body.
+         let standing = self
+             .executable_objects
+             .iter()
+             .filter(|(method, object)| runs(self, **method) && self.heap.get(**object).is_some())
+             .min_by_key(|(method, _)| method.0)
+@@ -462,21 +464,21 @@ impl Interp {
+     /// dictionary under `name` and make [`Interp::method_object`] answer it.
+     pub(crate) fn define_method_object(
+         &mut self,
+         class: ObjRef,
+         name: &[u8],
+         source: ObjRef,
+     ) -> Option<()> {
+         let (object, method) = self.scoped_method(source, class)?;
+         self.classes()
+             .define_instance_method(class, &String::from_utf8_lossy(name), method);
+-        self.hold_method_object(class, name, object);
++        self.hold_method_object(class, false, name, object);
+         Some(())
+     }
+ 
+     /// [`Interp::method_new_scope`] with the method identity its answer runs
+     /// under, which is what `setMethod`, `run`, `enhanced` and `define`
+     /// install: the object's own where `newScope` answers the object itself,
+     /// and one [`Interp::copy_method_identity`] mints for a copy. `None`
+     /// for an object this crate did not build, since every one it builds
+     /// carries an identity.
+     pub(crate) fn scoped_method(
+@@ -524,21 +526,21 @@ impl Interp {
+     /// on the class side.
+     pub(crate) fn define_class_method_object(
+         &mut self,
+         class: ObjRef,
+         name: &[u8],
+         source: ObjRef,
+     ) -> Option<()> {
+         let (object, method) = self.scoped_method(source, class)?;
+         self.classes()
+             .define_class_method(class, &String::from_utf8_lossy(name), method);
+-        self.hold_method_object(class, name, object);
++        self.hold_method_object(class, true, name, object);
+         Some(())
+     }
+ 
+     /// `~defineMethods`: one mutation for the whole table.
+     pub(crate) fn define_method_table(
+         &mut self,
+         class: ObjRef,
+         entries: &[(Box<[u8]>, Option<ObjRef>)],
+     ) -> Option<()> {
+         let mut installed: Vec<(String, Option<rexx_classes::MethodId>)> = Vec::new();
+@@ -552,37 +554,44 @@ impl Interp {
+             };
+             let (object, _) = self.scoped_method(source, class)?;
+             self.roots.activity_mut().push_temp(object);
+             let (object, method) = self.scoped_method(object, class)?;
+             self.roots.activity_mut().push_temp(object);
+             installed.push((name_text, Some(method)));
+             objects.push((name.clone(), object));
+         }
+         self.classes().define_instance_methods(class, &installed);
+         for (name, object) in objects {
+-            self.hold_method_object(class, &name, object);
++            self.hold_method_object(class, false, &name, object);
+         }
+         self.roots.activity_mut().pop_frame(frame);
+         Some(())
+     }
+ 
+     /// Make [`Interp::method_object`] answer `object` for this dictionary
+     /// entry, and root it the way one this crate built is rooted.
+-    pub(crate) fn hold_method_object(&mut self, class: ObjRef, name: &[u8], object: ObjRef) {
++    pub(crate) fn hold_method_object(
++        &mut self,
++        class: ObjRef,
++        class_side: bool,
++        name: &[u8],
++        object: ObjRef,
++    ) {
+         self.class_owns(class, object);
+-        self.method_objects.insert((class, name.into()), object);
++        self.method_objects
++            .insert((class, class_side, name.into()), object);
+     }
+ 
+-    /// Forget the `Method` object this dictionary entry answered, for a
+-    /// `~delete` or a `~define` that took the entry away.
++    /// Forget the `Method` object this instance dictionary entry answered,
++    /// for a `~delete` or a `~define` that took the entry away.
+     pub(crate) fn drop_method_object(&mut self, class: ObjRef, name: &[u8]) {
+-        self.method_objects.remove(&(class, name.into()));
++        self.method_objects.remove(&(class, false, name.into()));
+     }
+ 
+     /// The `StringTable` `~annotations` answers for `site`, built empty on
+     /// first ask and kept.
+     pub(crate) fn annotation_table(&mut self, site: Annotated) -> ObjRef {
+         if let Some(found) = self.annotations.get(&site).copied() {
+             return found;
+         }
+         let table = crate::dispatch::hash::new_string_table(self)
+             .expect("StringTable is not an abstract class");
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 2a106b0c2..b9d233131 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1417,24 +1417,25 @@ struct Interp {
+     /// The `StringTable` each annotated thing's `~annotations` answers, keyed
+     /// by the thing -- see [`environment::Annotated`] for the key space and
+     /// [`Interp::annotation_table`] for why the table is kept rather than
+     /// rebuilt.
+     annotations: FxHashMap<environment::Annotated, ObjRef>,
+     /// How many methods have been compiled from source text, which is what
+     /// [`environment::Annotated::Compiled`] counts -- see that variant for
+     /// why a compiled method's annotation table is keyed by a count and not
+     /// by the dictionary entry it is installed into.
+     compiled_methods: usize,
+-    /// The `Method` object `Class~method` answers, keyed by the class and the
+-    /// instance dictionary name -- see [`Interp::method_object`] for the two
+-    /// oracle answers that make one object per entry observable.
+-    method_objects: FxHashMap<(ObjRef, Box<[u8]>), ObjRef>,
++    /// The `Method` object `Class~method` answers, keyed by the class, whether
++    /// the entry is on its class side, and the dictionary name -- see
++    /// [`Interp::method_object`] for the two oracle answers that make one
++    /// object per entry observable.
++    method_objects: FxHashMap<(ObjRef, bool, Box<[u8]>), ObjRef>,
+     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
+     /// minted names -- the "bodies are stored" half of R9, addressed by the
+     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
+     /// already returns.
+     method_bodies: NameMap<MethodId, InstalledMethodBody>,
+     /// Whether the interpreter's own Rexx-written library is running.
+     library_bootstrap: bool,
+     /// How many collections the heap had performed when the library
+     /// bootstrap finished, which is what `Outcome::collections` is counted
+     /// from -- see `Interp::bootstrap_library` for why the boundary is
+@@ -3124,21 +3125,21 @@ impl Interp {
+         // which slots it freed, and a scan of the registry per collection
+         // would cost the whole class population to find the few that died.
+         if !stats.freed_classes.is_empty() {
+             let dead = stats.freed_classes;
+             self.classes().expunge(&dead);
+             for class in &dead {
+                 self.class_variables.remove(class);
+                 self.class_packages.remove(class);
+             }
+             self.method_objects
+-                .retain(|(class, _), _| !dead.contains(class));
++                .retain(|(class, _, _), _| !dead.contains(class));
+         }
+         // **Not raised for the stress mode**, which collects on every
+         // allocation by definition and must not have its watermark moved
+         // out from under it.
+         if !self.stress_collect {
+             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
+         }
+         self.bytes_due = COLLECT_BYTES_FLOOR.max(stats.live_bytes);
+         self.collect_due = self.stress_collect || self.sim_collects_at_random();
+         #[cfg(feature = "sharing")]
+diff --git a/rust/crates/rexx-exec/tests/concurrency_tests.rs b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+index 19f204156..7a094e70f 100644
+--- a/rust/crates/rexx-exec/tests/concurrency_tests.rs
++++ b/rust/crates/rexx-exec/tests/concurrency_tests.rs
+@@ -2715,29 +2715,29 @@ mod group_runs {
+                 "base/class/Class.testGroup",
+                 "whole",
+                 "every",
+                 "failure, assertions 298, rc 1, last started TEST_UNINHERIT_TWO_ARGS, failing [TEST_ACTIVATE TEST_METHODS]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+             (
+                 "base/class/Method.testGroup",
+                 "whole",
+                 "normal",
+-                "rexx-exec: method \"NEW\" of class \"Method\" is not implemented (Phase 9), rc 120, last started TEST_NEW_FOUR_ARGS, failing []",
+-                "a test outside the derived list refuses: TEST_NEW_FOUR_ARGS, Method NEW with an INIT argument (Phase 9)",
++                "error, assertions 92, rc 2, last started TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
++                "tests outside the derived list that fail alone too: Method NEW's array and compiled-file shapes",
+             ),
+             (
+                 "base/class/Method.testGroup",
+                 "whole",
+                 "every",
+-                "rexx-exec: method \"NEW\" of class \"Method\" is not implemented (Phase 9), rc 120, last started TEST_NEW_FOUR_ARGS, failing []",
+-                "a test outside the derived list refuses: TEST_NEW_FOUR_ARGS, Method NEW with an INIT argument (Phase 9)",
++                "error, assertions 92, rc 2, last started TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
++                "tests outside the derived list that fail alone too: Method NEW's array and compiled-file shapes",
+             ),
+             (
+                 "base/class/Method.testGroup",
+                 "rest",
+                 "normal",
+                 "error, assertions 85, rc 2, last started TEST_SOURCE, failing [TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED]",
+                 "tests outside the derived list that fail alone too: Method NEW's array and compiled-file shapes",
+             ),
+             (
+                 "base/class/Method.testGroup",
+@@ -2785,43 +2785,29 @@ mod group_runs {
+                 "base/class/RexxContext.testGroup",
+                 "whole",
+                 "every",
+                 "failure, assertions 358, rc 1, last started TEST_SOURCELINE_LAST_LINE, failing [TESTRS01]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+             (
+                 "base/directives/ATTRIBUTE.testGroup",
+                 "whole",
+                 "normal",
+-                "error, assertions 276, rc 2, last started TEST_SET_RETURN, failing [TESTDELEGATE TESTMISPLACEDCLASSMETHOD]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6; TESTMISPLACEDCLASSMETHOD: `::attribute 'foo' class` with a body is 99.937 here, 99.905 on the oracle",
++                "error, assertions 303, rc 2, last started TEST_SET_RETURN, failing [TESTMISPLACEDCLASSMETHOD]",
++                "TESTMISPLACEDCLASSMETHOD: `::attribute 'foo' class` with a body is 99.937 here, 99.905 on the oracle",
+             ),
+             (
+                 "base/directives/ATTRIBUTE.testGroup",
+                 "whole",
+                 "every",
+-                "error, assertions 276, rc 2, last started TEST_SET_RETURN, failing [TESTDELEGATE TESTMISPLACEDCLASSMETHOD]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6; TESTMISPLACEDCLASSMETHOD: `::attribute 'foo' class` with a body is 99.937 here, 99.905 on the oracle",
+-            ),
+-            (
+-                "base/directives/ATTRIBUTE.testGroup",
+-                "derived",
+-                "normal",
+-                "failure, assertions 187, rc 1, last started TESTDELEGATE, failing [TESTDELEGATE]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+-            ),
+-            (
+-                "base/directives/ATTRIBUTE.testGroup",
+-                "derived",
+-                "every",
+-                "failure, assertions 187, rc 1, last started TESTDELEGATE, failing [TESTDELEGATE]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
++                "error, assertions 303, rc 2, last started TEST_SET_RETURN, failing [TESTMISPLACEDCLASSMETHOD]",
++                "TESTMISPLACEDCLASSMETHOD: `::attribute 'foo' class` with a body is 99.937 here, 99.905 on the oracle",
+             ),
+             (
+                 "base/directives/CONSTANT.testGroup",
+                 "whole",
+                 "normal",
+                 "error, assertions 173, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+             (
+                 "base/directives/CONSTANT.testGroup",
+@@ -2837,62 +2823,20 @@ mod group_runs {
+                 "error, assertions 170, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+             (
+                 "base/directives/CONSTANT.testGroup",
+                 "rest",
+                 "every",
+                 "error, assertions 170, rc 2, last started TEST_SUBCLASS_DEFINITION, failing [TEST_EXPRESSION_NOVALUE_ERROR]",
+                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
+             ),
+-            (
+-                "base/directives/METHOD.testGroup",
+-                "whole",
+-                "normal",
+-                "rexx-exec: method \"ITEMS\" of class \"StringTable\" is not implemented (Phase 9), rc 120, last started TESTPACKAGE, failing []",
+-                "a test outside the derived list refuses: TESTPACKAGE, StringTable ITEMS (Phase 9)",
+-            ),
+-            (
+-                "base/directives/METHOD.testGroup",
+-                "whole",
+-                "every",
+-                "rexx-exec: method \"ITEMS\" of class \"StringTable\" is not implemented (Phase 9), rc 120, last started TESTPACKAGE, failing []",
+-                "a test outside the derived list refuses: TESTPACKAGE, StringTable ITEMS (Phase 9)",
+-            ),
+-            (
+-                "base/directives/METHOD.testGroup",
+-                "rest",
+-                "normal",
+-                "failure, assertions 179, rc 1, last started TEST_DELEGATE_TWICE, failing [TESTDELEGATE]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+-            ),
+-            (
+-                "base/directives/METHOD.testGroup",
+-                "rest",
+-                "every",
+-                "failure, assertions 179, rc 1, last started TEST_DELEGATE_TWICE, failing [TESTDELEGATE]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+-            ),
+-            (
+-                "base/directives/METHOD.testGroup",
+-                "derived",
+-                "normal",
+-                "failure, assertions 67, rc 1, last started TESTGUARDEDACCESS, failing [TESTDELEGATE]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+-            ),
+-            (
+-                "base/directives/METHOD.testGroup",
+-                "derived",
+-                "every",
+-                "failure, assertions 67, rc 1, last started TESTGUARDEDACCESS, failing [TESTDELEGATE]",
+-                "TESTDELEGATE, as alone: Method delegate attributes, outside Phase 6",
+-            ),
+             (
+                 "base/keyword/CALL.testGroup",
+                 "derived",
+                 "normal",
+                 "failure, assertions 7, rc 1, last started TEST_4, failing [TEST_4]",
+                 "TEST_4, as alone: elapsed-clock defect, queued 2026-10-02-elapsed-clock-per-routine-and-reset",
+             ),
+             (
+                 "base/keyword/CALL.testGroup",
+                 "derived",
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/class_side_method_objects.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/class_side_method_objects.txt
+new file mode 100644
+index 000000000..bc1aa3659
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/class_side_method_objects.txt
+@@ -0,0 +1,36 @@
++count 35
++/* instanceMethod on a class object answers one Method object per class-side
++   entry: two classes' class methods of one name are two objects with their
++   own flags, and a subclass reaches its superclass's. */
++say (.E~instanceMethod('M') == .C~instanceMethod('M')) .E~instanceMethod('M')~isProtected
++say (.D~instanceMethod('M') == .C~instanceMethod('M')) .C~instanceMethod('M')~isProtected
++say (.C~instanceMethod('M') == .C~instanceMethod('M')) (.C~instanceMethod('M') == .C~method('M'))
++s = .E~instanceMethods(.E)
++do while s~available
++  say s~index (s~item == .E~instanceMethod(s~index))
++  s~next
++end
++say (.Array~instanceMethod('NEW') == .List~instanceMethod('NEW')) -
++    (.Array~instanceMethod('METHOD') == .List~instanceMethod('METHOD'))
++p = .package~new('first', ("::class test", "::method cd class guarded"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isProtected m~isGuarded
++p = .package~new('second', ("::class test", "::method cd class protected unguarded"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isProtected m~isGuarded
++p = .package~new('third', ("::class test", -
++    "::method cd delegate target class private protected unguarded"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isPrivate m~isProtected m~isGuarded
++p = .package~new('fourth', ("::class test", -
++    "::method cd public delegate target guarded class unprotected"))
++m = p~findClass('test')~instanceMethod('cd')
++say m~isPrivate m~isProtected m~isGuarded
++exit
++
++::class C
++::method m class protected
++::method m
++::class D subclass C
++::class E
++::method m class
