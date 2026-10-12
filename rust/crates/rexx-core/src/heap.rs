@@ -82,7 +82,7 @@ pub struct Heap {
     peak_bytes: usize,
     /// The names `~objectName=` gave objects whose body has no field for
     /// one. Each collection drops the rows of objects it swept.
-    names: Vec<(ObjRef, Box<[u8]>)>,
+    names: crate::NameMap<ObjRef, Box<[u8]>>,
     #[cfg(feature = "sharing")]
     sharing: Sharing,
 }
@@ -136,7 +136,7 @@ impl Heap {
             live_bytes: 0,
             held_bytes: 0,
             peak_bytes: 0,
-            names: Vec::new(),
+            names: crate::NameMap::default(),
             #[cfg(feature = "sharing")]
             sharing: Sharing::default(),
         }
@@ -147,18 +147,12 @@ impl Heap {
         if self.names.is_empty() {
             return None;
         }
-        self.names
-            .iter()
-            .find(|(named, _)| *named == r)
-            .map(|(_, name)| &name[..])
+        self.names.get(&r).map(|name| &name[..])
     }
 
     /// Names `r`, an object whose body has no field for a name.
     pub fn set_object_name(&mut self, r: ObjRef, name: &[u8]) {
-        match self.names.iter_mut().find(|(named, _)| *named == r) {
-            Some((_, held)) => *held = name.into(),
-            None => self.names.push((r, name.into())),
-        }
+        self.names.insert(r, name.into());
     }
 
     pub fn slot_capacity(&self) -> usize {
@@ -439,7 +433,7 @@ impl Heap {
     #[inline(never)]
     fn prune_names(&mut self) {
         let slots = &self.slots;
-        self.names.retain(|(r, _)| {
+        self.names.retain(|r, _| {
             let Decoded::Heap { slot, generation } = r.decode() else {
                 return false;
             };
