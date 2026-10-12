@@ -555,13 +555,9 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
             "{class}~{method}"
         );
     }
-    let (code, _, stderr) = run_source("say .context~package~local~items\n");
-    assert_eq!(code, 120);
-    assert!(
-        stderr.ends_with(
-            "rexx-exec: method \"ITEMS\" of class \"Directory\" is not implemented (Phase 9)\n"
-        ),
-        "{stderr}"
+    assert_eq!(
+        run_source("say .context~package~local~items\n"),
+        (0, "0\n".to_owned(), String::new())
     );
     assert_eq!(
         run_source(

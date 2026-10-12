@@ -128,11 +128,7 @@ impl Interp {
 
     /// The info directory one checkpoint hands its manager.
     fn security_arguments(&mut self, entries: &[(&[u8], ObjRef)]) -> Result<ObjRef, Failure> {
-        let class = self
-            .classes()
-            .lookup("Directory")
-            .expect("Directory is a native class");
-        let directory = self.native_instance(class);
+        let directory = crate::dispatch::hash::new_directory(self, 0)?;
         self.roots.activity_mut().push_temp(directory);
         let frame = self.roots.activity_mut().push_frame();
         for (name, value) in entries {

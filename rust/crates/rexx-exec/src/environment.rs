@@ -261,8 +261,6 @@ pub(crate) struct EnvironmentModel {
     /// A reading of `.local`'s pool and of `.environment`'s, in that order,
     /// from an earlier lookup; one that is not current is read again.
     views: [Option<hash::StoreView>; 2],
-    /// `.methods`, `.routines` and `.resources` all answer one of these.
-    string_table: ObjRef,
     /// What `.context` answers to.
     context: ObjRef,
 }
@@ -344,10 +342,6 @@ impl Interp {
     }
 
     fn build_environment(&mut self) -> EnvironmentModel {
-        let string_table = self
-            .classes()
-            .lookup("StringTable")
-            .expect("StringTable is a native class");
         let context = self
             .classes()
             .lookup("RexxContext")
@@ -466,7 +460,6 @@ impl Interp {
             directories: env_seam::hold(environment, local),
             owed,
             views: [None, None],
-            string_table,
             context,
         }
     }
@@ -520,7 +513,7 @@ impl Interp {
             return Ok(found);
         }
 
-        if let Some(found) = self.package_local_entry(bare) {
+        if let Some(found) = self.package_local_entry(bare)? {
             return Ok(found);
         }
 
@@ -746,13 +739,19 @@ impl Interp {
     /// -- `packageLocal->get(internalName)` in `PackageClass::findClass`
     /// (`classes/PackageClass.cpp:1122`), the step between the REXX package's
     /// public classes and `.local`.
-    fn package_local_entry(&self, bare: &[u8]) -> Option<ObjRef> {
-        let program = self.running_program()?;
-        let directory = *self.package_locals.get(&Package::Program(program))?;
-        // The map alone: a package's local directory is one of this crate's
-        // own `native_instance`s and never a collection with a store, and
-        // this caller is on a `&self` path.
-        self.native_map_entry(directory, bare)
+    fn package_local_entry(&mut self, bare: &[u8]) -> Result<Option<ObjRef>, Failure> {
+        let Some(program) = self.running_program() else {
+            return Ok(None);
+        };
+        let Some(&directory) = self.package_locals.get(&Package::Program(program)) else {
+            return Ok(None);
+        };
+        Ok(
+            match hash::directory_get(self, directory, hash::Key::new(bare), None)?.0 {
+                hash::DirectoryEntry::Found(found) => Some(found),
+                hash::DirectoryEntry::Owed(_) | hash::DirectoryEntry::Absent => None,
+            },
+        )
     }
 
     /// A public class of the interpreter's own package --
@@ -807,11 +806,7 @@ impl Interp {
         if let Some(found) = self.package_locals.get(&package).copied() {
             return found;
         }
-        let class = self
-            .classes()
-            .lookup("Directory")
-            .expect("Directory is a native class");
-        let directory = self.native_instance(class);
+        let directory = hash::new_directory(self, 0).expect("Directory is not an abstract class");
         self.roots
             .add_global(&package_local_root_key(package), directory);
         self.package_locals.insert(package, directory);

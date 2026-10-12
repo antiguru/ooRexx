@@ -38,3 +38,4 @@ lang/enhanced_runs_new.rex
 lang/enhanced_primitive_receivers.rex
 lang/metaclass_new.rex
 lang/executable_copies.rex
+lang/package_store_tables.rex

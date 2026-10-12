@@ -389,8 +389,11 @@ impl Interp {
             _ => None,
         };
         if let Some(table) = annotations {
-            let body = self.heap.get(table)?.body.clone();
-            let fresh = self.alloc_with(BehaviourId::OBJECT, body);
+            let caller = self.caller();
+            let fresh = self
+                .send_message(table, b"COPY", None, &[], caller)
+                .ok()
+                .flatten()?;
             if let Some(Body::Native(native)) = self.heap.get_mut(object).map(|held| &mut held.body)
             {
                 native.set_annotations(fresh);
@@ -580,8 +583,8 @@ impl Interp {
         if let Some(found) = self.annotations.get(&site).copied() {
             return found;
         }
-        let string_table = self.environment_model().string_table;
-        let table = self.native_instance(string_table);
+        let table = crate::dispatch::hash::new_string_table(self)
+            .expect("StringTable is not an abstract class");
         // A class-owned site is held by its class, so the table dies with it.
         // Every other site belongs to a package or a program, which outlive
         // the run, and those keep the global root.
@@ -613,11 +616,8 @@ impl Interp {
         for (name, value) in pairs {
             let value = self.text(value);
             self.roots.activity_mut().push_temp(value);
-            let object = self.heap.get_mut(table).expect("just built and rooted");
-            let Body::Native(native) = &mut object.body else {
-                unreachable!("allocated as Body::Native by native_instance")
-            };
-            native.set_entry(name, value);
+            crate::dispatch::hash::directory_put(self, table, name, value)
+                .expect("a StringTable accepts a string index");
         }
         self.roots.activity_mut().pop_frame(frame);
         for site in rest {

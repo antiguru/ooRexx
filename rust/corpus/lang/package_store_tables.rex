@@ -1,0 +1,44 @@
+/* Package~local, the annotation tables and a security manager's info
+   directory are Directory and StringTable objects with stores of their own. */
+l = .context~package~local
+say l~class~id l~items (l == .context~package~local)
+l~foo = 'bar'
+l['BAZ'] = 5
+say l~items .foo .baz l~hasIndex('FOO')
+do i over l~allIndexes~sortWith(.caselessComparator~new); say ' ' i l[i]; end
+l~setMethod('M', 'return 42')
+say l~m l~x
+call r
+say .k~annotations~class~id .k~annotations~items .k~annotation('a') .k~annotations['B']
+a = .k~annotations
+do i over a~allIndexes~sort; say ' ' i a[i]; end
+m = .k~method('M1')
+say m~annotations~items m~annotation('x') m~annotations~allItems~makeString('L', ',')
+c = m~copy
+c~annotations['NEW'] = 1
+say m~annotations~items c~annotations~items
+say .context~package~annotations~items .context~package~annotation('p')
+say .routines~r~annotations~items
+q = .context~package
+q~setSecurityManager(.mgr~new)
+q~findRoutine('INNER')~call
+exit
+r: procedure
+  say .foo
+  return
+::annotate package p 'pv'
+::class k
+::annotate class k a 'one' b 'two'
+::method m1
+::annotate method m1 x 'xv' y 'yv'
+::routine r
+::annotate routine r q 'qv'
+::routine inner public
+  x = .environment~foo
+  return
+::class mgr
+::method unknown
+  use arg name, args
+  info = args[1]
+  say name info~class~id info~items info~allIndexes~sort~makeString('L', ',')
+  return 0
