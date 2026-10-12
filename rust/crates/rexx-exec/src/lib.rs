@@ -1378,6 +1378,9 @@ struct Interp {
     /// -- see [`crate::plan::Package`] for why the interpreter's own is a
     /// variant rather than an absent program id.
     package_objects: FxHashMap<Package, ObjRef>,
+    /// [`Interp::package_objects`] the other way round, which
+    /// `Interp::which_package` reads.
+    object_packages: FxHashMap<ObjRef, Package>,
     /// The one `Routine` object standing for a program's own main section --
     /// what `RexxContext~executable` answers from a `PROGRAM` or
     /// `INTERNALCALL` context.
@@ -2113,6 +2116,7 @@ impl Interp {
             class_packages: FxHashMap::default(),
             empty_arguments: Rc::from(&[][..]),
             package_objects: FxHashMap::default(),
+            object_packages: FxHashMap::default(),
             program_routine_objects: FxHashMap::default(),
             package_tables: FxHashMap::default(),
             routine_objects: FxHashMap::default(),
@@ -2919,6 +2923,7 @@ impl Interp {
             empty_arguments: _,
             // `RootSet::add_global`, under `package_root_key`.
             package_objects: _,
+            object_packages: _,
             // `RootSet::add_global`, under `program_routine_root_key`.
             program_routine_objects: _,
             // `RootSet::add_global`, under `package_table_root_key`.

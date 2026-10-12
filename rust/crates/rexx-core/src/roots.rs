@@ -63,7 +63,8 @@ struct Segment {
 
 /// Everything the collector starts from.
 pub struct RootSet {
-    globals: Vec<(String, ObjRef)>,
+    /// By name; a name added again replaces its value.
+    globals: crate::NameMap<String, ObjRef>,
     /// Storage for variables a `>name` reference has been taken to, outside
     /// every frame and never truncated.
     cells: Vec<Option<ObjRef>>,
@@ -117,7 +118,7 @@ pub struct Parked(usize);
 impl RootSet {
     pub fn new() -> Self {
         RootSet {
-            globals: Vec::new(),
+            globals: crate::NameMap::default(),
             cells: Vec::new(),
             next_serial: 0,
             activity: ActivityRoots::new(),
@@ -125,9 +126,11 @@ impl RootSet {
     }
 
     pub fn add_global(&mut self, name: &str, value: ObjRef) {
-        match self.globals.iter_mut().find(|(n, _)| n == name) {
-            Some(entry) => entry.1 = value,
-            None => self.globals.push((name.to_string(), value)),
+        match self.globals.get_mut(name) {
+            Some(held) => *held = value,
+            None => {
+                self.globals.insert(name.to_string(), value);
+            }
         }
     }
 
@@ -285,8 +288,8 @@ impl RootSet {
     /// needs to filter them out again by frame.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
         self.globals
-            .iter()
-            .map(|(_, v)| *v)
+            .values()
+            .copied()
             .chain(self.cells.iter().filter_map(|c| *c))
             .chain(self.activity.iter())
     }

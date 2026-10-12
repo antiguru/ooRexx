@@ -142,6 +142,7 @@ impl Interp {
         // a temp -- the position `.environment` and `.local` are in.
         self.roots.add_global(&package_root_key(package), object);
         self.package_objects.insert(package, object);
+        self.object_packages.insert(object, package);
         self.attach_annotations(object, Annotated::Package(package));
         object
     }
@@ -1081,6 +1082,7 @@ impl Interp {
             class_packages: _,
             empty_arguments: _,
             package_objects: _,
+            object_packages: _,
             program_routine_objects,
             package_tables: _,
             routine_objects: _,
@@ -1338,10 +1340,7 @@ impl Interp {
     /// Which package a package object stands for, or `None` for a handle
     /// [`Interp::package_object`] did not produce.
     pub(crate) fn which_package(&self, package: ObjRef) -> Option<Package> {
-        self.package_objects
-            .iter()
-            .find(|(_, object)| **object == package)
-            .map(|(which, _)| *which)
+        self.object_packages.get(&package).copied()
     }
 
     /// The package a `Method` or `Routine` object passed as a context argument
