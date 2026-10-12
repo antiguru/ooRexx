@@ -2764,14 +2764,14 @@ mod group_runs {
                 "base/class/Object.testGroup",
                 "whole",
                 "normal",
-                "failure, assertions 252, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
+                "failure, assertions 272, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_SETMETHOD]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (
                 "base/class/Object.testGroup",
                 "whole",
                 "every",
-                "failure, assertions 252, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_RUN TEST_SETMETHOD TEST_SETMETHOD_SCOPE]",
+                "failure, assertions 272, rc 1, last started TEST_UNSETMETHOD_NO_ARG, failing [TEST_INSTANCEMETHOD TEST_SETMETHOD]",
                 "tests outside the derived list that fail alone too (whole-groups/alone.txt)",
             ),
             (

@@ -717,14 +717,16 @@ pub fn interpreter_bin(run: &Path) -> PathBuf {
     fs::create_dir_all(&bin).expect("the interpreter bin directory");
     let rexx = bin.join("rexx");
     let ours = env!("CARGO_BIN_EXE_rexx-run");
-    let current = fs::metadata(&rexx)
-        .ok()
-        .zip(fs::metadata(ours).ok())
-        .is_some_and(|(theirs, ours)| {
-            use std::os::unix::fs::MetadataExt as _;
-            (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
-        });
-    if !current {
+    let current = || {
+        fs::metadata(&rexx)
+            .ok()
+            .zip(fs::metadata(ours).ok())
+            .is_some_and(|(theirs, ours)| {
+                use std::os::unix::fs::MetadataExt as _;
+                (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
+            })
+    };
+    if !current() {
         // A copy or an older link left by an earlier build is replaced, and
         // the copy below never writes onto an existing file, which could be
         // a link to `ours` itself.
@@ -734,7 +736,11 @@ pub fn interpreter_bin(run: &Path) -> PathBuf {
             }
             _ => {}
         }
-        if let Err(link) = fs::hard_link(ours, &rexx) {
+        // A run sharing this directory may link it between the removal and
+        // the link, which leaves the file this one would have made.
+        if let Err(link) = fs::hard_link(ours, &rexx)
+            && !current()
+        {
             assert!(
                 !rexx.exists(),
                 "{} appeared while it was replaced",
