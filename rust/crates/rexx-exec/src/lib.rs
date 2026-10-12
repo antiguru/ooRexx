@@ -1316,8 +1316,8 @@ struct Interp {
     /// `Program::directives`.
     routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
     /// The programs whose `.ROUTINES` table a program has written, whose
-    /// routine lookups read that table in place of [`routines`] --
-    /// `PackageClass::findLocalRoutine` (`classes/PackageClass.cpp:822`).
+    /// routine lookups read that table in place of [`routines`], as
+    /// `PackageClass::findLocalRoutine` does (`classes/PackageClass.cpp:822`).
     routines_written: rustc_hash::FxHashSet<ProgramId>,
     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
     /// oracle's `publicRoutines`, a second table beside `routines` exactly as

@@ -1170,6 +1170,11 @@ impl Interp {
             pool: _,
             routine_generation: _,
         } = self;
+        assert_eq!(
+            programs.len(),
+            copy.0,
+            "copying the tables loaded a program, so the copy's id is taken"
+        );
         programs.push(std::rc::Rc::clone(&programs[program.0]));
         if let Some(options) = package_options.get(&program).cloned() {
             package_options.insert(copy, options);

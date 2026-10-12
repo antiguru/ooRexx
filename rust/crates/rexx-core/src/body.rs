@@ -878,8 +878,8 @@ impl ObjectMethods {
     }
 
     /// Appends every object these entries reach, which is each defined
-    /// method's scope and `Method` object, and the enhancing class --
-    /// [`ScopePools::trace`]'s position and its reason.
+    /// method's scope and `Method` object, and the enhancing class, for
+    /// [`ScopePools::trace`]'s reason.
     fn trace(&self, out: &mut Vec<ObjRef>) {
         for ObjectMethod {
             method: _,

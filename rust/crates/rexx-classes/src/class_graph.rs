@@ -273,7 +273,7 @@ impl ClassGraph {
     }
 
     /// A behaviour of its own holding `class`'s current instance methods with
-    /// each of `hidden` hidden in front -- what `defineInstanceMethod` with a
+    /// each of `hidden` hidden in front, as `defineInstanceMethod` with a
     /// `.nil` method does to one object's behaviour copy
     /// (`ObjectClass.cpp:2297`).
     pub fn hiding_behaviour(&mut self, class: ObjRef, hidden: &[&str]) -> BehaviourHandle {
