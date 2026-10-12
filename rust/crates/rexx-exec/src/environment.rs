@@ -513,7 +513,9 @@ impl Interp {
             return Ok(found);
         }
 
-        if let Some(found) = self.package_local_entry(bare)? {
+        if !self.package_locals.is_empty()
+            && let Some(found) = self.package_local_entry(bare)?
+        {
             return Ok(found);
         }
 
@@ -739,6 +741,7 @@ impl Interp {
     /// -- `packageLocal->get(internalName)` in `PackageClass::findClass`
     /// (`classes/PackageClass.cpp:1122`), the step between the REXX package's
     /// public classes and `.local`.
+    #[inline(never)]
     fn package_local_entry(&mut self, bare: &[u8]) -> Result<Option<ObjRef>, Failure> {
         let Some(program) = self.running_program() else {
             return Ok(None);
@@ -746,12 +749,9 @@ impl Interp {
         let Some(&directory) = self.package_locals.get(&Package::Program(program)) else {
             return Ok(None);
         };
-        Ok(
-            match hash::directory_get(self, directory, hash::Key::new(bare), None)?.0 {
-                hash::DirectoryEntry::Found(found) => Some(found),
-                hash::DirectoryEntry::Owed(_) | hash::DirectoryEntry::Absent => None,
-            },
-        )
+        let index = self.text(bare);
+        self.roots.activity_mut().push_temp(index);
+        hash::store_get(self, directory, index)
     }
 
     /// A public class of the interpreter's own package --
