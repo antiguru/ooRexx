@@ -283,3 +283,25 @@ before the scheduler test's refusal moved: 101 (1084 passed, that test failed); 
 `--test refusal_sites --test refusal_dispositions` 0; `--test concurrency_tests --test suite` 0
 (54, 50); suite groups `base/class/Package,base/class/Object,base/class/StackFrame`: same not-passed
 sets as the earlier final run, no test newly failing.
+
+### Item 5, ruled by Moritz 2026-10-12: `30daf690d`
+
+Deviations 31 (`OBJECTNAME=` on a string or a small integer refused; probes `objname2`, `objname4`)
+and 32 (a foreign `NEW` answer through `enhanced` handed back untouched; probes `p5`, `p8`, R16) are
+in `docs/superpowers/plans/phase-4-exclusions.txt` after 30. The string refusal is now the owner-less
+`Loud::object_name_of_a_value` ("OBJECTNAME= on a string or a number is not implemented"), with a
+`DEVIATION` row in `refusal-dispositions.tsv` citing Deviation 31 and a `recorded` row in
+`refusal-sites.tsv`; the pin and `mark_enhanced`'s doc cite the numbers. `suite_rows::deviations`
+reads both (`--test suite`: 50 passed). No witness or suite row relies on either.
+
+Found while checking: `phase_ten_reasons::the_scan_reads_the_test_modules_it_leaves_out` read the
+literal of `Loud::package_routines_write`, deleted at `2b1b13583`, and failed from that commit on;
+none of my earlier check lists ran that binary. It now reads `string_answer_not_a_string`'s literal.
+
+Checks at `30daf690d` (statuses unpiped): `cargo fmt --all --check` 0; `cargo clippy -j 4 -p
+rexx-exec --all-targets -- -D warnings` 0; `--lib` 0 (1085 passed); `--test refusal_sites --test
+refusal_dispositions --test closed_phases --test owners --test loud --test suite --test
+phase_ten_reasons` 0 after the literal fix; every other rexx-exec test binary not run earlier in this
+task, in two `-j 2` batches, 0 (`collection_arity` and `introspection_arity` with the temporary
+`rust/target/release/rexx-run` link, removed). One `--tests` run of all binaries at `-j 4` was
+OOM-killed at the 8G cap while compiling.
