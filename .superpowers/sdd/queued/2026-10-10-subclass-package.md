@@ -27,3 +27,5 @@ This crate (`rexx-run` at `6a87cd616`), rc 159:
     Error 97.1:  Object "a Package" does not understand message "GO".
 
 Suspected site: `Package~new` (`dispatch.rs` `native_package_new`, `dispatch/package.rs` `package_new`) answers an instance of Package itself, not of the receiver class.
+
+Closed 2026-10-12 by Phase 9a Task 8 at `1c0e1d769`: `Package~new` on a subclass makes the package an instance of it. Witness `rust/corpus/lang/package_subclass_new.rex`.

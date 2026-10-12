@@ -28,3 +28,5 @@ This crate (`rexx-run` at `6a87cd616`), rc 158:
     Error 98.909:  Class "REXXINFO" not found.
 
 Suspected site: the `::CLASS` superclass resolution in `install.rs` (`class_not_found`): `.RexxInfo` is an instance, which the oracle rejects as "not a valid class" at translation time.
+
+Closed 2026-10-12 by Phase 9a Task 8 at `1c0e1d769`: a `::CLASS` target naming an object that is not a class is 99.949. Witness `rust/corpus/lang/class_target_not_a_class.rex`.

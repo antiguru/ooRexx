@@ -49,7 +49,7 @@ site, the condition the C++ tests, and the witness lines (oracle, `t` column = c
 | `upperRexx`, `lowerRexx` | start past the end, or range 0 | `upper 5`, `upper 1 0`, `upper empty`, `lower 5`, `lower 2 0` K | `upper`, `upper ABC`, `lower abc` String |
 | `translate` | no tables and no pad: `upperRexx`; else start past the end or range 0 | `translate 9`, `translate tables 9`, `translate tables 1 0` K | `translate`, `translate tables` String |
 | `stringValue`, `makeString`, `primitiveMakeString` | base class only | -- | `makestring`, `string`, `request` String |
-| `concat`, `stringTrace`, `evaluate`, `getValue`, `getRealValue` | internal; no Rexx send reaches them for an instance | -- | -- |
+| `concat`, `upper()`, `lower()` (no arguments), `stringTrace`, `evaluate`, `getValue`, `getRealValue` | internal; no Rexx send reaches them for an instance (`upper()` and `lower()` get a fresh base string from `stringArgument`) | -- | -- |
 
 The natives return the receiver where the condition holds; for a base string that is the same
 value, so no branch tests for a subclass.
@@ -241,3 +241,62 @@ The per-task check ran past 5 minutes: the gated corpus and `collect_stress` tog
    beside `package.rs`'s row that answers; the first looks shadowed. Not changed.
 5. `Method~annotations~items` refuses (`StringTable` `ITEMS`, Phase 9) on the base as on a subclass;
    the witness compares the table's identity instead.
+
+## Fix round 1
+
+Review: `task-8-review.md`. Code commit `f3741cfad`; this section and the queued-file closings are
+committed after it.
+
+* **I1.** `copy_object` charges a `String` subclass instance's text toward the next collection with
+  `charge_unheld`, as `String~new` does. `Body::held_bytes` stays the base's: reporting the text
+  there stopped `alloc_charged` inlining into `array_of_class` (+0.18% on alloc, measured in the
+  first round). The other subclasses' copies carry no unreported bytes. A copied Stem store is a
+  `Body::Stem`, which `held_bytes` reports as 0 for a base stem's copy too. Method/Routine copies
+  allocate an annotation table, as `copy_method_object` does for a base one. A Message copy is the
+  base's copy. Witness: `rust/crates/rexx-exec/tests/instance_copy_memory.rs`, the reviewer's
+  3000 x 1,000,000-byte copy loop under `ulimit -v 1048576`, the cap and harness shape of
+  `library_routine_memory.rs`. The corpus runs the crate in-process and uncapped, and
+  `collect_stress` collects on every allocation whatever is charged, so neither can see this. Green
+  (exit 0). With `charge_unheld(text)` replaced by `let _ = text;` it fails, `(None, "", "memory
+  allocation of 1000000 bytes failed ...")`, exit 101; restored from a copy. Probe: oracle `done
+  1000000 K` rc 0; the previous head OOM-killed at `memcap 2G`, rc 137; now identical to the oracle.
+* **I2.** `STORE_HOLDERS` (less `Properties`, a `Directory` subclass: oracle
+  `.properties~superclass~id` is `Directory`) is resolved once in `ObjectModel::build` into
+  `store_holders`. `holds_store_class` tests membership, then `is_a`. `initialize_store` reads the
+  instance's pool for the store directly instead of `class_of_value` and `read_store`. Bench program
+  `rust/bench-programs/hashnew.rex` is added to the set: registered in `callgrind.sh`'s `PROGRAMS`,
+  `rexx-bench`'s `PROGRAMS` and `rexx-bench-suite`'s `AXES`, with a README row. Measured, interleaved:
+  `bench-programs/callgrind.sh -r 3 -j 6 -p hashnew base=<023565ff1 build> head=<e2f5408cb build>
+  fix=<f3741cfad build>`: 1,589,251,545 / 1,915,694,841 (+20.5407%) / 1,595,794,650 (+0.4117%),
+  spread 0.0000. The full set (`-r 1`, two batches, 27 programs) on `f3741cfad` against the base
+  matches the figures above: largest alloc +0.0589%, pingmsg +0.0279%.
+* **Minor 1.** The four queued files carry a closing line naming the witness and `1c0e1d769`.
+* **Minor 2.** The audit table's internal row names `upper()` and `lower()`.
+* **Minor 3.** The `changestr` pre-scan is left as is (no change requested).
+* **Minor 4.** Which `Package` `NEW` row won: `ObjectModel::build` writes `NATIVE_CLASS_METHODS` and
+  then `package::RESUMABLE_CLASS_METHODS` into the same method slot through `put_native`, and the
+  later write wins. So the `dispatch.rs` row was dead, which `.Package~new` answering on both sides
+  confirms. Deleted with `native_package_new`, `unbuilt_new` and `unbuilt_class_method`, which only
+  it used. `REXX_REFUSAL_SITES_REFRESH=1` re-derived `refusal-sites.tsv` byte-identical.
+* **Minor 5.** The ` -- ` dashes in the doc lines this task added (`native_capacity_init`,
+  `native_executable_new`, `native_new_file`, `initialize_store`) are now sentences.
+  `executable_name_argument`'s doc no longer names `Package`.
+
+Checks, each exit status read unpiped (load average 28 to 36 throughout):
+
+* `cargo fmt --all --check`: 0.
+* `cargo clippy -p rexx-core -p rexx-exec --all-targets -- -D warnings`: 0.
+* `cargo clippy -p rexx-bench --all-targets -- -D warnings`: 0.
+* `REXX_CORPUS_GATE=1 timeout 595 cargo test --release -p rexx-exec --lib --test corpus --test
+  collect_stress ...`: 124. The timeout cut `corpus` after lib 1085, `closed_phases` 8 and
+  `collect_stress` 37 had passed (`collect_stress` took 307 s).
+* `REXX_CORPUS_GATE=1 ... --test corpus --test refusal_sites --test refusal_dispositions --test
+  owners --test instance_copy_memory`: 0.
+* `REXX_CORPUS_GATE=1 ... --test method_bodies --test ir_recorded --test trace_oracle --test
+  coverage --test gate_table_c --test gate_table_d`: 0.
+* `cargo test --release -p rexx-bench`: 101. `every_declared_runnability_still_holds` looks for
+  `rust/target/{release,debug}/rexx-run` and does not follow `CARGO_TARGET_DIR`. Every other test
+  passed, `the_axis_list_covers_every_bench_program` among them.
+* Suite groups String/String, Stem, Package, Bag, Directory, IdentityTable, Relation, Set, Table,
+  collections/directory, collections/stringtable, Properties, Method, Routine, Message: exit 101.
+  The not-passed set is the one tabled above, and no test newly fails.
