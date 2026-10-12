@@ -118,8 +118,8 @@ D1: 324 groups green, 78 red.
   `base/source.file/incorrectCharacters`, `doc/rexxref/chapter5/Section1`,
   `utilities/rexx/rexx_command`, `utilities/rexxc/rexxc`.
 
-`base/class/Package`'s `TESTRECLAIM01` is blocked by `timeout after 60 s`: the hang at program end
-Task 9 isolates.
+`base/class/Package`'s `TESTRECLAIM01` is blocked by `timeout after 60 s`: it loops until a package it
+dropped is collected, and this crate never collects a package object (Task 9's report).
 
 The run before it, at `717ab354b`, found the enumeration missing what `getTestMethods` runs
 (block comments, quoted names with blanks, `::CONSTANT` and `::ATTRIBUTE` methods, class methods)
