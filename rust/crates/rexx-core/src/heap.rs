@@ -82,7 +82,7 @@ pub struct Heap {
     peak_bytes: usize,
     /// The names `~objectName=` gave objects whose body has no field for
     /// one. Each collection drops the rows of objects it swept.
-    names: crate::NameMap<ObjRef, Box<[u8]>>,
+    names: Vec<(ObjRef, Box<[u8]>)>,
     #[cfg(feature = "sharing")]
     sharing: Sharing,
 }
@@ -136,7 +136,7 @@ impl Heap {
             live_bytes: 0,
             held_bytes: 0,
             peak_bytes: 0,
-            names: crate::NameMap::default(),
+            names: Vec::new(),
             #[cfg(feature = "sharing")]
             sharing: Sharing::default(),
         }
@@ -147,12 +147,18 @@ impl Heap {
         if self.names.is_empty() {
             return None;
         }
-        self.names.get(&r).map(|name| &name[..])
+        self.names
+            .iter()
+            .find(|(named, _)| *named == r)
+            .map(|(_, name)| &name[..])
     }
 
     /// Names `r`, an object whose body has no field for a name.
     pub fn set_object_name(&mut self, r: ObjRef, name: &[u8]) {
-        self.names.insert(r, name.into());
+        match self.names.iter_mut().find(|(named, _)| *named == r) {
+            Some((_, held)) => *held = name.into(),
+            None => self.names.push((r, name.into())),
+        }
     }
 
     pub fn slot_capacity(&self) -> usize {
@@ -413,15 +419,7 @@ impl Heap {
             );
         }
         if !self.names.is_empty() {
-            let marks = &self.marks;
-            let slots = &self.slots;
-            self.names.retain(|r, _| {
-                let Decoded::Heap { slot, generation } = r.decode() else {
-                    return false;
-                };
-                let slot = slot as usize;
-                marks.get(slot).copied().unwrap_or(false) && slots[slot].generation() == generation
-            });
+            self.prune_names();
         }
         self.held_bytes = survivor_bytes;
         self.peak_bytes = self.peak_body_bytes();
@@ -434,6 +432,19 @@ impl Heap {
             freed_classes,
             live_bytes: self.held_bytes,
         }
+    }
+
+    /// Drops the [`Heap::set_object_name`] rows of objects the sweep freed.
+    #[cold]
+    #[inline(never)]
+    fn prune_names(&mut self) {
+        let slots = &self.slots;
+        self.names.retain(|(r, _)| {
+            let Decoded::Heap { slot, generation } = r.decode() else {
+                return false;
+            };
+            matches!(slots.get(slot as usize), Some(Slot::Live { generation: live, .. }) if *live == generation)
+        });
     }
 
     /// Allocates `body` and holds the bytes it holds outside its slot.
