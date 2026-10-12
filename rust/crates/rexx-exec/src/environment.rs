@@ -1374,7 +1374,7 @@ fn package_local_root_key(package: Package) -> String {
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one package table is held under.
-fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> String {
+pub(super) fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> String {
     let which = match kind {
         PackageTable::UnattachedMethods => "methods",
         PackageTable::Routines => "routines",

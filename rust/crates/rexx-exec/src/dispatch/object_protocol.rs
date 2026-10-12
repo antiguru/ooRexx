@@ -657,6 +657,13 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
             }
             return Ok(copy);
         }
+        Ok(Primitive::Package) => match interp.which_package(receiver) {
+            Some(crate::plan::Package::Program(program)) => {
+                interp.roots.activity_mut().push_temp(receiver);
+                return interp.copy_package(program);
+            }
+            _ => return Err(Loud::native_method(b"COPY", "Object").into()),
+        },
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
         Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
     };

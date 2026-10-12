@@ -2043,13 +2043,8 @@ fn a_copy_or_frame_executable_this_crate_does_not_keep_is_loud() {
         );
     }
     assert_eq!(
-        run_source("c = .context~package~copy\n"),
-        (
-            120,
-            String::new(),
-            "rexx-exec: method \"COPY\" of class \"Object\" is not implemented (Phase 9)\n"
-                .to_string()
-        ),
+        run_source("say .context~package~copy~class\n"),
+        (0, "The Package class\n".to_string(), String::new())
     );
     // A REXX package native routine level's executable is one `Routine` per
     // name: measured, oracle rc 0.

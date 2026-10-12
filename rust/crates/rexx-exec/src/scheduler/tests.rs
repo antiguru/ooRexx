@@ -683,7 +683,7 @@ fn a_refusal_after_main_ended_in_a_nested_round_is_reported() {
              ::method init\n  expose started done\n  started = 0\n  done = 0\n\
              ::method spin unguarded\n  self~started = 1\n  \
              interpret \"do while \\self~done; end\"\n  say 'spin ended'\n  \
-             x = .context~package~copy\n  say 'spin after' x\n"
+             x = .object~package~copy\n  say 'spin after' x\n"
         )
     };
     for (end, expected) in [

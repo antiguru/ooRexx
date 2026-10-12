@@ -1020,6 +1020,256 @@ impl Interp {
         object
     }
 
+    /// `Package~copy`: `PackageClass::copy` (`classes/PackageClass.cpp:362`),
+    /// a package over the same program whose routine, class and import
+    /// tables, settings and annotations are its own copies, sharing the
+    /// objects they hold, its `.METHODS`, `.RESOURCES`, local directory and
+    /// prolog. The copy is a new [`ProgramId`] over the same `Program`;
+    /// every field of [`Interp`] is named below so that a field added later
+    /// decides what a copy does with it.
+    pub(crate) fn copy_package(&mut self, program: ProgramId) -> Result<ObjRef, Failure> {
+        let copy = ProgramId(self.programs.len());
+        let frame = self.roots.activity_mut().push_frame();
+        let copied = self.copy_package_tables(program, copy);
+        self.roots.activity_mut().pop_frame(frame);
+        copied?;
+        let Interp {
+            heap: _,
+            roots: _,
+            activity: _,
+            key_buffer: _,
+            parse_buffers: _,
+            text_scratch: _,
+            text_numbers: _,
+            result_buffer: _,
+            env: _,
+            library_search: _,
+            cwd: _,
+            next_activation_id: _,
+            next_invocation: _,
+            programs,
+            package_options,
+            option_writes,
+            security_managers,
+            plans: _,
+            last_plan: _,
+            deadline: _,
+            clause_countdown: _,
+            stack_base: _,
+            stack_room: _,
+            timer: _,
+            baton: _,
+            switch: _,
+            sim: _,
+            slice_deferred: _,
+            chunks: _,
+            chunks_refused: _,
+            routines,
+            routines_written,
+            package_public_routines,
+            merged_public_routines,
+            merged_public_classes,
+            rexx_class_cache: _,
+            package_namespaces,
+            package_locals,
+            object_model: _,
+            environment: _,
+            class_variables: _,
+            package_classes,
+            package_public_classes,
+            class_packages: _,
+            empty_arguments: _,
+            package_objects: _,
+            program_routine_objects,
+            package_tables: _,
+            routine_objects: _,
+            library_routine_objects: _,
+            rexx_routine_executables: _,
+            package_imports,
+            package_parents,
+            parented,
+            constant_values: _,
+            annotations: _,
+            compiled_methods: _,
+            method_objects: _,
+            method_bodies: _,
+            library_bootstrap: _,
+            collections_before_program: _,
+            #[cfg(feature = "pinning")]
+                pinning: _,
+            activities: _,
+            library_programs: _,
+            compiled_method_names,
+            object_methods: _,
+            executable_objects: _,
+            executable_sources: _,
+            stem_exposers: _,
+            method_flag_writes: _,
+            message_outcomes: _,
+            started_messages: _,
+            unnotified_messages: _,
+            generated_methods: _,
+            native_externals: _,
+            guarded_externals: _,
+            global_references: _,
+            kept_strings: _,
+            kept_names: _,
+            kept_holders: _,
+            kept_carried: _,
+            kept_carried_limit: _,
+            libraries: _,
+            command_handlers: _,
+            #[cfg(test)]
+                library_open_attempts: _,
+            #[cfg(test)]
+                executables_rebuilt: _,
+            #[cfg(test)]
+                panic_at_call_end: _,
+            #[cfg(test)]
+                fail_native_wait: _,
+            library_externals: _,
+            external_packages: _,
+            library_codes: _,
+            library_code_rows: _,
+            library_code_keys: _,
+            library_code_routines: _,
+            library_routine_codes: _,
+            rexx_routine_rows: _,
+            rexx_routine_objects: _,
+            defined_library_codes: _,
+            package_routines: _,
+            package_routine_codes: _,
+            special_methods: _,
+            out: _,
+            trace: _,
+            stress_collect: _,
+            collect_due: _,
+            uninit_ready: _,
+            processing_uninits: _,
+            bootstrap_stderr: _,
+            bootstrap_stdout: _,
+            route_generation: _,
+            store_generation: _,
+            output_route: _,
+            collect_at: _,
+            bytes_due: _,
+            queue: _,
+            input: _,
+            standard_transient: _,
+            sinks: _,
+            command_words: _,
+            reqstr_armed: _,
+            lostdigits_armed: _,
+            program_path: _,
+            required_paths,
+            required_packages: _,
+            untranslated,
+            pool: _,
+            routine_generation: _,
+        } = self;
+        programs.push(std::rc::Rc::clone(&programs[program.0]));
+        if let Some(options) = package_options.get(&program).cloned() {
+            package_options.insert(copy, options);
+        }
+        if let Some(initial) = option_writes.initial.get(&Some(program)).cloned() {
+            option_writes.initial.insert(Some(copy), initial);
+        }
+        if let Some(manager) = security_managers.get(&program).copied() {
+            security_managers.insert(copy, manager);
+        }
+        if let Some(held) = routines.get(&program).cloned() {
+            routines.insert(copy, held);
+        }
+        if routines_written.contains(&program) {
+            routines_written.insert(copy);
+        }
+        if let Some(held) = package_public_routines.get(&program).cloned() {
+            package_public_routines.insert(copy, held);
+        }
+        if let Some(held) = merged_public_routines.get(&program).cloned() {
+            merged_public_routines.insert(copy, held);
+        }
+        if let Some(held) = merged_public_classes.get(&program).cloned() {
+            merged_public_classes.insert(copy, held);
+        }
+        if let Some(held) = package_namespaces.get(&program).cloned() {
+            package_namespaces.insert(copy, held);
+        }
+        if let Some(local) = package_locals.get(&Package::Program(program)).copied() {
+            package_locals.insert(Package::Program(copy), local);
+        }
+        if let Some(held) = package_classes.get(&program).cloned() {
+            package_classes.insert(copy, held);
+        }
+        if let Some(held) = package_public_classes.get(&program).cloned() {
+            package_public_classes.insert(copy, held);
+        }
+        if let Some(routine) = program_routine_objects.get(&program).copied() {
+            program_routine_objects.insert(copy, routine);
+        }
+        if let Some(imports) = package_imports.get(&program).cloned() {
+            package_imports.insert(copy, imports);
+        }
+        if let Some(parent) = package_parents.get(&program).copied() {
+            package_parents.insert(copy, parent);
+            if parented.len() <= copy.0 {
+                parented.resize(copy.0 + 1, false);
+            }
+            parented[copy.0] = true;
+        }
+        if let Some(name) = compiled_method_names.get(&program).cloned() {
+            compiled_method_names.insert(copy, name);
+        }
+        if let Some(path) = required_paths.get(&program).cloned() {
+            required_paths.insert(copy, path);
+        }
+        if untranslated.contains(&program) {
+            untranslated.insert(copy);
+        }
+        Ok(self.package_object(Package::Program(copy)))
+    }
+
+    /// [`Interp::copy_package`]'s tables: `copy`'s `.ROUTINES` and annotation
+    /// table are copies of `program`'s, and its `.METHODS` and `.RESOURCES`
+    /// are `program`'s own. `program`'s prolog object is built here, so the
+    /// copy shares it.
+    fn copy_package_tables(&mut self, program: ProgramId, copy: ProgramId) -> Result<(), Failure> {
+        use crate::environment::PackageTable;
+        self.program_routine_object(program);
+        for kind in [PackageTable::UnattachedMethods, PackageTable::Resources] {
+            if let Some(table) = self.package_string_table(program, kind) {
+                self.package_tables.insert((copy, kind), table);
+            }
+        }
+        if let Some(table) = self.package_string_table(program, PackageTable::Routines) {
+            let fresh = self.copy_of(table)?;
+            self.roots.add_global(
+                &crate::environment::package_table_root_key(copy, PackageTable::Routines),
+                fresh,
+            );
+            self.package_tables
+                .insert((copy, PackageTable::Routines), fresh);
+        }
+        let original = Annotated::Package(Package::Program(program));
+        if let Some(table) = self.annotations.get(&original).copied() {
+            let fresh = self.copy_of(table)?;
+            let site = Annotated::Package(Package::Program(copy));
+            self.roots.add_global(&annotation_root_key(&site), fresh);
+            self.annotations.insert(site, fresh);
+        }
+        Ok(())
+    }
+
+    /// `object~copy`, rooted.
+    fn copy_of(&mut self, object: ObjRef) -> Result<ObjRef, Failure> {
+        let caller = self.caller();
+        let fresh = self
+            .send_message(object, b"COPY", None, &[], caller)?
+            .unwrap_or(ObjRef::NIL);
+        self.roots.activity_mut().push_temp(fresh);
+        Ok(fresh)
+    }
+
     /// The one `Routine` a native routine level of the REXX package answers
     /// for `StackFrame~executable`, built on the first ask: measured, oracle
     /// rc 0, two `SysSleep` failures answer one object, a `SysFileDelete`
