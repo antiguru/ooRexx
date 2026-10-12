@@ -1,0 +1,1360 @@
+# Review package: c515bac3a..6dc1c956c
+
+## Commits
+6dc1c956c Phase 9a Task 6: withdraw Deviation 8, sourceline expectations
+cecec0830 Phase 9a Task 6: store-backed condition objects and package tables
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-6-report.md       | 163 +++++++++++++++++++++
+ docs/superpowers/plans/phase-4-exclusions.txt      |  69 ++-------
+ rust/corpus/lang/condition_object_hash.rex         |  56 +++++++
+ rust/corpus/lang/package_tables.rex                |  18 +--
+ rust/corpus/lang/package_tables_hash.rex           |  28 ++++
+ rust/corpus/phase-5c.txt                           |   4 +-
+ rust/corpus/phase-9.txt                            |   4 +
+ rust/crates/rexx-exec/src/condition.rs             |  65 +++-----
+ rust/crates/rexx-exec/src/dispatch.rs              |   6 +-
+ rust/crates/rexx-exec/src/dispatch/context.rs      |   9 +-
+ rust/crates/rexx-exec/src/dispatch/hash.rs         |   6 +-
+ rust/crates/rexx-exec/src/dispatch/package.rs      |  34 ++---
+ rust/crates/rexx-exec/src/dispatch/tests.rs        |   5 +-
+ rust/crates/rexx-exec/src/environment.rs           |  16 +-
+ .../rexx-exec/src/eval/object_operand_tests.rs     |   8 +-
+ rust/crates/rexx-exec/src/run/loops.rs             |   6 +-
+ rust/crates/rexx-exec/tests/corpus.rs              |  88 +----------
+ .../sourceline_oracle/condition_object_hash.txt    |  57 +++++++
+ .../tests/sourceline_oracle/package_tables.txt     |  18 +--
+ .../sourceline_oracle/package_tables_hash.txt      |  29 ++++
+ 20 files changed, 425 insertions(+), 264 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-6-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-6-report.md
+new file mode 100644
+index 000000000..61f4bd3af
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-6-report.md
+@@ -0,0 +1,163 @@
++# Phase 9a Task 6 report: hash methods on the condition object and the package tables
++
++Base `c515bac3a`. Status: DONE_WITH_CONCERNS. Commits `cecec0830` (code, witnesses) and a second one (Deviation 8
++withdrawal, `sourceline_oracle` expectations).
++
++Probes ran from fresh empty directories under `/tmp/claude-1000/p9/t6-probe*` and
++`/tmp/claude-1000/p9/t6-w-*`, the oracle under the standard wrapper with `timeout -k 5 20`, the
++crate's `rexx-run` (release, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t6-target`) under
++`memcap 2G timeout 20`. `oracle-crashes.txt` was read first; entry 22 (a re-raise whose `TRACEBACK`
++holds a non-string) is the nearby hazard and no probe touches `TRACEBACK`. stdout, stderr and status
++were compared separately. Every witness's stdout was read on both sides.
++
++## Per item
++
++### 1. The condition object (`Message~errorCondition`, `CONDITION('O')`, re-raise)
++
++Probe `t6-probe1/a.rex` (a `Message~send` whose method divides by zero, trapped by `SIGNAL ON
++SYNTAX`, then `c~items`, `allIndexes`, `hasIndex`, `at`, `[]`, entry method, `isEmpty`, `hasItem`,
++`index`, `allItems`, `makeArray`, `supplier`, `CONDITION('O')` identity, `~result` re-raise):
++oracle rc 0, first lines `The Directory class 14` and
++` PROPAGATED ERRORTEXT MESSAGE STACKFRAMES POSITION INSTRUCTION CODE RC CONDITION PACKAGE TRACEBACK PROGRAM ADDITIONAL DESCRIPTION`;
++`(o == c)` is `0` (`CONDITION('O')` is a copy), `(c3 == c)` after `r = m~result` re-raised it is
++`1`, `c~propagated` is `1`, `c~position` is the `~result` line. The brief's `13` was for another
++shape; this shape answers 14. Ours before: rc 120, `method "ITEMS" of class "Directory" is not
++implemented (Phase 9)`.
++
++Implemented (`condition.rs`): every condition object is now built by `store_directory` (a
++`Directory~new` with a hash store), its entries put in `key::order`, which the native-call path
++already used. Re-raise and the `SIGNAL` trap write `POSITION`, `PROGRAM`, `PACKAGE`, `PROPAGATED`,
++`INSTRUCTION` through `condition_put` (`hash::directory_put`, rooting the value across the index's
++allocation), into the same object, so identity under re-raise is the object's own.
++`condition_copy` is `~copy` and `condition_entry` is `~at`; their `Body::Native` branches are gone,
++since nothing builds a native condition object any more. The extra probes (`t6-probe3`, `t6-probe4`)
++covered `CALL ON USER` (10 indexes), `SIGNAL ON NOVALUE` (9), a `RAISE PROPAGATE` out of a routine
++(14, `PROPAGATED` 1), `DO OVER` a condition object, and a write into the copy not reaching the
++original (`15 14`); all identical on the three descriptors.
++
++Witness `rust/corpus/lang/condition_object_hash.rex`: oracle rc 0, crate rc 0, stdout identical
++(each path above printing), stderr identical (empty).
++
++### 2. `.METHODS` (and `.ROUTINES`, `.RESOURCES`)
++
++Probe `t6-probe2/a.rex`: oracle rc 0, `The StringTable class 5 0`,
++` GAMMA ALPHA ZETA DELTA BETA` for `allIndexes` and the same for `DO OVER`, `1 0 The Method class`
++for `hasIndex`/`at`, `5 GAMMA 1 1` for `allItems`/`supplier~index`/identity, then `.routines` and
++`.resources` counts and order, `addRoutine` reaching `.routines` (` NEWR R1 Q2`). Ours before:
++rc 120, `method "ITEMS" of class "StringTable" is not implemented (Phase 9)`.
++
++Implemented (`environment.rs` `build_package_string_table`): the table is `hash::new_string_table`
++and each entry is put with `directory_put`, value rooted first. The three kinds share that one
++builder, so `.ROUTINES` and `.RESOURCES` became store-backed with `.METHODS`; the brief names
++`.methods` only, and this is the same constructor, not a widening of the method set. Readers and
++the writer that matched `Body::Native` on these tables now use the store: `package.rs`
++`package_table_entries` (store walk) and `~addRoutine` (`directory_put`), `context.rs`'s routine
++executable lookup (`native_entry`, which reads either body).
++
++Witness `rust/corpus/lang/package_tables_hash.rex`: oracle rc 0, crate rc 0, stdout identical,
++stderr identical (empty).
++
++Both witnesses are registered in `rust/corpus/phase-9.txt`.
++
++## `not_this_task` sites left
++
++None of the call sites in `dispatch/hash.rs` and `dispatch/hash/relation.rs` was deleted: each is
++still reached. `Body::Native` `Directory` and `StringTable` receivers remain outside this task:
++`Package~local` (`environment.rs` `package_local`), `~annotations` tables
++(`identities.rs` `annotation_table`), and the security manager's info directory
++(`security.rs` `security_arguments`). Measured: `say .context~package~local~items` is oracle rc 0
++`0`, crate rc 120 `method "ITEMS" of class "Directory" is not implemented (Phase 9)`;
++`.k~annotations~items` is oracle `1`. Making those store-backed is the same change for three more
++constructors and is reported, not done, under the mechanical-batch rule. The unit test
++`a_native_row_on_a_receiver_of_another_class_refuses_its_type`, which used a started message's
++`errorCondition` as its store-less `Directory`, now uses `.context~package~local`.
++
++## Refusal tables
++
++`REXX_REFUSAL_SITES_REFRESH=1 memcap 8G cargo test --release -j 4 -p rexx-exec --test
++refusal_sites`: exit 0, `rust/corpus/refusal-sites.tsv` unchanged (`git diff --stat corpus/` lists
++only `phase-9.txt`). One `Loud::unknown_receiver` site in `context.rs` ("a package table this
++crate did not build") is deleted; the constructor stays.
++
++## Deviation 8
++
++`lang/package_writes.rex` now agrees with the oracle byte for byte: its tables print in the store's
++order, which is the oracle's. `corpus.rs`'s control
++`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else` fails because of it
++("agrees on stdout byte for byte, so it does not need Deviation 8"); it is `HASH_ORDERED_STDOUT`'s
++only entry.
++
++Controller ruling A, applied in the second commit: Deviation 8 is withdrawn in
++`docs/superpowers/plans/phase-4-exclusions.txt` in Deviation 5's form (number and heading kept, one
++paragraph, body removed). `HASH_ORDERED_STDOUT`, `stdout_mode`,
++`the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else` and
++`the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list` (which asserted the list
++non-empty) are deleted from `tests/corpus.rs`, which now passes `StdoutComparison::Raw`;
++`support::oracle::stdout_multiset` and its controls stay. The licence lines in `phase-5c.txt` are
++dropped. `suite_rows::deviations` skips a `WITHDRAWN` heading, and `--test suite` passes.
++
++`corpus/lang/package_tables.rex`'s "this crate's sorted walk" paragraph is rewritten in place in
++both it and `crates/rexx-parse/tests/sourceline_oracle/package_tables.txt`, keeping the line count
++(101). The expectation was then regenerated with the module comment's oracle driver and is identical
++to the hand edit. The paragraph below it (a DO OVER rooting workaround citing a record that
++reproduced with `.methods`) is history about a native table and was left alone.
++
++**A check missed in the first commit**: `cecec0830` added two `corpus/lang/*.rex` programs without
++their `sourceline_oracle` expectations, so `cargo test -p rexx-parse --test sourceline_oracle` was
++red there. Both expectations are generated with the oracle driver in the second commit; exit 0.
++
++## Group verdicts
++
++```sh
++REXX_SUITE_GATE=1 REXX_SUITE_TABLE=/tmp/claude-1000/p9/t6-suite/table.tsv \
++  REXX_SUITE_GROUPS=base/class/Message,base/directives/METHOD,API/oo/METHOD,base/class/Package,base/bif/CONDITION,base/keyword/RAISE,base/keyword/SIGNAL,base/directives/ROUTINE,base/directives/RESOURCE \
++  timeout 590 memcap 8G cargo test --release -j 4 -p rexx-exec --test suite l3_core_suite -- --nocapture
++```
++
++Exit 101 (6 of 9 groups red, as each is in the baseline). Against
++`docs/superpowers/records/2026-10-11-phase-9a/suite-baseline/tests.tsv`, the crate column, no test
++is newly not passed. Changed:
++
++| group | test | baseline | now |
++|---|---|---|---|
++| base/directives/METHOD | TESTPACKAGE | blocked: `ITEMS` of `StringTable` (Phase 9) | passed |
++| base/directives/RESOURCE | TEST_RESOURCE_DEFINED | blocked: `ITEMS` of `StringTable` | passed |
++| base/directives/ROUTINE | TESTDOTROUTINES | blocked: `ALLINDEXES` of `StringTable` | passed |
++| base/directives/ROUTINE | TESTPACKAGE | blocked: `ITEMS` of `StringTable` | passed |
++| base/class/Message | TEST_{REPLY,SEND,START}WITH_NOT_ARRAY | blocked: `MAKEARRAY` (Task 5) | passed |
++| base/class/Package | TEST_PACKAGE_FINDPROGRAM_REXXTRY | failed | passed (the 9d set's known case) |
++
++Two `ROUTINE` rows changed only in refusal text (`Phase 10` to `Phase 10 Rxapi`, Task 4). Verdicts:
++`base/class/Message`, `base/directives/RESOURCE`, `base/directives/ROUTINE` green (baseline red);
++`base/directives/METHOD` red on TESTDELEGATE only; `base/class/Package` red on TESTRECLAIM01 (the
++60 s hang, Task 9's), TEST_NEW01, TEST_PACKAGE_LOCAL_GET_EMPTY, TEST_PROLOG, as before;
++`API/oo/METHOD`, `base/bif/CONDITION`, `base/keyword/RAISE`, `base/keyword/SIGNAL` red on the
++baseline's own tests.
++
++## Checks (each read unpiped)
++
++* `cargo fmt --all --check`: exit 0.
++* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0 (log shows
++  `Checking rexx-exec`).
++* `memcap 8G cargo test --release -j 4 -p rexx-exec --lib`: first exit 101, 1083 passed, 1 failed
++  (`a_native_row_on_a_receiver_of_another_class_refuses_its_type`, see above); after the fix, that
++  test alone exit 0, and the whole binary re-run: exit 0, 1084 passed.
++* `REXX_CORPUS_GATE=1 memcap 8G cargo test --release -j 4 -p rexx-exec --test corpus --test
++  collect_stress --test refusal_sites --no-fail-fast`: exit 101. `collect_stress` 37 passed,
++  `refusal_sites` 5 passed, `corpus` 28 passed 1 failed: the Deviation 8 control above.
++* After the ruling: `cargo fmt --all --check` exit 0; `memcap 8G cargo clippy -j 4 -p rexx-exec -p
++  rexx-parse --all-targets -- -D warnings` exit 0; `memcap 8G cargo test --release -j 4 -p
++  rexx-parse --test sourceline_oracle` exit 0; `REXX_CORPUS_GATE=1 timeout 590 memcap 8G cargo test
++  --release -j 4 -p rexx-exec --test corpus --test suite --test refusal_dispositions --no-fail-fast`
++  exit 0 (corpus 27 passed 1 ignored, suite 50, refusal_dispositions 3).
++* `memcap 8G cargo test --release -j 4 -p rexx-exec --test coverage --test trace_oracle --test
++  ir_recorded --test closed_phases --test owners --no-fail-fast`: exit 0 (21, 41, 28, 8, 6 passed).
++
++## Concerns
++
++* `RAISE ... RESULT` (not valid on the oracle either) reports `Error 25.907: ... found "&1".` on
++  the crate where the oracle substitutes `"RESULT"`: an unsubstituted insert, pre-existing, not in
++  this task's scope. Program: `raise user foo description 'd1' result 'rr'`.
++* Condition objects are now built by a `Directory~new` send and store puts where they were a map
++  write. No benchmark was run; 9a measures nothing against the pin.
++* The debug-profile corpus run was not made (beyond the 5-minute per-task budget).
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index eb3f8a563..605e77696 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -1371,80 +1371,33 @@ DEVIATIONS -- permanent, chosen
+ 
+      `directive_options.rs` was NOT deleted, against the expectation this row
+      used to record. Its programs are in `corpus/phase-5c.txt` now, and what
+      it still has that the differential does not is `stderr` compared RAW
+      rather than through Deviation 0, both engines rather than the default
+      one, `CONCURRENTLY_TRACED`'s own both-directions scope guard over the
+      family's sources, and the LOSTDIGITS table, which drives programs of its
+      own and has nothing to do with the corpus subset.
+ 
+ 
+-  8. A HASH-ORDERED COLLECTION'S ITERATION ORDER IS NOT A SPECIFIED
+-     OBSERVABLE, AND ONE PROGRAM'S STDOUT IS COMPARED AS A MULTISET OF LINES.
++  8. WITHDRAWN 2026-10-12 BY PHASE 9a TASK 6. A HASH-ORDERED COLLECTION'S
++     STDOUT WAS COMPARED AS A MULTISET OF LINES.
+ 
+-     IMPLEMENTED by Phase 5i Tasks 7+8. The harness is
+-     `rust/crates/rexx-exec/tests/corpus.rs`: `HASH_ORDERED_STDOUT` names the
+-     programs whose stdout is sorted before comparison, on BOTH sides, and
+-     `stdout_mode` is what chooses it. `support::oracle::stdout_multiset` is
+-     the one implementation, written in the shape of Deviation 7's
+-     `stderr_multiset`.
++     `corpus/lang/package_writes.rex`, the only program the licence named, now
++     agrees with the oracle byte for byte: `.METHODS`, `.ROUTINES` and
++     `.RESOURCES` are StringTables with a hash store, which iterates in the
++     oracle's own bucket order. `HASH_ORDERED_STDOUT`, `stdout_mode` and the
++     licence's control are deleted from `rust/crates/rexx-exec/tests/corpus.rs`;
++     `support::oracle::stdout_multiset` and its own controls stay.
+ 
+-     SCOPE -- THE ORDER OF STDOUT LINES FOR A NAMED PROGRAM, AND NOTHING ELSE.
+-     Deliberately narrow, in Deviation 0's and Deviation 7's register. It does
+-     NOT license:
+-
+-       - a line whose content differs.
+-       - a line that is missing, added or duplicated.
+-       - a stdout that lost its final newline. The comparison splits on `\n`
+-         rather than using `str::lines`, so the empty trailing element a final
+-         newline produces survives the sort and a truncation still differs.
+-       - any difference in stderr, or in exit status, on either side.
+-       - the ordering of stdout lines for any program NOT named in that list.
+-
+-     THE OPT-IN LIST IS THE LICENCE, AND EACH ENTRY OWES A REASON. A sorted
+-     comparison hides a genuine ordering defect in any program that takes it,
+-     so `the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else`
+-     holds the list in BOTH directions: for every entry the two sides' raw
+-     stdout must differ -- a program that does not need the relaxation cannot
+-     sit here -- and their sorted stdout must agree, so a content difference is
+-     not hidden by it. And a listed program whose oracle stdout is empty is a
+-     failure naming that, because a sorted comparison of two empty strings
+-     agrees with anything; that is Deviation 7's own guard, restated.
+-
+-     WHY. `Interp::hash_collection_indexes` walks a native `StringTable`'s or
+-     `Directory`'s keys in
+-     sorted order and the oracle walks its `HashContents` bucket-ascending,
+-     which is the divergence `hash_collection_indexes`' own doc comment
+-     records and prices. Both orders are deterministic; neither reproduces the
+-     other. Measured 2026-09-08: `corpus/lang/package_writes.rex` differs from
+-     the oracle on stdout byte for byte and agrees line for line once both
+-     sides are sorted, over the same run.
+-
+-     WHAT IT IS NOT. Unlike Deviation 7 this is not about a non-deterministic
+-     reference. The oracle answers one order and this crate answers another,
+-     both stably. What is licensed is the same thing Deviations 1, 5 and 6
+-     license for collection ordering, extended to the channel a witness prints
+-     on: where the order is not a specified observable, matching one of the
+-     orders is the whole of what is owed.
+-
+-     WHAT THE LIST DOES NOT HOLD, AND WHY THAT MATTERS. Every `Package`
+-     witness except the one named above is compared byte for byte and is not
+-     on the list: `package_settings`, `package_options`, `package_tables`,
+-     `package_find` and `package_rexx`. The set is named and not counted --
+-     a count here is a claim about this document that whoever adds the next
+-     witness will not know to re-check, and `corpus/phase-5c.txt` is where
+-     the membership actually lives.
+-
+-     `package_rexx` is the one worth a sentence: it prints every one of the
+-     REXX package's class names and reads each back BY NAME from a list it
+-     carries itself, rather than enumerating the table, so its output is in
+-     the program's own order on both sides and needs no licence.
++     The number is kept and the body removed rather than the row being deleted
++     outright, so that every later row keeps the identity other documents cite
++     it by.
+ 
+   9. A NATIVE CALL'S OLD MUTABLEBUFFER STORAGE OUTLIVES A COLLECTION
+      (spec 2026-09-29 2.5). OWNER: none.
+ 
+      A native call on a pool thread holds the address MutableBufferData
+      answered while the holder runs other activities. Growth past the
+      storage moves the bytes on both interpreters: the oracle's
+      MutableBuffer::ensureCapacity
+      (interpreter/classes/MutableBufferClass.cpp:246) gives the buffer a new
+      data object and leaves the old one as garbage. So both agree while no
+diff --git a/rust/corpus/lang/condition_object_hash.rex b/rust/corpus/lang/condition_object_hash.rex
+new file mode 100644
+index 000000000..976db8621
+--- /dev/null
++++ b/rust/corpus/lang/condition_object_hash.rex
+@@ -0,0 +1,56 @@
++/* A condition object is a Directory: its hash methods answer, CONDITION('O')
++   is a copy of it, and re-raising it through ~result keeps its identity. */
++m = .message~new(.t~new, 'BOOM')
++signal on syntax name s1
++m~send
++s1:
++c = m~errorCondition
++say c~class c~items
++s = ''; do i over c~allIndexes; s = s i; end
++say s
++say c~hasIndex('CODE') c~hasIndex('NOPE') c~hasIndex('code')
++say c~at('CODE') c['CODE'] c~code
++say c~isEmpty c~hasItem(c~at('CODE')) c~index('42.3')
++say c~allItems~items c~makeArray~items c~supplier~class
++o = condition('O')
++say (o == c) o~items
++o['NEW'] = 1
++say o~items c~items (m~errorCondition == c)
++signal on syntax name s2
++r = m~result
++s2:
++c3 = m~errorCondition
++say (c3 == c) (condition('O') == c) c~propagated c3~items c~position
++call on user foo name h1
++call raiser
++signal on novalue name h2
++say zz
++h2:
++call show 'novalue', condition('O')
++signal on syntax name h3
++call deep
++h3:
++c = condition('O')
++call show 'propagated' c~propagated, c
++do k over c; nop; end
++say k
++exit
++h1:
++call show 'call-on', condition('O')
++return
++show: procedure
++  use arg tag, c
++  s = ''
++  do i over c~allIndexes; s = s i; end
++  say tag c~items':'s
++  return
++raiser:
++  raise user foo description 'd1' additional (.array~of(1,2)) return
++::routine deep
++  signal on syntax name inner
++  x = 1/0
++inner:
++  raise propagate
++::class t
++::method boom
++  return 1/0
+diff --git a/rust/corpus/lang/package_tables.rex b/rust/corpus/lang/package_tables.rex
+index e1e5307a4..bef8b89c5 100644
+--- a/rust/corpus/lang/package_tables.rex
++++ b/rust/corpus/lang/package_tables.rex
+@@ -1,27 +1,27 @@
+ /* Package's ten table readers, on a package carrying more than one of every
+    kind: two classes public and one not, two routines public and one not, two
+    unattached methods, two resources, and one ::REQUIRES under a namespace.
+    A body answering an empty table or a one-entry table fails here.
+ 
+    Every entry is read back BY NAME and its own class asked, because the
+    table's rendering is `a StringTable` whatever is inside it.
+ 
+-   This program's stdout is compared BYTE FOR BYTE. The tables it prints are
+-   hash-ordered on both sides, and the two orders differ in general -- but the
+-   names here are short enough that this crate's sorted walk and the oracle's
+-   bucket walk happen to agree, so it is not on corpus.rs's
+-   HASH_ORDERED_STDOUT and Deviation 8 does not cover it. `package_writes.rex`
+-   is the one program that needs the licence. **The agreement is a
+-   coincidence of these names, not a property**: restoring long names, which
+-   is what the defect below asks for once it is fixed, will need this program
+-   put back on that list.
++   This program's stdout is compared BYTE FOR BYTE. Every table it
++   prints is a StringTable with a hash store on both sides, so both
++   walk it in bucket order. The crate's `Package` readers put a
++   table's entries in name order, where the oracle puts them in its
++   own, and entries sharing a bucket walk in the order they were put;
++   for the names here the two orders agree, measured by this
++   program's own byte-for-byte comparison. `package_writes.rex`
++   prints `.ROUTINES` itself as well as `Package~routines`, and
++   agrees byte for byte too.
+ 
+    Every name a table is keyed under here is at most seven bytes, so that the
+    index string a DO OVER binds sits in the handle rather than on the heap.
+    That is a workaround for a defect this program found and does not own:
+    under collect-on-every-allocation a DO OVER over one of the interpreter's
+    own StringTables binds a dead handle once the index is long enough to be
+    allocated, which `docs/superpowers/records/2026-09-07-phase-5i-introspection/
+    found-defect-do-over-native-table-rooting.md` reproduces with `.methods`
+    alone. */
+ 
+diff --git a/rust/corpus/lang/package_tables_hash.rex b/rust/corpus/lang/package_tables_hash.rex
+new file mode 100644
+index 000000000..232aa6bcf
+--- /dev/null
++++ b/rust/corpus/lang/package_tables_hash.rex
+@@ -0,0 +1,28 @@
++/* .METHODS, .ROUTINES and .RESOURCES are StringTables whose hash methods
++   answer in the store's own order, and writes into them are kept. */
++say .methods~class .methods~items .methods~isEmpty
++s = ''; do i over .methods~allIndexes; s = s i; end; say s
++s = ''; do i over .methods; s = s i; end; say s
++say .methods~hasIndex('ZETA') .methods~hasIndex('zeta') .methods~at('ALPHA')~class
++say .methods~allItems~items .methods~supplier~index (.methods == .methods)
++say .methods~index(.methods['BETA'])
++say .routines~items .resources~items
++s = ''; do i over .routines~allIndexes; s = s i; end; say s
++.context~package~addRoutine('NEWR', .routine~new('newr', 'return 1'))
++say .routines~items .routines~hasIndex('NEWR')
++s = ''; do i over .routines~allIndexes; s = s i; end; say s
++say .resources~at('RES')~items .resources~res~items
++.methods['EXTRA'] = 5
++say .methods~items .methods~hasIndex('EXTRA') .methods~extra
++exit
++::method zeta
++::method alpha
++::method beta
++::method gamma
++::method delta
++::routine r1
++::routine q2
++::resource res
++line1
++line2
++::END
+diff --git a/rust/corpus/phase-5c.txt b/rust/corpus/phase-5c.txt
+index 53e406cc9..b8315e6ef 100644
+--- a/rust/corpus/phase-5c.txt
++++ b/rust/corpus/phase-5c.txt
+@@ -170,21 +170,19 @@ lang/rexx_context_new.rex
+ lang/stack_frame_new.rex
+ lang/map_collection_of_index.rex
+ lang/map_collection_of_pair.rex
+ 
+ # Tasks 7 and 8: `Package`'s thirty-three rows -- its source and settings
+ # readers, its ten table readers, the six `find*` readers and its four writes,
+ # on both receivers. `package_tables_lib.cls` and `package_tables_dep.cls` are
+ # the two helpers, `.cls` so that no corpus scan reads them as programs of
+ # their own; each declares two public classes and two public routines, so that
+ # a body answering a one-entry table cannot pass.
+-# `package_writes` is on corpus.rs's HASH_ORDERED_STDOUT for Deviation 8:
+-# what it prints is a StringTable's own iteration order, which is a bucket
+-# walk on both sides. `package_settings` reads the settings of a package that
++# `package_settings` reads the settings of a package that
+ # declares none and `package_options` of one that declares seven, which is
+ # what stops a settings reader that ignores its receiver passing both.
+ lang/package_settings.rex
+ lang/package_options.rex
+ lang/package_tables.rex
+ lang/package_find.rex
+ lang/package_writes.rex
+ lang/package_rexx.rex
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index b0093a8e9..09fcd2548 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -5,10 +5,14 @@
+ # One path per line, relative to this directory (rust/corpus/). Lines starting
+ # with # are comments; blank lines are ignored.
+ 
+ # 9a Task 5: the native_method batch.
+ lang/rexxinfo_executable_file.rex
+ lang/stackframe_executable.rex
+ lang/object_copy_method.rex
+ lang/unknown_argument_list.rex
+ lang/define_methods_supplier.rex
+ lang/array_argument_callers.rex
++
++# 9a Task 6: hash methods on the condition object and the package tables.
++lang/condition_object_hash.rex
++lang/package_tables_hash.rex
+diff --git a/rust/crates/rexx-exec/src/condition.rs b/rust/crates/rexx-exec/src/condition.rs
+index c17d8fce1..9f1793899 100644
+--- a/rust/crates/rexx-exec/src/condition.rs
++++ b/rust/crates/rexx-exec/src/condition.rs
+@@ -6,21 +6,21 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The condition object a trap holds, whose copy `CONDITION('O')` answers:
+ //! the Directory `Activity::createConditionObject` builds, with the entries
+ //! the raised condition's own kind carries.
+ 
+-use rexx_core::{Body, ObjRef};
++use rexx_core::ObjRef;
+ 
+ use crate::Interp;
+ use crate::dispatch::context::LiveLevel;
+ use crate::error::{Failure, FailureSite, Raised};
+ use crate::plan::Package;
+ 
+ /// What the levels a trapped failure left contribute to its condition object:
+ /// the frames `Activity::generateProgramInformation` takes at the raise, which
+ /// this crate can only take as each level ends.
+ pub(crate) struct Unwound<'a> {
+@@ -159,32 +159,32 @@ impl Interp {
+         let (package, line) = match origin {
+             Some(origin) => origin,
+             None => (
+                 self.running_program()
+                     .map_or(Package::Rexx, Package::Program),
+                 Some(self.activity.clause_state.line()),
+             ),
+         };
+         if let Some(line) = line {
+             let position = self.counted(line);
+-            self.hash_entry_write(object, key::POSITION, position)?;
++            self.condition_put(object, key::POSITION, position)?;
+         }
+         let program = match package {
+             Package::Program(id) => self.program_display_name(id).to_vec(),
+             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
+         };
+         let program = self.text_built(program);
+-        self.hash_entry_write(object, key::PROGRAM, program)?;
++        self.condition_put(object, key::PROGRAM, program)?;
+         let package = self.package_object(package);
+-        self.hash_entry_write(object, key::PACKAGE, package)?;
++        self.condition_put(object, key::PACKAGE, package)?;
+         let propagated = self.text(b"1");
+-        self.hash_entry_write(object, key::PROPAGATED, propagated)?;
++        self.condition_put(object, key::PROPAGATED, propagated)?;
+         Ok(object)
+     }
+ 
+     /// Gives every message whose send the unwinding failure ended the
+     /// condition object no trap built: the object of the levels it has left,
+     /// or the kept object a level raised again.
+     pub(crate) fn settle_failed_sends(&mut self, raised: &Raised) -> Result<(), Failure> {
+         if self.activity.failed_sends.is_empty() {
+             return Ok(());
+         }
+@@ -305,24 +305,31 @@ impl Interp {
+ 
+     /// [`Interp::reraise_condition_object`] for a `SIGNAL ON` trap, which
+     /// names its instruction in the object (`RexxActivation::trap`).
+     pub(crate) fn trap_reraised_condition_object(
+         &mut self,
+         object: ObjRef,
+         origin: Option<(Package, Option<usize>)>,
+     ) -> Result<ObjRef, Failure> {
+         let object = self.reraise_condition_object(object, origin)?;
+         let instruction = self.text(b"SIGNAL");
+-        self.hash_entry_write(object, key::INSTRUCTION, instruction)?;
++        self.condition_put(object, key::INSTRUCTION, instruction)?;
+         Ok(object)
+     }
+ 
++    /// `put` of `value` under `name` on a condition object, rooting `value`
++    /// across the index's allocation.
++    fn condition_put(&mut self, object: ObjRef, name: &[u8], value: ObjRef) -> Result<(), Failure> {
++        self.roots.activity_mut().push_temp(value);
++        crate::dispatch::hash::directory_put(self, object, name, value)
++    }
++
+     /// [`Interp::build_condition_object`] for a condition the innermost
+     /// native call raised, whose own frame leads `STACKFRAMES` and
+     /// `TRACEBACK` (`NativeActivation::createStackFrame`).
+     pub(crate) fn build_native_condition_object(
+         &mut self,
+         raised: &Raised,
+     ) -> Result<ObjRef, Failure> {
+         self.build_condition_object_from(raised, None, true, None)
+     }
+ 
+@@ -477,61 +484,34 @@ impl Interp {
+             // substitutions make -- empty for one raised with none, measured
+             // as an `Array` of no items rather than `.NIL`.
+             None if syntax => {
+                 let additional = self.additional_array(&raised.additional);
+                 self.roots.activity_mut().push_temp(additional);
+                 entries.push((key::ADDITIONAL, additional));
+             }
+             None => {}
+         }
+ 
+-        // A native call's object is handed to the extension as it is, so it
+-        // gets the `Directory` a program can use; a trapped one is only ever
+-        // seen through `condition_copy`.
+-        let object = if native && call.is_none() {
+-            let order = key::order(syntax);
+-            entries.sort_by_key(|(name, _)| order.iter().position(|k| k == name));
+-            self.store_directory(&entries)?
+-        } else {
+-            let class = self
+-                .classes()
+-                .lookup("Directory")
+-                .expect("Directory is a native class");
+-            let object = self.native_instance(class);
+-            for (name, value) in entries {
+-                self.hash_entry_write(object, name, value)?;
+-            }
+-            object
+-        };
++        let order = key::order(syntax);
++        entries.sort_by_key(|(name, _)| order.iter().position(|k| k == name));
++        let object = self.store_directory(&entries)?;
+         self.roots.activity_mut().pop_frame(frame);
+         self.roots.activity_mut().push_temp(object);
+         Ok(object)
+     }
+ 
+-    /// `conditionobj->copy()`, what `CONDITION('O')` answers: a new
+-    /// store-backed `Directory` holding the same items.
++    /// `conditionobj->copy()`, what `CONDITION('O')` answers.
+     pub(crate) fn condition_copy(&mut self, object: ObjRef) -> Result<ObjRef, Failure> {
+-        let Some(Body::Native(native)) = self.heap.get(object).map(|held| &held.body) else {
+-            let caller = self.caller();
+-            let copy = self
+-                .send_message(object, b"COPY", None, &[], caller)?
+-                .unwrap_or(ObjRef::NIL);
+-            self.roots.activity_mut().push_temp(copy);
+-            return Ok(copy);
+-        };
+-        let entries: Vec<(&[u8], ObjRef)> = key::order(native.entry(key::CODE).is_some())
+-            .iter()
+-            .filter_map(|name| Some((*name, native.entry(name)?)))
+-            .collect();
+-        let frame = self.roots.activity_mut().push_frame();
+-        let copy = self.store_directory(&entries)?;
+-        self.roots.activity_mut().pop_frame(frame);
++        let caller = self.caller();
++        let copy = self
++            .send_message(object, b"COPY", None, &[], caller)?
++            .unwrap_or(ObjRef::NIL);
+         self.roots.activity_mut().push_temp(copy);
+         Ok(copy)
+     }
+ 
+     /// A store-backed `Directory` holding `entries`, put in their order. The
+     /// caller roots every value.
+     fn store_directory(&mut self, entries: &[(&[u8], ObjRef)]) -> Result<ObjRef, Failure> {
+         let class = self
+             .classes()
+             .lookup("Directory")
+@@ -630,23 +610,20 @@ impl Interp {
+             .send_message(list_class, b"NEW", None, &[], caller)?
+             .expect("List~new answers an instance");
+         self.roots.activity_mut().push_temp(list);
+         Ok(list)
+     }
+ 
+     /// One entry of a condition object, or `None` where it has none.
+     /// `CONDITION('A')` reads `ADDITIONAL` back through this rather than
+     /// re-deriving it, so the two cannot disagree.
+     pub(crate) fn condition_entry(&mut self, object: ObjRef, name: &[u8]) -> Option<ObjRef> {
+-        if let Some(Body::Native(native)) = self.heap.get(object).map(|held| &held.body) {
+-            return native.entry(name).filter(|answer| *answer != ObjRef::NIL);
+-        }
+         let index = self.text(name);
+         self.roots.activity_mut().push_temp(index);
+         let caller = self.caller();
+         self.send_message(object, b"AT", None, &[Some(index)], caller)
+             .ok()
+             .flatten()
+             .filter(|answer| *answer != ObjRef::NIL)
+     }
+ 
+     /// `ADDITIONAL`: an Array of the raise's substitutions, empty for a
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index d6a805c8b..bf994508f 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -1459,26 +1459,24 @@ enum Primitive {
+     /// A `Body::Native` whose class is `.Package` -- what `~package` answers.
+     /// Measured, `.Array~package~class~id` is `Package`.
+     Package,
+     /// A `Body::Native` whose class is `.Method` -- what `Class~method`
+     /// answers and what a `.METHODS` entry holds. Measured,
+     /// `.K~method("M")~class` is `The Method class`.
+     Method,
+     /// A `Body::Native` whose class is `.Routine` -- what a `.ROUTINES` entry
+     /// holds. Measured, `.routines~r~class` is `The Routine class`.
+     Routine,
+-    /// A `Body::Native` whose class is `.Directory`, such as a condition
+-    /// object.
++    /// A `Body::Native` whose class is `.Directory`, such as `Package~local`.
+     Directory,
+     /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
+-    /// `.methods`, `.routines` and `.resources`, and `.TraceObject~new`.
+-    /// Measured, `.methods~class` is `The StringTable class` and
++    /// an `~annotations` table, and `.TraceObject~new`. Measured,
+     /// `.TraceObject~new~class~id` is `TraceObject`.
+     StringTable(ObjRef),
+     /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
+     /// answers. Measured, `.context~class` is `The RexxContext class`.
+     Context,
+     /// A `Body::Native` whose class is `.StackFrame` -- what
+     /// `RexxContext~stackFrames` fills its array with. Measured,
+     /// `.context~stackFrames[1]~class~id` is `StackFrame`.
+     StackFrame,
+     /// A `Body::Native` whose class is the `RexxInfo` one -- the single
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index bd5a9a93a..dbdacf0fd 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -462,26 +462,23 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
+                 .directives
+                 .get(directive)
+                 .is_some_and(|declared| declared.clause_span.is_empty());
+             if synthetic && let Some(object) = routine_object_running(interp, program, directive) {
+                 return Ok(object);
+             }
+             let name = routine_entry_name(interp, program, directive)?;
+             let table = interp
+                 .package_string_table(program, crate::environment::PackageTable::Routines)
+                 .ok_or_else(|| Loud::unknown_receiver("a routine whose package has no table"))?;
+-            match interp.heap.get(table).map(|held| &held.body) {
+-                Some(Body::Native(native)) => native.entry(&name).ok_or_else(|| {
+-                    Loud::unknown_receiver("a routine with no package entry").into()
+-                }),
+-                _ => Err(Loud::unknown_receiver("a package table this crate did not build").into()),
+-            }
++            interp
++                .native_entry(table, &name)
++                .ok_or_else(|| Loud::unknown_receiver("a routine with no package entry").into())
+         }
+         // An internal call runs its caller's code, and answers its caller's
+         // executable: measured, oracle rc 0, an internal routine called from
+         // a `::METHOD` answers that `Method`.
+         (Entry::InternalCall, ..) => executable_at(interp, depth + 1),
+         _ => Ok(interp.program_routine_object(program)),
+     }
+ }
+ 
+ /// A live `Routine` object whose `~call` enters `directive` of `program`.
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash.rs b/rust/crates/rexx-exec/src/dispatch/hash.rs
+index e7529cab7..037111add 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -151,22 +151,22 @@ fn index_only(interp: &mut Interp, receiver: ObjRef) -> bool {
+         if interp.classes().is_a(class, base) {
+             return true;
+         }
+     }
+     false
+ }
+ 
+ /// Whether `receiver`'s class is one of [`OWNED`].
+ pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
+     // **A `Body::Native` receiver is never one of these**, however its class
+-    // reads: a `Directory` built on `NativeObject`'s map, such as a condition
+-    // object, has no store -- see [`store_of`].
++    // reads: a `Directory` built on `NativeObject`'s map, such as
++    // `Package~local`, has no store -- see [`store_of`].
+     if matches!(
+         interp.heap.get(receiver).map(|object| &object.body),
+         Some(Body::Native(_))
+     ) {
+         return false;
+     }
+     class_is_one_of(interp, receiver, OWNED)
+ }
+ 
+ /// Whether `receiver`'s class is or inherits from one of `names`.
+@@ -179,21 +179,21 @@ fn class_is_one_of(interp: &mut Interp, receiver: ObjRef, names: &[&str]) -> boo
+             continue;
+         };
+         if interp.classes().is_a(class, base) {
+             return true;
+         }
+     }
+     false
+ }
+ 
+ /// The refusal for a receiver [`owns`] declines: a collection of one of
+-/// `classes` with no store (a condition object's `Directory`) is the class's
++/// `classes` with no store (`Package~local`'s `Directory`) is the class's
+ /// own unbuilt method, and any other receiver is of the wrong type
+ /// (Deviation 28).
+ fn not_this_task(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
+     refusal_outside(
+         interp,
+         receiver,
+         method,
+         OWNED,
+         "a value that is not a hash collection",
+     )
+diff --git a/rust/crates/rexx-exec/src/dispatch/package.rs b/rust/crates/rexx-exec/src/dispatch/package.rs
+index 7461f4601..1db9434d7 100644
+--- a/rust/crates/rexx-exec/src/dispatch/package.rs
++++ b/rust/crates/rexx-exec/src/dispatch/package.rs
+@@ -7,21 +7,21 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `Package`'s readers and its four writes -- `classes/PackageClass.cpp`,
+ //! bound by `memory/Setup.cpp`'s `Package` block.
+ 
+ use rustc_hash::FxHashMap;
+ 
+-use rexx_core::{Body, ObjRef};
++use rexx_core::ObjRef;
+ 
+ use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, required_string_named_argument};
+ use crate::environment::PackageTable;
+ use crate::error::Raised;
+ use crate::options::{OptionQuery, PackageOptions};
+ use crate::plan::Package;
+ use crate::trace::TraceMode;
+ use crate::{InstalledRoutine, ProgramId};
+ 
+ /// `Package`'s instance methods. Chained into `ObjectModel::build` beside
+@@ -621,36 +621,29 @@ fn package_table_entries(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     kind: PackageTable,
+ ) -> Result<Vec<(Box<[u8]>, ObjRef)>, Failure> {
+     let Some(program) = package_of(interp, receiver)? else {
+         return Ok(Vec::new());
+     };
+     let Some(table) = interp.package_string_table(program, kind) else {
+         return Ok(Vec::new());
+     };
+-    Ok(table_pairs(interp, table))
+-}
+-
+-/// Every (key, value) a `Body::Native` table holds.
+-fn table_pairs(interp: &Interp, table: ObjRef) -> Vec<(Box<[u8]>, ObjRef)> {
+-    let Some(object) = interp.heap.get(table) else {
+-        return Vec::new();
+-    };
+-    let Body::Native(native) = &object.body else {
+-        return Vec::new();
+-    };
+-    native
+-        .keys()
+-        .into_iter()
+-        .filter_map(|key| native.entry(&key).map(|value| (key, value)))
+-        .collect()
++    let mut pairs = Vec::new();
++    for index in super::hash::store_indexes(interp, table) {
++        let Some(value) = super::hash::store_item(interp, table, index) else {
++            continue;
++        };
++        let key = interp.to_text(index).into_owned().into_boxed_slice();
++        pairs.push((key, value));
++    }
++    Ok(pairs)
+ }
+ 
+ /// `PackageClass::getNamespacesRexx`: the qualifiers this package's
+ /// `::REQUIRES ... NAMESPACE` directives and `~addPackage` registered, each
+ /// answering the package it names.
+ fn namespaces(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+@@ -860,25 +853,22 @@ fn install_routine(
+     if public {
+         interp
+             .package_public_routines
+             .entry(program)
+             .or_default()
+             .insert(name.clone(), installed);
+     }
+     // `.ROUTINES` answers this same table, so the write has to reach it --
+     // measured, oracle rc 0, `.routines~allIndexes` carries a name added by
+     // `~addRoutine`.
+-    if let Some(table) = interp.package_string_table_for_write(program, PackageTable::Routines)
+-        && let Some(object) = interp.heap.get_mut(table)
+-        && let Body::Native(native) = &mut object.body
+-    {
+-        native.set_entry(&name, routine);
++    if let Some(table) = interp.package_string_table_for_write(program, PackageTable::Routines) {
++        super::hash::directory_put(interp, table, &name, routine)?;
+     }
+     Ok(Some(receiver))
+ }
+ 
+ /// `PackageClass::addPackageRexx`: imports another package into this one,
+ /// optionally under a namespace qualifier.
+ fn add_package(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+diff --git a/rust/crates/rexx-exec/src/dispatch/tests.rs b/rust/crates/rexx-exec/src/dispatch/tests.rs
+index 6dcc05c5b..f3be1f185 100644
+--- a/rust/crates/rexx-exec/src/dispatch/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/tests.rs
+@@ -548,24 +548,21 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
+             (
+                 120,
+                 String::new(),
+                 format!(
+                     "rexx-exec: a message send to a value that is not {kind} is not implemented\n"
+                 )
+             ),
+             "{class}~{method}"
+         );
+     }
+-    let (code, _, stderr) = run_source(
+-        "m = .t~new~start('boom')\nm~wait\nc = m~errorCondition\nsay c~items\n\
+-         ::class t\n::method boom unguarded\n  return 1/0\n",
+-    );
++    let (code, _, stderr) = run_source("say .context~package~local~items\n");
+     assert_eq!(code, 120);
+     assert!(
+         stderr.ends_with(
+             "rexx-exec: method \"ITEMS\" of class \"Directory\" is not implemented (Phase 9)\n"
+         ),
+         "{stderr}"
+     );
+     assert_eq!(
+         run_source(
+             "b = .b~new\nsay b~length\nb~append('xy')\nsay b~string\n\
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 266f69c6a..56ba14dd3 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -1029,26 +1029,24 @@ impl Interp {
+         }
+         let source = std::rc::Rc::clone(self.programs.get(program.0)?);
+         let entries = if self.untranslated.contains(&program) {
+             Vec::new()
+         } else {
+             package_table_entries(program, &source, kind)
+         };
+         if entries.is_empty() && !force {
+             return None;
+         }
+-        let class = self.environment_model().string_table;
+         // The table is rooted before anything it will hold is allocated, and
+         // each value goes into it as soon as it exists: `alloc_with` collects
+-        // before it allocates, and a `Body::Native`'s entries are traced, so
+-        // a value stored here survives the next value's allocation.
+-        let table = self.native_instance(class);
++        // before it allocates.
++        let table = crate::dispatch::hash::new_string_table(self).ok()?;
+         self.roots
+             .add_global(&package_table_root_key(program, kind), table);
+         self.package_tables.insert((program, kind), table);
+         let frame = self.roots.activity_mut().push_frame();
+         for (name, value) in entries {
+             let value = match value {
+                 TableValue::Instance {
+                     class: id,
+                     site,
+                     declared: (program, directive),
+@@ -1087,25 +1085,25 @@ impl Interp {
+                             },
+                         );
+                         if routine {
+                             self.routine_objects.insert(installed, object);
+                         }
+                         object
+                     }
+                 }
+                 TableValue::Lines(lines) => self.line_array(&lines),
+             };
+-            let object = self.heap.get_mut(table).expect("just allocated and rooted");
+-            let Body::Native(native) = &mut object.body else {
+-                unreachable!("allocated as Body::Native by native_instance")
+-            };
+-            native.set_entry(&name, value);
++            self.roots.activity_mut().push_temp(value);
++            if crate::dispatch::hash::directory_put(self, table, &name, value).is_err() {
++                self.roots.activity_mut().pop_frame(frame);
++                return None;
++            }
+         }
+         self.roots.activity_mut().pop_frame(frame);
+         Some(table)
+     }
+ 
+     /// A fresh `StringTable` holding `entries`, put in name order: the copy
+     /// `PackageClass::getClassesRexx` and its siblings answer, which a program
+     /// can ask everything a `.StringTable~new` answers.
+     pub(crate) fn string_table_of(
+         &mut self,
+diff --git a/rust/crates/rexx-exec/src/eval/object_operand_tests.rs b/rust/crates/rexx-exec/src/eval/object_operand_tests.rs
+index 0142bb588..9e4cb3c2d 100644
+--- a/rust/crates/rexx-exec/src/eval/object_operand_tests.rs
++++ b/rust/crates/rexx-exec/src/eval/object_operand_tests.rs
+@@ -244,25 +244,23 @@ fn an_object_as_a_do_over_target_is_array_requested() {
+     let (code, stdout, stderr) = run_source(b"do e over .array\nsay e\nend\n");
+     assert_eq!((code, stdout.as_str()), (158, ""));
+     assert!(
+         stderr.contains(
+             "Error 98.913:  Unable to convert object \"The Array class\" to a \
+              single-dimensional array value."
+         ),
+         "a class object must raise the oracle's own noarray, got {stderr:?}"
+     );
+ 
+-    // The adjacent successes: `.environment` has a store and iterates
+-    // through `MAKEARRAY` (measured, oracle `69` at rc 0), and a
+-    // `StringTable` built on the map iterates by its own walk, whose count
+-    // is order-independent for the reason `Interp::hash_collection_indexes`
+-    // gives.
++    // The adjacent successes: `.environment` and `.methods` have a store and
++    // iterate through `MAKEARRAY` (measured, oracle `69` at rc 0 for
++    // `.environment`).
+     assert_eq!(
+         run_source(b"n = 0\ndo e over .environment\n  n = n + 1\nend\nsay n\n"),
+         (0, "69\n".to_string(), String::new())
+     );
+     assert_eq!(
+         run_source(b"n = 0\ndo e over .methods\n  n = n + 1\nend\nsay n\n::method a\n::method b\n"),
+         (0, "2\n".to_string(), String::new())
+     );
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/run/loops.rs b/rust/crates/rexx-exec/src/run/loops.rs
+index 2e871e774..8aeeb1817 100644
+--- a/rust/crates/rexx-exec/src/run/loops.rs
++++ b/rust/crates/rexx-exec/src/run/loops.rs
+@@ -818,23 +818,23 @@ impl Interp {
+         }
+         let wanted = self.text_built(b"ARRAY".to_vec());
+         self.roots.activity_mut().push_temp(wanted);
+         pinned!(
+             self,
+             crate::pinning::PinKind::Conversion,
+             self.send_message(value, b"REQUEST", None, &[Some(wanted)], caller)
+         )
+     }
+ 
+-    /// Whether `value` is a `StringTable` -- `.methods`, `.routines`,
+-    /// `.resources`, or a package's `~publicClasses` -- or a `Directory` built
+-    /// on the same map, a package's `~local`.
++    /// Whether `value` is a `StringTable` or a `Directory` built on
++    /// `NativeObject`'s map, such as an `~annotations` table or a package's
++    /// `~local`.
+     fn is_hash_collection(&mut self, value: ObjRef) -> bool {
+         let Some(Body::Native(native)) = self.heap.get(value).map(|object| &object.body) else {
+             return false;
+         };
+         let class = native.class();
+         class == self.object_model().iterable_collection_class()
+             || self.receiver_class_id(value).as_deref() == Some("Directory")
+     }
+ 
+     /// The values a `DO OVER` binds its control variable to: the **non-empty**
+diff --git a/rust/crates/rexx-exec/tests/corpus.rs b/rust/crates/rexx-exec/tests/corpus.rs
+index b852278e9..371c8fff1 100644
+--- a/rust/crates/rexx-exec/tests/corpus.rs
++++ b/rust/crates/rexx-exec/tests/corpus.rs
+@@ -246,143 +246,61 @@ const RAW_STDERR_COMPARISON: &[&str] = &[
+     // only thing separating either report from one raised in the sender.
+     "lang/method_reply.rex",
+     "lang/method_reply_twice.rex",
+ ];
+ 
+ /// Corpus programs whose `stderr` is compared as a multiset of lines, per
+ /// DEVIATION 7: `REPLY` under a package trace setting has two threads writing
+ /// trace lines and their interleaving is not a specified observable.
+ const CONCURRENTLY_TRACED: &[&str] = &["lang/directive_options_trace_reply.rex"];
+ 
+-/// Corpus programs whose `stdout` is compared as a multiset of lines, per
+-/// DEVIATION 8: what they print is the contents of a hash-ordered
+-/// `StringTable`, whose iteration order is a bucket walk on both sides and
+-/// reproduces on neither.
+-const HASH_ORDERED_STDOUT: &[&str] = &["lang/package_writes.rex"];
+-
+-/// The `stdout` comparison one corpus entry gets.
+-fn stdout_mode(rel_path: &str) -> StdoutComparison {
+-    if HASH_ORDERED_STDOUT.contains(&rel_path) {
+-        StdoutComparison::Multiset
+-    } else {
+-        StdoutComparison::Raw
+-    }
+-}
+-
+ /// The `stderr` comparison one corpus entry gets, and no entry may ask for two.
+ fn stderr_mode(rel_path: &str) -> StderrComparison {
+     match (
+         RAW_STDERR_COMPARISON.contains(&rel_path),
+         CONCURRENTLY_TRACED.contains(&rel_path),
+     ) {
+         (true, true) => panic!(
+             "{rel_path} is on both RAW_STDERR_COMPARISON and CONCURRENTLY_TRACED, which ask \
+              for a stricter and a weaker comparison of the same channel"
+         ),
+         (true, false) => StderrComparison::Raw,
+         (false, true) => StderrComparison::Multiset,
+         (false, false) => StderrComparison::Normalized,
+     }
+ }
+ 
+-/// Every entry in [`RAW_STDERR_COMPARISON`], [`CONCURRENTLY_TRACED`] and
+-/// [`HASH_ORDERED_STDOUT`] is a line some phase subset file actually names.
++/// Every entry in [`RAW_STDERR_COMPARISON`] and [`CONCURRENTLY_TRACED`] is a
++/// line some phase subset file actually names.
+ #[test]
+ fn every_opted_in_comparison_names_a_program_the_subset_runs() {
+     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+     let paths: Vec<PathBuf> = SUBSET_FILES
+         .iter()
+         .map(|name| corpus_dir.join(name))
+         .collect();
+     let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+     for (list, opted_into) in [
+         (RAW_STDERR_COMPARISON, "raw"),
+         (CONCURRENTLY_TRACED, "multiset"),
+-        (HASH_ORDERED_STDOUT, "sorted stdout"),
+     ] {
+         for listed in list {
+             assert!(
+                 subset.iter().any(|entry| entry == listed),
+                 "{listed} is listed for the {opted_into} stderr comparison but is not a \
+                  line in any phase subset file -- stderr_mode would silently give it the \
+                  normalised comparison instead of the one it is supposed to opt into"
+             );
+         }
+     }
+ }
+ 
+-/// [`stdout_mode`] answers the multiset mode for exactly the licensed list.
+-#[test]
+-fn the_multiset_stdout_mode_is_selected_for_exactly_the_licensed_list() {
+-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+-    let paths: Vec<PathBuf> = SUBSET_FILES
+-        .iter()
+-        .map(|name| corpus_dir.join(name))
+-        .collect();
+-    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+-    assert!(
+-        !HASH_ORDERED_STDOUT.is_empty() && HASH_ORDERED_STDOUT.len() < subset.len(),
+-        "the licensed list is empty or is the whole subset, so this control          separates nothing"
+-    );
+-    for entry in &subset {
+-        let listed = HASH_ORDERED_STDOUT.contains(&entry.as_str());
+-        let mode = stdout_mode(entry);
+-        assert_eq!(
+-            mode == StdoutComparison::Multiset,
+-            listed,
+-            "{entry} is compared as {mode:?} and is {} on HASH_ORDERED_STDOUT",
+-            if listed { "" } else { "not" }
+-        );
+-    }
+-}
+-
+-/// DEVIATION 8's own control: for every program on [`HASH_ORDERED_STDOUT`],
+-/// the two sides' `stdout` **differs** raw and **agrees** sorted.
+-#[test]
+-fn the_sorted_stdout_licence_covers_an_ordering_difference_and_nothing_else() {
+-    let oracle = support::oracle::locate();
+-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+-    assert!(
+-        !HASH_ORDERED_STDOUT.is_empty(),
+-        "the licensed list is empty, so this control iterates over nothing"
+-    );
+-    for listed in HASH_ORDERED_STDOUT {
+-        let abs = fs::canonicalize(corpus_dir.join(listed))
+-            .unwrap_or_else(|e| panic!("cannot resolve {listed}: {e}"));
+-        let dir = run_directory(listed);
+-        empty_run_directory(&dir);
+-        let cpp = oracle.run_in(&abs, &dir, &[]);
+-        empty_run_directory(&dir);
+-        let rust = run_rust(&abs, &dir, &[], None);
+-        assert!(
+-            !cpp.stdout.is_empty(),
+-            "{listed}: on HASH_ORDERED_STDOUT and the oracle wrote no stdout, so \
+-the sorted comparison would agree with anything"
+-        );
+-        // Both compared as booleans rather than with `assert_ne!`/`assert_eq!`
+-        // on the transcripts: the message is the useful part, and those macros
+-        // would print two whole `Vec<u8>`s as byte arrays.
+-        assert!(
+-            rust.stdout != cpp.stdout,
+-            "{listed}: agrees on stdout byte for byte, so it does not need \
+-Deviation 8 and must not carry a relaxation that hides an ordering defect"
+-        );
+-        assert!(
+-            support::oracle::stdout_multiset(&rust.stdout)
+-                == support::oracle::stdout_multiset(&cpp.stdout),
+-            "{listed}: differs on stdout as a MULTISET of lines, which \
+-Deviation 8 does not license -- the two sides printed different content, not \
+-the same content in a different order"
+-        );
+-    }
+-}
+-
+ /// Runs one corpus entry under both interpreters and compares all three
+ /// observable channels. `None` when they agree.
+ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mismatch> {
+     let abs = fs::canonicalize(corpus_dir.join(rel_path))
+         .unwrap_or_else(|e| panic!("cannot resolve corpus entry {rel_path}: {e}"));
+ 
+     // One directory per program, the same absolute path for both interpreters
+     // and emptied between them: a program that writes files leaves nothing in
+     // `corpus/`, and neither side ever reads what the other left behind.
+     let dir = run_directory(rel_path);
+@@ -431,21 +349,21 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
+             reason: format!(
+                 "the crate did not finish: {:?} -- a structural failure, not a byte comparison",
+                 String::from_utf8_lossy(&rust.stderr).trim_end()
+             ),
+             structural: true,
+         });
+     }
+ 
+     let rust_exit = wrapped_exit_code(rust.exit_code);
+ 
+-    let diffs = descriptor_diffs_modes(&rust, &cpp, stdout_mode(rel_path), stderr_mode(rel_path));
++    let diffs = descriptor_diffs_modes(&rust, &cpp, StdoutComparison::Raw, stderr_mode(rel_path));
+     if diffs.is_empty() {
+         return None;
+     }
+ 
+     let owner = owner_from_stderr(&rust.stderr);
+     let reason = match &owner {
+         Some(construct) => format!(
+             "{} differ (loud failure: {construct} is not implemented; rust rc {rust_exit}, \
+              oracle rc {})",
+             diffs.join(", "),
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/condition_object_hash.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/condition_object_hash.txt
+new file mode 100644
+index 000000000..0ca884a0c
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/condition_object_hash.txt
+@@ -0,0 +1,57 @@
++count 56
++/* A condition object is a Directory: its hash methods answer, CONDITION('O')
++   is a copy of it, and re-raising it through ~result keeps its identity. */
++m = .message~new(.t~new, 'BOOM')
++signal on syntax name s1
++m~send
++s1:
++c = m~errorCondition
++say c~class c~items
++s = ''; do i over c~allIndexes; s = s i; end
++say s
++say c~hasIndex('CODE') c~hasIndex('NOPE') c~hasIndex('code')
++say c~at('CODE') c['CODE'] c~code
++say c~isEmpty c~hasItem(c~at('CODE')) c~index('42.3')
++say c~allItems~items c~makeArray~items c~supplier~class
++o = condition('O')
++say (o == c) o~items
++o['NEW'] = 1
++say o~items c~items (m~errorCondition == c)
++signal on syntax name s2
++r = m~result
++s2:
++c3 = m~errorCondition
++say (c3 == c) (condition('O') == c) c~propagated c3~items c~position
++call on user foo name h1
++call raiser
++signal on novalue name h2
++say zz
++h2:
++call show 'novalue', condition('O')
++signal on syntax name h3
++call deep
++h3:
++c = condition('O')
++call show 'propagated' c~propagated, c
++do k over c; nop; end
++say k
++exit
++h1:
++call show 'call-on', condition('O')
++return
++show: procedure
++  use arg tag, c
++  s = ''
++  do i over c~allIndexes; s = s i; end
++  say tag c~items':'s
++  return
++raiser:
++  raise user foo description 'd1' additional (.array~of(1,2)) return
++::routine deep
++  signal on syntax name inner
++  x = 1/0
++inner:
++  raise propagate
++::class t
++::method boom
++  return 1/0
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables.txt
+index 72dba7d55..a881ce2f8 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables.txt
+@@ -1,28 +1,28 @@
+ count 101
+ /* Package's ten table readers, on a package carrying more than one of every
+    kind: two classes public and one not, two routines public and one not, two
+    unattached methods, two resources, and one ::REQUIRES under a namespace.
+    A body answering an empty table or a one-entry table fails here.
+ 
+    Every entry is read back BY NAME and its own class asked, because the
+    table's rendering is `a StringTable` whatever is inside it.
+ 
+-   This program's stdout is compared BYTE FOR BYTE. The tables it prints are
+-   hash-ordered on both sides, and the two orders differ in general -- but the
+-   names here are short enough that this crate's sorted walk and the oracle's
+-   bucket walk happen to agree, so it is not on corpus.rs's
+-   HASH_ORDERED_STDOUT and Deviation 8 does not cover it. `package_writes.rex`
+-   is the one program that needs the licence. **The agreement is a
+-   coincidence of these names, not a property**: restoring long names, which
+-   is what the defect below asks for once it is fixed, will need this program
+-   put back on that list.
++   This program's stdout is compared BYTE FOR BYTE. Every table it
++   prints is a StringTable with a hash store on both sides, so both
++   walk it in bucket order. The crate's `Package` readers put a
++   table's entries in name order, where the oracle puts them in its
++   own, and entries sharing a bucket walk in the order they were put;
++   for the names here the two orders agree, measured by this
++   program's own byte-for-byte comparison. `package_writes.rex`
++   prints `.ROUTINES` itself as well as `Package~routines`, and
++   agrees byte for byte too.
+ 
+    Every name a table is keyed under here is at most seven bytes, so that the
+    index string a DO OVER binds sits in the handle rather than on the heap.
+    That is a workaround for a defect this program found and does not own:
+    under collect-on-every-allocation a DO OVER over one of the interpreter's
+    own StringTables binds a dead handle once the index is long enough to be
+    allocated, which `docs/superpowers/records/2026-09-07-phase-5i-introspection/
+    found-defect-do-over-native-table-rooting.md` reproduces with `.methods`
+    alone. */
+ 
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables_hash.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables_hash.txt
+new file mode 100644
+index 000000000..d176b2145
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_tables_hash.txt
+@@ -0,0 +1,29 @@
++count 28
++/* .METHODS, .ROUTINES and .RESOURCES are StringTables whose hash methods
++   answer in the store's own order, and writes into them are kept. */
++say .methods~class .methods~items .methods~isEmpty
++s = ''; do i over .methods~allIndexes; s = s i; end; say s
++s = ''; do i over .methods; s = s i; end; say s
++say .methods~hasIndex('ZETA') .methods~hasIndex('zeta') .methods~at('ALPHA')~class
++say .methods~allItems~items .methods~supplier~index (.methods == .methods)
++say .methods~index(.methods['BETA'])
++say .routines~items .resources~items
++s = ''; do i over .routines~allIndexes; s = s i; end; say s
++.context~package~addRoutine('NEWR', .routine~new('newr', 'return 1'))
++say .routines~items .routines~hasIndex('NEWR')
++s = ''; do i over .routines~allIndexes; s = s i; end; say s
++say .resources~at('RES')~items .resources~res~items
++.methods['EXTRA'] = 5
++say .methods~items .methods~hasIndex('EXTRA') .methods~extra
++exit
++::method zeta
++::method alpha
++::method beta
++::method gamma
++::method delta
++::routine r1
++::routine q2
++::resource res
++line1
++line2
++::END
