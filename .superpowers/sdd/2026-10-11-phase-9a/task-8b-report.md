@@ -276,8 +276,9 @@ On top of `cfb8af83f`, one commit per item.
 5. `OBJECTNAME=` on strings and small integers, and R16: unchanged, awaiting Moritz.
 
 Checks (statuses unpiped): `cargo fmt --all --check` 0; `cargo clippy -j 4 -p rexx-exec
---all-targets -- -D warnings` 0 (and `-p rexx-classes` at `78d84b7e6`: 0); `--lib` of rexx-exec 0
-(1085 passed, after moving the scheduler test's refusal); `-p rexx-parse --test sourceline_oracle` 0;
+--all-targets -- -D warnings` 0 (and `-p rexx-classes` at `78d84b7e6`: 0); `--lib` of rexx-exec at `48326cad0`
+before the scheduler test's refusal moved: 101 (1084 passed, that test failed); after it moved,
+`--lib -- scheduler:: dispatch::` 0 (239 passed); `-p rexx-parse --test sourceline_oracle` 0;
 `REXX_CORPUS_GATE=1 --test corpus --test collect_stress` 0 at `48326cad0` (27+1 ignored, 37);
 `--test refusal_sites --test refusal_dispositions` 0; `--test concurrency_tests --test suite` 0
 (54, 50); suite groups `base/class/Package,base/class/Object,base/class/StackFrame`: same not-passed
