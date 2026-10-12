@@ -27,7 +27,7 @@ impl Interp {
     ) -> Result<Flow, Failure> {
         match &trap.label {
             Some(label) => {
-                // The required-string protocol's other arming route: a
+                // An arming route of the required-string protocol: a
                 // NOSTRING trap is what turns an object with no string value
                 // from a rendering into a raise. `ANY` counts, measured --
                 // `signal on any` over `say .environment` runs the handler

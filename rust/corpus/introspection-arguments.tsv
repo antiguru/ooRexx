@@ -9,9 +9,9 @@
 # instrument reads green having sent nothing that could work.
 #
 # THE CLASS ARM IS HERE and corpus/collection-arguments.tsv's is not. This
-# phase's own `loud` rows that live on it -- Package~defaultOptions,
-# Method~loadExternalMethod, Method~newFile, Routine~loadExternalRoutine and
-# Routine~newFile -- are named by the plan's Tasks 4 and 7; an instance-only
+# phase's own `loud` rows that live on it -- Method~loadExternalMethod,
+# Method~newFile, Routine~loadExternalRoutine and Routine~newFile -- are
+# named by the plan's Tasks 4 and 7; an instance-only
 # table would leave them unsized.
 #
 # `UNSTABLE:` marks a row whose answered value the ORACLE does not reproduce

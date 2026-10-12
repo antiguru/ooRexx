@@ -250,7 +250,7 @@ impl Interp {
                         self.blame_directive(program, directive);
                         return Err(run::raised_from_settings(error).into());
                     }
-                    // The required-string protocol's third arming route:
+                    // An arming route of the required-string protocol:
                     // `::OPTIONS NOSTRING SYNTAX` turns a rendering into a
                     // raise exactly as a `NOSTRING` trap does. See
                     // [`Interp::reqstr_armed`] for why this only ever sets.
@@ -260,8 +260,8 @@ impl Interp {
                     {
                         self.reqstr_armed = true;
                     }
-                    // `Interp::lostdigits_armed`'s only write, and the same
-                    // set-once rule: the arithmetic path's gate.
+                    // `Interp::lostdigits_armed`, under the same set-once
+                    // rule: the arithmetic path's gate.
                     if self
                         .options_of(id)
                         .is_some_and(PackageOptions::escalates_lostdigits)

@@ -209,9 +209,9 @@ fn create_unsigned_value(digits: &[u8], carry: bool, exponent: i64, max_value: u
 }
 
 impl Settings {
-    /// The three settings as given, the pair not compared:
-    /// `PackageSetting::setDigits` and `setFuzz` store without the check
-    /// `NUMERIC` makes.
+    /// The three settings as given, unchecked: `PackageSetting::setDigits`
+    /// and `setFuzz` store without the check `NUMERIC` makes. The caller
+    /// owns `digits >= 1`; `fuzz >= digits` is allowed through.
     pub fn from_parts(digits: u64, fuzz: u64, form: Form) -> Settings {
         Settings { digits, fuzz, form }
     }

@@ -147,3 +147,37 @@ rows were re-run after it. Together these took longer than the 5-minute per-task
    The same for one interpreter per process, which is what `rexx -o` uses.
 5. `rexx-run` has no `-o`/`-od` switch; the witness drives the same two `defaultOptions` sends the
    C++ launcher makes.
+
+## Fix round 1
+
+Review: `task-7-review.md`, fixed on top of `40278c99e`.
+
+* Important 1: `install.rs`'s "`Interp::lostdigits_armed`'s only write" now says only what that
+  site does, and `lib.rs`'s field doc names both arming routes (an installed `::OPTIONS ...
+  LOSTDIGITS SYNTAX`, or a `Package~options` write). Two neighbouring sentences counted the
+  required-string protocol's arming routes ("third", "other"), and `arm_option_latches` adds one;
+  both now say "An arming route" (`install.rs`, `run/condition.rs`).
+* Minor 1: `Package~defaultOptions` removed from `introspection-arguments.tsv`'s list of this
+  phase's `loud` rows.
+* Minor 2: `Settings::from_parts`'s doc says the caller owns `digits >= 1`, and that
+  `fuzz >= digits` is allowed through.
+* Minor 3: `lang/package_default_options.rex` now pins an override `FUZZ 5` over explicit `DIGITS
+  3` and `DIGITS 5` (comparisons `3 5 0 0 1` and `5 5 1 1 0`, and a bare `NUMERIC DIGITS` there is
+  33.1), an override naming `NUMERIC INHERIT` (`inherited: 14 ENGINEERING INHERIT`, then `not
+  inherited: 9 SCIENTIFIC` once the count is spent), and `D`/`C` written from a started activity,
+  seen by compiles on the main activity and on a third one (`7 ENGINEERING`, counts -2 and -3).
+  Oracle rc 0, crate rc 0, stdout identical (each line above read), stderr identical (empty). Its
+  `sourceline_oracle` expectation was regenerated through the oracle driver (count 106).
+
+Checks at the final edit, each unpiped, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t7-target`,
+`memcap 8G`, `-j 4`, `CARGO_INCREMENTAL=0`:
+
+| command | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -j 4 -p rexx-exec -p rexx-num --all-targets -- -D warnings` | 0 |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus --test refusal_sites --test closed_phases --test owners --test phase_ten_reasons` | 0 (`1001 of 1001 matching`) |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+
+Review Minor 4 (the unsubstituted `&1` in a main-program parse error) is outside this diff and goes
+to the 9d ledger with concern 3.

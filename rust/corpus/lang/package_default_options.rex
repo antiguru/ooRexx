@@ -52,6 +52,28 @@ np = .context~package~loadPackage(dir || 'package_default_options_noprolog.cls')
 say 'NOPROLOG package:' np~options('P') np~options('X') np~digits
 say 'C' cls~defaultOptions('C', ' 0 ')
 
+say 'fuzz over an explicit DIGITS:' cls~defaultOptions('D', '::options fuzz 5') cls~defaultOptions('C', 3)
+f = .routine~new('f', ('return digits() fuzz() (1 = 1.01) (12 = 13) (100 > 101)', '::options digits 3'))
+say '  digits 3 fuzz 5:' f~call
+f = .routine~new('f', ('return digits() fuzz() (1 = 1.01) (12 = 13) (100 > 101)', '::options digits 5'))
+say '  digits 5 fuzz 5:' f~call
+call try ".routine~new('f', ('numeric digits; return digits()', '::options digits 3'))~call"
+say 'C' cls~defaultOptions('C')
+
+say 'NUMERIC INHERIT:' cls~defaultOptions('D', '::options numeric inherit') cls~defaultOptions('C', 1)
+ni = .routine~new('ni', 'return digits() form()')
+numeric digits 14
+numeric form engineering
+say '  inherited:' ni~call ni~package~options('NU')
+say '  not inherited:' .routine~new('no', 'return digits() form()')~call
+numeric digits 9
+numeric form scientific
+
+say 'from another activity:' .k~start('setBoth')~result
+say '  main activity:' .routine~new('m', 'return digits() form()')~call 'C' cls~defaultOptions('C')
+say '  third activity:' .k~start('compile')~result 'C' cls~defaultOptions('C')
+say 'C' cls~defaultOptions('C', 0)
+
 call try "cls~defaultOptions('D', 'digits 5')"
 call try "cls~defaultOptions('D', '::options digits 5;')"
 call try "cls~defaultOptions('D', '')"
@@ -77,3 +99,8 @@ refused:
   return
 
 ::class k
+::method setBoth class
+  .Package~defaultOptions('D', '::options digits 7 form engineering')
+  return .Package~defaultOptions('C', -1)
+::method compile class
+  return .routine~new('t', 'return digits() form()')~call
