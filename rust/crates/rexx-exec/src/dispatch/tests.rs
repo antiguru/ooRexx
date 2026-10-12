@@ -572,6 +572,46 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
     );
 }
 
+/// Every mutator a `StringTable` answers refuses on a package's `.ROUTINES`,
+/// whose contents the oracle's `CALL` resolves through: measured, after
+/// `.routines~put(.routines~bar, 'FOO')` the oracle's `call foo` runs `BAR`.
+/// Reads, `~addRoutine` and a `.METHODS` write still answer.
+#[test]
+fn a_write_to_a_packages_routines_table_refuses() {
+    let tail =
+        "call foo\nsay result\n::routine foo\n  return 'foo'\n::routine bar\n  return 'bar'\n";
+    for write in [
+        ".routines~put(.routines~bar, 'FOO')",
+        ".routines['FOO'] = .routines~bar",
+        ".routines~foo = .routines~bar",
+        ".routines~remove('BAR')",
+        ".routines~removeItem(.routines~bar)",
+        ".routines~empty",
+        ".routines~setEntry('FOO', .routines~bar)",
+        ".routines~removeEntry('BAR')",
+        ".routines~putAll(.stringtable~new~~put(1, 'X'))",
+    ] {
+        assert_eq!(
+            run_source(&format!("{write}\n{tail}")),
+            (
+                120,
+                String::new(),
+                "rexx-exec: a write to a package's .ROUTINES table is not implemented (Phase 9)\n"
+                    .to_owned()
+            ),
+            "{write}"
+        );
+    }
+    assert_eq!(
+        run_source(&format!(
+            "say .routines~items .routines~hasIndex('BAR')\n\
+             .context~package~addRoutine('ADDED', .routine~new('added', 'return 1'))\n\
+             say .routines~items\n.methods['X'] = 5\nsay .methods~x\n{tail}::method m\n"
+        )),
+        (0, "2 1\n3\n5\nfoo\n".to_owned(), String::new())
+    );
+}
+
 /// A user `STRING` method's answer reads as `primitiveMakeString` reads it:
 /// an array (or an `Array` subclass) joins its items and a buffer is its
 /// text. A `Queue`, `.nil` or any other object is `.nil` there: a truth

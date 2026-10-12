@@ -1007,6 +1007,13 @@ impl Interp {
         self.build_package_string_table(program, kind, false)
     }
 
+    /// Whether `table` is some package's `.ROUTINES` table.
+    pub(crate) fn is_package_routines_table(&self, table: ObjRef) -> bool {
+        self.package_tables
+            .iter()
+            .any(|(&(_, kind), &held)| held == table && kind == PackageTable::Routines)
+    }
+
     /// [`Interp::package_string_table`] for a caller that is about to write an
     /// entry into it, which builds the table even when the program's own
     /// directives declare none of that kind.

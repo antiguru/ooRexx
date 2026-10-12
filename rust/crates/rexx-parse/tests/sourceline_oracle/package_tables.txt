@@ -1,4 +1,4 @@
-count 101
+count 92
 /* Package's ten table readers, on a package carrying more than one of every
    kind: two classes public and one not, two routines public and one not, two
    unattached methods, two resources, and one ::REQUIRES under a namespace.
@@ -15,16 +15,7 @@ count 101
    for the names here the two orders agree, measured by this
    program's own byte-for-byte comparison. `package_writes.rex`
    prints `.ROUTINES` itself as well as `Package~routines`, and
-   agrees byte for byte too.
-
-   Every name a table is keyed under here is at most seven bytes, so that the
-   index string a DO OVER binds sits in the handle rather than on the heap.
-   That is a workaround for a defect this program found and does not own:
-   under collect-on-every-allocation a DO OVER over one of the interpreter's
-   own StringTables binds a dead handle once the index is long enough to be
-   allocated, which `docs/superpowers/records/2026-09-07-phase-5i-introspection/
-   found-defect-do-over-native-table-rooting.md` reproduces with `.methods`
-   alone. */
+   agrees byte for byte too. */
 
 p = .context~package
 call dump 'classes', p~classes

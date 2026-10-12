@@ -489,7 +489,7 @@ pub enum StderrComparison {
 pub enum StdoutComparison {
     /// Byte-for-byte. The default.
     Raw,
-    /// Byte-for-byte after sorting each side's lines: Deviation 8's licence.
+    /// Byte-for-byte after sorting each side's lines.
     Multiset,
 }
 
@@ -720,18 +720,18 @@ mod tests {
         }
     }
 
-    /// The transcript DEVIATION 8's controls mutate, and its reordering.
+    /// The transcript the multiset mode's controls mutate, and its reordering.
     const LINES: &[u8] = b"alpha\nbravo\ncharlie\n";
     const REORDERED: &[u8] = b"charlie\nalpha\nbravo\n";
 
-    /// DEVIATION 8's control: [`stdout_multiset`] discards ORDERING and
+    /// [`stdout_multiset`] discards ORDERING and
     /// nothing else.
     #[test]
     fn the_stdout_multiset_comparison_discards_ordering_and_nothing_else() {
         assert_eq!(
             stdout_multiset(LINES),
             stdout_multiset(REORDERED),
-            "sorting must accept a pure reordering, or the licence covers nothing"
+            "sorting must accept a pure reordering, or the mode accepts nothing"
         );
         for (what, mutated) in [
             ("a changed line", b"alpha\nBRAVO\ncharlie\n".as_slice()),
@@ -749,13 +749,13 @@ mod tests {
             assert_ne!(
                 stdout_multiset(LINES),
                 stdout_multiset(mutated),
-                "sorting must still catch {what}, which Deviation 8 does not license"
+                "sorting must still catch {what}, which is not an ordering difference"
             );
         }
     }
 
-    /// DEVIATION 8's second control: only the multiset mode ignores stdout
-    /// ordering, so the licence cannot leak to a program off the list.
+    /// Only the multiset mode ignores stdout ordering, so the raw mode cannot
+    /// leak it.
     #[test]
     fn only_the_multiset_stdout_mode_ignores_ordering() {
         let rust = stdout_outcome(REORDERED);
@@ -771,7 +771,7 @@ mod tests {
             raw,
             vec!["stdout"],
             "the raw mode must report a stdout difference on a pure reordering, \
-             or Deviation 8's licence is in force for every program"
+             or the multiset relaxation is in force for every program"
         );
 
         let sorted = descriptor_diffs_modes(

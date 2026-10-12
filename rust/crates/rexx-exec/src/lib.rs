@@ -655,6 +655,18 @@ impl Loud {
         }
     }
 
+    /// A write to a package's `.ROUTINES` table, which the oracle's routine
+    /// resolution reads (`PackageClass::findLocalRoutine`) and this crate's
+    /// does not.
+    fn package_routines_write() -> Loud {
+        Loud {
+            message: owned_message(
+                "a write to a package's .ROUTINES table",
+                Some(Owner::Phase9),
+            ),
+        }
+    }
+
     /// `Package~options(name, value)` and `Package~defaultOptions(name,
     /// value)`, each of which writes a package setting rather than reading
     /// one.
