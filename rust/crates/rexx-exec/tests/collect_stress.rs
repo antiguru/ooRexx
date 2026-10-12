@@ -97,6 +97,7 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/class_metaclass_not_found.rex",
     "lang/class_subclass_cycle.rex",
     "lang/class_subclass_not_found.rex",
+    "lang/class_target_not_a_class.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",

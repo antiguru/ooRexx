@@ -678,8 +678,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `isPosted` with `1` after its `UNINIT`.
     ("EventSemaphore", "UNINIT", Arity::Fixed(0), native_no_op),
     // `HashCollection::initRexx` at the class that declares it
-    // (`memory/Setup.cpp:841`), and `ListClass::initRexx` (`:1011`), which
-    // differs from it only in the default capacity.
+    // (`memory/Setup.cpp:841`).
     (
         "IdentityTable",
         "INIT",

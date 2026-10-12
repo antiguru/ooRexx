@@ -75,18 +75,17 @@ pub(super) fn native_directory_new(
     }
 }
 
-/// A collection's `~init(size)`: the initial-size argument, validated and
-/// then dropped -- `HashCollection::initRexx`
-/// (`classes/support/HashCollection.cpp:63`), and the `QueueClass::initRexx`
-/// and `ListClass::initRexx` beside it (`classes/QueueClass.cpp:261`,
-/// `classes/ListClass.cpp:102`), which differ only in the default capacity.
+/// A hash collection's `~init(size)`: the store sized for the initial-size
+/// argument -- `HashCollection::initRexx`
+/// (`classes/support/HashCollection.cpp:63`).
 pub(super) fn native_capacity_init(
     interp: &mut Interp,
     _cleared: Cleared,
-    _receiver: ObjRef,
+    receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    optional_length_argument(interp, args, 0)?;
+    let capacity = optional_length_argument(interp, args, 0)?.unwrap_or(0);
+    hash::initialize_store(interp, receiver, capacity)?;
     Ok(None)
 }
 
@@ -190,20 +189,21 @@ pub(super) fn native_executable_new(
         )?
     };
     if class != base {
-        executable_as_instance(interp, object, class, base)?;
+        native_as_instance(interp, object, class, base)?;
     }
     super::begin_init(interp, object, args.get(3..).unwrap_or_default())
 }
 
-/// The scope-pool entry, under `Method`'s or `Routine`'s scope, that holds a
-/// subclass instance's annotation table.
-pub(super) const EXECUTABLE_ANNOTATIONS: &[u8] = b"ANNOTATIONS";
+/// The scope-pool entry, under `Method`'s, `Routine`'s or `Package`'s scope,
+/// that holds a subclass instance's annotation table.
+pub(super) const SUBCLASS_ANNOTATIONS: &[u8] = b"ANNOTATIONS";
 
 /// `RexxClass::completeNewObject` (`classes/ClassClass.cpp:1882`) for an
-/// executable `object` that `base`'s compile built: it becomes an instance of
-/// `class`, a subclass of `base`, keeping its identity, so every record kept
-/// against the object still reaches it.
-fn executable_as_instance(
+/// executable or package `object` that `base`'s constructor built: it becomes
+/// an instance of `class`, a subclass of `base`, keeping its identity, so
+/// every record kept against the object still reaches it. An object an
+/// earlier call already made an instance takes `class`'s behaviour.
+pub(super) fn native_as_instance(
     interp: &mut Interp,
     object: ObjRef,
     class: ObjRef,
@@ -217,22 +217,31 @@ fn executable_as_instance(
     let Some(held) = interp.heap.get_mut(object) else {
         return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
     };
-    let annotations = match &held.body {
-        Body::Native(native) => native.annotations(),
-        _ => None,
-    };
-    let mut pools = rexx_core::ScopePools::new();
-    if let Some(table) = annotations {
-        pools.set(base, EXECUTABLE_ANNOTATIONS, table);
+    match &mut held.body {
+        Body::Native(native) => {
+            let mut pools = rexx_core::ScopePools::new();
+            if let Some(table) = native.annotations() {
+                pools.set(base, SUBCLASS_ANNOTATIONS, table);
+            }
+            held.body = Body::Instance {
+                class,
+                behaviour,
+                name: None,
+                pools,
+                own: None,
+                native: None,
+            };
+        }
+        Body::Instance {
+            class: held_class,
+            behaviour: held_behaviour,
+            ..
+        } => {
+            *held_class = class;
+            *held_behaviour = behaviour;
+        }
+        _ => return Err(Loud::unknown_receiver("an object this crate did not build").into()),
     }
-    held.body = Body::Instance {
-        class,
-        behaviour,
-        name: None,
-        pools,
-        own: None,
-        native: None,
-    };
     // See `Interp::reqstr_armed`, which `new_instance` arms for the same
     // reason.
     interp.reqstr_armed = true;
@@ -262,7 +271,7 @@ pub(super) fn native_new_file(
     let name = interp.to_text(name).to_vec();
     let object = interp.new_file_executable(&name, routine, parent)?;
     if class != base {
-        executable_as_instance(interp, object, class, base)?;
+        native_as_instance(interp, object, class, base)?;
     }
     super::begin_init(interp, object, &[])
 }

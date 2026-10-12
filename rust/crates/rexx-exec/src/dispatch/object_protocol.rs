@@ -757,14 +757,14 @@ fn duplicate_executable(interp: &mut Interp, original: ObjRef, copy: ObjRef) {
     for scope in [model.method, model.routine] {
         let held = interp
             .pools_of(copy)
-            .and_then(|pools| pools.get(scope, super::construct::EXECUTABLE_ANNOTATIONS));
+            .and_then(|pools| pools.get(scope, super::construct::SUBCLASS_ANNOTATIONS));
         let Some(body) = held.and_then(|table| interp.heap.get(table).map(|t| t.body.clone()))
         else {
             continue;
         };
         let fresh = interp.alloc_with(BehaviourId::OBJECT, body);
         interp.roots.activity_mut().push_temp(fresh);
-        interp.set_pool_variable(copy, scope, super::construct::EXECUTABLE_ANNOTATIONS, fresh);
+        interp.set_pool_variable(copy, scope, super::construct::SUBCLASS_ANNOTATIONS, fresh);
     }
 }
 
@@ -1416,10 +1416,18 @@ impl Interp {
         pools: &rexx_core::ScopePools,
     ) -> Option<ObjRef> {
         let model = self.object_model.as_ref()?;
-        let entry = super::construct::EXECUTABLE_ANNOTATIONS;
+        let entry = super::construct::SUBCLASS_ANNOTATIONS;
         pools
             .get(model.method, entry)
             .or_else(|| pools.get(model.routine, entry))
+    }
+
+    /// [`Interp::executable_subclass_annotations`], or the table a `Package`
+    /// subclass instance holds.
+    pub(crate) fn subclass_annotations(&self, pools: &rexx_core::ScopePools) -> Option<ObjRef> {
+        let model = self.object_model.as_ref()?;
+        self.executable_subclass_annotations(pools)
+            .or_else(|| pools.get(model.package, super::construct::SUBCLASS_ANNOTATIONS))
     }
 
     /// The scope a `Message` subclass instance keeps its message's entries

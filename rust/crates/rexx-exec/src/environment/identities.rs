@@ -645,7 +645,7 @@ impl Interp {
         }
         match self.heap.get(receiver).map(|held| &held.body) {
             Some(Body::Native(native)) => native.annotations(),
-            Some(Body::Instance { pools, .. }) => self.executable_subclass_annotations(pools),
+            Some(Body::Instance { pools, .. }) => self.subclass_annotations(pools),
             _ => None,
         }
         .ok_or_else(|| Loud::receiver_class("a value that carries no annotations").into())

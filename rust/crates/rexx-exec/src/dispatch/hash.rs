@@ -1506,12 +1506,10 @@ fn native_hash_supplier(
     super::collection::new_supplier(interp, items, indexes).map(Some)
 }
 
-/// `TableClass::newRexx` and its siblings: the optional first argument is the
-/// table's initial capacity, and it is **observable** -- it decides the
-/// bucket count, which decides the iteration order. Measured, the same eight
-/// keys in the same order come back differently from `.Table~new` and
-/// `.Table~new(100)`, and both orders are what this store's geometry
-/// predicts.
+/// `TableClass::newRexx` and its siblings: an instance with no store yet and
+/// `INIT` with every argument. The store is sized by `INIT`
+/// ([`initialize_store`]), or at the default capacity on first use by a
+/// subclass whose `INIT` does not forward.
 pub(super) fn native_hash_new(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1519,11 +1517,26 @@ pub(super) fn native_hash_new(
     args: &[Option<ObjRef>],
 ) -> Result<super::NativeStarted, Failure> {
     let class = super::class_receiver(interp, receiver)?;
-    let capacity = super::optional_length_argument(interp, args, 0)?.unwrap_or(0);
     let object = new_instance(interp, class)?;
-    interp.roots.activity_mut().push_temp(object);
-    install_store(interp, object, CONTENTS, calculate_bucket_size(capacity));
     super::begin_init(interp, object, args)
+}
+
+/// `HashCollection::initialize` (`classes/support/HashCollection.cpp:78`):
+/// the store sized for `capacity`, unless the receiver already has one. The
+/// capacity is **observable** -- it decides the bucket count, which decides
+/// the iteration order. Measured, the same eight keys in the same order come
+/// back differently from `.Table~new` and `.Table~new(100)`, and both orders
+/// are what this store's geometry predicts.
+pub(super) fn initialize_store(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    capacity: usize,
+) -> Result<(), Failure> {
+    if !holds_hash_store(interp, receiver) || read_store(interp, receiver, CONTENTS)?.is_some() {
+        return Ok(());
+    }
+    install_store(interp, receiver, CONTENTS, calculate_bucket_size(capacity));
+    Ok(())
 }
 
 // ---- the string-keyed classes' own accessors ----

@@ -1,0 +1,31 @@
+count 30
+/* NEW on a Package subclass: the package the source or file builds becomes
+   an instance of the subclass, so it keeps every package method, its
+   routines answer it as their package, and INIT gets the arguments after the
+   context. */
+say .kg~new('p0', 'say 1')~go
+src = .array~of('say "prolog"', '::routine r public', 'return "rr"', '::class c public')
+x = .k~new('p', src)
+say x~class~id x~go x~name
+say x~routines~hasIndex('R') x~classes~hasIndex('C') x~source~items
+say (x~routines['R']~package == x) x~routines['R']~package~class~id
+say x~annotations~class~id x~findClass('C')~id x~findRoutine('R')~call
+say x~objectName
+y = .ki~new('q', .array~of('nop'), .context~package, 'extra')
+say y~class~id
+say .k~new('p2', .array~of('::routine z', 'return 1'))~routines~items
+.context~package~addPackage(x); say 'added' x~class~id
+signal on syntax name e1
+z = .ka~new('a', .array~of('nop'))
+e1: say 'e1' condition('O')~code condition('O')~message
+exit
+::class k subclass package
+::method go
+  expose v; v = 3; return v
+::class kg subclass package
+::method go
+  expose x; x = 3; return x
+::class ki subclass package
+::method init
+  say 'ki init' arg() arg(1)
+::class ka subclass package abstract

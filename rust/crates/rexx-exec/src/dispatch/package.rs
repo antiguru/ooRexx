@@ -1055,9 +1055,10 @@ fn load_package(
 fn package_new(
     interp: &mut Interp,
     _cleared: Cleared,
-    _receiver: ObjRef,
+    receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<super::NativeStarted, Failure> {
+    let class = super::class_receiver(interp, receiver)?;
     let Some(name) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("name").into());
     };
@@ -1097,6 +1098,10 @@ fn package_new(
         }
     };
     let object = interp.package_object(Package::Program(program));
+    let package_class = interp.package_class();
+    if class != package_class {
+        super::construct::native_as_instance(interp, object, class, package_class)?;
+    }
     // **`INIT` is sent after the package is built, and an argument too many
     // is what it refuses.** Measured, `.Package~new('c3', a, ctx, 'X')` prints
     // the prologue's own line before reporting `93.902 ... 0 expected.` at

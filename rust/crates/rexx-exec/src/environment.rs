@@ -641,18 +641,25 @@ impl Interp {
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
         // search is the package's classes and then the environment
         // directory, and `.local` is not in it.
-        if let hash::DirectoryEntry::Found(found) =
-            self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)?
+        let entry =
+            self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)?;
+        if let hash::DirectoryEntry::Found(found) = entry
             && self.heap.is_class(found)
         {
             return Ok(Some(found));
         }
-        // A name that answers something which is not a class, and a name
-        // whose directory entry this crate has not built, both fall through
+        let found_object = matches!(entry, hash::DirectoryEntry::Found(_));
+        // A name whose directory entry this crate has not built falls through
         // to the native table -- which is where a `::CLASS` target was
         // resolved before `.environment` was ever consulted, so a miss is the
-        // same 98.909 it was.
-        Ok(self.classes().lookup_upper(upper))
+        // same 98.909 it was. A name that answers an object which is not a
+        // class and that the native table does not hold either is 99.949:
+        // measured, oracle rc 157, `::class k subclass rexxinfo`.
+        let native = self.classes().lookup_upper(upper);
+        if native.is_none() && found_object {
+            return Err(crate::error::Raised::not_a_valid_class(upper).into());
+        }
+        Ok(native)
     }
 
     /// What the first of `scopes` whose directory holds `bare` answers for it.

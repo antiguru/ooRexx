@@ -1039,18 +1039,41 @@ impl Interp {
                 native: Some(state),
                 ..
             } if state.renders_its_own_string_value() => Redirect::None,
-            // `StemClass::stringValue` for a `Stem` subclass instance.
-            Body::Instance { pools, .. } if let Some(store) = self.stem_store_in(pools) => {
-                Redirect::StemSubclass(store)
-            }
-            Body::Instance {
-                class, name: None, ..
-            } => Redirect::InstanceDefault(*class),
-            Body::VarRef(reference) => match self.referenced_value(reference) {
-                Some(value) => Redirect::VarRefValue(value),
-                None => Redirect::VarRefUnset,
-            },
+            Body::Instance { .. } => self.instance_redirect(body),
+            Body::VarRef(reference) => self.reference_redirect(reference),
             _ => Redirect::None,
+        }
+    }
+
+    // The two arms below are out of line so that `redirect_of` itself needs
+    // no saved registers on the path every heap string takes.
+
+    /// [`Interp::redirect_of`] for an instance that does not render its own
+    /// state.
+    #[inline(never)]
+    fn instance_redirect(&self, body: &Body) -> Redirect {
+        let Body::Instance {
+            class, name, pools, ..
+        } = body
+        else {
+            return Redirect::None;
+        };
+        // `StemClass::stringValue` for a `Stem` subclass instance.
+        if let Some(store) = self.stem_store_in(pools) {
+            return Redirect::StemSubclass(store);
+        }
+        match name {
+            None => Redirect::InstanceDefault(*class),
+            Some(_) => Redirect::None,
+        }
+    }
+
+    /// [`Interp::redirect_of`] for a `>name` reference.
+    #[inline(never)]
+    fn reference_redirect(&self, reference: &VarRef) -> Redirect {
+        match self.referenced_value(reference) {
+            Some(value) => Redirect::VarRefValue(value),
+            None => Redirect::VarRefUnset,
         }
     }
 

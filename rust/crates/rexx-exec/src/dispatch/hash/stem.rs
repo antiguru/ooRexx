@@ -150,9 +150,12 @@ impl Interp {
         }
     }
 
-    /// [`Interp::stem_subclass_store`] over an instance's pools.
+    /// [`Interp::stem_subclass_store`] over an instance's pools: the one
+    /// entry the `Stem` scope's pool holds, found by the scope alone, which
+    /// keeps the test free of a name comparison on the string-value path.
     pub(crate) fn stem_store_in(&self, pools: &rexx_core::ScopePools) -> Option<ObjRef> {
-        pools.get(self.object_model.as_ref()?.stem, STEM_STORE)
+        let scope = self.object_model.as_ref()?.stem;
+        pools.entries(scope).first().map(|(_, store)| *store)
     }
 }
 

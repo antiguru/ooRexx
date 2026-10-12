@@ -413,6 +413,14 @@ impl Raised {
         Raised::syntax(98, 909, vec![name.to_vec()])
     }
 
+    /// 99.949: a `::CLASS` directive naming a target whose name resolves to
+    /// an object that is not a class (`ClassResolver::lookup`,
+    /// `expression/ExpressionClassResolver.cpp:159`). One substitution, the
+    /// target's upcased spelling.
+    pub(crate) fn not_a_valid_class(name: &[u8]) -> Raised {
+        Raised::syntax(99, 949, vec![name.to_vec()])
+    }
+
     /// 98.908: a `::CLASS` directive naming a `METACLASS` target no name
     /// resolves to. One substitution, the target's upcased spelling.
     pub(crate) fn metaclass_not_found(name: &[u8]) -> Raised {
