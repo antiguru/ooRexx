@@ -1,0 +1,2130 @@
+# Review package: 5d12347c0..ccd4d4f02
+
+## Commits
+ccd4d4f02 Phase 9a Task 9 report; the Package hang is TESTRECLAIM01's loop
+7d7036e3a Phase 9a Task 9: ReleaseLocalReference unroots its handle
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-9-report.md       | 146 +++++++++++++
+ .../queued/2026-10-12-package-as-real-object.md    |  34 +++
+ docs/superpowers/plans/2026-10-11-phase-9a.md      |   4 +
+ docs/superpowers/plans/phase-4-exclusions.txt      |  14 +-
+ docs/superpowers/plans/phase-9a-gate.md            |   4 +-
+ rust/crates/rexx-api/src/callbacks.rs              |  61 +++---
+ rust/crates/rexx-api/src/ffi.rs                    |   2 +-
+ rust/crates/rexx-api/src/handles.rs                |  58 ++++-
+ rust/crates/rexx-api/src/values.rs                 |  26 ++-
+ rust/crates/rexx-api/src/values/convert.rs         |  18 +-
+ rust/crates/rexx-api/tests/handles.rs              |  57 ++++-
+ rust/crates/rexx-core/src/roots.rs                 |  10 +
+ rust/crates/rexx-exec/src/dispatch/library.rs      |  49 ++++-
+ .../crates/rexx-exec/src/dispatch/library/tests.rs |  69 ++++++
+ rust/crates/rexx-exec/src/lib.rs                   |   3 +
+ rust/crates/rexx-exec/src/run/tests.rs             |   1 +
+ rust/crates/rexx-exec/src/tests.rs                 |   2 +
+ .../rexx-exec/tests/release_local_reference.rs     | 234 +++++++++++++++++++++
+ .../tests/release_local_reference/relloop.cpp      |  19 ++
+ .../tests/release_local_reference/relsem.cpp       |  65 ++++++
+ 20 files changed, 806 insertions(+), 70 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md
+new file mode 100644
+index 000000000..abd9fff9c
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md
+@@ -0,0 +1,146 @@
++# Phase 9a Task 9 report: `ReleaseLocalReference` and the `Package` hang
++
++BASE `5d12347c0`. Code commit `7d7036e3a`. Status: Steps 1 and 2 done; Step 3 diagnosed, not fixed (its
++premise was wrong and the cause is the deferred package-as-object work).
++
++## Steps 1 and 2: the release
++
++### Memory, `release_local_reference.rs`
++
++`relloop.cpp` (the queued note's probe, verbatim) built by the test with `c++ -shared -fPIC -O1
++-I<repo>/api -I<repo>/api/platform/unix` into `CARGO_TARGET_TMPDIR`; `say RelLoop(n)` run under
++`memcap 2G timeout -k 5 120 /usr/bin/time -f %M -o <file> rexx-run`, so `time` reads the
++interpreter's own rusage. The test asserts the 2,000,000-pass peak is at most twice the 200,000-pass
++one.
++
++| side | 200,000 | 2,000,000 |
++|---|---|---|
++| crate at `5d12347c0` (test red) | 59572 KB | 430344 KB |
++| crate at `7d7036e3a` | 32168 KB | 32220 KB |
++| oracle | 19980 KB | 20864 KB |
++
++Crate rows from the test's own failure message (before) and from the same command by hand on the
++built binary (after); oracle rows from `( ulimit -v 1048576; LD_LIBRARY_PATH=<oracle lib>:<probe dir>
++timeout -k 5 20 /usr/bin/time -f '%M KB %e s' <oracle>/bin/rexx FILE )` in a fresh empty directory.
++
++### What changed
++
++* `handles::Table::release` moves the handle from the rooted entries to a `released` map that
++  `roots()` does not report. A released handle resolves while the host says its object lives
++  (`Table::resolve_live`; `Interp` checks `heap.peek` with the generation), and the map drops swept
++  objects each time it passes twice its last size (floor 4096). `Table::remove` is gone.
++* `Host::register_local` (default: register) and `Host::release_local` (default: release, all live).
++  Every `cx.host.locals().register(...)` in `rexx-api` now goes through `register_local`.
++  `Interp::register_local` also pops the top temporary when it is that object and lies above the
++  native frame's `temps_floor` (taken at `push_native_frame`): the Host constructors push what they
++  mint as a temp, and those temps were never popped inside a call, which held every string.
++* `end_library_method` / `end_library_routine` push the call's answer as a temp before the frame
++  pops, since the temp that used to root it can now be popped.
++* `phase-4-exclusions.txt`: the M2 row is DELIVERED with the figures; the CLOSED row no longer says
++  "rooted until the call ends", and says a use after a collection took the object is refused loudly.
++
++Each part is load-bearing for the memory test, by mutation then exact restore (`git diff --stat`
++checked after each): no temp pop, 429404 KB vs 57016 KB, red; release keeps the entry, 491352 vs
++61408, red; released map never pruned, 135056 vs 36348, red. A release that clears every entry
++reddens the two semantics tests. **Removing the answer's temp reddens nothing**: `collect_stress`,
++the stress test, and a stress probe that concatenates two heap-sized native answers under `trace i`
++all stay green. It restores the rooting the popped temp gave; no path needing it was found.
++
++### Release semantics, oracle-probed
++
++`relsem.cpp`, built against `api/`, run as `say RelTwice()`, `RelStash()`, `RelStale()`,
++`RelOne(1000000)`, `RelLength()`, `'end'`. Oracle and crate (`7d7036e3a`), stdout byte-identical,
++stderr empty, rc 0 on both:
++
++```
++released twice
++kept
++stale released
++held among many
++18
++end
++```
++
++* Double release (`RelTwice`): no-op the second time on both. Oracle: `removeLocalReference`
++  (`interpreter/execution/NativeActivation.cpp:1219`) on an object no longer in `saveList` removes
++  nothing.
++* Release of a handle this call never held, through a context kept from an earlier call
++  (`RelStash`/`RelStale`): no-op on both. The oracle's stub (`ReleaseLocalReference`,
++  `interpreter/api/ThreadContextStubs.cpp:145`) builds an `ApiContext` from the thread context, which
++  is the activity's current native activation (`interpreter/api/ContextApi.hpp:64`-`:70`), so it removes from the
++  running call's list, which does not hold it. Here `Table::release` ignores a handle `entries`
++  does not hold, and does not add it to `released`.
++* Release leaves the others: `RelOne` releases one string of two and then 1,000,000 more; the held
++  one answers on both. Under `run_program_collect_every_alloc` (test
++  `under_a_collection_at_every_allocation_only_the_released_string_goes`, `RelOne(50)`) it still
++  answers, and the unit test `a_released_local_reference_is_collectable_inside_its_call` shows the
++  released object swept and the held one kept by `collect_now`.
++* Read after release (`RelLength`, 18): answers on both while no collection runs.
++* A released handle used after a collection took its object: under the stress mode `RelTwice`'s
++  string is collected at the stub's return and the crate ends rc 120 with `rexx-exec: the handle is
++  no longer held by this activation is not implemented`. The oracle would read a freed object there.
++
++## Step 3: the `Package` hang
++
++**There is no hang at program end.** `TESTRECLAIM01`
++(`ootest/ooRexx/base/class/Package.testGroup:155`) drops a package, wraps it in a `WeakReference`
++and loops `until package~value == .nil` with no bound. Every package object here is a global root
++(`Interp::package_object`, `environment/identities.rs`), so the loop never ends.
++
++How it was found:
++
++1. Harness, at `7d7036e3a`: `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package cargo test
++   --release -p rexx-exec --test suite`: crate run 1 killed at 60 s with `TESTRECLAIM01` the last
++   started test; run 2, it renamed out, ended normally with `Tests ran: 79`. Verdict red: not passed
++   `TESTRECLAIM01 TEST_NEW01 TEST_PROLOG`, `TESTRECLAIM01=timeout after 60 s`, oracle 80 of 80.
++   `StringTable~items` and `Directory~items` no longer refuse, so the scout's two renames are gone.
++2. The whole group by hand in a copy, nothing renamed out, under `timeout 90` and then `timeout 400`:
++   both printed a full summary (`Tests ran: 80`) with `Test execution` 00:01:29.97 and 00:06:39.97,
++   that is, the bound; `TESTRECLAIM01` failed with `SYNTAX 4.1 ... Program interrupted with HALT
++   condition`. The kill's `SIGTERM` halted the loop and the framework then finished. That is the
++   "summary then no exit" the scout saw.
++3. Standalone, from a fresh directory, one allocation round of 100 x `copies('x', 1000000)` per pass,
++   at most 10 passes: for each of `.package~new(file)`, `.package~new('src', source)`, and
++   `.package~new(file)` followed by a dropped `Routine` (one `::requires`-ing the file, one not), the
++   oracle clears the weak reference after 1 pass and the crate clears none of them in 10.
++
++The oracle caches a loaded package weakly (`PackageManager::addToRequiresCache`,
++`interpreter/package/PackageManager.cpp:921`). Making a package object collectable here needs the
++package to be a heap object that routines, methods, classes and activations reference, which is
++`.superpowers/sdd/queued/2026-10-12-package-as-real-object.md` (Moritz 2026-10-12, deferred). Doing a
++narrower version (dropping the global root) would clear a weak reference while a routine of that
++package still lives, a new identity rule; so no fix and no crate test that pins today's retention.
++
++Recorded where the next reader looks: the plan's Task 9 Step 3 carries a correction, the gate record's
++line on `TESTRECLAIM01` is corrected, and the queued note carries the symptom.
++
++**Group verdict**: before and after this task, red with `TESTRECLAIM01` blocked by `timeout after
++60 s`, `TEST_NEW01` and `TEST_PROLOG` failing (the run above, after the release change, which does
++not touch packages).
++
++## Checks (each run in the foreground, statuses read unpiped)
++
++`CARGO_TARGET_DIR=/tmp/claude-1000/p9/t9-target CARGO_INCREMENTAL=0 memcap 8G`, `-j 8` (load 1 to 9).
++
++| command | status |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `cargo clippy -p rexx-core -p rexx-api -p rexx-exec --all-targets -- -D warnings` | 0 |
++| `cargo test --release -p rexx-api -p rexx-core` | 0 |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus --test refusal_sites --test refusal_dispositions --test phase_ten_reasons --test closed_phases --test owners --test api_group_tests --test api_group_partition --test release_local_reference --test library_routine_memory --test native_entries` | 0 (corpus 29 passed, 1 ignored) |
++| `cargo test --release -p rexx-exec --test collect_stress --lib` | 0 (lib 1087, collect_stress 37) |
++| `REXX_CORPUS_GATE=1 cargo test -p rexx-exec --test release_local_reference --test api_group_tests --test corpus` (debug) | 0 |
++| `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package cargo test --release -p rexx-exec --test suite` | 101 (the group's red verdict above; the other 49 tests pass) |
++
++No `Loud` constructor added or relabelled, so `refusal-sites.tsv` is unchanged. No new `unsafe`, no
++new dependency. No `.rex` file added (the test programs are inline).
++
++## Concerns
++
++1. Step 3 is not fixed: it needs the deferred package-as-object design.
++2. The answer temp in `end_library_*` has no witness that fails without it.
++3. A use after release that meets a collection is a loud rc 120 here. M1's reading in the exclusions
++   file is that the collection-timing licence does not cover an rc or stderr difference; the row now
++   rests on "a use after release is outside the API contract", as the kept-handle row does. That is a
++   ruling for the controller to confirm.
++4. The crate still peaks 32 MB against the oracle's 20 MB for this loop, flat in the pass count.
+diff --git a/.superpowers/sdd/queued/2026-10-12-package-as-real-object.md b/.superpowers/sdd/queued/2026-10-12-package-as-real-object.md
+new file mode 100644
+index 000000000..472972423
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-10-12-package-as-real-object.md
+@@ -0,0 +1,34 @@
++# Package becomes a real object; sweep for other built-ins that should be
++
++Moritz 2026-10-12: "We'll need to turn Package into a real class/object, with a handle to the
++built-in data. We can defer building this, and when we do we should combine it with a sweep over
++what else should be real classes rather than built-ins. We can add more classes if it helps us, as
++long as they're somewhat namespaced."
++
++Today a Package object is an identity: `object_packages` maps its ObjRef to `Package::{Rexx,
++Program(ProgramId)}`, and its state lives in per-ProgramId side maps on `Interp` (options, security
++managers, routines and public/merged routines, classes and public/merged classes, namespaces,
++imports, parents, required paths, routine objects, compiled method names; `rust/crates/rexx-exec/src/lib.rs`).
++
++Symptoms found in Phase 9a Task 8b: `Package~copy` must find and clone every map (an exhaustive
++destructuring guards it); the REXX package cannot be copied (no ProgramId); copies are never
++collected (~5.8 kB each, queued in 2026-10-12-gc-trigger-blind-to-class-weight.md); each new
++per-package feature adds a map the collector must trace.
++
++Target shape: a heap object holding the mutable per-package state as fields plus a handle to the
++immutable compiled program (`Rc<Program>`); copy is a field copy sharing the program; the collector
++traces and frees it; activations hold the package ObjRef.
++
++Scope when built: combine with a sweep over every other built-in kept as side-table state keyed by
++an id rather than as an object (candidates to find, not a list to trust). New internal classes are
++allowed if they help, as long as they are namespaced. Start with a scout mapping each side map, its
++readers, and which sit on the CALL / send hot path (callgrind before and after).
++
++Owner: deferred (not Phase 9a).
++
++Symptom found in Phase 9a Task 9: `base/class/Package`'s `TESTRECLAIM01` wraps a package in a
++`WeakReference` and loops until it is `.nil`; every package object here is a global root
++(`Interp::package_object`), so the loop never ends, and the oracle's requires cache holds its
++packages weakly (`PackageManager::addToRequiresCache`, `interpreter/package/PackageManager.cpp:921`).
++Even `.package~new('src', source)`, dropped, stays: the crate's weak reference is not cleared in
++10 passes of 100 `copies('x', 1000000)`, the oracle's after 1.
+diff --git a/docs/superpowers/plans/2026-10-11-phase-9a.md b/docs/superpowers/plans/2026-10-11-phase-9a.md
+index e993eb262..db23a0298 100644
+--- a/docs/superpowers/plans/2026-10-11-phase-9a.md
++++ b/docs/superpowers/plans/2026-10-11-phase-9a.md
+@@ -358,20 +358,24 @@ site.
+       `c++ -shared -fPIC -O1 -I<repo>/api -I<repo>/api/platform/unix` (fails if no `c++`), runs a
+       program calling it at 200,000 and 2,000,000 iterations under `memcap 2G`, reads peak RSS from the
+       child's rusage, and asserts the second is at most twice the first. It fails today (430 MB).
+ - [ ] **Step 2:** Implement: a released local reference drops from the call's rooted set so a
+       collection inside a long native call can reclaim it, as `NativeActivation::removeLocalReference`
+       does. Update `phase-4-exclusions.txt:6179`'s row to delivered.
+ - [ ] **Step 3:** `base/class/Package` hangs at program end after its summary (scout A section 4).
+       Bisect by renaming tests out (the harness's `REXX_SUITE_GROUPS` plus a rename list) to the test
+       that leaves the state behind, then fix it with a crate test that reproduces it in one program.
+       Per-task check. Commit.
++      Corrected by Task 9 (2026-10-12): there is no hang at program end. `TESTRECLAIM01` loops until
++      a package it dropped is collected, and this crate never collects a package object; the summary
++      printed only because the kill's `SIGTERM` halted that loop (4.1 in `TESTRECLAIM01`, test
++      execution equal to the bound). Owned by `.superpowers/sdd/queued/2026-10-12-package-as-real-object.md`.
+ 
+ ### Task 10: 9a close
+ 
+ **Files:** `phase-9a-gate.md`, `.superpowers/sdd/queued/` (items found, one file each).
+ 
+ - [ ] **Step 1:** Commit, then run in the background with a status file:
+       `REXX_CORPUS_GATE=1 timeout 2400 memcap 8G cargo test -j 4 --workspace --release --no-fail-fast`
+       (the sub-phase close command, spec section 9) and the whole suite (`REXX_SUITE_GATE=1`).
+ - [ ] **Step 2:** The gate record, each spec 9a gate item with its evidence: the suite table and
+       wall time; every section 3 refusal's witness; the row-file test, the D3 test; the denominator
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 6428bea96..e4b9aa0f6 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -6186,28 +6186,31 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
+   `call SysSleep 0` is rc 0 with result 0 on both (syssleep.rex); what is
+   missing is the package name. The roadmap's D11 reads "Decision: build the
+   `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in
+   Phase 10." OWNER: Phase 9, as non-macrospace RexxUtil (Phase 9 spec R2);
+   binding the internal package's names is new mechanism beside `LIBRARY
+   REXX`'s. Row 521's ::REQUIRES LIBRARY and ::CONSTANT-before-EXTERNAL
+   shapes match (constlib.rex rc 214, constlib2.rex rc 166, reqlib.rex rc 0,
+   each identical on all three descriptors).
+ 
+   A RELEASED LOCAL REFERENCE RETURNED BY A NATIVE ROUTINE WAS REFUSED.
+-  CLOSED at Phase 8's close (Task 9, ruling 3): ReleaseLocalReference keeps
+-  the handle resolvable and rooted until the call ends. The forge's
++  CLOSED at Phase 8's close (Task 9, ruling 3): a released handle resolves
++  while its object lives. The forge's
+   StaleRet makes a string, releases its local reference and returns it
+   (stale.rex): "got released" and "after", rc 0, on both. The oracle's
+   release leaves the object to its next collection, so where a collection
+   runs mid-call the two may differ, which Moritz's ruling of 2026-09-01
+   licenses ("anything that depends on gc ordering is inherently
+-  unpredictable", docs/superpowers/plans/2026-08-27-phase-5b.md). No
++  unpredictable", docs/superpowers/plans/2026-08-27-phase-5b.md). Where a
++  collection here takes the released object first, the use is refused
++  loudly (rc 120, release_local_reference.rs's stress test): a use after
++  release is outside the API contract, as the kept handle's below is. No
+   oracle-built extension on this host releases a local reference (only
+   ooDialog does), so the witnesses are rexx-api's
+   a_released_local_reference_still_answers, red with the old removal
+   restored, and the forge probe.
+   A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED. The forge's
+   StashLocal keeps a string's local handle in a static and UseStashed
+   returns it on the next call (stash.rex): the oracle prints "use stashed",
+   rc 0; ours ends at rc 120 with "rexx-exec: the handle is no longer held by
+   this activation is not implemented". The oracle's object is unrooted once
+   the first call ends and answers only while no collection has run; this
+@@ -6224,11 +6227,14 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
+   ReleaseLocalReference FREES NOTHING UNTIL THE NATIVE CALL ENDS (Phase 8
+   final review M2, 2026-09-29). Since da17061ba the released handle stays
+   resolvable and rooted for the call, and no collection runs inside a native
+   call, so an extension that allocates and releases in a loop holds every
+   object until it returns: a 2M-iteration release loop peaks at 430 MB here
+   against the oracle's 20 MB (348 MB at 2ae06085c, before the change). The
+   oracle's release drops the object from the activation's save list
+   (NativeActivation::removeLocalReference,
+   interpreter/execution/NativeActivation.cpp:1219). Output and rc agree.
+   OWNER: Phase 9 (peak memory stops growing with the loop count, Phase 9 spec
+-  section 3).
++  section 3). DELIVERED, Phase 9a Task 9: a release unroots that handle, a
++  local registered from a temporary the call pushed pops it, and the loop
++  peaks at 32168 KB at 200,000 passes and 32220 KB at 2,000,000 (oracle 19980
++  and 20864); rust/crates/rexx-exec/tests/release_local_reference.rs.
+diff --git a/docs/superpowers/plans/phase-9a-gate.md b/docs/superpowers/plans/phase-9a-gate.md
+index 12dea6876..f0dc70c6a 100644
+--- a/docs/superpowers/plans/phase-9a-gate.md
++++ b/docs/superpowers/plans/phase-9a-gate.md
+@@ -111,22 +111,22 @@ D1: 324 groups green, 78 red.
+   `base/keyword/TRACE_TraceObject`, `base/keyword/VarRef`, `base/rexxutil/SysDumpVariables`,
+   `base/rexxutil/SysFileDateTime`, `base/rexxutil/SysFileSearch`, `base/rexxutil/SysFileTree`,
+   `base/rexxutil/SysFileXXX`, `base/rexxutil/SysFormatMessage`, `base/rexxutil/SysSearchPath`,
+   `base/rexxutil/SysStemCopy`, `base/rexxutil/SysStemDelete`, `base/rexxutil/SysStemInsert`,
+   `base/rexxutil/SysStemSort`, `base/rexxutil/platform/unix/SysGetMessage`,
+   `base/rexxutil/platform/unix/tilde`, `base/runtime.objects/environmentEntries`,
+   `base/security.manager/SecurityManager`, `base/source.file/SourceFile`,
+   `base/source.file/incorrectCharacters`, `doc/rexxref/chapter5/Section1`,
+   `utilities/rexx/rexx_command`, `utilities/rexxc/rexxc`.
+ 
+-`base/class/Package`'s `TESTRECLAIM01` is blocked by `timeout after 60 s`: the hang at program end
+-Task 9 isolates.
++`base/class/Package`'s `TESTRECLAIM01` is blocked by `timeout after 60 s`: it loops until a package it
++dropped is collected, and this crate never collects a package object (Task 9's report).
+ 
+ The run before it, at `717ab354b`, found the enumeration missing what `getTestMethods` runs
+ (block comments, quoted names with blanks, `::CONSTANT` and `::ATTRIBUTE` methods, class methods)
+ and the four `STREAM`/`Stream` relative-file failures on the oracle; `2415e1733` fixed both.
+ 
+ **The `STREAM`/`Stream` finding.** The harness's copy causes the four oracle failures. Each test
+ opens a group file outside its own group's directory by a relative path
+ (`base/class/Array.testGroup` and `API/oo/CONVERSION.testGroup` from `base/bif`,
+ `base/bif/STREAM.testGroup` from `base/class`), and the copy held only the group's own directory.
+ `suite.rs`'s `NEIGHBOURS` copies those files where the checkout has them; the four pass on the oracle
+diff --git a/rust/crates/rexx-api/src/callbacks.rs b/rust/crates/rexx-api/src/callbacks.rs
+index 19016fedd..cc488669b 100644
+--- a/rust/crates/rexx-api/src/callbacks.rs
++++ b/rust/crates/rexx-api/src/callbacks.rs
+@@ -305,38 +305,38 @@ impl Activation<'_> {
+         serve(&mut cx)
+     }
+ 
+     /// The object `handle` names in this activation, or `None`.
+     fn resolve(&self, handle: RexxObjectPtr) -> Option<ObjRef> {
+         self.conversion().host.resolve(handle)
+     }
+ 
+     /// `object` registered as a local reference.
+     fn register(&self, object: ObjRef) -> RexxObjectPtr {
+-        self.conversion().host.locals().register(object)
++        self.conversion().host.register_local(object)
+     }
+ 
+     /// `Int64ToObject`, `IntptrToObject` and `Int32ToObject`, which are
+     /// `wholenumberToObject` for a value that fits a pointer.
+     pub fn signed_object(&self, value: i64) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let value = isize::try_from(value).expect("a pointer is 64 bits");
+         let object = cx.host.whole_number(value);
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `UnsignedInt64ToObject`, `UintptrToObject`, `StringSizeToObject` and
+     /// `UnsignedInt32ToObject`.
+     pub fn unsigned_object(&self, value: u64) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let object = cx.host.unsigned_number(value);
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `handle`'s value as a whole number from `min` to `max`, which is
+     /// `objectToSignedInteger` and `objectToWholeNumber`, or `None`.
+     pub fn signed_value(&self, handle: RexxObjectPtr, min: i64, max: i64) -> Option<i64> {
+         let object = self.resolve(handle)?;
+         let found = self.conversion().host.signed_integer(object, min, max);
+         found
+             .ok()
+             .flatten()
+@@ -367,33 +367,33 @@ impl Activation<'_> {
+ 
+     /// `LogicalToObject`: `.true` for any value but zero.
+     pub fn logical_object(&self, value: bool) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let constants = cx.host.constants();
+         let object = if value {
+             constants.true_object
+         } else {
+             constants.false_object
+         };
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `DoubleToObject`.
+     pub fn double_default_object(&self, value: f64) -> RexxObjectPtr {
+         self.double_object(value, DOUBLE_DIGITS)
+     }
+ 
+     /// `NewString` and `NewStringFromAsciiz`.
+     pub fn string_object(&self, bytes: &[u8]) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let object = cx.host.new_string(bytes);
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `valueToObject` over one descriptor an extension filled, whose
+     /// `CSTRING` value, where it has one, is `text`.
+     fn value_object(&self, declared: u16, value: Value, text: Option<&[u8]>) -> Option<ObjRef> {
+         let mut cx = self.conversion();
+         let value = match (value, text) {
+             (Value::CString(_), Some(text)) => Value::CString(cx.strings.intern(text)),
+             (value, _) => value,
+         };
+@@ -422,21 +422,21 @@ impl Activation<'_> {
+             .map(|(declared, value, text)| self.value_to_object(*declared, *value, text.as_deref()))
+             .collect();
+         let items: Vec<Option<ObjRef>> =
+             handles.iter().map(|handle| self.resolve(*handle)).collect();
+         self.with_surface(
+             "RexxThreadInterface.ValuesToObject",
+             std::ptr::null_mut(),
+             |cx| {
+                 let surface = cx.host.surface().expect("checked by with_surface");
+                 let array = surface.new_array(&items);
+-                cx.host.locals().register(array)
++                cx.host.register_local(array)
+             },
+         )
+     }
+ 
+     /// `RaiseException0`: a host that serves the callback tables holds the
+     /// condition itself, and one that does not records it here.
+     pub fn raise_syntax(&self, number: usize) {
+         let mut cx = self.conversion();
+         match cx.host.surface() {
+             Some(surface) => surface.raise_exception(number, None),
+@@ -515,21 +515,21 @@ impl Activation<'_> {
+     }
+ 
+     /// `GetConditionInfo`, null where no condition is held.
+     pub fn condition_info(&self) -> RexxObjectPtr {
+         self.with_surface(
+             "RexxThreadInterface.GetConditionInfo",
+             std::ptr::null_mut(),
+             |cx| {
+                 let surface = cx.host.surface().expect("checked by with_surface");
+                 match surface.condition_object() {
+-                    Some(object) => cx.host.locals().register(object),
++                    Some(object) => cx.host.register_local(object),
+                     None => std::ptr::null_mut(),
+                 }
+             },
+         )
+     }
+ 
+     /// `DisplayCondition`.
+     pub fn display_condition(&self) -> isize {
+         // `Error_Interpretation / 1000`, the stub's own answer where the
+         // call fails (`interpreter/api/ThreadContextStubs.cpp:1948`).
+@@ -545,21 +545,21 @@ impl Activation<'_> {
+     /// for a handle this activation does not hold.
+     pub fn decode_condition(&self, handle: RexxObjectPtr) -> Option<DecodedCondition> {
+         let directory = self.resolve(handle)?;
+         self.with_surface("RexxThreadInterface.DecodeConditionInfo", None, |cx| {
+             let mut entry = |name: &[u8]| {
+                 let object = cx
+                     .host
+                     .surface()
+                     .expect("checked by with_surface")
+                     .directory_entry(directory, name)?;
+-                Some((object, cx.host.locals().register(object)))
++                Some((object, cx.host.register_local(object)))
+             };
+             let code = entry(b"CODE");
+             let rc = entry(b"RC");
+             let position = entry(b"POSITION");
+             let handle = |found: Option<(ObjRef, RexxObjectPtr)>| {
+                 found.map_or(std::ptr::null_mut(), |(_, handle)| handle)
+             };
+             let decoded = DecodedCondition {
+                 code: 0,
+                 rc: 0,
+@@ -605,40 +605,40 @@ impl Activation<'_> {
+ 
+     /// `ObjectToString`.
+     pub fn object_to_string(&self, handle: RexxObjectPtr) -> RexxObjectPtr {
+         self.with_object(
+             "RexxThreadInterface.ObjectToString",
+             handle,
+             std::ptr::null_mut(),
+             |cx, object| {
+                 let surface = cx.host.surface().expect("checked by with_surface");
+                 match surface.request_string(object) {
+-                    Some(string) => cx.host.locals().register(string),
++                    Some(string) => cx.host.register_local(string),
+                     None => std::ptr::null_mut(),
+                 }
+             },
+         )
+     }
+ 
+     /// `ObjectToStringValue`: the string value's bytes, at one address per
+     /// string kept as by [`Conversion::c_string_for`].
+     pub fn object_to_string_value(&self, handle: RexxObjectPtr) -> CSTRING {
+         self.with_object(
+             "RexxThreadInterface.ObjectToStringValue",
+             handle,
+             std::ptr::null(),
+             |cx, object| {
+                 let surface = cx.host.surface().expect("checked by with_surface");
+                 let Some(string) = surface.request_string(object) else {
+                     return std::ptr::null();
+                 };
+-                cx.host.locals().register(string);
++                cx.host.register_local(string);
+                 let bytes = cx.host.string_value_text(string);
+                 cx.c_string_for(string, &bytes)
+             },
+         )
+     }
+ 
+     /// A string object's bytes, or `None` for a handle this activation does
+     /// not hold or an object that is not a string.
+     pub fn string_bytes(&self, handle: RexxObjectPtr) -> Option<Vec<u8>> {
+         let object = self.resolve(handle)?;
+@@ -698,21 +698,21 @@ impl Activation<'_> {
+         self.with_surface(
+             "RexxThreadInterface.NewBufferString",
+             std::ptr::null_mut(),
+             |cx| {
+                 let string = cx
+                     .host
+                     .surface()
+                     .expect("checked by with_surface")
+                     .new_raw_string(length);
+                 cx.strings.writable(string, length);
+-                cx.host.locals().register(string)
++                cx.host.register_local(string)
+             },
+         )
+     }
+ 
+     /// `BufferStringLength`: the length the string was made at.
+     pub fn buffer_string_length(&self, handle: RexxObjectPtr) -> usize {
+         let Some(object) = self.resolve(handle) else {
+             return 0;
+         };
+         let cx = self.conversion();
+@@ -760,21 +760,21 @@ impl Activation<'_> {
+     pub fn new_buffer(&self, length: usize) -> RexxObjectPtr {
+         self.with_surface(
+             "RexxThreadInterface.NewBuffer",
+             std::ptr::null_mut(),
+             |cx| {
+                 let buffer = cx
+                     .host
+                     .surface()
+                     .expect("checked by with_surface")
+                     .new_buffer(length);
+-                cx.host.locals().register(buffer)
++                cx.host.register_local(buffer)
+             },
+         )
+     }
+ 
+     /// `BufferData` and `BufferLength`.
+     pub fn buffer_data(
+         &self,
+         slot: &'static str,
+         handle: RexxObjectPtr,
+     ) -> Option<(POINTER, usize)> {
+@@ -790,21 +790,21 @@ impl Activation<'_> {
+     pub fn new_mutable_buffer(&self, capacity: usize) -> RexxObjectPtr {
+         self.with_surface(
+             "RexxThreadInterface.NewMutableBuffer",
+             std::ptr::null_mut(),
+             |cx| {
+                 let buffer = cx
+                     .host
+                     .surface()
+                     .expect("checked by with_surface")
+                     .new_mutable_buffer(capacity);
+-                cx.host.locals().register(buffer)
++                cx.host.register_local(buffer)
+             },
+         )
+     }
+ 
+     /// `MutableBufferData`, `MutableBufferLength` and `MutableBufferCapacity`.
+     pub fn mutable_buffer(
+         &self,
+         slot: &'static str,
+         handle: RexxObjectPtr,
+     ) -> Option<(POINTER, usize, usize)> {
+@@ -903,41 +903,41 @@ impl Activation<'_> {
+         arguments: &[Argument<'_>],
+     ) -> Option<ObjRef> {
+         let receiver = receiver?;
+         let mut objects = Vec::with_capacity(arguments.len());
+         for argument in arguments {
+             objects.push(match argument {
+                 Argument::Handle(handle) => self.resolve(*handle),
+                 Argument::Text(bytes) => {
+                     let mut cx = self.conversion();
+                     let string = cx.host.new_string(bytes);
+-                    cx.host.locals().register(string);
++                    cx.host.register_local(string);
+                     Some(string)
+                 }
+                 Argument::Number(number) => {
+                     let mut cx = self.conversion();
+                     let value = isize::try_from(*number).unwrap_or(isize::MAX);
+                     let object = cx.host.whole_number(value);
+-                    cx.host.locals().register(object);
++                    cx.host.register_local(object);
+                     Some(object)
+                 }
+             });
+         }
+         self.with_surface(slot, None, |cx| {
+             let answer = cx
+                 .host
+                 .surface()
+                 .expect("checked by with_surface")
+                 .send(receiver, name, None, &objects)
+                 .ok()
+                 .flatten()?;
+-            cx.host.locals().register(answer);
++            cx.host.register_local(answer);
+             Some(answer)
+         })
+     }
+ 
+     /// [`Activation::send_to`] answering a handle, null for nothing.
+     fn send_for_handle(
+         &self,
+         slot: &'static str,
+         receiver: Option<ObjRef>,
+         name: &[u8],
+@@ -1021,21 +1021,21 @@ impl Activation<'_> {
+             return std::ptr::null_mut();
+         }
+         self.send_for_handle(slot, collection, b"REMOVE", &[index])
+     }
+ 
+     /// Holds `Error_Incorrect_method_positive` for the argument at `position`.
+     fn raise_not_positive(&self, slot: &'static str, position: usize) {
+         let position = {
+             let mut cx = self.conversion();
+             let object = cx.host.whole_number(isize::try_from(position).unwrap_or(0));
+-            cx.host.locals().register(object)
++            cx.host.register_local(object)
+         };
+         self.raise_with(slot, INCORRECT_METHOD_POSITIVE, &[position]);
+     }
+ 
+     /// `ArrayAt`: `safeGet`, null beyond the array's size.
+     pub fn array_at(&self, array: RexxObjectPtr, index: usize) -> RexxObjectPtr {
+         const SLOT: &str = "RexxThreadInterface.ArrayAt";
+         if index == 0 {
+             self.raise_not_positive(SLOT, 1);
+             return std::ptr::null_mut();
+@@ -1107,21 +1107,21 @@ impl Activation<'_> {
+ 
+     /// `ArrayOfOne` to `ArrayOfFour`: a null handle an empty slot.
+     pub fn array_of(&self, slot: &'static str, items: &[RexxObjectPtr]) -> RexxObjectPtr {
+         let items: Vec<Option<ObjRef>> = items.iter().map(|item| self.resolve(*item)).collect();
+         self.with_surface(slot, std::ptr::null_mut(), |cx| {
+             let array = cx
+                 .host
+                 .surface()
+                 .expect("checked by with_surface")
+                 .new_array(&items);
+-            cx.host.locals().register(array)
++            cx.host.register_local(array)
+         })
+     }
+ 
+     /// `NewDirectory`, `NewStringTable` and `NewStem`'s nameless form: the
+     /// class's `NEW` with `arguments`.
+     pub fn new_instance_of(
+         &self,
+         slot: &'static str,
+         id: &str,
+         arguments: &[Argument<'_>],
+@@ -1200,21 +1200,21 @@ impl Activation<'_> {
+         table: RexxObjectPtr,
+         serve: impl FnOnce(&mut dyn Surface, ObjRef) -> Option<Result<Option<ObjRef>, ()>>,
+     ) -> Option<RexxObjectPtr> {
+         let collection = self.resolve(table)?;
+         self.with_surface(slot, None, |cx| {
+             let answered = serve(
+                 cx.host.surface().expect("checked by with_surface"),
+                 collection,
+             )?;
+             Some(match answered {
+-                Ok(Some(object)) => cx.host.locals().register(object),
++                Ok(Some(object)) => cx.host.register_local(object),
+                 Ok(None) | Err(()) => std::ptr::null_mut(),
+             })
+         })
+     }
+ 
+     /// `SupplierItem` and `SupplierIndex`.
+     pub fn supplier_object(
+         &self,
+         slot: &'static str,
+         supplier: RexxObjectPtr,
+@@ -1297,21 +1297,21 @@ impl Activation<'_> {
+ 
+     /// Runs `serve` against the host's surface, answering its object as a
+     /// handle, null for none.
+     fn surface_handle(
+         &self,
+         slot: &'static str,
+         serve: impl FnOnce(&mut dyn Surface) -> Option<ObjRef>,
+     ) -> RexxObjectPtr {
+         self.with_surface(slot, std::ptr::null_mut(), |cx| {
+             match serve(cx.host.surface().expect("checked by with_surface")) {
+-                Some(object) => cx.host.locals().register(object),
++                Some(object) => cx.host.register_local(object),
+                 None => std::ptr::null_mut(),
+             }
+         })
+     }
+ 
+     /// `GetContextVariable`. `outer` is the host frame of the call whose
+     /// context it came through, where that is not this call: a context kept
+     /// from an enclosing call reaches that call's caller, as the oracle's
+     /// blocking members use the context's own activation
+     /// (`interpreter/api/ContextApi.hpp:108`).
+@@ -1390,21 +1390,21 @@ impl Activation<'_> {
+         let Some(object) = self.resolve(handle) else {
+             return std::ptr::null_mut();
+         };
+         let mut cx = self.conversion();
+         let stem = if cx.host.is_stem(object) {
+             Some(object)
+         } else {
+             cx.host.context_stem(object).ok().flatten()
+         };
+         match stem {
+-            Some(stem) => cx.host.locals().register(stem),
++            Some(stem) => cx.host.register_local(stem),
+             None => std::ptr::null_mut(),
+         }
+     }
+ 
+     /// `VariableReferenceName` and `VariableReferenceValue`: what the
+     /// reference answers `NAME` and `VALUE`.
+     pub fn reference_answer(
+         &self,
+         slot: &'static str,
+         reference: RexxObjectPtr,
+@@ -1492,21 +1492,21 @@ impl Activation<'_> {
+             }
+         };
+         let name = match name {
+             Some(name) => name.to_ascii_uppercase(),
+             None => self.conversion().host.message_name(),
+         };
+         let arguments = if arguments.is_null() {
+             let array = {
+                 let mut cx = self.conversion();
+                 let array = cx.host.arguments();
+-                cx.host.locals().register(array)
++                cx.host.register_local(array)
+             };
+             self.arguments_of(array)
+         } else {
+             self.arguments_of(arguments)
+         };
+         let Some(arguments) = arguments else {
+             return std::ptr::null_mut();
+         };
+         let scope = if scope.is_null() {
+             None
+@@ -1521,21 +1521,21 @@ impl Activation<'_> {
+                 .send(receiver, &name, scope, &arguments)
+                 .ok()
+                 .flatten()
+         })
+     }
+ 
+     /// `GetArguments`: the same array however often the call asks.
+     pub fn arguments(&self) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let array = cx.host.arguments();
+-        cx.host.locals().register(array)
++        cx.host.register_local(array)
+     }
+ 
+     /// `GetArgument`: null for an omitted or absent argument.
+     pub fn argument(&self, index: usize) -> RexxObjectPtr {
+         if index == 0 {
+             return std::ptr::null_mut();
+         }
+         let array = self.arguments();
+         self.item_at(
+             "MethodContextInterface.GetArgument",
+@@ -1553,35 +1553,35 @@ impl Activation<'_> {
+     }
+ 
+     /// `GetSelf`, `GetScope` and `GetSuper`.
+     pub fn method_object(&self, which: MethodObject) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let object = match which {
+             MethodObject::Receiver => cx.host.receiver(),
+             MethodObject::Scope => cx.host.scope(),
+             MethodObject::Super => cx.host.super_scope(),
+         };
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// [`Surface::kept_numeric`] for `frame`, `None` without one.
+     pub fn kept_numeric(&self, frame: Option<u64>) -> Option<Numeric> {
+         let mut cx = self.conversion();
+         cx.host.surface()?.kept_numeric(frame?)
+     }
+ 
+     /// [`Surface::kept_executable`] for `frame`, registered, `None` without
+     /// one.
+     pub fn kept_executable(&self, frame: Option<u64>) -> Option<RexxObjectPtr> {
+         let mut cx = self.conversion();
+         let object = cx.host.surface()?.kept_executable(frame?)?;
+-        Some(cx.host.locals().register(object))
++        Some(cx.host.register_local(object))
+     }
+ 
+     /// `GetMethod` and `GetRoutine`.
+     pub fn executable(&self, slot: &'static str) -> RexxObjectPtr {
+         self.surface_handle(slot, |surface| surface.executable())
+     }
+ 
+     /// `GetCallerContext`.
+     pub fn caller_context(&self) -> RexxObjectPtr {
+         self.surface_handle("CallContextInterface.GetCallerContext", |surface| {
+@@ -1788,26 +1788,25 @@ impl Activation<'_> {
+         };
+         self.with_surface(slot, std::ptr::null_mut(), |cx| {
+             cx.host
+                 .surface()
+                 .expect("checked by with_surface")
+                 .global_reference(object);
+             handle
+         })
+     }
+ 
+-    /// `ReleaseLocalReference`: the handle stays resolvable and rooted until
+-    /// the call ends. The oracle's release leaves the object to its next
+-    /// collection, so an extension that returns or uses the handle afterwards
+-    /// is answered there unless a collection intervenes, and collection
+-    /// timing is not a specified observable.
+-    pub fn release_local_reference(&self, _handle: RexxObjectPtr) {}
++    /// `ReleaseLocalReference`: the handle no longer roots its object, and
++    /// answers until a collection takes it, as the oracle's does.
++    pub fn release_local_reference(&self, handle: RexxObjectPtr) {
++        self.conversion().host.release_local(handle);
++    }
+ 
+     /// `AllocateObjectMemory`.
+     pub fn allocate_object_memory(&self, size: usize) -> POINTER {
+         self.with_surface(
+             "MethodContextInterface.AllocateObjectMemory",
+             std::ptr::null_mut(),
+             |cx| {
+                 cx.host
+                     .surface()
+                     .expect("checked by with_surface")
+diff --git a/rust/crates/rexx-api/src/ffi.rs b/rust/crates/rexx-api/src/ffi.rs
+index 872a70e46..2c10eb15b 100644
+--- a/rust/crates/rexx-api/src/ffi.rs
++++ b/rust/crates/rexx-api/src/ffi.rs
+@@ -5709,21 +5709,21 @@ mod tests {
+         assert_eq!(refused, None);
+         let (answered, fixed, pointer_sized, (logical, double), doubled) = read;
+         assert!(answered.iter().all(|answer| *answer == 1), "{answered:?}");
+         assert_eq!(fixed, (-7, 8, -9, 10));
+         assert_eq!(pointer_sized, (11, 12, -13, 14));
+         assert_eq!((logical, double), (1, 2.0));
+         let doubled = host.locals.resolve(doubled.cast()).expect("registered");
+         assert_eq!(host.bytes(doubled), Some(b"0.5 at 9".to_vec()));
+     }
+ 
+-    /// **A released local reference still answers until the call ends**,
++    /// **A released local reference still answers while its object lives**,
+     /// as the oracle's does until its next collection.
+     #[test]
+     fn a_released_local_reference_still_answers() {
+         let mut host = FakeHost::new();
+         let string = host.text(b"released");
+         let string = host.locals.register(string);
+         let (length, refused) = with_thread(&mut host, |thread, table| {
+             // SAFETY: `thread` is live for the call and `string` is
+             // registered before it; neither member reads a descriptor.
+             unsafe {
+diff --git a/rust/crates/rexx-api/src/handles.rs b/rust/crates/rexx-api/src/handles.rs
+index 327660bf6..661fa23b8 100644
+--- a/rust/crates/rexx-api/src/handles.rs
++++ b/rust/crates/rexx-api/src/handles.rs
+@@ -23,55 +23,97 @@ const _: () = assert!(usize::BITS == u64::BITS);
+ 
+ /// The objects one activation has handed a native call, held so the collector
+ /// can see them (D5).
+ ///
+ /// A handle is derived from the whole of the `ObjRef`, generation included, so
+ /// two handles are equal exactly when they name the same object and a handle
+ /// minted before a slot was recycled cannot name the slot's next occupant.
+ #[derive(Default)]
+ pub struct Table {
+     entries: FxHashMap<usize, ObjRef>,
++    /// Handles [`Table::release`] dropped, which root nothing and resolve
++    /// while their object lives.
++    released: FxHashMap<usize, ObjRef>,
++    /// The size of `released` at which [`Table::release`] next drops the
++    /// handles whose object is gone.
++    released_limit: usize,
+ }
+ 
++/// The least `released_limit`.
++const RELEASED_FLOOR: usize = 4096;
++
+ impl Table {
+     pub fn new() -> Table {
+         Table::default()
+     }
+ 
+-    /// The handle for `object`, valid until [`Table::remove`] or
++    /// The handle for `object`, held until [`Table::release`] or
+     /// [`Table::clear`]. Registering an object this table already holds
+     /// answers the same handle and changes nothing.
+     pub fn register(&mut self, object: ObjRef) -> RexxObjectPtr {
+         let address = address_of(object);
+         self.entries.insert(address, object);
++        self.released.remove(&address);
+         std::ptr::without_provenance_mut(address)
+     }
+ 
+-    /// The object `handle` names, or `None` if this table does not hold it.
++    /// The object `handle` names, held or released, or `None` if this table
++    /// has neither.
+     pub fn resolve(&self, handle: RexxObjectPtr) -> Option<ObjRef> {
+-        self.entries.get(&handle.addr()).copied()
++        self.resolve_live(handle, |_| true)
++    }
++
++    /// [`Table::resolve`], a released handle answered only where `live`
++    /// says its object is.
++    pub fn resolve_live(
++        &self,
++        handle: RexxObjectPtr,
++        live: impl Fn(ObjRef) -> bool,
++    ) -> Option<ObjRef> {
++        let address = handle.addr();
++        self.entries.get(&address).copied().or_else(|| {
++            self.released
++                .get(&address)
++                .copied()
++                .filter(|object| live(*object))
++        })
+     }
+ 
+     /// Whether this table holds `object`.
+     pub fn holds(&self, object: ObjRef) -> bool {
+         self.entries.contains_key(&address_of(object))
+     }
+ 
+-    /// Drops `handle`'s registration. A handle this table never held is
+-    /// ignored, as `NativeActivation::removeLocalReference` ignores one.
+-    pub fn remove(&mut self, handle: RexxObjectPtr) {
+-        self.entries.remove(&handle.addr());
++    /// Drops `handle`'s registration, so it no longer roots its object
++    /// (`NativeActivation::removeLocalReference`,
++    /// `interpreter/execution/NativeActivation.cpp:1219`). A handle this table
++    /// does not hold is ignored, as the oracle ignores one. Each time the
++    /// released handles pass their limit, those whose object `live` says is
++    /// gone are forgotten.
++    pub fn release(&mut self, handle: RexxObjectPtr, live: impl Fn(ObjRef) -> bool) {
++        let address = handle.addr();
++        let Some(object) = self.entries.remove(&address) else {
++            return;
++        };
++        self.released.insert(address, object);
++        if self.released.len() >= self.released_limit.max(RELEASED_FLOOR) {
++            self.released.retain(|_, object| live(*object));
++            self.released_limit = self.released.len() * 2;
++        }
+     }
+ 
+-    /// Drops every registration, which is what the end of an activation does.
++    /// Drops every registration and every released handle, which is what
++    /// the end of an activation does.
+     pub fn clear(&mut self) {
+         self.entries.clear();
++        self.released.clear();
++        self.released_limit = 0;
+     }
+ 
+     /// Every object this table holds, for the collector.
+     pub fn roots(&self) -> impl Iterator<Item = ObjRef> + '_ {
+         self.entries.values().copied()
+     }
+ }
+ 
+ /// `object`'s handle, as an address.
+ ///
+diff --git a/rust/crates/rexx-api/src/values.rs b/rust/crates/rexx-api/src/values.rs
+index f6040374f..9c5be096a 100644
+--- a/rust/crates/rexx-api/src/values.rs
++++ b/rust/crates/rexx-api/src/values.rs
+@@ -667,20 +667,32 @@ pub trait Host {
+     /// (`interpreter/execution/NativeActivation.hpp:232`).
+     fn locals(&mut self) -> &mut Table;
+ 
+     /// The object `handle` names for the running native call: one of its
+     /// local references, or for a host that keeps them, a global reference,
+     /// which is the same handle for the same object.
+     fn resolve(&mut self, handle: RexxObjectPtr) -> Option<ObjRef> {
+         self.locals().resolve(handle)
+     }
+ 
++    /// Registers `object` as a local reference, which roots it for the rest
++    /// of the call; a host may stop rooting it any other way.
++    fn register_local(&mut self, object: ObjRef) -> RexxObjectPtr {
++        self.locals().register(object)
++    }
++
++    /// `ReleaseLocalReference`: [`Table::release`], against the host's own
++    /// view of which objects live.
++    fn release_local(&mut self, handle: RexxObjectPtr) {
++        self.locals().release(handle, |_| true);
++    }
++
+     /// What the callback tables reach beyond the conversions, or `None` for a
+     /// host that serves only the conversions, whose callbacks then refuse.
+     fn surface(&mut self) -> Option<&mut dyn Surface> {
+         None
+     }
+ 
+     /// A terminated copy of `bytes`, `object`'s value, at one address that
+     /// lasts as long as `object` does, or `None` for a host that keeps no such
+     /// copies, whose calls then answer the call's pool.
+     fn kept_c_string(&mut self, _object: ObjRef, _bytes: &[u8]) -> Option<CSTRING> {
+@@ -978,41 +990,41 @@ impl<'a> Activation<'a> {
+     pub fn drop_object_variable(&self, name: &[u8]) {
+         let mut cx = self.conversion();
+         cx.host.drop_object_variable(name);
+     }
+ 
+     /// `WholeNumberToObject`, registered as a local reference the way
+     /// `ApiContext::ret` registers one.
+     pub fn whole_number(&self, value: isize) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let object = cx.host.whole_number(value);
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `DoubleToObjectWithPrecision`, registered as
+     /// [`Activation::whole_number`]'s answer is.
+     pub fn double_object(&self, value: f64, precision: usize) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let object = cx.host.double_object(value, precision);
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `GetContextDigits`, `GetContextFuzz` and `GetContextForm`.
+     pub fn numeric(&self) -> Numeric {
+         self.conversion().host.numeric()
+     }
+ 
+     /// `NewPointer`, registered as [`Activation::whole_number`]'s answer is.
+     pub fn new_pointer(&self, value: POINTER) -> RexxObjectPtr {
+         let mut cx = self.conversion();
+         let object = cx.host.new_pointer(value);
+-        cx.host.locals().register(object)
++        cx.host.register_local(object)
+     }
+ 
+     /// `StringData`: one address per object, kept as by
+     /// [`Conversion::c_string_for`], or a null pointer for a handle this activation does not hold or an object
+     /// with no bytes, which is the `NULL` the stub answers on an exception.
+     pub fn string_data(&self, handle: RexxObjectPtr) -> CSTRING {
+         let mut cx = self.conversion();
+         let Some(object) = cx.host.resolve(handle) else {
+             return std::ptr::null();
+         };
+@@ -1032,24 +1044,24 @@ impl<'a> Activation<'a> {
+         };
+         cx.host.string_bytes(object).map_or(0, |bytes| bytes.len())
+     }
+ 
+     /// The thread table's data members, each registered as a local reference
+     /// so that the handle names a rooted object.
+     pub fn constants(&self) -> Constants<RexxObjectPtr> {
+         let mut cx = self.conversion();
+         let objects = cx.host.constants();
+         Constants {
+-            nil: cx.host.locals().register(objects.nil),
+-            true_object: cx.host.locals().register(objects.true_object),
+-            false_object: cx.host.locals().register(objects.false_object),
+-            null_string: cx.host.locals().register(objects.null_string),
++            nil: cx.host.register_local(objects.nil),
++            true_object: cx.host.register_local(objects.true_object),
++            false_object: cx.host.register_local(objects.false_object),
++            null_string: cx.host.register_local(objects.null_string),
+         }
+     }
+ }
+ 
+ /// Which member of a `ValueDescriptor`'s union a code's value occupies
+ /// (`api/oorexxapi.h:287-364`).
+ ///
+ /// The header's own `ARGUMENT_TYPE_<name>` defines (`:4196-4239`) are what say
+ /// which member a code uses, and the test derives this mapping from them.
+ /// Reading a union is `unsafe` and lives past the boundary in `ffi.rs` (D-U1),
+diff --git a/rust/crates/rexx-api/src/values/convert.rs b/rust/crates/rexx-api/src/values/convert.rs
+index 151764859..87271bf8b 100644
+--- a/rust/crates/rexx-api/src/values/convert.rs
++++ b/rust/crates/rexx-api/src/values/convert.rs
+@@ -17,21 +17,21 @@ use rexx_core::ObjRef;
+ 
+ use super::{Class, Conversion, Failure, MAX_WHOLENUMBER, RESULT_DIGITS, Value, pointer_string};
+ 
+ /// `REXX_VALUE_ARGLIST` (`NativeActivation.cpp:306`).
+ pub(super) fn arglist_to_native(
+     cx: &mut Conversion<'_>,
+     _argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     let arguments = cx.host.arguments();
+-    Ok(Value::Object(cx.host.locals().register(arguments)))
++    Ok(Value::Object(cx.host.register_local(arguments)))
+ }
+ 
+ /// `REXX_VALUE_NAME` (`NativeActivation.cpp:317`).
+ pub(super) fn name_to_native(
+     cx: &mut Conversion<'_>,
+     _argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     let name = cx.host.message_name();
+     Ok(Value::CString(cx.c_string_name(&name)))
+@@ -40,21 +40,21 @@ pub(super) fn name_to_native(
+ /// `REXX_VALUE_SCOPE` (`NativeActivation.cpp:266`).
+ pub(super) fn scope_to_native(
+     cx: &mut Conversion<'_>,
+     _argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     if !cx.host.is_method() {
+         return Err(Failure::Signature);
+     }
+     let scope = cx.host.scope();
+-    Ok(Value::Object(cx.host.locals().register(scope)))
++    Ok(Value::Object(cx.host.register_local(scope)))
+ }
+ 
+ /// `REXX_VALUE_CSELF` (`NativeActivation.cpp:294`).
+ pub(super) fn cself_to_native(
+     cx: &mut Conversion<'_>,
+     _argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     if !cx.host.is_method() {
+         return Err(Failure::Signature);
+@@ -67,43 +67,43 @@ pub(super) fn cself_to_native(
+ /// `REXX_VALUE_OSELF` (`NativeActivation.cpp:251`).
+ pub(super) fn oself_to_native(
+     cx: &mut Conversion<'_>,
+     _argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     if !cx.host.is_method() {
+         return Err(Failure::Signature);
+     }
+     let receiver = cx.host.receiver();
+-    Ok(Value::Object(cx.host.locals().register(receiver)))
++    Ok(Value::Object(cx.host.register_local(receiver)))
+ }
+ 
+ /// `REXX_VALUE_SUPER` (`NativeActivation.cpp:281`).
+ pub(super) fn super_to_native(
+     cx: &mut Conversion<'_>,
+     _argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     if !cx.host.is_method() {
+         return Err(Failure::Signature);
+     }
+     let scope = cx.host.super_scope();
+-    Ok(Value::Object(cx.host.locals().register(scope)))
++    Ok(Value::Object(cx.host.register_local(scope)))
+ }
+ 
+ /// `REXX_VALUE_RexxObjectPtr` (`NativeActivation.cpp:335`).
+ pub(super) fn object_to_native(
+     cx: &mut Conversion<'_>,
+     argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+-    Ok(Value::Object(cx.host.locals().register(argument)))
++    Ok(Value::Object(cx.host.register_local(argument)))
+ }
+ 
+ /// A row `signedIntegerValue(argument, position, max, min)` converts
+ /// (`NativeActivation.cpp:1901`), answering the value as the C type `T`.
+ fn signed<T: TryFrom<i64>>(
+     cx: &mut Conversion<'_>,
+     argument: ObjRef,
+     position: usize,
+     min: i64,
+     max: i64,
+@@ -360,66 +360,66 @@ pub(super) fn string_object_to_native(
+     argument: ObjRef,
+     position: usize,
+ ) -> Result<Value, Failure> {
+     let string = cx
+         .host
+         .string_value(argument)?
+         .ok_or(Failure::NoStringValue { position })?;
+     // The C++ registers a local reference only for a string the conversion
+     // had to create. Minting a handle is registering it, so here every one is
+     // rooted and the "was it created" question does not arise.
+-    Ok(Value::Object(cx.host.locals().register(string)))
++    Ok(Value::Object(cx.host.register_local(string)))
+ }
+ 
+ /// `REXX_VALUE_RexxArrayObject` (`NativeActivation.cpp:488`).
+ pub(super) fn array_to_native(
+     cx: &mut Conversion<'_>,
+     argument: ObjRef,
+     _position: usize,
+ ) -> Result<Value, Failure> {
+     let array = cx
+         .host
+         .array_value(argument)?
+         .ok_or(Failure::NotArray { argument })?;
+-    Ok(Value::Object(cx.host.locals().register(array)))
++    Ok(Value::Object(cx.host.register_local(array)))
+ }
+ 
+ /// `REXX_VALUE_RexxStemObject` (`NativeActivation.cpp:502`): a stem, or in a
+ /// call the name of the caller's.
+ pub(super) fn stem_to_native(
+     cx: &mut Conversion<'_>,
+     argument: ObjRef,
+     position: usize,
+ ) -> Result<Value, Failure> {
+     let stem = if cx.host.is_stem(argument) {
+         argument
+     } else if cx.host.is_method() {
+         return Err(Failure::NoStem { position, argument });
+     } else {
+         cx.host
+             .context_stem(argument)?
+             .ok_or(Failure::NoStem { position, argument })?
+     };
+-    Ok(Value::Object(cx.host.locals().register(stem)))
++    Ok(Value::Object(cx.host.register_local(stem)))
+ }
+ 
+ /// An argument that must be an instance of `class`, handed over as it is.
+ fn instance(
+     cx: &mut Conversion<'_>,
+     argument: ObjRef,
+     position: usize,
+     class: Class,
+ ) -> Result<Value, Failure> {
+     if !cx.host.is_instance_of(argument, class) {
+         return Err(Failure::NotInstance { position, class });
+     }
+-    Ok(Value::Object(cx.host.locals().register(argument)))
++    Ok(Value::Object(cx.host.register_local(argument)))
+ }
+ 
+ /// `REXX_VALUE_RexxClassObject` (`NativeActivation.cpp:549`).
+ pub(super) fn class_to_native(
+     cx: &mut Conversion<'_>,
+     argument: ObjRef,
+     position: usize,
+ ) -> Result<Value, Failure> {
+     instance(cx, argument, position, Class::Class)
+ }
+diff --git a/rust/crates/rexx-api/tests/handles.rs b/rust/crates/rexx-api/tests/handles.rs
+index 1bd44fce3..1f86b3b5d 100644
+--- a/rust/crates/rexx-api/tests/handles.rs
++++ b/rust/crates/rexx-api/tests/handles.rs
+@@ -110,41 +110,86 @@ fn a_handle_that_outlived_its_activation_misses_the_slots_next_occupant() {
+     let mut later = Table::new();
+     let live = later.register(second);
+     assert_eq!(later.resolve(live), Some(second));
+ 
+     // The stale handle carries the old generation, so it names nothing --
+     // rather than the object that took the slot.
+     assert_eq!(later.resolve(stale), None);
+     assert_ne!(stale, live);
+ }
+ 
++/// A release takes that handle alone out of the roots; it still resolves
++/// while its object lives; a second release, or one of a handle the table
++/// does not hold, changes nothing (`NativeActivation::removeLocalReference`,
++/// `interpreter/execution/NativeActivation.cpp:1219`).
+ #[test]
+-fn remove_drops_one_registration_and_clear_drops_them_all() {
++fn release_unroots_one_registration_and_clear_drops_them_all() {
+     let mut heap = Heap::new();
+     let first = heap.alloc(array(1));
+     let second = heap.alloc(array(2));
++    let stranger = heap.alloc(array(3));
+ 
+     let mut table = Table::new();
+     let first_handle = table.register(first);
+     let second_handle = table.register(second);
++    let stranger_handle = Table::new().register(stranger);
+ 
+-    table.remove(first_handle);
+-    assert_eq!(table.resolve(first_handle), None);
+-    assert_eq!(table.resolve(second_handle), Some(second));
+-    // As `removeLocalReference` ignores an object it does not hold.
+-    table.remove(first_handle);
++    table.release(first_handle, |_| true);
++    assert_eq!(table.roots().collect::<Vec<_>>(), vec![second]);
++    assert_eq!(table.resolve(first_handle), Some(first));
++    assert_eq!(table.resolve_live(first_handle, |_| false), None);
++    assert_eq!(table.resolve_live(second_handle, |_| false), Some(second));
+ 
++    table.release(first_handle, |_| true);
++    table.release(stranger_handle, |_| true);
++    assert_eq!(table.roots().collect::<Vec<_>>(), vec![second]);
++    assert_eq!(table.resolve(stranger_handle), None);
++
++    // Registered again, it is held again.
++    assert_eq!(table.register(first), first_handle);
++    assert_eq!(table.roots().count(), 2);
++    assert_eq!(table.resolve_live(first_handle, |_| false), Some(first));
++
++    table.release(first_handle, |_| true);
+     table.clear();
++    assert_eq!(table.resolve(first_handle), None);
+     assert_eq!(table.resolve(second_handle), None);
+     assert_eq!(table.roots().count(), 0);
+ }
+ 
++/// Released handles whose object is gone are forgotten once enough pile up,
++/// and one whose object lives is kept.
++#[test]
++fn released_handles_of_swept_objects_are_forgotten() {
++    let mut heap = Heap::new();
++    let mut table = Table::new();
++    let kept = heap.alloc(array(1));
++    let kept_handle = table.register(kept);
++    table.release(kept_handle, |_| true);
++    let mut gone = Vec::new();
++    for _ in 0..10_000 {
++        let object = heap.alloc(array(0));
++        let handle = table.register(object);
++        table.release(handle, |candidate| candidate == kept);
++        gone.push(handle);
++    }
++    assert_eq!(table.resolve(kept_handle), Some(kept));
++    let remembered = gone
++        .iter()
++        .filter(|handle| table.resolve(**handle).is_some())
++        .count();
++    assert!(
++        remembered < 8192,
++        "{remembered} released handles of swept objects are still remembered"
++    );
++}
++
+ #[test]
+ fn registering_the_same_object_twice_answers_the_same_handle() {
+     let mut heap = Heap::new();
+     let object = heap.alloc(array(1));
+ 
+     let mut table = Table::new();
+     let first = table.register(object);
+     let second = table.register(object);
+ 
+     assert_eq!(first, second);
+diff --git a/rust/crates/rexx-core/src/roots.rs b/rust/crates/rexx-core/src/roots.rs
+index a747897b7..1fe444526 100644
+--- a/rust/crates/rexx-core/src/roots.rs
++++ b/rust/crates/rexx-core/src/roots.rs
+@@ -358,20 +358,30 @@ impl ActivityRoots {
+ 
+     /// Discards every temporary pushed since `frame` was taken.
+     pub fn pop_frame(&mut self, frame: FrameId) {
+         self.temps.truncate(frame.0);
+     }
+ 
+     pub fn push_temp(&mut self, value: ObjRef) {
+         self.temps.push(value);
+     }
+ 
++    /// Pops the top temporary if it is `value` and sits at or above `floor`,
++    /// a length [`ActivityRoots::temps_len`] answered.
++    pub fn pop_temp_above(&mut self, floor: usize, value: ObjRef) -> bool {
++        let popped = self.temps.len() > floor && self.temps.last() == Some(&value);
++        if popped {
++            self.temps.pop();
++        }
++        popped
++    }
++
+     /// The register frame arena, whose frames are roots while reserved. A
+     /// frame borrows the handle this answers, not `self`.
+     pub fn frames(&self) -> Rc<FrameArena> {
+         Rc::clone(&self.frames)
+     }
+ 
+     /// Replaces the register frame arena with an empty one of `size`.
+     ///
+     /// # Panics
+     ///
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 37e646c6a..9013b79b7 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -117,20 +117,21 @@ impl Interp {
+     /// condition or its value.
+     #[inline(always)]
+     fn end_library_method(
+         &mut self,
+         answered: Result<Option<ObjRef>, Refused>,
+         pending: Option<usize>,
+         receiver: ObjRef,
+         scope: ObjRef,
+         packaged: bool,
+     ) -> Result<Option<ObjRef>, Failure> {
++        self.root_native_answer(&answered);
+         let trapped = self.call_trapped_native_condition();
+         let popped = self.pop_native_frame();
+         pin_leave!(self);
+         if popped.reserved {
+             self.release_guard(crate::guards::GuardKey {
+                 object: receiver,
+                 scope,
+             });
+         }
+         let trapped = trapped?;
+@@ -205,20 +206,21 @@ impl Interp {
+     /// blamed for a failure.
+     #[inline(always)]
+     fn end_library_routine(
+         &mut self,
+         answered: Result<Option<ObjRef>, Refused>,
+         pending: Option<usize>,
+         name: &[u8],
+         program: Option<crate::ProgramId>,
+         args: &[Option<ObjRef>],
+     ) -> Result<Option<ObjRef>, Failure> {
++        self.root_native_answer(&answered);
+         let trapped = self.call_trapped_native_condition();
+         let popped = self.pop_native_frame();
+         pin_leave!(self);
+         let outcome = match (pending, trapped) {
+             (Some(number), _) => {
+                 self.activity.native_reraise = true;
+                 Err(condition_of(number))
+             }
+             (None, Err(failure)) => Err(failure),
+             (None, Ok(trapped)) => {
+@@ -661,35 +663,45 @@ impl Interp {
+                 additional: None,
+                 result: None,
+                 condition: None,
+                 code: None,
+                 kept: rustc_hash::FxHashSet::default(),
+                 lent: Vec::new(),
+                 caller: None,
+                 id: 0,
+                 packaged: false,
+                 reserved: false,
++                temps_floor: 0,
+             });
+         frame.owner = owner;
+         frame.scope = scope;
+         frame.method = receiver.is_some();
+         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
+         frame.code = code;
+         frame.caller = self.running_activation().map(|activation| activation.id);
+         frame.id = self.next_native_id();
+         frame.packaged = false;
+         frame.reserved = false;
++        frame.temps_floor = self.roots.activity().temps_len();
+         frame.name.extend_from_slice(name);
+         frame.arguments.extend_from_slice(args);
+         self.activity.native_handles.push(frame);
+     }
+ 
++    /// Roots the object a native call answered as a temporary, which its
++    /// frame's `locals` may have been alone in rooting.
++    fn root_native_answer(&mut self, answered: &Result<Option<ObjRef>, Refused>) {
++        if let Ok(Some(object)) = answered {
++            self.roots.activity_mut().push_temp(*object);
++        }
++    }
++
+     /// Pops the innermost native frame, answering the condition it holds and
+     /// whether it was a method's, and keeps its cleared buffers for the next
+     /// call to refill. The held condition's objects stay rooted as temps.
+     fn pop_native_frame(&mut self) -> Popped {
+         let (answer, mut frame) = self.take_native_frame();
+         self.end_native_frame(&mut frame);
+         self.activity.native_spares.push(frame);
+         answer
+     }
+ 
+@@ -1313,20 +1325,25 @@ impl rexx_api::values::Baton for InterpBaton {
+         crate::baton::Baton::release(self);
+     }
+ 
+     fn held_here(&self) -> bool {
+         crate::baton::Baton::held_here(self)
+     }
+ }
+ 
+ /// The condition an extension raised, whose number is the major and the minor
+ /// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
++/// Whether `object` is one the heap has not swept.
++fn lives(heap: &rexx_core::Heap, object: ObjRef) -> bool {
++    !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) || heap.peek(object).is_some()
++}
++
+ fn condition_of(number: usize) -> Failure {
+     let major = u16::try_from(number / 1000).unwrap_or(u16::MAX);
+     let minor = u16::try_from(number % 1000).unwrap_or(0);
+     Raised::syntax(major, minor, Vec::new()).into()
+ }
+ 
+ impl Host for Interp {
+     fn is_method(&self) -> bool {
+         self.activity
+             .native_handles
+@@ -1642,25 +1659,53 @@ impl Host for Interp {
+     fn locals(&mut self) -> &mut Table {
+         &mut self
+             .activity
+             .native_handles
+             .last_mut()
+             .expect("a native activation is running")
+             .locals
+     }
+ 
+     fn resolve(&mut self, handle: rexx_api::layout::RexxObjectPtr) -> Option<ObjRef> {
+-        self.locals()
+-            .resolve(handle)
++        let heap = &self.heap;
++        self.activity
++            .native_handles
++            .last()
++            .expect("a native activation is running")
++            .locals
++            .resolve_live(handle, |object| lives(heap, object))
+             .or_else(|| self.global_references.resolve(handle))
+     }
+ 
++    fn register_local(&mut self, object: ObjRef) -> rexx_api::layout::RexxObjectPtr {
++        let frame = self
++            .activity
++            .native_handles
++            .last_mut()
++            .expect("a native activation is running");
++        let handle = frame.locals.register(object);
++        self.roots
++            .activity_mut()
++            .pop_temp_above(frame.temps_floor, object);
++        handle
++    }
++
++    fn release_local(&mut self, handle: rexx_api::layout::RexxObjectPtr) {
++        let heap = &self.heap;
++        self.activity
++            .native_handles
++            .last_mut()
++            .expect("a native activation is running")
++            .locals
++            .release(handle, |object| lives(heap, object));
++    }
++
+     fn surface(&mut self) -> Option<&mut dyn rexx_api::callbacks::Surface> {
+         Some(self)
+     }
+ 
+     fn kept_c_string(&mut self, object: ObjRef, bytes: &[u8]) -> Option<rexx_api::layout::CSTRING> {
+         if !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) {
+             let frame = self.activity.native_handles.last_mut()?;
+             if frame.kept.insert(object) {
+                 *self.kept_holders.entry(object).or_default() += 1;
+             }
+diff --git a/rust/crates/rexx-exec/src/dispatch/library/tests.rs b/rust/crates/rexx-exec/src/dispatch/library/tests.rs
+index 5be9feb80..9f9564c21 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library/tests.rs
+@@ -830,20 +830,89 @@ fn a_handle_carried_values_copy_lasts_until_a_collection() {
+     interp.pop_native_frame();
+     assert!(
+         interp.kept_strings.contains_key(&loose),
+         "the call's end dropped the copy"
+     );
+     interp.collect_now();
+     assert!(!interp.kept_strings.contains_key(&loose));
+     assert!(interp.kept_strings.contains_key(&held));
+ }
+ 
++/// **A released local reference stops rooting its object while the call
++/// runs**, the others staying rooted, and resolves only until a collection
++/// takes the object.
++#[test]
++fn a_released_local_reference_is_collectable_inside_its_call() {
++    use rexx_api::values::Host;
++    use rexx_core::ObjRef;
++    let mut interp = Interp::new();
++    let fresh = |interp: &mut Interp| {
++        interp.heap.alloc(rexx_core::Body::Array {
++            slots: Vec::new().into(),
++            dimensions: None,
++        })
++    };
++    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
++    let (released, held) = (fresh(&mut interp), fresh(&mut interp));
++    let (released_handle, held_handle) =
++        (interp.register_local(released), interp.register_local(held));
++    interp.release_local(released_handle);
++    assert_eq!(Host::resolve(&mut interp, released_handle), Some(released));
++    interp.collect_now();
++    assert!(
++        interp.heap.get(released).is_none(),
++        "the released object lived"
++    );
++    assert!(
++        interp.heap.get(held).is_some(),
++        "the held object was collected"
++    );
++    assert_eq!(Host::resolve(&mut interp, released_handle), None);
++    assert_eq!(Host::resolve(&mut interp, held_handle), Some(held));
++    interp.pop_native_frame();
++}
++
++/// **Registering an object the call pushed as a temporary pops it**, so the
++/// call's `locals` alone root it, and leaves one pushed before the call.
++#[test]
++fn registering_a_local_pops_only_the_calls_own_temporary() {
++    use rexx_api::values::Host;
++    use rexx_core::ObjRef;
++    let mut interp = Interp::new();
++    let fresh = |interp: &mut Interp| {
++        interp.heap.alloc(rexx_core::Body::Array {
++            slots: Vec::new().into(),
++            dimensions: None,
++        })
++    };
++    let before = fresh(&mut interp);
++    interp.roots.activity_mut().push_temp(before);
++    interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
++    let floor = interp.roots.activity().temps_len();
++    let during = fresh(&mut interp);
++    interp.roots.activity_mut().push_temp(during);
++    interp.register_local(during);
++    assert_eq!(interp.roots.activity().temps_len(), floor);
++    interp.register_local(before);
++    assert_eq!(interp.roots.activity().temps_len(), floor);
++    interp.pop_native_frame();
++    interp.collect_now();
++    assert!(
++        interp.heap.get(during).is_none(),
++        "a temporary kept the call's object"
++    );
++    assert!(
++        interp.heap.get(before).is_some(),
++        "the caller's temporary was popped"
++    );
++}
++
+ /// **A buffer's storage moved out from under a call lives until that call
+ /// ends**, and a second call holding it keeps it past the first's end.
+ #[test]
+ fn a_lent_buffers_old_storage_lives_until_its_last_call_ends() {
+     use rexx_api::callbacks::Surface;
+     use rexx_core::ObjRef;
+     let mut interp = Interp::new();
+     let buffer = interp.new_mutable_buffer(16);
+     interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+     interp.mutable_buffer(buffer).expect("a buffer");
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 7f3865662..d2ffa1227 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1962,20 +1962,23 @@ struct NativeFrame {
+     /// The activation the call was made from.
+     caller: Option<crate::activation::ActivationId>,
+     /// This native activation's number among its activity's, which is what
+     /// rexx-api names the frame by.
+     id: u32,
+     /// Whether the code reports a package, which then leads a condition it
+     /// raises with no line, so the condition has no `POSITION`.
+     packaged: bool,
+     /// Whether a method's call holds its guard lock (`objectScope`).
+     reserved: bool,
++    /// The temporaries' length when the call began: one pushed since, and
++    /// registered in `locals`, is rooted by `locals` alone.
++    temps_floor: usize,
+ }
+ 
+ impl NativeFrame {
+     fn object_roots(&self, out: &mut Vec<ObjRef>) {
+         out.extend(self.locals.roots());
+         out.extend([self.owner, self.scope, self.receiver]);
+         out.extend(self.arguments.iter().copied().flatten());
+         out.extend(self.argument_list);
+         out.extend(self.lent.iter().copied());
+         out.extend(
+diff --git a/rust/crates/rexx-exec/src/run/tests.rs b/rust/crates/rexx-exec/src/run/tests.rs
+index 7ee3ef605..699448133 100644
+--- a/rust/crates/rexx-exec/src/run/tests.rs
++++ b/rust/crates/rexx-exec/src/run/tests.rs
+@@ -158,20 +158,21 @@ fn a_stale_native_frame_token_is_refused() {
+         additional: None,
+         result: None,
+         condition: None,
+         code: None,
+         kept: rustc_hash::FxHashSet::default(),
+         lent: Vec::new(),
+         caller: Some(caller),
+         id,
+         packaged: false,
+         reserved: false,
++        temps_floor: 0,
+     };
+     interp.activity.native_handles.push(frame(6));
+     assert_eq!(interp.suspended_caller(6), Some(0));
+     interp.activity.native_handles.pop();
+     interp.activity.native_handles.push(frame(7));
+     assert_eq!(interp.suspended_caller(7), Some(0));
+     assert_eq!(interp.suspended_caller(6), None, "the old frame's token");
+     assert_eq!(
+         interp.suspended_caller(1 << 32 | 7),
+         None,
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index 6b1d95217..28a814096 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -1013,20 +1013,21 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
+         additional: None,
+         result: None,
+         condition: None,
+         code: None,
+         kept: rustc_hash::FxHashSet::default(),
+         lent: Vec::new(),
+         caller: None,
+         id: 0,
+         packaged: false,
+         reserved: false,
++        temps_floor: 0,
+     };
+     let handle = frame.locals.register(object);
+     interp.activity.native_handles.push(frame);
+     interp.collect_now();
+     assert!(
+         interp.heap.get(object).is_some(),
+         "a live native activation's local reference was collected"
+     );
+     assert_eq!(
+         interp.activity.native_handles[0].locals.resolve(handle),
+@@ -1072,20 +1073,21 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
+         additional: Some(additional),
+         result: Some(result),
+         condition: Some(condition),
+         code: None,
+         kept: rustc_hash::FxHashSet::default(),
+         lent: vec![lent],
+         caller: None,
+         id: 0,
+         packaged: false,
+         reserved: false,
++        temps_floor: 0,
+     });
+     let held = [
+         (receiver, "receiver"),
+         (argument, "argument"),
+         (list, "list"),
+         (additional, "held ADDITIONAL"),
+         (result, "held RESULT"),
+         (condition, "held condition object"),
+         (lent, "lent buffer"),
+     ];
+diff --git a/rust/crates/rexx-exec/tests/release_local_reference.rs b/rust/crates/rexx-exec/tests/release_local_reference.rs
+new file mode 100644
+index 000000000..9ecff6bde
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/release_local_reference.rs
+@@ -0,0 +1,234 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! `ReleaseLocalReference` through extensions in `release_local_reference/`,
++//! each compiled with `c++` against this worktree's `api/` into a directory
++//! of this run's own.
++
++#![cfg(target_os = "linux")]
++#![expect(
++    clippy::disallowed_methods,
++    reason = "this harness bounds real runs and reads their rusage"
++)]
++
++use std::fs;
++use std::path::{Path, PathBuf};
++use std::process::{Command, Stdio};
++use std::time::Duration;
++
++use rexx_exec::{Invocation, Outcome, run_program, run_program_collect_every_alloc};
++
++/// The `memcap` limit each run is under.
++const MEMORY: &str = "2G";
++
++/// The address-space limit in KiB where `memcap` is not on `PATH`.
++const FALLBACK_LIMIT_KIB: u64 = 4_194_304;
++
++fn worktree() -> PathBuf {
++    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
++}
++
++/// Builds the extension `release_local_reference/<name>.cpp` into `dir` as
++/// `lib<name>.so`.
++fn build_library(dir: &Path, name: &str) {
++    let api = worktree().join("api");
++    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
++        .join(format!("tests/release_local_reference/{name}.cpp"));
++    let built = Command::new("c++")
++        .args(["-shared", "-fPIC", "-O1"])
++        .arg(format!("-I{}", api.display()))
++        .arg(format!("-I{}", api.join("platform/unix").display()))
++        .arg(&source)
++        .arg("-o")
++        .arg(dir.join(format!("lib{name}.so")))
++        .status()
++        .expect("`c++` runs, which this test needs to build its extension");
++    assert!(built.success(), "lib{name}.so did not build");
++}
++
++/// A fresh directory of this run's own, named for `name`.
++fn fresh_dir(name: &str) -> PathBuf {
++    let nanos = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .expect("the clock is after the epoch")
++        .as_nanos();
++    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
++        .join(format!("{name}-{}-{nanos}", std::process::id()));
++    fs::create_dir_all(&dir).expect("a directory of this run's own");
++    dir
++}
++
++/// Whether `name` is an executable file on this process's `PATH`.
++fn on_path(name: &str) -> bool {
++    std::env::var_os("PATH")
++        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()))
++}
++
++/// Runs `RelLoop(passes)` and answers the interpreter's peak resident set in
++/// KiB, read from its own rusage by `/usr/bin/time`, the innermost wrapper.
++fn peak_kib(dir: &Path, passes: u32) -> u64 {
++    let program = dir.join(format!("loop{passes}.rex"));
++    fs::write(
++        &program,
++        format!("say RelLoop({passes})\n::requires 'relloop' LIBRARY\n"),
++    )
++    .expect("the program is writable");
++    let rss = dir.join(format!("rss{passes}"));
++    let mut command = if on_path("memcap") {
++        let mut command = Command::new("memcap");
++        command.arg(MEMORY);
++        command
++    } else {
++        let mut command = Command::new("bash");
++        command.arg("-c").arg(format!(
++            "ulimit -v {FALLBACK_LIMIT_KIB} && exec \"$0\" \"$@\""
++        ));
++        command
++    };
++    let output = command
++        .args([
++            "timeout",
++            "-k",
++            "5",
++            "120",
++            "/usr/bin/time",
++            "-f",
++            "%M",
++            "-o",
++        ])
++        .arg(&rss)
++        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(&program)
++        .current_dir(dir)
++        .env("LD_LIBRARY_PATH", dir)
++        .stdin(Stdio::null())
++        .output()
++        .expect("the capped run spawns");
++    assert_eq!(
++        (
++            output.status.code(),
++            String::from_utf8_lossy(&output.stdout).into_owned(),
++            String::from_utf8_lossy(&output.stderr).into_owned()
++        ),
++        (Some(0), "done\n".to_owned(), String::new()),
++        "RelLoop({passes})"
++    );
++    let rss = fs::read_to_string(&rss).expect("/usr/bin/time wrote the rusage");
++    rss.trim()
++        .parse()
++        .unwrap_or_else(|_| panic!("a maxrss in KiB, not {rss:?}"))
++}
++
++/// **A released local reference is reclaimable inside the call that made
++/// it.** The oracle's release drops the object from the activation's save
++/// list (`NativeActivation::removeLocalReference`,
++/// `interpreter/execution/NativeActivation.cpp:1219`), so ten times the passes
++/// cost it no more memory: measured, 19980 KB at 200,000 and 20864 KB at
++/// 2,000,000.
++#[test]
++fn a_release_loop_runs_in_memory_that_does_not_grow_with_its_passes() {
++    let dir = fresh_dir("release-loop");
++    build_library(&dir, "relloop");
++    let short = peak_kib(&dir, 200_000);
++    let long = peak_kib(&dir, 2_000_000);
++    fs::remove_dir_all(&dir).expect("the run's directory is removable");
++    assert!(
++        long <= 2 * short,
++        "peak RSS {long} KiB at 2,000,000 passes against {short} KiB at 200,000"
++    );
++}
++
++fn run_in(dir: &Path, program: &str, stress: bool) -> Outcome {
++    let invocation = Invocation::none()
++        .with_directory(dir.to_path_buf())
++        .with_environment(vec![(
++            b"LD_LIBRARY_PATH".to_vec(),
++            dir.as_os_str().as_encoded_bytes().to_vec(),
++        )])
++        .with_deadline(Duration::from_secs(60));
++    let path = dir.join("relsem.rex").to_string_lossy().into_owned();
++    let text = program.as_bytes().to_vec();
++    match stress {
++        true => run_program_collect_every_alloc(&path, text, invocation),
++        false => run_program(&path, text, invocation),
++    }
++}
++
++/// **A release drops that handle alone, and a second release, a release
++/// through a context kept from an earlier call and a read after release
++/// answer as the oracle's do.** `relsem.cpp`'s routines, measured on the
++/// oracle with `RelOne(1000000)`: this stdout, empty stderr, rc 0.
++#[test]
++fn releases_answer_as_the_oracles_do() {
++    let dir = fresh_dir("release-semantics");
++    build_library(&dir, "relsem");
++    let program = |passes: u32| {
++        format!(
++            "say RelTwice()\n\
++             say RelStash()\n\
++             say RelStale()\n\
++             say RelOne({passes})\n\
++             say RelLength()\n\
++             say 'end'\n\
++             ::requires 'relsem' LIBRARY\n"
++        )
++    };
++    let ours = run_in(&dir, &program(1_000_000), false);
++    assert_eq!(
++        (
++            String::from_utf8_lossy(&ours.stdout).into_owned(),
++            String::from_utf8_lossy(&ours.stderr).into_owned(),
++            ours.exit_code
++        ),
++        (
++            "released twice\nkept\nstale released\nheld among many\n18\nend\n".to_owned(),
++            String::new(),
++            0
++        )
++    );
++    fs::remove_dir_all(&dir).expect("the run's directory is removable");
++}
++
++/// **Under a collection at every allocation, a released string goes and the
++/// one held beside it stays.** The answers that read no released object
++/// after an allocation are the oracle's; `RelTwice`'s released string is
++/// collected before its answer is read, which collection timing licenses
++/// (`docs/superpowers/plans/phase-4-exclusions.txt`), and is refused loudly.
++#[test]
++fn under_a_collection_at_every_allocation_only_the_released_string_goes() {
++    let dir = fresh_dir("release-stress");
++    build_library(&dir, "relsem");
++    let ours = run_in(
++        &dir,
++        "say RelStash()\n\
++         say RelStale()\n\
++         say RelOne(50)\n\
++         say RelLength()\n\
++         say RelTwice()\n\
++         say 'end'\n\
++         ::requires 'relsem' LIBRARY\n",
++        true,
++    );
++    assert_eq!(
++        (
++            String::from_utf8_lossy(&ours.stdout).into_owned(),
++            String::from_utf8_lossy(&ours.stderr).into_owned(),
++            ours.exit_code
++        ),
++        (
++            "kept\nstale released\nheld among many\n18\n".to_owned(),
++            "rexx-exec: the handle is no longer held by this activation is not implemented\n"
++                .to_owned(),
++            120
++        )
++    );
++    fs::remove_dir_all(&dir).expect("the run's directory is removable");
++}
+diff --git a/rust/crates/rexx-exec/tests/release_local_reference/relloop.cpp b/rust/crates/rexx-exec/tests/release_local_reference/relloop.cpp
+new file mode 100644
+index 000000000..eacecef23
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/release_local_reference/relloop.cpp
+@@ -0,0 +1,19 @@
++#include "oorexxapi.h"
++RexxRoutine1(RexxObjectPtr, RelLoop, int, n)
++{
++    for (int i = 0; i < n; i++) {
++        RexxObjectPtr s = context->String("some string that is long enough to be boxed on the heap");
++        context->ReleaseLocalReference(s);
++    }
++    return context->String("done");
++}
++RexxRoutineEntry routines[] = {
++    REXX_TYPED_ROUTINE(RelLoop, RelLoop),
++    REXX_LAST_ROUTINE()
++};
++RexxPackageEntry relloop_package_entry = {
++    STANDARD_PACKAGE_HEADER
++    REXX_INTERPRETER_4_0_0,
++    "relloop", "1.0.0", NULL, NULL, routines, NULL
++};
++OOREXX_GET_PACKAGE(relloop);
+diff --git a/rust/crates/rexx-exec/tests/release_local_reference/relsem.cpp b/rust/crates/rexx-exec/tests/release_local_reference/relsem.cpp
+new file mode 100644
+index 000000000..4643cf920
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/release_local_reference/relsem.cpp
+@@ -0,0 +1,65 @@
++#include "oorexxapi.h"
++
++static RexxThreadContext *kept;
++static RexxObjectPtr stashed;
++
++// Releases one string twice, then answers it.
++RexxRoutine0(RexxObjectPtr, RelTwice)
++{
++    RexxObjectPtr s = context->String("released twice");
++    context->ReleaseLocalReference(s);
++    context->ReleaseLocalReference(s);
++    return s;
++}
++
++// Keeps a string's handle and this call's thread context for a later call.
++RexxRoutine0(RexxObjectPtr, RelStash)
++{
++    kept = context->threadContext;
++    stashed = context->String("stashed");
++    return context->String("kept");
++}
++
++// Releases the handle an earlier call kept, through that call's context,
++// which this call never held.
++RexxRoutine0(RexxObjectPtr, RelStale)
++{
++    kept->ReleaseLocalReference(stashed);
++    return context->String("stale released");
++}
++
++// Releases one string of two and makes and releases n more; answers the
++// other, then the released one's length.
++RexxRoutine1(RexxObjectPtr, RelOne, int, n)
++{
++    RexxObjectPtr gone = context->String("released among many");
++    RexxObjectPtr held = context->String("held among many");
++    context->ReleaseLocalReference(gone);
++    for (int i = 0; i < n; i++) {
++        context->ReleaseLocalReference(context->String("some string that is long enough to be boxed on the heap"));
++    }
++    return held;
++}
++
++// Answers the length of a string read after its release.
++RexxRoutine0(size_t, RelLength)
++{
++    RexxStringObject s = context->String("read after release");
++    context->ReleaseLocalReference(s);
++    return context->StringLength(s);
++}
++
++RexxRoutineEntry routines[] = {
++    REXX_TYPED_ROUTINE(RelTwice, RelTwice),
++    REXX_TYPED_ROUTINE(RelStash, RelStash),
++    REXX_TYPED_ROUTINE(RelStale, RelStale),
++    REXX_TYPED_ROUTINE(RelOne, RelOne),
++    REXX_TYPED_ROUTINE(RelLength, RelLength),
++    REXX_LAST_ROUTINE()
++};
++RexxPackageEntry relsem_package_entry = {
++    STANDARD_PACKAGE_HEADER
++    REXX_INTERPRETER_4_0_0,
++    "relsem", "1.0.0", NULL, NULL, routines, NULL
++};
++OOREXX_GET_PACKAGE(relsem);

@@ -32,3 +32,5 @@ Symptom found in Phase 9a Task 9: `base/class/Package`'s `TESTRECLAIM01` wraps a
 packages weakly (`PackageManager::addToRequiresCache`, `interpreter/package/PackageManager.cpp:921`).
 Even `.package~new('src', source)`, dropped, stays: the crate's weak reference is not cleared in
 10 passes of 100 `copies('x', 1000000)`, the oracle's after 1.
+
+Phase 9a (Moritz 2026-10-12): ooTest base/class/Package TESTRECLAIM01 waits for a dropped package to be collected and stays renamed out on timeout until this lands; its witness is that test.

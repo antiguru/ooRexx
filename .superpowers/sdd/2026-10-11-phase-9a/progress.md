@@ -146,3 +146,16 @@ Note: per-step perf figures accumulate (memory: per-step thresholds hide cumulat
 Task 8b: re-review dispatched (sonnet).
 Task 8b: fix round 1/5 (all addressed, 0 open; commits 823db3a..8aefd10); re-review (sonnet) clean.
 Task 8b: complete (commits 8d3aa11..8aefd10, review clean after fix round 1; REXX package copy and library routine frame ~executable to 9d; copy retention queued)
+Task 9: dispatched (implementer opus, BASE 5d12347c0)
+Moritz 2026-10-12: Package becomes a real class/object with a handle to the built-in data; deferred; when built, combined with a sweep over what else should be real classes; new classes allowed if namespaced. Queued: 2026-10-12-package-as-real-object.md.
+Task 9: implementer DONE_WITH_CONCERNS, 7d7036e3a + ccd4d4f02. ReleaseLocalReference: 200k/2M peak 59572/430344 kB -> 32168/32220 kB (oracle 19980/20864); double release, foreign handle, read-after-release match the oracle. Package "hang" is TESTRECLAIM01 looping until a dropped package is collected; every package object is a global root here, so it never ends (cause: the deferred package-as-object item).
+Task 9: Ruling: a use after release that meets a collection ending loudly at rc 120 stands on "a use after release is outside the API contract", as the kept-handle row does -- the oracle's answer there is undefined memory -- if wrong, a Deviation. The unwitnessed end_library_* temp goes to the reviewer: witness it or delete it.
+Task 9: Moritz asked: TESTRECLAIM01 / 9a exit criterion "Package ends" vs the deferred package-as-object work.
+Task 9: review dispatched (opus).
+Moritz 2026-10-12: TESTRECLAIM01 -> 'Defer, amend 9a criterion'. Spec 9a row amended (TESTRECLAIM01 renamed out on timeout, listed in the table; the package-as-object item owns the fix).
+Task 9: review (opus): spec PASS, quality fixes. I1: end_library_* answer temp is live (a forced collection after pop_native_frame sweeps the answer without it) but no current path collects in that window; oracle roots it the same way (NativeActivation.cpp:1353 before :1363). Minors M1-M4 prose.
+Task 9: Ruling: keep the temp and witness it by adding a stress collection point after the pop in both end_library_* functions, through the existing collect-stress mechanism -- the oracle roots at the same point, and the forced-collection probe shows it is load-bearing -- if the stress point costs anything with stress off (callgrind on a native-call bench), say so and it is reconsidered.
+Task 9: fix round 1 dispatched (resume implementer): I1, M1-M4.
+Task 9: fix round 1 implementer DONE 4dacafc63; stress collection after pop makes the temp load-bearing (mutant: collect_stress and release test panic); stress-off cost extcall +0.0754% (2 Ir per native call), accepted. Re-review dispatched (sonnet).
+Task 9: fix round 1/5 (all addressed, 0 open; commits 6e0395f..4dacafc); re-review (sonnet) clean.
+Task 9: complete (commits 5d12347..4dacafc, review clean after fix round 1; TESTRECLAIM01 deferred by Moritz to the package-as-object item)

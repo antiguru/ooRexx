@@ -1,0 +1,259 @@
+# Review package: 6e0395fdf..4dacafc63
+
+## Commits
+4dacafc63 Phase 9a Task 9 fix round 1: the native answer's temp witnessed
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-9-report.md       | 35 ++++++++++++++++++++++
+ rust/crates/rexx-api/src/values.rs                 |  4 +--
+ rust/crates/rexx-exec/src/dispatch/library.rs      | 14 +++++++--
+ rust/crates/rexx-exec/src/lib.rs                   |  4 +--
+ .../rexx-exec/tests/release_local_reference.rs     |  5 ++--
+ 5 files changed, 54 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md
+index abd9fff9c..7a0b38a55 100644
+--- a/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-9-report.md
+@@ -137,10 +137,45 @@ new dependency. No `.rex` file added (the test programs are inline).
+ 
+ ## Concerns
+ 
+ 1. Step 3 is not fixed: it needs the deferred package-as-object design.
+ 2. The answer temp in `end_library_*` has no witness that fails without it.
+ 3. A use after release that meets a collection is a loud rc 120 here. M1's reading in the exclusions
+    file is that the collection-timing licence does not cover an rc or stderr difference; the row now
+    rests on "a use after release is outside the API contract", as the kept-handle row does. That is a
+    ruling for the controller to confirm.
+ 4. The crate still peaks 32 MB against the oracle's 20 MB for this loop, flat in the pass count.
++
++## Fix round 1
++
++On top of `6e0395fdf` (review `task-9-review.md`).
++
++* **I1, the answer temp witnessed.** `end_library_method` and `end_library_routine` call
++  `collect_under_stress` after `pop_native_frame` and `pin_leave!`: a `collect_now` when
++  `stress_collect` is set, so the collect-every-allocation runs collect while the answer is rooted
++  only as a temp. Mutant, `root_native_answer`'s push replaced by `let _ = answered;`, then restored
++  from a copy (`git diff --stat` back to 12+/2- on `library.rs`, the push present once):
++  `cargo test --release -p rexx-exec --test release_local_reference --test collect_stress
++  --no-fail-fast` exit 101, `collect_stress`'s `the_l0_subset_passes_again_under_collect_on_every_allocation`
++  and `under_a_collection_at_every_allocation_only_the_released_string_goes` both panicking at
++  `dispatch.rs:1712`. With the push both are green.
++* **Cost with stress off.** `bench-programs/callgrind.sh -r 3 -j 8 -p "extcall emptyloop"
++  base=<ccd4d4f02 rexx-run> head=<this tree's>` (rounds interleaved by the script, libc and ld
++  subtracted): `extcall` 7954127408 to 7960127408, +0.0754%, spread 0.0000 on both, which is
++  6,000,000 instructions over 3,000,000 native calls, two per call; `emptyloop` +0.0000. `extcall` is
++  the only bench program making a library call.
++* **M1** `lives` moved above `condition_of`'s doc block. **M2** the stress test's doc rests the rc 120
++  on "a use after release being outside the API contract". **M3** `register_local` roots "until it is
++  released or the call ends". **M4** `temps_floor` is "the floor below which `register_local` pops
++  nothing".
++
++Checks, `CARGO_TARGET_DIR=/tmp/claude-1000/p9/t9-target CARGO_INCREMENTAL=0 memcap 8G`, statuses
++unpiped:
++
++| command | status |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `cargo clippy -p rexx-api -p rexx-exec --all-targets -- -D warnings` | 0 |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --lib --test release_local_reference --test collect_stress --test corpus --test api_group_tests --test library_routine_memory --no-fail-fast` | 0 (lib 1087, collect_stress 37, corpus 29 + 1 ignored, api groups 24, release 3) |
++| `cargo test --release -p rexx-api` | 0 |
++
++Concern: the two instructions per native call with stress off (above).
+diff --git a/rust/crates/rexx-api/src/values.rs b/rust/crates/rexx-api/src/values.rs
+index 9c5be096a..0dc7ebdd4 100644
+--- a/rust/crates/rexx-api/src/values.rs
++++ b/rust/crates/rexx-api/src/values.rs
+@@ -667,22 +667,22 @@ pub trait Host {
+     /// (`interpreter/execution/NativeActivation.hpp:232`).
+     fn locals(&mut self) -> &mut Table;
+ 
+     /// The object `handle` names for the running native call: one of its
+     /// local references, or for a host that keeps them, a global reference,
+     /// which is the same handle for the same object.
+     fn resolve(&mut self, handle: RexxObjectPtr) -> Option<ObjRef> {
+         self.locals().resolve(handle)
+     }
+ 
+-    /// Registers `object` as a local reference, which roots it for the rest
+-    /// of the call; a host may stop rooting it any other way.
++    /// Registers `object` as a local reference, which roots it until it is
++    /// released or the call ends; a host may stop rooting it any other way.
+     fn register_local(&mut self, object: ObjRef) -> RexxObjectPtr {
+         self.locals().register(object)
+     }
+ 
+     /// `ReleaseLocalReference`: [`Table::release`], against the host's own
+     /// view of which objects live.
+     fn release_local(&mut self, handle: RexxObjectPtr) {
+         self.locals().release(handle, |_| true);
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 9013b79b7..e0fce640a 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -121,20 +121,21 @@ impl Interp {
+         answered: Result<Option<ObjRef>, Refused>,
+         pending: Option<usize>,
+         receiver: ObjRef,
+         scope: ObjRef,
+         packaged: bool,
+     ) -> Result<Option<ObjRef>, Failure> {
+         self.root_native_answer(&answered);
+         let trapped = self.call_trapped_native_condition();
+         let popped = self.pop_native_frame();
+         pin_leave!(self);
++        self.collect_under_stress();
+         if popped.reserved {
+             self.release_guard(crate::guards::GuardKey {
+                 object: receiver,
+                 scope,
+             });
+         }
+         let trapped = trapped?;
+ 
+         // The condition first, because the oracle raises it in the caller's
+         // frame once the call has returned (`NativeActivation::checkConditions`,
+@@ -210,20 +211,21 @@ impl Interp {
+         answered: Result<Option<ObjRef>, Refused>,
+         pending: Option<usize>,
+         name: &[u8],
+         program: Option<crate::ProgramId>,
+         args: &[Option<ObjRef>],
+     ) -> Result<Option<ObjRef>, Failure> {
+         self.root_native_answer(&answered);
+         let trapped = self.call_trapped_native_condition();
+         let popped = self.pop_native_frame();
+         pin_leave!(self);
++        self.collect_under_stress();
+         let outcome = match (pending, trapped) {
+             (Some(number), _) => {
+                 self.activity.native_reraise = true;
+                 Err(condition_of(number))
+             }
+             (None, Err(failure)) => Err(failure),
+             (None, Ok(trapped)) => {
+                 self.settle_native_call(answered, popped, program.is_some(), trapped)
+             }
+         };
+@@ -688,20 +690,28 @@ impl Interp {
+     }
+ 
+     /// Roots the object a native call answered as a temporary, which its
+     /// frame's `locals` may have been alone in rooting.
+     fn root_native_answer(&mut self, answered: &Result<Option<ObjRef>, Refused>) {
+         if let Ok(Some(object)) = answered {
+             self.roots.activity_mut().push_temp(*object);
+         }
+     }
+ 
++    /// Under the collect stress mode, a collection once a native call's frame
++    /// has popped, while its answer is rooted only as a temporary.
++    fn collect_under_stress(&mut self) {
++        if self.stress_collect {
++            self.collect_now();
++        }
++    }
++
+     /// Pops the innermost native frame, answering the condition it holds and
+     /// whether it was a method's, and keeps its cleared buffers for the next
+     /// call to refill. The held condition's objects stay rooted as temps.
+     fn pop_native_frame(&mut self) -> Popped {
+         let (answer, mut frame) = self.take_native_frame();
+         self.end_native_frame(&mut frame);
+         self.activity.native_spares.push(frame);
+         answer
+     }
+ 
+@@ -1323,27 +1333,27 @@ impl rexx_api::values::Baton for InterpBaton {
+ 
+     fn release(&self) {
+         crate::baton::Baton::release(self);
+     }
+ 
+     fn held_here(&self) -> bool {
+         crate::baton::Baton::held_here(self)
+     }
+ }
+ 
+-/// The condition an extension raised, whose number is the major and the minor
+-/// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
+ /// Whether `object` is one the heap has not swept.
+ fn lives(heap: &rexx_core::Heap, object: ObjRef) -> bool {
+     !matches!(object.decode(), rexx_core::Decoded::Heap { .. }) || heap.peek(object).is_some()
+ }
+ 
++/// The condition an extension raised, whose number is the major and the minor
++/// packed as `major * 1000 + minor` (`api/oorexxerrors.h`).
+ fn condition_of(number: usize) -> Failure {
+     let major = u16::try_from(number / 1000).unwrap_or(u16::MAX);
+     let minor = u16::try_from(number % 1000).unwrap_or(0);
+     Raised::syntax(major, minor, Vec::new()).into()
+ }
+ 
+ impl Host for Interp {
+     fn is_method(&self) -> bool {
+         self.activity
+             .native_handles
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index d2ffa1227..2a106b0c2 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1962,22 +1962,22 @@ struct NativeFrame {
+     /// The activation the call was made from.
+     caller: Option<crate::activation::ActivationId>,
+     /// This native activation's number among its activity's, which is what
+     /// rexx-api names the frame by.
+     id: u32,
+     /// Whether the code reports a package, which then leads a condition it
+     /// raises with no line, so the condition has no `POSITION`.
+     packaged: bool,
+     /// Whether a method's call holds its guard lock (`objectScope`).
+     reserved: bool,
+-    /// The temporaries' length when the call began: one pushed since, and
+-    /// registered in `locals`, is rooted by `locals` alone.
++    /// The temporaries' length when the call began, below which
++    /// `register_local` pops nothing.
+     temps_floor: usize,
+ }
+ 
+ impl NativeFrame {
+     fn object_roots(&self, out: &mut Vec<ObjRef>) {
+         out.extend(self.locals.roots());
+         out.extend([self.owner, self.scope, self.receiver]);
+         out.extend(self.arguments.iter().copied().flatten());
+         out.extend(self.argument_list);
+         out.extend(self.lent.iter().copied());
+diff --git a/rust/crates/rexx-exec/tests/release_local_reference.rs b/rust/crates/rexx-exec/tests/release_local_reference.rs
+index 9ecff6bde..d0657f4b6 100644
+--- a/rust/crates/rexx-exec/tests/release_local_reference.rs
++++ b/rust/crates/rexx-exec/tests/release_local_reference.rs
+@@ -193,22 +193,23 @@ fn releases_answer_as_the_oracles_do() {
+             String::new(),
+             0
+         )
+     );
+     fs::remove_dir_all(&dir).expect("the run's directory is removable");
+ }
+ 
+ /// **Under a collection at every allocation, a released string goes and the
+ /// one held beside it stays.** The answers that read no released object
+ /// after an allocation are the oracle's; `RelTwice`'s released string is
+-/// collected before its answer is read, which collection timing licenses
+-/// (`docs/superpowers/plans/phase-4-exclusions.txt`), and is refused loudly.
++/// collected before its answer is read and is refused loudly, a use after
++/// release being outside the API contract
++/// (`docs/superpowers/plans/phase-4-exclusions.txt`).
+ #[test]
+ fn under_a_collection_at_every_allocation_only_the_released_string_goes() {
+     let dir = fresh_dir("release-stress");
+     build_library(&dir, "relsem");
+     let ours = run_in(
+         &dir,
+         "say RelStash()\n\
+          say RelStale()\n\
+          say RelOne(50)\n\
+          say RelLength()\n\
