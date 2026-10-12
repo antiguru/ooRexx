@@ -1,0 +1,14 @@
+count 13
+/* A package's own ~local entries are part of the class search: .NAME,
+   Package~findClass, and the native API's FindContextClass from a method and
+   a routine whose package holds the entry. */
+l = .context~package~local
+l~put(.array, 'FOO')
+say 'dot:' .foo
+say 'findClass:' .context~package~findClass('FOO')
+say 'findClass absent:' .context~package~findClass('NOSUCHFOO')
+t = .T~new
+say 'method:' t~find('BAR')
+say 'routine:' findr('FOO')
+say 'lib local:' t~local('BAR')
+::requires 'lib.cls'

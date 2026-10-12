@@ -530,9 +530,16 @@ impl Interp {
         }
 
         if !self.package_locals.is_empty()
-            && let Some(found) = self.package_local_entry(bare)?
+            && let Some(program) = self.running_program()
+            && let Some(&local) = self.package_locals.get(&Package::Program(program))
         {
-            return Ok(found);
+            match self.package_local_entry(local, bare)? {
+                hash::DirectoryEntry::Found(found) => return Ok(found),
+                hash::DirectoryEntry::Owed(owner) => {
+                    return Err(Loud::environment_symbol(dotted, owner).into());
+                }
+                hash::DirectoryEntry::Absent => {}
+            }
         }
 
         match self.directory_lookup(
@@ -574,10 +581,8 @@ impl Interp {
         if let Some(found) = self.rexx_package_class(bare) {
             return Some(found);
         }
-        if let Some(found) = self
-            .package_locals
-            .get(&Package::Program(program))
-            .and_then(|directory| self.native_map_entry(*directory, bare))
+        if let Some(&local) = self.package_locals.get(&Package::Program(program))
+            && let Ok(hash::DirectoryEntry::Found(found)) = self.package_local_entry(local, bare)
         {
             return Some(found);
         }
@@ -753,21 +758,17 @@ impl Interp {
         None
     }
 
-    /// The running package's own local environment directory entry for `bare`
-    /// -- `packageLocal->get(internalName)` in `PackageClass::findClass`
-    /// (`classes/PackageClass.cpp:1122`), the step between the REXX package's
-    /// public classes and `.local`.
+    /// A package's own local environment directory entry for `bare`, by the
+    /// name's bytes: `packageLocal->get(internalName)` in
+    /// `PackageClass::findClass` (`classes/PackageClass.cpp:1122`), the step
+    /// between the REXX package's public classes and `.local`.
     #[inline(never)]
-    fn package_local_entry(&mut self, bare: &[u8]) -> Result<Option<ObjRef>, Failure> {
-        let Some(program) = self.running_program() else {
-            return Ok(None);
-        };
-        let Some(&directory) = self.package_locals.get(&Package::Program(program)) else {
-            return Ok(None);
-        };
-        let index = self.text(bare);
-        self.roots.activity_mut().push_temp(index);
-        hash::store_get(self, directory, index)
+    pub(crate) fn package_local_entry(
+        &mut self,
+        local: ObjRef,
+        bare: &[u8],
+    ) -> Result<hash::DirectoryEntry, Failure> {
+        hash::directory_get(self, local, hash::Key::new(bare), None).map(|(entry, _)| entry)
     }
 
     /// A public class of the interpreter's own package --
@@ -1278,15 +1279,6 @@ impl Interp {
     /// [`crate::dispatch::hash::store_item`], reachable from this module.
     fn store_item(&mut self, object: ObjRef, index: ObjRef) -> Option<ObjRef> {
         crate::dispatch::hash::store_item(self, object, index)
-    }
-
-    /// One entry of a `Body::Native`'s own map, for a caller that holds
-    /// `&self` and is asking about a table this crate built.
-    fn native_map_entry(&self, object: ObjRef, index: &[u8]) -> Option<ObjRef> {
-        match &self.heap.get(object)?.body {
-            Body::Native(native) => native.entry(index),
-            _ => None,
-        }
     }
 
     /// One entry of a string-keyed table, by the key the caller holds.

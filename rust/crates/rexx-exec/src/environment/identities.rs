@@ -734,12 +734,18 @@ impl Interp {
         if let Some(found) = self.package_public_class_of(package, upper) {
             return Ok(found);
         }
-        let local = self.package_local(match package {
+        let package = match package {
             Some(program) => Package::Program(program),
             None => Package::Rexx,
-        });
-        if let Some(found) = self.native_map_entry(local, upper) {
-            return Ok(found);
+        };
+        if let Some(&local) = self.package_locals.get(&package) {
+            match self.package_local_entry(local, upper)? {
+                hash::DirectoryEntry::Found(found) => return Ok(found),
+                hash::DirectoryEntry::Owed(owner) => {
+                    return Err(Loud::environment_entry(upper, owner).into());
+                }
+                hash::DirectoryEntry::Absent => {}
+            }
         }
         match self.directory_lookup(
             &[EnvScope::Local, EnvScope::Environment],
