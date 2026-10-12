@@ -182,8 +182,8 @@ use class_protocol::{
 mod construct;
 use construct::{
     native_capacity_init, native_directory_new, native_executable_new, native_hash_collection_new,
-    native_load_external, native_message_new, native_new_file, native_package_new, native_stem_new,
-    native_string_new, native_unsupported_new, native_weak_reference_new, pointer_address,
+    native_load_external, native_message_new, native_new_file, native_stem_new, native_string_new,
+    native_unsupported_new, native_weak_reference_new, pointer_address,
 };
 
 // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
@@ -1079,15 +1079,14 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
     // the mapped classes whose `of` is `MapCollection~OF` in Rexx.
     ("Set", "OF", Arity::Counted, hash::native_set_of),
-    // `loadExternalMethod`, `loadExternalRoutine` and `Package~new`
-    // (`memory/Setup.cpp:1093`, `:1130`, `:1156`).
+    // `loadExternalMethod` and `loadExternalRoutine` (`memory/Setup.cpp:1093`,
+    // `:1130`).
     (
         "Method",
         "LOADEXTERNALMETHOD",
         Arity::Fixed(2),
         native_load_external,
     ),
-    ("Package", "NEW", Arity::Counted, native_package_new),
     (
         "Routine",
         "LOADEXTERNALROUTINE",
@@ -1236,6 +1235,8 @@ pub(crate) struct ObjectModel {
     /// here rather than by name at every build, exactly as `context` beside
     /// it is.
     stack_frame: ObjRef,
+    /// [`hash::STORE_HOLDERS`], resolved.
+    store_holders: Vec<ObjRef>,
 }
 
 impl ObjectModel {
@@ -1401,6 +1402,14 @@ impl ObjectModel {
             .lookup("StackFrame")
             .expect("StackFrame is a native class");
         let table = classes.lookup("Table").expect("Table is a native class");
+        let store_holders = hash::STORE_HOLDERS
+            .iter()
+            .map(|name| {
+                classes
+                    .lookup(name)
+                    .unwrap_or_else(|| panic!("{name} is a native class"))
+            })
+            .collect();
         ObjectModel {
             classes,
             natives,
@@ -1421,6 +1430,7 @@ impl ObjectModel {
             stem,
             weak_reference,
             stack_frame,
+            store_holders,
         }
     }
 }

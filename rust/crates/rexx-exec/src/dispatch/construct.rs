@@ -76,8 +76,8 @@ pub(super) fn native_directory_new(
 }
 
 /// A hash collection's `~init(size)`: the store sized for the initial-size
-/// argument -- `HashCollection::initRexx`
-/// (`classes/support/HashCollection.cpp:63`).
+/// argument, as `HashCollection::initRexx`
+/// (`classes/support/HashCollection.cpp:63`) sizes it.
 pub(super) fn native_capacity_init(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -87,18 +87,6 @@ pub(super) fn native_capacity_init(
     let capacity = optional_length_argument(interp, args, 0)?.unwrap_or(0);
     hash::initialize_store(interp, receiver, capacity)?;
     Ok(None)
-}
-
-/// The refusal a constructor that has checked its arguments and cannot build
-/// the primitive body answers.
-fn unbuilt_new(interp: &mut Interp, class: ObjRef) -> Failure {
-    unbuilt_class_method(interp, class, b"NEW")
-}
-
-/// [`unbuilt_new`] for a class method under some other name.
-fn unbuilt_class_method(interp: &mut Interp, class: ObjRef, name: &[u8]) -> Failure {
-    let id = interp.classes().id_string(class).to_string();
-    Loud::native_method(name, &id).into()
 }
 
 /// `Message~new(target, message, ...)`: a message object whose send has not
@@ -155,8 +143,8 @@ pub(super) fn native_message_new(
 
 /// `Method~new(name, source [, context] ...)` and `Routine~new(name, source
 /// [, context] ...)`: the first two are required, the context is resolved as
-/// `newFile`'s is, and `INIT` gets the arguments after it --
-/// `BaseExecutable::processNewExecutableArgs`
+/// `newFile`'s is, and `INIT` gets the arguments after it. The arguments are
+/// `BaseExecutable::processNewExecutableArgs`'s
 /// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
 /// `RoutineClass::newRexx` share.
 pub(super) fn native_executable_new(
@@ -252,9 +240,9 @@ pub(super) fn native_as_instance(
 }
 
 /// `Method~newFile(name [, context])` and `Routine~newFile(name [, context])`:
-/// the executable a file's own text becomes, then `INIT` with no arguments
-/// -- `MethodClass::newFileRexx` (`classes/MethodClass.cpp:521`) and
-/// `RoutineClass::newFileRexx` (`classes/RoutineClass.cpp:341`).
+/// the executable a file's own text becomes, then `INIT` with no arguments,
+/// as `MethodClass::newFileRexx` (`classes/MethodClass.cpp:521`) and
+/// `RoutineClass::newFileRexx` (`classes/RoutineClass.cpp:341`) do.
 pub(super) fn native_new_file(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -433,21 +421,7 @@ fn external_specification(descriptor: &[u8], name: &[u8]) -> Option<(Vec<u8>, Ve
     Some((library, entry))
 }
 
-/// `Package~new(name, source, ...)`: the name is required, the source is not,
-/// and this crate loads no package either way -- `PackageClass::newRexx`
-/// (`classes/PackageClass.cpp:158`).
-pub(super) fn native_package_new(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    let class = class_receiver(interp, receiver)?;
-    executable_name_argument(interp, args)?;
-    Err(unbuilt_new(interp, class))
-}
-
-/// The `name` argument `Method`, `Routine` and `Package` share --
+/// The `name` argument `Method` and `Routine` share:
 /// `stringArgument(pgmname, "name")`.
 fn executable_name_argument(
     interp: &mut Interp,

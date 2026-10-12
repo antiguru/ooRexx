@@ -228,8 +228,9 @@ fn refuse_routines_write(interp: &Interp, receiver: ObjRef) -> Result<(), Failur
 }
 
 /// The classes whose instances get a store, named rather than derived for
-/// [`hash_scope`]'s reason.
-const STORE_HOLDERS: &[&str] = &[
+/// [`hash_scope`]'s reason, and resolved once into the object model's
+/// `store_holders`. `Properties` is a `Directory` subclass.
+pub(super) const STORE_HOLDERS: &[&str] = &[
     "Table",
     "IdentityTable",
     "Set",
@@ -237,7 +238,6 @@ const STORE_HOLDERS: &[&str] = &[
     "Relation",
     "Directory",
     "StringTable",
-    "Properties",
     "Stem",
 ];
 
@@ -246,15 +246,17 @@ fn holds_hash_store(interp: &mut Interp, receiver: ObjRef) -> bool {
     let Some(class) = interp.class_of_value(receiver) else {
         return false;
     };
-    for name in STORE_HOLDERS {
-        let Some(base) = interp.classes().lookup(name) else {
-            continue;
-        };
-        if interp.classes().is_a(class, base) {
-            return true;
-        }
-    }
-    false
+    holds_store_class(interp, class)
+}
+
+/// Whether `class` is one of [`STORE_HOLDERS`] or a subclass of one.
+fn holds_store_class(interp: &mut Interp, class: ObjRef) -> bool {
+    let model = interp.object_model();
+    model.store_holders.contains(&class)
+        || model
+            .store_holders
+            .iter()
+            .any(|&holder| model.classes.is_a(class, holder))
 }
 
 /// A hash store's three arrays and its two scalars, read out together.
@@ -1523,7 +1525,7 @@ pub(super) fn native_hash_new(
 
 /// `HashCollection::initialize` (`classes/support/HashCollection.cpp:78`):
 /// the store sized for `capacity`, unless the receiver already has one. The
-/// capacity is **observable** -- it decides the bucket count, which decides
+/// capacity is **observable**: it decides the bucket count, which decides
 /// the iteration order. Measured, the same eight keys in the same order come
 /// back differently from `.Table~new` and `.Table~new(100)`, and both orders
 /// are what this store's geometry predicts.
@@ -1532,10 +1534,16 @@ pub(super) fn initialize_store(
     receiver: ObjRef,
     capacity: usize,
 ) -> Result<(), Failure> {
-    if !holds_hash_store(interp, receiver) || read_store(interp, receiver, CONTENTS)?.is_some() {
-        return Ok(());
+    let scope = hash_scope(interp);
+    let class = match interp.heap.get(receiver).map(|object| &object.body) {
+        Some(Body::Instance { class, pools, .. }) if pools.get(scope, HASH_INDEXES).is_none() => {
+            *class
+        }
+        _ => return Ok(()),
+    };
+    if holds_store_class(interp, class) {
+        install_store(interp, receiver, CONTENTS, calculate_bucket_size(capacity));
     }
-    install_store(interp, receiver, CONTENTS, calculate_bucket_size(capacity));
     Ok(())
 }
 

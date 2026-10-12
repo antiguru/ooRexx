@@ -25,6 +25,7 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
 | `sendloop.rex` | An empty `::METHOD` sent 5,000,000 times |
 | `extcall.rex` | `liborxfunction`'s `TestIntArg` called 3,000,000 times; needs the library's directory on `LD_LIBRARY_PATH` |
 | `dirread.rex` | Directory entry reads by message and by `[]`, and a `.local` entry read as an environment symbol: the store-backed read path, 200,000 passes. Added in Phase 6.1 from Task 7's measurement of that path; sized against this crate (0.3s), not the oracle (0.05s) |
+| `hashnew.rex` | Hash-collection construction: a `.directory~new`, `.stringtable~new` and `.table~new` per pass, 50,000 passes, none kept. Added in Phase 9a Task 8's fix round, when moving the store's sizing into `INIT` cost this path 20% and no program here constructed a collection |
 | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
 | `pingpong/pingmsg.rex` | Message round trip: `~start` on a new activity and its `~result` awaited, 80,000 times. Criterion 7 of Phase 6, recorded against the oracle; in a subdirectory, so the criterion harness does not run it; `callgrind.sh` runs it as `pingmsg` |
 | `pingpong/pingsem.rex` | Semaphore post/wait: two activities hand a turn back and forth through two `EventSemaphore`s, 100,000 times each way. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |

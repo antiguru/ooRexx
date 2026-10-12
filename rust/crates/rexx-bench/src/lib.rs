@@ -67,6 +67,9 @@ pub static PROGRAMS: &[&str] = &[
     // Added in Phase 6.1: the store-backed read of a Directory entry and a
     // `.local` entry, the path whose cost Task 7 measured.
     "dirread",
+    // Added in Phase 9a Task 8's fix round: hash-collection construction,
+    // whose INIT sizes the store.
+    "hashnew",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

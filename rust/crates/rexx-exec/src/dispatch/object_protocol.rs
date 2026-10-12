@@ -658,7 +658,17 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     if let Body::Stem { exposed, .. } = &mut body {
         *exposed = None;
     }
+    // A `String` subclass instance's text is charged as `String~new` charges
+    // it, since `Body::held_bytes` does not report it.
+    let text = match &body {
+        Body::Instance {
+            native: Some(state),
+            ..
+        } => state.text().map_or(0, <[u8]>::len),
+        _ => 0,
+    };
     let copy = interp.alloc_charged(behaviour, body);
+    interp.charge_unheld(text);
     interp.roots.activity_mut().push_temp(copy);
     duplicate_collection_stores(interp, copy);
     duplicate_stem_store(interp, copy);

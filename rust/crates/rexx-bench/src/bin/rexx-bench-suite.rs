@@ -136,6 +136,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "hashnew",
+        role: Role::Loop,
+    },
+    Axis {
         name: "heapshape",
         role: Role::SelfTimed,
     },
