@@ -1370,6 +1370,9 @@ struct Interp {
     /// `mergeLibrary` merges the library package's own routine objects, so
     /// every package importing one answers the same object.
     library_routine_objects: FxHashMap<usize, ObjRef>,
+    /// The source-less `Routine` a REXX package native routine level answers
+    /// for `StackFrame~executable`, by upcased name, each rooted globally.
+    rexx_routine_executables: FxHashMap<Box<[u8]>, ObjRef>,
     /// The packages each program has imported, in the order they were added
     /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
     /// answers a copy of.
@@ -2092,6 +2095,7 @@ impl Interp {
             package_tables: FxHashMap::default(),
             routine_objects: FxHashMap::default(),
             library_routine_objects: FxHashMap::default(),
+            rexx_routine_executables: FxHashMap::default(),
             package_imports: FxHashMap::default(),
             package_parents: FxHashMap::default(),
             parented: Vec::new(),
@@ -2901,6 +2905,7 @@ impl Interp {
             routine_objects: _,
             // `RootSet::add_global`, under `library_routine_root_key`.
             library_routine_objects: _,
+            rexx_routine_executables: _,
             package_imports: _,
             // Program identities and nothing else.
             package_parents: _,

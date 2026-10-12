@@ -1020,6 +1020,30 @@ impl Interp {
         object
     }
 
+    /// The one `Routine` a native routine level of the REXX package answers
+    /// for `StackFrame~executable`, built on the first ask: measured, oracle
+    /// rc 0, two `SysSleep` failures answer one object, a `SysFileDelete`
+    /// failure another, each with no source and the REXX package.
+    pub(crate) fn rexx_routine_executable(&mut self, name: &[u8]) -> ObjRef {
+        let upper: Box<[u8]> = name.to_ascii_uppercase().into();
+        if let Some(found) = self.rexx_routine_executables.get(&upper).copied() {
+            return found;
+        }
+        let class = self.routine_class();
+        let object = self.native_instance(class);
+        self.roots.add_global(
+            &format!(
+                "the REXX package routine executable {}",
+                String::from_utf8_lossy(&upper)
+            ),
+            object,
+        );
+        self.rexx_routine_executables.insert(upper.clone(), object);
+        self.record_native_executable(object);
+        self.attach_annotations(object, Annotated::RexxRoutine(upper));
+        object
+    }
+
     /// The file `name` resolves to from `package`'s own directory --
     /// `PackageClass::resolveProgramName`, which `~findProgram` and
     /// `~loadPackage` each reach with their own resolve type.
@@ -1110,5 +1134,9 @@ fn annotation_root_key(site: &Annotated) -> String {
             format!("annotations of the library routine at code row {code}")
         }
         Annotated::Compiled(count) => format!("annotations of compiled method {count}"),
+        Annotated::RexxRoutine(name) => format!(
+            "annotations of the REXX package routine {}",
+            String::from_utf8_lossy(name)
+        ),
     }
 }

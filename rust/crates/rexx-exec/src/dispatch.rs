@@ -3862,10 +3862,13 @@ impl Interp {
         if self.activity.failure_site.is_some() {
             return;
         }
-        let executable = if level.method {
-            context::native_method_executable(self, level.target, level.name)
-        } else {
-            None
+        let executable = match &level.activation {
+            _ if level.method => context::native_method_executable(self, level.target, level.name),
+            Some(NativeActivationLevel {
+                package: Some(Package::Rexx),
+                ..
+            }) => Some(self.rexx_routine_executable(level.name)),
+            _ => None,
         };
         let frame = crate::dispatch::context::build_native_level_frame(
             self,

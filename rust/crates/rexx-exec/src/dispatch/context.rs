@@ -1083,7 +1083,7 @@ fn frame_arguments(
 
 /// `StackFrameClass::getExecutable`: the `Method` or `Routine` the frame's
 /// level was running, `.nil` for a `COMPILE` frame. A frame built without
-/// one refuses: a native routine level's, one built from a failure's site
+/// one refuses: a library routine level's, one built from a failure's site
 /// rather than from an activation, and one whose [`executable_at`] failed.
 fn frame_executable(
     interp: &mut Interp,

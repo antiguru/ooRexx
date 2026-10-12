@@ -2051,20 +2051,14 @@ fn a_copy_or_frame_executable_this_crate_does_not_keep_is_loud() {
                 .to_string()
         ),
     );
-    // A native routine level's executable is a `Routine` object the oracle
-    // keeps per package and name, with no source: measured, oracle rc 0.
+    // A REXX package native routine level's executable is one `Routine` per
+    // name: measured, oracle rc 0.
     assert_eq!(
         run_source(
             "signal on syntax\ncall sysSleep 'x'\nsyntax:\n\
              say condition('O')['STACKFRAMES']~firstItem~executable~class\n"
         ),
-        (
-            120,
-            String::new(),
-            "rexx-exec: method \"EXECUTABLE\" of class \"StackFrame\" is not implemented \
-             (Phase 9)\n"
-                .to_string()
-        )
+        (0, "The Routine class\n".to_string(), String::new())
     );
 }
 

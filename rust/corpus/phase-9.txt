@@ -41,3 +41,4 @@ lang/executable_copies.rex
 lang/package_store_tables.rex
 lang/routines_table_resolution.rex
 lang/nil_hidden_methods.rex
+lang/rexx_routine_frame_executable.rex
