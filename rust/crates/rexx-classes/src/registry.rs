@@ -135,6 +135,11 @@ impl ClassRegistry {
         id
     }
 
+    /// See [`ClassGraph::hiding_behaviour`].
+    pub fn hiding_behaviour(&mut self, class: ObjRef, hidden: &[&str]) -> BehaviourHandle {
+        self.graph.hiding_behaviour(class, hidden)
+    }
+
     /// See [`ClassGraph::behaviour_names`].
     pub fn behaviour_names(&self, class: ObjRef) -> usize {
         self.graph.behaviour_names(class)

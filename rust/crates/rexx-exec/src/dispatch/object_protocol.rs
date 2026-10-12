@@ -480,8 +480,8 @@ pub(super) fn native_object_name_set(
         // A string's name is shared by every value the oracle's identities
         // make the same object: a package's literals, its integer cache, and
         // the operations that answer their receiver, none of which this
-        // crate's strings and numbers keep. `.nil` is the oracle's 97.1, from
-        // a behaviour without `OBJECTNAME=` this crate does not model.
+        // crate's strings and numbers keep. `.nil`'s own behaviour hides
+        // `OBJECTNAME=`, so only a borrowed method object reaches it here.
         Primitive::String | Primitive::SmallInt | Primitive::Object => {
             return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
         }

@@ -1244,6 +1244,9 @@ pub(crate) struct ObjectModel {
     stack_frame: ObjRef,
     /// [`hash::STORE_HOLDERS`], resolved.
     store_holders: Vec<ObjRef>,
+    /// `.nil`'s own behaviour: `Object`'s with `COPY`, `START` and
+    /// `OBJECTNAME=` hidden (`memory/Setup.cpp:1758`-`:1760`).
+    nil_behaviour: rexx_classes::BehaviourHandle,
 }
 
 impl ObjectModel {
@@ -1271,7 +1274,7 @@ impl ObjectModel {
     }
 
     fn build(
-        classes: rexx_classes::ClassRegistry,
+        mut classes: rexx_classes::ClassRegistry,
         extra: &[(&str, &str, Arity, NativeMethod)],
     ) -> ObjectModel {
         let mut natives: Vec<Option<NativeEntry>> = Vec::new();
@@ -1417,6 +1420,7 @@ impl ObjectModel {
                     .unwrap_or_else(|| panic!("{name} is a native class"))
             })
             .collect();
+        let nil_behaviour = classes.hiding_behaviour(object, &["COPY", "START", "OBJECTNAME="]);
         ObjectModel {
             classes,
             natives,
@@ -1438,6 +1442,7 @@ impl ObjectModel {
             weak_reference,
             stack_frame,
             store_holders,
+            nil_behaviour,
         }
     }
 }
@@ -1917,7 +1922,12 @@ impl Interp {
             // literal's do. This fold is one of the two sites that would
             // change if that ever stopped being true.
             Primitive::String | Primitive::SmallInt => model.string,
-            Primitive::Object => model.object,
+            Primitive::Object => {
+                return Ok(Behaviour::Instance {
+                    methods: model.nil_behaviour,
+                    owner: model.object,
+                });
+            }
             Primitive::Array => model.array,
             Primitive::Package => model.package,
             Primitive::Method => model.method,

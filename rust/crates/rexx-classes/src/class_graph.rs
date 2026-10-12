@@ -272,6 +272,21 @@ impl ClassGraph {
         behaviour.version += 1;
     }
 
+    /// A behaviour of its own holding `class`'s current instance methods with
+    /// each of `hidden` hidden in front -- what `defineInstanceMethod` with a
+    /// `.nil` method does to one object's behaviour copy
+    /// (`ObjectClass.cpp:2297`).
+    pub fn hiding_behaviour(&mut self, class: ObjRef, hidden: &[&str]) -> BehaviourHandle {
+        let source = self.classes[&class].instance_behaviour;
+        let mut dict = self.behaviours[source.index()].dict.clone();
+        for name in hidden {
+            dict.add_hidden(name);
+        }
+        let handle = self.alloc_behaviour();
+        self.behaviours[handle.index()].dict = dict;
+        handle
+    }
+
     /// How many names `class`'s two behaviours hold entries under.
     pub fn behaviour_names(&self, class: ObjRef) -> usize {
         let def = &self.classes[&class];
