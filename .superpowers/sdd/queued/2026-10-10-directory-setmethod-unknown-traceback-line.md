@@ -30,3 +30,5 @@ This crate (`rexx-run` at `6a87cd616`), rc 214:
     Error 42.3:  Arithmetic overflow; divisor must not be zero.
 
 Suspected site: `dispatch/hash.rs` `run_stored_method`, which runs the entry method under the Directory's UNKNOWN method; the oracle's traceback has no frame for it.
+
+2026-10-12 (Phase 9a Task 8 review): the Stem sibling. `x = .stem~new('S.'); say x~nosuch` prints an extra `Compiled method "UNKNOWN" with scope "Stem".` traceback line the oracle does not (rc 159 both), for a base or subclass Stem receiver.

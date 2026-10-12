@@ -1,0 +1,802 @@
+# Review package: b0628b9be..0af69ae87
+
+## Commits
+0af69ae87 Phase 9a Task 8 fix round 1: report section, queued items closed
+f3741cfad Phase 9a Task 8 fix round 1: copy charges a subclass string; hash INIT cost
+
+## Files changed
+ .../sdd/2026-10-11-phase-9a/task-8-report.md       | 61 +++++++++++++++++++-
+ .../2026-09-30-hash-subclass-init-capacity.md      |  7 +++
+ .../2026-09-30-stringtable-subclass-new-arg.md     |  7 +++
+ .../sdd/queued/2026-10-10-subclass-package.md      |  2 +
+ .../sdd/queued/2026-10-10-subclass-rexxinfo.md     |  2 +
+ rust/bench-programs/README.md                      |  1 +
+ rust/bench-programs/callgrind.sh                   |  2 +-
+ rust/bench-programs/hashnew.rex                    | 12 ++++
+ rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs |  4 ++
+ rust/crates/rexx-bench/src/lib.rs                  |  3 +
+ rust/crates/rexx-exec/src/dispatch.rs              | 20 +++++--
+ rust/crates/rexx-exec/src/dispatch/construct.rs    | 42 +++-----------
+ rust/crates/rexx-exec/src/dispatch/hash.rs         | 40 +++++++------
+ .../rexx-exec/src/dispatch/object_protocol.rs      | 10 ++++
+ .../crates/rexx-exec/tests/instance_copy_memory.rs | 65 ++++++++++++++++++++++
+ 15 files changed, 221 insertions(+), 57 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-11-phase-9a/task-8-report.md b/.superpowers/sdd/2026-10-11-phase-9a/task-8-report.md
+index 9cdf94499..ef44e89ff 100644
+--- a/.superpowers/sdd/2026-10-11-phase-9a/task-8-report.md
++++ b/.superpowers/sdd/2026-10-11-phase-9a/task-8-report.md
+@@ -42,21 +42,21 @@ site, the condition the C++ tests, and the witness lines (oracle, `t` column = c
+ | `right` | size != 0 and size == length | `right 3` K | `right 5`, `right 0 empty` String |
+ | `copies` | count 1, length > 0 | `copies 1` K | `copies 2`, `copies 1 empty` String |
+ | `reverse` | length <= 1 | `reverse 1` K | `reverse 3`, `reverse aba` String |
+ | `delstr` | position > length | `delstr 9`, `delstr empty` K | `delstr 2 0` String |
+ | `delWord` | count 0, or fewer words than the position (non-empty) | `delword 5`, `delword 1 0` K | `delword 1`, `delword empty` String |
+ | `strip` | nothing stripped, length > 0 | `strip`, `strip t` K | `strip blanks`, `strip empty` String |
+ | `changeStr`, `caselessChangeStr` | count 0 or no match | `changestr none`, `changestr empty`, `changestr 0`, `caseless none`, `caseless 0` K | `changestr same`, `caseless hit` String |
+ | `upperRexx`, `lowerRexx` | start past the end, or range 0 | `upper 5`, `upper 1 0`, `upper empty`, `lower 5`, `lower 2 0` K | `upper`, `upper ABC`, `lower abc` String |
+ | `translate` | no tables and no pad: `upperRexx`; else start past the end or range 0 | `translate 9`, `translate tables 9`, `translate tables 1 0` K | `translate`, `translate tables` String |
+ | `stringValue`, `makeString`, `primitiveMakeString` | base class only | -- | `makestring`, `string`, `request` String |
+-| `concat`, `stringTrace`, `evaluate`, `getValue`, `getRealValue` | internal; no Rexx send reaches them for an instance | -- | -- |
++| `concat`, `upper()`, `lower()` (no arguments), `stringTrace`, `evaluate`, `getValue`, `getRealValue` | internal; no Rexx send reaches them for an instance (`upper()` and `lower()` get a fresh base string from `stringArgument`) | -- | -- |
+ 
+ The natives return the receiver where the condition holds; for a base string that is the same
+ value, so no branch tests for a subclass.
+ 
+ **Witness:** `rust/corpus/lang/string_subclass_new.rex` (138 lines; oracle rc 0). A long-value line
+ keeps the instance's bytes off the inline representation: with `base_string`'s `push_temp`
+ deleted, `collect_stress`'s `the_l0_subset_passes_again_under_collect_on_every_allocation` panics
+ `a live value` (mutation run, exit 101; restored from a copy, `git diff --stat` back to the
+ committed counts).
+ 
+@@ -234,10 +234,69 @@ The per-task check ran past 5 minutes: the gated corpus and `collect_stress` tog
+    test, so a literal `''` is an empty table, not an omitted one. Kept out of the String witness.
+ 2. `.Method~new('m', 'x', , 'y')` (context omitted, a fourth argument given) leaves the C++ with a
+    NULL source context (`processNewExecutableArgs` returns before the program-scope default); ours
+    uses the caller's package. Not probed.
+ 3. A compile error at the end of a clause prints `"&1"` for its token (`return (`, `-y +y \y`):
+    queued `2026-10-10-translation-error-inserts`. Kept out of the witnesses.
+ 4. `dispatch.rs`'s `NATIVE_CLASS_METHODS` still lists `("Package", "NEW", native_package_new)`
+    beside `package.rs`'s row that answers; the first looks shadowed. Not changed.
+ 5. `Method~annotations~items` refuses (`StringTable` `ITEMS`, Phase 9) on the base as on a subclass;
+    the witness compares the table's identity instead.
++
++## Fix round 1
++
++Review: `task-8-review.md`. Code commit `f3741cfad`; this section and the queued-file closings are
++committed after it.
++
++* **I1.** `copy_object` charges a `String` subclass instance's text toward the next collection with
++  `charge_unheld`, as `String~new` does. `Body::held_bytes` stays the base's: reporting the text
++  there stopped `alloc_charged` inlining into `array_of_class` (+0.18% on alloc, measured in the
++  first round). The other subclasses' copies carry no unreported bytes. A copied Stem store is a
++  `Body::Stem`, which `held_bytes` reports as 0 for a base stem's copy too. Method/Routine copies
++  allocate an annotation table, as `copy_method_object` does for a base one. A Message copy is the
++  base's copy. Witness: `rust/crates/rexx-exec/tests/instance_copy_memory.rs`, the reviewer's
++  3000 x 1,000,000-byte copy loop under `ulimit -v 1048576`, the cap and harness shape of
++  `library_routine_memory.rs`. The corpus runs the crate in-process and uncapped, and
++  `collect_stress` collects on every allocation whatever is charged, so neither can see this. Green
++  (exit 0). With `charge_unheld(text)` replaced by `let _ = text;` it fails, `(None, "", "memory
++  allocation of 1000000 bytes failed ...")`, exit 101; restored from a copy. Probe: oracle `done
++  1000000 K` rc 0; the previous head OOM-killed at `memcap 2G`, rc 137; now identical to the oracle.
++* **I2.** `STORE_HOLDERS` (less `Properties`, a `Directory` subclass: oracle
++  `.properties~superclass~id` is `Directory`) is resolved once in `ObjectModel::build` into
++  `store_holders`. `holds_store_class` tests membership, then `is_a`. `initialize_store` reads the
++  instance's pool for the store directly instead of `class_of_value` and `read_store`. Bench program
++  `rust/bench-programs/hashnew.rex` is added to the set: registered in `callgrind.sh`'s `PROGRAMS`,
++  `rexx-bench`'s `PROGRAMS` and `rexx-bench-suite`'s `AXES`, with a README row. Measured, interleaved:
++  `bench-programs/callgrind.sh -r 3 -j 6 -p hashnew base=<023565ff1 build> head=<e2f5408cb build>
++  fix=<f3741cfad build>`: 1,589,251,545 / 1,915,694,841 (+20.5407%) / 1,595,794,650 (+0.4117%),
++  spread 0.0000. The full set (`-r 1`, two batches, 27 programs) on `f3741cfad` against the base
++  matches the figures above: largest alloc +0.0589%, pingmsg +0.0279%.
++* **Minor 1.** The four queued files carry a closing line naming the witness and `1c0e1d769`.
++* **Minor 2.** The audit table's internal row names `upper()` and `lower()`.
++* **Minor 3.** The `changestr` pre-scan is left as is (no change requested).
++* **Minor 4.** Which `Package` `NEW` row won: `ObjectModel::build` writes `NATIVE_CLASS_METHODS` and
++  then `package::RESUMABLE_CLASS_METHODS` into the same method slot through `put_native`, and the
++  later write wins. So the `dispatch.rs` row was dead, which `.Package~new` answering on both sides
++  confirms. Deleted with `native_package_new`, `unbuilt_new` and `unbuilt_class_method`, which only
++  it used. `REXX_REFUSAL_SITES_REFRESH=1` re-derived `refusal-sites.tsv` byte-identical.
++* **Minor 5.** The ` -- ` dashes in the doc lines this task added (`native_capacity_init`,
++  `native_executable_new`, `native_new_file`, `initialize_store`) are now sentences.
++  `executable_name_argument`'s doc no longer names `Package`.
++
++Checks, each exit status read unpiped (load average 28 to 36 throughout):
++
++* `cargo fmt --all --check`: 0.
++* `cargo clippy -p rexx-core -p rexx-exec --all-targets -- -D warnings`: 0.
++* `cargo clippy -p rexx-bench --all-targets -- -D warnings`: 0.
++* `REXX_CORPUS_GATE=1 timeout 595 cargo test --release -p rexx-exec --lib --test corpus --test
++  collect_stress ...`: 124. The timeout cut `corpus` after lib 1085, `closed_phases` 8 and
++  `collect_stress` 37 had passed (`collect_stress` took 307 s).
++* `REXX_CORPUS_GATE=1 ... --test corpus --test refusal_sites --test refusal_dispositions --test
++  owners --test instance_copy_memory`: 0.
++* `REXX_CORPUS_GATE=1 ... --test method_bodies --test ir_recorded --test trace_oracle --test
++  coverage --test gate_table_c --test gate_table_d`: 0.
++* `cargo test --release -p rexx-bench`: 101. `every_declared_runnability_still_holds` looks for
++  `rust/target/{release,debug}/rexx-run` and does not follow `CARGO_TARGET_DIR`. Every other test
++  passed, `the_axis_list_covers_every_bench_program` among them.
++* Suite groups String/String, Stem, Package, Bag, Directory, IdentityTable, Relation, Set, Table,
++  collections/directory, collections/stringtable, Properties, Method, Routine, Message: exit 101.
++  The not-passed set is the one tabled above, and no test newly fails.
+diff --git a/.superpowers/sdd/queued/2026-09-30-hash-subclass-init-capacity.md b/.superpowers/sdd/queued/2026-09-30-hash-subclass-init-capacity.md
+new file mode 100644
+index 000000000..fe88b7728
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-09-30-hash-subclass-init-capacity.md
+@@ -0,0 +1,7 @@
++# Hash-collection subclass keeps NEW's capacity when its INIT skips super
++
++Found by Phase 6 Task 9's re-review (2026-09-30), pre-existing, not fixed: the oracle sizes a hash
++collection in INIT, so a subclass whose INIT does not forward to super differs from this crate, which
++sizes in NEW. Repro: ask for it in .superpowers/sdd/2026-09-29-phase-6-s0-s1/task-9-rereview.md.
++
++Closed 2026-10-12 by Phase 9a Task 8 at `1c0e1d769`: INIT sizes the store, and a subclass whose INIT does not forward gets the default one. Witness `rust/corpus/lang/hash_subclass_init_capacity.rex`.
+diff --git a/.superpowers/sdd/queued/2026-09-30-stringtable-subclass-new-arg.md b/.superpowers/sdd/queued/2026-09-30-stringtable-subclass-new-arg.md
+new file mode 100644
+index 000000000..a790b20e3
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-09-30-stringtable-subclass-new-arg.md
+@@ -0,0 +1,7 @@
++# StringTable subclass ~new refuses a non-length first argument
++
++Found by Phase 6 Task 9's re-review (2026-09-30), pre-existing, not fixed: a StringTable subclass's
++~new refuses a first argument that is not a length; the oracle accepts it. Repro: see
++.superpowers/sdd/2026-09-29-phase-6-s0-s1/task-9-rereview.md.
++
++Closed 2026-10-12 by Phase 9a Task 8 at `1c0e1d769`: NEW checks no capacity; INIT sizes the store. Witness `rust/corpus/lang/hash_subclass_init_capacity.rex` (`.ks~new('abcdefghij', 'q')`).
+diff --git a/.superpowers/sdd/queued/2026-10-10-subclass-package.md b/.superpowers/sdd/queued/2026-10-10-subclass-package.md
+index 6e6af0089..a99a7a093 100644
+--- a/.superpowers/sdd/queued/2026-10-10-subclass-package.md
++++ b/.superpowers/sdd/queued/2026-10-10-subclass-package.md
+@@ -20,10 +20,12 @@ Oracle, rc 0:
+ This crate (`rexx-run` at `6a87cd616`), rc 159:
+ 
+     [stdout]
+     1
+     [stderr]
+          1 *-* say .k~new('p', 'say 1')~go
+     Error 97 running b3_subclass_package.rex line 1:  Object method not found.
+     Error 97.1:  Object "a Package" does not understand message "GO".
+ 
+ Suspected site: `Package~new` (`dispatch.rs` `native_package_new`, `dispatch/package.rs` `package_new`) answers an instance of Package itself, not of the receiver class.
++
++Closed 2026-10-12 by Phase 9a Task 8 at `1c0e1d769`: `Package~new` on a subclass makes the package an instance of it. Witness `rust/corpus/lang/package_subclass_new.rex`.
+diff --git a/.superpowers/sdd/queued/2026-10-10-subclass-rexxinfo.md b/.superpowers/sdd/queued/2026-10-10-subclass-rexxinfo.md
+index 7dc9550f4..8a425bc72 100644
+--- a/.superpowers/sdd/queued/2026-10-10-subclass-rexxinfo.md
++++ b/.superpowers/sdd/queued/2026-10-10-subclass-rexxinfo.md
+@@ -21,10 +21,12 @@ Oracle, rc 157:
+ This crate (`rexx-run` at `6a87cd616`), rc 158:
+ 
+     [stdout]
+     (empty)
+     [stderr]
+          2 *-* ::class k subclass rexxinfo
+     Error 98 running b4_subclass_rexxinfo.rex line 2:  Execution error.
+     Error 98.909:  Class "REXXINFO" not found.
+ 
+ Suspected site: the `::CLASS` superclass resolution in `install.rs` (`class_not_found`): `.RexxInfo` is an instance, which the oracle rejects as "not a valid class" at translation time.
++
++Closed 2026-10-12 by Phase 9a Task 8 at `1c0e1d769`: a `::CLASS` target naming an object that is not a class is 99.949. Witness `rust/corpus/lang/class_target_not_a_class.rex`.
+diff --git a/rust/bench-programs/README.md b/rust/bench-programs/README.md
+index 27509d77f..540a09d88 100644
+--- a/rust/bench-programs/README.md
++++ b/rust/bench-programs/README.md
+@@ -18,20 +18,21 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
+ | `textnum.rex` | Values that arrive as **text** and are then used as numbers, with fresh handles each iteration so a handle-keyed cache cannot answer from the previous one. Added 2026-09-10 for the same reason: `rexxcps` performs 5,580,002 of these conversions and no program here performed one |
+ | `decloop.rex` | A **decimal-controlled** `DO` -- `do j=1.1 to 2.2 by 1.1`. `emptyloop.rex` and every other loop here use integer control, and the two are not the same axis: measured 2026-09-10, integer control is 1.22x the oracle and decimal control 1.63x |
+ | `decrender.rex` | The same decimal control plus the renderings a real program performs on the control value (`length(j)`, `j='foobar'`), which is `rexxcps`' inner-loop shape. **1.99x**, the worst ratio in the suite, and the construct that carries `rexxcps` above every other primitive it exercises |
+ | `nop.rex` | The fixed cost every clause pays: a counted loop whose body is 100 `nop` clauses, one per line, so the loop step is amortised over them. 1,000,000 passes |
+ | `assign.rex` | The same shape with 100 `x = y` clauses, `y` assigned once before the loop: the per-clause cost plus one variable read and one write. 1,000,000 passes |
+ | `fibcall.rex` | Recursive fib(22) by internal `CALL`, 30 times |
+ | `fibfunc.rex` | Recursive fib(22) by internal function call, 30 times |
+ | `sendloop.rex` | An empty `::METHOD` sent 5,000,000 times |
+ | `extcall.rex` | `liborxfunction`'s `TestIntArg` called 3,000,000 times; needs the library's directory on `LD_LIBRARY_PATH` |
+ | `dirread.rex` | Directory entry reads by message and by `[]`, and a `.local` entry read as an environment symbol: the store-backed read path, 200,000 passes. Added in Phase 6.1 from Task 7's measurement of that path; sized against this crate (0.3s), not the oracle (0.05s) |
++| `hashnew.rex` | Hash-collection construction: a `.directory~new`, `.stringtable~new` and `.table~new` per pass, 50,000 passes, none kept. Added in Phase 9a Task 8's fix round, when moving the store's sizing into `INIT` cost this path 20% and no program here constructed a collection |
+ | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
+ | `pingpong/pingmsg.rex` | Message round trip: `~start` on a new activity and its `~result` awaited, 80,000 times. Criterion 7 of Phase 6, recorded against the oracle; in a subdirectory, so the criterion harness does not run it; `callgrind.sh` runs it as `pingmsg` |
+ | `pingpong/pingsem.rex` | Semaphore post/wait: two activities hand a turn back and forth through two `EventSemaphore`s, 100,000 times each way. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
+ | `pingpong/pingguard.rex` | GUARD WHEN handoff: two activities pass a turn through one object's variable, each in `GUARD ON WHEN`, 100,000 times each. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
+ | `heapshape.rex` | Full-GC pause over a ~1M-object graph. It prints its own figures, so the suite reports those rather than timing the process. **The slot strings are wider than seven bytes on purpose**: a shorter one lives in the Rust handle and allocates nothing, which collapses the graph to ~1,001 objects -- see the program's own comment |
+ 
+ ## Determinism
+ 
+ Same rule as `corpus/`: byte-identical output on every run of the same interpreter. No `DATE()`,
+ `TIME()`, process IDs, or unordered iteration. Every program in this directory was run under
+diff --git a/rust/bench-programs/callgrind.sh b/rust/bench-programs/callgrind.sh
+index e8b71dbe9..df7c45f37 100755
+--- a/rust/bench-programs/callgrind.sh
++++ b/rust/bench-programs/callgrind.sh
+@@ -32,21 +32,21 @@ if [ $# -lt 1 ]; then
+ fi
+ lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
+ [ -f "$lib/liborxfunction.so" ] || { echo "no liborxfunction.so in $lib; set REXX_LIB_DIR" >&2; exit 2; }
+ [ -n "$out" ] || out=$(mktemp -d)
+ mkdir -p "$out"
+ out=$(cd "$out" && pwd)
+ 
+ # Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
+ PINGPONG="pingguard pingmsg pingsem"
+ PROGRAMS="alloc alloc4c arith assign compound decloop decrender dirread dispatch
+-dispatchclass emptyloop extcall fibcall fibfunc heapshape nop parse sayloop
++dispatchclass emptyloop extcall fibcall fibfunc hashnew heapshape nop parse sayloop
+ sendloop startup strings textnum varlookup rexxcps $PINGPONG"
+ on_disk=$(cd "$here" && ls ./*.rex pingpong/*.rex | sed 's|^\./||; s|^pingpong/||; s|\.rex$||' | sort)
+ listed=$(echo $PROGRAMS | tr ' ' '\n' | grep -vx rexxcps | sort)
+ if [ "$on_disk" != "$listed" ]; then
+     echo "PROGRAMS and $here/*.rex disagree:" >&2
+     diff <(echo "$listed") <(echo "$on_disk") >&2
+     exit 2
+ fi
+ if [ -n "$sel" ]; then
+     for p in $sel; do
+diff --git a/rust/bench-programs/hashnew.rex b/rust/bench-programs/hashnew.rex
+new file mode 100644
+index 000000000..97d34582f
+--- /dev/null
++++ b/rust/bench-programs/hashnew.rex
+@@ -0,0 +1,12 @@
++/* Hash-collection construction: a fresh Directory, StringTable and Table
++   every pass, none kept, 50,000 passes. The path NEW and INIT take to give
++   each its store. */
++n = 50000
++total = 0
++do i = 1 to n
++    d = .directory~new
++    s = .stringtable~new
++    t = .table~new
++    total = total + d~items + s~items + t~items
++end
++say total n
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+index 2e7c5fa06..a6b62eebd 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+@@ -128,20 +128,24 @@ const AXES: &[Axis] = &[
+         role: Role::Loop,
+     },
+     Axis {
+         name: "fibcall",
+         role: Role::Loop,
+     },
+     Axis {
+         name: "fibfunc",
+         role: Role::Loop,
+     },
++    Axis {
++        name: "hashnew",
++        role: Role::Loop,
++    },
+     Axis {
+         name: "heapshape",
+         role: Role::SelfTimed,
+     },
+     Axis {
+         name: "nop",
+         role: Role::Loop,
+     },
+     Axis {
+         name: "parse",
+diff --git a/rust/crates/rexx-bench/src/lib.rs b/rust/crates/rexx-bench/src/lib.rs
+index 5cf60386c..538fdbefe 100644
+--- a/rust/crates/rexx-bench/src/lib.rs
++++ b/rust/crates/rexx-bench/src/lib.rs
+@@ -60,20 +60,23 @@ pub static PROGRAMS: &[&str] = &[
+     "sayloop",
+     "nop",
+     "assign",
+     "fibcall",
+     "fibfunc",
+     "sendloop",
+     "extcall",
+     // Added in Phase 6.1: the store-backed read of a Directory entry and a
+     // `.local` entry, the path whose cost Task 7 measured.
+     "dirread",
++    // Added in Phase 9a Task 8's fix round: hash-collection construction,
++    // whose INIT sizes the store.
++    "hashnew",
+ ];
+ 
+ /// Programs in `bench-programs/` that the criterion harness deliberately does
+ /// not benchmark.
+ pub static NOT_BENCHMARKED: &[&str] = &["heapshape"];
+ 
+ /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
+ /// search path the same way `rexx-diff` does (`rexx-oracle/src/bin/rexx-diff.rs`):
+ /// the binary's own directory, plus a sibling `lib/`, which is where
+ /// `build/bin/rexx` finds `build/lib/*.so`.
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index bfc929d0c..614f90cf0 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -175,22 +175,22 @@ use class_protocol::{
+     native_mixin_class_factory, native_new, native_new_class, native_package,
+     native_package_add_class, native_package_add_public_class, native_scope, native_subclass,
+     native_superclass, native_superclasses, native_uninherit, new_instance, scoped_method,
+ };
+ 
+ // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
+ // chained the same way.
+ mod construct;
+ use construct::{
+     native_capacity_init, native_directory_new, native_executable_new, native_hash_collection_new,
+-    native_load_external, native_message_new, native_new_file, native_package_new, native_stem_new,
+-    native_string_new, native_unsupported_new, native_weak_reference_new, pointer_address,
++    native_load_external, native_message_new, native_new_file, native_stem_new, native_string_new,
++    native_unsupported_new, native_weak_reference_new, pointer_address,
+ };
+ 
+ // `Object`'s own methods, `run`/`send`/`start`, and the `Message` readers.
+ mod object_protocol;
+ use object_protocol::{
+     ArrayArgument, array_argument, array_argument_object, decode_message_name, hash_value,
+     invoke_executable, native_class, native_copy, native_default_name, native_has_method,
+     native_hash_code, native_identity_hash, native_is_a, native_is_nil, native_message_arguments,
+     native_message_completed, native_message_error_condition, native_message_halt,
+     native_message_has_error, native_message_has_result, native_message_message_complete,
+@@ -1072,29 +1072,28 @@ static NATIVE_CLASS_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+         "OF",
+         Arity::Counted,
+         collection::native_collection_of,
+     ),
+     // `AddClassMethod("Of", BagClass::ofRexx, A_COUNT)`, which unlike
+     // `Set~of` keeps the duplicates.
+     ("Bag", "OF", Arity::Counted, hash::native_bag_of),
+     // `AddClassMethod("Of", SetClass::ofRexx, A_COUNT)`: `Set`'s own, unlike
+     // the mapped classes whose `of` is `MapCollection~OF` in Rexx.
+     ("Set", "OF", Arity::Counted, hash::native_set_of),
+-    // `loadExternalMethod`, `loadExternalRoutine` and `Package~new`
+-    // (`memory/Setup.cpp:1093`, `:1130`, `:1156`).
++    // `loadExternalMethod` and `loadExternalRoutine` (`memory/Setup.cpp:1093`,
++    // `:1130`).
+     (
+         "Method",
+         "LOADEXTERNALMETHOD",
+         Arity::Fixed(2),
+         native_load_external,
+     ),
+-    ("Package", "NEW", Arity::Counted, native_package_new),
+     (
+         "Routine",
+         "LOADEXTERNALROUTINE",
+         Arity::Fixed(2),
+         native_load_external,
+     ),
+     // The classes whose `newRexx` is the refusal and nothing else, because
+     // their instances come only from native code (`utilityclasses.xml:429`,
+     // `:6910`) or from the `>name` operator
+     // (`classes/VariableReference.cpp:97`, `memory/Setup.cpp:1294`).
+@@ -1229,20 +1228,22 @@ pub(crate) struct ObjectModel {
+     /// The class a `Body::Stem` answers, whether a bare stem read produced it
+     /// or `.Stem~new` did.
+     stem: ObjRef,
+     /// The scope [`construct::WEAK_REFERENT`] is bound in, so that a subclass's instance
+     /// keeps its referent where `WeakReference~value` looks for it.
+     weak_reference: ObjRef,
+     /// The class `RexxContext~stackFrames` builds its elements from. Reached
+     /// here rather than by name at every build, exactly as `context` beside
+     /// it is.
+     stack_frame: ObjRef,
++    /// [`hash::STORE_HOLDERS`], resolved.
++    store_holders: Vec<ObjRef>,
+ }
+ 
+ impl ObjectModel {
+     /// The hash-collection class a `DO OVER` target may be, for a caller
+     /// asking whether an object is one.
+     pub(crate) fn iterable_collection_class(&self) -> ObjRef {
+         self.string_table
+     }
+ 
+     /// `Setup.cpp`'s native class set, plus the lookup from each implemented
+@@ -1394,40 +1395,49 @@ impl ObjectModel {
+             .lookup("VariableReference")
+             .expect("VariableReference is a native class");
+         let stem = classes.lookup("Stem").expect("Stem is a native class");
+         let weak_reference = classes
+             .lookup("WeakReference")
+             .expect("WeakReference is a native class");
+         let stack_frame = classes
+             .lookup("StackFrame")
+             .expect("StackFrame is a native class");
+         let table = classes.lookup("Table").expect("Table is a native class");
++        let store_holders = hash::STORE_HOLDERS
++            .iter()
++            .map(|name| {
++                classes
++                    .lookup(name)
++                    .unwrap_or_else(|| panic!("{name} is a native class"))
++            })
++            .collect();
+         ObjectModel {
+             classes,
+             natives,
+             string,
+             object,
+             metaclass,
+             array,
+             package,
+             method,
+             routine,
+             directory,
+             string_table,
+             table,
+             context,
+             rexx_info,
+             message,
+             variable_reference,
+             stem,
+             weak_reference,
+             stack_frame,
++            store_holders,
+         }
+     }
+ }
+ 
+ /// What [`Interp::write_object_method`] does to one name in an object's own
+ /// dictionary, which decides which of [`ObjectMethods`]'s levels it reaches.
+ #[derive(Copy, Clone, Debug)]
+ enum ObjectMethodWrite {
+     /// `setMethod`, whose `None` is the no-method form: it stores the
+     /// oracle's `.nil` and hides the name rather than removing anything.
+diff --git a/rust/crates/rexx-exec/src/dispatch/construct.rs b/rust/crates/rexx-exec/src/dispatch/construct.rs
+index f0f58e789..3b98acd09 100644
+--- a/rust/crates/rexx-exec/src/dispatch/construct.rs
++++ b/rust/crates/rexx-exec/src/dispatch/construct.rs
+@@ -69,45 +69,33 @@ pub(super) fn native_directory_new(
+ ) -> Result<super::NativeStarted, Failure> {
+     let class = class_receiver(interp, receiver)?;
+     if class == interp.object_model().directory {
+         native_hash_collection_new(interp, cleared, receiver, args)
+     } else {
+         native_new(interp, cleared, receiver, args)
+     }
+ }
+ 
+ /// A hash collection's `~init(size)`: the store sized for the initial-size
+-/// argument -- `HashCollection::initRexx`
+-/// (`classes/support/HashCollection.cpp:63`).
++/// argument, as `HashCollection::initRexx`
++/// (`classes/support/HashCollection.cpp:63`) sizes it.
+ pub(super) fn native_capacity_init(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let capacity = optional_length_argument(interp, args, 0)?.unwrap_or(0);
+     hash::initialize_store(interp, receiver, capacity)?;
+     Ok(None)
+ }
+ 
+-/// The refusal a constructor that has checked its arguments and cannot build
+-/// the primitive body answers.
+-fn unbuilt_new(interp: &mut Interp, class: ObjRef) -> Failure {
+-    unbuilt_class_method(interp, class, b"NEW")
+-}
+-
+-/// [`unbuilt_new`] for a class method under some other name.
+-fn unbuilt_class_method(interp: &mut Interp, class: ObjRef, name: &[u8]) -> Failure {
+-    let id = interp.classes().id_string(class).to_string();
+-    Loud::native_method(name, &id).into()
+-}
+-
+ /// `Message~new(target, message, ...)`: a message object whose send has not
+ /// been made -- `MessageClass::newRexx` (`classes/MessageClass.cpp:828`).
+ pub(super) fn native_message_new(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<super::NativeStarted, Failure> {
+     let class = class_receiver(interp, receiver)?;
+     if args.len() < 2 {
+@@ -148,22 +136,22 @@ pub(super) fn native_message_new(
+     if let Some(scope) = scope {
+         interp.set_native_entry(object, MESSAGE_SCOPE, scope);
+     }
+     let arguments = interp.security_arguments_array(&arguments);
+     interp.set_native_entry(object, MESSAGE_ARGUMENTS, arguments);
+     super::begin_init(interp, object, &[])
+ }
+ 
+ /// `Method~new(name, source [, context] ...)` and `Routine~new(name, source
+ /// [, context] ...)`: the first two are required, the context is resolved as
+-/// `newFile`'s is, and `INIT` gets the arguments after it --
+-/// `BaseExecutable::processNewExecutableArgs`
++/// `newFile`'s is, and `INIT` gets the arguments after it. The arguments are
++/// `BaseExecutable::processNewExecutableArgs`'s
+ /// (`execution/BaseExecutable.cpp:225`), which `MethodClass::newRexx` and
+ /// `RoutineClass::newRexx` share.
+ pub(super) fn native_executable_new(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<super::NativeStarted, Failure> {
+     let class = class_receiver(interp, receiver)?;
+     let name = executable_name_argument(interp, args)?;
+@@ -245,23 +233,23 @@ pub(super) fn native_as_instance(
+     // See `Interp::reqstr_armed`, which `new_instance` arms for the same
+     // reason.
+     interp.reqstr_armed = true;
+     if interp.classes().has_uninit(class) {
+         interp.heap.set_uninit(object);
+     }
+     Ok(())
+ }
+ 
+ /// `Method~newFile(name [, context])` and `Routine~newFile(name [, context])`:
+-/// the executable a file's own text becomes, then `INIT` with no arguments
+-/// -- `MethodClass::newFileRexx` (`classes/MethodClass.cpp:521`) and
+-/// `RoutineClass::newFileRexx` (`classes/RoutineClass.cpp:341`).
++/// the executable a file's own text becomes, then `INIT` with no arguments,
++/// as `MethodClass::newFileRexx` (`classes/MethodClass.cpp:521`) and
++/// `RoutineClass::newFileRexx` (`classes/RoutineClass.cpp:341`) do.
+ pub(super) fn native_new_file(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<super::NativeStarted, Failure> {
+     let class = class_receiver(interp, receiver)?;
+     let name = executable_name_argument(interp, args)?;
+     let (routine, base) = executable_base(interp, class);
+     let parent = match args.get(1).copied().flatten() {
+@@ -426,35 +414,21 @@ fn external_specification(descriptor: &[u8], name: &[u8]) -> Option<(Vec<u8>, Ve
+         return None;
+     }
+     let library = words.next()?.to_vec();
+     let entry = words.next().map_or_else(|| name.to_vec(), <[u8]>::to_vec);
+     if words.next().is_some() {
+         return None;
+     }
+     Some((library, entry))
+ }
+ 
+-/// `Package~new(name, source, ...)`: the name is required, the source is not,
+-/// and this crate loads no package either way -- `PackageClass::newRexx`
+-/// (`classes/PackageClass.cpp:158`).
+-pub(super) fn native_package_new(
+-    interp: &mut Interp,
+-    _cleared: Cleared,
+-    receiver: ObjRef,
+-    args: &[Option<ObjRef>],
+-) -> Result<Option<ObjRef>, Failure> {
+-    let class = class_receiver(interp, receiver)?;
+-    executable_name_argument(interp, args)?;
+-    Err(unbuilt_new(interp, class))
+-}
+-
+-/// The `name` argument `Method`, `Routine` and `Package` share --
++/// The `name` argument `Method` and `Routine` share:
+ /// `stringArgument(pgmname, "name")`.
+ fn executable_name_argument(
+     interp: &mut Interp,
+     args: &[Option<ObjRef>],
+ ) -> Result<ObjRef, Failure> {
+     match args.first().copied().flatten() {
+         Some(name) => required_string_named_argument(interp, name, "name"),
+         None => Err(Raised::missing_named_argument("name").into()),
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash.rs b/rust/crates/rexx-exec/src/dispatch/hash.rs
+index ba45e6c38..94f962ed4 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -221,47 +221,49 @@ fn refusal_outside(
+ /// what the oracle resolves a `CALL` through, and this crate resolves it
+ /// elsewhere, so a kept write would answer wrongly.
+ fn refuse_routines_write(interp: &Interp, receiver: ObjRef) -> Result<(), Failure> {
+     if interp.is_package_routines_table(receiver) {
+         return Err(Loud::package_routines_write().into());
+     }
+     Ok(())
+ }
+ 
+ /// The classes whose instances get a store, named rather than derived for
+-/// [`hash_scope`]'s reason.
+-const STORE_HOLDERS: &[&str] = &[
++/// [`hash_scope`]'s reason, and resolved once into the object model's
++/// `store_holders`. `Properties` is a `Directory` subclass.
++pub(super) const STORE_HOLDERS: &[&str] = &[
+     "Table",
+     "IdentityTable",
+     "Set",
+     "Bag",
+     "Relation",
+     "Directory",
+     "StringTable",
+-    "Properties",
+     "Stem",
+ ];
+ 
+ /// Whether `receiver` is an instance of a class this file gives a store to.
+ fn holds_hash_store(interp: &mut Interp, receiver: ObjRef) -> bool {
+     let Some(class) = interp.class_of_value(receiver) else {
+         return false;
+     };
+-    for name in STORE_HOLDERS {
+-        let Some(base) = interp.classes().lookup(name) else {
+-            continue;
+-        };
+-        if interp.classes().is_a(class, base) {
+-            return true;
+-        }
+-    }
+-    false
++    holds_store_class(interp, class)
++}
++
++/// Whether `class` is one of [`STORE_HOLDERS`] or a subclass of one.
++fn holds_store_class(interp: &mut Interp, class: ObjRef) -> bool {
++    let model = interp.object_model();
++    model.store_holders.contains(&class)
++        || model
++            .store_holders
++            .iter()
++            .any(|&holder| model.classes.is_a(class, holder))
+ }
+ 
+ /// A hash store's three arrays and its two scalars, read out together.
+ #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+ struct Store {
+     indexes: ObjRef,
+     items: ObjRef,
+     next: ObjRef,
+     buckets: usize,
+     free: usize,
+@@ -1516,33 +1518,39 @@ pub(super) fn native_hash_new(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<super::NativeStarted, Failure> {
+     let class = super::class_receiver(interp, receiver)?;
+     let object = new_instance(interp, class)?;
+     super::begin_init(interp, object, args)
+ }
+ 
+ /// `HashCollection::initialize` (`classes/support/HashCollection.cpp:78`):
+ /// the store sized for `capacity`, unless the receiver already has one. The
+-/// capacity is **observable** -- it decides the bucket count, which decides
++/// capacity is **observable**: it decides the bucket count, which decides
+ /// the iteration order. Measured, the same eight keys in the same order come
+ /// back differently from `.Table~new` and `.Table~new(100)`, and both orders
+ /// are what this store's geometry predicts.
+ pub(super) fn initialize_store(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     capacity: usize,
+ ) -> Result<(), Failure> {
+-    if !holds_hash_store(interp, receiver) || read_store(interp, receiver, CONTENTS)?.is_some() {
+-        return Ok(());
++    let scope = hash_scope(interp);
++    let class = match interp.heap.get(receiver).map(|object| &object.body) {
++        Some(Body::Instance { class, pools, .. }) if pools.get(scope, HASH_INDEXES).is_none() => {
++            *class
++        }
++        _ => return Ok(()),
++    };
++    if holds_store_class(interp, class) {
++        install_store(interp, receiver, CONTENTS, calculate_bucket_size(capacity));
+     }
+-    install_store(interp, receiver, CONTENTS, calculate_bucket_size(capacity));
+     Ok(())
+ }
+ 
+ // ---- the string-keyed classes' own accessors ----
+ 
+ /// The name an entry method looks up, which is **upper-cased** where the
+ /// index family's is not.
+ fn entry_name(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+     let Some(name) = args.first().copied().flatten() else {
+         return Err(Raised::missing_named_argument("index").into());
+diff --git a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+index a920255fe..fa1c35952 100644
+--- a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+@@ -651,21 +651,31 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
+     interp.roots.activity_mut().push_temp(receiver);
+     let Some(source) = interp.heap.get(receiver) else {
+         return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
+     };
+     let mut body = source.body.clone();
+     // `CompoundVariableTable::copyFrom` copies each tail's own value, so an
+     // exposed tail comes over as one that holds none.
+     if let Body::Stem { exposed, .. } = &mut body {
+         *exposed = None;
+     }
++    // A `String` subclass instance's text is charged as `String~new` charges
++    // it, since `Body::held_bytes` does not report it.
++    let text = match &body {
++        Body::Instance {
++            native: Some(state),
++            ..
++        } => state.text().map_or(0, <[u8]>::len),
++        _ => 0,
++    };
+     let copy = interp.alloc_charged(behaviour, body);
++    interp.charge_unheld(text);
+     interp.roots.activity_mut().push_temp(copy);
+     duplicate_collection_stores(interp, copy);
+     duplicate_stem_store(interp, copy);
+     duplicate_executable(interp, receiver, copy);
+     if interp.is_message(copy) {
+         reset_copied_message(interp, copy);
+     }
+     if interp.answers_uninit(copy) {
+         interp.heap.set_uninit(copy);
+     }
+diff --git a/rust/crates/rexx-exec/tests/instance_copy_memory.rs b/rust/crates/rexx-exec/tests/instance_copy_memory.rs
+new file mode 100644
+index 000000000..c95030922
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/instance_copy_memory.rs
+@@ -0,0 +1,65 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! Copies of a large `String` subclass instance, made in a loop and dropped,
++//! under the address-space cap the corpus gives the oracle. The corpus runs
++//! this crate in-process and uncapped, so it cannot see a run whose bytes the
++//! collector is never told about.
++
++#![expect(clippy::disallowed_methods, reason = "this harness bounds a real run")]
++
++mod support;
++
++use std::fs;
++use std::path::Path;
++use std::process::{Command, Stdio};
++
++use support::oracle::ORACLE_MEMORY_LIMIT_KIB;
++
++/// **3000 copies of a 1,000,000-byte instance run to completion under the
++/// cap.** Measured: oracle rc 0, `done 1000000`, maxrss 28 MB; the crate,
++/// while a copy's text was charged nowhere, was OOM-killed under `memcap 2G`.
++#[test]
++fn copies_of_a_large_string_subclass_instance_run_under_the_oracles_memory_cap() {
++    let nanos = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .expect("the clock is after the epoch")
++        .as_nanos();
++    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
++        .join(format!("instance-copies-{}-{nanos}", std::process::id()));
++    fs::create_dir_all(&dir).expect("a probe directory of this run's own");
++    fs::write(
++        dir.join("main.rex"),
++        "big = .k~new(copies('x', 1000000))\n\
++         do i = 1 to 3000; y = big~copy; end\n\
++         say 'done' y~length y~class~id\n\
++         ::class k subclass string\n",
++    )
++    .expect("the program is writable");
++    let output = Command::new("bash")
++        .arg("-c")
++        .arg(format!(
++            "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" main.rex"
++        ))
++        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .current_dir(&dir)
++        .stdin(Stdio::null())
++        .output()
++        .expect("the capped run spawns");
++    assert_eq!(
++        (
++            output.status.code(),
++            String::from_utf8_lossy(&output.stdout).into_owned(),
++            String::from_utf8_lossy(&output.stderr).into_owned()
++        ),
++        (Some(0), "done 1000000 K\n".to_owned(), String::new())
++    );
++}
