@@ -191,7 +191,8 @@ The suite harness's crate-side `bin-rexx/rexx` is a hard link (a copy where a li
 to `rexx-run`, with `samples` beside it linked to the oracle's `build/samples`: the test framework
 finds the samples at `../samples` from `.RexxInfo~executable`, which resolves a symlink.
 `samples/samples` through `REXX_SUITE_GROUPS` at Task 5's ruling commit: red, 27 of 29 pass;
-TEST_FACTOR refuses `NEW` on a `String` subclass and TEST_MAKESTRING refuses `SysTempFileName`.
+TEST_FACTOR refuses `NEW` on a `String` subclass and TEST_MAKESTRING fails: `makestring.rex`
+stops at `rxregexp.cls:48`'s `LIBRARY rxregexp` with 98.903 ("9a close", "The 9d set").
 
 ## 9a close
 
@@ -451,7 +452,13 @@ Deferred minors and queued items from `.superpowers/sdd/2026-10-11-phase-9a/prog
   Method and METHOD.
 * `:167` `lib.rs:1428`'s double-hyphen dash; `method_object_for`'s `class_owns` on a non-class scope.
 * `:169` `debug_ms` and the MutexSemaphore/STREAM `k` not re-derived; REPLY every-mode rows kept.
-* `:172` TEST_SLEEP_DURATION, Flaky candidate (above).
-* This close: the samples tests that load an extension library, and `extensions/yaml/yaml`'s
+* `:172` TEST_SLEEP_DURATION, Flaky candidate (above): the S2 list in `concurrency_tests` has no
+  licence path (9d).
+* This close: `samples` TEST_MAKESTRING, `scclient` TEST_04_SCCLIENT.REX and `sfclient`
+  TEST_04_SFCLIENT.REX end in 98.903 for `rxregexp` and `rxsock`, Phase 10 Extension libraries.
+  Ruling: loading a Phase 10 extension library becomes a loud refusal carrying
+  `Deferral::Extension`, the first item of 9b; the three tests then take Phase 10 Extension rows
+  and leave the 9d set.
+* This close: `extensions/yaml/yaml`'s
   TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS, blocked by "a compiled ... has no driver arm"
   refusals in a Phase 10 Extension group (`suite-close/table.tsv`).
