@@ -1944,6 +1944,57 @@ DEVIATIONS -- permanent, chosen
      `.nil` through the string layout, not specified observables. Not
      witnessed in the corpus.
 
+ 31. `OBJECTNAME=` ON A STRING OR A SMALL INTEGER IS REFUSED (Phase 9a Task 8b).
+     OWNER: none.
+
+     The oracle keeps a name in the object's own variables, so which values
+     answer it is the oracle's object identity: a package's literals are one
+     object each (a literal named at one site is named at every site of the
+     package, a `::ROUTINE` and a symbol spelling the same text included), the
+     integer cache shares -10..100 (`x = 100` named, then `(99+1)~objectName`
+     answers the name), and `||''` and `~string` answer their receiver; a
+     computed string or number is a fresh object. Measured, probes `objname2`
+     and `objname4` (Task 8b report, section 1), oracle rc 0:
+
+       `longs = 'a longer string than seven'; longs~objectName = 'long'`
+       `'a longer string than seven'~objectName`        long
+       `('a longer string' || ' than seven')~objectName`  a String
+       `('a longer string than seven' || '')~objectName`  long
+       the same literal in a `::ROUTINE`                  long
+       `x = 100` named, `(99+1)~objectName`               hundred
+       `y = 101` named, `(100+1)~objectName`              a String
+
+     This crate keeps a string of 7 bytes or less and a small integer as a
+     value with no object, and keeps none of the identities above for its
+     heap strings, so it refuses, rc 120, "OBJECTNAME= on a string or a
+     number is not implemented". Arrays, stems and variable references take
+     a name (corpus/lang/object_name_set_values.rex). The oracle's answer is
+     its object identity, not a specified observable. Moritz 2026-10-12. Not
+     witnessed in the corpus; pinned by
+     `a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer`.
+
+ 32. A USER `NEW` REACHED THROUGH `ENHANCED` THAT ANSWERS ANOTHER OBJECT GETS
+     THAT OBJECT BACK UNTOUCHED (Phase 9a Task 8b). OWNER: none.
+
+     `RexxClass::enhanced` sends `NEW` to the Enhanced Subclass and then
+     calls `setOwningClass` and `setEnhanced` on whatever answered
+     (interpreter/classes/ClassClass.cpp:1474-1476). A class-side `NEW` that
+     answers an object the dummy did not build has those written into the
+     behaviour that object shares with every other of its class.
+     Measured, probes `p5` and `p8` (.superpowers/sdd/2026-10-11-phase-9a/
+     enhanced-semantics.md, R16), oracle rc 0 against this crate:
+
+       `o~string o~hasMethod('foo')`      enhanced ODD 0   an ODD 0
+       a plain `Odd` made afterwards      enhanced ODD     an ODD
+       `q~string q~class~id` (`'abc'`)    abc ODD2         abc String
+       `('ab' || 'c')~class~id`,
+       `'xyz'~defaultName` afterwards     ODD2 enhanced ODD2   String a String
+
+     So after one such call every `String` reports the user's class. This
+     crate marks only an object the dummy built and hands any other answer
+     back as it is. The oracle's answer is damage to a shared behaviour, not
+     a specified observable. Moritz 2026-10-12. Not witnessed in the corpus.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

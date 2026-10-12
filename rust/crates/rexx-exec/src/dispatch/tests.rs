@@ -2062,23 +2062,18 @@ fn a_copy_or_frame_executable_this_crate_does_not_keep_is_loud() {
 #[test]
 fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
     for (source, message) in [
-        // A receiver with no variable pool to keep a name in. The oracle
-        // stores one and remembers it; answering rc 0 and forgetting it
-        // would be a wrong answer.
+        // A string's name is the oracle's object identity (Deviation 31).
         (
             "'abc'~objectName = 'x'\n",
-            "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
-             (Phase 9)\n",
+            "rexx-exec: OBJECTNAME= on a string or a number is not implemented\n",
         ),
         (
             "5~objectName = 'x'\n",
-            "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
-             (Phase 9)\n",
+            "rexx-exec: OBJECTNAME= on a string or a number is not implemented\n",
         ),
         (
             "s = 'a string longer than a handle holds'\ns~objectName = 'x'\n",
-            "rexx-exec: method \"OBJECTNAME=\" of class \"Object\" is not implemented \
-             (Phase 9)\n",
+            "rexx-exec: OBJECTNAME= on a string or a number is not implemented\n",
         ),
     ] {
         assert_eq!(

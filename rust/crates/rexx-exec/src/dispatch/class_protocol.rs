@@ -1205,7 +1205,8 @@ pub(super) fn native_enhanced(
 /// `setOwningClass(this)` and `setEnhanced()` on what the dummy's `NEW`
 /// answered (`:1474`-`:1476`), where the dummy built it. An answer built
 /// from anywhere else is handed back untouched, where the oracle writes into
-/// whatever behaviour that object shares with every other of its class.
+/// whatever behaviour that object shares with every other of its class
+/// (Deviation 32).
 fn mark_enhanced(interp: &mut Interp, answer: ObjRef, dummy: ObjRef, class: ObjRef) {
     if interp.heap.is_class(answer) {
         if interp.classes().class_of(answer) == dummy {

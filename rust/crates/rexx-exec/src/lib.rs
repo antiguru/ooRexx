@@ -525,6 +525,16 @@ impl Loud {
         }
     }
 
+    /// `OBJECTNAME=` on a string or a small integer, whose name the oracle
+    /// shares across every value its object identity makes the same object
+    /// (Deviation 31).
+    #[cold]
+    fn object_name_of_a_value() -> Loud {
+        Loud {
+            message: owned_message("OBJECTNAME= on a string or a number", None),
+        }
+    }
+
     /// A user `STRING` method that answered an object with no string value of
     /// its own (not a string, a number, an array or a buffer), read by a
     /// consumer of its bytes. The oracle's `primitiveMakeString` answers
