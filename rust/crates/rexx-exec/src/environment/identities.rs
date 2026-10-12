@@ -147,16 +147,18 @@ impl Interp {
         object
     }
 
-    /// `Class~method`'s answer: the one `Method` object this class's instance
-    /// dictionary entry named `name` has, built on first ask and kept.
+    /// `Class~method`'s answer: the one `Method` object the dictionary entry
+    /// named `name` on `class`'s instance side, or its class side where
+    /// `class_side`, has, built on first ask and kept.
     pub(crate) fn method_object(
         &mut self,
         class: ObjRef,
+        class_side: bool,
         name: &[u8],
         scope: ObjRef,
         record: crate::ExecutableRecord,
     ) -> ObjRef {
-        let key = (class, Box::<[u8]>::from(name));
+        let key = (class, class_side, Box::<[u8]>::from(name));
         if let Some(found) = self.method_objects.get(&key).copied() {
             return found;
         }
@@ -174,8 +176,8 @@ impl Interp {
         self.class_owns(class, object);
         self.method_objects.insert(key, object);
         // The dictionary entry the caller found, which is what its
-        // annotations are keyed by: this class, the instance side, this name.
-        self.attach_annotations(object, Annotated::Member(class, false, name.into()));
+        // annotations are keyed by.
+        self.attach_annotations(object, Annotated::Member(class, class_side, name.into()));
         object
     }
 
@@ -200,7 +202,7 @@ impl Interp {
                     installed: Some(method),
                     routine: None,
                 };
-                Ok(self.method_object(scope, name, scope, record))
+                Ok(self.method_object(scope, false, name, scope, record))
             }
             _ => Err(crate::Loud::unknown_receiver(
                 "a method context whose scope no longer defines it",
@@ -244,7 +246,7 @@ impl Interp {
                 installed: Some(method),
                 routine: None,
             };
-            return self.method_object(scope, name, scope, record);
+            return self.method_object(scope, false, name, scope, record);
         }
         // A `run`'s activation carries its own object, so what is left is a
         // directive's body a class no longer reaches by this name: the
@@ -469,7 +471,7 @@ impl Interp {
         let (object, method) = self.scoped_method(source, class)?;
         self.classes()
             .define_instance_method(class, &String::from_utf8_lossy(name), method);
-        self.hold_method_object(class, name, object);
+        self.hold_method_object(class, false, name, object);
         Some(())
     }
 
@@ -531,7 +533,7 @@ impl Interp {
         let (object, method) = self.scoped_method(source, class)?;
         self.classes()
             .define_class_method(class, &String::from_utf8_lossy(name), method);
-        self.hold_method_object(class, name, object);
+        self.hold_method_object(class, true, name, object);
         Some(())
     }
 
@@ -559,7 +561,7 @@ impl Interp {
         }
         self.classes().define_instance_methods(class, &installed);
         for (name, object) in objects {
-            self.hold_method_object(class, &name, object);
+            self.hold_method_object(class, false, &name, object);
         }
         self.roots.activity_mut().pop_frame(frame);
         Some(())
@@ -567,15 +569,22 @@ impl Interp {
 
     /// Make [`Interp::method_object`] answer `object` for this dictionary
     /// entry, and root it the way one this crate built is rooted.
-    pub(crate) fn hold_method_object(&mut self, class: ObjRef, name: &[u8], object: ObjRef) {
+    pub(crate) fn hold_method_object(
+        &mut self,
+        class: ObjRef,
+        class_side: bool,
+        name: &[u8],
+        object: ObjRef,
+    ) {
         self.class_owns(class, object);
-        self.method_objects.insert((class, name.into()), object);
+        self.method_objects
+            .insert((class, class_side, name.into()), object);
     }
 
-    /// Forget the `Method` object this dictionary entry answered, for a
-    /// `~delete` or a `~define` that took the entry away.
+    /// Forget the `Method` object this instance dictionary entry answered,
+    /// for a `~delete` or a `~define` that took the entry away.
     pub(crate) fn drop_method_object(&mut self, class: ObjRef, name: &[u8]) {
-        self.method_objects.remove(&(class, name.into()));
+        self.method_objects.remove(&(class, false, name.into()));
     }
 
     /// The `StringTable` `~annotations` answers for `site`, built empty on

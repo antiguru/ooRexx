@@ -1424,10 +1424,11 @@ struct Interp {
     /// why a compiled method's annotation table is keyed by a count and not
     /// by the dictionary entry it is installed into.
     compiled_methods: usize,
-    /// The `Method` object `Class~method` answers, keyed by the class and the
-    /// instance dictionary name -- see [`Interp::method_object`] for the two
-    /// oracle answers that make one object per entry observable.
-    method_objects: FxHashMap<(ObjRef, Box<[u8]>), ObjRef>,
+    /// The `Method` object `Class~method` answers, keyed by the class, whether
+    /// the entry is on its class side, and the dictionary name -- see
+    /// [`Interp::method_object`] for the two oracle answers that make one
+    /// object per entry observable.
+    method_objects: FxHashMap<(ObjRef, bool, Box<[u8]>), ObjRef>,
     /// Which `(program, directive)` a [`rexx_classes::MethodId`] `install_directives`
     /// minted names -- the "bodies are stored" half of R9, addressed by the
     /// same identity `ClassRegistry::add_instance_method`/`add_class_method`
@@ -3131,7 +3132,7 @@ impl Interp {
                 self.class_packages.remove(class);
             }
             self.method_objects
-                .retain(|(class, _), _| !dead.contains(class));
+                .retain(|(class, _, _), _| !dead.contains(class));
         }
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved

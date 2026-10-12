@@ -1,0 +1,35 @@
+/* instanceMethod on a class object answers one Method object per class-side
+   entry: two classes' class methods of one name are two objects with their
+   own flags, and a subclass reaches its superclass's. */
+say (.E~instanceMethod('M') == .C~instanceMethod('M')) .E~instanceMethod('M')~isProtected
+say (.D~instanceMethod('M') == .C~instanceMethod('M')) .C~instanceMethod('M')~isProtected
+say (.C~instanceMethod('M') == .C~instanceMethod('M')) (.C~instanceMethod('M') == .C~method('M'))
+s = .E~instanceMethods(.E)
+do while s~available
+  say s~index (s~item == .E~instanceMethod(s~index))
+  s~next
+end
+say (.Array~instanceMethod('NEW') == .List~instanceMethod('NEW')) -
+    (.Array~instanceMethod('METHOD') == .List~instanceMethod('METHOD'))
+p = .package~new('first', ("::class test", "::method cd class guarded"))
+m = p~findClass('test')~instanceMethod('cd')
+say m~isProtected m~isGuarded
+p = .package~new('second', ("::class test", "::method cd class protected unguarded"))
+m = p~findClass('test')~instanceMethod('cd')
+say m~isProtected m~isGuarded
+p = .package~new('third', ("::class test", -
+    "::method cd delegate target class private protected unguarded"))
+m = p~findClass('test')~instanceMethod('cd')
+say m~isPrivate m~isProtected m~isGuarded
+p = .package~new('fourth', ("::class test", -
+    "::method cd public delegate target guarded class unprotected"))
+m = p~findClass('test')~instanceMethod('cd')
+say m~isPrivate m~isProtected m~isGuarded
+exit
+
+::class C
+::method m class protected
+::method m
+::class D subclass C
+::class E
+::method m class

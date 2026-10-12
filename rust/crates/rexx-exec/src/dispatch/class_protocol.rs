@@ -206,7 +206,9 @@ pub(super) fn native_method(
                 installed: Some(method),
                 routine: None,
             };
-            Ok(Some(interp.method_object(class, &name, scope, record)))
+            Ok(Some(
+                interp.method_object(class, false, &name, scope, record),
+            ))
         }
     }
 }
@@ -1276,7 +1278,7 @@ fn install_enhancing_methods(
         .classes()
         .enhance_instance_methods(dummy, ObjRef::NIL, &methods);
     for (name, executable) in objects {
-        interp.hold_method_object(dummy, &name, executable);
+        interp.hold_method_object(dummy, false, &name, executable);
     }
     Ok(())
 }

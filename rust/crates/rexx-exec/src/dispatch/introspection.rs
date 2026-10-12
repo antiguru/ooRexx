@@ -110,8 +110,9 @@ fn methods(
         other => other,
     };
     let handle = interp.classes().instance_behaviour_handle(class);
-    let entries = behaviour_entries(interp, Selection::Behaviour(handle), scope);
-    supplier_of(interp, class, entries)
+    let selection = Selection::Behaviour(handle);
+    let entries = behaviour_entries(interp, selection, scope);
+    supplier_of(interp, selection, class, entries)
 }
 
 /// `Object~isInstanceOf(class)`: `RexxObject::isInstanceOfRexx`
@@ -157,7 +158,9 @@ fn instance_method(
     let Some((scope, method)) = lookup(interp, selection, &String::from_utf8_lossy(&name)) else {
         return Ok(Some(ObjRef::NIL));
     };
-    Ok(Some(method_object_for(interp, owner, &name, scope, method)))
+    Ok(Some(method_object_for(
+        interp, selection, owner, &name, scope, method,
+    )))
 }
 
 /// `Object~instanceMethods(scope)`: `RexxObject::instanceMethodsRexx`
@@ -182,7 +185,7 @@ fn instance_methods(
     } else {
         behaviour_entries(interp, selection, scope)
     };
-    supplier_of(interp, owner, entries)
+    supplier_of(interp, selection, owner, entries)
 }
 
 /// Which table a receiver's methods are read out of: an instance's own
@@ -257,6 +260,7 @@ fn object_level_entries(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjR
 /// `~index` is the name and its `~item~class~id` is `Method`.
 fn supplier_of(
     interp: &mut Interp,
+    selection: Selection,
     owner: ObjRef,
     entries: Vec<(Vec<u8>, ObjRef, MethodId)>,
 ) -> Result<Option<ObjRef>, Failure> {
@@ -266,7 +270,7 @@ fn supplier_of(
         // Rooted as each is built rather than at the end: every allocation
         // below can collect, and a handle held only by these `Vec`s is one
         // the collector cannot see.
-        let object = method_object_for(interp, owner, &name, scope, method);
+        let object = method_object_for(interp, selection, owner, &name, scope, method);
         interp.roots.activity_mut().push_temp(object);
         items.push(object);
         let index = interp.text_built(name);
@@ -281,9 +285,12 @@ fn supplier_of(
 }
 
 /// The `Method` object for one resolved entry, built the way `Class~method`
-/// builds its own.
+/// builds its own. A class-side entry is keyed by the class that defines it,
+/// so two classes' class methods of one name are two objects and a subclass
+/// reaches its superclass's.
 fn method_object_for(
     interp: &mut Interp,
+    selection: Selection,
     owner: ObjRef,
     name: &[u8],
     scope: ObjRef,
@@ -301,5 +308,8 @@ fn method_object_for(
         installed: Some(method),
         routine: None,
     };
-    interp.method_object(owner, name, scope, record)
+    match selection {
+        Selection::ClassSide(_) => interp.method_object(scope, true, name, scope, record),
+        Selection::Behaviour(_) => interp.method_object(owner, false, name, scope, record),
+    }
 }

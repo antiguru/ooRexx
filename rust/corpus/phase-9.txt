@@ -43,3 +43,6 @@ lang/routines_table_resolution.rex
 lang/nil_hidden_methods.rex
 lang/rexx_routine_frame_executable.rex
 lang/package_copy.rex
+
+# 9a Task 10 fix: class-side Method objects keyed by their defining class.
+lang/class_side_method_objects.rex
