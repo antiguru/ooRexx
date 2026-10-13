@@ -1,0 +1,11 @@
+cd ~                 0 <dir>
+cd ~/ab              0 <dir>/ab
+cd ~root             2 <dir>
+cd ~root/            2 <dir>
+/bin/sh: 1: cd: can't cd to ~nosuchuser.x
+cd ~nosuchuser.x     2 <dir>
+cd "a"b              0 <dir>/ab
+cd a\ b              0 <dir>/a b
+cd    ab             0 <dir>/ab
+cd ab/x/..           2 <dir>
+cd                   0 <dir>

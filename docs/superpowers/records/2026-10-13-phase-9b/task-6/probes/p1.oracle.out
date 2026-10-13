@@ -1,0 +1,62 @@
+SysGetMessage(5) -> [System resources exhausted.]
+SysGetMessage(0) -> syntax 88.905 : Argument 1 must be a positive whole number; found "0".
+SysGetMessage(-1) -> syntax 88.905 : Argument 1 must be a positive whole number; found "-1".
+SysGetMessage('x') -> syntax 88.905 : Argument 1 must be a positive whole number; found "x".
+SysGetMessage(1.5) -> syntax 88.905 : Argument 1 must be a positive whole number; found "1.5".
+SysGetMessage(4294967301) -> [System resources exhausted.]
+SysGetMessage(999999999999999999) -> [Error: Message not found]
+SysGetMessage(1000000000000000000) -> syntax 88.905 : Argument 1 must be a positive whole number; found "1000000000000000000".
+SysGetMessage(5, 'rexx.cat') -> [System resources exhausted.]
+SysGetMessage(5, 'REXX.CAT') -> [Error: Message catalog not found]
+SysGetMessage(5, '') -> [Error: Message catalog not found]
+SysGetMessage(5, 'rexx.cat'||'00'x||'zz') -> [System resources exhausted.]
+SysGetMessage(5, .array~new) -> [Error: Message catalog not found]
+SysGetMessageX(1, 5) -> [System resources exhausted.]
+SysGetMessageX(0, 5) -> syntax 88.905 : Argument 1 must be a positive whole number; found "0".
+SysGetMessageX(2, 5) -> [Error: Message not found]
+SysGetMessageX(4294967297, 5) -> [System resources exhausted.]
+SysGetMessageX(1) -> syntax 88.901 : Missing argument; argument 2 is required.
+SysGetMessageX() -> syntax 88.901 : Missing argument; argument 1 is required.
+SysGetMessage(678, , 1, 2, 3, 4, 5, 6, 7, 8, 9) -> [Argument 1 must be in the range 2 to 3; found "4".]
+SysGetMessage(678, , 1, 2, 3, 4, 5, 6, 7, 8, 9, 10) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysGetMessage(678, , 1, 2, 3, 4, 5, 6, 7, 8, 9, ) -> [Argument 1 must be in the range 2 to 3; found "4".]
+SysGetMessage(678, 'nope.cat', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysGetMessage(678, , .array~of(1,2), 'a'||'00'x||'b') -> [Argument 1
+2 must be in the range a to ; found "".]
+SysGetErrorText(2) -> [No such file or directory]
+SysGetErrorText(0) -> [Success]
+SysGetErrorText(-1) -> [Unknown error -1]
+SysGetErrorText(200) -> [Unknown error 200]
+SysGetErrorText(133) -> [Memory page has hardware error]
+SysGetErrorText(134) -> [Inappropriate file type or format]
+SysGetErrorText(2147483647) -> [Unknown error 2147483647]
+SysGetErrorText(-2147483648) -> syntax 88.907 : Argument 1 must be in the range -2147483648 to 2147483647; found "-2.14748365E+9".
+SysGetErrorText(2147483648) -> syntax 88.907 : Argument 1 must be in the range -2147483648 to 2147483647; found "2147483648".
+SysGetErrorText('x') -> syntax 88.907 : Argument 1 must be in the range -2147483648 to 2147483647; found "x".
+SysGetErrorText() -> syntax 88.901 : Missing argument; argument 1 is required.
+SysGetErrorText(1, 2) -> syntax 88.922 : Too many arguments in invocation; 1 expected.
+SysGetErrorText(' 2 ') -> [No such file or directory]
+SysGetErrorText(2.0) -> [No such file or directory]
+SysFormatMessage('&1', .array~new(9)) -> []
+SysFormatMessage('&1', .array~new(10)) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysFormatMessage('&1-&2', .array~new(10)~~put('a', 1)) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysFormatMessage('&1', .array~new(2,2)) -> syntax 98.913 : Unable to convert object "an Array" to a single-dimensional array value.
+SysFormatMessage('&1', 'abc') -> [abc]
+SysFormatMessage('&1&2', 'abc'||'0a'x||'def') -> [abcdef]
+SysFormatMessage('&1', .object~new) -> syntax 98.913 : Unable to convert object "an Object" to a single-dimensional array value.
+SysFormatMessage('&1', .nil) -> syntax 98.913 : Unable to convert object "The NIL object" to a single-dimensional array value.
+SysFormatMessage('&1', 12) -> [12]
+SysFormatMessage('a'||'00'x||'&1', 'q') -> [a]
+SysFormatMessage(.array~of(1), 'q') -> [1]
+SysFormatMessage('&1&', 'q') -> [q&]
+SysFormatMessage('&&', 'q') -> [&&]
+SysFormatMessage('&1', 'q', 'r') -> syntax 88.922 : Too many arguments in invocation; 2 expected.
+SysFormatMessage(, 'q') -> syntax 88.901 : Missing argument; argument 1 is required.
+SysFormatMessage('&1') -> syntax 88.901 : Missing argument; argument 2 is required.
+SysFormatMessage('&1&2', .array~of(.array~of(1,2), .object~new)) -> [1
+2an Object]
+SysFormatMessage('&1', a) -> [1]
+SysFormatMessage('&3', b) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysFormatMessage('&9', c) -> [9]
+SysFormatMessage('&9', d) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+18

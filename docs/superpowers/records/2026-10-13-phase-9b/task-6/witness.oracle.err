@@ -1,0 +1,4 @@
+       *-* Compiled routine "SYSFORMATMESSAGE".
+   184 *-* say SysFormatMessage('&1', .array~of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+Error 40 running /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/rexxutil_messages.rex line 184:  Incorrect call to routine.
+Error 40.1:  External routine "SysFormatMessage" failed.

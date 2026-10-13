@@ -1,0 +1,10 @@
+cd ~                 2 <dir>
+cd ~/ab              2 <dir>
+cd ~root             2 <dir>
+cd ~root/            2 <dir>
+cd ~nosuchuser.x     2 <dir>
+cd "a"b              2 <dir>
+cd a\ b              2 <dir>
+cd    ab             0 <dir>/ab
+cd ab/x/..           0 <dir>/ab
+cd                   0 <dir>
