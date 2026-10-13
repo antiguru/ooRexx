@@ -231,3 +231,64 @@ with `--profile mutation`) turns four witness rows red (`[[.a.]] oi`, `[![.a.]] 
 | suite group `base/rexxutil/SysFileTree` | exit 0, green, 26 of 26 (`run-output.txt`, `tests.tsv`) |
 | corpus, `REXX_CORPUS_GATE=1` release | exit 0, `1037 of 1037 matching` (`corpus-output.txt`) |
 | `collect_stress`, `ir_recorded`, `trace_oracle`, `coverage` release | exit 0: 37, 28, 41, 21 passed (`other-tests-output.txt`) |
+
+## Fix round 2
+
+Commit `064498811`, against `task-5-rereview.md`.
+
+**(1) Malformed `[=` after earlier items.** I read the source path the oracle uses first. That is
+the bracket case of glibc 2.43's `posix/fnmatch_loop.c` (the oracle's libc is Debian GLIBC
+2.43-7), fetched from sourceware at tag `glibc-2.43`. The oracle runs it in the C locale, where
+`nrules == 0` and `MB_CUR_MAX == 1` keep it on the narrow path, with `FNM_NOESCAPE`.
+
+The loop does not build a set. It tries each item in turn, and the first item that matches jumps
+to `matched:`. That code skips to the closing `]` and returns `FNM_NOMATCH` on any `[=` that is
+not `[=c=]` and on any `[.` with no `.]` it passes over. So `[b[=a]` fails the name `b`: the item
+`b` matched, then the skip met `[=a]`. Names that reach the malformed `[=` itself still treat it
+as a literal `[`.
+
+Under negation the outcome is the same, since a match fails a negated bracket either way.
+Measured: `[!b[=x]`, `[!bc[=x]` and `[^bc[=x]` exclude exactly `b`/`bc`, `[` and `=`, and so does
+this crate.
+
+A malformed `[.` fails the pattern wherever it is (`[b[.a]` and `[!b[.a]` match nothing). A `[:`
+that is not a class name is never fatal: in the main scan it is a literal `[`, and the skip passes
+over it.
+
+Fix round 1's rule-by-rule `bracket` is replaced by a port of that loop, its doc rewritten. The
+port also corrects two sentences fix round 1 got wrong:
+- "A `[=` not closed by `=]` two bytes on is a literal `[`" held only as the first item.
+- "`[=c=]` ending a range fails the whole pattern" was wrong. `[a-[=c=]]` is a range `a`-`[`
+  followed by the items `= c =`, and then a literal `]`, so it matches the name `c]` on both
+  sides.
+
+The port keeps glibc's quirks:
+- A class-name byte must be in `a`-`y` (glibc tests `c >= 'z'`).
+- After a `[.c.]`, a `-` followed by `]` makes the symbol not match on its own (`[[.a.]-]` matches
+  only `-`).
+
+The witness carries every variant the re-review listed, `[!b[=x]`, `[!bc[=x]`, `[^bc[=x]`, the
+`[.` and `[:` forms after an item, negated and not, and `[b[=a=]]`/`[!b[=a=]]` as well-formed
+controls, each with `o` and `oi`. Its tree gained the names `:`, `c]` and `A]`. Oracle and crate
+stdout, stderr and rc (216) are identical, and I read each row.
+
+Sweep (`probes/sweep.rex`, `probes/sweep-patterns.txt`, `probes/sweep.oracle.out`): 1700
+patterns, generated with a fixed seed over `[ ] . = - a b c A ! ^ : z \`, the fragments `[=`,
+`[.`, `[:`, `=]`, `.]`, `:]`, `alpha`, `upper` and the re-review's rows, each with `o` and `oi`,
+against 20 names. **0 of 3400 rows differ.** 888 rows list at least one name. The re-review's
+1500-pattern sweep against fix round 1 found 5 differing rows.
+
+Remaining divergence: `^` negates as `!` does. glibc reads `POSIXLY_CORRECT` once per process
+and then does not, and this crate does not read it.
+
+**(2) Deviation 34** cites the oracle tree's copy by path (`SysFileSystem.cpp:687-776`, line 706)
+and this checkout's lines (604-693, line 623).
+
+| check | result at `064498811` (raw output in `records/.../task-5/fix2/`) |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0, exit 0 |
+| lib + tables and `rexx-parse --test sourceline_oracle` | exit 0: lib 1096, then 8, 2, 1, 6, 5, 3, 5; sourceline 1 (`lib-tables-output.txt`) |
+| suite group `base/rexxutil/SysFileTree` | exit 0, green, 26 of 26 (`run-output.txt`) |
+| corpus, `REXX_CORPUS_GATE=1` release | exit 0, `1037 of 1037 matching` (`corpus-output.txt`) |
+| `collect_stress` release | exit 0, 37 passed, wall 259 s (`collect-stress-output.txt`) |
+| `ir_recorded`, `trace_oracle`, `coverage` release | exit 0: 28, 41, 21 passed (`other-tests-output.txt`) |

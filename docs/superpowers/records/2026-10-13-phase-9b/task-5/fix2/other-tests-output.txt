@@ -1,0 +1,112 @@
+commit 064498811
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 04s
+     Running tests/coverage.rs (target/release/deps/coverage-4541e47c7d1b24a0)
+
+running 21 tests
+test a_class_directive_is_admitted_without_panicking ... ok
+test an_unadmitted_directive_still_panics - should panic ... ok
+test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test owners::out_of_scope_set_matches_the_committed_expectation ... ok
+test owners::assert_owner_strings_are_split_table_phases ... ok
+test owners::only_backslash_is_unreachable ... ok
+test owners::variant_counts_match_the_audited_split ... ok
+test every_directive_keyword_is_correctly_admitted_or_refused ... ok
+test owners::the_two_harnesses_include_this_exact_file ... ok
+test phase_4a_subset_matches_the_committed_list ... ok
+test phase_4c_subset_matches_the_committed_list ... ok
+test phase_4b_subset_matches_the_committed_list ... ok
+test phase_5b_subset_matches_the_committed_list ... ok
+test phase_5a_subset_matches_the_committed_list ... ok
+test the_builtin_exclusion_set_matches_the_committed_file ... ok
+test read_subset_unions_two_files_first_seen_order_deduplicated ... ok
+test phase_5c_subset_matches_the_committed_list ... ok
+test phase_5d_subset_matches_the_committed_list ... ok
+test the_union_reads_every_phase_subset_file ... ok
+test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
+test every_in_scope_variant_is_witnessed_by_the_phase_subsets ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/ir_recorded.rs (target/release/deps/ir_recorded-a132a38613d24248)
+
+running 28 tests
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_harness_reads_every_phase_subset_file ... ok
+test the_sweep_runs_every_ootest_suite_a_sibling_harness_runs ... ok
+test the_smallest_program_answers ... ok
+test every_population_the_tree_calls_for_is_present_and_non_empty ... ok
+test every_loop_shape_answers_as_recorded ... ok
+test every_branch_shape_answers_as_recorded ... ok
+test every_case_file_answers_as_recorded ... ok
+test every_population_runs_without_a_refusal ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.22s
+
+     Running tests/trace_oracle.rs (target/release/deps/trace_oracle-19fc6fbb7b460fff)
+
+running 41 tests
+test every_trace_prefix_the_oracle_emits_has_a_witness ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_prefix_table_reads_every_phase_subset_file ... ok
+test every_witness_still_emits_every_prefix_it_is_named_for ... ok
+test exit_value_covers_the_exit_instructions_own_result_line ... ok
+test function_call_covers_the_function_prefix_after_the_callees_own_lines ... ok
+test control_variable_novalue_covers_a_dropped_control_variable_under_a_trap ... ok
+test prefix_operators_covers_plus_and_backslash ... ok
+test pull_queue_covers_the_line_reading_sources_in_both_modes ... ok
+test message_send_covers_the_message_result_line ... ok
+test controlled_loop_covers_the_control_variables_own_value_lines ... ok
+test call_arguments_covers_the_argument_prefix_at_every_position_shape ... ok
+test control_variable_reread_covers_a_body_that_writes_the_control_variable ... ok
+test trace_output_covers_clause_result_assignment_literal_variable_and_operator ... ok
+test dotvariable_beyond_the_list_covers_the_spec_correction ... ok
+test keyword_while_covers_a_re_evaluated_keyword_across_every_pass ... ok
+test use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate ... ok
+test trace_labels_covers_the_labels_only_mode ... ok
+test parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement ... ok
+test compound_read_write_covers_the_resolved_compound_name ... ok
+test namespace_lookup_covers_the_class_resolution_line ... ok
+test every_live_witness_emits_its_prefix_and_is_run_by_the_corpus ... ok
+
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+exit status 0
