@@ -38,3 +38,9 @@ identity.
 SysStemSort writes results back by tail; the oracle writes into the stem elements it captured. A
 STRING method that empties the stem mid-sort makes the oracle print [S.1] [S.2] and the crate [K]
 [heap...]. Fix needs stem element identity. See .superpowers/sdd/2026-10-13-phase-9b/task-3-review.md.
+
+## Added 2026-10-13 (9b Task 9 fix round)
+
+~addRoutine of a COPY of an internal-row Routine object answers 88.914 where the oracle adds it: a copy
+carries no directive/row record. Exclusions row "addRoutine REFUSES A LIBRARY Routine OBJECT" names
+it; probe add2.rex in docs/superpowers/records/2026-10-13-phase-9b/task-9/.
