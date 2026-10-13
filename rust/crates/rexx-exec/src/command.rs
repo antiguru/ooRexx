@@ -1401,16 +1401,17 @@ mod tests {
 
     /// `corpus/oracle-crashes.txt` entry 44: the oracle dies on `cd ~` with
     /// `HOME` unset. Here the shell answers it, as the C++ hands over a bare
-    /// `cd` or `cd ~/x` with `HOME` unset, and the directory stays.
+    /// `cd` or `cd ~/x` with `HOME` unset, and the directory stays. The rc is
+    /// the shell's own and is not asserted.
     #[test]
     fn cd_home_with_home_unset_goes_to_the_shell() {
         let source = b"here = directory()\n\
             'unset HOME'\n\
             'cd ~'\n\
-            say rc (directory() == here)\n";
+            say 'stayed' (directory() == here)\n";
         let outcome = crate::run_program("/t.rex", source.to_vec(), crate::Invocation::none());
         assert_eq!(outcome.exit_code, 0);
-        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "2 1\n");
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "stayed 1\n");
     }
 
     /// `unquote`'s byte rules, the C++ loop's answers.

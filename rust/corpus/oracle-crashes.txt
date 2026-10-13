@@ -1281,7 +1281,7 @@ layout. This was measured 2026-10-10 by Phase 6.1's Task 11a review and fix roun
 `b08_drop`, `f1c/c11_expose` and `f1c/c05_procexpose`, and were run 2 times on the oracle. This crate
 refuses each with the R11 loud refusal (Deviation 30). No upstream ticket.
 
-## 34. An `arrayArgument` whose `MAKEARRAY` answers a List, or a string that is not short
+## 34. An `arrayArgument` whose `MAKEARRAY` answers a List, or a string of some contents
 
     say .environment~unknown('ARRAY', .k~new)
     ::class k
@@ -1434,7 +1434,7 @@ crate answers "Error: Message not found" for the first and "Error: Message catal
 the second, pinned by `builtin::rexxutil::messages::tests::a_table_of_no_buckets_holds_no_message`
 and `a_table_reaching_past_the_mapping_is_rejected`. No upstream ticket.
 
-## 43. A `RexxArrayObject` argument whose `MAKEARRAY` answers a string that is not short
+## 43. A `RexxArrayObject` argument whose `MAKEARRAY` answers a string other than a short one
 
     say SysFormatMessage('&1', .k~new)
     ::class k
@@ -1466,6 +1466,6 @@ Run with `HOME` removed from the environment (`env -u HOME`): SIGSEGV, rc 139, 3
 the standard wrapper and `memcap 4G`, nothing on stdout, measured 2026-10-13 by Phase 9b Task 6.
 `sys_process_cd` (`platform/unix/SystemCommands.cpp:494`) hands a bare `cd` and `cd ~/x` to the
 shell where `getenv("HOME")` is null, but for `cd ~` and `cd ~ x` it runs `strlen` on it. This
-crate hands those to the shell too, which answers `rc 2` with its own message on stderr and leaves
-the directory, pinned by `command::tests::cd_home_with_home_unset_goes_to_the_shell`. No upstream
+crate hands those to the shell too, and the shell's answer is the command's, the directory
+unchanged, pinned by `command::tests::cd_home_with_home_unset_goes_to_the_shell`. No upstream
 ticket.

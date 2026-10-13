@@ -209,3 +209,14 @@ release binary rebuilt.
 | suite groups | the three groups, as above | **exit 0** at `a516009f5`, wall 77 s: ADDRESS 79/79, SysFormatMessage 5/5, SysGetMessage 9/9, all green |
 | corpus | `REXX_CORPUS_GATE=1 ... --test corpus` | exit 0, `1039 of 1039 matching` |
 | collect_stress | `... --test collect_stress` | exit 0, 37 passed |
+
+## Fix round 2
+
+- `command::tests::cd_home_with_home_unset_goes_to_the_shell` no longer asserts the shell's rc,
+  which depends on what `/bin/sh` is. It asserts that the program ends normally (exit 0) and that the directory is
+  unchanged (`stayed 1`). Entry 44 now says the shell's answer is the command's.
+- Headings of entries 34 and 43 match their tables: 34 "a List, or a string of some contents"
+  (its program answers rc 0 for `'not an array'` and crashes on longer strings), 43 "a string other
+  than a short one".
+- Checks: `cargo fmt --all --check` exit 0; clippy `-p rexx-exec --all-targets -D warnings` exit 0;
+  `cargo test -p rexx-exec --lib command::tests` 6 passed; `--test refusal_sites` 5 passed.
