@@ -117,7 +117,7 @@ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:971	off-send-surfa
 Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:964	off-send-surface	-	-	-
 Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:822	off-send-surface	-	-	-
 Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
-Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:772	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:797	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
 Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
 Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
 Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
