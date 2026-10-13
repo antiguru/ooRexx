@@ -63,3 +63,19 @@ Task 4: fix round 1 dispatched (resume b4-impl).
 Queued: lossy path sites (except SysFileTree's, which goes to the Task 5 dispatch).
 Task 4: fix round 1 at ab305b53e, ff222442b (tz-rs 0.7.3 added); re-review dispatched (sonnet).
 Task 4: complete (92d2868fc..1cbce6cde, ab305b53e, ff222442b). Re-review approved.
+Task 5: dispatched (implementer opus, BASE c11344b31); lossy sites rexxutil.rs:797/798/841 handed to Task 5.
+Task 5: implementer DONE_WITH_CONCERNS (813f71787, cc6e05caa). SysFileTree 26/26.
+Ruling: dangling link listed from lstat as a file -- oracle answer is undefined (entry 40, ignores stat failure), lstat is the defined reading -- if wrong, one witness line changes.
+Ruling: readdir order needs no Deviation -- both sides use readdir, so not a divergence; witness sorts because order is fs-defined -- if wrong, a Deviation entry later.
+Ruling: normalize_bytes doubled-slash-before-.. bug (/a/b//../c -> /a/c, oracle /a/b/c) is fixed in Task 5's fix round with a QUALIFY witness -- a real shared-path bug found here, cheap to fix -- if wrong, scope creep is one function.
+Task 5 review: spec OK; quality I1 bracket [=c=]/[.c.] unmatched (oracle matches); I2 normalizePathName wider: oracle sets previousSlash only at a / not followed by '.', before dedup -> /a/b//../c=/a/b/c, /a/.hidden/../c=/c, /a/b/..x/../c=/a/c; crate gives POSIX-lexical /a/c, /a/c, /a/b/c. Minors: entries() stats every name; entry 40 could name ELOOP; both-stat-fail drop (race). Perf dirread +0.4376% (0.06% headroom), startup +0.2812%.
+Ruling: REVERSES the Task 5 normalize ruling. The crate's lexical normalisation is the correct one on every reviewed row; the oracle's answers come from a previousSlash bug in normalizePathName (qualify('/a/.config/../x') = '/x' names a different file). License as Deviation 34 (oracle bug, per Moritz's "oracle bug" stance on 9a I1); witness the agreeing rows in corpus, pin the differing rows crate-only citing Deviation 34 -- if wrong, port the loop verbatim (one function).
+Ruling: bracket [=c=] and [.c.] fixed (single byte = that byte, also as range end) with witness rows.
+Ruling: entries() stats only names that match (autofs, syscalls); entry 40 names ELOOP; both-fail drop accepted (race only).
+Task 5: fix round 1 dispatched (resume b5-impl).
+Task 5: fix round 1 at 00ba9f620, 0f35b56f9, 4764c16ae ([=c=] as range end follows measurement: matches nothing on oracle); re-review dispatched (sonnet).
+Task 5 re-review 1: open I -- malformed [= after earlier bracket items: oracle drops accumulated set ([b[=a] -> '= [ a' vs crate '= [ a b'); 5/3000 sweep rows. Minor: Deviation 34 line numbers for this checkout's interpreter/ (604-693). Fix round 2 dispatched (resume b5-impl).
+Task 5: fix round 2 at 064498811, 6c8d0e7fd (bracket = port of glibc 2.43 fnmatch_loop bracket loop; sweep 1700 patterns/3400 rows, 0 differ).
+Ruling: controller re-ran the committed sweep on the release binary (built from 064498811's tree) instead of a third re-review: 3400 rows, diff vs sweep.oracle.out empty -- the sweep is the reviewer's own instrument, widened -- if wrong, close review.
+Ruling: '^' always negates (glibc consults POSIXLY_CORRECT per process) accepted -- env-dependent glibc mode, not an interpreter observable worth a Deviation -- if wrong, one branch.
+Task 5: complete (813f71787, cc6e05caa, 00ba9f620, 0f35b56f9, 4764c16ae, 064498811, 6c8d0e7fd).
