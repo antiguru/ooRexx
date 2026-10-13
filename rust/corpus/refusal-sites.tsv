@@ -126,7 +126,7 @@ Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:620	diverges	yes	di
 Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1935	off-send-surface	-	-	-
 Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:609	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
 Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1711	off-send-surface	-	-	-
-Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+Raised	escalated	body	crates/rexx-exec/src/command.rs:463	off-send-surface	-	-	-
 Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:552	off-send-surface	-	-	-
 Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1918	off-send-surface	-	-	-
 Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1876	off-send-surface	-	-	-

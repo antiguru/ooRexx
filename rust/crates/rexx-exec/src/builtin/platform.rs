@@ -81,7 +81,7 @@ pub(crate) fn expand_tilde(interp: &Interp, name: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// The home directory `/etc/passwd` gives the account `user`.
-fn passwd_home(user: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn passwd_home(user: &[u8]) -> Option<Vec<u8>> {
     let passwd = std::fs::read("/etc/passwd").ok()?;
     passwd.split(|byte| *byte == b'\n').find_map(|line| {
         let fields: Vec<&[u8]> = line.split(|byte| *byte == b':').collect();

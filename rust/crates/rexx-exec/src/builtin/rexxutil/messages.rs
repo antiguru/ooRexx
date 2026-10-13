@@ -314,8 +314,8 @@ fn open_catalog(interp: &Interp, name: &[u8]) -> Option<CatalogImage> {
     CatalogImage::read(file)
 }
 
-/// `open(path, O_RDONLY)`, a relative path resolved against the program's
-/// directory.
+/// `open(path, O_RDONLY)`, a relative path resolved against the
+/// interpreter's current directory, which `DIRECTORY` and `cd` move.
 fn open(interp: &Interp, path: &[u8]) -> Option<std::fs::File> {
     if path.is_empty() {
         return None;

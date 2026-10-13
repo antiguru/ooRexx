@@ -2,7 +2,8 @@
    interpreter's own messages by number and set, catalogs this program writes
    (found by a path, by NLSPATH and LANG, or not at all, and malformed ones),
    substitution with omitted, surplus, converted and raising values, the
-   array size rule, strerror text, and the argument errors. */
+   array size rule, a MAKEARRAY answering a short string, strerror text, and
+   the argument errors. */
 here = directory()
 d = 'messages.d'
 call SysMkDir d
@@ -97,6 +98,10 @@ call t "SysGetMessage(5, , .raiser~new('argument'))"
 g = .array~new; g[1] = .grower~new(g); g[2] = 'b'
 call t "SysFormatMessage('&1 &2', g)"
 call t "SysFormatMessage('&1', .makesArray~new)"
+do answer over .array~of('', 'x', 'abc')
+  call t "SysFormatMessage('&1', .makesString~new('"answer"'))"
+  call t ".environment~unknown('ARRAY', .makesString~new('"answer"'))"
+end
 call t "SysFormatMessage('&1', .array~new(2, 2))"
 call t "SysFormatMessage('&1', .object~new)"
 call t "SysFormatMessage('&1', .nil)"
@@ -266,3 +271,6 @@ catalog: procedure
 ::method string; expose target; target[2] = 'grown'; return 'g'
 ::class makesArray
 ::method makearray; return .array~of('m1', 'm2')
+::class makesString
+::method init; expose answer; use arg answer
+::method makearray; expose answer; return answer

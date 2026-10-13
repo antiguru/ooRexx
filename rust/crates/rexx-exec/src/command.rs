@@ -265,7 +265,7 @@ fn run_internally(interp: &mut Interp, command: &[u8]) -> Option<CommandOutcome>
         return None;
     }
     if command == b"cd" || command.starts_with(b"cd ") {
-        return Some(change_directory(interp, command));
+        return change_directory(interp, command);
     }
     if command.starts_with(b"set ") {
         return assign_environment(interp, after_keyword(command, 3), Assignment::Set);
@@ -279,44 +279,98 @@ fn run_internally(interp: &mut Interp, command: &[u8]) -> Option<CommandOutcome>
     None
 }
 
-/// `unquote` (`interpreter/platform/unix/SystemCommands.cpp:470`): a wrapping
-/// pair of double quotes is removed and everything else is kept.
+/// `unquote` (`interpreter/platform/unix/SystemCommands.cpp:453`): every `"`
+/// dropped, and a backslash dropped with the byte after it kept. A trailing
+/// backslash ends the text.
 fn unquote(text: &[u8]) -> Vec<u8> {
-    if text.len() >= 2 && text.first() == Some(&b'"') && text.last() == Some(&b'"') {
-        return text[1..text.len() - 1].to_vec();
+    let mut out = Vec::with_capacity(text.len());
+    let mut bytes = text.iter();
+    while let Some(&byte) = bytes.next() {
+        match byte {
+            b'\\' => match bytes.next() {
+                Some(&escaped) => out.push(escaped),
+                None => break,
+            },
+            b'"' => {}
+            _ => out.push(byte),
+        }
     }
-    text.to_vec()
+    out
 }
 
-/// `sys_process_cd`: moves this interpreter's own directory.
+/// `sys_process_cd` (`interpreter/platform/unix/SystemCommands.cpp:494`): the
+/// target after the leading spaces, unquoted, is where this interpreter's own
+/// directory moves. Nothing is the home directory. `~`, `~/rest` and `~ rest`
+/// are `HOME` with a `/` after it, the rest kept only after `~/`. `~user` and
+/// `~user/rest` are that account's home directory. `None` hands the command
+/// to the shell, as the C++ does where `HOME` is unset or the account is
+/// unknown. With `HOME` unset the oracle dies on `cd ~`
+/// (`corpus/oracle-crashes.txt` entry 44), and that goes to the shell too.
 ///
-/// **A `chdir` that fails is still handled here** -- the C++ raises `ERROR`
-/// with `errno` as the return code and answers `true`, so the command never
-/// reaches a shell. Measured: `cd nosuchdir` is `rc 2`, `.RS 1`, the
-/// directory unmoved and **nothing on stderr**.
-fn change_directory(interp: &mut Interp, command: &[u8]) -> CommandOutcome {
+/// The directory is resolved as `chdir` resolves it, `..` after any link, and
+/// the new directory is its physical path, as `getcwd` answers. A failure is
+/// still handled here: `rc` is the `errno` and nothing reaches stderr.
+fn change_directory(interp: &mut Interp, command: &[u8]) -> Option<CommandOutcome> {
     let rest = after_keyword(command, 2);
+    let home = || interp.env_get(b"HOME").map(<[u8]>::to_vec);
     let target = if rest.is_empty() {
-        match interp.env_get(b"HOME") {
-            Some(home) => home.to_vec(),
-            // No `HOME` is the one shape the C++ hands back to the shell,
-            // which this cannot express here; a shell would fail too.
-            None => return CommandOutcome::of(1),
+        home()?
+    } else if rest[0] == b'~' && matches!(rest.get(1), None | Some(b'/' | b' ')) {
+        let mut target = home()?;
+        target.push(b'/');
+        if rest.get(1) == Some(&b'/') {
+            target.extend_from_slice(&rest[2..]);
         }
+        target
+    } else if let Some(account) = rest.strip_prefix(b"~") {
+        let (user, tail) = match account.iter().position(|byte| *byte == b'/') {
+            Some(slash) => (&account[..slash], &account[slash + 1..]),
+            None => (account, &b""[..]),
+        };
+        let mut target = crate::builtin::platform::passwd_home(user)?;
+        target.push(b'/');
+        target.extend_from_slice(tail);
+        target
     } else {
-        unquote(rest)
+        rest.to_vec()
     };
-    let path = crate::paths::normalize(&String::from_utf8_lossy(&target), &interp.cwd_text());
-    match std::fs::metadata(&path) {
-        Ok(meta) if meta.is_dir() => {
-            interp.set_cwd(std::path::PathBuf::from(path));
-            CommandOutcome::of(0)
-        }
-        // `errno` is the return code, and `ENOTDIR` and `ENOENT` are the two
-        // this can produce.
-        Ok(_) => CommandOutcome::of(20),
-        Err(error) => CommandOutcome::of(error.raw_os_error().unwrap_or(2)),
+    let target = unquote(&target);
+    let target = match target.iter().position(|byte| *byte == 0) {
+        Some(end) => &target[..end],
+        None => &target[..],
+    };
+    Some(CommandOutcome::of(
+        match physical_directory(interp, target) {
+            Ok(directory) => {
+                interp.set_cwd(directory);
+                0
+            }
+            Err(errno) => errno,
+        },
+    ))
+}
+
+/// The directory `chdir(target)` would enter, by its physical path, or the
+/// `errno` it would fail with.
+fn physical_directory(interp: &Interp, target: &[u8]) -> Result<std::path::PathBuf, i32> {
+    const ENOENT: i32 = 2;
+    const ENOTDIR: i32 = 20;
+    if target.is_empty() {
+        return Err(ENOENT);
     }
+    let joined = if target[0] == b'/' {
+        target.to_vec()
+    } else {
+        [interp.cwd_bytes(), b"/", target].concat()
+    };
+    let directory = std::fs::canonicalize(OsStr::from_bytes(&joined))
+        .map_err(|error| error.raw_os_error().unwrap_or(ENOENT))?;
+    if !directory.is_dir() {
+        return Err(ENOTDIR);
+    }
+    rustix::fs::access(&directory, rustix::fs::Access::EXEC_OK)
+        .map_err(|errno| errno.raw_os_error())?;
+    Ok(directory)
 }
 
 /// Expands `$NAME` in the value half of an assignment against this
@@ -1343,5 +1397,29 @@ mod tests {
         assert_eq!(shell(b"tcsh"), "tcsh");
         assert!(matches!(handler_for(b"path"), Some(Handler::Path)));
         assert!(handler_for(b"nosuchhandler").is_none());
+    }
+
+    /// `corpus/oracle-crashes.txt` entry 44: the oracle dies on `cd ~` with
+    /// `HOME` unset. Here the shell answers it, as the C++ hands over a bare
+    /// `cd` or `cd ~/x` with `HOME` unset, and the directory stays.
+    #[test]
+    fn cd_home_with_home_unset_goes_to_the_shell() {
+        let source = b"here = directory()\n\
+            'unset HOME'\n\
+            'cd ~'\n\
+            say rc (directory() == here)\n";
+        let outcome = crate::run_program("/t.rex", source.to_vec(), crate::Invocation::none());
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "2 1\n");
+    }
+
+    /// `unquote`'s byte rules, the C++ loop's answers.
+    #[test]
+    fn unquote_drops_quotes_and_escapes_one_byte() {
+        assert_eq!(unquote(b"\"a\"b"), b"ab");
+        assert_eq!(unquote(b"a\\ b"), b"a b");
+        assert_eq!(unquote(b"a\\\"b"), b"a\"b");
+        assert_eq!(unquote(b"a\\\\b"), b"a\\b");
+        assert_eq!(unquote(b"ab\\"), b"ab");
     }
 }

@@ -1281,7 +1281,7 @@ layout. This was measured 2026-10-10 by Phase 6.1's Task 11a review and fix roun
 `b08_drop`, `f1c/c11_expose` and `f1c/c05_procexpose`, and were run 2 times on the oracle. This crate
 refuses each with the R11 loud refusal (Deviation 30). No upstream ticket.
 
-## 34. An `arrayArgument` whose `MAKEARRAY` answers a List
+## 34. An `arrayArgument` whose `MAKEARRAY` answers a List, or a string that is not short
 
     say .environment~unknown('ARRAY', .k~new)
     ::class k
@@ -1289,10 +1289,10 @@ refuses each with the R11 loud refusal (Deviation 30). No upstream ticket.
 
 SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper, nothing on stdout or stderr.
 `arrayArgument` (`runtime/MethodArguments.hpp:675`) checks the `requestArray` answer only against
-`TheNilObject` and then reads it through the array layout. The same program with a `MAKEARRAY`
-answering a string raises 98.913 on the oracle. Measured 2026-10-12 by Phase 9a Task 5 (probe
-`ua11`). This crate raises 98.913 for any answer that is not a single-dimensional array. No
-upstream ticket.
+`TheNilObject` and then reads it through the array layout. Measured 2026-10-12 by Phase 9a Task 5
+(probe `ua11`). A string answer is read the same way, and the outcome is fixed by the string's
+content: the table under entry 43 holds it, measured on this program and on that one. This crate
+raises 98.913 for any answer that is not a single-dimensional array. No upstream ticket.
 
 ## 35. `~defineMethods` over an object whose `SUPPLIER` answers a string
 
@@ -1434,16 +1434,38 @@ crate answers "Error: Message not found" for the first and "Error: Message catal
 the second, pinned by `builtin::rexxutil::messages::tests::a_table_of_no_buckets_holds_no_message`
 and `a_table_reaching_past_the_mapping_is_rejected`. No upstream ticket.
 
-## 43. A `RexxArrayObject` argument whose `MAKEARRAY` answers a string
+## 43. A `RexxArrayObject` argument whose `MAKEARRAY` answers a string that is not short
 
     say SysFormatMessage('&1', .k~new)
     ::class k
     ::method makearray; return 'not an array'
 
 SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper and `memcap 4G`, nothing on stdout,
-measured 2026-10-13 by Phase 9b Task 6. The same call inside `INTERPRET` under `SIGNAL ON SYNTAX`
-raised 98.913 once and died in another program, so the answer depends on what the string's memory
-holds when `arrayArgument` (`runtime/MethodArguments.hpp:675`) reads it as an array, as in entry 34.
-This crate raises 98.913, pinned by
+measured 2026-10-13 by Phase 9b Task 6. `arrayArgument` (`runtime/MethodArguments.hpp:675`) reads
+the string through the array layout, as in entry 34, and what follows depends on the string's
+content and not on the run. The Phase 9b Task 6 review measured both programs, entry 34's
+(`.environment~unknown('ARRAY', .k~new)`) and this one, 3 runs each, with `MAKEARRAY` answering:
+
+| `MAKEARRAY` answers | entry 34's program | this program |
+|---|---|---|
+| `''`, `'x'`, `'abc'` | 98.913, rc 158 | 98.913, rc 158 |
+| `'not an array'` | rc 0, prints `The Array class` | SIGSEGV |
+| `copies('a',40)`, `copies('b',300)`, `1`, `12345` | SIGSEGV | SIGSEGV |
+
+This crate raises 98.913 for every string, the oracle's one answer that is not a crash. The short
+strings agree and are in the corpus witness `lang/rexxutil_messages.rex`. The rest are pinned by
 `builtin::rexxutil::messages::tests::a_make_array_answering_a_string_is_not_an_array`. No upstream
+ticket.
+
+## 44. `cd ~` with `HOME` unset
+
+    'cd ~'
+    say rc
+
+Run with `HOME` removed from the environment (`env -u HOME`): SIGSEGV, rc 139, 3 runs of 3 under
+the standard wrapper and `memcap 4G`, nothing on stdout, measured 2026-10-13 by Phase 9b Task 6.
+`sys_process_cd` (`platform/unix/SystemCommands.cpp:494`) hands a bare `cd` and `cd ~/x` to the
+shell where `getenv("HOME")` is null, but for `cd ~` and `cd ~ x` it runs `strlen` on it. This
+crate hands those to the shell too, which answers `rc 2` with its own message on stderr and leaves
+the directory, pinned by `command::tests::cd_home_with_home_unset_goes_to_the_shell`. No upstream
 ticket.
