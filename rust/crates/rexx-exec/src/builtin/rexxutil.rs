@@ -9,11 +9,12 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The `REXXUTIL` package's file-system, sleep, semaphore, stem and version routines --
+//! The `REXXUTIL` package's file-system, message, sleep, semaphore, stem and version routines --
 //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
 
 pub(crate) mod files;
+pub(crate) mod messages;
 pub(crate) mod stems;
 pub(crate) mod tree;
 

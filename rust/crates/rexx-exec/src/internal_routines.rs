@@ -128,15 +128,27 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     ),
     util_run("SysFileTree", crate::builtin::rexxutil::tree::file_tree),
     util("SysFork", Owner::Phase9),
-    util("SysFormatMessage", Owner::Phase9),
-    util("SysGetErrorText", Owner::Phase9),
+    util_run(
+        "SysFormatMessage",
+        crate::builtin::rexxutil::messages::format,
+    ),
+    util_run(
+        "SysGetErrorText",
+        crate::builtin::rexxutil::messages::error_text,
+    ),
     util_run(
         "SysGetFileDateTime",
         crate::builtin::rexxutil::files::get_file_date_time,
     ),
     util("SysGetKey", Owner::Phase9),
-    util("SysGetMessage", Owner::Phase9),
-    util("SysGetMessageX", Owner::Phase9),
+    util_run(
+        "SysGetMessage",
+        crate::builtin::rexxutil::messages::get_message,
+    ),
+    util_run(
+        "SysGetMessageX",
+        crate::builtin::rexxutil::messages::get_message_x,
+    ),
     util_run("SysIsFile", crate::builtin::rexxutil::is_file),
     util_run(
         "SysIsFileDirectory",

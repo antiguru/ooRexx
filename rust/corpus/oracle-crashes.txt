@@ -1403,3 +1403,47 @@ link's own `2  lrwxrwxrwx`; both stop there, count 123. This checkout's `interpr
 by `lstat`, a link with its own size that counts as a file, pinned by
 `builtin::rexxutil::tree::tests::a_dangling_link_is_listed_by_its_own_status`. The corpus
 witness `lang/rexxutil_file_tree.rex` makes no dangling link.
+
+## 41. `SysFormatMessage` with a value the message refers to whose `STRING` raises
+
+    say SysFormatMessage('&1', .array~of(.raiser~new))
+    ::class raiser
+    ::method string; raise syntax 93.900 array('raised')
+
+SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper and `memcap 4G`, nothing on stdout,
+measured 2026-10-13 by Phase 9b Task 6. `formatMessage` (`runtime/RexxUtilCommon.cpp`) takes
+each value through `ObjectToStringValue`, which catches the raise and answers `NULL`, and the
+message's `&1` then runs `strlen` on it. A raising value the message does not refer to is safe:
+the other values are still converted and the last raise is the routine's answer, which the corpus
+witness `lang/rexxutil_messages.rex` runs. This crate answers the raise here too, pinned by
+`builtin::rexxutil::messages::tests::a_raising_value_the_message_refers_to_is_trapped`. No
+upstream ticket.
+
+## 42. A message catalog the oracle opens and then cannot read
+
+    call charout 'zero.cat', 'de080496'x || '00000000'x || '01000000'x || '00'x
+    call stream 'zero.cat', 'c', 'close'
+    say SysGetMessage(1, './zero.cat')
+
+SIGFPE, rc 136, 3 runs of 3 under the standard wrapper and `memcap 4G`, measured 2026-10-13 by
+Phase 9b Task 6: a catalog of no buckets passes glibc 2.43's `__open_catalog` checks and
+`catgets` divides by the bucket count. A header claiming more table than the file holds
+(`'a0860100'x` buckets, one deep, 20 bytes after the header) dies of SIGBUS, rc 135, 3 runs of 3:
+`__open_catalog` scans the table for its largest offset before it tests the file's size. This
+crate answers "Error: Message not found" for the first and "Error: Message catalog not found" for
+the second, pinned by `builtin::rexxutil::messages::tests::a_table_of_no_buckets_holds_no_message`
+and `a_table_reaching_past_the_mapping_is_rejected`. No upstream ticket.
+
+## 43. A `RexxArrayObject` argument whose `MAKEARRAY` answers a string
+
+    say SysFormatMessage('&1', .k~new)
+    ::class k
+    ::method makearray; return 'not an array'
+
+SIGSEGV, rc 139, 5 runs of 5 under the standard wrapper and `memcap 4G`, nothing on stdout,
+measured 2026-10-13 by Phase 9b Task 6. The same call inside `INTERPRET` under `SIGNAL ON SYNTAX`
+raised 98.913 once and died in another program, so the answer depends on what the string's memory
+holds when `arrayArgument` (`runtime/MethodArguments.hpp:675`) reads it as an array, as in entry 34.
+This crate raises 98.913, pinned by
+`builtin::rexxutil::messages::tests::a_make_array_answering_a_string_is_not_an_array`. No upstream
+ticket.

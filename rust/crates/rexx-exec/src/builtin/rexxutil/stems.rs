@@ -91,7 +91,11 @@ fn optional_positive(
 }
 
 /// [`optional_positive`] for an argument that is required.
-fn positive(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Result<i64, Failure> {
+pub(super) fn positive(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<i64, Failure> {
     required(args, position)?;
     Ok(optional_positive(interp, args, position)?.expect("the argument is present"))
 }

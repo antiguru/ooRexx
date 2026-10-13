@@ -82,3 +82,6 @@ lang/rexxutil_qualified_names.rex
 
 # 9b Task 5: SysFileTree.
 lang/rexxutil_file_tree.rex
+
+# 9b Task 6: the RexxUtil message routines.
+lang/rexxutil_messages.rex
