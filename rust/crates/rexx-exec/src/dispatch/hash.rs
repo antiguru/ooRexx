@@ -159,8 +159,7 @@ fn index_only(interp: &mut Interp, receiver: ObjRef) -> bool {
 /// Whether `receiver`'s class is one of [`OWNED`].
 pub(crate) fn owns(interp: &mut Interp, receiver: ObjRef) -> bool {
     // **A `Body::Native` receiver is never one of these**, however its class
-    // reads: a `Directory` built on `NativeObject`'s map, such as
-    // `Package~local`, has no store -- see [`store_of`].
+    // reads: it has no store (see [`store_of`]).
     if matches!(
         interp.heap.get(receiver).map(|object| &object.body),
         Some(Body::Native(_))
@@ -187,9 +186,8 @@ fn class_is_one_of(interp: &mut Interp, receiver: ObjRef, names: &[&str]) -> boo
 }
 
 /// The refusal for a receiver [`owns`] declines: a collection of one of
-/// `classes` with no store (`Package~local`'s `Directory`) is the class's
-/// own unbuilt method, and any other receiver is of the wrong type
-/// (Deviation 28).
+/// `classes` with no store is the class's own unbuilt method, and any other
+/// receiver is of the wrong type (Deviation 28).
 fn not_this_task(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Failure {
     refusal_outside(
         interp,

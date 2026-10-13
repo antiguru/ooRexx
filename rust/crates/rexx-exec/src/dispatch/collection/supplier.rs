@@ -84,7 +84,7 @@ fn supplier_state(
 }
 
 /// The pairs `supplier` has left, index then item with an empty slot read as
-/// `.nil`, leaving it at its end -- `createMethodDictionary`'s walk, which
+/// `.nil`, leaving it at its end: `createMethodDictionary`'s walk, which
 /// calls `SupplierClass`'s own `available`, `item`, `index` and `next` rather
 /// than sending them.
 pub(in crate::dispatch) fn drain_supplier(

@@ -1431,7 +1431,7 @@ struct Interp {
     /// by the dictionary entry it is installed into.
     compiled_methods: usize,
     /// The `Method` object `Class~method` answers, keyed by the class, whether
-    /// the entry is on its class side, and the dictionary name -- see
+    /// the entry is on its class side, and the dictionary name. See
     /// [`Interp::method_object`] for the two oracle answers that make one
     /// object per entry observable.
     method_objects: FxHashMap<(ObjRef, bool, Box<[u8]>), ObjRef>,

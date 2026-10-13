@@ -1514,11 +1514,9 @@ enum Primitive {
     /// A `Body::Native` whose class is `.Routine` -- what a `.ROUTINES` entry
     /// holds. Measured, `.routines~r~class` is `The Routine class`.
     Routine,
-    /// A `Body::Native` whose class is `.Directory`, such as `Package~local`.
+    /// A `Body::Native` whose class is `.Directory`.
     Directory,
-    /// A `Body::Native` whose class is `.StringTable` or a subclass of it --
-    /// an `~annotations` table, and `.TraceObject~new`. Measured,
-    /// `.TraceObject~new~class~id` is `TraceObject`.
+    /// A `Body::Native` whose class is `.StringTable` or a subclass of it.
     StringTable(ObjRef),
     /// A `Body::Native` whose class is `.RexxContext` -- what `.context`
     /// answers. Measured, `.context~class` is `The RexxContext class`.

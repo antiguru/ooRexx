@@ -368,7 +368,7 @@ NOSTRING {} NOTREADY {} NOVALUE {} {} TRACE {}",
 
     /// `PackageClass::overridePackageSettings`: every setting this package's
     /// own `::OPTIONS` did not name, taken from `defaults`. Only `PROLOG`
-    /// guards the prologue setting -- a package naming `NOPROLOG` takes it
+    /// guards the prologue setting: a package naming `NOPROLOG` takes it
     /// too, as `isExplicitPrologOption` reads one flag.
     pub(crate) fn take_defaults(&mut self, defaults: &PackageOptions) {
         let named = |word: &str| self.explicit.named(word);
