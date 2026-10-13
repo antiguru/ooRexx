@@ -1,0 +1,774 @@
+diff --git a/.superpowers/sdd/2026-10-13-phase-9b/final-fix-report.md b/.superpowers/sdd/2026-10-13-phase-9b/final-fix-report.md
+new file mode 100644
+index 000000000..0aba89dfb
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-13-phase-9b/final-fix-report.md
+@@ -0,0 +1,139 @@
++# Phase 9b final fix report
++
++Base `43a39ab01`. Commits:
++
++- `3da644f47`: I1 and M1, with oracle-crashes entry 47.
++- `7d4743be9`: M3 and M4 (entries 37, 45 and 48), **and M2**. The M2 commit's `git add` named the
++  gitignored queued file without `-f`. The `&&` chain stopped before its commit, and the next
++  commit took the M2 files. The message names M3/M4 only. The changes are right, the label is not.
++  I did not amend.
++- `1590a1cea`: M6.
++
++## I1: name-resolved stem rooted
++
++- **The fix.** `stems.rs` gets `push_temp(stem)` after each `context_stem_named` resolution:
++  - `stem_argument` (copy, delete, insert)
++  - `sort_target`'s whole-name branch
++  - `sort_target`'s `s.x` prefix branch, a third site the review did not name
++- **The witness.** `builtin::rexxutil::stems::tests::a_stem_named_by_its_variable_outlives_the_variable`
++  reads `crates/rexx-exec/tests/stem_dropped_by_name_cases/crate`, which has five cases: copy,
++  delete, insert, sort, and sort by prefix.
++  - Each case runs normally and under `run_program_collect_every_alloc`. The test asserts that the
++    two outcomes are equal and that collections > 0. The expected block is the crate's own
++    answer, which makes it a crate-only pin.
++  - Values are 18 to 24 bytes, so they are heap strings.
++  - The `STRING` method is `expose s.; drop s.`, then `copies('filler ', 50)`.
++- **Red before the fix.** At HEAD the copy case gives rc 216 and
++  `40.922 Stem argument does not have a valid count for element 0` under stress. The normal run
++  gives rc 0, `0 2`.
++- **Mutation matrix.** Each push was deleted on its own, and the case file was cut to one case per
++  run:
++
++  | push deleted | cases red | cases green |
++  |---|---|---|
++  | `stem_argument` | copy, delete, insert | both sorts |
++  | `sort_target` whole name | sort | the rest |
++  | `sort_target` prefix | sort by prefix | the rest |
++  | none | none | all five |
++
++  The script is `scratchpad/i1/mut.py`. Its other rows come from a wrong header split in the
++  script and are not cases.
++- **Oracle, entry 47.** 3 runs of 3 per variant, under the standard wrapper, `memcap 4G`,
++  `timeout -k 5 60`, from a fresh empty dir:
++  - **One small allocation in `STRING`:** every program matches the crate's pinned answer.
++  - **200000 allocations:** copy, delete and insert end in SIGSEGV, rc 139. Both sorts answer rc 0
++    as normal.
++  - **200000 allocations and no `drop`:** rc 0 with the variable intact.
++  - **This differs from the review.** The review measured 40.922 for its own program, which is
++    not recorded. My program crashes instead. The entry records both.
++- No corpus row.
++
++## M1: two roots
++
++The two tests are
++`stems::tests::a_dump_keeps_the_values_of_variables_a_string_method_drops` and
++`messages::tests::a_fresh_make_array_answer_outlives_its_values_string_methods`. Both run under
++collect-every-alloc.
++
++- **The dump test.** A method exposes five heap-string variables plus `z = self`, and its `STRING`
++  drops all five.
++  - Deleting the `variables` push loop (`stems.rs:730-732`) turns it red: panic at
++    `dispatch.rs:1710`.
++- **The `SysFormatMessage` test.** `MAKEARRAY` answers a fresh `.array~of` of objects, and each
++  object's `STRING` allocates.
++  - Deleting `messages.rs:250` turns it red: `firstfirstfirstfirst /  / ` against the full line.
++- **Green at the fix.**
++- **Oracle.** 3 runs of 3, rc 0. The dump's sorted lines match, including `SELF` and `SUPER`. The
++  format line matches.
++
++## M2: SysCls
++
++- **The fix.** `process.rs:65` now passes `OsStr::from_bytes(interp.cwd_bytes())`.
++- **The test.** `process::tests::sys_cls_runs_in_a_directory_whose_name_is_not_utf8` runs `cd` into
++  a directory whose name is `odd` followed by the byte `ff`.
++  - Before the fix it answered -1 there, printing `odd 0`.
++  - After the fix: `odd 1`.
++  - The adjacent success is a plain directory.
++- **The queued file.** `.superpowers/sdd/queued/2026-10-13-lossy-path-sites.md` gains the review's
++  measurements for two sites:
++  - `DIRECTORY()`, `platform.rs:181`
++  - the ADDRESS command working directory, `command.rs:621`
++
++  It also lists `install.rs:1905`, which the `cwd_text()` grep finds and the review did not probe.
++
++## M3: `~` with HOME unset
++
++- **Entry 48.** From source, not run on the oracle.
++  - The review cited `SysFileSystem.cpp:486`, the line in this checkout's `interpreter/`. At the
++    oracle's `cb9563364` the line is `:569`. The entry gives both.
++  - `FileNameBuffer.hpp:122` is the same line in both.
++- **The pin.** `builtin::platform::tests::a_tilde_with_home_unset_qualifies_without_a_home`:
++  - with `HOME=/h`: `/h /h/x`
++  - after `'unset HOME'`: `[] /x`
++
++## M4
++
++- **Entry 37** now names `an_untrapped_error_inside_the_sort_is_reported` and its case file.
++- **Entry 45** now names `tests/rexxutil_process.rs`'s
++  `a_command_whose_child_was_reaped_elsewhere_fails_with_127`.
++  - The program: the command touches a marker, then runs `sleep 0.6; exit 5`. The main activity
++    polls for the marker up to 400 times at 0.05 s, then calls `SysWait`.
++  - It asserts the sorted lines `cmd rc 127`, `failure 127`, `wait 1280`.
++  - `timeout -k 5 60` wraps `rexx-run`. Clippy forbids `Instant::now` and `thread::sleep` in tests.
++  - It passed 3 runs of 3 in its final form.
++
++## M6
++
++- **Semicolons** replaced with full stops:
++  - `environment.rs:620`
++  - `install.rs:633`
++  - `stream_handle.rs`, three doc comments
++- **`Cargo.toml:67`:** ` -- ` became `:`.
++- **`lib.rs` `set_cwd`:** the false sentence about its callers is deleted. The doc is now
++  "Moves it."
++
++## Checks
++
++All runs are at the committed tree, `1590a1cea`.
++
++- **`cargo fmt --all -- --check`:** exit 0. The first check exited 0 only through a pipe. It was
++  re-run after `cargo fmt --all`.
++- **`cargo clippy --workspace --all-targets -- -D warnings`:** exit 0. Its first run failed on the
++  disallowed clock methods, and that was fixed.
++- **`cargo test -p rexx-exec --lib`:** 1121 passed, 0 failed.
++- **`REXX_CORPUS_GATE=1 memcap 8G cargo test --release -p rexx-exec --test corpus --test collect_stress --test refusal_dispositions --test refusal_sites --test owners --no-fail-fast`:**
++  exit 0.
++  - corpus: 29 passed, 1 ignored
++  - collect_stress: 37 passed
++  - owners: 6 passed
++  - refusal_dispositions: 3 passed
++  - refusal_sites: 5 passed
++- **Perf: not run.** The changes are the stem name resolution, `SysCls`, tests and prose, and none
++  of them is on a bench path.
++
++## Concerns
++
++- **`7d4743be9`'s message omits M2**, which that commit contains.
++- **Entry 47's oracle answer differs from the review's 40.922.** That is consistent with "depends on
++  collection". The review's program is not recorded, so its 40.922 stays the review's
++  measurement.
+diff --git a/.superpowers/sdd/queued/2026-10-13-lossy-path-sites.md b/.superpowers/sdd/queued/2026-10-13-lossy-path-sites.md
+index 10d5f6b3f..378dca9ce 100644
+--- a/.superpowers/sdd/queued/2026-10-13-lossy-path-sites.md
++++ b/.superpowers/sdd/queued/2026-10-13-lossy-path-sites.md
+@@ -10,3 +10,14 @@ the wrong file:
+ - CD command: command.rs:309/567
+ - external file read: install.rs:1859/1866
+ Fix: pass OsStr from bytes, with an 'ff'x-name witness and a lossy decoy file per site.
++
++Added by the Phase 9b final fix, from the final review's M2 (.superpowers/sdd/2026-10-13-phase-9b/final-review.md).
++Task 6's `cd` resolves by bytes, so `'cd' 'dir'||'ff'x` now enters a non-UTF-8 directory and the
++`Interp::cwd_text` sites are reachable. The review's measurements after that `cd`, oracle beside it:
++- DIRECTORY(): platform.rs:181 (`interp.cwd_text()`). Crate ends `EFBFBD`, oracle ends `FF`.
++- ADDRESS command working directory: command.rs:621 (`builder.current_dir(interp.cwd_text())`).
++  `address system 'pwd'` answers rc 127 in the crate, rc 0 on the oracle.
++- `SysCls` (process.rs:65) was the third such site, crate -1 against oracle 256. The final fix
++  passes it the bytes.
++`grep -rn 'cwd_text()' rust/crates --include=*.rs` at the final fix also lists install.rs:1905
++(`normalize(&path, &self.cwd_text())`), which the review did not probe.
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index 4326e4668..64d1ea181 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1341,7 +1341,9 @@ The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTe
+ group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
+ it sorts is reported untrapped as usual: 40.919 (`call SysStemSort '*'`) and 40.921 (`first` 3,
+ `last` 2) measured 2026-10-13, 3 runs of 3 each, rc 216 with the ordinary report, and 40.920 is
+-the witness's own last clause. This crate raises each of the three as the trapped oracle does.
++the witness's own last clause. This crate raises each of the three as the trapped oracle does. Pinned
++by `builtin::rexxutil::stems::tests::an_untrapped_error_inside_the_sort_is_reported`, which reads
++`crates/rexx-exec/tests/stem_sort_untrapped_cases/crate`.
+ 
+ ## 38. `SysDumpVariables` over a variable whose `STRING` method raises
+ 
+@@ -1486,7 +1488,8 @@ and `SysWait` after `SysSleep 0.2` on the main one, 3 runs printed the wait's an
+ command's `rc` as `1280` and `3` twice, then `32631` and `5`
+ (`docs/superpowers/records/2026-10-13-phase-9b/task-7/probe-runs.txt`). This crate answers `-1` for a wait that finds no
+ child or fails, pinned by `tests/rexxutil_process.rs`, and a command whose child was reaped elsewhere
+-answers `127` with a `FAILURE`. No upstream ticket.
++answers `127` with a `FAILURE`, pinned by that file's
++`a_command_whose_child_was_reaped_elsewhere_fails_with_127`. No upstream ticket.
+ 
+ ## 46. `SysFork` with a second activity running
+ 
+@@ -1522,3 +1525,54 @@ other 2, and every child was still running after its parent was killed, to be ki
+ `768` for its `exit 3`, rc 0. This crate refuses `SysFork`: every run has a timer thread and a
+ joining main thread, which a forked child would not have
+ (`.superpowers/sdd/queued/2026-10-13-sysfork-design.md`). No upstream ticket.
++
++## 47. A stem passed by name whose variable a `STRING` method in the same call drops
++
++    .k~new~run
++    ::class k
++    ::method run
++      expose s.
++      s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
++      say SysStemCopy('s.', 't.', self) t.0
++      say t.1 '/' t.2
++      say symbol('s.0')
++    ::method string
++      expose s.
++      drop s.
++      do 200000; x = copies('filler ', 50); end
++      return 1
++
++Not one mode: what the oracle does depends on when it collects. `SysStemCopy`, `SysStemDelete`, `SysStemInsert`
++and `SysStemSort` resolve a stem named by a string and hold it only through the caller's variable,
++while later arguments and the sort's elements run `STRING` methods. Measured 2026-10-13 by the
++Phase 9b final fix, 3 runs of 3 each under the standard wrapper and `memcap 4G`, from a fresh
++empty directory:
++
++| program | `STRING` allocates `copies('filler ', 50)` once | 200000 times | 200000 times, no `drop` |
++|---|---|---|---|
++| the copy above | rc 0: `0 2`, the copied values, `LIT` | SIGSEGV, rc 139 | rc 0: `0 2`, the values, `VAR` |
++| `SysStemDelete('s.', self)` | rc 0: `0 S.0` | SIGSEGV, rc 139 | rc 0: `0 1` |
++| `SysStemInsert('s.', self, ...)` | rc 0: `0 S.0` | SIGSEGV, rc 139 | rc 0: `0 3` |
++| `SysStemSort('s.')`, `s.2 = self` | rc 0: `0 S.0` | rc 0: `0 S.0` | rc 0: `0 3` |
++| `SysStemSort('s.x')`, `s.x.2 = self` | rc 0: `0 S.X.0` | rc 0: `0 S.X.0` | rc 0: `0 3` |
++
++The Phase 9b final review measured 40.922 for its own program of the same shape, 3 runs of 3,
++where this program crashes. This crate holds the stem it resolved for the whole call, and answers as
++the oracle does when it does not collect, collecting or not: pinned by
++`builtin::rexxutil::stems::tests::a_stem_named_by_its_variable_outlives_the_variable`, which reads
++`crates/rexx-exec/tests/stem_dropped_by_name_cases/crate` and runs each case normally and
++collecting at every allocation. No corpus witness can run it. No upstream ticket.
++
++## 48. `~` with `HOME` unset, as a file name
++
++    say qualify('~')
++
++From source, not run. `SysFileSystem::resolveTilde` (`platform/unix/SysFileSystem.cpp:569` at the
++oracle's `cb9563364`, `:486` in this checkout's `interpreter/`) assigns `getenv("HOME")` to a
++`FileNameBuffer`, whose `operator=` (`memory/FileNameBuffer.hpp:122`) runs `strlen` on it:
++`strlen(NULL)` where `HOME` is unset, as in entry 44's `cd ~`, which was measured.
++`canonicalizeName` calls it for a name starting `~`, and `qualifyStreamName` calls
++`canonicalizeName`. In this crate the same names go through `qualify_name`: `QUALIFY`, stream names,
++`DIRECTORY` and the RexxUtil file routines. This crate reads the missing `HOME` as empty: `~`
++qualifies to the null string and `~/x` to `/x`, pinned by
++`builtin::platform::tests::a_tilde_with_home_unset_qualifies_without_a_home`. No upstream ticket.
+diff --git a/rust/crates/rexx-exec/Cargo.toml b/rust/crates/rexx-exec/Cargo.toml
+index 8289527e8..51f888c81 100644
+--- a/rust/crates/rexx-exec/Cargo.toml
++++ b/rust/crates/rexx-exec/Cargo.toml
+@@ -64,7 +64,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
+ # writable open handle where a read-only file's stamp is still the owner's to
+ # set; `uname`, for `SysVersion`; and `tcsetattr`, for `SysGetKey`'s
+ # terminal mode. `event` and `time` are the timer thread's `poll` and Linux
+-# `timerfd`. Each feature is a leaf here -- they gate their modules and pull
++# `timerfd`. Each feature is a leaf here: they gate their modules and pull
+ # no further crate.
+ rustix = { version = "1.1.4", features = ["event", "fs", "param", "process", "system", "termios", "time"] }
+ # `sigaction` and the async-signal-safe `write` the signal module needs
+diff --git a/rust/crates/rexx-exec/src/builtin/platform.rs b/rust/crates/rexx-exec/src/builtin/platform.rs
+index 67dde8042..d8d53799b 100644
+--- a/rust/crates/rexx-exec/src/builtin/platform.rs
++++ b/rust/crates/rexx-exec/src/builtin/platform.rs
+@@ -380,3 +380,22 @@ fn process_environment(
+     }
+     Ok(interp.text_built(old))
+ }
++
++#[cfg(test)]
++mod tests {
++    /// **A `~` with `HOME` unset qualifies to the null string, and `~/x` to
++    /// `/x`**, the empty home read as no directory at all. The oracle runs
++    /// `strlen` on the null `getenv("HOME")` there (`corpus/oracle-crashes.txt`
++    /// entry 48), so this is the crate's own answer. The adjacent success is
++    /// the same names with `HOME` set.
++    #[test]
++    fn a_tilde_with_home_unset_qualifies_without_a_home() {
++        let source = b"call value 'HOME', '/h', 'ENVIRONMENT'\n\
++            say qualify('~') qualify('~/x')\n\
++            'unset HOME'\n\
++            say '['qualify('~')']' qualify('~/x')\n";
++        let outcome = crate::run_program("/t.rex", source.to_vec(), crate::Invocation::none());
++        assert_eq!(outcome.exit_code, 0);
++        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "/h /h/x\n[] /x\n");
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/messages/tests.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/messages/tests.rs
+index 67cf5925f..4415bb580 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/messages/tests.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/messages/tests.rs
+@@ -216,3 +216,40 @@ fn a_make_array_answering_a_string_is_not_an_array() {
+     assert_eq!(outcome.exit_code, 0);
+     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "trapped 98.913\n");
+ }
++
++/// **The array a `MAKEARRAY` answers is held while its values are
++/// converted**: nothing else refers to a fresh one, and each value's `STRING`
++/// allocates. Collecting at every allocation, an unheld array loses its
++/// values. Oracle rc 0, these lines, measured.
++#[test]
++fn a_fresh_make_array_answer_outlives_its_values_string_methods() {
++    let source = b"say SysFormatMessage('&1 / &2 / &3', .k~new)\n\
++        ::class k\n\
++        ::method makearray\n\
++        return .array~of(.v~new(copies('first', 4)), .v~new(copies('second', 4)),\
++        .v~new(copies('third', 4)))\n\
++        ::class v\n\
++        ::method init\n\
++        expose t\n\
++        use arg t\n\
++        ::method string\n\
++        expose t\n\
++        x = copies('filler ', 50)\n\
++        return t\n";
++    let outcome = crate::run_program_collect_every_alloc(
++        "/t.rex",
++        source.to_vec(),
++        crate::Invocation::none(),
++    );
++    assert!(outcome.collections > 0, "the mode collected nothing");
++    assert_eq!(
++        outcome.exit_code,
++        0,
++        "{}",
++        String::from_utf8_lossy(&outcome.stderr)
++    );
++    assert_eq!(
++        String::from_utf8_lossy(&outcome.stdout),
++        "firstfirstfirstfirst / secondsecondsecondsecond / thirdthirdthirdthird\n"
++    );
++}
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/process.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/process.rs
+index 0487584d5..d076bf6ab 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/process.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/process.rs
+@@ -62,7 +62,7 @@ pub(crate) fn cls(
+             std::ffi::OsStr::from_bytes(value),
+         );
+     }
+-    command.current_dir(interp.cwd_text());
++    command.current_dir(std::ffi::OsStr::from_bytes(interp.cwd_bytes()));
+     let status = match command.output() {
+         Ok(output) => {
+             interp.write_out(&output.stdout);
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/process/tests.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/process/tests.rs
+index 80cff4217..dabc08889 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/process/tests.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/process/tests.rs
+@@ -162,3 +162,37 @@ fn a_failed_read_answers_none_and_restores_the_settings() {
+         .local_modes;
+     assert_eq!(after, before, "the settings are restored");
+ }
++
++/// **`SysCls` runs its shell in a working directory whose name is not
++/// UTF-8**, as `system` does wherever the process stands. `-1` is the answer
++/// for no child at all. The adjacent success is the same call from a
++/// directory whose name is UTF-8.
++#[test]
++fn sys_cls_runs_in_a_directory_whose_name_is_not_utf8() {
++    use std::os::unix::ffi::OsStrExt as _;
++    let base = std::env::temp_dir().join(format!("rexx-cls-{}", std::process::id()));
++    let plain = base.join("plain");
++    let mut name = b"odd".to_vec();
++    name.push(0xff);
++    let odd = base.join(std::ffi::OsStr::from_bytes(&name));
++    std::fs::create_dir_all(&plain).expect("a directory");
++    std::fs::create_dir_all(&odd).expect("a directory");
++    let mut source = b"'cd' '".to_vec();
++    source.extend_from_slice(plain.as_os_str().as_bytes());
++    source.extend_from_slice(b"'\nr = SysCls()\nsay 'plain' (r \\= -1)\n'cd' '");
++    source.extend_from_slice(odd.as_os_str().as_bytes());
++    source.extend_from_slice(b"'\nr = SysCls()\nsay 'odd' (r \\= -1)\n");
++    let outcome = crate::run_program("/t.rex", source, crate::Invocation::none());
++    let _ = std::fs::remove_dir_all(&base);
++    assert_eq!(outcome.exit_code, 0);
++    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
++    let answers: Vec<&str> = ["plain ", "odd "]
++        .iter()
++        .filter_map(|label| {
++            stdout
++                .find(label)
++                .map(|at| &stdout[at..at + label.len() + 1])
++        })
++        .collect();
++    assert_eq!(answers, ["plain 1", "odd 1"], "{stdout:?}");
++}
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
+index 3e5b6803e..bbddabf76 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
+@@ -46,6 +46,7 @@ fn stem_argument(
+     if text != ObjRef::NIL {
+         let name = interp.to_text(text).into_owned();
+         if let Some(stem) = interp.context_stem_named(&name) {
++            interp.roots.activity_mut().push_temp(stem);
+             return Ok(stem);
+         }
+     }
+@@ -540,6 +541,7 @@ fn sort_target(interp: &mut Interp, argument: ObjRef) -> Result<(ObjRef, Vec<u8>
+     let text = interp.required_string_value(argument)?;
+     let name = interp.to_text(text).into_owned();
+     if let Some(stem) = interp.context_stem_named(&name) {
++        interp.roots.activity_mut().push_temp(stem);
+         return Ok((stem, Vec::new()));
+     }
+     let unresolved = || Failure::from(Raised::stem_argument_unresolved(1, &name));
+@@ -552,6 +554,7 @@ fn sort_target(interp: &mut Interp, argument: ObjRef) -> Result<(ObjRef, Vec<u8>
+     let Some(stem) = interp.context_stem_named(&name[..=period]) else {
+         return Err(unresolved());
+     };
++    interp.roots.activity_mut().push_temp(stem);
+     let mut prefix = name[period + 1..].to_ascii_uppercase();
+     if prefix.last() != Some(&b'.') {
+         prefix.push(b'.');
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
+index 5199fefd2..ce0d09006 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
+@@ -12,6 +12,22 @@
+ /// The cases [`an_untrapped_error_inside_the_sort_is_reported`] reads.
+ const UNTRAPPED_SORT_CASES: &str = "tests/stem_sort_untrapped_cases";
+ 
++/// The cases [`a_stem_named_by_its_variable_outlives_the_variable`] reads.
++const DROPPED_STEM_CASES: &str = "tests/stem_dropped_by_name_cases";
++
++/// An outcome as the case files spell it: `rc>`, then a line per line of
++/// standard output and of standard error.
++fn rendered(outcome: &crate::Outcome) -> String {
++    let mut rendered = format!("rc> {}\n", outcome.exit_code);
++    for line in String::from_utf8_lossy(&outcome.stdout).lines() {
++        rendered.push_str(&format!("out> {line}\n"));
++    }
++    for line in String::from_utf8_lossy(&outcome.stderr).lines() {
++        rendered.push_str(&format!("err> {line}\n"));
++    }
++    rendered
++}
++
+ /// **An error `SysStemSort` raises from inside its sort is reported when
+ /// nothing traps it**, where the oracle crashes (`corpus/oracle-crashes.txt`
+ /// entry 37, upstream SF #2068). No differential can cover these, so the case
+@@ -34,19 +50,44 @@ fn an_untrapped_error_inside_the_sort_is_reported() {
+                 case.input.clone().into_bytes(),
+                 crate::Invocation::none(),
+             );
+-            let mut rendered = format!("rc> {}\n", outcome.exit_code);
+-            for line in String::from_utf8_lossy(&outcome.stdout).lines() {
+-                rendered.push_str(&format!("out> {line}\n"));
+-            }
+-            for line in String::from_utf8_lossy(&outcome.stderr).lines() {
+-                rendered.push_str(&format!("err> {line}\n"));
+-            }
+-            rendered
++            rendered(&outcome)
+         });
+     });
+     assert!(cases > 0, "{UNTRAPPED_SORT_CASES} ran no case");
+ }
+ 
++/// **`SysStemCopy`, `SysStemDelete`, `SysStemInsert` and `SysStemSort` hold
++/// a stem they resolved by its variable's name** while later arguments and
++/// elements run `STRING` methods: one that drops the variable and allocates
++/// leaves the routine working on the stem it resolved. Each case runs
++/// normally and collecting at every allocation, and the two must agree. The
++/// oracle's answer depends on when it collects (`corpus/oracle-crashes.txt`
++/// entry 47), so no differential can cover these, and the case file is this
++/// crate's own answer.
++#[test]
++fn a_stem_named_by_its_variable_outlives_the_variable() {
++    let mut cases = 0;
++    datadriven::walk(DROPPED_STEM_CASES, |file| {
++        file.run(|case| {
++            cases += 1;
++            assert_eq!(
++                case.directive, "program",
++                "unknown directive {:?}",
++                case.directive
++            );
++            let source = case.input.clone().into_bytes();
++            let normal = crate::run_program("/t.rex", source.clone(), crate::Invocation::none());
++            let stressed =
++                crate::run_program_collect_every_alloc("/t.rex", source, crate::Invocation::none());
++            assert!(stressed.collections > 0, "the mode collected nothing");
++            let stressed = rendered(&stressed);
++            assert_eq!(rendered(&normal), stressed, "{}", case.input);
++            stressed
++        });
++    });
++    assert!(cases > 0, "{DROPPED_STEM_CASES} ran no case");
++}
++
+ /// **`SysDumpVariables` holds the tail values it read before it writes any
+ /// of them**, as the oracle's `toDirectory` snapshot does: a `STRING` method
+ /// that empties the stem midway leaves the rest of the dump intact. Measured,
+@@ -94,6 +135,55 @@ fn a_dumped_stem_keeps_its_tails_when_a_string_method_empties_it() {
+     );
+ }
+ 
++/// **`SysDumpVariables` holds the variables' values it read before it
++/// writes any of them**: a `STRING` method that drops the caller's other
++/// variables and allocates leaves their values to be written as read.
++/// Collecting at every allocation, an unheld value is swept. Oracle rc 0,
++/// these lines in hash order, measured.
++#[test]
++fn a_dump_keeps_the_values_of_variables_a_string_method_drops() {
++    let source = b".k~new~run\n\
++        ::class k\n\
++        ::method run\n\
++        expose a b c d e\n\
++        a = copies('alpha ', 3); b = copies('bravo ', 3); c = copies('charlie ', 3)\n\
++        d = copies('delta ', 3); e = copies('echo ', 3); z = self\n\
++        call SysDumpVariables\n\
++        ::method string\n\
++        expose a b c d e\n\
++        drop a b c d e\n\
++        x = copies('filler ', 50)\n\
++        return 'K'\n";
++    let outcome = crate::run_program_collect_every_alloc(
++        "/t.rex",
++        source.to_vec(),
++        crate::Invocation::none(),
++    );
++    assert!(outcome.collections > 0, "the mode collected nothing");
++    assert_eq!(
++        outcome.exit_code,
++        0,
++        "{}",
++        String::from_utf8_lossy(&outcome.stderr)
++    );
++    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
++    let mut lines: Vec<&str> = stdout.split_terminator('\n').collect();
++    lines.sort_unstable();
++    assert_eq!(
++        lines,
++        [
++            "Name=A, Value='alpha alpha alpha '",
++            "Name=B, Value='bravo bravo bravo '",
++            "Name=C, Value='charlie charlie charlie '",
++            "Name=D, Value='delta delta delta '",
++            "Name=E, Value='echo echo echo '",
++            "Name=SELF, Value='K'",
++            "Name=SUPER, Value='The Object class'",
++            "Name=Z, Value='K'",
++        ]
++    );
++}
++
+ /// **`SysDumpVariables` over a variable whose `STRING` method raises
+ /// reports the raise**, after the lines already written, where the oracle
+ /// crashes even under `SIGNAL ON SYNTAX` (`corpus/oracle-crashes.txt` entry
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 05ecf2edd..9c93fd2de 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -617,7 +617,7 @@ impl Interp {
+             &env_seam::Access::Resolve,
+         )? {
+             hash::DirectoryEntry::Found(found) => Ok(Some(found)),
+-            // `.STDQUE` is owed with an owner; it is a queue, which no class search answers.
++            // `.STDQUE` is owed with an owner. It is a queue, which no class search answers.
+             hash::DirectoryEntry::Owed(Some(_)) | hash::DirectoryEntry::Absent => Ok(None),
+             hash::DirectoryEntry::Owed(None) => Err(Loud::environment_entry(bare, None).into()),
+         }
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index 09844f017..f272658ed 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -630,7 +630,7 @@ impl Interp {
+         // (`runtime/InterpreterInstance.cpp:1021`-`:1045`), whose callers
+         // resolve first (`classes/PackageClass.cpp:1319`). Then the manager
+         // sees the short name, then the resolved one
+-        // (`package/PackageManager.cpp:718`-`:766`); its short-name answer is
++        // (`package/PackageManager.cpp:718`-`:766`). Its short-name answer is
+         // only looked up, and the search, a miss and the cache entries use
+         // the original.
+         let original = name;
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 96818ca8e..0bb107529 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -2739,8 +2739,7 @@ impl Interp {
+         self.cwd.as_os_str().as_bytes()
+     }
+ 
+-    /// Moves it. `DIRECTORY(new)` is the only caller: nothing else in the
+-    /// interpreter changes where relative paths resolve from.
++    /// Moves it.
+     pub(crate) fn set_cwd(&mut self, cwd: std::path::PathBuf) {
+         self.cwd = cwd;
+     }
+diff --git a/rust/crates/rexx-exec/tests/rexxutil_process.rs b/rust/crates/rexx-exec/tests/rexxutil_process.rs
+index 13a1b6b8a..0f1a1ab81 100644
+--- a/rust/crates/rexx-exec/tests/rexxutil_process.rs
++++ b/rust/crates/rexx-exec/tests/rexxutil_process.rs
+@@ -85,3 +85,50 @@ fn pgid_is_the_parents_group() {
+     assert_eq!(group, ours.to_string(), "{text}");
+     assert_ne!(group, pid, "{text}");
+ }
++
++/// A command whose child a `SysWait` on another activity reaped answers `127`
++/// with a `FAILURE`, where the oracle reads the status of its own failed
++/// `waitpid` (`corpus/oracle-crashes.txt` entry 45). The wait itself answers
++/// the child's status, `exit 5` as `1280`. The command marks that it has
++/// started, and the main activity waits for the mark before it calls
++/// `SysWait`, a bounded number of times. `timeout` kills a run that outlives
++/// its deadline.
++#[test]
++fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
++    let program = "a = .w~new~start('RUN')\n\
++        do 400 until SysFileExists('started'); call SysSleep 0.05; end\n\
++        say 'wait' SysWait()\n\
++        say 'cmd' a~result\n\
++        ::class w\n\
++        ::method run\n\
++        call on failure name failed\n\
++        'touch started; sleep 0.6; exit 5'\n\
++        return 'rc' rc\n\
++        failed:\n\
++        say 'failure' rc\n\
++        return\n";
++    let (_, dir) = rexx_run("sys-wait-reaped", program);
++    let output = Command::new("timeout")
++        .args(["-k", "5", "60"])
++        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(dir.join("p.rex"))
++        .current_dir(&dir)
++        .stdin(std::process::Stdio::null())
++        .output()
++        .expect("timeout runs rexx-run");
++    let _ = std::fs::remove_dir_all(&dir);
++    assert!(
++        output.status.success(),
++        "{:?}: {}",
++        output.status,
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let stdout = String::from_utf8_lossy(&output.stdout);
++    let mut lines: Vec<&str> = stdout.lines().collect();
++    lines.sort_unstable();
++    assert_eq!(
++        lines,
++        ["cmd rc 127", "failure 127", "wait 1280"],
++        "{stdout}"
++    );
++}
+diff --git a/rust/crates/rexx-exec/tests/stem_dropped_by_name_cases/crate b/rust/crates/rexx-exec/tests/stem_dropped_by_name_cases/crate
+new file mode 100644
+index 000000000..1ac143ecd
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/stem_dropped_by_name_cases/crate
+@@ -0,0 +1,94 @@
++# A stem passed by name to a RexxUtil stem routine, whose variable a STRING
++# method run by the same call drops before allocating. The oracle's answer
++# depends on when it collects (oracle-crashes.txt entry 47), so the expected
++# blocks are this crate's own output: the routine works on the stem it
++# resolved, as the oracle does when it does not collect.
++
++# SysStemCopy: the start argument's STRING drops the source stem
++program
++.k~new~run
++::class k
++::method run
++  expose s.
++  s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
++  say SysStemCopy('s.', 't.', self) t.0
++  say t.1 '/' t.2
++  say symbol('s.0')
++::method string
++  expose s.
++  drop s.
++  x = copies('filler ', 50)
++  return 1
++----
++rc> 0
++out> 0 2
++out> first first first  / second second second 
++out> LIT
++
++# SysStemDelete: the start argument's STRING drops the stem
++program
++.k~new~run
++::class k
++::method run
++  expose s.
++  s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
++  say SysStemDelete('s.', self) s.0
++::method string
++  expose s.
++  drop s.
++  x = copies('filler ', 50)
++  return 1
++----
++rc> 0
++out> 0 S.0
++
++# SysStemInsert: the position argument's STRING drops the stem
++program
++.k~new~run
++::class k
++::method run
++  expose s.
++  s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
++  say SysStemInsert('s.', self, copies('inserted ', 2)) s.0
++::method string
++  expose s.
++  drop s.
++  x = copies('filler ', 50)
++  return 1
++----
++rc> 0
++out> 0 S.0
++
++# SysStemSort: an element's STRING drops the stem midway through the sort
++program
++.k~new~run
++::class k
++::method run
++  expose s.
++  s.0 = 3; s.1 = copies('bravo ', 3); s.2 = self; s.3 = copies('alpha ', 3)
++  say SysStemSort('s.') s.0
++::method string
++  expose s.
++  drop s.
++  x = copies('filler ', 50)
++  return 1
++----
++rc> 0
++out> 0 S.0
++
++# SysStemSort over a name with a tail prefix, an element dropping the stem
++program
++.k~new~run
++::class k
++::method run
++  expose s.
++  s.x.0 = 3; s.x.1 = copies('bravo ', 3); s.x.2 = self; s.x.3 = copies('alpha ', 3)
++  say SysStemSort('s.x') s.x.0
++::method string
++  expose s.
++  drop s.
++  x = copies('filler ', 50)
++  return 1
++----
++rc> 0
++out> 0 S.X.0
+diff --git a/rust/crates/rexx-exec/tests/stream_handle.rs b/rust/crates/rexx-exec/tests/stream_handle.rs
+index c41d2eb6e..404b0325c 100644
+--- a/rust/crates/rexx-exec/tests/stream_handle.rs
++++ b/rust/crates/rexx-exec/tests/stream_handle.rs
+@@ -65,7 +65,7 @@ fn handle_one_and_two_write_standard_output_and_error() {
+ }
+ 
+ /// Deviation 35: an opened `HANDLE:n` answers its descriptor for `QUERY
+-/// HANDLE`, where the oracle answers `18446744073709551615`; unopened, both
++/// HANDLE`, where the oracle answers `18446744073709551615`. Unopened, both
+ /// answer the null string.
+ #[test]
+ fn query_handle_after_open_answers_the_descriptor() {
+@@ -102,7 +102,7 @@ fn a_second_open_opens_the_descriptor_again() {
+ }
+ 
+ /// An opened `HANDLE:n`'s stream type is the one the `Invocation` reports for
+-/// that standard stream; unopened it is `UNKNOWN`, as on the oracle.
++/// that standard stream. Unopened it is `UNKNOWN`, as on the oracle.
+ #[test]
+ fn the_stream_type_follows_the_invocation_once_opened() {
+     let program = "do n = 0 to 2\n\
+@@ -128,7 +128,7 @@ fn the_stream_type_follows_the_invocation_once_opened() {
+ }
+ 
+ /// Deviation 35: a descriptor other than `0`, `1` or `2` is refused loudly
+-/// when the stream is made, where the oracle makes an inert stream; the
++/// when the stream is made, where the oracle makes an inert stream. The
+ /// adjacent `HANDLE:2` is made.
+ #[test]
+ fn another_descriptor_is_refused_loudly() {
