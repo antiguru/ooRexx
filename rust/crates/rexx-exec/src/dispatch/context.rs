@@ -671,7 +671,7 @@ pub(crate) fn build_frame_with(
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, std::mem::take(&mut snapshot.arguments));
     interp.roots.activity_mut().push_temp(arguments);
-    let mut entries = vec![
+    let entries = [
         (key::TYPE, kind),
         (key::NAME, name),
         (key::LINE, line),
@@ -680,11 +680,14 @@ pub(crate) fn build_frame_with(
         (key::ARGUMENTS, arguments),
         (key::CONTEXT, context.unwrap_or(ObjRef::NIL)),
         (key::TRACE_LINE, trace_line),
+        (key::EXECUTABLE, executable.unwrap_or(ObjRef::NIL)),
     ];
-    if let Some(executable) = executable {
-        entries.push((key::EXECUTABLE, executable));
-    }
-    Ok(frame_object(interp, frame, &entries, &trace_text))
+    let set = if executable.is_some() {
+        &entries[..]
+    } else {
+        &entries[..entries.len() - 1]
+    };
+    Ok(frame_object(interp, frame, set, &trace_text))
 }
 
 /// The `StackFrame` holding `entries`, whose values the caller rooted inside
@@ -704,6 +707,7 @@ fn frame_object(
     let Body::Native(native) = &mut held.body else {
         unreachable!("allocated as Body::Native by native_instance")
     };
+    native.reserve_entries(entries.len());
     for &(name, value) in entries {
         native.set_entry(name, value);
     }

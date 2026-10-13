@@ -18,7 +18,8 @@ use super::collection;
 use super::required_string_named_argument;
 use super::{
     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod,
-    ObjRef, Raised, array_argument, array_slots, new_instance, required_string_argument,
+    ObjRef, Raised, array_argument, array_argument_object, array_slots, new_instance,
+    required_string_argument,
 };
 
 // `Relation`'s and `Bag`'s own primitive methods, chained into
@@ -1736,6 +1737,23 @@ pub(crate) fn directory_get(
     Ok((view_get(interp, directory, key, &view)?, Some(view)))
 }
 
+/// [`directory_get`] for a package local, kept apart from it so that the
+/// `.local` and `.environment` lookup is its one caller.
+pub(crate) fn package_local_get(
+    interp: &mut Interp,
+    local: ObjRef,
+    key: Key<'_>,
+    view: Option<&StoreView>,
+) -> Result<(DirectoryEntry, Option<StoreView>), Failure> {
+    if let Some(view) = view
+        && view.generation == interp.store_generation
+    {
+        return Ok((view_get(interp, local, key, view)?, None));
+    }
+    let view = read_view(interp, local)?;
+    Ok((view_get(interp, local, key, &view)?, Some(view)))
+}
+
 fn view_get(
     interp: &mut Interp,
     directory: ObjRef,
@@ -1898,7 +1916,7 @@ pub(super) fn native_hash_unknown(
     let Some(Some(arguments)) = args.get(1).copied() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let forwarded = array_argument(interp, arguments, ArrayArgument::Positional)?;
+    let forwarded = array_argument_object(interp, arguments, ArrayArgument::Positional)?;
     // [`native_hash_at`]'s split again: a store or `NativeObject`'s map.
     // Measured, a `.Directory` given
     // `setEntry('alpha', 42)` answers `d~alpha` as `42`, and `d~beta = 7`
@@ -1916,7 +1934,10 @@ pub(super) fn native_hash_unknown(
         return Ok(Some(interp.hash_entry_read(receiver, &index)));
     };
     let index = index.to_ascii_uppercase();
-    let Some(Some(item)) = forwarded.first().copied() else {
+    let Some(Some(item)) = interp
+        .array_slots(forwarded)
+        .and_then(|slots| slots.first().copied())
+    else {
         return Err(Loud::entry_method_without_a_value(&index).into());
     };
     if store {

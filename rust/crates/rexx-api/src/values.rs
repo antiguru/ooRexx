@@ -1046,15 +1046,18 @@ impl<'a> Activation<'a> {
     }
 
     /// The thread table's data members, each registered as a local reference
-    /// so that the handle names a rooted object.
+    /// so that the handle names a rooted object. They are the interpreter's
+    /// own constants, never a temporary a call pushed, so they skip
+    /// [`Host::register_local`].
     pub fn constants(&self) -> Constants<RexxObjectPtr> {
         let mut cx = self.conversion();
         let objects = cx.host.constants();
+        let locals = cx.host.locals();
         Constants {
-            nil: cx.host.register_local(objects.nil),
-            true_object: cx.host.register_local(objects.true_object),
-            false_object: cx.host.register_local(objects.false_object),
-            null_string: cx.host.register_local(objects.null_string),
+            nil: locals.register(objects.nil),
+            true_object: locals.register(objects.true_object),
+            false_object: locals.register(objects.false_object),
+            null_string: locals.register(objects.null_string),
         }
     }
 }

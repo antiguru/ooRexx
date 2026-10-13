@@ -30,15 +30,21 @@ const _: () = assert!(usize::BITS == u64::BITS);
 #[derive(Default)]
 pub struct Table {
     entries: FxHashMap<usize, ObjRef>,
-    /// Handles [`Table::release`] dropped, which root nothing and resolve
-    /// while their object lives.
-    released: FxHashMap<usize, ObjRef>,
-    /// The size of `released` at which [`Table::release`] next drops the
-    /// handles whose object is gone.
-    released_limit: usize,
+    /// `None` until the first [`Table::release`].
+    released: Option<Box<Released>>,
 }
 
-/// The least `released_limit`.
+/// The handles [`Table::release`] dropped, which root nothing and resolve
+/// while their object lives.
+#[derive(Default)]
+struct Released {
+    handles: FxHashMap<usize, ObjRef>,
+    /// The size of `handles` at which [`Table::release`] next drops the
+    /// handles whose object is gone.
+    limit: usize,
+}
+
+/// The least [`Released::limit`].
 const RELEASED_FLOOR: usize = 4096;
 
 impl Table {
@@ -52,7 +58,11 @@ impl Table {
     pub fn register(&mut self, object: ObjRef) -> RexxObjectPtr {
         let address = address_of(object);
         self.entries.insert(address, object);
-        self.released.remove(&address);
+        if let Some(released) = &mut self.released
+            && !released.handles.is_empty()
+        {
+            released.handles.remove(&address);
+        }
         std::ptr::without_provenance_mut(address)
     }
 
@@ -72,6 +82,8 @@ impl Table {
         let address = handle.addr();
         self.entries.get(&address).copied().or_else(|| {
             self.released
+                .as_ref()?
+                .handles
                 .get(&address)
                 .copied()
                 .filter(|object| live(*object))
@@ -94,10 +106,11 @@ impl Table {
         let Some(object) = self.entries.remove(&address) else {
             return;
         };
-        self.released.insert(address, object);
-        if self.released.len() >= self.released_limit.max(RELEASED_FLOOR) {
-            self.released.retain(|_, object| live(*object));
-            self.released_limit = self.released.len() * 2;
+        let released = self.released.get_or_insert_with(Box::default);
+        released.handles.insert(address, object);
+        if released.handles.len() >= released.limit.max(RELEASED_FLOOR) {
+            released.handles.retain(|_, object| live(*object));
+            released.limit = released.handles.len() * 2;
         }
     }
 
@@ -105,8 +118,10 @@ impl Table {
     /// the end of an activation does.
     pub fn clear(&mut self) {
         self.entries.clear();
-        self.released.clear();
-        self.released_limit = 0;
+        if let Some(released) = &mut self.released {
+            released.handles.clear();
+            released.limit = 0;
+        }
     }
 
     /// Every object this table holds, for the collector.

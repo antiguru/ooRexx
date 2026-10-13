@@ -977,6 +977,12 @@ impl NativeObject {
         self.entries.insert(key.into(), value);
     }
 
+    /// Room for `additional` more entries, for a builder that knows how many
+    /// it sets.
+    pub fn reserve_entries(&mut self, additional: usize) {
+        self.entries.reserve(additional);
+    }
+
     pub fn remove_entry(&mut self, key: &[u8]) {
         self.entries.remove(key);
     }

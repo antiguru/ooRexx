@@ -781,7 +781,8 @@ impl Interp {
             Some((held, view)) if held == local => Some(view),
             _ => None,
         };
-        let (entry, fresh) = hash::directory_get(self, local, hash::Key::new(bare), view.as_ref())?;
+        let (entry, fresh) =
+            hash::package_local_get(self, local, hash::Key::new(bare), view.as_ref())?;
         if let Some(fresh) = fresh {
             self.package_local_view = Some((local, fresh));
         }

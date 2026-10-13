@@ -1753,15 +1753,6 @@ fn message_argument_count(slots: &[Option<ObjRef>]) -> usize {
         .map_or(0, |at| at + 1)
 }
 
-/// [`message_argument_count`] applied to an argument array, which is what
-/// `messageArgs()`/`messageArgCount()` hand a send together.
-fn message_argument_slots(slots: Vec<Option<ObjRef>>) -> Vec<Option<ObjRef>> {
-    let count = message_argument_count(&slots);
-    let mut slots = slots;
-    slots.truncate(count);
-    slots
-}
-
 /// The argument array `~sendWith` requires -- `arrayArgument(args, "message
 /// arguments")` (`classes/ObjectClass.cpp:1980`).
 fn message_arguments(
@@ -1798,8 +1789,8 @@ pub(super) fn array_argument(
     overload: ArrayArgument,
 ) -> Result<Vec<Option<ObjRef>>, Failure> {
     let array = array_argument_object(interp, value, overload)?;
-    let slots = interp.array_slots_of(array).unwrap_or_default();
-    Ok(message_argument_slots(slots))
+    let slots = interp.array_slots(array).unwrap_or_default();
+    Ok(slots[..message_argument_count(slots)].to_vec())
 }
 
 /// [`array_argument`]'s converted array itself, rooted: `value` where it
@@ -1809,14 +1800,20 @@ pub(super) fn array_argument_object(
     value: ObjRef,
     overload: ArrayArgument,
 ) -> Result<ObjRef, Failure> {
-    let array = if interp.array_slots_of(value).is_some() {
-        Some(value)
-    } else {
-        interp.request_array_value(value)?
+    let single = |dimensions: Option<&[usize]>| dimensions.is_none_or(|held| held.len() == 1);
+    let array = match interp.array_body(value) {
+        Some((_, dimensions)) if single(dimensions) => {
+            interp.roots.activity_mut().push_temp(value);
+            return Ok(value);
+        }
+        Some(_) => Some(value),
+        None => interp.request_array_value(value)?,
     };
     if let Some(array) = array {
         interp.roots.activity_mut().push_temp(array);
-        if !interp.is_multi_dimensional_array(array) && interp.array_slots_of(array).is_some() {
+        if let Some((_, dimensions)) = interp.array_body(array)
+            && single(dimensions)
+        {
             return Ok(array);
         }
     }
