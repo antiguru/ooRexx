@@ -32,6 +32,21 @@ sha256sum /tmp/claude-1000/p9/pin/rexx-run
 
 The source and target directories were deleted after the copy.
 
+### Rebuilt pin, 2026-10-13
+
+Rebuilt by Phase 9b Task 1 with the commands above, source at `/tmp/claude-1000/p9b-pin/src`,
+target at `/tmp/claude-1000/p9b-pin/target`, rustc 1.99.0 (b940084d7 2026-09-28); the build log has
+one `Compiling rexx-exec` line. Only the binary is kept, outside `/tmp`:
+
+* path: `/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run`
+* sha256: `c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67`
+* size: 58,197,968 bytes
+
+The build is not bit-reproducible: a second build at the old paths (`/tmp/claude-1000/p9/pin/`) gave
+the same size and sha256 `93934309be19406cbb5b5c8b2af55699a43673f545348706162e3894cd899b8c`, and
+neither matches the 2026-10-11 size. Phase 9 measures against this binary, not against the old hash.
+Both build directories were deleted after the copy.
+
 ## Row files
 
 The tests the suite gate does not require to pass, one row per test (`dir/group`, test, owner,

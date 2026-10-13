@@ -541,7 +541,8 @@ impl Surface for Interp {
             && let Some(crate::plan::ClassPackage::Program(program)) =
                 self.class_packages.get(&frame.scope).copied()
         {
-            let found = self.class_in_program(program, name)?;
+            let lookup = self.class_in_program(program, name);
+            let found = self.held(lookup)??;
             return self.is_class_object(found).then_some(found);
         }
         self.class_named(name)

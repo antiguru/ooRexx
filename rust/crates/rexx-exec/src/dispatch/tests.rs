@@ -1853,7 +1853,8 @@ fn an_entry_method_send_with_no_value_is_loud() {
 /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
 /// and two answers are refused: one that is not a class, which the oracle
 /// casts unchecked (`oracle-crashes.txt` entry 8), and a class `Class~new`
-/// did not build, which the oracle rewires in place (Deviation 32).
+/// did not build or a subclass already took, which the oracle rewires in
+/// place (Deviation 32).
 #[test]
 fn a_metaclass_new_answering_no_new_class_is_loud() {
     let program = |body: &str| {
@@ -1892,6 +1893,26 @@ fn a_metaclass_new_answering_no_new_class_is_loud() {
     assert_eq!(
         run_source(&program("forward class (super)")),
         (0, "id k\n".to_string(), String::new())
+    );
+    // The oracle answers `XX` then `Array`: the second `~subclass` rewires the
+    // class the first one already took.
+    assert_eq!(
+        run_source(
+            "x = .class~new('XX')\n\
+             .local~held = x\n\
+             say .object~subclass('k', .meta)~id\n\
+             say .array~subclass('k2', .meta)~superclass~id\n\
+             ::class meta subclass class\n\
+             ::method new class\n\
+             \x20 return .held\n"
+        ),
+        (
+            120,
+            "XX\n".to_string(),
+            "rexx-exec: a metaclass NEW answering a class Class~new did not build or a subclass \
+             already took is not implemented\n"
+                .to_string()
+        )
     );
 }
 

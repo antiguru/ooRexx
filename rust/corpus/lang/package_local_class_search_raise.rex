@@ -1,0 +1,15 @@
+/* A native method's FindClass searches its own package's local, and a
+   condition that local's UNKNOWN method raises is the call's condition. */
+t = .T~new
+say 'class:' t~findc('LIST')
+say 'local:' t~findc('PLFIND')
+signal on syntax
+r = t~findc('NOSUCH')
+say 'answered:' r
+exit
+syntax:
+  c = condition('o')
+  say 'syntax' c~code c~message
+  say 'additional' c~additional~toString(,'|')
+  say 'position' c~position
+::requires 'lib.cls'

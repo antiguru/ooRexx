@@ -1,33 +1,39 @@
 #!/bin/bash
-# Callgrind instruction counts, libc.so.6 and ld-linux subtracted, per program per binary.
+# Callgrind instruction counts per program per binary: the whole process, and the same
+# with libc.so.6 and ld-linux subtracted.
 #
-# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-T] NAME=BINARY...
+# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY...
 #   ROUNDS  rounds (default 3); round r starts at binary r
 #   JOBS    programs run at once (default 8)
 #   OUTDIR  output directory (default: mktemp -d)
 #   PROGRAMS  space-separated subset of PROGRAMS (default: all)
+#   PCT     budget: a whole-process delta over PCT percent fails (flagged OVER)
 #   -T      print the table for OUTDIR's summary.tsv without running
 # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
 #
-# Table: median per binary, delta against the first binary, spread across rounds.
+# Table: the whole-process median per binary and its delta against the first binary,
+# which the budget judges; the libc-and-ld-subtracted median and delta; the
+# whole-process spread across rounds.
 # Exits 1 if a run exits non-zero, if its stdout differs from the first binary's
-# (except on TIMED), or if a cell's spread exceeds 0.01% (flagged SPREAD).
+# (except on TIMED), if a whole-process spread exceeds 0.01% (flagged SPREAD), or if
+# a whole-process delta exceeds PCT.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-rounds=3 jobs=8 out= table_only= sel=
-while getopts r:j:o:p:T opt; do
+rounds=3 jobs=8 out= table_only= sel= budget=
+while getopts r:j:o:p:B:T opt; do
     case $opt in
         r) rounds=$OPTARG ;;
         j) jobs=$OPTARG ;;
         o) out=$OPTARG ;;
         p) sel=$OPTARG ;;
+        B) budget=$OPTARG ;;
         T) table_only=1 ;;
         *) exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
 if [ $# -lt 1 ]; then
-    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-T] NAME=BINARY..." >&2
+    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY..." >&2
     exit 2
 fi
 lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
@@ -114,29 +120,44 @@ for p in $PROGRAMS; do
     done
 done
 fi
-python3 - "$out/summary.tsv" "${names[@]}" > "$out/table.txt" <<'EOF'
+python3 - "$out/summary.tsv" "$budget" "${names[@]}" > "$out/table.txt" <<'EOF'
 import statistics
 import sys
-rows = {}
+whole = {}
+less = {}
 flagged = False
 for line in open(sys.argv[1]):
     b, p, r, summ, libc, ld, ex, rc = line.rstrip("\n").split("\t")
-    rows.setdefault((b, p), []).append(int(ex))
-names = sys.argv[2:]
-progs = list(dict.fromkeys(p for (_, p) in rows))
-head = ["program"] + names + [f"{b} d%" for b in names[1:]] + [f"{b} spread%" for b in names]
+    whole.setdefault((b, p), []).append(int(summ))
+    less.setdefault((b, p), []).append(int(ex))
+budget = float(sys.argv[2]) if sys.argv[2] else None
+names = sys.argv[3:]
+progs = list(dict.fromkeys(p for (_, p) in whole))
+head = ["program"] + names + [f"{b} d%" for b in names[1:]]
+head += [f"{b} -libc" for b in names] + [f"{b} -libc d%" for b in names[1:]]
+head += [f"{b} spread%" for b in names]
 print("\t".join(head))
 for p in progs:
-    mid = {b: statistics.median(rows[(b, p)]) for b in names}
-    base = mid[names[0]]
-    cells = [p] + [f"{mid[b]:.0f}" for b in names]
-    cells += [f"{100 * (mid[b] - base) / base:+.4f}" for b in names[1:]]
-    spread = {b: 100 * (max(rows[(b, p)]) - min(rows[(b, p)])) / mid[b] for b in names}
+    cells = [p]
+    deltas = {}
+    for kind, counts in (("whole", whole), ("less", less)):
+        mid = {b: statistics.median(counts[(b, p)]) for b in names}
+        deltas[kind] = {b: 100 * (mid[b] - mid[names[0]]) / mid[names[0]] for b in names[1:]}
+        cells += [f"{mid[b]:.0f}" for b in names]
+        cells += [f"{deltas[kind][b]:+.4f}" for b in names[1:]]
+    spread = {
+        b: 100 * (max(whole[(b, p)]) - min(whole[(b, p)])) / statistics.median(whole[(b, p)])
+        for b in names
+    }
     cells += [f"{spread[b]:.4f}" for b in names]
     print("\t".join(cells))
     for b in names:
         if spread[b] > 0.01:
             print(f"SPREAD {p} {b} {spread[b]:.4f}%", file=sys.stderr)
+            flagged = True
+    for b in names[1:]:
+        if budget is not None and deltas["whole"][b] > budget:
+            print(f"OVER {p} {b} {deltas['whole'][b]:+.4f}% > {budget}%", file=sys.stderr)
             flagged = True
 sys.exit(1 if flagged else 0)
 EOF

@@ -145,27 +145,29 @@ fn a_stale_native_frame_token_is_refused() {
     activate(&mut interp, parse_program(b"nop".to_vec()).expect("parses"));
     let caller = interp.activation().id;
     activate(&mut interp, parse_program(b"nop".to_vec()).expect("parses"));
-    let frame = |id| crate::NativeFrame {
-        owner: ObjRef::NIL,
-        scope: ObjRef::NIL,
-        method: false,
-        receiver: ObjRef::NIL,
-        name: Vec::new(),
-        arguments: Vec::new(),
-        argument_list: None,
-        locals: rexx_api::handles::Table::new(),
-        raised: None,
-        additional: None,
-        result: None,
-        condition: None,
-        code: None,
-        kept: rustc_hash::FxHashSet::default(),
-        lent: Vec::new(),
-        caller: Some(caller),
-        id,
-        packaged: false,
-        reserved: false,
-        temps_floor: 0,
+    let frame = |id| {
+        Box::new(crate::NativeFrame {
+            owner: ObjRef::NIL,
+            scope: ObjRef::NIL,
+            method: false,
+            receiver: ObjRef::NIL,
+            name: Vec::new(),
+            arguments: Vec::new(),
+            argument_list: None,
+            locals: rexx_api::handles::Table::new(),
+            raised: None,
+            additional: None,
+            result: None,
+            condition: None,
+            code: None,
+            kept: rustc_hash::FxHashSet::default(),
+            lent: Vec::new(),
+            caller: Some(caller),
+            id,
+            packaged: false,
+            reserved: false,
+            temps_floor: 0,
+        })
     };
     interp.activity.native_handles.push(frame(6));
     assert_eq!(interp.suspended_caller(6), Some(0));

@@ -648,11 +648,8 @@ impl Interp {
         args: &[Option<ObjRef>],
         code: Option<usize>,
     ) {
-        let mut frame = self
-            .activity
-            .native_spares
-            .pop()
-            .unwrap_or_else(|| NativeFrame {
+        let mut frame = self.activity.native_spares.pop().unwrap_or_else(|| {
+            Box::new(NativeFrame {
                 owner: ObjRef::NIL,
                 scope: ObjRef::NIL,
                 method: false,
@@ -673,7 +670,8 @@ impl Interp {
                 packaged: false,
                 reserved: false,
                 temps_floor: 0,
-            });
+            })
+        });
         frame.owner = owner;
         frame.scope = scope;
         frame.method = receiver.is_some();
@@ -725,7 +723,7 @@ impl Interp {
 
     /// Pops the innermost native frame and takes its held condition out of
     /// it, leaving the rest held.
-    fn take_native_frame(&mut self) -> (Popped, crate::NativeFrame) {
+    fn take_native_frame(&mut self) -> (Popped, Box<crate::NativeFrame>) {
         let mut frame = self
             .activity
             .native_handles

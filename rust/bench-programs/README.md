@@ -62,7 +62,8 @@ unexposed; `.rexxinfo` is an instance, not a class). None of these programs refe
 ## Instruction counts: `callgrind.sh`
 
 `callgrind.sh NAME=BINARY NAME=BINARY...` runs every program here, `pingpong/*.rex` (named
-`pingmsg`, `pingsem`, `pingguard`) and `../bench-rexxcps/rexxcps.rex` under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
+`pingmsg`, `pingsem`, `pingguard`) and `../bench-rexxcps/rexxcps.rex` under callgrind on each binary and prints whole-process instruction
+counts, which the Phase 9 budget judges (`-B PCT`), beside the counts less libc.so.6 and ld-linux
 (`cgsum.py`). `layout-pad.py TREE COUNT` adds never-called functions to a tree's IR driver.
 `wallclock.sh NAME=BINARY...` times the same programs, interleaved, or those `PROGRAMS` names
 (`PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard"`).

@@ -53,3 +53,8 @@ lang/class_side_method_objects.rex
 lang/package_local_find_class.rex
 lang/executable_subclass_copy_annotations.rex
 lang/package_local_symbol_writes.rex
+
+# 9b Task 1: the package local miss memo answering a repeated miss, and a
+# native method's class search raising its package local's UNKNOWN condition.
+lang/package_local_miss_repeat.rex
+lang/package_local_class_search_raise.rex

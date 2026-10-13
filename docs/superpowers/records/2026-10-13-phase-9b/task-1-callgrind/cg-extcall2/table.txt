@@ -1,0 +1,2 @@
+program	pin	before	after	before d%	after d%	pin -libc	before -libc	after -libc	before -libc d%	after -libc d%	pin spread%	before spread%	after spread%
+extcall	8975966708	9249317821	7773316365	+3.0454	-13.3986	7536919758	7558131839	7390131667	+0.2814	-1.9476	0.0000	0.0000	0.0000

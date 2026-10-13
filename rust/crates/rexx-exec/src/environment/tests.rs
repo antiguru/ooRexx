@@ -265,3 +265,35 @@ fn every_directory_method_answers_on_both_directories_as_on_a_copy() {
         );
     }
 }
+
+/// A native method's class search over its program refuses an entry this
+/// crate does not build, in the program's own local and in `.local`, where a
+/// class beside it in the same local answers and a missing name answers none.
+#[test]
+fn a_class_search_from_a_program_refuses_an_owed_entry() {
+    let mut interp = Interp::new();
+    let program = ProgramId(0);
+    let local = interp.package_local(Package::Program(program));
+    let owed = interp.environment_model().owed[1].0;
+    let array = interp.classes().lookup("Array").expect("Array is native");
+    hash::directory_put(&mut interp, local, b"OWEDCLASS", owed).expect("puts");
+    hash::directory_put(&mut interp, local, b"FOUNDCLASS", array).expect("puts");
+    assert_eq!(
+        interp.class_in_program(program, b"FOUNDCLASS").ok(),
+        Some(Some(array))
+    );
+    for name in [b"OWEDCLASS".as_slice(), b"STDQUE"] {
+        assert!(
+            matches!(
+                interp.class_in_program(program, name),
+                Err(Failure::Loud(_))
+            ),
+            "{}",
+            String::from_utf8_lossy(name)
+        );
+    }
+    assert_eq!(
+        interp.class_in_program(program, b"NOSUCHCLASS").ok(),
+        Some(None)
+    );
+}

@@ -576,7 +576,15 @@ impl Interp {
     /// `PackageClass::findClass` for `program` rather than the running
     /// package: [`Interp::dot_variable`]'s order without the reflection names,
     /// which only an activation has.
-    pub(crate) fn class_in_program(&mut self, program: ProgramId, bare: &[u8]) -> Option<ObjRef> {
+    ///
+    /// # Errors
+    /// The condition a searched directory's `UNKNOWN` method raised, and
+    /// [`Loud`] for an entry this crate does not build.
+    pub(crate) fn class_in_program(
+        &mut self,
+        program: ProgramId,
+        bare: &[u8],
+    ) -> Result<Option<ObjRef>, Failure> {
         let own = |table: &rexx_core::NameMap<ProgramId, rexx_core::NameMap<Box<[u8]>, ObjRef>>| {
             table
                 .get(&program)
@@ -585,23 +593,28 @@ impl Interp {
         };
         if let Some(found) = own(&self.package_classes).or_else(|| own(&self.merged_public_classes))
         {
-            return Some(found);
+            return Ok(Some(found));
         }
         if let Some(found) = self.rexx_package_class(bare) {
-            return Some(found);
+            return Ok(Some(found));
         }
-        if let Some(&local) = self.package_locals.get(&Package::Program(program))
-            && let Ok(hash::DirectoryEntry::Found(found)) = self.package_local_entry(local, bare)
-        {
-            return Some(found);
+        if let Some(&local) = self.package_locals.get(&Package::Program(program)) {
+            match self.package_local_entry(local, bare)? {
+                hash::DirectoryEntry::Found(found) => return Ok(Some(found)),
+                hash::DirectoryEntry::Owed(owner) => {
+                    return Err(Loud::environment_entry(bare, owner).into());
+                }
+                hash::DirectoryEntry::Absent => {}
+            }
         }
         match self.directory_lookup(
             &[EnvScope::Local, EnvScope::Environment],
             bare,
             &env_seam::Access::Resolve,
-        ) {
-            Ok(hash::DirectoryEntry::Found(found)) => Some(found),
-            _ => None,
+        )? {
+            hash::DirectoryEntry::Found(found) => Ok(Some(found)),
+            hash::DirectoryEntry::Owed(owner) => Err(Loud::environment_entry(bare, owner).into()),
+            hash::DirectoryEntry::Absent => Ok(None),
         }
     }
 

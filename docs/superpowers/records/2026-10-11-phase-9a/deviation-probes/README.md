@@ -11,8 +11,10 @@ status are kept per side as `NAME.oracle.{out,err,rc}` and `NAME.crate.{out,err,
 memcap 2G timeout 20 rust/target/release/rexx-run NAME.rex
 ```
 
-* `objname-table.rex`: Deviation 31's table, one line per row. Oracle rc 0; crate rc 120 at the
-  first `OBJECTNAME=`.
+* `objname-table.rex`: Deviation 31's table, one line per row, except the `::ROUTINE` row: its
+  fourth line reads the literal in an internal routine (`r: procedure`). The `::ROUTINE` row is
+  `objname4.rex`'s `::routine other` (lines 10 and 25-26), oracle `long`, its eighth output line.
+  Oracle rc 0; crate rc 120 at the first `OBJECTNAME=`.
 * `objname2.rex`, `objname4.rex`: Task 8b's probes the table was drawn from (`objname2`,
   `objname4` in `.superpowers/sdd/2026-10-11-phase-9a/task-8b-report.md`). Oracle rc 0; crate rc
   120 at the first `OBJECTNAME=` on a string.

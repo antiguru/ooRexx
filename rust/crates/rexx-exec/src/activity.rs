@@ -57,10 +57,19 @@ pub(crate) struct Activity {
     /// objects an extension's handles name (D5), rooted by
     /// [`Activity::object_roots`] for exactly as long as the frame is on this
     /// stack, so a handle that outlives its activation resolves to nothing.
-    pub(crate) native_handles: Vec<NativeFrame>,
+    #[expect(
+        clippy::vec_box,
+        reason = "pushing, popping and abandoning a native call move a pointer \
+                  instead of the frame"
+    )]
+    pub(crate) native_handles: Vec<Box<NativeFrame>>,
     /// Frames popped off [`Activity::native_handles`] with the buffers that held
     /// objects cleared, whose allocations the next native call reuses.
-    pub(crate) native_spares: Vec<NativeFrame>,
+    #[expect(
+        clippy::vec_box,
+        reason = "the box is the allocation being kept for the next native call"
+    )]
+    pub(crate) native_spares: Vec<Box<NativeFrame>>,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs;
     /// made by the first ([`crate::Interp::thread_context`]).

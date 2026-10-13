@@ -1746,6 +1746,12 @@ pub(crate) fn package_local_get(
     if let Some(view) = view
         && view.generation == interp.store_generation
     {
+        debug_assert_eq!(
+            Some(*view),
+            unshared!(interp, read_view(interp, local).ok()),
+            "a StoreView was reused after its directory's pool changed without a \
+             bump_store_generation"
+        );
         return Ok((view_get(interp, local, key, view)?, None));
     }
     let view = read_view(interp, local)?;

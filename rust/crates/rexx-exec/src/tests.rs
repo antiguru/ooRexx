@@ -1023,7 +1023,7 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
         temps_floor: 0,
     };
     let handle = frame.locals.register(object);
-    interp.activity.native_handles.push(frame);
+    interp.activity.native_handles.push(Box::new(frame));
     interp.collect_now();
     assert!(
         interp.heap.get(object).is_some(),
@@ -1060,28 +1060,31 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
     let (additional, result, condition) =
         (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
     let lent = fresh(&mut interp);
-    interp.activity.native_handles.push(crate::NativeFrame {
-        owner: rexx_core::ObjRef::NIL,
-        scope: rexx_core::ObjRef::NIL,
-        method: true,
-        receiver,
-        name: b"NAME".to_vec(),
-        arguments: vec![None, Some(argument)],
-        argument_list: Some(list),
-        locals: rexx_api::handles::Table::new(),
-        raised: None,
-        additional: Some(additional),
-        result: Some(result),
-        condition: Some(condition),
-        code: None,
-        kept: rustc_hash::FxHashSet::default(),
-        lent: vec![lent],
-        caller: None,
-        id: 0,
-        packaged: false,
-        reserved: false,
-        temps_floor: 0,
-    });
+    interp
+        .activity
+        .native_handles
+        .push(Box::new(crate::NativeFrame {
+            owner: rexx_core::ObjRef::NIL,
+            scope: rexx_core::ObjRef::NIL,
+            method: true,
+            receiver,
+            name: b"NAME".to_vec(),
+            arguments: vec![None, Some(argument)],
+            argument_list: Some(list),
+            locals: rexx_api::handles::Table::new(),
+            raised: None,
+            additional: Some(additional),
+            result: Some(result),
+            condition: Some(condition),
+            code: None,
+            kept: rustc_hash::FxHashSet::default(),
+            lent: vec![lent],
+            caller: None,
+            id: 0,
+            packaged: false,
+            reserved: false,
+            temps_floor: 0,
+        }));
     let held = [
         (receiver, "receiver"),
         (argument, "argument"),
