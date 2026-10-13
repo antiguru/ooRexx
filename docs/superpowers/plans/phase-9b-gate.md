@@ -48,7 +48,7 @@ refusal, failed, not started because a row owns the test):
 The two `platform/windows` groups are green already: every test carries a `NotRun` row (`restrictOS`),
 so they stay in the file and never move.
 
-The 9b close criterion (Moritz ruling, 2026-10-13) is that every test in a group of the file passes, or
+The 9b close criterion (controller ruling, 2026-10-13, ledger .superpowers/sdd/2026-10-13-phase-9b/progress.md) is that every test in a group of the file passes, or
 is listed in `rust/corpus/suite-9d-set.txt`. The 9d set is the carried list, so 9b judges only what it
 owns. `base/security.manager/SecurityManager`'s 5 failed tests (`TEST_ENVIRONMENT_HANDLE`,
 `TEST_METHOD_HANDLE_NO_RESULT`, `TEST_METHOD_HANDLE_RESULT`, `TEST_METHOD_PASS`,
