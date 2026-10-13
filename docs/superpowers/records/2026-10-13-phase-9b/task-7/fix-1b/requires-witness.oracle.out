@@ -1,0 +1,11 @@
+-- an existing file renamed to another
+loaded the replaced file 1
+event name ends with the original 1
+event name ends with the original 1
+-- a missing file renamed to an existing one
+43.901 Could not find file "rq_missing.cls" for ::REQUIRES.
+1 events
+-- a file loaded twice
+first load 1 2 events
+second load 1 2 events
+by its full name 1 2 events
