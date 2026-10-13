@@ -10,6 +10,10 @@
 #   awk -F'\t' '$3=="-" && $4=="passed" && $5=="failed" && $1!="utilities/rexx/rexx_command" && $1!="utilities/rexxc/rexxc" && $1!="base/rexxutil/SysFileTree" && !($1=="API/oo/METHOD" && $2=="TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA") && !(($1=="base/class/Method" || $1=="base/class/Routine") && ($2=="TEST_NEW_ARRAY_FROM_FILE" || $2=="TEST_NEW_FILE_COMPILED")) {print $1"\t"$2}' tests.tsv
 #
 # ootest revision 13178
+#
+# Removed after the derivation, each once it passed under the harness (Phase
+# 9b Task 4): base/rexxutil/SysFileXXX TEST_FILEEXISTS_NIL_INVALID and
+# samples/samples TEST_MAKESTRING.
 base/bif/ARG	TEST_EXTERNAL_CALLS
 base/bif/CHAROUT	TEST_POSITIONING_1_BIN
 base/bif/CHARS	TEST_CHARS_NOTREADY_DIRECTORY
@@ -195,7 +199,6 @@ base/keyword/VarRef	TESTREFAUTOEXPOSED
 base/keyword/VarRef	TESTREFAUTOEXPOSEDSTEM
 base/keyword/VarRef	TESTREFEXPOSED
 base/keyword/VarRef	TESTREFEXPOSEDSTEM
-base/rexxutil/SysFileXXX	TEST_FILEEXISTS_NIL_INVALID
 base/runtime.objects/environmentEntries	TEST_ZZZ_TRACEOUTPUT_INVALID
 base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE
 base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT
@@ -203,6 +206,5 @@ base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT
 base/security.manager/SecurityManager	TEST_METHOD_PASS
 base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_STREAM_OPEN
 base/source.file/incorrectCharacters	TEST_INCORRECT_CHARACTERS
-samples/samples	TEST_MAKESTRING
 samples/scclient	TEST_04_SCCLIENT.REX
 samples/sfclient	TEST_04_SFCLIENT.REX

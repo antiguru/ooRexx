@@ -1514,6 +1514,38 @@ impl Raised {
         )
     }
 
+    /// 40.23 as a routine of this package raises it, naming the argument
+    /// rather than numbering it: `argument` of `routine` is not exactly one
+    /// character.
+    pub(crate) fn routine_argument_not_a_character(
+        routine: &str,
+        argument: &str,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            23,
+            vec![
+                routine.as_bytes().to_vec(),
+                argument.as_bytes().to_vec(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.900: `Error_Incorrect_call_user_defined`, whose whole message the
+    /// routine supplies.
+    pub(crate) fn routine_user_defined(text: &[u8]) -> Raised {
+        Raised::syntax(40, 900, vec![text.to_vec()])
+    }
+
+    /// 40.925: the argument at `position` is not an array, a stem or a stem
+    /// name. The oracle substitutes the stem it failed to resolve, which is
+    /// null, so the value it reports is always empty.
+    pub(crate) fn not_an_array_or_stem(position: usize) -> Raised {
+        Raised::syntax(40, 925, vec![position.to_string().into_bytes(), Vec::new()])
+    }
+
     /// 40.921: `last`, named `last_name`, is below `first`.
     pub(crate) fn arguments_out_of_order(
         last_name: &str,

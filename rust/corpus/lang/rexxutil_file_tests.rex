@@ -1,0 +1,84 @@
+/* SysFileExists, SysIsFile, SysIsFileDirectory and SysIsFileLink over names
+   with a blank, with bytes that are not UTF-8 and with a NUL, a trailing
+   slash, a link to a directory, a dangling link, a directory that cannot be
+   read or searched, and the home-directory forms; the same qualification in
+   QUALIFY and .File; and the argument errors. Everything is made under a
+   directory this program makes and removes. */
+d = 'filetests.d'
+call SysMkDir d
+call SysMkDir d'/sub'
+call make d'/f.txt'
+call make d'/with blank'
+call make d'/caf' || 'c3a9'x
+call SysFileCopy d'/f.txt', d'/n' || 'ff'x
+'ln -s f.txt' d'/link'
+'ln -s sub' d'/dirlink'
+'ln -s nowhere' d'/dangling'
+call SysMkDir d'/closed'
+call make d'/closed/in.txt'
+'chmod 000' d'/closed'
+names = d d'/' d'/sub' d'/sub/' d'/f.txt' d'/f.txt/' d'/none' d'/link' d'/link/' ,
+  d'/dirlink' d'/dirlink/' d'/dangling' d'/closed' d'/closed/in.txt' . '..' '/' ''
+do i = 1 to words(names)
+  call row word(names, i)
+end
+call row d'/with blank'
+call row d'/caf' || 'c3a9'x
+call row d'/n' || 'ff'x
+call row d'/n' || 'efbfbd'x
+call row d'/f.txt' || '00'x || 'more'
+call row d'/none' || '00'x || '/f.txt'
+call row d'/./sub/../f.txt'
+call row d'//f.txt'
+call row '~'
+call row '~/'
+call row '~root'
+call row '~nosuchuser.rexxutil'
+call row '~nosuchuser.rexxutil/x'
+say 'qualify' quiet(qualify('~')) qualify('~root/a/../b') '['qualify('~nosuchuser.rexxutil/a')']' '['qualify('')']'
+say 'nul    ' (qualify(d'/f.txt' || '00'x || 'x') == qualify(d'/f.txt')) '['qualify('00'x || 'x')']' ,
+  (.File~new(d'/f.txt' || '00'x || 'x')~absolutePath == qualify(d'/f.txt'))
+say 'file   ' quiet(.File~new('~')~absolutePath) .File~new('~root/x')~absolutePath ,
+  '['.File~new('~nosuchuser.rexxutil/a')~absolutePath']' '['.File~new('')~absolutePath']'
+say 'home   ' (qualify('~') == value('HOME', , 'ENVIRONMENT'))
+call t "call SysFileExists .nil"
+call t "call SysIsFile .nil"
+call t "call SysIsFileDirectory .nil"
+call t "call SysIsFileLink .nil"
+call t "call SysIsFileDirectory"
+call t "call SysIsFileLink"
+call t "call SysIsFileDirectory 'a', 'b'"
+call t "call SysIsFileLink 'a', 'b'"
+call t "say SysFileExists(.stem~new('S.'))"
+'chmod 700' d'/closed'
+'rm -rf' d
+say SysIsFileLink(.nil)
+exit
+
+row: procedure
+  parse arg name
+  say left('['translate(name, '?', '00'x)']', 34) SysFileExists(name) SysIsFile(name) ,
+    SysIsFileDirectory(name) SysIsFileLink(name)
+  return
+
+-- the home directory differs between machines, so only its shape is shown
+quiet: procedure
+  parse arg path
+  return '<'left(path, 1)'..>'
+
+make: procedure
+  parse arg name
+  call lineout name, 'x'
+  call lineout name
+  return
+
+t: procedure
+  parse arg code
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code
+  return
+bad:
+  c = condition('O')
+  say 'error' code '|' c~code c~message
+  return

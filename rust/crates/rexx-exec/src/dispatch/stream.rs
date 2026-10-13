@@ -116,12 +116,7 @@ pub(super) fn init(
         Some(value) => interp.to_text(value).into_owned(),
         None => Vec::new(),
     };
-    let qualified = if name.is_empty() {
-        Vec::new()
-    } else {
-        let cwd = interp.cwd_text();
-        crate::paths::normalize(&String::from_utf8_lossy(&name), &cwd).into_bytes()
-    };
+    let qualified = crate::builtin::platform::qualify_name(interp, &name);
     let state = StreamState::new(name, qualified);
     let Some(object) = interp.heap.get_mut(receiver) else {
         unreachable!("a live receiver")

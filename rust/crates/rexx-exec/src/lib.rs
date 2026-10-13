@@ -2679,6 +2679,12 @@ impl Interp {
         self.cwd.to_string_lossy().into_owned()
     }
 
+    /// [`Interp::cwd_text`] as the bytes the file system holds.
+    pub(crate) fn cwd_bytes(&self) -> &[u8] {
+        use std::os::unix::ffi::OsStrExt as _;
+        self.cwd.as_os_str().as_bytes()
+    }
+
     /// Moves it. `DIRECTORY(new)` is the only caller: nothing else in the
     /// interpreter changes where relative paths resolve from.
     pub(crate) fn set_cwd(&mut self, cwd: std::path::PathBuf) {

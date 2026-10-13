@@ -1,0 +1,100 @@
+count 99
+/* SysTempFileName. Its digits are random, so each answer is shown by its
+   properties: how it differs from the qualified template, where only filler
+   places may differ and only by holding digits, and whether it names
+   nothing. Fillers counted, an exhausted template, a filler that is a
+   letter of the template, the home-directory forms, a directory that cannot
+   be searched, bytes that are not UTF-8 and a NUL, and the argument
+   errors. Everything is made under a directory this program makes and
+   removes. */
+d = 'tempname.d'
+call SysMkDir d
+call p d'/t???.x'
+call p d'/t???.x', '?'
+call p d'/x?', 'x'
+call p d'/a.?/b.?'
+call p d'/../'d'/./u??'
+call p d'/v?/'
+call p 'rel??'
+call p '?????????'
+call p '~/rexxutil-temp-??????'
+call p d'/blank ??'
+call p d'/n' || 'ff'x || '??'
+call p d'/c' || '00'x || '??'
+call p d'/q??' || '00'x || '??'
+call p d'/q' || 'ff'x || '?', 'ff'x
+call SysMkDir d'/closed'
+'chmod 000' d'/closed'
+call p d'/closed/c?'
+'chmod 700' d'/closed'
+-- no filler, more than nine, and every name taken
+call e ''
+call e '', '?'
+call e 'file'
+call e '?', '*'
+call e '***', '.'
+call e 'file??', '-'
+call e '??????????'
+call e '?????file?????'
+call e '~nosuchuser.rexxutil/f?'
+do i = 0 to 9
+  call SysFileCopy d'/../'d'/none', d'/e'i
+  call SysMkDir d'/e'i
+end
+call e d'/e?'
+call SysRmDir d'/e4'
+say 'one left  ' (SysTempFileName(d'/e?') == qualify(d'/e4'))
+call SysMkDir d'/e4'
+call e d'/e?'
+call t "call SysTempFileName"
+call t "call SysTempFileName 'a?', 'xy'"
+call t "call SysTempFileName 'a?', ''"
+call t "call SysTempFileName 'a?', '00'x"
+call t "call SysTempFileName 'a?', 'x' || '00'x || 'y'"
+call t "call SysTempFileName .nil"
+call t "call SysTempFileName 'a?', .nil"
+call t "call SysTempFileName 'a?', '?', 'x'"
+call t "r = SysTempFileName(''); say 'returned [' || r || ']'"
+'rm -rf' d
+call SysTempFileName d'/x', '--'
+exit
+
+-- the answer's properties: its length beyond the qualified template's, the
+-- number of places where they differ, which must be filler places that now
+-- hold digits, and whether the answer names anything
+p: procedure
+  parse arg template, filler
+  if arg(2, 'e') then name = SysTempFileName(template, filler)
+  else do
+    name = SysTempFileName(template)
+    filler = '?'
+  end
+  if name == '' then do
+    say left(translate(template, '?', '00'x), 28) '[]'
+    return
+  end
+  q = qualify(template)
+  changed = 0
+  do i = 1 to min(q~length, name~length)
+    if q~subchar(i) == name~subchar(i) then iterate
+    if q~subchar(i) \== filler | \datatype(name~subchar(i), 'W') then changed = changed + 1000
+    changed = changed + 1
+  end
+  say left(translate(template, '?', '00'x), 28) name~length - q~length changed SysFileExists(name)
+  return
+
+e: procedure
+  if arg(2, 'e') then say 'empty     ' '['SysTempFileName(arg(1), arg(2))']'
+  else say 'empty     ' '['SysTempFileName(arg(1))']'
+  return
+
+t: procedure
+  parse arg code
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code
+  return
+bad:
+  c = condition('O')
+  say 'error' translate(code, '?', '00'x) '|' c~code translate(c~message, '?', '00'x)
+  return

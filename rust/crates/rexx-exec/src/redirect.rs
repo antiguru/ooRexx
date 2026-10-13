@@ -629,8 +629,7 @@ impl Interp {
         self.trace_redirect_target(stream, value);
         let value = self.required_string_value(value)?;
         let name = self.to_text(value).into_owned();
-        let cwd = self.cwd_text();
-        Ok(crate::paths::normalize(&String::from_utf8_lossy(&name), &cwd).into_bytes())
+        Ok(crate::builtin::platform::qualify_name(self, &name))
     }
 
     /// A `.Stream` opened for one redirection.

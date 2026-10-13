@@ -1,0 +1,102 @@
+/* SysSearchPath: the current directory first or not, empty entries, an
+   entry with a trailing slash, a relative entry, a home-directory entry, a
+   directory found first ending the search, names that carry their own
+   directory, names with a blank and bytes that are not UTF-8, an unset
+   variable, a directory that cannot be searched, a NUL in either name, and
+   the argument errors. Answers are shown relative to the current directory.
+   Everything is made under a directory this program makes and removes. */
+d = 'searchpath.d'
+call SysMkDir d
+call SysMkDir d'/p1'
+call SysMkDir d'/p2'
+call SysMkDir d'/p2/f.dir'
+call make d'/p1/f.dir'
+call make d'/p1/g'
+call make d'/p2/g'
+call make d'/p1/only1'
+call make d'/p2/with blank'
+call SysFileCopy d'/p1/g', d'/p2/n' || 'ff'x
+call make 'top'
+call SysMkDir d'/closed'
+call make d'/closed/g'
+'chmod 000' d'/closed'
+call set d'/p2::'d'/p1'
+call s 'SP', 'g'
+call s 'SP', 'only1'
+call s 'SP', 'f.dir'
+call s 'SP', 'top'
+call s 'SP', 'top', 'N'
+call s 'SP', 'top', 'c'
+call s 'SP', 'top', 'Nothing'
+call s 'SP', 'with blank', 'N'
+call s 'SP', 'n' || 'ff'x, 'N'
+call s 'SP', 'n' || 'efbfbd'x, 'N'
+call s 'SP', ''
+call s 'SP', './top', 'N'
+call s 'SP', '../'filespec('name', directory())'/top', 'N'
+call s 'SP', d'/p1/g', 'N'
+call s 'SP', directory()'/'d'/p1/g', 'N'
+call s 'SP', directory()'/'d'/p1', 'N'
+call s 'SP', 'p1/g', 'N'
+call s 'SP', 'g' || '00'x || 'zz', 'N'
+call s 'SP' || '00'x || 'Q', 'g', 'N'
+call s 'NOSUCHVAR.REXXUTIL', 'top'
+call s 'NOSUCHVAR.REXXUTIL', 'top', 'N'
+call s 'sp', 'g', 'N'
+call set d
+call s 'SP', 'p1/g', 'N'
+call s 'SP', 'p1', 'N'
+call set d'/p1/g/:'d'/p1/'
+call s 'SP', 'g', 'N'
+call set '~/nosuchdir.rexxutil:'d'/p2'
+call s 'SP', 'g', 'N'
+call set '~nosuchuser.rexxutil:'d'/p2'
+call s 'SP', 'g', 'N'
+call set d'/closed:'d'/p2'
+call s 'SP', 'g', 'N'
+call set ''
+call s 'SP', 'top'
+call s 'SP', 'top', 'N'
+call set ':::'
+call s 'SP', 'top', 'N'
+call t "call SysSearchPath"
+call t "call SysSearchPath 'SP'"
+call t "call SysSearchPath .nil, 'x'"
+call t "call SysSearchPath 'SP', .nil"
+call t "call SysSearchPath 'SP', 'x', .nil"
+call t "call SysSearchPath 'SP', 'x', ''"
+call t "call SysSearchPath 'SP', 'x', 'q'"
+call t "call SysSearchPath 'SP', 'x', 'C', 'd'"
+'chmod 700' d'/closed'
+'rm -rf' d 'top'
+call SysSearchPath 'SP', 'x', 'Z'
+exit
+
+set: procedure
+  call value 'SP', arg(1), 'ENVIRONMENT'
+  return
+
+s: procedure
+  if arg(3, 'e') then r = SysSearchPath(arg(1), arg(2), arg(3))
+  else r = SysSearchPath(arg(1), arg(2))
+  shown = changestr(filespec('name', directory()), changestr(directory(), arg(2), '<cwd>'), '<here>')
+  say left(translate(arg(1)'|'shown'|'arg(3), '?', '00'x), 40) ,
+    '['changestr(directory()'/', r, '')']'
+  return
+
+make: procedure
+  parse arg name
+  call lineout name, 'x'
+  call lineout name
+  return
+
+t: procedure
+  parse arg code
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code
+  return
+bad:
+  c = condition('O')
+  say 'error' code '|' c~code c~message
+  return

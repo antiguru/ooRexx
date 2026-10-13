@@ -24,42 +24,69 @@ use crate::{Failure, Interp};
 /// `QUALIFY(name)`: the name resolved against the interpreter's current
 /// directory and reduced to one spelling, whether or not it exists
 /// (`expression/BuiltinFunctions.cpp:2988` through
-/// `SysFileSystem::qualifyStreamName`). An empty name answers the null string,
-/// because `canonicalizeName` refuses it and the caller resets to `""`.
+/// `SysFileSystem::qualifyStreamName`).
 pub(crate) fn qualify(
     interp: &mut Interp,
     _name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let text = required_string(interp, args, 1);
-    if text.is_empty() {
-        return Ok(interp.text(b""));
-    }
-    let expanded = expand_tilde(interp, &text);
-    let cwd = interp.cwd_text();
-    let qualified = crate::paths::normalize(&String::from_utf8_lossy(&expanded), &cwd);
-    Ok(interp.text_built(qualified.into_bytes()))
+    let qualified = qualify_name(interp, &text);
+    Ok(interp.text_built(qualified))
 }
 
-/// A leading `~` or `~/` replaced by the environment's `HOME`, as
-/// `SysFileSystem::resolveTilde` does. `~user` is left alone: it needs the
-/// passwd entry of another account, which nothing in this phase reads.
-fn expand_tilde(interp: &Interp, name: &[u8]) -> Vec<u8> {
-    if name.first() != Some(&b'~') {
-        return name.to_vec();
+/// `SysFileSystem::qualifyStreamName`: `name` up to its first NUL, as the C
+/// string the C++ is given, with a leading `~` or `~user` resolved, made
+/// absolute against the interpreter's current directory and reduced by
+/// [`crate::paths::normalize_bytes`]. The null string where the C++ fails: an
+/// empty name, a `~user` naming no account, or a home directory that is not
+/// absolute.
+pub(crate) fn qualify_name(interp: &Interp, name: &[u8]) -> Vec<u8> {
+    let name = match name.iter().position(|byte| *byte == 0) {
+        Some(end) => &name[..end],
+        None => name,
+    };
+    if name.is_empty() {
+        return Vec::new();
     }
+    if name.first() == Some(&b'~') {
+        return match expand_tilde(interp, name) {
+            Some(expanded) if expanded.first() == Some(&b'/') => {
+                crate::paths::normalize_bytes(&expanded, b"/")
+            }
+            _ => Vec::new(),
+        };
+    }
+    crate::paths::normalize_bytes(name, interp.cwd_bytes())
+}
+
+/// `SysFileSystem::resolveTilde`: a leading `~` replaced by the environment's
+/// `HOME`, a leading `~user` by that account's home directory, and `None`
+/// where no account has that name. Accounts are read from `/etc/passwd`, so
+/// one that lives only in NSS (LDAP and the like) is not found.
+fn expand_tilde(interp: &Interp, name: &[u8]) -> Option<Vec<u8>> {
     let rest = &name[1..];
-    if !rest.is_empty() && rest.first() != Some(&b'/') {
-        return name.to_vec();
+    if rest.is_empty() || rest[0] == b'/' {
+        let mut out = interp.env_get(b"HOME").unwrap_or_default().to_vec();
+        out.extend_from_slice(rest);
+        return Some(out);
     }
-    match interp.env_get(b"HOME") {
-        None => name.to_vec(),
-        Some(home) => {
-            let mut out = home.to_vec();
-            out.extend_from_slice(rest);
-            out
-        }
-    }
+    let slash = rest
+        .iter()
+        .position(|byte| *byte == b'/')
+        .unwrap_or(rest.len());
+    let mut out = passwd_home(&rest[..slash])?;
+    out.extend_from_slice(&rest[slash..]);
+    Some(out)
+}
+
+/// The home directory `/etc/passwd` gives the account `user`.
+fn passwd_home(user: &[u8]) -> Option<Vec<u8>> {
+    let passwd = std::fs::read("/etc/passwd").ok()?;
+    passwd.split(|byte| *byte == b'\n').find_map(|line| {
+        let fields: Vec<&[u8]> = line.split(|byte| *byte == b':').collect();
+        (fields.len() > 5 && fields[0] == user).then(|| fields[5].to_vec())
+    })
 }
 
 /// `USERID()`: the effective user's login name
@@ -158,9 +185,8 @@ pub(crate) fn directory(
     if text.is_empty() {
         return Ok(interp.text(b""));
     }
-    let expanded = expand_tilde(interp, &text);
-    let cwd = interp.cwd_text();
-    let candidate = crate::paths::normalize(&String::from_utf8_lossy(&expanded), &cwd);
+    let qualified = qualify_name(interp, &text);
+    let candidate = String::from_utf8_lossy(&qualified).into_owned();
     if !std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_dir()) {
         return Ok(interp.text(b""));
     }

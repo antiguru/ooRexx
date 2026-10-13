@@ -17,7 +17,7 @@ use std::cmp::Ordering;
 use rexx_core::{Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
 
-use super::answer;
+use super::{answer, c_string, check_arity, marshalled, optional_text, os_path, required};
 use crate::error::Raised;
 use crate::{Failure, Interp};
 
@@ -30,30 +30,6 @@ const ARGUMENT_DIGITS: usize = 18;
 /// The largest count `StemClass::sort` reads from element 0: an unsigned
 /// value at the default nine digits (`Numerics::maxValueForDigits(9)`).
 const SORT_COUNT_MAXIMUM: u64 = 999_999_999;
-
-/// A raise the argument marshalling makes, which the oracle reports against
-/// the package with no line.
-fn marshalled(mut raised: Raised) -> Failure {
-    raised.delivery.lineless = true;
-    raised.delivery.internal_package = true;
-    raised.into()
-}
-
-/// 88.922 where more than `arity` arguments were passed.
-fn check_arity(args: &[Option<ObjRef>], arity: usize) -> Result<(), Failure> {
-    if args.len() > arity {
-        return Err(Raised::too_many_internal_arguments(arity).into());
-    }
-    Ok(())
-}
-
-/// The argument at `position`, 88.901 where it is omitted.
-fn required(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure> {
-    args.get(position - 1)
-        .copied()
-        .flatten()
-        .ok_or_else(|| Raised::missing_internal_argument(&position.to_string()).into())
-}
 
 /// A `RexxStemObject` argument: a stem itself, or a string naming a stem
 /// variable of the caller's.
@@ -77,22 +53,6 @@ fn stem_argument(
     Err(marshalled(Raised::native_argument_not_a_stem(
         false, position, &found,
     )))
-}
-
-/// An `OPTIONAL_CSTRING` argument's bytes, 88.909 where it has no string
-/// value: `requiredString`, with no `STRING` fallback.
-fn optional_text(
-    interp: &mut Interp,
-    args: &[Option<ObjRef>],
-    position: usize,
-) -> Result<Option<Vec<u8>>, Failure> {
-    let Some(value) = args.get(position - 1).copied().flatten() else {
-        return Ok(None);
-    };
-    let Some(text) = interp.string_conversion(value)? else {
-        return Err(marshalled(Raised::argument_needs_a_string_value(position)));
-    };
-    Ok(Some(interp.to_text(text).into_owned()))
 }
 
 /// A whole number from `minimum` to [`MAX_WHOLENUMBER`], as
@@ -746,15 +706,11 @@ pub(crate) fn dump_variables(
     let mut file = match target {
         None => None,
         Some(text) => {
-            let path = if text.is_empty() {
-                String::new()
-            } else {
-                crate::paths::normalize(&String::from_utf8_lossy(&text), &interp.cwd_text())
-            };
+            let path = crate::builtin::platform::qualify_name(interp, c_string(&text));
             let opened = std::fs::OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(&path);
+                .open(os_path(&path));
             match opened {
                 Ok(file) => Some(file),
                 Err(_) => {

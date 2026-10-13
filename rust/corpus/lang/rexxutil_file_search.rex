@@ -1,0 +1,103 @@
+/* SysFileSearch: line ends (LF, CR LF, a lone CR, none at the end, empty
+   lines), case and its options, line numbers, a NUL in the needle and in
+   a line, an empty needle, a line longer than the reader's buffer, an
+   array, a stem object, a stem name with and without its period, tails
+   past the count left alone, a missing file, a directory, a file that
+   cannot be read, names with a blank and bytes that are not UTF-8, and the
+   errors. Everything is made under a directory this program makes and
+   removes. */
+d = 'filesearch.d'
+call SysMkDir d
+f = d'/a.txt'
+call charout f, 'Alpha beta' || '0a'x || 'gamma' || '0d0a'x || 'ALPHA' || '00'x || 'x' || '0a'x || ,
+  '0a'x || 'cr only' || '0d'x || 'alpha' || '0d0d0a'x || '1a'x || 'alpha tail' || '0d'x
+call charout f
+s.5 = 'keep'
+s.7 = 'keep too'
+say SysFileSearch('alpha', f, 's.') s.0 s.5 s.7
+call show 's.'
+drop s.
+say SysFileSearch('alpha', f, 's.', 'CN') s.0
+call show 's.'
+say SysFileSearch('ALPHA', f, 's', 'c') s.0
+call show 's.'
+say SysFileSearch('alpha', f, 's.', 'cI') s.0 SysFileSearch('alpha', f, 's.', 'IC') s.0
+say SysFileSearch('alpha', f, 's.', 'nnN') s.0 SysFileSearch('alpha', f, 's.', '') s.0
+say SysFileSearch('', f, 's.') s.0
+say SysFileSearch('ALPHA' || '00'x, f, 's.', 'c') s.0 c2x(s.1)
+say SysFileSearch('beta' || '0a'x, f, 's.') s.0
+say SysFileSearch('a', f, 's.', 'n' || '00'x || 'Q') s.0
+say SysFileSearch('a', f || '00'x || 'junk', 's.') s.0
+a = .array~of(1, 2, 3)
+say SysFileSearch('a', f, a, 'n') a~items a~size
+do x over a; say '  ' c2x(x); end
+st = .stem~new
+say SysFileSearch('alpha', f, st) st[0]
+call charout d'/e.txt', ''
+call charout d'/e.txt'
+say SysFileSearch('a', d'/e.txt', 's.') s.0
+call charout d'/l.txt', copies('x', 5000) || 'needle' || copies('y', 5000) || '0a'x || 'needle'
+call charout d'/l.txt'
+say SysFileSearch('needle', d'/l.txt', 's.', 'n') s.0 length(s.1) left(s.1, 3) s.2
+call SysFileCopy f, d'/with blank'
+call SysFileCopy f, d'/n' || 'ff'x
+say SysFileSearch('tail', d'/with blank', 's.') s.0 SysFileSearch('tail', d'/n' || 'ff'x, 's.') s.0 ,
+  SysFileSearch('tail', d'/n' || 'efbfbd'x, 's.') s.0
+-- nothing to read: the count is still set, and an array is still emptied
+s.0 = 9
+say SysFileSearch('a', d'/none', 's.') s.0
+t. = 'dflt'
+say SysFileSearch('a', d'/none', 't') t.0 t.1
+say SysFileSearch('a', d, 's.') s.0
+say SysFileSearch('a', d'/', 's.') s.0
+say SysFileSearch('a', d'/none', a) a~items
+call make d'/unreadable.txt'
+'chmod 200' d'/unreadable.txt'
+say SysFileSearch('a', d'/unreadable.txt', 's.') s.0
+-- errors
+b = .myarray~new
+call t "say SysFileSearch('a', f, b)"
+call t "call SysFileSearch 'a', f, .nil"
+call t "call SysFileSearch 'a', f, 'a.1'"
+call t "call SysFileSearch 'a', f, '*'"
+call t "call SysFileSearch 'a', f, .object~new"
+call t "call SysFileSearch 'a', f, 's.', 'Q'"
+call t "call SysFileSearch 'a', f, 's.', 'nNiIcCzz'"
+call t "call SysFileSearch 'a', f, 's.', copies('Z', 300)"
+call t "call SysFileSearch 'a', f, 's.', 'q' || '00'x || 'r'"
+call t "call SysFileSearch .nil, f, 's.'"
+call t "call SysFileSearch 'a', .nil, 's.'"
+call t "call SysFileSearch 'a', f"
+call t "call SysFileSearch 'a', , 's.'"
+call t "call SysFileSearch 'a', f, 's.', .nil"
+call t "call SysFileSearch 'a', f, 's.', 'x', 'y'"
+call t "r = SysFileSearch('zzz', f, 's.'); say 'returned' r s.0"
+'chmod 600' d'/unreadable.txt'
+'rm -rf' d
+call SysFileSearch 'a', 'x', 's.', 'Y'
+exit
+
+show: procedure expose s.
+  do i = 1 to s.0
+    say '  ' i c2x(s.i)
+  end
+  return
+
+make: procedure
+  parse arg name
+  call lineout name, 'x'
+  call lineout name
+  return
+
+t: procedure expose f b
+  parse arg code
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code
+  return
+bad:
+  c = condition('O')
+  say 'error' translate(code, '?', '00'x) '|' c~code c~message
+  return
+
+::class myarray subclass array

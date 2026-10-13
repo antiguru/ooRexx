@@ -278,6 +278,14 @@ pub(super) fn append_slot(
     Ok(at + 1)
 }
 
+impl Interp {
+    /// `ArrayClass::append` with no message send, as a native routine's
+    /// `ArrayAppendString` reaches it: the 1-based index `item` landed on.
+    pub(crate) fn array_append(&mut self, array: ObjRef, item: ObjRef) -> Result<usize, Failure> {
+        append_slot(self, array, item)
+    }
+}
+
 /// A `Queue`'s two-tier index bound, which is two different errors.
 pub(super) fn queue_bound(
     interp: &mut Interp,

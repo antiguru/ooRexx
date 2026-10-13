@@ -122,3 +122,69 @@ fn date_and_time_read_the_same_zone_the_oracle_does() {
          `corpus/builtin-probes.txt` requires them to be deterministic"
     );
 }
+
+/// The zones the file date and time witness is run under: one whose
+/// daylight saving starts and ends at a European hour and one at a North
+/// American hour, so each of the witness's transition lines falls inside a
+/// skipped or repeated hour in one of them.
+const FILE_ZONES: &[&str] = &["Europe/Zurich", "America/New_York"];
+
+/// An empty directory for one side's run of the witness under `zone`.
+fn empty_dir(name: &str) -> PathBuf {
+    let dir = probe_dir().join(name);
+    if dir.exists() {
+        fs::remove_dir_all(&dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
+    }
+    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+    dir
+}
+
+/// `SysSetFileDateTime` and `SysGetFileDateTime` convert through the local
+/// zone in both directions, so `corpus/lang/rexxutil_file_date_time.rex` is
+/// run under each of [`FILE_ZONES`] on both sides, all three descriptors
+/// compared.
+#[test]
+fn the_file_date_time_witness_reads_the_zone_the_oracle_does() {
+    let oracle = locate();
+    let witness = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../corpus/lang/rexxutil_file_date_time.rex")
+        .canonicalize()
+        .expect("the witness is in the corpus");
+    let mut outputs = Vec::new();
+    for zone in FILE_ZONES {
+        let tag = zone.replace('/', "_");
+        let cpp = oracle.run_in(
+            &witness,
+            &empty_dir(&format!("oracle-{tag}")),
+            &[("TZ", zone)],
+        );
+        let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+            .arg(&witness)
+            .current_dir(empty_dir(&format!("crate-{tag}")))
+            .env("TZ", zone)
+            .output()
+            .unwrap_or_else(|e| panic!("cannot run this crate under TZ={zone}: {e}"));
+        assert_eq!(
+            cpp.termination,
+            Termination::Exited(out.status.code().unwrap_or(-1)),
+            "exit status under TZ={zone}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&cpp.stdout),
+            "stdout under TZ={zone}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            String::from_utf8_lossy(&cpp.stderr),
+            "stderr under TZ={zone}"
+        );
+        outputs.push(out.stdout);
+    }
+    // Equal output in every zone would mean neither side read one.
+    assert_ne!(
+        outputs[0], outputs[1],
+        "the witness printed the same in every zone, so this run cannot tell a crate that reads \
+         the zone from one that ignores it"
+    );
+}

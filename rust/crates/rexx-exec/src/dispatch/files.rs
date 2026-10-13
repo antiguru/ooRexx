@@ -564,7 +564,7 @@ pub(super) fn search_path_impl(
 }
 
 /// `file_qualify`: the absolute spelling of `path`, against the interpreter's
-/// own current directory.
+/// own current directory, by [`crate::builtin::platform::qualify_name`].
 ///
 /// **Purely lexical, and that is the oracle's own choice** -- measured,
 /// `a/b/../c.txt` answers `<cwd>/a/c.txt` although no such directory exists,
@@ -578,8 +578,10 @@ pub(super) fn qualify(
     _receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let path = path_argument(interp, args)?;
-    let cwd = interp.cwd_text();
-    let qualified = crate::paths::normalize(&path, &cwd);
-    Ok(Some(interp.text_built(qualified.into_bytes())))
+    let Some(value) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let path = interp.to_text(value).into_owned();
+    let qualified = crate::builtin::platform::qualify_name(interp, &path);
+    Ok(Some(interp.text_built(qualified)))
 }

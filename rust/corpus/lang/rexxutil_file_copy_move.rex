@@ -1,0 +1,110 @@
+/* SysFileCopy and SysFileMove: the answers for a missing source, one file
+   named twice, a directory at either end, a link at either end, a target
+   that exists, a source that cannot be read, a name with a blank and names
+   that are not UTF-8; the times and mode a copy keeps; and the argument
+   errors. Everything is made under a directory this program makes and
+   removes. A move across file systems is not here: the oracle answers an
+   uninitialised errno for it (oracle-crashes.txt entry 39). */
+d = 'copymove.d'
+call SysMkDir d
+call make d'/a.txt', 'alpha'
+say 'copy missing   ' SysFileCopy(d'/none', d'/b.txt')
+say 'copy           ' SysFileCopy(d'/a.txt', d'/b.txt') show(d'/b.txt')
+say 'copy same      ' SysFileCopy(d'/a.txt', d'/../'d'/./a.txt')
+say 'copy over      ' SysFileCopy(d'/a.txt', d'/b.txt') show(d'/b.txt')
+say 'copy empty     ' SysFileCopy('', d'/x') SysFileCopy(d'/a.txt', '')
+call SysMkDir d'/sub'
+say 'copy from dir  ' SysFileCopy(d'/sub', d'/c.txt') SysFileExists(d'/c.txt') show(d'/c.txt')
+say 'copy to dir    ' SysFileCopy(d'/a.txt', d'/sub')
+say 'copy to dir/   ' SysFileCopy(d'/a.txt', d'/sub/')
+say 'copy into none ' SysFileCopy(d'/a.txt', d'/none/x')
+say 'copy blank     ' SysFileCopy(d'/a.txt', d'/with blank.txt') show(d'/with blank.txt')
+odd = d'/n' || 'ff'x || '.txt'
+lossy = d'/n' || 'efbfbd'x || '.txt'
+say 'copy not utf8  ' SysFileCopy(d'/a.txt', odd) SysFileExists(odd) SysFileExists(lossy) show(odd)
+say 'copy utf8      ' SysFileCopy(odd, d'/caf' || 'c3a9'x || '.txt') show(d'/caf' || 'c3a9'x || '.txt')
+say 'copy nul cut   ' SysFileCopy(d'/a.txt' || '00'x || 'junk', d'/cut.txt' || '00'x || 'more') show(d'/cut.txt')
+-- times kept to the second, mode given only to a target the copy creates
+'chmod 640' d'/a.txt'
+call SysSetFileDateTime d'/a.txt', '2001-02-03', '04:05:06'
+'touch -a -d @1000000000' d'/a.txt'
+'chmod 600' d'/b.txt'
+say 'copy times     ' SysFileCopy(d'/a.txt', d'/new.txt') SysFileCopy(d'/a.txt', d'/b.txt')
+'stat -c "%n %a %X %Y"' d'/new.txt'
+'stat -c "%n %a %Y"' d'/b.txt'
+-- links: a copy follows them, a move keeps them
+'ln -s a.txt' d'/link'
+'ln -s nowhere' d'/dangling'
+'ln -s sub' d'/dirlink'
+say 'copy from link ' SysFileCopy(d'/link', d'/fromlink.txt') SysIsFileLink(d'/fromlink.txt') show(d'/fromlink.txt')
+call make d'/beta.txt', 'beta'
+say 'copy to link   ' SysFileCopy(d'/beta.txt', d'/link') SysIsFileLink(d'/link') show(d'/a.txt')
+say 'copy dangling  ' SysFileCopy(d'/dangling', d'/x') SysFileCopy(d'/a.txt', d'/dangling') SysIsFileLink(d'/dangling') show(d'/nowhere')
+call SysFileDelete d'/nowhere'
+say 'copy dirlink   ' SysFileCopy(d'/a.txt', d'/dirlink/in.txt') show(d'/sub/in.txt')
+-- a directory that cannot be read or searched
+call SysMkDir d'/closed'
+call make d'/closed/f.txt', 'shut'
+'chmod 000' d'/closed'
+say 'copy closed    ' SysFileCopy(d'/closed/f.txt', d'/x') SysFileCopy(d'/a.txt', d'/closed/g.txt')
+say 'move closed    ' SysFileMove(d'/closed/f.txt', d'/x') SysFileMove(d'/a.txt', d'/closed/g.txt')
+'chmod 700' d'/closed'
+call make d'/unreadable.txt', 'secret'
+'chmod 200' d'/unreadable.txt'
+say 'copy unreadable' SysFileCopy(d'/unreadable.txt', d'/x') SysFileExists(d'/x')
+-- moves
+say 'move missing   ' SysFileMove(d'/none', d'/m.txt')
+say 'move same      ' SysFileMove(d'/a.txt', d'/a.txt')
+say 'move onto file ' SysFileMove(d'/a.txt', d'/b.txt')
+say 'move           ' SysFileMove(d'/b.txt', d'/m.txt') SysFileExists(d'/b.txt') show(d'/m.txt')
+say 'move to dir    ' SysFileMove(d'/m.txt', d'/sub')
+say 'move dir       ' SysFileMove(d'/sub', d'/sub2') SysIsFileDirectory(d'/sub2') SysIsFileLink(d'/dirlink')
+say 'move link      ' SysFileMove(d'/link', d'/link2') SysIsFileLink(d'/link2') show(d'/link2')
+say 'move dangling  ' SysFileMove(d'/dangling', d'/dangling2') SysIsFileLink(d'/dangling2')
+say 'move onto link ' SysFileMove(d'/m.txt', d'/link2') SysIsFileLink(d'/link2')
+say 'move not utf8  ' SysFileMove(odd, d'/o' || 'fe'x) SysFileExists(odd) SysFileExists(d'/o' || 'fe'x)
+say 'move trailing /' SysFileMove(d'/m.txt/', d'/t.txt/') show(d'/t.txt')
+-- argument errors
+call t "call SysFileCopy"
+call t "call SysFileCopy 'x'"
+call t "call SysFileCopy .nil, 'x'"
+call t "call SysFileCopy 'x', .nil"
+call t "call SysFileCopy 'x', 'y', 'z'"
+call t "call SysFileMove , 'y'"
+call t "call SysFileMove 'x', .nil"
+call t "call SysFileMove 'x', 'y', 'z'"
+call t "r = SysFileCopy(d'/none', d'/x'); say 'returned' r"
+'chmod -R 700' d
+'rm -rf' d
+call SysFileMove 'x'
+exit
+
+make: procedure
+  parse arg name, text
+  call lineout name, text
+  call lineout name
+  return
+
+show: procedure
+  parse arg name
+  if \SysFileExists(name) then return '(none)'
+  -- a stream opens a name that is not UTF-8 as this crate spells it, so
+  -- the contents are read through a copy under a plain name
+  view = 'view.txt'
+  call SysFileDelete view
+  call SysFileCopy name, view
+  text = charin(view, 1, chars(view))
+  call stream view, 'c', 'close'
+  call SysFileDelete view
+  return '['text']'
+
+t: procedure expose d
+  parse arg code
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code
+  return
+bad:
+  c = condition('O')
+  say 'error' code '|' c~code c~message
+  return

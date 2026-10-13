@@ -13,6 +13,7 @@
 //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
 
+pub(crate) mod files;
 pub(crate) mod stems;
 
 use rexx_core::{Decoded, ObjRef};
@@ -23,31 +24,83 @@ use crate::scheduler::ParkReason;
 use crate::semaphores::{SEM_POLL, SemaphoreKey, SemaphoreWait, WaitKind};
 use crate::{Failure, Interp, Loud};
 
-/// The one path argument these routines take, resolved against the
-/// interpreter's own directory rather than the process's.
-///
-/// `position` is the argument number the missing-argument message names.
-fn path_argument(
-    interp: &mut Interp,
-    args: &[Option<ObjRef>],
-    position: &str,
-    arity: usize,
-) -> Result<String, Failure> {
+/// A raise the argument marshalling makes, which the oracle reports against
+/// the package with no line.
+fn marshalled(mut raised: Raised) -> Failure {
+    raised.delivery.lineless = true;
+    raised.delivery.internal_package = true;
+    raised.into()
+}
+
+/// 88.922 where more than `arity` arguments were passed.
+fn check_arity(args: &[Option<ObjRef>], arity: usize) -> Result<(), Failure> {
     if args.len() > arity {
         return Err(Raised::too_many_internal_arguments(arity).into());
     }
-    let Some(Some(value)) = args.first().copied() else {
-        return Err(Raised::missing_internal_argument(position).into());
+    Ok(())
+}
+
+/// The argument at `position`, 88.901 where it is omitted.
+fn required(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure> {
+    args.get(position - 1)
+        .copied()
+        .flatten()
+        .ok_or_else(|| Raised::missing_internal_argument(&position.to_string()).into())
+}
+
+/// An `OPTIONAL_CSTRING` argument's bytes, 88.909 where it has no string
+/// value: `requiredString`, with no `STRING` fallback.
+fn optional_text(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Option<Vec<u8>>, Failure> {
+    let Some(value) = args.get(position - 1).copied().flatten() else {
+        return Ok(None);
     };
-    let text = interp.to_text(value).into_owned();
-    if text.is_empty() {
-        return Ok(String::new());
+    let Some(text) = interp.string_conversion(value)? else {
+        return Err(marshalled(Raised::argument_needs_a_string_value(position)));
+    };
+    Ok(Some(interp.to_text(text).into_owned()))
+}
+
+/// A `CSTRING` argument as the routine reads it: the bytes before the first
+/// NUL, which ends a C string.
+fn c_string(text: &[u8]) -> &[u8] {
+    match text.iter().position(|byte| *byte == 0) {
+        Some(end) => &text[..end],
+        None => text,
     }
-    let cwd = interp.cwd_text();
-    Ok(crate::paths::normalize(
-        &String::from_utf8_lossy(&text),
-        &cwd,
-    ))
+}
+
+/// [`optional_text`] for a `CSTRING` argument that is required, cut at its
+/// first NUL by [`c_string`].
+fn required_c_string(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Vec<u8>, Failure> {
+    required(args, position)?;
+    let text = optional_text(interp, args, position)?.expect("the argument is present");
+    Ok(c_string(&text).to_vec())
+}
+
+/// A path argument, `RoutineQualifiedName`: the `CSTRING` at `position`
+/// qualified by [`crate::builtin::platform::qualify_name`]. The null string
+/// where the name cannot be qualified, which no file system call finds.
+fn path_argument(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Vec<u8>, Failure> {
+    let text = required_c_string(interp, args, position)?;
+    Ok(crate::builtin::platform::qualify_name(interp, &text))
+}
+
+/// A path's bytes as the `Path` the standard library opens, unchanged.
+fn os_path(path: &[u8]) -> &std::path::Path {
+    use std::os::unix::ffi::OsStrExt as _;
+    std::path::Path::new(std::ffi::OsStr::from_bytes(path))
 }
 
 /// The answer these routines give: a whole number, as text.
@@ -63,8 +116,9 @@ pub(crate) fn file_exists(
     _name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let path = path_argument(interp, args, "1", 1)?;
-    let found = !path.is_empty() && std::fs::metadata(&path).is_ok();
+    check_arity(args, 1)?;
+    let path = path_argument(interp, args, 1)?;
+    let found = rustix::fs::stat(path.as_slice()).is_ok();
     Ok(answer(interp, i64::from(found)))
 }
 
@@ -74,8 +128,9 @@ pub(crate) fn is_file(
     _name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let path = path_argument(interp, args, "1", 1)?;
-    let found = !path.is_empty() && std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+    check_arity(args, 1)?;
+    let path = path_argument(interp, args, 1)?;
+    let found = std::fs::metadata(os_path(&path)).is_ok_and(|meta| meta.is_file());
     Ok(answer(interp, i64::from(found)))
 }
 
@@ -91,12 +146,13 @@ pub(crate) fn file_delete(
     _name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let path = path_argument(interp, args, "1", 1)?;
+    check_arity(args, 1)?;
+    let path = path_argument(interp, args, 1)?;
     const EACCES: i64 = 13;
-    if path.is_empty() || !rustix::fs::access(path.as_str(), rustix::fs::Access::WRITE_OK).is_ok() {
+    if rustix::fs::access(path.as_slice(), rustix::fs::Access::WRITE_OK).is_err() {
         return Ok(answer(interp, EACCES));
     }
-    let code = match rustix::fs::unlink(path.as_str()) {
+    let code = match rustix::fs::unlink(path.as_slice()) {
         Ok(()) => 0,
         Err(errno) => i64::from(errno.raw_os_error()),
     };
@@ -114,11 +170,12 @@ pub(crate) fn rm_dir(
     _name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let path = path_argument(interp, args, "1", 1)?;
-    let code = match rustix::fs::unlink(path.as_str()) {
+    check_arity(args, 1)?;
+    let path = path_argument(interp, args, 1)?;
+    let code = match rustix::fs::unlink(path.as_slice()) {
         Ok(()) => 0,
         Err(errno) if errno == rustix::io::Errno::ISDIR || errno == rustix::io::Errno::PERM => {
-            match rustix::fs::rmdir(path.as_str()) {
+            match rustix::fs::rmdir(path.as_slice()) {
                 Ok(()) => 0,
                 Err(errno) => i64::from(errno.raw_os_error()),
             }
@@ -137,7 +194,8 @@ pub(crate) fn mk_dir(
     _name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let path = path_argument(interp, args, "1", 2)?;
+    check_arity(args, 2)?;
+    let path = path_argument(interp, args, 1)?;
     let mode = match args.get(1).copied().flatten() {
         None => 0o777,
         Some(value) => {
@@ -151,7 +209,8 @@ pub(crate) fn mk_dir(
             }
         }
     };
-    let code = match rustix::fs::mkdir(path.as_str(), rustix::fs::Mode::from_bits_truncate(mode)) {
+    let code = match rustix::fs::mkdir(path.as_slice(), rustix::fs::Mode::from_bits_truncate(mode))
+    {
         Ok(()) => 0,
         Err(errno) => i64::from(errno.raw_os_error()),
     };

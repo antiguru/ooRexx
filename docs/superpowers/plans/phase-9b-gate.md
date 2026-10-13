@@ -52,9 +52,9 @@ The 9b close criterion (controller ruling, 2026-10-13, ledger .superpowers/sdd/2
 is listed in `rust/corpus/suite-9d-set.txt`. The 9d set is the carried list, so 9b judges only what it
 owns. `base/security.manager/SecurityManager`'s 5 failed tests (`TEST_ENVIRONMENT_HANDLE`,
 `TEST_METHOD_HANDLE_NO_RESULT`, `TEST_METHOD_HANDLE_RESULT`, `TEST_METHOD_PASS`,
-`TEST_STREAM_PASS_BIF_STREAM_OPEN`) are in `suite-9d-set.txt:200-204`, owned by 9d. Its 7 blocked tests
-are 9b's. `SysFileXXX.TEST_FILEEXISTS_NIL_INVALID` is 9b's although the 9d set also lists it (line 198):
-Task 4 removes that line once the test is green.
+`TEST_STREAM_PASS_BIF_STREAM_OPEN`) are in `suite-9d-set.txt`, owned by 9d. Its 7 blocked tests
+are 9b's. `SysFileXXX.TEST_FILEEXISTS_NIL_INVALID` is 9b's although the 9d set listed it: Task 4
+removed its line once the test was green.
 
 Owning 9b task of each red group (plan `2026-10-13-phase-9b.md`):
 

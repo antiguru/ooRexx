@@ -3996,8 +3996,7 @@ impl Interp {
         if let Some(standard) = standard_stream_name(name, input) {
             return self.dot_variable(standard);
         }
-        let cwd = self.cwd_text();
-        let qualified = crate::paths::normalize(&String::from_utf8_lossy(name), &cwd).into_bytes();
+        let qualified = crate::builtin::platform::qualify_name(self, name);
         if let Some(found) = self
             .stream_table()
             .and_then(|table| table.get(qualified.as_slice()).copied())
@@ -4059,8 +4058,7 @@ impl Interp {
     /// send: the stream stays closed and the next builtin to name it builds a
     /// fresh one (`RexxActivation::removeFileName`).
     pub(crate) fn forget_stream(&mut self, name: &[u8]) {
-        let cwd = self.cwd_text();
-        let qualified = crate::paths::normalize(&String::from_utf8_lossy(name), &cwd).into_bytes();
+        let qualified = crate::builtin::platform::qualify_name(self, name);
         if let Some(table) = self.stream_table_mut() {
             table.remove(qualified.as_slice());
         }

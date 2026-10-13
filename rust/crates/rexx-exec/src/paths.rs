@@ -21,22 +21,37 @@
 /// oracle avoids `realpath` here precisely so that a path that does not exist
 /// still normalises.
 pub(crate) fn normalize(path: &str, cwd: &str) -> String {
-    let absolute = if path.starts_with('/') {
-        path.to_string()
-    } else {
-        format!("{}/{path}", cwd.trim_end_matches('/'))
-    };
-    let mut parts: Vec<&str> = Vec::new();
-    for part in absolute.split('/') {
+    String::from_utf8(normalize_bytes(path.as_bytes(), cwd.as_bytes()))
+        .expect("removing whole components keeps UTF-8 valid")
+}
+
+/// [`normalize`] over bytes, for a name that need not be UTF-8.
+pub(crate) fn normalize_bytes(path: &[u8], cwd: &[u8]) -> Vec<u8> {
+    let mut absolute = Vec::with_capacity(cwd.len() + path.len() + 1);
+    if path.first() != Some(&b'/') {
+        absolute.extend_from_slice(cwd);
+        absolute.push(b'/');
+    }
+    absolute.extend_from_slice(path);
+    let mut parts: Vec<&[u8]> = Vec::new();
+    for part in absolute.split(|byte| *byte == b'/') {
         match part {
-            "" | "." => {}
-            ".." => {
+            b"" | b"." => {}
+            b".." => {
                 parts.pop();
             }
             other => parts.push(other),
         }
     }
-    format!("/{}", parts.join("/"))
+    let mut out = Vec::with_capacity(absolute.len());
+    for part in &parts {
+        out.push(b'/');
+        out.extend_from_slice(part);
+    }
+    if out.is_empty() {
+        out.push(b'/');
+    }
+    out
 }
 
 #[cfg(test)]
@@ -55,5 +70,12 @@ mod tests {
         assert_eq!(normalize("/..", "/x"), "/");
         // `..b` is a file name, not a parent reference.
         assert_eq!(normalize("/a/..b", "/x"), "/a/..b");
+    }
+
+    /// A name that is not UTF-8 keeps its bytes.
+    #[test]
+    fn normalize_bytes_keeps_bytes_that_are_not_utf8() {
+        assert_eq!(normalize_bytes(b"a/\xff/../\xfe", b"/x/"), b"/x/a/\xfe");
+        assert_eq!(normalize_bytes(b"/\xff/", b"/x"), b"/\xff");
     }
 }

@@ -24,6 +24,10 @@
 # own, so it is the one mode whose entry can only be characterised by killing
 # it. Every such entry states the deadline it was killed at, and rc 137 there
 # is the kill and not the oracle's answer.
+#
+# A fourth mode, an UNDEFINED ANSWER -- a value the oracle reads from memory
+# it never set, different from run to run -- was added on 2026-10-13 for
+# entry 39.
 
 ## 1. `select; when 1 = 0 then; when 2 = 2 then nop; end`
 
@@ -1361,3 +1365,20 @@ raise comes out of `ObjectToString` inside `writeVariable` (`runtime/RexxUtilCom
 This crate traps the 93.900 and prints `trapped 93.900`, pinned by
 `builtin::rexxutil::stems::tests::a_string_method_raising_inside_the_dump_is_trapped`. No
 upstream ticket.
+
+## 39. `SysFileMove` across file systems
+
+    call lineout 'xfs.txt', 'x'
+    call lineout 'xfs.txt'
+    away = SysTempFileName('/tmp/rexxutil-xfs-?????')
+    say SysFileMove('xfs.txt', away) SysFileExists('xfs.txt') SysFileExists(away)
+
+Not a crash: an UNDEFINED ANSWER, a fourth mode. Run from a directory on another file system than
+`/tmp`, 3 runs under the standard wrapper and `memcap 4G`, measured 2026-10-13 by Phase 9b Task 4:
+stdout `32617 1 0`, `32685 1 0`, `32756 1 0`, nothing moved and rc 0. The oracle's
+`temporaryFilename` (`platform/unix/SysFileSystem.cpp` at the oracle's `cb9563364`) returns
+without setting `errInfo` on success, so `moveFile` answers whatever the stack held; it also
+formats the spare name into a 7-byte `snprintf` bound. This checkout's `interpreter/` has both
+fixed, and this crate follows it: the move copies and unlinks, answering 0, pinned by
+`builtin::rexxutil::files::tests::a_move_across_file_systems_copies_and_unlinks`. No corpus
+witness can run it.
