@@ -136,3 +136,4 @@ Ruling (M5): owner of the two Moritz-deferred refusals is a Moritz question befo
 Final fix dispatched (opus): I1, M1, M2 (SysCls site + add cwd_text sites to queued lossy file), M3, M4, M6.
 Final fix: 3da644f47, 7d4743be9 (also holds M2), 1590a1cea, 6d7180b21. Entry 47: oracle SIGSEGVs (139) for copy/delete/insert with stem as object variable. Scoped final re-review dispatched (sonnet).
 Final re-review: approved, no open findings (6 mutants each red in its own test). Close run 2 at final HEAD next.
+Task 10: complete. Close run 2 at 07cf14bde: workspace exit 0, suite 356/402 (identical per test to run 1), callgrind -B 0.5 exit 0 (worst hashnew +0.3065%). Gate record phase-9b-gate.md '9b close'. Open for Moritz: owner of the two deferred refusals (before 9d plans); ratify tz-rs vs plan's 'No new dependency'. Phase 9b CLOSED.
