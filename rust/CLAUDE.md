@@ -5,6 +5,17 @@ Correctness is defined **differentially**: a change is right when its output mat
 
 Each rule below has already cost this project a session, a wrong measurement, or a shipped defect.
 
+## Specialization is internal
+
+**Moritz, 2026-10-13: representation is never observable.** Every value a Rexx program can reach behaves
+as an object of its class: identity, `objectName`, object variables, methods, `copy`, collection.
+Inline strings, small integers, side tables keyed by an id, and any fast path that assumes a plain kind
+are optimisations, and each must be able to become a full object the moment a program asks something
+only an object can answer. A difference that only the representation explains is a defect, unless
+Moritz has ruled a Deviation for it. When a feature seems to need a refusal like "this crate does not
+keep X" or a new side map keyed by an id, that is this rule being broken: stop and say so. Phase 9b1
+(`.superpowers/sdd/queued/2026-10-13-phase-9b1-uniform-object-model.md`) removes the known leaks.
+
 ## The oracle
 
 * **The C++ tree is read-only.** Never modify `interpreter/`, `samples/`, `build/`, `ootest/`.
