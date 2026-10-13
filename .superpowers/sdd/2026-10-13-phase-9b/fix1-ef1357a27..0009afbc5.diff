@@ -1,0 +1,482 @@
+diff --git a/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md b/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md
+index e1049b2ce..3b8fdccf9 100644
+--- a/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md
++++ b/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md
+@@ -56,9 +56,11 @@ directory, stdout, stderr and status read separately.
+   `Interp::string_conversion` (`requiredString`).
+ - An error raised before the routine's work stops it: `SysStemSort 's.', 'Q'` leaves the stem
+   unsorted though the C++ code continues past `ThrowException` (measured, stem unchanged).
+-- `SysStemSort` with element 0 of `999999999` answers 5.0 on the oracle (`new_array(bounds * 3)`
+-  under the 1 GiB cap). This crate answers 40.924 for that program. Licensed best-effort OOM
+-  divergence, not in any witness.
++- `SysStemSort` with element 0 of `999999999` answers 5.0 on the oracle: its eager
++  `new_array(bounds * 3)` (`classes/StemClass.cpp:1654`), made before any element is read, hits
++  the memory cap. Trapped, a count of 30000000 gives 5.0 under `ulimit -v` 1 GiB and 40.924 under
++  4 GiB (measured by the Task 3 review). This crate answers 40.924, the oracle's answer without
++  memory pressure, which is what the OOM licence covers. No check added, not in any witness.
+ - Review Focus 1 shapes: a stem default never counts as an element (40.922 with no element 0,
+   40.924 for a missing element below the count, on all four routines); `'2.0'` and `' 2 '` are
+   counts, `'2.5'`, `''`, `'x'` are 40.922; `-1` is 40.922 for Delete and Sort but a usable count
+@@ -189,4 +191,60 @@ RexxUtil groups. The five groups were blocked by the refusal, not by a row, so n
+ 4. **No callgrind run**, per the dispatch. Nothing on a per-clause or dispatch path changed: the
+    bodies are new, `context_stem` is the native API's `ResolveStemVariable` path, and
+    `local_variables` only split its loop out.
+-5. `SysStemSort` with a 999999999 count: oracle 5.0, crate 40.924 (licensed OOM divergence).
++5. `SysStemSort` with a 999999999 count: oracle 5.0 from its capped eager allocation, crate 40.924,
++   the oracle's answer when the allocation fits (corrected in fix round 1).
++
++## Fix round 1
++
++Commit `d6c1b2d85`, against `task-3-review.md`.
++
++1. **Entry 38, a new oracle crash.** The review's program (`SysDumpVariables` over a variable whose
++   `STRING` method raises, under `SIGNAL ON SYNTAX`) was run 3 times on the oracle, under
++   `ulimit -v 1048576` and `memcap 4G`, from a fresh `mktemp -d` each time: rc 139 all 3, stdout
++   `Name=A, Value='first'`, the only stderr is memcap's own `Segmentation fault` line. Recorded as
++   `oracle-crashes.txt` entry 38 and kept out of every witness. The crate's answer is pinned by
++   `builtin::rexxutil::stems::tests::a_string_method_raising_inside_the_dump_is_trapped`, whose doc
++   states the reason: rc 0, empty stderr, last line `trapped 93.900`. The line for `A` is allowed
++   before it but not required, because this crate's variable order is not the oracle's.
++2. **The 999999999 sentence is corrected** (Oracle measurements and Concern 5). The oracle's 5.0
++   comes from its eager `new_array(bounds * 3)` (`StemClass.cpp:1654`) hitting the cap. Trapped,
++   30000000 gives 5.0 at 1 GiB and 40.924 at 4 GiB (the review's measurement). The crate's 40.924
++   is the oracle's answer without memory pressure. Code unchanged.
++3. **`SysDumpVariables` writes each line as its value converts**, to the file or to standard output.
++   It no longer buffers the whole dump. RED: before the change, the crate printed `STRING ran` first
++   for a stem with one tail whose `STRING` method says it, where the oracle printed
++   `Name=S., Value='S.'`, then `STRING ran`, then `Name=S.1, Value='K'` (oracle run 4 times, same
++   order each time). GREEN: the new `talk` clause in `corpus/lang/rexxutil_dump_variables.rex`
++   gives oracle and crate identical stdout, stderr and rc 216. Its header now says where the
++   standard-output form is used. The `sourceline_oracle` file was regenerated.
++4. **`sort` holds its converted values explicitly** (`push_temp` after `required_string_value`).
++   The probe is a temporary test, run and then deleted, that runs `run_program_collect_every_alloc`
++   and `run_program` on each program and compares all three descriptors:
++   - `s.1`, `s.2` computed strings, `s.3` an object whose `STRING` empties the stem: 10
++     collections, rc 0, `[K] [aaaaaaaaa] [bbbbbbbbb]`, same as the plain run.
++   - 30 computed strings under `s.foo`, sorted: 88 collections, rc 0, the letters in order, same as
++     the plain run.
++
++   This replaces the earlier report's sentence that the hold was dropped.
++5. **Entry 37's sentence is measured now.** Untrapped `call SysStemSort '*'` (40.919) and
++   `first` 3, `last` 2 (40.921) were each run 3 times: rc 216 every time, with the ordinary report.
++   40.920 is the witness's own last clause.
++
++Left alone as directed: sort write-back by element identity (9b1), and the class-side `::method
++string`.
++
++Checks at `d6c1b2d85`, from `rust/`, foreground:
++
++| check | result |
++|---|---|
++| `cargo fmt --all --check` | exit 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib --test closed_phases --test internal_routines --test owners --test phase_ten_reasons --test refusal_dispositions --test refusal_sites` | exit 0, lib 1091 passed, the tables 8, 2, 6, 5, 3, 5 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse --test sourceline_oracle` | exit 0 |
++| the suite command above over the five groups | exit 0, 44 of 44 passed on both sides |
++| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | exit 0, `1029 of 1029 matching` |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress` | exit 0, 37 passed |
++
++The records in `docs/superpowers/records/2026-10-13-phase-9b/task-3/` (`run-output.txt`, the suite
++tables, `corpus-output.txt`, `collect-stress-output.txt`) were re-run at `d6c1b2d85`. The
++ir_recorded and trace/coverage records stay at `28aa77b29`.
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt
+index 240f2e6af..678bd98cb 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt
+@@ -1,48 +1,48 @@
+-commit 28aa77b29
++commit d6c1b2d85
+    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+-    Finished `release` profile [optimized + debuginfo] target(s) in 46.06s
++    Finished `release` profile [optimized + debuginfo] target(s) in 46.08s
+      Running tests/collect_stress.rs (target/release/deps/collect_stress-3e828767363293d0)
+ 
+ running 37 tests
+ test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+-test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+ test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+ test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+-test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+-test support::arity::tests::directives_are_appended_after_the_program ... ok
+ test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+ test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+-test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+ test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+ test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+ test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+ test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+-test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+ test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+ test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+-test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+ test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+ test the_stress_subset_reads_every_phase_subset_file ... ok
+-test a_running_activation_keeps_its_context_object_across_a_collection ... ok
+-test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
+-test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
+-test a_command_line_argument_survives_collect_on_every_allocation ... ok
+-test a_parked_activitys_registers_survive_the_activity_that_wakes_it ... ok
+ test a_method_that_assigns_over_self_keeps_its_exposed_variables ... ok
++test a_running_activation_keeps_its_context_object_across_a_collection ... ok
++test a_parked_activitys_registers_survive_the_activity_that_wakes_it ... ok
++test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
+ test a_message_driven_loops_to_and_by_survive_collect_on_every_allocation ... ok
++test a_command_line_argument_survives_collect_on_every_allocation ... ok
++test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
+ test a_pending_reply_keeps_its_registers_across_a_collection ... ok
+ test a_trapped_conditions_object_survives_collect_on_every_allocation ... ok
+ test a_clause_value_survives_the_handler_its_boundary_runs ... ok
+ test a_parked_reply_keeps_its_variables_across_a_collection ... ok
+ test values_compound_write_roots_the_old_value_before_the_stems_first_allocation ... ok
+-test a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop ... ok
+ test values_environment_write_roots_the_old_value_before_the_stores_allocation ... ok
++test a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop ... ok
+ test a_stream_builtins_values_survive_a_pinned_yield ... ok
+ test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+ test the_l0_subset_passes_again_under_collect_on_every_allocation ... ok
+ 
+-test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 155.27s
++test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 157.01s
+ 
+-exit 0, wall 201 s
++exit 0, wall 204 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt
+index 0592ce6a0..e5f2e053c 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt
+@@ -1,25 +1,24 @@
+-commit 28aa77b29
++commit d6c1b2d85
+    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+-    Finished `release` profile [optimized + debuginfo] target(s) in 48.98s
++    Finished `release` profile [optimized + debuginfo] target(s) in 48.37s
+      Running tests/corpus.rs (target/release/deps/corpus-d50996334ec4dce5)
+ 
+ running 30 tests
+ test probe_emit_uncaptured_marker ... ignored, run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process
+-test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+ test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+-test support::arity::tests::directives_are_appended_after_the_program ... ok
+-test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+ test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+ test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+-test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+ test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
+ test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+ test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+ test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+ test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+ test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+-test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
+ test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+ test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+ test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+@@ -27,6 +26,7 @@ test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_conti
+ test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test the_differential_reads_every_phase_subset_file ... ok
++test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
+ test the_multiset_stdout_mode_is_selected_for_exactly_the_listed_programs ... ok
+ test every_lang_program_is_run_or_named_unfiled ... ok
+ test every_sidecar_names_a_program_the_subset_runs ... ok
+@@ -41,6 +41,6 @@ mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
+ ==============================================================================
+ test corpus_differential ... ok
+ 
+-test result: ok. 29 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 82.62s
++test result: ok. 29 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 82.28s
+ 
+-exit 0, wall 132 s
++exit 0, wall 130 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt
+index ee34320f2..746fe34f5 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt
+@@ -1,6 +1,6 @@
+-commit 28aa77b29
++commit d6c1b2d85
+    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+-    Finished `release` profile [optimized + debuginfo] target(s) in 23.20s
++    Finished `release` profile [optimized + debuginfo] target(s) in 23.50s
+      Running tests/suite.rs (target/release/deps/suite-22d700f0bfa93c32)
+ 
+ running 1 test
+@@ -8,4 +8,4 @@ test l3_core_suite ... ok
+ 
+ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.14s
+ 
+-exit 0, wall 23 s
++exit 0, wall 24 s
+diff --git a/rust/corpus/lang/rexxutil_dump_variables.rex b/rust/corpus/lang/rexxutil_dump_variables.rex
+index b3bb2b02f..e55e06f02 100644
+--- a/rust/corpus/lang/rexxutil_dump_variables.rex
++++ b/rust/corpus/lang/rexxutil_dump_variables.rex
+@@ -2,7 +2,9 @@
+    object values, dropped variables and tails, a method's variables, the file
+    form appending, and the errors. The oracle lists the variables in hash
+    order, so the file form's lines are sorted before they are shown. The
+-   stdout form is only used where it prints one line or none. */
++   stdout form is only used where its order is fixed: one line or none, or a
++   stem's own line before its one tail, where a STRING method's SAY lands
++   between the two. */
+ f = 'dumpvariables.out'
+ call SysFileDelete f
+ call one
+@@ -15,6 +17,7 @@ call several f
+ call show f
+ .k~new~m(f)
+ call show f
++call talk
+ call t "call SysDumpVariables 1, 2"
+ call t "call SysDumpVariables .nil"
+ call t "call SysDumpVariables ''"
+@@ -65,6 +68,11 @@ show: procedure
+   call SysFileDelete f
+   return
+ 
++talk: procedure
++  s.1 = .talker~new
++  call SysDumpVariables
++  return
++
+ t: procedure
+   parse arg code
+   signal on syntax name bad
+@@ -83,3 +91,8 @@ bad:
+   ivar = 'iv'
+   local = 'lv'
+   call SysDumpVariables f
++
++::class talker
++::method string
++  say 'STRING ran'
++  return 'K'
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index eea40a5c9..97f8fcfb3 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1334,5 +1334,30 @@ on stderr:
+ 
+ The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTest's `SysStemSort`
+ group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
+-it sorts (40.919, 40.920, 40.921) is reported untrapped as usual. This crate raises each of the
+-three as the trapped oracle does.
++it sorts is reported untrapped as usual: 40.919 (`call SysStemSort '*'`) and 40.921 (`first` 3,
++`last` 2) measured 2026-10-13, 3 runs of 3 each, rc 216 with the ordinary report, and 40.920 is
++the witness's own last clause. This crate raises each of the three as the trapped oracle does.
++
++## 38. `SysDumpVariables` over a variable whose `STRING` method raises
++
++    signal on syntax
++    call p
++    exit
++    syntax: say 'trapped' condition('O')~code
++    exit
++    p: procedure
++      a = 'first'
++      b = .k~new
++      call SysDumpVariables
++      return
++    ::class k
++    ::method string
++      raise syntax 93.900 array('boom')
++
++SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper and `memcap 4G`, measured 2026-10-13 by
++Phase 9b Task 3's fix round: stdout `Name=A, Value='first'`, nothing from the interpreter on
++stderr. The `SIGNAL ON SYNTAX` does not save it. Found by Task 3's review. Cause not read: the
++raise comes out of `ObjectToString` inside `writeVariable` (`runtime/RexxUtilCommon.cpp:1449`).
++This crate traps the 93.900 and prints `trapped 93.900`, pinned by
++`builtin::rexxutil::stems::tests::a_string_method_raising_inside_the_dump_is_trapped`. No
++upstream ticket.
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
+index 43d8e25e7..259de1aee 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
+@@ -689,6 +689,7 @@ pub(crate) fn sort(
+             return Err(Raised::stem_element_unset(index).into());
+         };
+         let value = interp.required_string_value(value)?;
++        interp.roots.activity_mut().push_temp(value);
+         texts.push(interp.to_text(value).into_owned());
+         values.push(value);
+     }
+@@ -766,11 +767,10 @@ pub(crate) fn dump_variables(
+     for (_, value) in &variables {
+         interp.roots.activity_mut().push_temp(*value);
+     }
+-    let mut out = Vec::new();
+     for (variable, value) in variables {
+         if variable.last() == Some(&b'.') && interp.is_stem_object(value) {
+             let own = interp.stem_own_value(value);
+-            dump_line(interp, &mut out, &variable, own, b"\n")?;
++            dump_line(interp, &mut file, &variable, own, b"\n")?;
+             let tails = interp.stem_live_tails(value);
+             for (_, held) in &tails {
+                 interp.roots.activity_mut().push_temp(*held);
+@@ -778,38 +778,40 @@ pub(crate) fn dump_variables(
+             for (tail, held) in tails {
+                 let mut compound = variable.clone();
+                 compound.extend_from_slice(&tail);
+-                dump_line(interp, &mut out, &compound, held, b"\r\n")?;
++                dump_line(interp, &mut file, &compound, held, b"\r\n")?;
+             }
+         } else {
+-            dump_line(interp, &mut out, &variable, value, b"\n")?;
++            dump_line(interp, &mut file, &variable, value, b"\n")?;
+         }
+     }
+-    match file.as_mut() {
+-        Some(file) => {
+-            use std::io::Write as _;
+-            // The oracle ignores a failed write.
+-            let _ = file.write_all(&out);
+-        }
+-        None => interp.write_out(&out),
+-    }
+     Ok(answer(interp, 0))
+ }
+ 
+-/// One `Name=..., Value='...'` line, the value as its string value.
++/// Writes one `Name=..., Value='...'` line to `file`, or to standard output
++/// where there is none, as soon as the value's string value is in hand: a
++/// `STRING` method's own output lands between the lines, as on the oracle.
+ fn dump_line(
+     interp: &mut Interp,
+-    out: &mut Vec<u8>,
++    file: &mut Option<std::fs::File>,
+     name: &[u8],
+     value: ObjRef,
+     end: &[u8],
+ ) -> Result<(), Failure> {
+     let text = interp.required_string_value(value)?;
+-    out.extend_from_slice(b"Name=");
+-    out.extend_from_slice(name);
+-    out.extend_from_slice(b", Value='");
+-    out.extend_from_slice(&interp.to_text(text));
+-    out.extend_from_slice(b"'");
+-    out.extend_from_slice(end);
++    let mut line = b"Name=".to_vec();
++    line.extend_from_slice(name);
++    line.extend_from_slice(b", Value='");
++    line.extend_from_slice(&interp.to_text(text));
++    line.extend_from_slice(b"'");
++    line.extend_from_slice(end);
++    match file {
++        Some(file) => {
++            use std::io::Write as _;
++            // The oracle ignores a failed write.
++            let _ = file.write_all(&line);
++        }
++        None => interp.write_out(&line),
++    }
+     Ok(())
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
+index e4f5a39e4..5199fefd2 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
+@@ -93,3 +93,40 @@ fn a_dumped_stem_keeps_its_tails_when_a_string_method_empties_it() {
+         ]
+     );
+ }
++
++/// **`SysDumpVariables` over a variable whose `STRING` method raises
++/// reports the raise**, after the lines already written, where the oracle
++/// crashes even under `SIGNAL ON SYNTAX` (`corpus/oracle-crashes.txt` entry
++/// 38). No differential can run it, so this is the crate's own answer: the
++/// method's 93.900 trapped as any raise from a routine is. The line for `A`
++/// is written first where the variable order puts it first, as the oracle's
++/// order did before it crashed.
++#[test]
++fn a_string_method_raising_inside_the_dump_is_trapped() {
++    let source = b"signal on syntax\n\
++        call p\n\
++        exit\n\
++        syntax: say 'trapped' condition('O')~code\n\
++        exit\n\
++        p: procedure\n\
++        a = 'first'\n\
++        b = .k~new\n\
++        call SysDumpVariables\n\
++        return\n\
++        ::class k\n\
++        ::method string\n\
++        raise syntax 93.900 array('boom')\n";
++    let outcome = crate::run_program("/t.rex", source.to_vec(), crate::Invocation::none());
++    assert_eq!(outcome.exit_code, 0);
++    assert_eq!(String::from_utf8_lossy(&outcome.stderr), "");
++    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
++    let (written, trapped) = stdout
++        .trim_end_matches('\n')
++        .rsplit_once('\n')
++        .unwrap_or(("", stdout.trim_end_matches('\n')));
++    assert_eq!(trapped, "trapped 93.900", "{stdout:?}");
++    assert!(
++        written.is_empty() || written == "Name=A, Value='first'",
++        "{stdout:?}"
++    );
++}
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt
+index d4c1b05e1..e3e01436f 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt
+@@ -1,9 +1,11 @@
+-count 85
++count 98
+ /* SysDumpVariables: the caller's variables, a stem's own value and its tails,
+    object values, dropped variables and tails, a method's variables, the file
+    form appending, and the errors. The oracle lists the variables in hash
+    order, so the file form's lines are sorted before they are shown. The
+-   stdout form is only used where it prints one line or none. */
++   stdout form is only used where its order is fixed: one line or none, or a
++   stem's own line before its one tail, where a STRING method's SAY lands
++   between the two. */
+ f = 'dumpvariables.out'
+ call SysFileDelete f
+ call one
+@@ -16,6 +18,7 @@ call several f
+ call show f
+ .k~new~m(f)
+ call show f
++call talk
+ call t "call SysDumpVariables 1, 2"
+ call t "call SysDumpVariables .nil"
+ call t "call SysDumpVariables ''"
+@@ -66,6 +69,11 @@ show: procedure
+   call SysFileDelete f
+   return
+ 
++talk: procedure
++  s.1 = .talker~new
++  call SysDumpVariables
++  return
++
+ t: procedure
+   parse arg code
+   signal on syntax name bad
+@@ -84,3 +92,8 @@ bad:
+   ivar = 'iv'
+   local = 'lv'
+   call SysDumpVariables f
++
++::class talker
++::method string
++  say 'STRING ran'
++  return 'K'

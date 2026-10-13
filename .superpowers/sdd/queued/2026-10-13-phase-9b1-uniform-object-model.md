@@ -32,3 +32,9 @@ is in rust/CLAUDE.md ("Specialization is internal").
 
 Must land before 9c: the rexx/rexxc front ends and Phase 10's embedding handles need uniform
 identity.
+
+## Added 2026-10-13 (9b Task 3 review)
+
+SysStemSort writes results back by tail; the oracle writes into the stem elements it captured. A
+STRING method that empties the stem mid-sort makes the oracle print [S.1] [S.2] and the crate [K]
+[heap...]. Fix needs stem element identity. See .superpowers/sdd/2026-10-13-phase-9b/task-3-review.md.

@@ -1,0 +1,3215 @@
+# Review package: 2b59b029d..ef1357a27
+
+## Commits
+ef1357a27 Phase 9b Task 3: report and run records
+28aa77b29 Phase 9b Task 3: SysDumpVariables holds its tail snapshot
+a6c147e62 Phase 9b Task 3: the RexxUtil stem routines and SysDumpVariables
+
+## Files changed
+ .../sdd/2026-10-13-phase-9b/task-3-report.md       | 192 +++++
+ .../task-3/collect-stress-output.txt               |  48 ++
+ .../2026-10-13-phase-9b/task-3/corpus-output.txt   |  46 ++
+ .../task-3/ir-recorded-output.txt                  |  38 +
+ .../task-3/oracle-differences.tsv                  |   2 +
+ .../2026-10-13-phase-9b/task-3/run-output.txt      |  11 +
+ .../records/2026-10-13-phase-9b/task-3/table.tsv   |  12 +
+ .../records/2026-10-13-phase-9b/task-3/tests.tsv   |  47 ++
+ .../task-3/trace-coverage-output.txt               |  78 ++
+ .../2026-10-13-phase-9b/task-3/verdicts.tsv        |   7 +
+ rust/corpus/lang/rexxutil_dump_variables.rex       |  85 +++
+ rust/corpus/lang/rexxutil_stem_copy.rex            |  86 +++
+ rust/corpus/lang/rexxutil_stem_delete_insert.rex   |  87 +++
+ rust/corpus/lang/rexxutil_stem_sort.rex            |  99 +++
+ rust/corpus/oracle-crashes.txt                     |  24 +
+ rust/corpus/phase-9.txt                            |   6 +
+ rust/corpus/refusal-sites.tsv                      | 103 +--
+ rust/crates/rexx-exec/src/builtin/rexxutil.rs      |   4 +-
+ .../crates/rexx-exec/src/builtin/rexxutil/stems.rs | 817 +++++++++++++++++++++
+ .../rexx-exec/src/builtin/rexxutil/stems/tests.rs  |  95 +++
+ rust/crates/rexx-exec/src/dispatch/context.rs      |  37 +-
+ rust/crates/rexx-exec/src/dispatch/hash/stem.rs    |  24 +
+ rust/crates/rexx-exec/src/dispatch/library.rs      |  11 +-
+ rust/crates/rexx-exec/src/error.rs                 |  69 ++
+ rust/crates/rexx-exec/src/internal_routines.rs     |  13 +-
+ rust/crates/rexx-exec/src/redirect.rs              |   4 +-
+ rust/crates/rexx-exec/src/run/tests/directives.rs  |   5 +-
+ rust/crates/rexx-exec/src/stem.rs                  |  16 +
+ .../tests/stem_sort_untrapped_cases/crate          |  77 ++
+ .../sourceline_oracle/rexxutil_dump_variables.txt  |  86 +++
+ .../tests/sourceline_oracle/rexxutil_stem_copy.txt |  87 +++
+ .../rexxutil_stem_delete_insert.txt                |  88 +++
+ .../tests/sourceline_oracle/rexxutil_stem_sort.txt | 100 +++
+ 33 files changed, 2422 insertions(+), 82 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md b/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md
+new file mode 100644
+index 000000000..e1049b2ce
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-13-phase-9b/task-3-report.md
+@@ -0,0 +1,192 @@
++# Phase 9b Task 3 report: the RexxUtil stem routines
++
++Status: DONE_WITH_CONCERNS (concerns at the end, none blocking).
++
++Commits:
++
++- `a6c147e62` Phase 9b Task 3: the RexxUtil stem routines and SysDumpVariables
++- `28aa77b29` Phase 9b Task 3: SysDumpVariables holds its tail snapshot
++- the records commit that carries this report (sha in the reply)
++
++## What was implemented
++
++`SysStemSort`, `SysStemCopy`, `SysStemDelete`, `SysStemInsert` and `SysDumpVariables`, in a new
++`rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs`, each row switched from
++`util(.., Owner::Phase9)` to `util_run(..)` in `internal_routines.rs`.
++
++- Each body follows its `RexxUtilCommon.cpp` function step for step, in the oracle's order of
++  checks and writes, so the partial work a missing element leaves behind matches (witnessed).
++- Stems are reached through the stem object, never through variable names:
++  `GetStemArrayElement` is `Interp::stem_object_tail` (no default, a tombstone answers `None`),
++  `SetStemArrayElement` is `stem_object_write`, `DropStemArrayElement` is a new
++  `Interp::stem_drop_element` (drops only a tail the stem holds), `GetAllStemElements` is a new
++  `stem_live_tails`, `GetStemValue` a new `stem_own_value`. A stem name argument resolves through a
++  new `Interp::context_stem_named` (`getContextStem`), which `dispatch/library.rs`'s `context_stem`
++  now calls too, so the native API and RexxUtil share one resolver.
++- `SysStemSort` ports `StemClass::sort`: the count read at nine digits, the `999999999999999999`
++  "to the end" sentinel for `last` and `lastcol` (given or defaulted, as in the C++), the
++  `s.foo` form split at its first period with the tail prefix upcased, the merge sort itself
++  (insertion below eight, exponential-search merge), `sortCompare` and `sortCaselessCompare` with
++  `caselessCompare`'s signed-`char` bytes (a byte from 0x80 up orders below ASCII), and the column
++  forms' read of the terminating NUL one byte past the shorter value. Each quirk is witnessed.
++- `SysStemCopy`'s 40.924 for a missing source element names the loop offset, not the index, as
++  the C++ does (witnessed: `position "0"`).
++- `SysDumpVariables` reads the caller's variables through a new
++  `dispatch::context::local_variable_entries` (split out of `local_variables`, which builds its
++  `Directory` from it), writes a stem's own value and then its live tails, simple lines ending LF
++  and tail lines CR LF, appends to the named file (created `0666` before the umask) or writes to
++  standard output, and raises 40.1 where the file does not open.
++- New `Raised` constructors: `routine_failed` (40.1), `stem_argument_unresolved` (a body's 40.919),
++  `invalid_routine_option` (40.920), `arguments_out_of_order` (40.921), `stem_count_invalid`
++  (40.922), `stem_range` (40.923), `stem_element_unset` (40.924). Argument-marshalling raises
++  carry `lineless` and `internal_package` ("Error 88 running REXX:"), body raises do not ("running
++  <program> line N"), both measured.
++- `redirect.rs`'s `stem_object_tail` and `is_stem_object` widened to `pub(crate)`.
++
++No `unsafe`, no new dependency, no side map.
++
++## Oracle measurements behind it
++
++All runs under `( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib
++timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx FILE )` from a fresh `mktemp -d`
++directory, stdout, stderr and status read separately.
++
++- An `OPTIONAL_CSTRING` argument with no string value is 88.909 (`.nil` measured). The crate first
++  used the `STRING`-fallback conversion and answered 40.920 with `"The NIL object"`; corrected to
++  `Interp::string_conversion` (`requiredString`).
++- An error raised before the routine's work stops it: `SysStemSort 's.', 'Q'` leaves the stem
++  unsorted though the C++ code continues past `ThrowException` (measured, stem unchanged).
++- `SysStemSort` with element 0 of `999999999` answers 5.0 on the oracle (`new_array(bounds * 3)`
++  under the 1 GiB cap). This crate answers 40.924 for that program. Licensed best-effort OOM
++  divergence, not in any witness.
++- Review Focus 1 shapes: a stem default never counts as an element (40.922 with no element 0,
++  40.924 for a missing element below the count, on all four routines); `'2.0'` and `' 2 '` are
++  counts, `'2.5'`, `''`, `'x'` are 40.922; `-1` is 40.922 for Delete and Sort but a usable count
++  for Copy and Insert (40.923 or a no-op, each witnessed); `'1E1'` is a count of 10;
++  `1234567890` is a count for Copy, Delete and Insert (18 digits) and 40.922 for Sort (9 digits);
++  `a.01` is not `a.1`; tails that are not whole numbers are ignored; a dropped tail reads back as
++  its name, not the stem default.
++
++## Review Focus 3: the SF #2068 shape
++
++`rust/corpus/oracle-crashes.txt` had no `SysStemSort` entry (checked: `grep -n -i "stemsort\|2068"
++corpus/oracle-crashes.txt` printed nothing). Entry 37 now records it. The shape is wider than the
++one line: every error `StemClass::sort` raises itself crashes the oracle when untrapped. Measured
++2026-10-13, 3 runs of 3 each, rc 139, stdout `go`: an element-2-missing program (40.924) and a
++`first` past the count (40.923). The SF #2068 one-liner was **not** run (project memory's
++measurement stands). Trapped, all three errors answer on the oracle, which is how ooTest's group
++and the corpus witness reach them.
++
++The crate's untrapped answer is pinned crate-only by
++`builtin::rexxutil::stems::tests::an_untrapped_error_inside_the_sort_is_reported`, a datadriven
++file `crates/rexx-exec/tests/stem_sort_untrapped_cases/crate` with five raising shapes (the SF
++#2068 line, a stem default only, elements from 4 up, 40.923, 40.924) and two adjacent successes.
++Its header gives the reason: no differential can run these, so the expected blocks are this
++crate's own output, the error the trapped oracle raises reported as any routine's error is.
++
++## Tests and results
++
++Commands from `rust/`, every one in the foreground, exit statuses read unpiped.
++
++| check | command | result |
++|---|---|---|
++| fmt | `cargo fmt --all --check` | exit 0 |
++| clippy | `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0, at `28aa77b29`'s tree |
++| lib + tables | `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib --test closed_phases --test internal_routines --test owners --test phase_ten_reasons --test refusal_dispositions --test refusal_sites` | exit 0: lib 1090 passed, 8, 2, 6, 5, 3, 5 passed |
++| refusal sites | `REXX_REFUSAL_SITES_REFRESH=1 ... cargo test -p rexx-exec --test refusal_sites` | re-derived, exit 0: the seven new constructors as `body`, three marshalling constructors now `body+send`, the rest line shifts |
++| sourceline | `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse --test sourceline_oracle` | exit 0 |
++| suite groups | `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/rexxutil/SysStemCopy,base/rexxutil/SysStemDelete,base/rexxutil/SysStemInsert,base/rexxutil/SysStemSort,base/rexxutil/SysDumpVariables REXX_SUITE_TABLE=<records>/table.tsv CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` | exit 0 at `28aa77b29`: all five groups green, 44 of 44 tests passed on both sides (Task 2's start: 0 passed, 44 blocked) |
++| corpus | `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | exit 0 at `28aa77b29`, `1029 of 1029 matching` |
++| collect_stress | `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress` | exit 0 at `28aa77b29`, 37 passed, the L0 subset (with the four witnesses) included |
++| ir_recorded | `... cargo test -j 4 --release -p rexx-exec --test ir_recorded` | exit 0 at `28aa77b29`, 28 passed |
++| trace_oracle, coverage | `... cargo test -j 4 --release -p rexx-exec --test trace_oracle --test coverage` | exit 0 at `28aa77b29`, 41 and 21 passed |
++
++Raw outputs: `docs/superpowers/records/2026-10-13-phase-9b/task-3/` (`run-output.txt`,
++`table.tsv`, `verdicts.tsv`, `tests.tsv`, `oracle-differences.tsv`, `corpus-output.txt`,
++`collect-stress-output.txt`, `ir-recorded-output.txt`, `trace-coverage-output.txt`), each with
++its commit on the first line.
++
++### Corpus witnesses
++
++`rust/corpus/lang/rexxutil_stem_sort.rex`, `rexxutil_stem_copy.rex`,
++`rexxutil_stem_delete_insert.rex`, `rexxutil_dump_variables.rex`, listed in
++`rust/corpus/phase-9.txt`, each with its `sourceline_oracle/<name>.txt` generated by that test's
++driver (`grep -a`, because the sort witness prints a NUL byte and the wrapper's `grep` skips
++binary input). Each was run on the oracle first and its stdout read before the crate ran it; each
++ends with one untrapped error so the rendering is compared too. Oracle against crate, all three
++descriptors identical for all four at `28aa77b29`'s binary.
++
++`SysDumpVariables` lists variables in the oracle's hash order (`GetAllContextVariables` and
++`GetAllStemElements` are both `Directory` objects), so the witness writes the dump to a file and
++sorts its lines before printing (a multiset comparison). The standard-output form is used only
++where it prints one line or none. This crate writes the activation's variables in plan order and
++a stem's tails in the stem's own order. Bucket order is not copied.
++
++A further probe, not committed: 72 sort configurations (8 option sets, sizes 1 to 297) of
++pseudo-random strings with `_`, a high byte and NUL, checksummed: identical on both sides.
++
++### TDD evidence
++
++RED, before any body existed (`c.sh` runs `target/release/rexx-run` under `memcap 2G`): each of
++the four witnesses exited 120 with `rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)`
++(and the `SYSSTEMCOPY`, `SYSSTEMDELETE`, `SYSDUMPVARIABLES` equivalents), stdout empty. Expected:
++the rows were `util(.., Owner::Phase9)`.
++
++GREEN: the differential script after implementation printed `stdout same` and `stderr same` with
++equal status for all four (rc 216, 168, 216, 216).
++
++### Mutations, each reversed by an exact edit
++
++- Column compare without the terminating NUL (`- start + 1` to `- start`): the sort witness's
++  stdout differs from the oracle's. Reversed, checked by `grep -n "let reachable"`.
++- Dropping `SysDumpVariables`'s hold on the tail snapshot:
++  `a_dumped_stem_keeps_its_tails_when_a_string_method_empties_it` panics at `not_in_arena`'s
++  `"a live value"` assertion (`dispatch.rs:1710`) under collect-on-every-allocation. Restored from a copy, `grep -c` 1.
++  The first version of that test used a literal value and stayed green with the hold deleted,
++  because a literal is rooted by the program. It now uses a computed value.
++- Dropping the sort's own `push_temp` of its converted values left a collect-every-allocation
++  test green: `required_string_dispatch` already roots what it answers. The `push_temp` and that
++  test were deleted (`28aa77b29`), not kept as a test that cannot fail.
++
++## Derived rows
++
++None record these groups. `grep -rln -a "SysStem\|SysDumpVariables" corpus/
++crates/*/tests/*.tsv crates/*/tests/*.txt` names only `suite-9b-groups.txt`, `oracle-crashes.txt`,
++`phase-9.txt` and the witnesses. `grep -n -a rexxutil corpus/sim-gate.tsv corpus/sim-exempt.tsv`
++prints nothing, and `concurrency_tests.rs`'s whole-group rows name only `SysSleep` among the
++RexxUtil groups. The five groups were blocked by the refusal, not by a row, so no suite row moves.
++`refusal-sites.tsv` was re-derived in `a6c147e62`.
++
++## Files changed
++
++- `rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs` (new), `stems/tests.rs` (new)
++- `rust/crates/rexx-exec/src/builtin/rexxutil.rs` (`mod stems`, module doc)
++- `rust/crates/rexx-exec/src/internal_routines.rs` (five rows)
++- `rust/crates/rexx-exec/src/error.rs` (seven constructors)
++- `rust/crates/rexx-exec/src/dispatch/hash/stem.rs` (`stem_drop_element`, `stem_live_tails`,
++  `stem_own_value`)
++- `rust/crates/rexx-exec/src/stem.rs` (`context_stem_named`)
++- `rust/crates/rexx-exec/src/dispatch/library.rs` (`context_stem` calls it)
++- `rust/crates/rexx-exec/src/dispatch/context.rs` (`local_variable_entries`)
++- `rust/crates/rexx-exec/src/redirect.rs` (two helpers widened)
++- `rust/crates/rexx-exec/src/run/tests/directives.rs` (the refusal example is now `SysGetKey`,
++  and `SysStemSort` joins the delivered side)
++- `rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate` (new)
++- `rust/corpus/lang/rexxutil_*.rex` (four new), `rust/corpus/phase-9.txt`,
++  `rust/corpus/oracle-crashes.txt` (entry 37), `rust/corpus/refusal-sites.tsv` (re-derived)
++- `rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_*.txt` (four new)
++
++## Concerns
++
++1. **File layout.** `rexxutil.rs` would have stayed under 1500 lines (804 plus about 800). The
++   stems went to `builtin/rexxutil/stems.rs` anyway, as one family per file, since Tasks 4 to 8 add
++   to `rexxutil.rs`. The controller's note made the split conditional, so this is a judgement call.
++2. **`SysDumpVariables` file names go through `String::from_utf8_lossy`**, as `path_argument` does
++   for the existing file routines. A non-UTF-8 name would be altered. That is Review Focus 2's
++   ground (Task 4), and the fix belongs with `path_argument`.
++3. **The refusal example in `directives.rs`** now names `SysGetKey`, still a Phase 9 row. Whichever
++   task implements it has to pick another.
++4. **No callgrind run**, per the dispatch. Nothing on a per-clause or dispatch path changed: the
++   bodies are new, `context_stem` is the native API's `ResolveStemVariable` path, and
++   `local_variables` only split its loop out.
++5. `SysStemSort` with a 999999999 count: oracle 5.0, crate 40.924 (licensed OOM divergence).
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt
+new file mode 100644
+index 000000000..240f2e6af
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/collect-stress-output.txt
+@@ -0,0 +1,48 @@
++commit 28aa77b29
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 46.06s
++     Running tests/collect_stress.rs (target/release/deps/collect_stress-3e828767363293d0)
++
++running 37 tests
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
++test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test the_stress_subset_reads_every_phase_subset_file ... ok
++test a_running_activation_keeps_its_context_object_across_a_collection ... ok
++test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
++test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
++test a_command_line_argument_survives_collect_on_every_allocation ... ok
++test a_parked_activitys_registers_survive_the_activity_that_wakes_it ... ok
++test a_method_that_assigns_over_self_keeps_its_exposed_variables ... ok
++test a_message_driven_loops_to_and_by_survive_collect_on_every_allocation ... ok
++test a_pending_reply_keeps_its_registers_across_a_collection ... ok
++test a_trapped_conditions_object_survives_collect_on_every_allocation ... ok
++test a_clause_value_survives_the_handler_its_boundary_runs ... ok
++test a_parked_reply_keeps_its_variables_across_a_collection ... ok
++test values_compound_write_roots_the_old_value_before_the_stems_first_allocation ... ok
++test a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop ... ok
++test values_environment_write_roots_the_old_value_before_the_stores_allocation ... ok
++test a_stream_builtins_values_survive_a_pinned_yield ... ok
++test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
++test the_l0_subset_passes_again_under_collect_on_every_allocation ... ok
++
++test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 155.27s
++
++exit 0, wall 201 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt
+new file mode 100644
+index 000000000..0592ce6a0
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/corpus-output.txt
+@@ -0,0 +1,46 @@
++commit 28aa77b29
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 48.98s
++     Running tests/corpus.rs (target/release/deps/corpus-d50996334ec4dce5)
++
++running 30 tests
++test probe_emit_uncaptured_marker ... ignored, run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
++test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test the_differential_reads_every_phase_subset_file ... ok
++test the_multiset_stdout_mode_is_selected_for_exactly_the_listed_programs ... ok
++test every_lang_program_is_run_or_named_unfiled ... ok
++test every_sidecar_names_a_program_the_subset_runs ... ok
++test demonstrate_the_report_reaches_a_plain_cargo_test ... ok
++test the_multiset_stdout_licence_covers_order_and_nothing_else ... ok
++test a_sidecar_changes_what_one_of_the_interpreters_answers ... ok
++test corpus_differential has been running for over 60 seconds
++==============================================================================
++rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt + phase-4c.txt + phase-5a.txt + phase-5b.txt + phase-5c.txt + phase-5d.txt + phase-5j.txt + phase-6-1.txt + phase-6.txt + phase-7.txt + phase-8.txt + phase-9.txt
++mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
++1029 of 1029 matching
++==============================================================================
++test corpus_differential ... ok
++
++test result: ok. 29 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 82.62s
++
++exit 0, wall 132 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/ir-recorded-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/ir-recorded-output.txt
+new file mode 100644
+index 000000000..36fe12ddc
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/ir-recorded-output.txt
+@@ -0,0 +1,38 @@
++commit 28aa77b29
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 50.42s
++     Running tests/ir_recorded.rs (target/release/deps/ir_recorded-27ee2d9270b406c6)
++
++running 28 tests
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
++test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
++test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test the_harness_reads_every_phase_subset_file ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test the_sweep_runs_every_ootest_suite_a_sibling_harness_runs ... ok
++test the_smallest_program_answers ... ok
++test every_population_the_tree_calls_for_is_present_and_non_empty ... ok
++test every_loop_shape_answers_as_recorded ... ok
++test every_branch_shape_answers_as_recorded ... ok
++test every_case_file_answers_as_recorded ... ok
++test every_population_runs_without_a_refusal ... ok
++
++test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.67s
++
++exit 0, wall 64 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/oracle-differences.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-3/oracle-differences.tsv
+new file mode 100644
+index 000000000..00ad345e2
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/oracle-differences.tsv
+@@ -0,0 +1,2 @@
++# ootest revision 13178
++group	test	oracle	crate
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt
+new file mode 100644
+index 000000000..ee34320f2
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/run-output.txt
+@@ -0,0 +1,11 @@
++commit 28aa77b29
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 23.20s
++     Running tests/suite.rs (target/release/deps/suite-22d700f0bfa93c32)
++
++running 1 test
++test l3_core_suite ... ok
++
++test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.14s
++
++exit 0, wall 23 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/table.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-3/table.tsv
+new file mode 100644
+index 000000000..6e00a0e78
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/table.tsv
+@@ -0,0 +1,12 @@
++# ootest revision 13178
++group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
++base/rexxutil/SysDumpVariables	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
++base/rexxutil/SysDumpVariables	crate	4	4	4			-	-	1	yes	memcap 2G	4
++base/rexxutil/SysStemCopy	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
++base/rexxutil/SysStemCopy	crate	12	12	12			-	-	1	yes	memcap 2G	12
++base/rexxutil/SysStemDelete	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
++base/rexxutil/SysStemDelete	crate	5	5	5			-	-	1	yes	memcap 2G	5
++base/rexxutil/SysStemInsert	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
++base/rexxutil/SysStemInsert	crate	5	5	5			-	-	1	yes	memcap 2G	5
++base/rexxutil/SysStemSort	oracle	18	18	18			-	-	1	yes	ulimit -v 1048576	18
++base/rexxutil/SysStemSort	crate	18	18	18			-	-	1	yes	memcap 2G	18
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/tests.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-3/tests.tsv
+new file mode 100644
+index 000000000..f87bf59be
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/tests.tsv
+@@ -0,0 +1,47 @@
++# ootest revision 13178
++# groups base/rexxutil/SysStemCopy,base/rexxutil/SysStemDelete,base/rexxutil/SysStemInsert,base/rexxutil/SysStemSort,base/rexxutil/SysDumpVariables
++group	test	row	oracle	crate
++base/rexxutil/SysDumpVariables	TEST_LONG	-	passed	passed
++base/rexxutil/SysDumpVariables	TEST_NONE	-	passed	passed
++base/rexxutil/SysDumpVariables	TEST_NO_ARGS_TOO_MANY	-	passed	passed
++base/rexxutil/SysDumpVariables	TEST_SIMPLE_AND_STEM	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_BAD_FROM_COUNT	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_BAD_TO_COUNT	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_COPIES	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_COUNT_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_FROM_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_INVALID_OPTION	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_SPARSE_INSERT_SOURCE	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_SPARSE_INSERT_TARGET	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_SPARSE_OVERLAY_SOURCE	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_TO_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_UNSET_FROM_COUNT	-	passed	passed
++base/rexxutil/SysStemCopy	TEST_UNSET_TO_COUNT	-	passed	passed
++base/rexxutil/SysStemDelete	TEST_BAD_COUNT	-	passed	passed
++base/rexxutil/SysStemDelete	TEST_DELETES	-	passed	passed
++base/rexxutil/SysStemDelete	TEST_OUT_OF_COUNT	-	passed	passed
++base/rexxutil/SysStemDelete	TEST_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemDelete	TEST_UNSET_COUNT	-	passed	passed
++base/rexxutil/SysStemInsert	TEST_INSERT_EMPTY	-	passed	passed
++base/rexxutil/SysStemInsert	TEST_INSERT_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemInsert	TEST_INSET	-	passed	passed
++base/rexxutil/SysStemInsert	TEST_STEM_SIZE_BAD_VALUE	-	passed	passed
++base/rexxutil/SysStemInsert	TEST_STEM_SIZE_NOT_SET	-	passed	passed
++base/rexxutil/SysStemSort	TESTSORTRANGE	-	passed	passed
++base/rexxutil/SysStemSort	TEST_ALREADY_SORTED	-	passed	passed
++base/rexxutil/SysStemSort	TEST_BAD_COUNT	-	passed	passed
++base/rexxutil/SysStemSort	TEST_BAD_DIRECTION_ARG	-	passed	passed
++base/rexxutil/SysStemSort	TEST_CASE_SENSITIVITY	-	passed	passed
++base/rexxutil/SysStemSort	TEST_COMPOUND_NAME	-	passed	passed
++base/rexxutil/SysStemSort	TEST_DESCENDING_SIMPLE	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_FIRSTCOL_LASTCOL	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_FIRST_LAST	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_ORDER	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_STEM	-	passed	passed
++base/rexxutil/SysStemSort	TEST_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SIMPLE_LETTERS	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SORT	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SORT_COLS	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SPARSE_ARRAY	-	passed	passed
++base/rexxutil/SysStemSort	TEST_TOO_MANY	-	passed	passed
++base/rexxutil/SysStemSort	TEST_UNSET_COUNT	-	passed	passed
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/trace-coverage-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-3/trace-coverage-output.txt
+new file mode 100644
+index 000000000..3d8a5f553
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/trace-coverage-output.txt
+@@ -0,0 +1,78 @@
++commit 28aa77b29
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 46.05s
++     Running tests/coverage.rs (target/release/deps/coverage-dd21fc78c4c21ccb)
++
++running 21 tests
++test a_class_directive_is_admitted_without_panicking ... ok
++test owners::out_of_scope_set_matches_the_committed_expectation ... ok
++test owners::assert_owner_strings_are_split_table_phases ... ok
++test phase_5d_subset_matches_the_committed_list ... ok
++test owners::only_backslash_is_unreachable ... ok
++test the_builtin_exclusion_set_matches_the_committed_file ... ok
++test phase_4a_subset_matches_the_committed_list ... ok
++test phase_5c_subset_matches_the_committed_list ... ok
++test an_unadmitted_directive_still_panics - should panic ... ok
++test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
++test read_subset_unions_two_files_first_seen_order_deduplicated ... ok
++test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
++test owners::variant_counts_match_the_audited_split ... ok
++test every_directive_keyword_is_correctly_admitted_or_refused ... ok
++test phase_4c_subset_matches_the_committed_list ... ok
++test phase_5b_subset_matches_the_committed_list ... ok
++test the_union_reads_every_phase_subset_file ... ok
++test phase_4b_subset_matches_the_committed_list ... ok
++test owners::the_two_harnesses_include_this_exact_file ... ok
++test phase_5a_subset_matches_the_committed_list ... ok
++test every_in_scope_variant_is_witnessed_by_the_phase_subsets ... ok
++
++test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
++
++     Running tests/trace_oracle.rs (target/release/deps/trace_oracle-79e3a023695b7b74)
++
++running 41 tests
++test every_trace_prefix_the_oracle_emits_has_a_witness ... ok
++test every_witness_still_emits_every_prefix_it_is_named_for ... ok
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test the_prefix_table_reads_every_phase_subset_file ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
++test controlled_loop_covers_the_control_variables_own_value_lines ... ok
++test call_arguments_covers_the_argument_prefix_at_every_position_shape ... ok
++test parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement ... ok
++test function_call_covers_the_function_prefix_after_the_callees_own_lines ... ok
++test prefix_operators_covers_plus_and_backslash ... ok
++test use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate ... ok
++test keyword_while_covers_a_re_evaluated_keyword_across_every_pass ... ok
++test compound_read_write_covers_the_resolved_compound_name ... ok
++test trace_output_covers_clause_result_assignment_literal_variable_and_operator ... ok
++test control_variable_reread_covers_a_body_that_writes_the_control_variable ... ok
++test message_send_covers_the_message_result_line ... ok
++test pull_queue_covers_the_line_reading_sources_in_both_modes ... ok
++test namespace_lookup_covers_the_class_resolution_line ... ok
++test control_variable_novalue_covers_a_dropped_control_variable_under_a_trap ... ok
++test exit_value_covers_the_exit_instructions_own_result_line ... ok
++test trace_labels_covers_the_labels_only_mode ... ok
++test dotvariable_beyond_the_list_covers_the_spec_correction ... ok
++test every_live_witness_emits_its_prefix_and_is_run_by_the_corpus ... ok
++
++test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
++
++exit 0, wall 46 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-3/verdicts.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-3/verdicts.tsv
+new file mode 100644
+index 000000000..edca6f100
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-3/verdicts.tsv
+@@ -0,0 +1,7 @@
++# ootest revision 13178
++group	verdict	crate	oracle denominator
++base/rexxutil/SysDumpVariables	green		equal
++base/rexxutil/SysStemCopy	green		equal
++base/rexxutil/SysStemDelete	green		equal
++base/rexxutil/SysStemInsert	green		equal
++base/rexxutil/SysStemSort	green		equal
+diff --git a/rust/corpus/lang/rexxutil_dump_variables.rex b/rust/corpus/lang/rexxutil_dump_variables.rex
+new file mode 100644
+index 000000000..b3bb2b02f
+--- /dev/null
++++ b/rust/corpus/lang/rexxutil_dump_variables.rex
+@@ -0,0 +1,85 @@
++/* SysDumpVariables: the caller's variables, a stem's own value and its tails,
++   object values, dropped variables and tails, a method's variables, the file
++   form appending, and the errors. The oracle lists the variables in hash
++   order, so the file form's lines are sorted before they are shown. The
++   stdout form is only used where it prints one line or none. */
++f = 'dumpvariables.out'
++call SysFileDelete f
++call one
++call none
++say 'none:' result
++call several f
++call show f
++call several f
++call several f
++call show f
++.k~new~m(f)
++call show f
++call t "call SysDumpVariables 1, 2"
++call t "call SysDumpVariables .nil"
++call t "call SysDumpVariables ''"
++call t "call SysDumpVariables '/nonexistent-dir/x'"
++call t "r = SysDumpVariables('" || f || "'); say 'returned' r"
++call SysFileDelete f
++call SysDumpVariables '/nonexistent-dir/x'
++exit
++
++one: procedure
++  only = 'it''s'
++  call SysDumpVariables
++  return
++
++none: procedure
++  call SysDumpVariables
++  return result
++
++several: procedure
++  parse arg f
++  x = 'one'
++  n = 12
++  empty = ''
++  s. = 'def'
++  s.1 = 'a'
++  s.k = .array~of('p', 'q')
++  s.2 = 'gone'; drop s.2
++  t.1 = 't1'
++  t.two.three = 'deep'
++  gone = 1; drop gone
++  o = .object~new
++  call SysDumpVariables f
++  return
++
++show: procedure
++  parse arg f
++  text = charin(f, 1, chars(f))
++  call stream f, 'c', 'close'
++  lines = .array~new
++  do while text \== ''
++    parse var text line '0a'x text
++    lines~append(changestr('0d'x, line, '<CR>'))
++  end
++  say lines~items 'lines'
++  do line over lines~sort
++    say '  ' line
++  end
++  call SysFileDelete f
++  return
++
++t: procedure
++  parse arg code
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message
++  return
++
++::class k
++::method m
++  expose ivar
++  parse arg f
++  ivar = 'iv'
++  local = 'lv'
++  call SysDumpVariables f
+diff --git a/rust/corpus/lang/rexxutil_stem_copy.rex b/rust/corpus/lang/rexxutil_stem_copy.rex
+new file mode 100644
+index 000000000..72adefd8b
+--- /dev/null
++++ b/rust/corpus/lang/rexxutil_stem_copy.rex
+@@ -0,0 +1,86 @@
++/* SysStemCopy: overlay and insert, the from, to and count arguments, the stem
++   shapes that are not plain arrays on either side, a stem copied onto itself,
++   and every error the routine raises. */
++abc = "a.0 = 3; a.1 = 'a'; a.2 = 'b'; a.3 = 'c'"
++def = "b.0 = 3; b.1 = 'd'; b.2 = 'e'; b.3 = 'f'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.'"
++call t abc"; "def, "call SysStemCopy a., b., , 2"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 4"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, 2, 1"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, , 0"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 3"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 5"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , 'Overlay'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , 'i'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 2, , 'Insert'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, 4, 2, 'I'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, 2, 0, 'I'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 3, 1, , 'I'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 5, 1, , 'I'"
++call t abc, "call SysStemCopy 'a.', 'b.'"
++call t abc, "call SysStemCopy 'a', 'b', , , , 'I'"
++call t abc, "call SysStemCopy 'a.', 'a.', , 2, , 'I'"
++call t abc, "call SysStemCopy 'a.', 'a.', 2, 1"
++call t abc"; b. = 'z'", "call SysStemCopy 'a.', 'b.', , 1, 2"
++call t abc"; b. = 'z'; b.0 = 1", "call SysStemCopy 'a.', 'b.', , 2, , 'I'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'; b.0 = '1E0'; b.1 = 'r'", "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.1.5 = 's'; a.3 = 'o'", "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 2; a.1 = .array~of('z', 'y'); a.2 = 'p'", "call SysStemCopy 'a.', 'b.'; say (a.1 == b.1) b.1~class~id"
++call t "a.0 = -1;"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 0;"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 1; a.1 = 'q'; b.0 = -1", "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 1; a.1 = 'q'; b.0 = -2", "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t abc"; "def, "r = SysStemCopy('a.', 'b.'); say 'returned' r"
++-- errors
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , 'Q'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , ''"
++call t abc"; "def, "call SysStemCopy 'a.', '*'"
++call t abc"; "def, "call SysStemCopy 'a.b', 'b.'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 0"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 'x'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , -1"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , 'y'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 1, 1, 1, 'O', 1"
++call t abc"; "def, "call SysStemCopy 'a.'"
++call t abc"; "def, "call SysStemCopy , 'b.'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , .nil"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 5"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, , 3"
++call t "a.0 = 0;"def, "call SysStemCopy 'a.', 'b.', , , 0"
++call t "a. = 'd';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = ''; a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++call t abc"; b.0 = 'x'; b.1 = 'q'", "call SysStemCopy 'a.', 'b.'"
++call t abc"; b.0 = 1.5", "call SysStemCopy 'a.', 'b.'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p';"def, "call SysStemCopy 'a.', 'b.', 2"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t abc"; "def"; drop b.2", "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t abc"; b. = 'z'; b.0 = 2; b.1 = 'y'", "call SysStemCopy 'a.', 'b.', , 1, , 'I'"
++call t "a.0 = 1234567890; a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++a.0 = 1; a.1 = 'q'
++call SysStemCopy 'a.', 'b.', 'x'
++exit
++
++t: procedure
++  parse arg setup, code
++  interpret setup
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code '|' show()
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message '|' show()
++  return
++
++show: procedure expose a. b.
++  o = ''
++  do i = 0 to 4; o = o a.i; end
++  o = o '/'
++  do i = 0 to 7; o = o b.i; end
++  return o
+diff --git a/rust/corpus/lang/rexxutil_stem_delete_insert.rex b/rust/corpus/lang/rexxutil_stem_delete_insert.rex
+new file mode 100644
+index 000000000..96396bdc2
+--- /dev/null
++++ b/rust/corpus/lang/rexxutil_stem_delete_insert.rex
+@@ -0,0 +1,87 @@
++/* SysStemDelete and SysStemInsert: the position and count arguments, the stem
++   shapes that are not plain arrays, the partial work a missing element leaves
++   behind, and every error the two routines raise. */
++abc = "a.0 = 3; a.1 = 'a'; a.2 = 'b'; a.3 = 'c'"
++call t abc, "call SysStemDelete 'a.', 1"
++call t abc, "call SysStemDelete a., 2"
++call t abc, "call SysStemDelete 'a', 3"
++call t abc, "call SysStemDelete 'a.', 1, 2"
++call t abc, "call SysStemDelete 'a.', 2, 2"
++call t abc, "call SysStemDelete 'a.', 1, 3"
++call t abc"; a. = 'z'; a.0 = 2; a.1 = 'a'; a.2 = 'b'", "call SysStemDelete 'a.', 1"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 2"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.3 = 'o'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 0", "call SysStemDelete 'a.', 1, 0"
++call t abc, "r = SysStemDelete('a.', 1); say 'returned' r"
++call t abc, "call SysStemInsert 'a.', 1, 'n'"
++call t abc, "call SysStemInsert a., 2, 'n'"
++call t abc, "call SysStemInsert 'a', 4, 'n'"
++call t abc, "call SysStemInsert 'a.', 3, .array~of(1, 2); say a.3~class~id"
++call t "a.0 = 0", "call SysStemInsert 'a.', 1, 'n'"
++call t "a. = 'z'; a.0 = 2; a.1 = 'a'; a.2 = 'b'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 3, 'n'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.3 = 'o'", "call SysStemInsert 'a.', 3, 'n'"
++call t "a.0 = -1", "call SysStemInsert 'a.', 1, 'n'"
++call t abc, "r = SysStemInsert('a.', 1, 'n'); say 'returned' r"
++-- errors
++call t abc, "call SysStemDelete"
++call t abc, "call SysStemDelete 'a.'"
++call t abc, "call SysStemDelete 'a.', 0"
++call t abc, "call SysStemDelete 'a.', 'q'"
++call t abc, "call SysStemDelete 'a.', 1, 0"
++call t abc, "call SysStemDelete 'a.', 1.5"
++call t abc, "call SysStemDelete 'a.', 1, 1, 1"
++call t abc, "call SysStemDelete '*', 1"
++call t abc, "call SysStemDelete 'a.b', 1"
++call t abc, "call SysStemDelete 'zz', 1"
++call t abc, "call SysStemDelete 'a.', 4"
++call t abc, "call SysStemDelete 'a.', 2, 3"
++call t "a. = 'd'", "call SysStemDelete 'a.', 1"
++call t "a.1 = 'q'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 'x'; a.1 = 'q'", "call SysStemDelete 'a.', 1"
++call t "a.0 = -1", "call SysStemDelete 'a.', 1"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemDelete 'a.', 1"
++call t abc"; drop a.3", "call SysStemDelete 'a.', 1"
++call t abc, "call SysStemInsert"
++call t abc, "call SysStemInsert 'a.', 1"
++call t abc, "call SysStemInsert 'a.', , 'n'"
++call t abc, "call SysStemInsert 'a.', 0, 'n'"
++call t abc, "call SysStemInsert 'a.', 1, 'n', 'm'"
++call t abc, "call SysStemInsert '*', 1, 'n'"
++call t abc, "call SysStemInsert 'a.', 5, 'n'"
++call t "a. = 'd'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 'x'; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 1234567890; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
++a.0 = 1; a.1 = 'q'
++call SysStemInsert 'a.', 1, 'n'
++say a.0 a.1 a.2
++call SysStemDelete 'a.', 3
++exit
++
++t: procedure
++  parse arg setup, code
++  interpret setup
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code '|' show()
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message '|' show()
++  return
++
++show: procedure expose a.
++  o = ''
++  do i = 0 to 5; o = o a.i; end
++  return o
+diff --git a/rust/corpus/lang/rexxutil_stem_sort.rex b/rust/corpus/lang/rexxutil_stem_sort.rex
+new file mode 100644
+index 000000000..7fb697f4f
+--- /dev/null
++++ b/rust/corpus/lang/rexxutil_stem_sort.rex
+@@ -0,0 +1,99 @@
++/* SysStemSort: order, type, the element and column ranges, the stem forms the
++   first argument takes, the stem shapes that are not plain arrays, and every
++   error the routine raises. A raise from inside the sort itself is trapped
++   in each case: untrapped it crashes the oracle (oracle-crashes.txt entry 37). */
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort 'a.'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort a., 'Descending'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort 'a'"
++call t "a.0 = 4; a.1 = 'b'; a.2 = 'C'; a.3 = 'a'; a.4 = 'D'", "call SysStemSort 'a.', 'A', 'C'"
++call t "a.0 = 4; a.1 = 'b'; a.2 = 'C'; a.3 = 'a'; a.4 = 'D'", "call SysStemSort 'a.', 'a', 'Ignore'"
++call t "a.0 = 4; a.1 = 'b'; a.2 = 'C'; a.3 = 'a'; a.4 = 'D'", "call SysStemSort 'a.', 'd', 'i'"
++call t "a.0 = 4; a.1 = 'x1'; a.2 = 'X2'; a.3 = 'x3'; a.4 = 'X0'", "call SysStemSort 'a.', , 'I', , , 1, 1"
++call t "a.0 = 4; a.1 = 'x1'; a.2 = 'X2'; a.3 = 'x3'; a.4 = 'X0'", "call SysStemSort 'a.', 'D', 'I', , , 1, 1"
++call t "a.0 = 5; a.1 = 'e'; a.2 = 'd'; a.3 = 'c'; a.4 = 'b'; a.5 = 'a'", "call SysStemSort 'a.', , , 2, 4"
++call t "a.0 = 5; a.1 = 'e'; a.2 = 'd'; a.3 = 'c'; a.4 = 'b'; a.5 = 'a'", "call SysStemSort 'a.', , , 3"
++call t "a.0 = 5; a.1 = 'e'; a.2 = 'd'; a.3 = 'c'; a.4 = 'b'; a.5 = 'a'", "call SysStemSort 'a.', , , , 2"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort 'a.', , , 1, 999999999999999999"
++call t "a.0 = 4; a.1 = 'zb'; a.2 = 'ya'; a.3 = 'x'; a.4 = 'yab'", "call SysStemSort 'a.', , , , , 2"
++call t "a.0 = 4; a.1 = 'zb'; a.2 = 'ya'; a.3 = 'x'; a.4 = 'yab'", "call SysStemSort 'a.', , , , , 2, 2"
++call t "a.0 = 4; a.1 = 'zb'; a.2 = 'ya'; a.3 = 'x'; a.4 = 'yab'", "call SysStemSort 'a.', , , , , 5"
++call t "a.0 = 4; a.1 = 'abc'; a.2 = 'ab'; a.3 = 'abd'; a.4 = 'a'", "call SysStemSort 'a.', , , , , 1, 2"
++call t "a.0 = 4; a.1 = 'abc'; a.2 = 'ab'; a.3 = 'abd'; a.4 = 'a'", "call SysStemSort 'a.', 'D', 'I', , , 2, 3"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'é'; a.3 = 'A'", "call SysStemSort 'a.'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'é'; a.3 = 'A'", "call SysStemSort 'a.', , 'I'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = '_'; a.3 = 'A'", "call SysStemSort 'a.', , 'I'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = '_'; a.3 = 'A'", "call SysStemSort 'a.', , 'I', , , 1, 1"
++call t "a.0 = 3; a.1 = 'a'||'00'x; a.2 = 'a'; a.3 = 'a'||'01'x", "call SysStemSort 'a.', , , , , 1, 3"
++call t "a.0 = 2; a.1 = 'a'||'00'x; a.2 = 'a'", "call SysStemSort 'a.', , , , , 1, 2"
++call t "a.0 = 2; a.1 = 'a'; a.2 = 'aé'", "call SysStemSort 'a.', , 'I', , , 1, 5"
++call t "a.0 = 2; a.1 = 'a'; a.2 = 'aé'", "call SysStemSort 'a.', , 'I'"
++call t "a.0 = 12; do i = 1 to 12; a.i = (i * 7) // 12; end", "call SysStemSort 'a.'"
++call t "a.0 = 10; do i = 1 to 10; a.i = word('k j i h g f e d c b', i); end", "call SysStemSort 'a.', 'D'"
++call t "a.0 = 9; do i = 1 to 9; a.i = word('B a A b C c a B A', i) || i; end", "call SysStemSort 'a.', , 'I', , , 1, 1"
++call t "a.0 = 0", "call SysStemSort 'a.'"
++call t "a.0 = 1; a.1 = 'only'", "call SysStemSort 'a.'"
++call t "f = 1; a.foo.0 = 3; a.foo.1 = 'b'; a.foo.2 = 'c'; a.foo.3 = 'a'", "call SysStemSort 'a.foo'"
++call t "f = 1; a.foo.0 = 3; a.foo.1 = 'b'; a.foo.2 = 'c'; a.foo.3 = 'a'", "call SysStemSort 'a.foo.'"
++call t "f = 1; a.FOO.0 = 2; a.FOO.1 = 'b'; a.FOO.2 = 'a'; a.foo.1 = 'x'", "call SysStemSort 'a.Foo'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.1.5 = 's'; a.3 = 'o'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = .array~of('z', 'y'); a.2 = 'p'", "call SysStemSort 'a.'; say a.1~class~id a.2~class~id"
++call t "a.0 = 3; a.1 = 10; a.2 = 9; a.3 = 100", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "r = SysStemSort('a.'); say 'returned' r"
++-- the routine's own argument errors
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort '*'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort '1.x'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'Q'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', ''"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'D', 'N'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'Q', 'N'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 2, 1"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , , 3, 2"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 0"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , 'x'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , 1000000000000000000"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , , , -1"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'A', 'C', 1, 2, 1, 2, 'x'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort"
++-- raised from inside the sort: the count, the range and a missing element
++call t "a. = 'd'", "call SysStemSort 'a.'"
++call t "a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = 'x'; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = ''; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = -1", "call SysStemSort 'a.'"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = 1234567890; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 3"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 1, 3"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; drop a.2", "call SysStemSort 'a.'"
++-- an error the routine raises before it sorts, untrapped
++a.0 = 1; a.1 = 'q'
++call SysStemSort 'a.', 'X'
++exit
++
++t: procedure
++  parse arg setup, code
++  f = 0
++  interpret setup
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code '|' show()
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message '|' show()
++  return
++
++show: procedure expose a. f
++  if datatype(a.0, 'W') & a.0 >= 0 & a.0 < 20 then n = a.0
++  else n = 3
++  o = a.0 ':'
++  do i = 1 to n; o = o a.i; end
++  if f then do i = 1 to a.FOO.0; o = o a.FOO.i; end
++  return o
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index 80b4d672f..eea40a5c9 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1305,10 +1305,34 @@ answer to `SupplierClass *` and calls its methods directly. Measured 2026-10-12
+ not a supplier`). No upstream ticket.
+ 
+ ## 36. A `TRACE` write to the REXX package's settings
+ 
+     say .object~package~options('T', 'r')
+ 
+ SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper, nothing on stdout or stderr. The read
+ `.object~package~options('T')` answers `?n/a?` and a `DIGITS` write to the same package answers,
+ so it is the trace write that crashes. Measured 2026-10-12 by Phase 9a Task 7 (probe `t7-crash`).
+ This crate stores the setting and answers `?n/a?`. Cause not read. No upstream ticket.
++
++## 37. An untrapped error raised from inside `SysStemSort`'s sort
++
++    call SysStemSort "s."
++
++SIGSEGV, rc 139, deterministic: upstream **SF #2068**, reduced to this line on 2026-07-25 (project
++memory), not re-run since. Any error `StemClass::sort` (`classes/StemClass.cpp:1605`) raises
++itself crashes the same way when nothing traps it: an element 0 that is not a count (40.922, the
++line above), a first or last element past it (40.923), and a missing element (40.924). Measured
++2026-10-13 by Phase 9b Task 3, 3 runs of 3 each under the standard wrapper, stdout `go` and nothing
++on stderr:
++
++    say 'go'
++    a.0 = 2; a.1 = 'q'
++    call SysStemSort 'a.'
++
++    say 'go'
++    a.0 = 2; a.1 = 'q'; a.2 = 'p'
++    call SysStemSort 'a.', , , 3
++
++The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTest's `SysStemSort`
++group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
++it sorts (40.919, 40.920, 40.921) is reported untrapped as usual. This crate raises each of the
++three as the trapped oracle does.
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 66a62b148..c9aaaa814 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -54,10 +54,16 @@ lang/package_local_find_class.rex
+ lang/executable_subclass_copy_annotations.rex
+ lang/package_local_symbol_writes.rex
+ 
+ # 9b Task 1: the package local miss memo answering a repeated miss, and a
+ # native method's class search raising its package local's UNKNOWN condition.
+ lang/package_local_miss_repeat.rex
+ lang/package_local_class_search_raise.rex
+ 
+ # 9b Task 1 fix round 1: a native FindClass of STDQUE answers no class.
+ lang/native_find_class_stdque.rex
++
++# 9b Task 3: the RexxUtil stem routines and SysDumpVariables.
++lang/rexxutil_stem_sort.rex
++lang/rexxutil_stem_copy.rex
++lang/rexxutil_stem_delete_insert.rex
++lang/rexxutil_dump_variables.rex
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index 69e569f7c..9c4cafc94 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -78,181 +78,183 @@ Raised	argument_needs_a_string_value	body+send	crates/rexx-exec/src/error.rs:133
+ Raised	argument_not_a_class	send	crates/rexx-exec/src/error.rs:1239	agrees	yes	88.914	o~isA(5)
+ Raised	argument_not_a_pad	body	crates/rexx-exec/src/error.rs:658	off-send-surface	-	-	-
+ Raised	argument_not_a_pad_or_class_name	body	crates/rexx-exec/src/error.rs:937	off-send-surface	-	-	-
+ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:679	off-send-surface	-	-	-
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1250	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1105	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:735	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:908	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1021	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:694	off-send-surface	-	-	-
+-Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1827	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
++Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1896	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:643	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:720	off-send-surface	-	-	-
++Raised	arguments_out_of_order	body	crates/rexx-exec/src/error.rs:1518	off-send-surface	-	-	-
+ Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:641	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1211	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:559	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:432	agrees	yes	99.927	.Object~subclass('K', 5)
+ Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:471	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:982	off-send-surface	-	-	-
+ Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:845	off-send-surface	-	-	-
+ Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:769	off-send-surface	-	-	-
+ Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:778	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:565	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1183	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1189	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:572	off-send-surface	-	-	-
+-Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1556	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
++Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1625	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+ Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:853	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:522	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+ Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:736	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+-Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1517	agrees	yes	93.970	.K~copy
++Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1586	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:534	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:971	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:964	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:822	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:772	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+ Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:650	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+ Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:620	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+-Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1821	off-send-surface	-	-	-
++Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1890	off-send-surface	-	-	-
+ Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:609	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
+-Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1597	off-send-surface	-	-	-
++Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1666	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:409	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:552	off-send-surface	-	-	-
+-Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1804	off-send-surface	-	-	-
+-Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1762	off-send-surface	-	-	-
++Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1873	off-send-surface	-	-	-
++Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1831	off-send-surface	-	-	-
+ Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:718	off-send-surface	-	-	-
+ Loud	expression	body	crates/rexx-exec/src/lib.rs:463	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+-Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1603	off-send-surface	-	-	-
++Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1672	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:858	off-send-surface	-	-	-
+-Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1783	off-send-surface	-	-	-
+-Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1777	off-send-surface	-	-	-
+-Raised	from	body	crates/rexx-exec/src/error.rs:1869	off-send-surface	-	-	-
+-Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1767	off-send-surface	-	-	-
++Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1852	off-send-surface	-	-	-
++Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1846	off-send-surface	-	-	-
++Raised	from	body	crates/rexx-exec/src/error.rs:1938	off-send-surface	-	-	-
++Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1836	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+ Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:889	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1161	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:897	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1150	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1177	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:490	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:483	agrees	yes	98.942	.K~inherit(.Array)
+ Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:410	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+ Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:497	off-send-surface	-	-	-
+-Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1714	agrees	yes	93.962	'YW==YWJj'~decodeBase64
++Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1783	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:828	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:1000	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1010	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:920	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:887	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
++Raised	invalid_routine_option	body	crates/rexx-exec/src/error.rs:1499	off-send-surface	-	-	-
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:809	off-send-surface	-	-	-
+ Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:877	off-send-surface	-	-	-
+ Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:795	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:593	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:955	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+ Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:674	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+ Loud	library_source	body	crates/rexx-exec/src/lib.rs:697	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+ Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:819	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:477	off-send-surface	-	-	-
+-Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1530	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+-Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1523	agrees	yes	93.972	o~sendWith(o, (1))
++Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1599	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
++Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1592	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:517	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+ Loud	metaclass_new_reused_class	send	crates/rexx-exec/src/lib.rs:532	recorded	yes	a metaclass NEW answering a class	say 'id' .object~subclass("k", .MyMeta)~id over ::CLASS MyMeta SUBCLASS Class / ::METHOD new CLASS / return .array (Phase 9a Task 8b review probe metaarr): the oracle id Array, recorded as Deviation 32
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:426	off-send-surface	-	-	-
+-Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1692	off-send-surface	-	-	-
++Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1761	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1262	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1217	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1129	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+-Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1511	agrees	yes	93.915	(1,2)~makeString('X')
++Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1580	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1079	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+-Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1703	agrees	yes	93.943	'abc'~sign
+-Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1708	agrees	yes	93.940	'1.5'~modulo(3)
++Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1772	agrees	yes	93.943	'abc'~sign
++Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1777	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	body+send	crates/rexx-exec/src/error.rs:1118	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:989	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:627	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1067	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1166	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+ Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:761	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1057	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1276	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+-Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1497	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+-Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1490	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+-Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1504	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+-Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1483	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
++Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1566	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
++Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1559	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
++Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1573	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
++Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1552	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+ Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:506	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1341	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1351	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1289	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1449	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+-Raised	native_argument_not_a_stem	send	crates/rexx-exec/src/error.rs:1467	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
++Raised	native_argument_not_a_stem	body+send	crates/rexx-exec/src/error.rs:1467	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	send	crates/rexx-exec/src/error.rs:1426	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1416	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+-Raised	native_argument_not_nonnegative	send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+-Raised	native_argument_not_positive	send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
++Raised	native_argument_not_nonnegative	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
++Raised	native_argument_not_positive	body+send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1293	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1314	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1392	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+ Loud	native_method	send	crates/rexx-exec/src/lib.rs:629	diverges	yes	of class	m~dimensions, .object~package~copy, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+-Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1537	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
++Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1606	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1194	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+-Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1633	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+-Raised	nomethod	send	crates/rexx-exec/src/error.rs:1567	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
++Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1702	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
++Raised	nomethod	send	crates/rexx-exec/src/error.rs:1636	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+-Raised	nostring	send	crates/rexx-exec/src/error.rs:1578	agrees	yes	NOSTRING	substr('abcdef', o)
+-Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1587	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
++Raised	nostring	send	crates/rexx-exec/src/error.rs:1647	agrees	yes	NOSTRING	substr('abcdef', o)
++Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1656	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+-Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1747	off-send-surface	-	-	-
+-Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1737	off-send-surface	-	-	-
++Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1816	off-send-surface	-	-	-
++Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1806	off-send-surface	-	-	-
+ Raised	not_a_valid_class	body	crates/rexx-exec/src/error.rs:420	off-send-surface	-	-	-
+-Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1721	off-send-surface	-	-	-
++Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1790	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:606	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1144	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1204	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:504	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:447	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+-Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1620	off-send-surface	-	-	-
++Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1689	off-send-surface	-	-	-
+ Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:726	off-send-surface	-	-	-
+ Loud	object_method	send	crates/rexx-exec/src/lib.rs:688	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+ Loud	object_name_of_a_value	send	crates/rexx-exec/src/lib.rs:545	recorded	yes	OBJECTNAME= on a string	longs = 'a longer string than seven' / longs~objectName = 'long' (Phase 9a Task 8b probe objname4), recorded as Deviation 31
+-Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1834	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
++Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1903	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+ Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:787	off-send-surface	-	-	-
+ Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:594	off-send-surface	-	-	-
+-Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1549	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
++Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1618	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+ Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:753	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+-Raised	private_method	send	crates/rexx-exec/src/error.rs:1543	agrees	yes	97.2	.K~new~p over ::method p private
++Raised	private_method	send	crates/rexx-exec/src/error.rs:1612	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:599	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:776	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+ Raised	raised_from_settings	body	crates/rexx-exec/src/run/raised.rs:159	off-send-surface	-	-	-
+ Raised	raised_guard_not_logical	body	crates/rexx-exec/src/run/raised.rs:47	off-send-surface	-	-	-
+@@ -271,65 +273,70 @@ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-sen
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1048	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+ Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:522	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:497	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+ Loud	redirection	body	crates/rexx-exec/src/lib.rs:583	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:782	off-send-surface	-	-	-
+-Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1610	off-send-surface	-	-	-
++Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1679	off-send-surface	-	-	-
+ Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:803	off-send-surface	-	-	-
+-Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1772	off-send-surface	-	-	-
+-Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1794	off-send-surface	-	-	-
++Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1841	off-send-surface	-	-	-
++Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1863	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:541	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:462	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+-Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1799	off-send-surface	-	-	-
++Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1868	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:511	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:528	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
++Raised	routine_failed	body	crates/rexx-exec/src/error.rs:1484	off-send-surface	-	-	-
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+ Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:869	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1227	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1233	agrees	yes	93.957	o~m:.Array
+ Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:811	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:834	off-send-surface	-	-	-
+ Loud	setup_method	send	crates/rexx-exec/src/lib.rs:707	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+ Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:828	off-send-surface	-	-	-
+ Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1383	off-send-surface	-	-	-
+ Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1394	off-send-surface	-	-	-
+ Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1420	off-send-surface	-	-	-
+ Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1372	off-send-surface	-	-	-
+ Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1410	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1172	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1085	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:709	off-send-surface	-	-	-
+ Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:745	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Raised	stem_argument_unresolved	body	crates/rexx-exec/src/error.rs:1490	off-send-surface	-	-	-
++Raised	stem_count_invalid	body	crates/rexx-exec/src/error.rs:1537	off-send-surface	-	-	-
++Raised	stem_element_unset	body	crates/rexx-exec/src/error.rs:1547	off-send-surface	-	-	-
++Raised	stem_range	body	crates/rexx-exec/src/error.rs:1542	off-send-surface	-	-	-
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:793	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:788	off-send-surface	-	-	-
+ Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:837	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:760	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:765	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:771	off-send-surface	-	-	-
+ Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:556	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+-Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1789	off-send-surface	-	-	-
++Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1858	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:931	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:616	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1099	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1199	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1074	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+-Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1627	off-send-surface	-	-	-
++Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1696	off-send-surface	-	-	-
+ Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:573	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+ Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:665	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+ Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:480	off-send-surface	-	-	-
+ Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:861	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1156	agrees	yes	93.967	.Pointer~new
+-Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1816	off-send-surface	-	-	-
+-Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1810	off-send-surface	-	-	-
+-Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1757	off-send-surface	-	-	-
+-Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1731	off-send-surface	-	-	-
++Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1885	off-send-surface	-	-	-
++Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1879	off-send-surface	-	-	-
++Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1826	off-send-surface	-	-	-
++Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1800	off-send-surface	-	-	-
+ Raised	whole_number_user_defined	send	crates/rexx-exec/src/error.rs:1124	agrees	yes	26.900	.context~package~options('FUZZ', 9) at DIGITS 9 (lang/package_option_writes.rex)
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:977	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil.rs b/rust/crates/rexx-exec/src/builtin/rexxutil.rs
+index 7cfba2b58..fc8515ce4 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil.rs
+@@ -2,24 +2,26 @@
+ /*                                                                            */
+ /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+-//! The `REXXUTIL` package's file-system, sleep, semaphore and version routines --
++//! The `REXXUTIL` package's file-system, sleep, semaphore, stem and version routines --
+ //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
+ //! `RexxUtilCommon.cpp`.
+ 
++pub(crate) mod stems;
++
+ use rexx_core::{Decoded, ObjRef};
+ use rexx_num::{DIGITS64, Number};
+ 
+ use crate::error::Raised;
+ use crate::scheduler::ParkReason;
+ use crate::semaphores::{SEM_POLL, SemaphoreKey, SemaphoreWait, WaitKind};
+ use crate::{Failure, Interp, Loud};
+ 
+ /// The one path argument these routines take, resolved against the
+ /// interpreter's own directory rather than the process's.
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
+new file mode 100644
+index 000000000..43d8e25e7
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs
+@@ -0,0 +1,817 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The `REXXUTIL` routines over stem arrays and the caller's variables:
++//! `interpreter/runtime/RexxUtilCommon.cpp` and `StemClass::sort`.
++
++use std::cmp::Ordering;
++
++use rexx_core::{Decoded, ObjRef};
++use rexx_num::{DIGITS64, Number};
++
++use super::answer;
++use crate::error::Raised;
++use crate::{Failure, Interp};
++
++/// `Numerics::MAX_WHOLENUMBER`, the top of a native whole-number argument.
++const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
++
++/// `Numerics::ARGUMENT_DIGITS`, the precision `WholeNumber` converts under.
++const ARGUMENT_DIGITS: usize = 18;
++
++/// The largest count `StemClass::sort` reads from element 0: an unsigned
++/// value at the default nine digits (`Numerics::maxValueForDigits(9)`).
++const SORT_COUNT_MAXIMUM: u64 = 999_999_999;
++
++/// A raise the argument marshalling makes, which the oracle reports against
++/// the package with no line.
++fn marshalled(mut raised: Raised) -> Failure {
++    raised.delivery.lineless = true;
++    raised.delivery.internal_package = true;
++    raised.into()
++}
++
++/// 88.922 where more than `arity` arguments were passed.
++fn check_arity(args: &[Option<ObjRef>], arity: usize) -> Result<(), Failure> {
++    if args.len() > arity {
++        return Err(Raised::too_many_internal_arguments(arity).into());
++    }
++    Ok(())
++}
++
++/// The argument at `position`, 88.901 where it is omitted.
++fn required(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure> {
++    args.get(position - 1)
++        .copied()
++        .flatten()
++        .ok_or_else(|| Raised::missing_internal_argument(&position.to_string()).into())
++}
++
++/// A `RexxStemObject` argument: a stem itself, or a string naming a stem
++/// variable of the caller's.
++fn stem_argument(
++    interp: &mut Interp,
++    args: &[Option<ObjRef>],
++    position: usize,
++) -> Result<ObjRef, Failure> {
++    let value = required(args, position)?;
++    if interp.is_stem_object(value) {
++        return Ok(value);
++    }
++    let text = interp.required_string_or_nil(value)?;
++    if text != ObjRef::NIL {
++        let name = interp.to_text(text).into_owned();
++        if let Some(stem) = interp.context_stem_named(&name) {
++            return Ok(stem);
++        }
++    }
++    let found = interp.string_value_text(value);
++    Err(marshalled(Raised::native_argument_not_a_stem(
++        false, position, &found,
++    )))
++}
++
++/// An `OPTIONAL_CSTRING` argument's bytes, 88.909 where it has no string
++/// value: `requiredString`, with no `STRING` fallback.
++fn optional_text(
++    interp: &mut Interp,
++    args: &[Option<ObjRef>],
++    position: usize,
++) -> Result<Option<Vec<u8>>, Failure> {
++    let Some(value) = args.get(position - 1).copied().flatten() else {
++        return Ok(None);
++    };
++    let Some(text) = interp.string_conversion(value)? else {
++        return Err(marshalled(Raised::argument_needs_a_string_value(position)));
++    };
++    Ok(Some(interp.to_text(text).into_owned()))
++}
++
++/// A whole number from `minimum` to [`MAX_WHOLENUMBER`], as
++/// `objectToSignedInteger` converts a native argument.
++fn whole_value(interp: &mut Interp, value: ObjRef, minimum: i64) -> Result<Option<i64>, Failure> {
++    let number = match value.decode() {
++        Decoded::SmallInt(number) => Some(number),
++        _ => {
++            let text = interp.required_string_or_nil(value)?;
++            Number::parse_bytes(&interp.to_text(text))
++                .and_then(|number| number.int64_value(DIGITS64))
++        }
++    };
++    Ok(number.filter(|number| (minimum..=MAX_WHOLENUMBER).contains(number)))
++}
++
++/// An `OPTIONAL_positive_wholenumber_t` argument: 88.905 where it is not
++/// a whole number from one up.
++fn optional_positive(
++    interp: &mut Interp,
++    args: &[Option<ObjRef>],
++    position: usize,
++) -> Result<Option<i64>, Failure> {
++    let Some(value) = args.get(position - 1).copied().flatten() else {
++        return Ok(None);
++    };
++    match whole_value(interp, value, 1)? {
++        Some(number) => Ok(Some(number)),
++        None => {
++            let found = interp.string_value_text(value);
++            Err(marshalled(Raised::native_argument_not_positive(
++                position, &found,
++            )))
++        }
++    }
++}
++
++/// [`optional_positive`] for an argument that is required.
++fn positive(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Result<i64, Failure> {
++    required(args, position)?;
++    Ok(optional_positive(interp, args, position)?.expect("the argument is present"))
++}
++
++/// An `OPTIONAL_nonnegative_wholenumber_t` argument: 88.904 where it is not
++/// a whole number from zero up.
++fn optional_nonnegative(
++    interp: &mut Interp,
++    args: &[Option<ObjRef>],
++    position: usize,
++) -> Result<Option<i64>, Failure> {
++    let Some(value) = args.get(position - 1).copied().flatten() else {
++        return Ok(None);
++    };
++    match whole_value(interp, value, 0)? {
++        Some(number) => Ok(Some(number)),
++        None => {
++            let found = interp.string_value_text(value);
++            Err(marshalled(Raised::native_argument_not_nonnegative(
++                position, &found,
++            )))
++        }
++    }
++}
++
++/// The tail `CompoundVariableTail(index)` builds: the number in decimal.
++fn index_tail(index: i64) -> Vec<u8> {
++    index.to_string().into_bytes()
++}
++
++/// `GetStemArrayElement`: the element's own value, `None` where it is unset
++/// or dropped. The stem's default never answers.
++fn element(interp: &Interp, stem: ObjRef, index: i64) -> Option<ObjRef> {
++    interp.stem_object_tail(stem, &index_tail(index))
++}
++
++/// `SetStemArrayElement`.
++fn set_element(interp: &mut Interp, stem: ObjRef, index: i64, value: ObjRef) {
++    interp.stem_object_write(stem, &index_tail(index), value);
++}
++
++/// `SetStemArrayElement` of a whole number.
++fn set_count(interp: &mut Interp, stem: ObjRef, index: i64, count: i64) {
++    let value = answer(interp, count);
++    set_element(interp, stem, index, value);
++}
++
++/// `WholeNumber` over element 0: `None` where it is unset, `Some(None)` where
++/// it is not a whole number.
++fn element_count(interp: &mut Interp, stem: ObjRef) -> Result<Option<Option<i64>>, Failure> {
++    let Some(value) = element(interp, stem, 0) else {
++        return Ok(None);
++    };
++    let number = match value.decode() {
++        Decoded::SmallInt(number) => Some(number),
++        _ => {
++            let text = interp.required_string_or_nil(value)?;
++            Number::parse_bytes(&interp.to_text(text))
++                .and_then(|number| number.int64_value(ARGUMENT_DIGITS))
++        }
++    };
++    Ok(Some(number.filter(|number| {
++        (-MAX_WHOLENUMBER..=MAX_WHOLENUMBER).contains(number)
++    })))
++}
++
++/// Element 0 as a count, 40.922 where it is unset or not a whole number.
++fn required_count(interp: &mut Interp, stem: ObjRef) -> Result<i64, Failure> {
++    element_count(interp, stem)?
++        .flatten()
++        .ok_or_else(|| Raised::stem_count_invalid().into())
++}
++
++/// `SysStemDelete(stem, start [, count])`: removes `count` elements from
++/// `start`, moving the rest down and dropping the vacated tails.
++pub(crate) fn delete(
++    interp: &mut Interp,
++    _name: &'static [u8],
++    args: &[Option<ObjRef>],
++) -> Result<ObjRef, Failure> {
++    check_arity(args, 3)?;
++    let stem = stem_argument(interp, args, 1)?;
++    let start = positive(interp, args, 2)?;
++    let count = optional_positive(interp, args, 3)?.unwrap_or(1);
++    let items = match element_count(interp, stem)?.flatten() {
++        Some(items) if items >= 0 => items,
++        _ => return Err(Raised::stem_count_invalid().into()),
++    };
++    if start + count - 1 > items {
++        return Err(Raised::stem_range(items).into());
++    }
++    let mut index = start;
++    while index + count <= items {
++        let Some(value) = element(interp, stem, index + count) else {
++            return Err(Raised::stem_element_unset(index).into());
++        };
++        set_element(interp, stem, index, value);
++        index += 1;
++    }
++    for index in items - count + 1..=items {
++        interp.stem_drop_element(stem, &index_tail(index));
++    }
++    set_count(interp, stem, 0, items - count);
++    Ok(answer(interp, 0))
++}
++
++/// `SysStemInsert(stem, position, value)`: moves the elements from
++/// `position` up by one and stores `value` there.
++pub(crate) fn insert(
++    interp: &mut Interp,
++    _name: &'static [u8],
++    args: &[Option<ObjRef>],
++) -> Result<ObjRef, Failure> {
++    check_arity(args, 3)?;
++    let stem = stem_argument(interp, args, 1)?;
++    let position = positive(interp, args, 2)?;
++    let value = required(args, 3)?;
++    let count = required_count(interp, stem)?;
++    if position > count + 1 {
++        return Err(Raised::stem_range(count).into());
++    }
++    let mut index = count;
++    while index >= position {
++        let Some(moved) = element(interp, stem, index) else {
++            return Err(Raised::stem_element_unset(index).into());
++        };
++        set_element(interp, stem, index + 1, moved);
++        index -= 1;
++    }
++    set_element(interp, stem, position, value);
++    set_count(interp, stem, 0, count + 1);
++    Ok(answer(interp, 0))
++}
++
++/// `SysStemCopy(from, to [, start [, at [, count [, mode]]]])`: copies
++/// `count` elements of `from` from `start` over `to` from `at`, or inserts
++/// them there under mode `I`.
++///
++/// A missing source element is 40.924 naming its offset into the copy, not
++/// its index, as the oracle passes its loop counter.
++pub(crate) fn copy(
++    interp: &mut Interp,
++    _name: &'static [u8],
++    args: &[Option<ObjRef>],
++) -> Result<ObjRef, Failure> {
++    check_arity(args, 6)?;
++    let from = stem_argument(interp, args, 1)?;
++    let to = stem_argument(interp, args, 2)?;
++    let start = optional_positive(interp, args, 3)?;
++    let at = optional_positive(interp, args, 4)?;
++    let given = optional_nonnegative(interp, args, 5)?;
++    let mode = optional_text(interp, args, 6)?;
++    let inserting = match mode.as_deref() {
++        None => false,
++        Some(mode) => match mode.first().map(u8::to_ascii_uppercase) {
++            Some(b'I') => true,
++            Some(b'O') => false,
++            _ => {
++                return Err(Raised::invalid_routine_option(
++                    "SysStemCopy",
++                    "sort type",
++                    "'I' or 'O'",
++                    mode,
++                )
++                .into());
++            }
++        },
++    };
++    let from_count = required_count(interp, from)?;
++    let start = start.unwrap_or(1);
++    let at = at.unwrap_or(1);
++    let count = match given {
++        Some(count) if count > from_count - start + 1 || from_count == 0 => {
++            return Err(Raised::stem_range(from_count).into());
++        }
++        Some(count) => count,
++        None => from_count - start + 1,
++    };
++    let mut to_count = match element_count(interp, to)? {
++        None => 0,
++        Some(Some(count)) => count,
++        Some(None) => return Err(Raised::stem_count_invalid().into()),
++    };
++    if at > to_count + 1 {
++        return Err(Raised::stem_range(to_count).into());
++    }
++    if inserting {
++        let mut index = to_count;
++        while index >= at {
++            let Some(moved) = element(interp, to, index) else {
++                return Err(Raised::stem_element_unset(index).into());
++            };
++            set_element(interp, to, index + count, moved);
++            index -= 1;
++        }
++        to_count += count;
++        set_count(interp, to, 0, to_count);
++    }
++    for offset in 0..count {
++        let Some(value) = element(interp, from, start + offset) else {
++            return Err(Raised::stem_element_unset(offset).into());
++        };
++        set_element(interp, to, at + offset, value);
++    }
++    if at + count - 1 > to_count {
++        set_count(interp, to, 0, at + count - 1);
++    }
++    Ok(answer(interp, 0))
++}
++
++/// How `SysStemSort` orders two values.
++#[derive(Clone, Copy)]
++struct SortOrder {
++    descending: bool,
++    caseless: bool,
++    /// The zero-based first column and the column count, where a column
++    /// range was given.
++    columns: Option<(usize, usize)>,
++}
++
++impl SortOrder {
++    /// The comparator `StemClass::sort` picks, as `-1`, `0` or `1`.
++    fn compare(self, left: &[u8], right: &[u8]) -> i32 {
++        let ordering = match self.columns {
++            None => compare_whole(left, right, self.caseless),
++            Some((start, length)) => compare_columns(left, right, start, length, self.caseless),
++        };
++        let sign = match ordering {
++            Ordering::Less => -1,
++            Ordering::Equal => 0,
++            Ordering::Greater => 1,
++        };
++        if self.descending { -sign } else { sign }
++    }
++}
++
++/// One byte as `StringUtil::caselessCompare` reads it: upcased, then taken as
++/// a signed `char`, so a byte from `0x80` up orders below every ASCII byte.
++fn caseless_byte(byte: u8) -> i8 {
++    i8::from_ne_bytes([byte.to_ascii_uppercase()])
++}
++
++/// Compares two byte runs of one length, case-sensitively as `memcmp` does or
++/// caselessly as `caselessCompare` does.
++fn compare_run(
++    left: impl Iterator<Item = u8>,
++    right: impl Iterator<Item = u8>,
++    caseless: bool,
++) -> Ordering {
++    for (left, right) in left.zip(right) {
++        let ordering = if caseless {
++            caseless_byte(left).cmp(&caseless_byte(right))
++        } else {
++            left.cmp(&right)
++        };
++        if ordering != Ordering::Equal {
++            return ordering;
++        }
++    }
++    Ordering::Equal
++}
++
++/// `RexxString::sortCompare` and `sortCaselessCompare` with no columns: the
++/// shared prefix, then the shorter first.
++fn compare_whole(left: &[u8], right: &[u8], caseless: bool) -> Ordering {
++    let shared = left.len().min(right.len());
++    compare_run(
++        left[..shared].iter().copied(),
++        right[..shared].iter().copied(),
++        caseless,
++    )
++    .then(left.len().cmp(&right.len()))
++}
++
++/// The column forms of the same two comparisons.
++///
++/// The run compared reaches one byte past the shorter value, where the C++
++/// reads the string's terminating NUL.
++fn compare_columns(
++    left: &[u8],
++    right: &[u8],
++    start: usize,
++    length: usize,
++    caseless: bool,
++) -> Ordering {
++    if start >= left.len() || start >= right.len() {
++        return left.len().cmp(&right.len());
++    }
++    let reachable = left.len().min(right.len()) - start + 1;
++    let compared = length.min(reachable);
++    let ordering = compare_run(
++        terminated(left, start, compared),
++        terminated(right, start, compared),
++        caseless,
++    );
++    if ordering == Ordering::Equal && reachable < length {
++        return left.len().cmp(&right.len());
++    }
++    ordering
++}
++
++/// `count` bytes of `value` from `start`, a NUL standing for each byte past
++/// its end.
++fn terminated(value: &[u8], start: usize, count: usize) -> impl Iterator<Item = u8> + '_ {
++    (start..start + count).map(|at| value.get(at).copied().unwrap_or(0))
++}
++
++/// `StemClass::mergeSort` over `order`, one index per element: the oracle's
++/// own algorithm, an insertion sort below eight elements and an exponential
++/// search in the merge, so the order it leaves is the oracle's whatever the
++/// comparator answers.
++fn merge_sort(
++    order: &mut [usize],
++    working: &mut [usize],
++    left: usize,
++    right: usize,
++    compare: &dyn Fn(usize, usize) -> i32,
++) {
++    if right - left < 7 {
++        for i in left + 1..=right {
++            let current = order[i];
++            let mut previous = order[i - 1];
++            if compare(current, previous) < 0 {
++                let mut j = i;
++                loop {
++                    order[j] = previous;
++                    j -= 1;
++                    if j <= left {
++                        break;
++                    }
++                    previous = order[j - 1];
++                    if compare(current, previous) >= 0 {
++                        break;
++                    }
++                }
++                order[j] = current;
++            }
++        }
++        return;
++    }
++    let middle = (left + right) / 2;
++    merge_sort(order, working, left, middle, compare);
++    merge_sort(order, working, middle + 1, right, compare);
++    merge(order, working, left, middle + 1, right, compare);
++}
++
++/// `StemClass::merge`: joins the sorted runs `left..middle` and
++/// `middle..=right`, copying each stretch past an exponential search.
++fn merge(
++    order: &mut [usize],
++    working: &mut [usize],
++    left: usize,
++    middle: usize,
++    right: usize,
++    compare: &dyn Fn(usize, usize) -> i32,
++) {
++    let left_end = middle - 1;
++    if compare(order[left_end], order[middle]) <= 0 {
++        return;
++    }
++    let (mut left_cursor, mut right_cursor, mut out) = (left, middle, left);
++    loop {
++        let from_value = order[left_cursor];
++        let right_value = order[right_cursor];
++        if compare(from_value, right_value) <= 0 {
++            let insertion = find(order, right_value, -1, left_cursor + 1, left_end, compare);
++            let stretch = insertion + 1 - left_cursor;
++            working[out..out + stretch].copy_from_slice(&order[left_cursor..left_cursor + stretch]);
++            out += stretch;
++            working[out] = right_value;
++            out += 1;
++            right_cursor += 1;
++            left_cursor = insertion + 1;
++        } else {
++            let insertion = find(order, from_value, 0, right_cursor + 1, right, compare);
++            let stretch = insertion + 1 - right_cursor;
++            working[out..out + stretch]
++                .copy_from_slice(&order[right_cursor..right_cursor + stretch]);
++            out += stretch;
++            working[out] = from_value;
++            out += 1;
++            left_cursor += 1;
++            right_cursor = insertion + 1;
++        }
++        if !(right >= right_cursor && middle > left_cursor) {
++            break;
++        }
++    }
++    if left_cursor < middle {
++        let stretch = middle - left_cursor;
++        working[out..out + stretch].copy_from_slice(&order[left_cursor..middle]);
++    } else {
++        let stretch = right + 1 - right_cursor;
++        working[out..out + stretch].copy_from_slice(&order[right_cursor..=right]);
++    }
++    order[left..=right].copy_from_slice(&working[left..=right]);
++}
++
++/// `StemClass::find`: the last index from `left` to `right` whose element
++/// `value` compares above `limit` against, or `left - 1` where there is none.
++fn find(
++    order: &[usize],
++    value: usize,
++    limit: i32,
++    left: usize,
++    right: usize,
++    compare: &dyn Fn(usize, usize) -> i32,
++) -> usize {
++    // Signed, because the C++'s `right = checkPoint - 1` may pass below
++    // `left` and the loops end on that.
++    let (mut left, mut right) = (left as isize, right as isize);
++    let mut check = left;
++    let mut delta = 1;
++    while check <= right {
++        if compare(value, order[check as usize]) > limit {
++            left = check + 1;
++        } else {
++            right = check - 1;
++            break;
++        }
++        check += delta;
++        delta *= 2;
++    }
++    while left <= right {
++        check = (left + right) / 2;
++        if compare(value, order[check as usize]) > limit {
++            left = check + 1;
++        } else {
++            right = check - 1;
++        }
++    }
++    (left - 1) as usize
++}
++
++/// The stem `SysStemSort` sorts and the tail prefix its elements carry: the
++/// argument resolved as a stem, else a name like `s.foo` split at its first
++/// period into the stem `s.` and the prefix `FOO`.
++fn sort_target(interp: &mut Interp, argument: ObjRef) -> Result<(ObjRef, Vec<u8>), Failure> {
++    if interp.is_stem_object(argument) {
++        return Ok((argument, Vec::new()));
++    }
++    let text = interp.required_string_value(argument)?;
++    let name = interp.to_text(text).into_owned();
++    if let Some(stem) = interp.context_stem_named(&name) {
++        return Ok((stem, Vec::new()));
++    }
++    let unresolved = || Failure::from(Raised::stem_argument_unresolved(1, &name));
++    let Some(period) = name.iter().position(|byte| *byte == b'.') else {
++        return Err(unresolved());
++    };
++    if period + 1 == name.len() {
++        return Err(unresolved());
++    }
++    let Some(stem) = interp.context_stem_named(&name[..=period]) else {
++        return Err(unresolved());
++    };
++    let mut prefix = name[period + 1..].to_ascii_uppercase();
++    if prefix.last() != Some(&b'.') {
++        prefix.push(b'.');
++    }
++    Ok((stem, prefix))
++}
++
++/// `SysStemSort(stem [, order [, type [, first [, last [, firstcol [,
++/// lastcol]]]]]])`: sorts elements `first` to `last` by their string values,
++/// which replace them.
++///
++/// `last` and `lastcol` of `999999999999999999` mean "to the end" whether
++/// given or defaulted, as in the C++, which marks the default with that value.
++pub(crate) fn sort(
++    interp: &mut Interp,
++    _name: &'static [u8],
++    args: &[Option<ObjRef>],
++) -> Result<ObjRef, Failure> {
++    check_arity(args, 7)?;
++    let argument = required(args, 1)?;
++    let order = optional_text(interp, args, 2)?;
++    let kind = optional_text(interp, args, 3)?;
++    let first = optional_positive(interp, args, 4)?;
++    let last = optional_positive(interp, args, 5)?;
++    let first_column = optional_positive(interp, args, 6)?;
++    let last_column = optional_positive(interp, args, 7)?;
++    let (stem, prefix) = sort_target(interp, argument)?;
++    let descending = match order.as_deref() {
++        None => false,
++        Some(order) => match order.first().map(u8::to_ascii_uppercase) {
++            Some(b'A') => false,
++            Some(b'D') => true,
++            _ => {
++                return Err(Raised::invalid_routine_option(
++                    "SysStemSort",
++                    "sort order",
++                    "'A' or 'D'",
++                    order,
++                )
++                .into());
++            }
++        },
++    };
++    let caseless = match kind.as_deref() {
++        None => false,
++        Some(kind) => match kind.first().map(u8::to_ascii_uppercase) {
++            Some(b'C') => false,
++            Some(b'I') => true,
++            _ => {
++                return Err(Raised::invalid_routine_option(
++                    "SysStemSort",
++                    "sort type",
++                    "'C' or 'I'",
++                    kind,
++                )
++                .into());
++            }
++        },
++    };
++    let first = first.unwrap_or(1);
++    let last = last.unwrap_or(MAX_WHOLENUMBER);
++    if last < first {
++        return Err(Raised::arguments_out_of_order("last", last, "first", first).into());
++    }
++    let first_column = first_column.unwrap_or(1);
++    let last_column = last_column.unwrap_or(MAX_WHOLENUMBER);
++    if last_column < first_column {
++        return Err(Raised::arguments_out_of_order(
++            "last column",
++            last_column,
++            "first column",
++            first_column,
++        )
++        .into());
++    }
++
++    let tail = |index: i64| {
++        let mut tail = prefix.clone();
++        tail.extend_from_slice(&index_tail(index));
++        tail
++    };
++    let count = interp
++        .stem_object_tail(stem, &tail(0))
++        .map(|value| sort_count(interp, value))
++        .transpose()?
++        .flatten()
++        .ok_or_else(|| Failure::from(Raised::stem_count_invalid()))?;
++    if count == 0 {
++        return Ok(answer(interp, 0));
++    }
++    let last = if last == MAX_WHOLENUMBER { count } else { last };
++    if first > count || last > count {
++        return Err(Raised::stem_range(count).into());
++    }
++    let mut values = Vec::new();
++    let mut texts = Vec::new();
++    for index in first..=last {
++        let Some(value) = interp.stem_object_tail(stem, &tail(index)) else {
++            return Err(Raised::stem_element_unset(index).into());
++        };
++        let value = interp.required_string_value(value)?;
++        texts.push(interp.to_text(value).into_owned());
++        values.push(value);
++    }
++    let columns = (first_column != 1 || last_column != MAX_WHOLENUMBER).then(|| {
++        let start = usize::try_from(first_column - 1).expect("a positive column");
++        let length = usize::try_from(last_column - first_column + 1).expect("an ordered range");
++        (start, length)
++    });
++    let sorting = SortOrder {
++        descending,
++        caseless,
++        columns,
++    };
++    let compare = |left: usize, right: usize| sorting.compare(&texts[left], &texts[right]);
++    let mut order: Vec<usize> = (0..values.len()).collect();
++    let mut working = vec![0; order.len()];
++    let right = order.len() - 1;
++    merge_sort(&mut order, &mut working, 0, right, &compare);
++    for (index, at) in (first..=last).zip(order) {
++        interp.stem_object_write(stem, &tail(index), values[at]);
++    }
++    Ok(answer(interp, 0))
++}
++
++/// Element 0 as `StemClass::sort` reads it: an unsigned whole number at nine
++/// digits, `None` where it is not one.
++fn sort_count(interp: &mut Interp, value: ObjRef) -> Result<Option<i64>, Failure> {
++    let count = match value.decode() {
++        Decoded::SmallInt(number) => u64::try_from(number).ok(),
++        _ => {
++            let text = interp.required_string_or_nil(value)?;
++            Number::parse_bytes(&interp.to_text(text))
++                .and_then(|number| number.unsigned_int64_value(rexx_num::DEFAULT_DIGITS as usize))
++        }
++    };
++    Ok(count
++        .filter(|count| *count <= SORT_COUNT_MAXIMUM)
++        .map(|count| i64::try_from(count).expect("nine digits fit")))
++}
++
++/// `SysDumpVariables([file])`: every variable of the caller's, a line each
++/// as `Name=NAME, Value='value'`, and after a stem's own line one per tail
++/// that holds a value, which ends in CR LF where a simple variable's ends in
++/// LF. Appended to `file`, or written to standard output.
++///
++/// A file that will not open is 40.1.
++pub(crate) fn dump_variables(
++    interp: &mut Interp,
++    name: &'static [u8],
++    args: &[Option<ObjRef>],
++) -> Result<ObjRef, Failure> {
++    check_arity(args, 1)?;
++    let target = optional_text(interp, args, 1)?;
++    let mut file = match target {
++        None => None,
++        Some(text) => {
++            let path = if text.is_empty() {
++                String::new()
++            } else {
++                crate::paths::normalize(&String::from_utf8_lossy(&text), &interp.cwd_text())
++            };
++            let opened = std::fs::OpenOptions::new()
++                .append(true)
++                .create(true)
++                .open(&path);
++            match opened {
++                Ok(file) => Some(file),
++                Err(_) => {
++                    return Err(Raised::routine_failed(&name.to_ascii_uppercase()).into());
++                }
++            }
++        }
++    };
++    let variables = crate::dispatch::context::local_variable_entries(interp, 0)?;
++    for (_, value) in &variables {
++        interp.roots.activity_mut().push_temp(*value);
++    }
++    let mut out = Vec::new();
++    for (variable, value) in variables {
++        if variable.last() == Some(&b'.') && interp.is_stem_object(value) {
++            let own = interp.stem_own_value(value);
++            dump_line(interp, &mut out, &variable, own, b"\n")?;
++            let tails = interp.stem_live_tails(value);
++            for (_, held) in &tails {
++                interp.roots.activity_mut().push_temp(*held);
++            }
++            for (tail, held) in tails {
++                let mut compound = variable.clone();
++                compound.extend_from_slice(&tail);
++                dump_line(interp, &mut out, &compound, held, b"\r\n")?;
++            }
++        } else {
++            dump_line(interp, &mut out, &variable, value, b"\n")?;
++        }
++    }
++    match file.as_mut() {
++        Some(file) => {
++            use std::io::Write as _;
++            // The oracle ignores a failed write.
++            let _ = file.write_all(&out);
++        }
++        None => interp.write_out(&out),
++    }
++    Ok(answer(interp, 0))
++}
++
++/// One `Name=..., Value='...'` line, the value as its string value.
++fn dump_line(
++    interp: &mut Interp,
++    out: &mut Vec<u8>,
++    name: &[u8],
++    value: ObjRef,
++    end: &[u8],
++) -> Result<(), Failure> {
++    let text = interp.required_string_value(value)?;
++    out.extend_from_slice(b"Name=");
++    out.extend_from_slice(name);
++    out.extend_from_slice(b", Value='");
++    out.extend_from_slice(&interp.to_text(text));
++    out.extend_from_slice(b"'");
++    out.extend_from_slice(end);
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
+new file mode 100644
+index 000000000..e4f5a39e4
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs
+@@ -0,0 +1,95 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++/// The cases [`an_untrapped_error_inside_the_sort_is_reported`] reads.
++const UNTRAPPED_SORT_CASES: &str = "tests/stem_sort_untrapped_cases";
++
++/// **An error `SysStemSort` raises from inside its sort is reported when
++/// nothing traps it**, where the oracle crashes (`corpus/oracle-crashes.txt`
++/// entry 37, upstream SF #2068). No differential can cover these, so the case
++/// file is this crate's own answer: the error the trapped oracle raises for
++/// the same stem, reported as any routine's error is. The adjacent successes
++/// are in the same file.
++#[test]
++fn an_untrapped_error_inside_the_sort_is_reported() {
++    let mut cases = 0;
++    datadriven::walk(UNTRAPPED_SORT_CASES, |file| {
++        file.run(|case| {
++            cases += 1;
++            assert_eq!(
++                case.directive, "program",
++                "unknown directive {:?}",
++                case.directive
++            );
++            let outcome = crate::run_program(
++                "/t.rex",
++                case.input.clone().into_bytes(),
++                crate::Invocation::none(),
++            );
++            let mut rendered = format!("rc> {}\n", outcome.exit_code);
++            for line in String::from_utf8_lossy(&outcome.stdout).lines() {
++                rendered.push_str(&format!("out> {line}\n"));
++            }
++            for line in String::from_utf8_lossy(&outcome.stderr).lines() {
++                rendered.push_str(&format!("err> {line}\n"));
++            }
++            rendered
++        });
++    });
++    assert!(cases > 0, "{UNTRAPPED_SORT_CASES} ran no case");
++}
++
++/// **`SysDumpVariables` holds the tail values it read before it writes any
++/// of them**, as the oracle's `toDirectory` snapshot does: a `STRING` method
++/// that empties the stem midway leaves the rest of the dump intact. Measured,
++/// oracle rc 0, these lines in hash order. This crate writes tail 2 first, so
++/// the emptying runs before tail 1 is written, and collecting at every
++/// allocation sweeps an unheld value.
++#[test]
++fn a_dumped_stem_keeps_its_tails_when_a_string_method_empties_it() {
++    let source = b"s.1 = copies('heap ', 8)\n\
++        s.2 = .k~new(s.)\n\
++        call SysDumpVariables\n\
++        say s.1\n\
++        ::class k\n\
++        ::method init\n\
++        expose st.\n\
++        use arg st.\n\
++        ::method string\n\
++        expose st.\n\
++        st.~empty\n\
++        x = copies('filler', 50)\n\
++        return 'K'\n";
++    let outcome = crate::run_program_collect_every_alloc(
++        "/t.rex",
++        source.to_vec(),
++        crate::Invocation::none(),
++    );
++    assert!(outcome.collections > 0, "the mode collected nothing");
++    assert_eq!(
++        outcome.exit_code,
++        0,
++        "{}",
++        String::from_utf8_lossy(&outcome.stderr)
++    );
++    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
++    let mut lines: Vec<&str> = stdout.split_terminator('\n').collect();
++    lines.sort_unstable();
++    assert_eq!(
++        lines,
++        [
++            "Name=S., Value='S.'",
++            "Name=S.1, Value='heap heap heap heap heap heap heap heap '\r",
++            "Name=S.2, Value='K'\r",
++            "S.1",
++        ]
++    );
++}
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index 9f913846a..fa71bdb46 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -375,38 +375,45 @@ fn context_variables(
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     at_context(interp, receiver, |interp, depth| {
+         local_variables(interp, depth).map(Some)
+     })
+ }
+ 
+ /// `RexxActivation::getAllLocalVariables`: a `Directory` of every variable
+ /// the activation at `depth` has set, a stem under its name with the period.
+ pub(crate) fn local_variables(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
++    let entries = local_variable_entries(interp, depth)?;
++    hash::directory_of(interp, entries)
++}
++
++/// [`local_variables`]'s pairs, name and value, with no `Directory` built.
++pub(crate) fn local_variable_entries(
++    interp: &Interp,
++    depth: usize,
++) -> Result<Vec<(Vec<u8>, ObjRef)>, Failure> {
++    let activation = interp
++        .frame_at(depth)
++        .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
++    let named = activation
++        .plan
++        .names
++        .iter()
++        .map(|(name, slot)| (&**name, *slot))
++        .chain(activation.extra.iter().map(|(name, slot)| (&**name, *slot)));
+     let mut entries = Vec::new();
+-    {
+-        let activation = interp
+-            .frame_at(depth)
+-            .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
+-        let named = activation
+-            .plan
+-            .names
+-            .iter()
+-            .map(|(name, slot)| (&**name, *slot))
+-            .chain(activation.extra.iter().map(|(name, slot)| (&**name, *slot)));
+-        for (name, slot) in named {
+-            if let Some(value) = interp.variable_in(activation, slot) {
+-                entries.push((name.to_vec(), value));
+-            }
++    for (name, slot) in named {
++        if let Some(value) = interp.variable_in(activation, slot) {
++            entries.push((name.to_vec(), value));
+         }
+     }
+-    hash::directory_of(interp, entries)
++    Ok(entries)
+ }
+ 
+ /// `RexxContext::copyRexx`, whose whole body is the 93.970 raise.
+ fn context_copy(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let target = interp.string_value_text(receiver);
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash/stem.rs b/rust/crates/rexx-exec/src/dispatch/hash/stem.rs
+index 31c747ec8..7f5608d85 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash/stem.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash/stem.rs
+@@ -150,20 +150,44 @@ impl Interp {
+         }
+     }
+ 
+     /// [`Interp::stem_subclass_store`] over an instance's pools: the one
+     /// entry the `Stem` scope's pool holds, found by the scope alone, which
+     /// keeps the test free of a name comparison on the string-value path.
+     pub(crate) fn stem_store_in(&self, pools: &rexx_core::ScopePools) -> Option<ObjRef> {
+         let scope = self.object_model.as_ref()?.stem;
+         pools.entries(scope).first().map(|(_, store)| *store)
+     }
++
++    /// `StemClass::dropElement`: drops `tail` where the stem holds it, and
++    /// leaves a tail it never held absent.
++    pub(crate) fn stem_drop_element(&mut self, stem: ObjRef, tail: &[u8]) {
++        let held = exposed_tail(self, stem, tail).is_some()
++            || matches!(
++                self.heap.get(stem).map(|object| &object.body),
++                Some(Body::Stem { tails, .. }) if tails.get(tail).is_some()
++            );
++        if held {
++            stem_write(self, stem, tail.to_vec(), None);
++        }
++    }
++
++    /// `StemClass::toDirectory`'s pairs: every tail that holds a value, in
++    /// the order the stem answers its tails.
++    pub(crate) fn stem_live_tails(&self, stem: ObjRef) -> Vec<(Vec<u8>, ObjRef)> {
++        stem_live(self, stem)
++    }
++
++    /// `StemClass::getStemValue`: the stem's default, else its own name.
++    pub(crate) fn stem_own_value(&mut self, stem: ObjRef) -> ObjRef {
++        stem_value(self, stem)
++    }
+ }
+ 
+ /// The `Body::Stem` a `Stem` method works on: the receiver itself, or the
+ /// store a subclass instance holds; anything else is refused.
+ fn stem_of(interp: &mut Interp, receiver: ObjRef, method: &[u8]) -> Result<ObjRef, Failure> {
+     if is_stem(interp, receiver) {
+         return Ok(receiver);
+     }
+     match interp.stem_subclass_store(receiver) {
+         Some(store) => Ok(store),
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 4204a8bf2..affeaeb9d 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -25,21 +25,20 @@ use rexx_api::layout::POINTER;
+ use rexx_api::load::{CommandHandler, HeldMethod, HeldRoutine, Hook, Library};
+ use rexx_api::redirect::Redirector;
+ use rexx_api::values::{
+     Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, HostRef,
+     Numeric, Raised as Condition,
+ };
+ use rexx_core::{BehaviourId, Body, Decoded, ObjRef, Owner};
+ use rexx_num::{DIGITS64, Number};
+ 
+ use super::Resolution;
+-use crate::builtin::datatype::{SymbolKind, classify};
+ use crate::error::Raised;
+ use crate::island::{InterpBaton, Islanded, Lent};
+ use crate::run::Started;
+ use crate::scheduler::{ActivityId, Posted, Recall, Recaller, Scheduler};
+ use crate::sync::Arc;
+ use crate::timer::Inbox;
+ use crate::{Failure, Interp, LibraryBinding, Loud, NativeFrame, PendingTrap};
+ 
+ /// The bytes a small integer or an inline string renders as, for a reader
+ /// that cannot allocate into the interpreter.
+@@ -1560,28 +1559,22 @@ impl Host for Interp {
+ 
+     fn is_stem(&self, object: ObjRef) -> bool {
+         matches!(
+             self.heap.get(object).map(|found| &found.body),
+             Some(Body::Stem { .. })
+         )
+     }
+ 
+     fn context_stem(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
+         let text = self.native_string_conversion(object)?;
+-        let mut name = self.to_text(text).to_ascii_uppercase();
+-        if name.last() != Some(&b'.') {
+-            name.push(b'.');
+-        }
+-        if classify(&name) != SymbolKind::Stem {
+-            return Ok(None);
+-        }
+-        Ok(Some(self.read_stem(&name)))
++        let name = self.to_text(text).into_owned();
++        Ok(self.context_stem_named(&name))
+     }
+ 
+     fn is_instance_of(&mut self, object: ObjRef, class: Class) -> bool {
+         if class == Class::Class {
+             return self.is_class_object(object);
+         }
+         let (Some(held), Some(wanted)) = (
+             self.class_of_value(object),
+             self.classes().lookup(class.id()),
+         ) else {
+diff --git a/rust/crates/rexx-exec/src/error.rs b/rust/crates/rexx-exec/src/error.rs
+index 888543d75..03d77ef1d 100644
+--- a/rust/crates/rexx-exec/src/error.rs
++++ b/rust/crates/rexx-exec/src/error.rs
+@@ -1472,20 +1472,89 @@ impl Raised {
+         let inserts = vec![position.to_string().into_bytes(), found.to_vec()];
+         let mut raised = if method {
+             Raised::syntax(93, 969, inserts)
+         } else {
+             Raised::syntax(40, 919, inserts)
+         };
+         raised.delivery.lineless = true;
+         raised
+     }
+ 
++    /// 40.1: a routine of an internal package failed (`InvalidRoutine`).
++    /// `routine` is the upcased name.
++    pub(crate) fn routine_failed(routine: &[u8]) -> Raised {
++        Raised::syntax(40, 1, vec![routine.to_vec()])
++    }
++
++    /// 40.919 raised by a routine's own body rather than its argument
++    /// marshalling, so it names the calling clause's line.
++    pub(crate) fn stem_argument_unresolved(position: usize, found: &[u8]) -> Raised {
++        Raised::syntax(
++            40,
++            919,
++            vec![position.to_string().into_bytes(), found.to_vec()],
++        )
++    }
++
++    /// 40.920: `routine`'s `argument` is not one of `options`.
++    pub(crate) fn invalid_routine_option(
++        routine: &str,
++        argument: &str,
++        options: &str,
++        found: &[u8],
++    ) -> Raised {
++        Raised::syntax(
++            40,
++            920,
++            vec![
++                routine.as_bytes().to_vec(),
++                argument.as_bytes().to_vec(),
++                options.as_bytes().to_vec(),
++                found.to_vec(),
++            ],
++        )
++    }
++
++    /// 40.921: `last`, named `last_name`, is below `first`.
++    pub(crate) fn arguments_out_of_order(
++        last_name: &str,
++        last: i64,
++        first_name: &str,
++        first: i64,
++    ) -> Raised {
++        Raised::syntax(
++            40,
++            921,
++            vec![
++                last_name.as_bytes().to_vec(),
++                last.to_string().into_bytes(),
++                first_name.as_bytes().to_vec(),
++                first.to_string().into_bytes(),
++            ],
++        )
++    }
++
++    /// 40.922: a stem argument's element 0 is not a usable count.
++    pub(crate) fn stem_count_invalid() -> Raised {
++        Raised::syntax(40, 922, Vec::new())
++    }
++
++    /// 40.923: an operation past the stem array's `size`.
++    pub(crate) fn stem_range(size: i64) -> Raised {
++        Raised::syntax(40, 923, vec![size.to_string().into_bytes()])
++    }
++
++    /// 40.924: the stem array has no element at `position`.
++    pub(crate) fn stem_element_unset(position: i64) -> Raised {
++        Raised::syntax(40, 924, vec![position.to_string().into_bytes()])
++    }
++
+     /// 88.909 for an argument the oracle names rather than numbers.
+     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {
+         Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])
+     }
+ 
+     /// 88.910: a pad argument the oracle names rather than numbers is a
+     /// string that is not exactly one byte. `found` is the argument's own
+     /// rendered bytes.
+     pub(crate) fn named_argument_invalid_pad(argument: &str, found: &[u8]) -> Raised {
+         Raised::syntax(88, 910, vec![argument.as_bytes().to_vec(), found.to_vec()])
+diff --git a/rust/crates/rexx-exec/src/internal_routines.rs b/rust/crates/rexx-exec/src/internal_routines.rs
+index 031d9b4fe..4b4ee1f60 100644
+--- a/rust/crates/rexx-exec/src/internal_routines.rs
++++ b/rust/crates/rexx-exec/src/internal_routines.rs
+@@ -107,21 +107,24 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
+         "SysCreateEventSem",
+         crate::builtin::rexxutil::create_event_sem,
+     ),
+     util_run(
+         "SysCreateMutexSem",
+         crate::builtin::rexxutil::create_mutex_sem,
+     ),
+     util("SysCreatePipe", Owner::Phase9),
+     util("SysDropFuncs", Owner::Phase9),
+     util("SysDropRexxMacro", Owner::Phase10(Deferral::Rxapi)),
+-    util("SysDumpVariables", Owner::Phase9),
++    util_run(
++        "SysDumpVariables",
++        crate::builtin::rexxutil::stems::dump_variables,
++    ),
+     util("SysFileCopy", Owner::Phase9),
+     util_run("SysFileDelete", crate::builtin::rexxutil::file_delete),
+     util_run("SysFileExists", crate::builtin::rexxutil::file_exists),
+     util("SysFileMove", Owner::Phase9),
+     util("SysFileSearch", Owner::Phase9),
+     util_run("SysFileTree", crate::builtin::rexxutil::file_tree),
+     util("SysFork", Owner::Phase9),
+     util("SysFormatMessage", Owner::Phase9),
+     util("SysGetErrorText", Owner::Phase9),
+     util("SysGetFileDateTime", Owner::Phase9),
+@@ -149,24 +152,24 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
+     util_run(
+         "SysResetEventSem",
+         crate::builtin::rexxutil::reset_event_sem,
+     ),
+     util_run("SysRmDir", crate::builtin::rexxutil::rm_dir),
+     util("SysSaveRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
+     util("SysSearchPath", Owner::Phase9),
+     util("SysSetFileDateTime", Owner::Phase9),
+     util("SysSetPriority", Owner::Phase9),
+     util_run("SysSleep", crate::builtin::rexxutil::sleep),
+-    util("SysStemCopy", Owner::Phase9),
+-    util("SysStemDelete", Owner::Phase9),
+-    util("SysStemInsert", Owner::Phase9),
+-    util("SysStemSort", Owner::Phase9),
++    util_run("SysStemCopy", crate::builtin::rexxutil::stems::copy),
++    util_run("SysStemDelete", crate::builtin::rexxutil::stems::delete),
++    util_run("SysStemInsert", crate::builtin::rexxutil::stems::insert),
++    util_run("SysStemSort", crate::builtin::rexxutil::stems::sort),
+     util("SysTempFileName", Owner::Phase9),
+     util("SysUtilVersion", Owner::Phase9),
+     util_run("SysVersion", crate::builtin::rexxutil::version),
+     util("SysWait", Owner::Phase9),
+     util_run("SysWaitEventSem", crate::builtin::rexxutil::wait_sem),
+ ];
+ 
+ /// The `REXX` package's row `name` names, found as
+ /// `LibraryPackage::resolveRoutine` finds a routine table entry
+ /// (`interpreter/package/LibraryPackage.cpp:410-435`): by exact spelling, then
+diff --git a/rust/crates/rexx-exec/src/redirect.rs b/rust/crates/rexx-exec/src/redirect.rs
+index e45d8ab02..9ca0ce51e 100644
+--- a/rust/crates/rexx-exec/src/redirect.rs
++++ b/rust/crates/rexx-exec/src/redirect.rs
+@@ -801,21 +801,21 @@ impl Interp {
+             Some(count) => Ok(Some(count)),
+             None => {
+                 let name = self.stem_object_name(object);
+                 Err(Raised::stem_size_not_whole(&name, &text).into())
+             }
+         }
+     }
+ 
+     /// One tail's own value, with no fallback to the stem's default and none
+     /// to a derived name. A tombstone answers `None`, as an absent tail does.
+-    fn stem_object_tail(&self, object: ObjRef, key: &[u8]) -> Option<ObjRef> {
++    pub(crate) fn stem_object_tail(&self, object: ObjRef, key: &[u8]) -> Option<ObjRef> {
+         let Body::Stem { tails, exposed, .. } = &self.heap.get(object)?.body else {
+             return None;
+         };
+         // `getElement` answers an exposed tail's `realVariable`.
+         if let Some(home) = crate::stem::exposed_home(exposed, key) {
+             return self.tail_value(home, key);
+         }
+         match tails.get(key) {
+             Some((_, value)) => *value,
+             None => None,
+@@ -904,21 +904,21 @@ impl Interp {
+ 
+     /// A stem object's own name, its trailing period included.
+     fn stem_object_name(&self, object: ObjRef) -> Vec<u8> {
+         match self.heap.get(object).map(|found| &found.body) {
+             Some(Body::Stem { name, .. }) => name.to_vec(),
+             _ => Vec::new(),
+         }
+     }
+ 
+     /// Whether `value` is a stem object.
+-    fn is_stem_object(&self, value: ObjRef) -> bool {
++    pub(crate) fn is_stem_object(&self, value: ObjRef) -> bool {
+         matches!(value.decode(), Decoded::Heap { .. })
+             && matches!(
+                 self.heap.get(value).map(|found| &found.body),
+                 Some(Body::Stem { .. })
+             )
+     }
+ 
+     /// Whether `value` is a `RexxQueue`, which a redirection accepts and this
+     /// crate has no queues to give it -- Phase 10's.
+     fn is_rexx_queue(&mut self, value: ObjRef) -> bool {
+diff --git a/rust/crates/rexx-exec/src/run/tests/directives.rs b/rust/crates/rexx-exec/src/run/tests/directives.rs
+index b067a40a9..f23b38737 100644
+--- a/rust/crates/rexx-exec/src/run/tests/directives.rs
++++ b/rust/crates/rexx-exec/src/run/tests/directives.rs
+@@ -296,35 +296,36 @@ fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
+ #[test]
+ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
+     // The delivered side of the same boundary: a row that has a body answers,
+     // and answers through the very resolver step that refuses the rest. Without
+     // these the test could go green over a resolver that refuses everything.
+     for (source, expected) in [
+         (&b"say filespec('N','/a/b.c')\n"[..], "b.c\n"),
+         (b"say length(directory()) > 0\n", "1\n"),
+         (b"say SysFileExists('.')\n", "1\n"),
+         (b"say words(SysVersion()) > 0\n", "1\n"),
++        (b"s.0 = 0; say SysStemSort('s.')\n", "0\n"),
+     ] {
+         let outcome = routine_program(source);
+         assert_eq!(
+             outcome.exit_code,
+             0,
+             "{}",
+             String::from_utf8_lossy(&outcome.stderr)
+         );
+         assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected);
+     }
+ 
+     let cases: &[(&[u8], &str)] = &[
+         (
+-            b"say SysStemSort('a.')\n",
+-            "routine \"SYSSTEMSORT\" is not implemented (Phase 9)",
++            b"say SysGetKey()\n",
++            "routine \"SYSGETKEY\" is not implemented (Phase 9)",
+         ),
+         (
+             b"say SysOpenEventSem('sem')\n",
+             "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 9)",
+         ),
+         (
+             b"say SysCreateEventSem('sem')\n",
+             "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 9)",
+         ),
+         (
+diff --git a/rust/crates/rexx-exec/src/stem.rs b/rust/crates/rexx-exec/src/stem.rs
+index 49fbe39aa..933941865 100644
+--- a/rust/crates/rexx-exec/src/stem.rs
++++ b/rust/crates/rexx-exec/src/stem.rs
+@@ -178,20 +178,36 @@ impl Interp {
+ 
+     /// Reads a bare stem (`ExprKind::Stem`): D15a's own auto-vivification
+     /// rule (branch review F4), mirroring the oracle's `createStemVariable`,
+     /// which fires on any miss to the variable dictionary, reads included
+     /// (`VariableDictionary::getStemVariable`, `VariableDictionary.hpp:
+     /// 178-183`).
+     pub(crate) fn read_stem(&mut self, name: &[u8]) -> ObjRef {
+         self.read_stem_at(name, None)
+     }
+ 
++    /// `NativeActivation::getContextStem`: the stem variable `name` names in
++    /// the running activation, a period appended where it has none, or `None`
++    /// where the name is not a stem symbol. Upcased first, as a variable
++    /// retriever reads a name.
++    pub(crate) fn context_stem_named(&mut self, name: &[u8]) -> Option<ObjRef> {
++        use crate::builtin::datatype::{SymbolKind, classify};
++        let mut name = name.to_ascii_uppercase();
++        if name.last() != Some(&b'.') {
++            name.push(b'.');
++        }
++        if classify(&name) != SymbolKind::Stem {
++            return None;
++        }
++        Some(self.read_stem(&name))
++    }
++
+     /// [`Interp::read_stem`] with the slot already in hand. Two callers have
+     /// one and they do not take it from the same place: `crate::ir::Op::Load`
+     /// carries the slot the chunk was compiled with, and a controlled loop's
+     /// re-test reads its stem control's off the entry `Code::compound` holds.
+     /// A read reached from `eval.rs` has none.
+     pub(crate) fn read_stem_at(&mut self, name: &[u8], at: Option<usize>) -> ObjRef {
+         let slot = match at {
+             Some(slot) => {
+                 // `Interp::stem_slot`'s tripwire, on the reading side, for the
+                 // same premise and against the same map: a slot reaches either
+diff --git a/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate b/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate
+new file mode 100644
+index 000000000..a55cea610
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate
+@@ -0,0 +1,77 @@
++# SysStemSort with an error raised inside its sort and nothing to trap it.
++# The oracle crashes on every program here that raises (oracle-crashes.txt
++# entry 37), so the expected blocks are this crate's own output: the error
++# the oracle raises for the same stem under SIGNAL ON SYNTAX
++# (corpus/lang/rexxutil_stem_sort.rex), reported against the calling line.
++
++# SF #2068's one line: no element 0 at all
++program
++call SysStemSort "s."
++----
++rc> 216
++err>        *-* Compiled routine "SYSSTEMSORT".
++err>      1 *-* call SysStemSort "s."
++err> Error 40 running /t.rex line 1:  Incorrect call to routine.
++err> Error 40.922:  Stem argument does not have a valid count for element 0.
++
++# a stem default and no element 0
++program
++s. = ''
++call SysStemSort "s."
++----
++rc> 216
++err>        *-* Compiled routine "SYSSTEMSORT".
++err>      2 *-* call SysStemSort "s."
++err> Error 40 running /t.rex line 2:  Incorrect call to routine.
++err> Error 40.922:  Stem argument does not have a valid count for element 0.
++
++# elements from 4 up and no element 0
++program
++do i = 4 to 6; s.i = i; end
++call SysStemSort "s."
++----
++rc> 216
++err>        *-* Compiled routine "SYSSTEMSORT".
++err>      2 *-* call SysStemSort "s."
++err> Error 40 running /t.rex line 2:  Incorrect call to routine.
++err> Error 40.922:  Stem argument does not have a valid count for element 0.
++
++# a first element past the count
++program
++s.0 = 2; s.1 = 'q'; s.2 = 'p'
++call SysStemSort "s.", , , 3
++----
++rc> 216
++err>        *-* Compiled routine "SYSSTEMSORT".
++err>      2 *-* call SysStemSort "s.", , , 3
++err> Error 40 running /t.rex line 2:  Incorrect call to routine.
++err> Error 40.923:  The operation is outside the size of the stem array ("2").
++
++# a missing element below the count
++program
++s.0 = 2; s.1 = 'q'
++call SysStemSort "s."
++----
++rc> 216
++err>        *-* Compiled routine "SYSSTEMSORT".
++err>      2 *-* call SysStemSort "s."
++err> Error 40 running /t.rex line 2:  Incorrect call to routine.
++err> Error 40.924:  Stem element at position "2" is not set.
++
++# the adjacent success: a count of zero
++program
++s.0 = 0
++call SysStemSort "s."
++say result s.0
++----
++rc> 0
++out> 0 0
++
++# the adjacent success: a count and every element
++program
++s.0 = 2; s.1 = 'q'; s.2 = 'p'
++call SysStemSort "s."
++say result s.1 s.2
++----
++rc> 0
++out> 0 p q
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt
+new file mode 100644
+index 000000000..d4c1b05e1
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_dump_variables.txt
+@@ -0,0 +1,86 @@
++count 85
++/* SysDumpVariables: the caller's variables, a stem's own value and its tails,
++   object values, dropped variables and tails, a method's variables, the file
++   form appending, and the errors. The oracle lists the variables in hash
++   order, so the file form's lines are sorted before they are shown. The
++   stdout form is only used where it prints one line or none. */
++f = 'dumpvariables.out'
++call SysFileDelete f
++call one
++call none
++say 'none:' result
++call several f
++call show f
++call several f
++call several f
++call show f
++.k~new~m(f)
++call show f
++call t "call SysDumpVariables 1, 2"
++call t "call SysDumpVariables .nil"
++call t "call SysDumpVariables ''"
++call t "call SysDumpVariables '/nonexistent-dir/x'"
++call t "r = SysDumpVariables('" || f || "'); say 'returned' r"
++call SysFileDelete f
++call SysDumpVariables '/nonexistent-dir/x'
++exit
++
++one: procedure
++  only = 'it''s'
++  call SysDumpVariables
++  return
++
++none: procedure
++  call SysDumpVariables
++  return result
++
++several: procedure
++  parse arg f
++  x = 'one'
++  n = 12
++  empty = ''
++  s. = 'def'
++  s.1 = 'a'
++  s.k = .array~of('p', 'q')
++  s.2 = 'gone'; drop s.2
++  t.1 = 't1'
++  t.two.three = 'deep'
++  gone = 1; drop gone
++  o = .object~new
++  call SysDumpVariables f
++  return
++
++show: procedure
++  parse arg f
++  text = charin(f, 1, chars(f))
++  call stream f, 'c', 'close'
++  lines = .array~new
++  do while text \== ''
++    parse var text line '0a'x text
++    lines~append(changestr('0d'x, line, '<CR>'))
++  end
++  say lines~items 'lines'
++  do line over lines~sort
++    say '  ' line
++  end
++  call SysFileDelete f
++  return
++
++t: procedure
++  parse arg code
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message
++  return
++
++::class k
++::method m
++  expose ivar
++  parse arg f
++  ivar = 'iv'
++  local = 'lv'
++  call SysDumpVariables f
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_copy.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_copy.txt
+new file mode 100644
+index 000000000..22056bbd9
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_copy.txt
+@@ -0,0 +1,87 @@
++count 86
++/* SysStemCopy: overlay and insert, the from, to and count arguments, the stem
++   shapes that are not plain arrays on either side, a stem copied onto itself,
++   and every error the routine raises. */
++abc = "a.0 = 3; a.1 = 'a'; a.2 = 'b'; a.3 = 'c'"
++def = "b.0 = 3; b.1 = 'd'; b.2 = 'e'; b.3 = 'f'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.'"
++call t abc"; "def, "call SysStemCopy a., b., , 2"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 4"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, 2, 1"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, , 0"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 3"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 5"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , 'Overlay'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , 'i'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 2, , 'Insert'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, 4, 2, 'I'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, 2, 0, 'I'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 3, 1, , 'I'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 5, 1, , 'I'"
++call t abc, "call SysStemCopy 'a.', 'b.'"
++call t abc, "call SysStemCopy 'a', 'b', , , , 'I'"
++call t abc, "call SysStemCopy 'a.', 'a.', , 2, , 'I'"
++call t abc, "call SysStemCopy 'a.', 'a.', 2, 1"
++call t abc"; b. = 'z'", "call SysStemCopy 'a.', 'b.', , 1, 2"
++call t abc"; b. = 'z'; b.0 = 1", "call SysStemCopy 'a.', 'b.', , 2, , 'I'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'; b.0 = '1E0'; b.1 = 'r'", "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.1.5 = 's'; a.3 = 'o'", "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 2; a.1 = .array~of('z', 'y'); a.2 = 'p'", "call SysStemCopy 'a.', 'b.'; say (a.1 == b.1) b.1~class~id"
++call t "a.0 = -1;"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 0;"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 1; a.1 = 'q'; b.0 = -1", "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 1; a.1 = 'q'; b.0 = -2", "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t abc"; "def, "r = SysStemCopy('a.', 'b.'); say 'returned' r"
++-- errors
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , 'Q'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , ''"
++call t abc"; "def, "call SysStemCopy 'a.', '*'"
++call t abc"; "def, "call SysStemCopy 'a.b', 'b.'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 0"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 'x'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , -1"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , 'y'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 1, 1, 1, 'O', 1"
++call t abc"; "def, "call SysStemCopy 'a.'"
++call t abc"; "def, "call SysStemCopy , 'b.'"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , , , .nil"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', , 5"
++call t abc"; "def, "call SysStemCopy 'a.', 'b.', 2, , 3"
++call t "a.0 = 0;"def, "call SysStemCopy 'a.', 'b.', , , 0"
++call t "a. = 'd';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = ''; a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++call t abc"; b.0 = 'x'; b.1 = 'q'", "call SysStemCopy 'a.', 'b.'"
++call t abc"; b.0 = 1.5", "call SysStemCopy 'a.', 'b.'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p';"def, "call SysStemCopy 'a.', 'b.', 2"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p';"def, "call SysStemCopy 'a.', 'b.'"
++call t abc"; "def"; drop b.2", "call SysStemCopy 'a.', 'b.', , , , 'I'"
++call t abc"; b. = 'z'; b.0 = 2; b.1 = 'y'", "call SysStemCopy 'a.', 'b.', , 1, , 'I'"
++call t "a.0 = 1234567890; a.1 = 'q';"def, "call SysStemCopy 'a.', 'b.'"
++a.0 = 1; a.1 = 'q'
++call SysStemCopy 'a.', 'b.', 'x'
++exit
++
++t: procedure
++  parse arg setup, code
++  interpret setup
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code '|' show()
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message '|' show()
++  return
++
++show: procedure expose a. b.
++  o = ''
++  do i = 0 to 4; o = o a.i; end
++  o = o '/'
++  do i = 0 to 7; o = o b.i; end
++  return o
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_delete_insert.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_delete_insert.txt
+new file mode 100644
+index 000000000..adb2d6270
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_delete_insert.txt
+@@ -0,0 +1,88 @@
++count 87
++/* SysStemDelete and SysStemInsert: the position and count arguments, the stem
++   shapes that are not plain arrays, the partial work a missing element leaves
++   behind, and every error the two routines raise. */
++abc = "a.0 = 3; a.1 = 'a'; a.2 = 'b'; a.3 = 'c'"
++call t abc, "call SysStemDelete 'a.', 1"
++call t abc, "call SysStemDelete a., 2"
++call t abc, "call SysStemDelete 'a', 3"
++call t abc, "call SysStemDelete 'a.', 1, 2"
++call t abc, "call SysStemDelete 'a.', 2, 2"
++call t abc, "call SysStemDelete 'a.', 1, 3"
++call t abc"; a. = 'z'; a.0 = 2; a.1 = 'a'; a.2 = 'b'", "call SysStemDelete 'a.', 1"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 2"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.3 = 'o'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 0", "call SysStemDelete 'a.', 1, 0"
++call t abc, "r = SysStemDelete('a.', 1); say 'returned' r"
++call t abc, "call SysStemInsert 'a.', 1, 'n'"
++call t abc, "call SysStemInsert a., 2, 'n'"
++call t abc, "call SysStemInsert 'a', 4, 'n'"
++call t abc, "call SysStemInsert 'a.', 3, .array~of(1, 2); say a.3~class~id"
++call t "a.0 = 0", "call SysStemInsert 'a.', 1, 'n'"
++call t "a. = 'z'; a.0 = 2; a.1 = 'a'; a.2 = 'b'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 3, 'n'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.3 = 'o'", "call SysStemInsert 'a.', 3, 'n'"
++call t "a.0 = -1", "call SysStemInsert 'a.', 1, 'n'"
++call t abc, "r = SysStemInsert('a.', 1, 'n'); say 'returned' r"
++-- errors
++call t abc, "call SysStemDelete"
++call t abc, "call SysStemDelete 'a.'"
++call t abc, "call SysStemDelete 'a.', 0"
++call t abc, "call SysStemDelete 'a.', 'q'"
++call t abc, "call SysStemDelete 'a.', 1, 0"
++call t abc, "call SysStemDelete 'a.', 1.5"
++call t abc, "call SysStemDelete 'a.', 1, 1, 1"
++call t abc, "call SysStemDelete '*', 1"
++call t abc, "call SysStemDelete 'a.b', 1"
++call t abc, "call SysStemDelete 'zz', 1"
++call t abc, "call SysStemDelete 'a.', 4"
++call t abc, "call SysStemDelete 'a.', 2, 3"
++call t "a. = 'd'", "call SysStemDelete 'a.', 1"
++call t "a.1 = 'q'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 'x'; a.1 = 'q'", "call SysStemDelete 'a.', 1"
++call t "a.0 = -1", "call SysStemDelete 'a.', 1"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemDelete 'a.', 1"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemDelete 'a.', 1"
++call t abc"; drop a.3", "call SysStemDelete 'a.', 1"
++call t abc, "call SysStemInsert"
++call t abc, "call SysStemInsert 'a.', 1"
++call t abc, "call SysStemInsert 'a.', , 'n'"
++call t abc, "call SysStemInsert 'a.', 0, 'n'"
++call t abc, "call SysStemInsert 'a.', 1, 'n', 'm'"
++call t abc, "call SysStemInsert '*', 1, 'n'"
++call t abc, "call SysStemInsert 'a.', 5, 'n'"
++call t "a. = 'd'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 'x'; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
++call t "a.0 = 1234567890; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
++a.0 = 1; a.1 = 'q'
++call SysStemInsert 'a.', 1, 'n'
++say a.0 a.1 a.2
++call SysStemDelete 'a.', 3
++exit
++
++t: procedure
++  parse arg setup, code
++  interpret setup
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code '|' show()
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message '|' show()
++  return
++
++show: procedure expose a.
++  o = ''
++  do i = 0 to 5; o = o a.i; end
++  return o
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_sort.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_sort.txt
+new file mode 100644
+index 000000000..b0d789beb
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_stem_sort.txt
+@@ -0,0 +1,100 @@
++count 99
++/* SysStemSort: order, type, the element and column ranges, the stem forms the
++   first argument takes, the stem shapes that are not plain arrays, and every
++   error the routine raises. A raise from inside the sort itself is trapped
++   in each case: untrapped it crashes the oracle (oracle-crashes.txt entry 37). */
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort 'a.'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort a., 'Descending'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort 'a'"
++call t "a.0 = 4; a.1 = 'b'; a.2 = 'C'; a.3 = 'a'; a.4 = 'D'", "call SysStemSort 'a.', 'A', 'C'"
++call t "a.0 = 4; a.1 = 'b'; a.2 = 'C'; a.3 = 'a'; a.4 = 'D'", "call SysStemSort 'a.', 'a', 'Ignore'"
++call t "a.0 = 4; a.1 = 'b'; a.2 = 'C'; a.3 = 'a'; a.4 = 'D'", "call SysStemSort 'a.', 'd', 'i'"
++call t "a.0 = 4; a.1 = 'x1'; a.2 = 'X2'; a.3 = 'x3'; a.4 = 'X0'", "call SysStemSort 'a.', , 'I', , , 1, 1"
++call t "a.0 = 4; a.1 = 'x1'; a.2 = 'X2'; a.3 = 'x3'; a.4 = 'X0'", "call SysStemSort 'a.', 'D', 'I', , , 1, 1"
++call t "a.0 = 5; a.1 = 'e'; a.2 = 'd'; a.3 = 'c'; a.4 = 'b'; a.5 = 'a'", "call SysStemSort 'a.', , , 2, 4"
++call t "a.0 = 5; a.1 = 'e'; a.2 = 'd'; a.3 = 'c'; a.4 = 'b'; a.5 = 'a'", "call SysStemSort 'a.', , , 3"
++call t "a.0 = 5; a.1 = 'e'; a.2 = 'd'; a.3 = 'c'; a.4 = 'b'; a.5 = 'a'", "call SysStemSort 'a.', , , , 2"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'c'; a.3 = 'a'", "call SysStemSort 'a.', , , 1, 999999999999999999"
++call t "a.0 = 4; a.1 = 'zb'; a.2 = 'ya'; a.3 = 'x'; a.4 = 'yab'", "call SysStemSort 'a.', , , , , 2"
++call t "a.0 = 4; a.1 = 'zb'; a.2 = 'ya'; a.3 = 'x'; a.4 = 'yab'", "call SysStemSort 'a.', , , , , 2, 2"
++call t "a.0 = 4; a.1 = 'zb'; a.2 = 'ya'; a.3 = 'x'; a.4 = 'yab'", "call SysStemSort 'a.', , , , , 5"
++call t "a.0 = 4; a.1 = 'abc'; a.2 = 'ab'; a.3 = 'abd'; a.4 = 'a'", "call SysStemSort 'a.', , , , , 1, 2"
++call t "a.0 = 4; a.1 = 'abc'; a.2 = 'ab'; a.3 = 'abd'; a.4 = 'a'", "call SysStemSort 'a.', 'D', 'I', , , 2, 3"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'é'; a.3 = 'A'", "call SysStemSort 'a.'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = 'é'; a.3 = 'A'", "call SysStemSort 'a.', , 'I'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = '_'; a.3 = 'A'", "call SysStemSort 'a.', , 'I'"
++call t "a.0 = 3; a.1 = 'b'; a.2 = '_'; a.3 = 'A'", "call SysStemSort 'a.', , 'I', , , 1, 1"
++call t "a.0 = 3; a.1 = 'a'||'00'x; a.2 = 'a'; a.3 = 'a'||'01'x", "call SysStemSort 'a.', , , , , 1, 3"
++call t "a.0 = 2; a.1 = 'a'||'00'x; a.2 = 'a'", "call SysStemSort 'a.', , , , , 1, 2"
++call t "a.0 = 2; a.1 = 'a'; a.2 = 'aé'", "call SysStemSort 'a.', , 'I', , , 1, 5"
++call t "a.0 = 2; a.1 = 'a'; a.2 = 'aé'", "call SysStemSort 'a.', , 'I'"
++call t "a.0 = 12; do i = 1 to 12; a.i = (i * 7) // 12; end", "call SysStemSort 'a.'"
++call t "a.0 = 10; do i = 1 to 10; a.i = word('k j i h g f e d c b', i); end", "call SysStemSort 'a.', 'D'"
++call t "a.0 = 9; do i = 1 to 9; a.i = word('B a A b C c a B A', i) || i; end", "call SysStemSort 'a.', , 'I', , , 1, 1"
++call t "a.0 = 0", "call SysStemSort 'a.'"
++call t "a.0 = 1; a.1 = 'only'", "call SysStemSort 'a.'"
++call t "f = 1; a.foo.0 = 3; a.foo.1 = 'b'; a.foo.2 = 'c'; a.foo.3 = 'a'", "call SysStemSort 'a.foo'"
++call t "f = 1; a.foo.0 = 3; a.foo.1 = 'b'; a.foo.2 = 'c'; a.foo.3 = 'a'", "call SysStemSort 'a.foo.'"
++call t "f = 1; a.FOO.0 = 2; a.FOO.1 = 'b'; a.FOO.2 = 'a'; a.foo.1 = 'x'", "call SysStemSort 'a.Foo'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.1.5 = 's'; a.3 = 'o'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = .array~of('z', 'y'); a.2 = 'p'", "call SysStemSort 'a.'; say a.1~class~id a.2~class~id"
++call t "a.0 = 3; a.1 = 10; a.2 = 9; a.3 = 100", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "r = SysStemSort('a.'); say 'returned' r"
++-- the routine's own argument errors
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort '*'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort '1.x'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'Q'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', ''"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'D', 'N'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'Q', 'N'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 2, 1"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , , 3, 2"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 0"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , 'x'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , 1000000000000000000"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , , , , -1"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', 'A', 'C', 1, 2, 1, 2, 'x'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort"
++-- raised from inside the sort: the count, the range and a missing element
++call t "a. = 'd'", "call SysStemSort 'a.'"
++call t "a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = 'x'; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = ''; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = -1", "call SysStemSort 'a.'"
++call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = 1234567890; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 3"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.', , , 1, 3"
++call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemSort 'a.'"
++call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemSort 'a.'"
++call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; drop a.2", "call SysStemSort 'a.'"
++-- an error the routine raises before it sorts, untrapped
++a.0 = 1; a.1 = 'q'
++call SysStemSort 'a.', 'X'
++exit
++
++t: procedure
++  parse arg setup, code
++  f = 0
++  interpret setup
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code '|' show()
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message '|' show()
++  return
++
++show: procedure expose a. f
++  if datatype(a.0, 'W') & a.0 >= 0 & a.0 < 20 then n = a.0
++  else n = 3
++  o = a.0 ':'
++  do i = 1 to n; o = o a.i; end
++  if f then do i = 1 to a.FOO.0; o = o a.FOO.i; end
++  return o

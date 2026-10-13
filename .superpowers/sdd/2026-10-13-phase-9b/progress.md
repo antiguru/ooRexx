@@ -39,3 +39,15 @@ Task 2: fix round 1 at 82c8bfabc; re-review dispatched (sonnet).
 Task 2 re-review 1: owner table wrong for SecurityManager TEST_CALL_PASS_THREE_ARGS (SysSearchPath, Task 4, not Task 7); 29 s figure uncited. Fix round 2 dispatched (resume b2-impl).
 Task 2: fix round 2 at 1138fbfa6 (docs only, 2 open findings). Ruling: controller read the diff instead of a third re-review -- both findings are a table row and a deleted figure, verifiable by reading -- if wrong, close review catches a doc error.
 Task 2: complete (a0abcc77c, ed0923fcc, 82c8bfabc, 1138fbfa6).
+Task 3: dispatched (implementer opus, BASE 2b59b029d); Review Focus section appended to brief.
+Task 3: implementer DONE_WITH_CONCERNS (a6c147e62, 28aa77b29, ef1357a27). Groups 44/44.
+Task 3 review: spec OK; quality needs fixes. I1 new oracle crash (SysDumpVariables over var whose STRING raises: SIGSEGV even under SIGNAL ON SYNTAX, 1 run). I2 report's 999999999 justification false. Minors: sort writes back by tail not by captured element; dump buffered not line-by-line; sort values rooted only via coarse reqstr latch; 40.919/40.921 claim unrun. Out of scope: class-side ::method string not sent.
+Ruling: I1 -> repeat oracle run 3x, oracle-crashes entry 38, crate-only pin with reason.
+Ruling: 999999999 keeps 40.924 with no check; wording: oracle's 5.0 is its eager new_array(bounds*3) under the memory cap (5.0 at 1 GiB, 40.924 at 4 GiB), so the crate matches the oracle's unpressured answer -- that IS the OOM licence, stated with the measurement -- if wrong, a stem-size check would be needed.
+Ruling: dump writes line by line as the oracle does -- interleaving with a STRING method's own output is observable -- if wrong, cost is one buffered write.
+Ruling: sort's value Vec gets an explicit hold, not a comment -- a reqstr latch refinement would silently unroot it; prose is not a control -- if wrong, a redundant root.
+Ruling: sort write-back by element identity -> queued to 9b1 (needs element identity) -- if wrong, a mid-sort stem-emptying STRING method diverges until 9b1.
+Ruling: class-side ::method string not sent -> queued (pre-existing, reqstr.rs Instance gate).
+Task 3: fix round 1 dispatched (resume b3-impl).
+Task 3: fix round 1 at d6c1b2d85, 0009afbc5; re-review dispatched (sonnet).
+Task 3: complete (a6c147e62, 28aa77b29, ef1357a27, d6c1b2d85, 0009afbc5). Re-review approved.
