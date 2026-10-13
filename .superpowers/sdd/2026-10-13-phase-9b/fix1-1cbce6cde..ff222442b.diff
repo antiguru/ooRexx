@@ -1,0 +1,1017 @@
+diff --git a/.superpowers/sdd/2026-10-13-phase-9b/task-4-report.md b/.superpowers/sdd/2026-10-13-phase-9b/task-4-report.md
+index b84c4a8bb..98ce9a208 100644
+--- a/.superpowers/sdd/2026-10-13-phase-9b/task-4-report.md
++++ b/.superpowers/sdd/2026-10-13-phase-9b/task-4-report.md
+@@ -246,3 +246,74 @@ file without line numbers. `refusal-sites.tsv` re-derived in `92d2868fc`.
+    it was left alone.
+ 6. **`~user` reads `/etc/passwd`**, as `USERID()` already does, so an account known only through
+    NSS is not found where the oracle's `getpwnam` would find it.
++
++## Fix round 1
++
++Commit `ab305b53e`, against `task-4-review.md` and the Task 4 rulings in `progress.md`. This
++section replaces Concerns 1 and 5 and the Mutations paragraph above.
++
++1. **The shared qualifier (ratified) is witnessed.** I ran the reviewer's `shared.rex`,
++   `emptyredir.rex` and `nouserredir.rex` on the oracle first, then folded them into a new
++   witness, `rust/corpus/lang/rexxutil_qualified_names.rex`. It is listed in `phase-9.txt` and
++   works inside its own directory with `HOME` moved into it. It covers:
++   - the stream builtins and `.Stream` with a NUL, with an unknown `~user`, and with `''`;
++   - redirects to a NUL name and to `~/t.txt`;
++   - trapped redirects to `''` and to `~nosuchuser.../x`, both 98.920 with `Unable to open file ""`;
++   - an untrapped `''` redirect as its last line.
++   Oracle and crate are identical on all three descriptors, rc 158.
++2. **The date and time routines read the program's own `TZ`.** They now convert through the new
++   `tz-rs` 0.7.3 dependency. It has `#![forbid(unsafe_code)]` and no dependencies of its own, and
++   `Cargo.lock` gains only its entry.
++   - `program_zone` resolves `TZ` from the interpreter's environment, as glibc does: unset reads
++     `/etc/localtime`, a name a zoneinfo file, `:path` that path, and anything else a POSIX rule.
++     A value that reads as nothing, the empty one included, is UTC.
++   - The zone is read only inside the two routines, and only after the `stat` succeeds. No other
++     call path changed.
++   - `make_time` takes the offsets a day either side of the reading. A candidate that reads back
++     as the same reading wins, and of two the earlier wins. For a skipped reading it takes the
++     candidate whose own local time type `is_dst`, else the offset before the skip.
++   - **TDD:** `dublin.rex` under `TZ=Europe/Dublin` and `tzenv.rex` under process
++     `TZ=America/New_York` are now identical to the oracle. Their lines are now in
++     `rexxutil_file_date_time.rex`, which sets `TZ` itself through `VALUE(..., 'ENVIRONMENT')`:
++     - Dublin: the 2020, 2021 and 2045 gaps, the edges, and the repeated reading;
++     - UTC and Kolkata;
++     - the POSIX rule `IST-1GMT0,M10.5.0,M3.5.0/1`, `:Europe/Zurich`, `''` and `No/Such_Zone`.
++   - By hand, the whole witness is identical under process `TZ` Zurich, New_York, UTC, Lord_Howe,
++     Kolkata, Sao_Paulo, Dublin, Chatham, Casablanca and unset.
++   - **Mutants**, each reversed from a copy and confirmed by `cmp`. Both made the witness differ
++     from the oracle:
++     - the gap rule fixed at the earlier offset, which reproduces the old Dublin answer:
++       `1585445400` against `1585441800`;
++     - `program_zone` ignoring the program's `TZ`: the Dublin and Kolkata lines.
++3. **I dropped the `push_temp` at `files.rs:663`, because it cannot be load-bearing.** `Interp`
++   collects only inside `alloc_with` → `collect_if_due`. Between `text_built` and the slot write,
++   `array_append` → `array_grow` → `charge_growth` only marks a collection due. So no collection
++   can fall in that window, and that is why the removal run stayed green.
++4. **The entry-39 test now uses two `Scratch` directories**, each unique per run (pid plus a
++   random key) and removed by `Drop`. A failed assertion leaves nothing behind. It still fails
++   loudly where `target/` and `TMPDIR` are one file system.
++5. **`datetime_zone.rs` compares stdout and stderr as bytes.** It renders them lossily only in the
++   failure message.
++6. **The `.File~new('n'||'ff'x)~absolutePath` case** is in `rexxutil_qualified_names.rex`. It
++   answers raw `6EFF`, which equals both `QUALIFY` and `directory()'/n'||'ff'x`.
++
++Checks at `ab305b53e`, from `rust/`, in the foreground:
++
++| check | result |
++|---|---|
++| `cargo fmt --all --check` | exit 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0 |
++| the lib and table command above, plus `no_process_state` | exit 0, lib 1093 passed, then 8, 2, 1, 6, 5, 3, 5 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse --test sourceline_oracle` | exit 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib rexxutil::files` | 1 passed; no `rexxutil-move-*` left in `target/tmp` or `/tmp` |
++| corpus gate command above | exit 0, `1035 of 1035` before this round, now `1036 of 1036 matching` |
++| `... --test ir_recorded --test trace_oracle --test coverage --test datetime_zone` | exit 0: 28, 41, 21, 22 passed |
++| the suite command above over the same eight groups | exit 101, the same verdicts as before: seven groups green, SecurityManager 18 of 29 (Task 7's 6 and 9d's 5) |
++| `collect_stress` command above | exit 0, 37 passed |
++
++The records in `docs/superpowers/records/2026-10-13-phase-9b/task-4/` were re-run at `ab305b53e`:
++`run-output.txt`, the suite tables, `corpus-output.txt`, `collect-stress-output.txt` and
++`other-tests-output.txt`.
++
++Concerns left: 2 (other lossy path sites, which the controller is queuing), 3 (no callgrind; the
++reviewer measured it), 4 is closed by item 3 above, and 6 (`/etc/passwd`). Concern 1 is closed.
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-4/collect-stress-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-4/collect-stress-output.txt
+index 29dc7b2c0..fd8f11752 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-4/collect-stress-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-4/collect-stress-output.txt
+@@ -1,48 +1,49 @@
+-commit bf532a205
+-    Finished `release` profile [optimized + debuginfo] target(s) in 0.05s
+-     Running tests/collect_stress.rs (target/release/deps/collect_stress-3e828767363293d0)
++commit ab305b53e
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 46.57s
++     Running tests/collect_stress.rs (target/release/deps/collect_stress-845fb3140e90c870)
+ 
+ running 37 tests
+-test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+-test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+-test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+-test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+-test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+-test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+-test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+-test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+-test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+-test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+-test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+-test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+ test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+-test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+ test support::arity::tests::directives_are_appended_after_the_program ... ok
+-test the_stress_subset_reads_every_phase_subset_file ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+ test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+-test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
+-test a_command_line_argument_survives_collect_on_every_allocation ... ok
+-test a_method_that_assigns_over_self_keeps_its_exposed_variables ... ok
+-test a_message_driven_loops_to_and_by_survive_collect_on_every_allocation ... ok
+-test a_pending_reply_keeps_its_registers_across_a_collection ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test the_stress_subset_reads_every_phase_subset_file ... ok
+ test a_parked_activitys_registers_survive_the_activity_that_wakes_it ... ok
+-test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
++test a_message_driven_loops_to_and_by_survive_collect_on_every_allocation ... ok
++test a_command_line_argument_survives_collect_on_every_allocation ... ok
++test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
+ test a_running_activation_keeps_its_context_object_across_a_collection ... ok
+-test a_clause_value_survives_the_handler_its_boundary_runs ... ok
+-test a_stream_builtins_values_survive_a_pinned_yield ... ok
+-test a_parked_reply_keeps_its_variables_across_a_collection ... ok
++test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
++test a_method_that_assigns_over_self_keeps_its_exposed_variables ... ok
++test a_pending_reply_keeps_its_registers_across_a_collection ... ok
+ test a_trapped_conditions_object_survives_collect_on_every_allocation ... ok
++test a_clause_value_survives_the_handler_its_boundary_runs ... ok
++test a_parked_reply_keeps_its_variables_across_a_collection ... ok
+ test values_compound_write_roots_the_old_value_before_the_stems_first_allocation ... ok
+ test values_environment_write_roots_the_old_value_before_the_stores_allocation ... ok
+ test a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop ... ok
++test a_stream_builtins_values_survive_a_pinned_yield ... ok
+ test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+ test the_l0_subset_passes_again_under_collect_on_every_allocation ... ok
+ 
+-test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 336.59s
++test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 155.94s
+ 
+ exit status 0
+-wall 337 s
++wall 202 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-4/corpus-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-4/corpus-output.txt
+index 78d561aee..c733d9a84 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-4/corpus-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-4/corpus-output.txt
+@@ -1,46 +1,47 @@
+-commit 309d16dce
+-    Finished `release` profile [optimized + debuginfo] target(s) in 0.09s
+-     Running tests/corpus.rs (target/release/deps/corpus-d50996334ec4dce5)
++commit ab305b53e
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 49.66s
++     Running tests/corpus.rs (target/release/deps/corpus-1709bffd5fc496e0)
+ 
+ running 30 tests
+ test probe_emit_uncaptured_marker ... ignored, run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
++test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+ test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
+ test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+-test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+ test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+-test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+ test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+ test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
+ test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+-test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+ test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+ test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+ test the_differential_reads_every_phase_subset_file ... ok
+-test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+-test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+-test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+-test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+-test support::arity::tests::directives_are_appended_after_the_program ... ok
+-test demonstrate_the_report_reaches_a_plain_cargo_test ... ok
+ test the_multiset_stdout_mode_is_selected_for_exactly_the_listed_programs ... ok
+-test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
++test demonstrate_the_report_reaches_a_plain_cargo_test ... ok
+ test every_lang_program_is_run_or_named_unfiled ... ok
+-test the_multiset_stdout_licence_covers_order_and_nothing_else ... ok
+ test every_sidecar_names_a_program_the_subset_runs ... ok
++test the_multiset_stdout_licence_covers_order_and_nothing_else ... ok
+ test a_sidecar_changes_what_one_of_the_interpreters_answers ... ok
+ test corpus_differential has been running for over 60 seconds
+ ==============================================================================
+ rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt + phase-4c.txt + phase-5a.txt + phase-5b.txt + phase-5c.txt + phase-5d.txt + phase-5j.txt + phase-6-1.txt + phase-6.txt + phase-7.txt + phase-8.txt + phase-9.txt
+ mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
+-1035 of 1035 matching
++1036 of 1036 matching
+ ==============================================================================
+ test corpus_differential ... ok
+ 
+-test result: ok. 29 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 95.06s
++test result: ok. 29 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 83.76s
+ 
+ exit status 0
+-wall 95 s
++wall 134 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-4/other-tests-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-4/other-tests-output.txt
+index 8a0291128..53756cf57 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-4/other-tests-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-4/other-tests-output.txt
+@@ -1,85 +1,85 @@
+-commit 0dccdb3b7
++commit ab305b53e
+    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+-    Finished `release` profile [optimized + debuginfo] target(s) in 1m 24s
+-     Running tests/coverage.rs (target/release/deps/coverage-dd21fc78c4c21ccb)
++    Finished `release` profile [optimized + debuginfo] target(s) in 52.93s
++     Running tests/coverage.rs (target/release/deps/coverage-4541e47c7d1b24a0)
+ 
+ running 21 tests
+-test owners::assert_owner_strings_are_split_table_phases ... ok
+ test a_class_directive_is_admitted_without_panicking ... ok
++test owners::assert_owner_strings_are_split_table_phases ... ok
+ test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
+-test an_unadmitted_directive_still_panics - should panic ... ok
+ test owners::only_backslash_is_unreachable ... ok
+-test owners::out_of_scope_set_matches_the_committed_expectation ... ok
+-test owners::variant_counts_match_the_audited_split ... ok
+-test phase_4a_subset_matches_the_committed_list ... ok
+ test every_directive_keyword_is_correctly_admitted_or_refused ... ok
+-test owners::the_two_harnesses_include_this_exact_file ... ok
++test an_unadmitted_directive_still_panics - should panic ... ok
++test owners::out_of_scope_set_matches_the_committed_expectation ... ok
++test phase_4a_subset_matches_the_committed_list ... ok
++test owners::variant_counts_match_the_audited_split ... ok
+ test phase_4b_subset_matches_the_committed_list ... ok
+ test phase_4c_subset_matches_the_committed_list ... ok
+ test phase_5d_subset_matches_the_committed_list ... ok
++test phase_5b_subset_matches_the_committed_list ... ok
++test phase_5c_subset_matches_the_committed_list ... ok
++test owners::the_two_harnesses_include_this_exact_file ... ok
+ test the_builtin_exclusion_set_matches_the_committed_file ... ok
+ test read_subset_unions_two_files_first_seen_order_deduplicated ... ok
+-test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
+-test phase_5b_subset_matches_the_committed_list ... ok
+ test phase_5a_subset_matches_the_committed_list ... ok
+ test the_union_reads_every_phase_subset_file ... ok
+-test phase_5c_subset_matches_the_committed_list ... ok
++test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
+ test every_in_scope_variant_is_witnessed_by_the_phase_subsets ... ok
+ 
+-test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
++test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+ 
+-     Running tests/datetime_zone.rs (target/release/deps/datetime_zone-c144229bf719dc08)
++     Running tests/datetime_zone.rs (target/release/deps/datetime_zone-61b1c30d50908384)
+ 
+ running 22 tests
+-test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+ test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+-test support::arity::tests::directives_are_appended_after_the_program ... ok
+-test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+ test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+-test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+-test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+-test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+ test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+ test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+-test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+ test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+ test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+ test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+-test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+-test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+ test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+ test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test the_file_date_time_witness_reads_the_zone_the_oracle_does ... ok
+ test date_and_time_read_the_same_zone_the_oracle_does ... ok
+ 
+-test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
++test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+ 
+-     Running tests/ir_recorded.rs (target/release/deps/ir_recorded-27ee2d9270b406c6)
++     Running tests/ir_recorded.rs (target/release/deps/ir_recorded-a132a38613d24248)
+ 
+ running 28 tests
+-test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+ test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+-test support::arity::tests::directives_are_appended_after_the_program ... ok
+-test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+-test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+-test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+-test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+ test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
++test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+ test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+ test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+ test support::tests::a_changed_value_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+ test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+ test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+-test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+-test the_harness_reads_every_phase_subset_file ... ok
+-test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+ test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+-test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test the_harness_reads_every_phase_subset_file ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test the_sweep_runs_every_ootest_suite_a_sibling_harness_runs ... ok
+ test the_smallest_program_answers ... ok
+ test every_population_the_tree_calls_for_is_present_and_non_empty ... ok
+@@ -88,54 +88,54 @@ test every_branch_shape_answers_as_recorded ... ok
+ test every_case_file_answers_as_recorded ... ok
+ test every_population_runs_without_a_refusal ... ok
+ 
+-test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.55s
++test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.52s
+ 
+-     Running tests/trace_oracle.rs (target/release/deps/trace_oracle-79e3a023695b7b74)
++     Running tests/trace_oracle.rs (target/release/deps/trace_oracle-19fc6fbb7b460fff)
+ 
+ running 41 tests
+-test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+-test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+-test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+-test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+ test every_trace_prefix_the_oracle_emits_has_a_witness ... ok
+-test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+ test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+ test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+-test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+ test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
++test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
++test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
++test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+ test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+-test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+-test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+-test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::arity::tests::directives_are_appended_after_the_program ... ok
+ test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+-test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+-test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
++test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
++test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+ test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+ test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+-test support::arity::tests::directives_are_appended_after_the_program ... ok
++test support::tests::a_missing_line_still_differs_after_normalisation ... ok
++test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
++test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
++test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
++test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
++test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+ test the_prefix_table_reads_every_phase_subset_file ... ok
+ test every_witness_still_emits_every_prefix_it_is_named_for ... ok
+-test control_variable_reread_covers_a_body_that_writes_the_control_variable ... ok
+-test pull_queue_covers_the_line_reading_sources_in_both_modes ... ok
+-test message_send_covers_the_message_result_line ... ok
+-test trace_output_covers_clause_result_assignment_literal_variable_and_operator ... ok
+-test compound_read_write_covers_the_resolved_compound_name ... ok
+-test use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate ... ok
+-test namespace_lookup_covers_the_class_resolution_line ... ok
+-test call_arguments_covers_the_argument_prefix_at_every_position_shape ... ok
+-test function_call_covers_the_function_prefix_after_the_callees_own_lines ... ok
+-test control_variable_novalue_covers_a_dropped_control_variable_under_a_trap ... ok
+-test controlled_loop_covers_the_control_variables_own_value_lines ... ok
+-test exit_value_covers_the_exit_instructions_own_result_line ... ok
+ test parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement ... ok
++test namespace_lookup_covers_the_class_resolution_line ... ok
++test use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate ... ok
++test compound_read_write_covers_the_resolved_compound_name ... ok
+ test trace_labels_covers_the_labels_only_mode ... ok
+-test prefix_operators_covers_plus_and_backslash ... ok
+-test dotvariable_beyond_the_list_covers_the_spec_correction ... ok
++test message_send_covers_the_message_result_line ... ok
++test pull_queue_covers_the_line_reading_sources_in_both_modes ... ok
++test function_call_covers_the_function_prefix_after_the_callees_own_lines ... ok
++test trace_output_covers_clause_result_assignment_literal_variable_and_operator ... ok
++test control_variable_reread_covers_a_body_that_writes_the_control_variable ... ok
+ test keyword_while_covers_a_re_evaluated_keyword_across_every_pass ... ok
++test call_arguments_covers_the_argument_prefix_at_every_position_shape ... ok
++test dotvariable_beyond_the_list_covers_the_spec_correction ... ok
++test control_variable_novalue_covers_a_dropped_control_variable_under_a_trap ... ok
++test exit_value_covers_the_exit_instructions_own_result_line ... ok
++test prefix_operators_covers_plus_and_backslash ... ok
++test controlled_loop_covers_the_control_variables_own_value_lines ... ok
+ test every_live_witness_emits_its_prefix_and_is_run_by_the_corpus ... ok
+ 
+-test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
++test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+ 
+ exit status 0
+-wall 110 s
++wall 65 s
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-4/run-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-4/run-output.txt
+index c5ffa0e2f..4fc82a064 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-4/run-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-4/run-output.txt
+@@ -1,7 +1,7 @@
+-commit 92d2868fc
++commit ab305b53e
+    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+-    Finished `release` profile [optimized + debuginfo] target(s) in 23.82s
+-     Running tests/suite.rs (target/release/deps/suite-22d700f0bfa93c32)
++    Finished `release` profile [optimized + debuginfo] target(s) in 23.23s
++     Running tests/suite.rs (target/release/deps/suite-de56001e9348986c)
+ 
+ running 1 test
+ test l3_core_suite has been running for over 60 seconds
+@@ -12,7 +12,7 @@ failures:
+ ---- l3_core_suite stdout ----
+ suite: 8 groups, 1 red, table /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-13-phase-9b/task-4/table.tsv, verdicts /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-13-phase-9b/task-4/verdicts.tsv
+ 
+-thread 'l3_core_suite' (2988679) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
++thread 'l3_core_suite' (3129902) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
+ 1 of 8 groups are not green; each reason is in /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-13-phase-9b/task-4/verdicts.tsv
+ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ 
+@@ -20,8 +20,8 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ failures:
+     l3_core_suite
+ 
+-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 126.51s
++test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 126.20s
+ 
+ error: test failed, to rerun pass `-p rexx-exec --test suite`
+ exit status 101
+-wall 150 s
++wall 149 s
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index 513279359..7d95df1ac 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -611,6 +611,7 @@ dependencies = [
+  "rexx-parse",
+  "rustc-hash",
+  "rustix",
++ "tz-rs",
+ ]
+ 
+ [[package]]
+@@ -870,6 +871,12 @@ dependencies = [
+  "tracing-log",
+ ]
+ 
++[[package]]
++name = "tz-rs"
++version = "0.7.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4fc6c929ffa10fb34f4a3c7e9a73620a83ef2e85e47f9ec3381b8289e6762f42"
++
+ [[package]]
+ name = "unicode-ident"
+ version = "1.0.24"
+diff --git a/rust/corpus/lang/rexxutil_file_date_time.rex b/rust/corpus/lang/rexxutil_file_date_time.rex
+index a33decfbd..4192efb0c 100644
+--- a/rust/corpus/lang/rexxutil_file_date_time.rex
++++ b/rust/corpus/lang/rexxutil_file_date_time.rex
+@@ -5,8 +5,10 @@
+    apart), years before 1000 and before 1970, the access time a set keeps,
+    either half omitted, links, a directory, names that resolve to nothing,
+    and the argument errors. The daylight-saving lines are the zone's own
+-   transitions in Europe and in North America. Everything is made under a
+-   directory this program makes and removes. */
++   transitions in Europe and in North America. Last, TZ is set by the
++   program itself, to zones including one whose daylight saving is winter
++   time, a POSIX rule, an empty value and a name no file has. Everything is
++   made under a directory this program makes and removes. */
+ d = 'datetime.d'
+ call SysMkDir d
+ f = d'/a.txt'
+@@ -85,6 +87,28 @@ call t "call SysSetFileDateTime f, .nil"
+ call t "call SysSetFileDateTime f, , .nil"
+ call t "call SysSetFileDateTime f, 1, 2, 3"
+ call t "r = SysSetFileDateTime(f, '2020-01-01'); say 'returned' r"
++-- the program's own TZ, set through the environment, is the zone both read
++call value 'TZ', 'Europe/Dublin', 'ENVIRONMENT'
++call s '2020-03-29', '01:30:00', 'epoch'
++call s '2020-03-29', '00:59:59', 'epoch'
++call s '2020-03-29', '02:00:00', 'epoch'
++call s '2020-10-25', '01:30:00', 'epoch'
++call s '2021-03-28', '01:30:00', 'epoch'
++call s '2045-03-26', '01:30:00', 'epoch'
++call value 'TZ', 'UTC', 'ENVIRONMENT'
++call s '2020-06-01', '12:00:00', 'epoch'
++call value 'TZ', 'Asia/Kolkata', 'ENVIRONMENT'
++say 'kolkata     ' SysGetFileDateTime(f)
++call s '2020-06-01', '12:00:00', 'epoch'
++call value 'TZ', 'IST-1GMT0,M10.5.0,M3.5.0/1', 'ENVIRONMENT'
++call s '2020-03-29', '01:30:00', 'epoch'
++call s '2020-07-01', '12:00:00', 'epoch'
++call value 'TZ', ':Europe/Zurich', 'ENVIRONMENT'
++call s '2020-03-29', '02:30:00', 'epoch'
++call value 'TZ', '', 'ENVIRONMENT'
++call s '2020-07-01', '12:00:00', 'epoch'
++call value 'TZ', 'No/Such_Zone', 'ENVIRONMENT'
++call s '2020-07-01', '12:00:00', 'epoch'
+ 'rm -rf' d
+ call SysGetFileDateTime f, 'Q'
+ exit
+diff --git a/rust/corpus/lang/rexxutil_qualified_names.rex b/rust/corpus/lang/rexxutil_qualified_names.rex
+new file mode 100644
+index 000000000..53d2aae3f
+--- /dev/null
++++ b/rust/corpus/lang/rexxutil_qualified_names.rex
+@@ -0,0 +1,44 @@
++/* Names the stream builtins, .Stream, .File and the redirects qualify as
++   SysFileSystem::qualifyStreamName does: a NUL ends the name, an unknown
++   ~user and the empty name qualify to the null string, ~/ is HOME, and bytes
++   that are not UTF-8 stay as they are. Everything is made under a directory
++   this program makes and removes, with HOME moved into it. */
++d = 'qualified.d'
++call SysMkDir d
++call directory d
++call lineout 'a' || '00'x || 'b', 'x'
++call lineout 'a' || '00'x || 'b'
++say 'nul stream     ' (stream('a', 'c', 'query exists') <> '') ,
++  (stream('a' || '00'x || 'zz', 'c', 'query exists') <> '')
++say 'nul .Stream    ' (.Stream~new('q' || '00'x || 'z')~qualify == qualify('q'))
++say 'no user lineout' lineout('~nosuchuser.rexxutil/x', 'y')
++say 'no user exists ' '[' || stream('~nosuchuser.rexxutil/x', 'c', 'query exists') || ']'
++say 'no user state  ' stream('~nosuchuser.rexxutil/x', 's') stream('~nosuchuser.rexxutil/x', 'd')
++say 'no user .Stream' '[' || .Stream~new('~nosuchuser.rexxutil/x')~qualify || ']'
++say 'empty .Stream  ' '[' || .Stream~new('')~qualify || ']'
++address system 'echo hi' with output stream ('o' || '00'x || 'p')
++say 'nul redirect   ' (stream('o', 'c', 'query exists') <> '') linein('o')
++h = value('HOME', directory(), 'ENVIRONMENT')
++address system 'echo tilde' with output stream '~/t.txt'
++say 'tilde redirect ' (stream(directory()'/t.txt', 'c', 'query exists') <> '') linein(directory()'/t.txt')
++call value 'HOME', h, 'ENVIRONMENT'
++call t "address system 'echo e' with output stream ''"
++call t "address system 'echo e' with output stream '~nosuchuser.rexxutil/x'"
++odd = .File~new('n' || 'ff'x)~absolutePath
++say 'not utf8 .File ' c2x(right(odd, 2)) (odd == qualify('n' || 'ff'x)) ,
++  (odd == directory()'/n' || 'ff'x)
++call directory '..'
++'rm -rf' d
++address system 'echo e' with output stream ''
++exit
++
++t: procedure
++  parse arg code
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code 'rc' rc
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message
++  return
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 28e56f6c0..23ab9c668 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -75,3 +75,7 @@ lang/rexxutil_file_date_time.rex
+ lang/rexxutil_temp_file_name.rex
+ lang/rexxutil_search_path.rex
+ lang/rexxutil_file_search.rex
++
++# 9b Task 4 fix round 1: names the shared qualifier reaches from streams,
++# .Stream, .File and redirects.
++lang/rexxutil_qualified_names.rex
+diff --git a/rust/crates/rexx-exec/Cargo.toml b/rust/crates/rexx-exec/Cargo.toml
+index cb81bab76..b0b5a086f 100644
+--- a/rust/crates/rexx-exec/Cargo.toml
++++ b/rust/crates/rexx-exec/Cargo.toml
+@@ -50,7 +50,6 @@ rexx-lib = { path = "../rexx-lib" }
+ # `SystemInterpreter::getCurrentTime` calls `localtime`; this crate cannot,
+ # because that is `unsafe` and the workspace lint is `deny`.
+ #
+-# **The only external crate `src/` depends on**, so the reasons are here.
+ # `default-features = false` drops `oldtime` (a no-op feature since 0.4.30,
+ # and what used to pull the `time` 0.1 whose `localtime_r` is
+ # RUSTSEC-2020-0071) and `wasmbind`. What is left compiles four crates on
+@@ -70,6 +69,11 @@ rustix = { version = "1.1.4", features = ["event", "fs", "process", "system", "t
+ # `sigaction` and the async-signal-safe `write` the signal module needs
+ # (D-U3, `src/signal.rs`). Already in the graph through `std`'s users.
+ libc = "0.2.186"
++# The zone `SysGetFileDateTime` and `SysSetFileDateTime` convert through: the
++# program's own `TZ` resolved as glibc resolves it, and each local time
++# type's `is_dst`, which glibc's `mktime` uses to place a skipped reading and
++# chrono does not expose. `#![forbid(unsafe_code)]`, no dependencies.
++tz-rs = "0.7.3"
+ 
+ [features]
+ # The pinned-park counter, `src/pinning.rs`.
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/files.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/files.rs
+index 22ce21b1e..b1b6868bd 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/files.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/files.rs
+@@ -13,9 +13,7 @@
+ //! `interpreter/runtime/RexxUtilCommon.cpp`, `platform/unix/SysRexxUtil.cpp`
+ //! and the `platform/unix/SysFileSystem.cpp` calls they make.
+ 
+-use chrono::{
+-    Datelike as _, LocalResult, NaiveDate, NaiveDateTime, TimeDelta, TimeZone as _, Timelike as _,
+-};
++use chrono::{Datelike as _, NaiveDate, TimeDelta, Timelike as _};
+ use rexx_core::ObjRef;
+ use rustix::fs::{AtFlags, FileType, Mode, OFlags, Timespec, Timestamps};
+ use rustix::io::Errno;
+@@ -262,9 +260,31 @@ struct CivilTime {
+     second: i64,
+ }
+ 
+-/// `localtime`: the local reading of `seconds` since the epoch.
+-fn local_time(seconds: i64) -> Option<CivilTime> {
+-    let at = chrono::Local.timestamp_opt(seconds, 0).earliest()?;
++/// The zone the program's own `TZ` names, resolved as glibc's `tzset` does:
++/// unset is `/etc/localtime`, a name is a TZif file under the zoneinfo
++/// directories or a path after `:`, anything else a POSIX rule, and what none
++/// of these reads, an empty `TZ` among them, is UTC. Read on every call, as
++/// `localtime` and `mktime` read it.
++fn program_zone(interp: &Interp) -> tz::TimeZone {
++    let named = match interp.env_get(b"TZ") {
++        None => tz::TimeZone::local(),
++        Some(text) => match std::str::from_utf8(text) {
++            Ok(text) => tz::TimeZone::from_posix_tz(text),
++            Err(_) => return tz::TimeZone::utc(),
++        },
++    };
++    named.unwrap_or_else(|_| tz::TimeZone::utc())
++}
++
++/// The local time type `zone` has in force at `seconds` since the epoch.
++fn zone_type(zone: &tz::TimeZone, seconds: i64) -> Option<tz::LocalTimeType> {
++    zone.find_local_time_type(seconds).ok().copied()
++}
++
++/// `localtime`: the reading of `seconds` since the epoch in `zone`.
++fn local_time(zone: &tz::TimeZone, seconds: i64) -> Option<CivilTime> {
++    let offset = i64::from(zone_type(zone, seconds)?.ut_offset());
++    let at = chrono::DateTime::from_timestamp(seconds.checked_add(offset)?, 0)?;
+     Some(CivilTime {
+         year: i64::from(at.year()),
+         month0: i64::from(at.month0()),
+@@ -275,18 +295,14 @@ fn local_time(seconds: i64) -> Option<CivilTime> {
+     })
+ }
+ 
+-/// `mktime` with `tm_isdst` of `-1`: fields past their range carry into the
+-/// next, a reading the zone repeats is its earlier instant, and a reading the
+-/// zone skips is taken at the offset in force before the skip. `-1` where the
+-/// result is outside what the calendar holds.
+-///
+-/// glibc takes a skipped reading at whichever offset lands it in daylight
+-/// saving time, which is the earlier offset wherever daylight saving is the
+-/// later one. In a zone whose daylight saving is the earlier offset, as
+-/// `Europe/Dublin`'s winter is, it lands an hour earlier than here: measured,
+-/// `2020-03-29 01:30:00` there is `1585441800` on the oracle and `1585445400`
+-/// here. chrono does not say which offset is daylight saving time.
+-fn make_time(fields: CivilTime) -> i64 {
++/// `mktime` with `tm_isdst` of `-1` in `zone`: fields past their range carry
++/// into the next, and a reading the zone repeats is its earlier instant. A
++/// reading the zone skips is taken at whichever of the two offsets around it
++/// lands it in a local time type flagged daylight saving, which is glibc's
++/// choice: the offset before the skip in most zones, the one after it where
++/// the zone flags winter time as daylight saving (`Europe/Dublin`). `-1` where
++/// the result is outside what the calendar holds.
++fn make_time(zone: &tz::TimeZone, fields: CivilTime) -> i64 {
+     let months = fields.year * 12 + fields.month0;
+     let first = i32::try_from(months.div_euclid(12)).ok().and_then(|year| {
+         let month = u32::try_from(months.rem_euclid(12) + 1).ok()?;
+@@ -299,34 +315,26 @@ fn make_time(fields: CivilTime) -> i64 {
+     else {
+         return -1;
+     };
+-    let candidates = match chrono::Local.from_local_datetime(&local) {
+-        LocalResult::Single(at) => [Some(at), None],
+-        LocalResult::Ambiguous(one, other) => [Some(one), Some(other)],
+-        LocalResult::None => [None, None],
+-    };
+-    // chrono answers both readings for the instant a transition happens at,
+-    // so each is kept only where the zone reads that instant back as `local`.
+-    candidates
+-        .into_iter()
+-        .flatten()
+-        .map(|at| at.timestamp())
+-        .filter(|seconds| {
+-            chrono::Local
+-                .timestamp_opt(*seconds, 0)
+-                .earliest()
+-                .is_some_and(|at| at.naive_local() == local)
+-        })
+-        .min()
+-        .unwrap_or_else(|| skipped_reading(local))
+-}
+-
+-/// [`make_time`] for a reading inside a skipped hour.
+-fn skipped_reading(local: NaiveDateTime) -> i64 {
+-    let Some(before) = local.checked_sub_signed(TimeDelta::days(1)) else {
++    let local = local.and_utc().timestamp();
++    // The offsets a day either side: a reading a transition repeats or skips
++    // lies between them.
++    let offsets = [local - 86_400, local + 86_400]
++        .map(|around| zone_type(zone, around).map(|found| i64::from(found.ut_offset())));
++    let [Some(before), Some(after)] = offsets else {
+         return -1;
+     };
+-    let offset = chrono::Local.offset_from_utc_datetime(&before);
+-    local.and_utc().timestamp() - i64::from(offset.local_minus_utc())
++    let candidates = [local - before, local - after];
++    let reads_back = |at: i64| {
++        zone_type(zone, at).is_some_and(|found| i64::from(found.ut_offset()) == local - at)
++    };
++    if let Some(at) = candidates.into_iter().filter(|at| reads_back(*at)).min() {
++        return at;
++    }
++    let daylight = |at: i64| zone_type(zone, at).is_some_and(|found| found.is_dst());
++    match candidates.map(daylight) {
++        [false, true] => candidates[1],
++        _ => candidates[0],
++    }
+ }
+ 
+ /// `sscanf` over `text` with the format `%<w>d<sep>%<w>d<sep>%<w>d`, the
+@@ -413,7 +421,7 @@ pub(crate) fn get_file_date_time(
+         return Ok(answer(interp, -1));
+     };
+     let seconds = if access { stat.st_atime } else { stat.st_mtime };
+-    let Some(at) = local_time(seconds) else {
++    let Some(at) = local_time(&program_zone(interp), seconds) else {
+         return Ok(answer(interp, -1));
+     };
+     let text = format!(
+@@ -453,7 +461,8 @@ pub(crate) fn set_file_date_time(
+                 i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
+             })
+     } else {
+-        let Some(mut fields) = local_time(stat.st_mtime) else {
++        let zone = program_zone(interp);
++        let Some(mut fields) = local_time(&zone, stat.st_mtime) else {
+             return Ok(answer(interp, -1));
+         };
+         if let Some(date) = date {
+@@ -468,7 +477,7 @@ pub(crate) fn set_file_date_time(
+             };
+             (fields.hour, fields.minute, fields.second) = (hour, minute, second);
+         }
+-        make_time(fields)
++        make_time(&zone, fields)
+     };
+     let times = Timestamps {
+         last_access: whole_second(stat.st_atime),
+@@ -660,7 +669,6 @@ impl Found {
+         let value = interp.text_built(line);
+         match self {
+             Found::Array(array) => {
+-                interp.roots.activity_mut().push_temp(value);
+                 interp.array_append(array, value)?;
+             }
+             Found::Stem(stem) => {
+diff --git a/rust/crates/rexx-exec/src/builtin/rexxutil/files/tests.rs b/rust/crates/rexx-exec/src/builtin/rexxutil/files/tests.rs
+index e5a225e64..3c6e204d1 100644
+--- a/rust/crates/rexx-exec/src/builtin/rexxutil/files/tests.rs
++++ b/rust/crates/rexx-exec/src/builtin/rexxutil/files/tests.rs
+@@ -20,11 +20,32 @@ fn bytes(path: &Path) -> &[u8] {
+     path.as_os_str().as_bytes()
+ }
+ 
+-/// A fresh empty directory at `path`.
+-fn fresh(path: PathBuf) -> PathBuf {
+-    let _ = fs::remove_dir_all(&path);
+-    fs::create_dir_all(&path).unwrap_or_else(|e| panic!("cannot create {}: {e}", path.display()));
+-    path
++/// A directory of this run's own under `parent`, removed when dropped, so a
++/// failed assertion leaves nothing behind and two runs never share one.
++struct Scratch(PathBuf);
++
++impl Scratch {
++    fn new(parent: &Path) -> Scratch {
++        use std::hash::BuildHasher as _;
++        let unique = std::hash::RandomState::new().hash_one(std::process::id());
++        let path = parent.join(format!(
++            "rexxutil-move-{}-{unique:016x}",
++            std::process::id()
++        ));
++        fs::create_dir_all(&path)
++            .unwrap_or_else(|e| panic!("cannot create {}: {e}", path.display()));
++        Scratch(path)
++    }
++
++    fn join(&self, name: &str) -> PathBuf {
++        self.0.join(name)
++    }
++}
++
++impl Drop for Scratch {
++    fn drop(&mut self) {
++        let _ = fs::remove_dir_all(&self.0);
++    }
+ }
+ 
+ /// **A move across file systems copies and then unlinks**, keeping the
+@@ -34,11 +55,11 @@ fn fresh(path: PathBuf) -> PathBuf {
+ /// this crate's own answer, the one this checkout's `interpreter/` gives. The
+ /// two directories are this crate's target directory and the system's
+ /// temporary directory, and the test first checks that a rename between them
+-/// is refused with `EXDEV`.
++/// is refused with `EXDEV`, failing where they are one file system.
+ #[test]
+ fn a_move_across_file_systems_copies_and_unlinks() {
+-    let here = fresh(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/rexxutil-move"));
+-    let there = fresh(std::env::temp_dir().join(format!("rexxutil-move-{}", std::process::id())));
++    let here = Scratch::new(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp"));
++    let there = Scratch::new(&std::env::temp_dir());
+ 
+     let probe = here.join("probe");
+     fs::write(&probe, b"").expect("a probe file");
+@@ -46,8 +67,8 @@ fn a_move_across_file_systems_copies_and_unlinks() {
+         rustix::fs::rename(bytes(&probe), bytes(&there.join("probe"))),
+         Err(rustix::io::Errno::XDEV),
+         "this test needs {} and {} on different file systems",
+-        here.display(),
+-        there.display()
++        here.0.display(),
++        there.0.display()
+     );
+ 
+     let from = here.join("f.txt");
+@@ -87,7 +108,4 @@ fn a_move_across_file_systems_copies_and_unlinks() {
+         "nothing is written through the link"
+     );
+     assert_eq!(fs::read(&second).expect("the source stays"), b"more");
+-
+-    let _ = fs::remove_dir_all(&here);
+-    let _ = fs::remove_dir_all(&there);
+ }
+diff --git a/rust/crates/rexx-exec/tests/datetime_zone.rs b/rust/crates/rexx-exec/tests/datetime_zone.rs
+index 76245ba88..589b39960 100644
+--- a/rust/crates/rexx-exec/tests/datetime_zone.rs
++++ b/rust/crates/rexx-exec/tests/datetime_zone.rs
+@@ -169,15 +169,17 @@ fn the_file_date_time_witness_reads_the_zone_the_oracle_does() {
+             Termination::Exited(out.status.code().unwrap_or(-1)),
+             "exit status under TZ={zone}"
+         );
+-        assert_eq!(
++        assert!(
++            out.stdout == cpp.stdout,
++            "stdout under TZ={zone}:\n{}\n---\n{}",
+             String::from_utf8_lossy(&out.stdout),
+-            String::from_utf8_lossy(&cpp.stdout),
+-            "stdout under TZ={zone}"
++            String::from_utf8_lossy(&cpp.stdout)
+         );
+-        assert_eq!(
++        assert!(
++            out.stderr == cpp.stderr,
++            "stderr under TZ={zone}:\n{}\n---\n{}",
+             String::from_utf8_lossy(&out.stderr),
+-            String::from_utf8_lossy(&cpp.stderr),
+-            "stderr under TZ={zone}"
++            String::from_utf8_lossy(&cpp.stderr)
+         );
+         outputs.push(out.stdout);
+     }
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_file_date_time.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_file_date_time.txt
+index 590958749..4e5ee5c0d 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_file_date_time.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_file_date_time.txt
+@@ -1,4 +1,4 @@
+-count 110
++count 134
+ /* SysSetFileDateTime and SysGetFileDateTime: dates and times that scan and
+    ones that do not, fields past their range carrying into the next, a
+    reading the local zone skips and one it repeats (each also as seconds
+@@ -6,8 +6,10 @@ count 110
+    apart), years before 1000 and before 1970, the access time a set keeps,
+    either half omitted, links, a directory, names that resolve to nothing,
+    and the argument errors. The daylight-saving lines are the zone's own
+-   transitions in Europe and in North America. Everything is made under a
+-   directory this program makes and removes. */
++   transitions in Europe and in North America. Last, TZ is set by the
++   program itself, to zones including one whose daylight saving is winter
++   time, a POSIX rule, an empty value and a name no file has. Everything is
++   made under a directory this program makes and removes. */
+ d = 'datetime.d'
+ call SysMkDir d
+ f = d'/a.txt'
+@@ -86,6 +88,28 @@ call t "call SysSetFileDateTime f, .nil"
+ call t "call SysSetFileDateTime f, , .nil"
+ call t "call SysSetFileDateTime f, 1, 2, 3"
+ call t "r = SysSetFileDateTime(f, '2020-01-01'); say 'returned' r"
++-- the program's own TZ, set through the environment, is the zone both read
++call value 'TZ', 'Europe/Dublin', 'ENVIRONMENT'
++call s '2020-03-29', '01:30:00', 'epoch'
++call s '2020-03-29', '00:59:59', 'epoch'
++call s '2020-03-29', '02:00:00', 'epoch'
++call s '2020-10-25', '01:30:00', 'epoch'
++call s '2021-03-28', '01:30:00', 'epoch'
++call s '2045-03-26', '01:30:00', 'epoch'
++call value 'TZ', 'UTC', 'ENVIRONMENT'
++call s '2020-06-01', '12:00:00', 'epoch'
++call value 'TZ', 'Asia/Kolkata', 'ENVIRONMENT'
++say 'kolkata     ' SysGetFileDateTime(f)
++call s '2020-06-01', '12:00:00', 'epoch'
++call value 'TZ', 'IST-1GMT0,M10.5.0,M3.5.0/1', 'ENVIRONMENT'
++call s '2020-03-29', '01:30:00', 'epoch'
++call s '2020-07-01', '12:00:00', 'epoch'
++call value 'TZ', ':Europe/Zurich', 'ENVIRONMENT'
++call s '2020-03-29', '02:30:00', 'epoch'
++call value 'TZ', '', 'ENVIRONMENT'
++call s '2020-07-01', '12:00:00', 'epoch'
++call value 'TZ', 'No/Such_Zone', 'ENVIRONMENT'
++call s '2020-07-01', '12:00:00', 'epoch'
+ 'rm -rf' d
+ call SysGetFileDateTime f, 'Q'
+ exit
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_qualified_names.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_qualified_names.txt
+new file mode 100644
+index 000000000..20bfec972
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/rexxutil_qualified_names.txt
+@@ -0,0 +1,45 @@
++count 44
++/* Names the stream builtins, .Stream, .File and the redirects qualify as
++   SysFileSystem::qualifyStreamName does: a NUL ends the name, an unknown
++   ~user and the empty name qualify to the null string, ~/ is HOME, and bytes
++   that are not UTF-8 stay as they are. Everything is made under a directory
++   this program makes and removes, with HOME moved into it. */
++d = 'qualified.d'
++call SysMkDir d
++call directory d
++call lineout 'a' || '00'x || 'b', 'x'
++call lineout 'a' || '00'x || 'b'
++say 'nul stream     ' (stream('a', 'c', 'query exists') <> '') ,
++  (stream('a' || '00'x || 'zz', 'c', 'query exists') <> '')
++say 'nul .Stream    ' (.Stream~new('q' || '00'x || 'z')~qualify == qualify('q'))
++say 'no user lineout' lineout('~nosuchuser.rexxutil/x', 'y')
++say 'no user exists ' '[' || stream('~nosuchuser.rexxutil/x', 'c', 'query exists') || ']'
++say 'no user state  ' stream('~nosuchuser.rexxutil/x', 's') stream('~nosuchuser.rexxutil/x', 'd')
++say 'no user .Stream' '[' || .Stream~new('~nosuchuser.rexxutil/x')~qualify || ']'
++say 'empty .Stream  ' '[' || .Stream~new('')~qualify || ']'
++address system 'echo hi' with output stream ('o' || '00'x || 'p')
++say 'nul redirect   ' (stream('o', 'c', 'query exists') <> '') linein('o')
++h = value('HOME', directory(), 'ENVIRONMENT')
++address system 'echo tilde' with output stream '~/t.txt'
++say 'tilde redirect ' (stream(directory()'/t.txt', 'c', 'query exists') <> '') linein(directory()'/t.txt')
++call value 'HOME', h, 'ENVIRONMENT'
++call t "address system 'echo e' with output stream ''"
++call t "address system 'echo e' with output stream '~nosuchuser.rexxutil/x'"
++odd = .File~new('n' || 'ff'x)~absolutePath
++say 'not utf8 .File ' c2x(right(odd, 2)) (odd == qualify('n' || 'ff'x)) ,
++  (odd == directory()'/n' || 'ff'x)
++call directory '..'
++'rm -rf' d
++address system 'echo e' with output stream ''
++exit
++
++t: procedure
++  parse arg code
++  signal on syntax name bad
++  interpret code
++  say 'ok   ' code 'rc' rc
++  return
++bad:
++  c = condition('O')
++  say 'error' code '|' c~code c~message
++  return

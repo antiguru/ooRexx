@@ -51,3 +51,15 @@ Ruling: class-side ::method string not sent -> queued (pre-existing, reqstr.rs I
 Task 3: fix round 1 dispatched (resume b3-impl).
 Task 3: fix round 1 at d6c1b2d85, 0009afbc5; re-review dispatched (sonnet).
 Task 3: complete (a6c147e62, 28aa77b29, ef1357a27, d6c1b2d85, 0009afbc5). Re-review approved.
+Ruling: plan and gate record said 'Moritz ruling' for controller rulings (Task 2 fix rounds); corrected to 'controller ruling' -- attribution must be true.
+Task 4: dispatched (implementer opus, BASE 72550bcda). Carry-in item 6 (samples rows suite-9d-set.txt:206-208) handed to Task 4.
+Task 4: implementer DONE_WITH_CONCERNS (92d2868fc, 0dccdb3b7, bf532a205, 309d16dce, 1cbce6cde).
+Task 4 review: spec flag (qualify_name widened into QUALIFY/DIRECTORY/.File/.Stream/stream BIFs/redirects inside the task, against "mechanical batches" constraint) -- all probe-match the oracle; quality: Dublin DST-gap divergence unlicensed, in-program TZ (VALUE ENVIRONMENT) ignored by date-time routines; minors: unneeded push_temp files.rs:663, entry-39 test fixed dir/no cleanup guard, datetime_zone lossy compare, .File absolutePath raw bytes unwitnessed. Perf: dirread +0.39%, sayloop +0.19% vs pin; stream loop -22%.
+Ruling: ratify the qualify_name widening -- correct, oracle-matching, the tilde group needed it -- add witness lines from the reviewer's probes (copied to task-4-review-probes/) -- if wrong, cost is a revert of a correct change.
+Ruling: date-time routines read the zone from the program's ENVIRONMENT TZ and pick the gap candidate as glibc mktime(tm_isdst=-1) does, via a pure-Rust TZif reader that exposes is_dst (a crate is fine, builds are online; no unsafe) -- matches oracle on both divergences; per-process TZ was a stance, not a licence -- if it does not fit in the round, fall back to a Deviation entry naming both and report it.
+Ruling: drop push_temp at files.rs:663 (cannot be load-bearing: no allocation between text_built and slot write) -- Task 3's hold differed (values crossed allocations) -- if wrong, collect_stress catches.
+Ruling: entry-39 test stays loud on a shared fs (this machine's gate); give it a unique dir and a cleanup guard. datetime_zone compares bytes. Witness .File absolutePath on 'ff'x name.
+Task 4: fix round 1 dispatched (resume b4-impl).
+Queued: lossy path sites (except SysFileTree's, which goes to the Task 5 dispatch).
+Task 4: fix round 1 at ab305b53e, ff222442b (tz-rs 0.7.3 added); re-review dispatched (sonnet).
+Task 4: complete (92d2868fc..1cbce6cde, ab305b53e, ff222442b). Re-review approved.
