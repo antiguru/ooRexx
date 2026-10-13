@@ -1,0 +1,18 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/class/File	oracle	64	64	64			-	-	1	yes	ulimit -v 1048576	64
+base/class/File	crate	64	64	64			-	-	1	yes	memcap 2G	64
+base/rexxutil/SysFileDateTime	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
+base/rexxutil/SysFileDateTime	crate	8	8	8			-	-	1	yes	memcap 2G	8
+base/rexxutil/SysFileSearch	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
+base/rexxutil/SysFileSearch	crate	14	14	14			-	-	1	yes	memcap 2G	14
+base/rexxutil/SysFileXXX	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
+base/rexxutil/SysFileXXX	crate	43	43	43			-	-	1	yes	memcap 2G	43
+base/rexxutil/SysSearchPath	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/rexxutil/SysSearchPath	crate	10	10	10			-	-	1	yes	memcap 2G	10
+base/rexxutil/platform/unix/tilde	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/rexxutil/platform/unix/tilde	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/security.manager/SecurityManager	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	87
+base/security.manager/SecurityManager	crate	29	29	18	TEST_ENVIRONMENT_HANDLE TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_HANDLE_RESULT TEST_METHOD_PASS TEST_STREAM_PASS_BIF_STREAM_OPEN	TEST_CALL_HANDLE_NO_RESULT=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9) | TEST_CALL_HANDLE_RESULT=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9) | TEST_CALL_PASS_NO_ARGS=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9) | TEST_REQUIRES_HANDLE=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9) | TEST_REQUIRES_HANDLE_SECURITY_MANAGER=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9) | TEST_REQUIRES_PASS=rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)	-	-	7	yes	memcap 2G	69
+samples/samples	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+samples/samples	crate	29	29	29			-	-	1	yes	memcap 2G	29

@@ -1,0 +1,10 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/class/File	green		equal
+base/rexxutil/SysFileDateTime	green		equal
+base/rexxutil/SysFileSearch	green		equal
+base/rexxutil/SysFileXXX	green		equal
+base/rexxutil/SysSearchPath	green		equal
+base/rexxutil/platform/unix/tilde	green		equal
+base/security.manager/SecurityManager	red	not passed: TEST_CALL_HANDLE_NO_RESULT TEST_CALL_HANDLE_RESULT TEST_CALL_PASS_NO_ARGS TEST_ENVIRONMENT_HANDLE TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_HANDLE_RESULT TEST_METHOD_PASS TEST_REQUIRES_HANDLE TEST_REQUIRES_HANDLE_SECURITY_MANAGER TEST_REQUIRES_PASS TEST_STREAM_PASS_BIF_STREAM_OPEN	equal
+samples/samples	green		equal
