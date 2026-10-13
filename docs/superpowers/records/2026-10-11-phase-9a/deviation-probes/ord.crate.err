@@ -1,0 +1,3 @@
+     8 *-* o~setMethod('AAA', 'return 2')
+Error 97 running /tmp/claude-1000/p9/ff1/w7/ord.rex line 8:  Object method not found.
+Error 97.2:  Object "enhanced Object" cannot accept private message "SETMETHOD" from this context.

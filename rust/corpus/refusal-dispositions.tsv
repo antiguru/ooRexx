@@ -42,7 +42,7 @@ jump_out_of_range	GUARD	-	compiler invariant: a jump stays inside its range (cen
 library_procedure_gone	GUARD	-	a held library is never released (refusal-sites.tsv: library_method_package_blame.rex, library_routine_package_blame.rex agree)
 library_source	GUARD	-	scout A b17: rexx-lib pins each embedded .orx by sha256, and every probe in scout A's Appendix C ran past the library bootstrap
 loop_op_off_its_node	GUARD	-	compiler invariant: a DO/LOOP op names its own loop (census d-guard)
-metaclass_new_reused_class	DEVIATION	-	Deviation 32: a metaclass NEW answering a class Class~new did not just build, which the oracle rewires into the new subclass in place; Phase 9a Task 8b review probes metaarr, metaold
+metaclass_new_reused_class	DEVIATION	-	Deviation 32: a metaclass NEW answering a class Class~new did not build or a subclass already took, which the oracle rewires into the new subclass in place; Phase 9a Task 8b review probes metaarr, metaold
 missing_body	GUARD	-	every body selector names a directive index the parser fills (refusal-sites.tsv: an instance reading a generated accessor agrees)
 numeric_form_without_expression	GUARD	-	parser guarantee: NUMERIC FORM VALUE with no expression is 35.917 at parse time
 object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .string~inherit (98.985), SETMETHOD to an Array or String (97.2), setMethod, unsetMethod and setMethod OBJECT from methods of Directory, .local, .environment and a Directory subclass; all answer or raise, oracle-identical

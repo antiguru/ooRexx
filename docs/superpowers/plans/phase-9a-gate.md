@@ -45,8 +45,9 @@ reason), each file headed by the ootest revision it was derived at (13178):
 
 `tests/suite.rs`'s `the_row_files_hold_only_checked_rows` runs each owner's check
 (`support/suite_rows.rs`) and asserts every row `derived_rows` finds in the group files is present.
-A Phase 10 refusal row's check accepts a refusal naming Phase 10; `suite_rows::refusal_carries` is
-where Task 4 requires its D3 reason. Rows per owner and reason at the commit that adds this section:
+A Phase 10 refusal row's check (`check_phase_10`, `support/suite_rows.rs:531-536`) requires the
+refusal to carry the row's D3 reason (`suite_rows::refusal_carries`). Rows per owner and reason at
+the commit that adds this section:
 
 ```sh
 cat docs/superpowers/plans/phase-9-exclusions.txt rust/corpus/suite-licences.txt rust/corpus/suite-not-run.txt \
@@ -191,8 +192,8 @@ The suite harness's crate-side `bin-rexx/rexx` is a hard link (a copy where a li
 to `rexx-run`, with `samples` beside it linked to the oracle's `build/samples`: the test framework
 finds the samples at `../samples` from `.RexxInfo~executable`, which resolves a symlink.
 `samples/samples` through `REXX_SUITE_GROUPS` at Task 5's ruling commit: red, 27 of 29 pass;
-TEST_FACTOR refuses `NEW` on a `String` subclass and TEST_MAKESTRING fails: `makestring.rex`
-stops at `rxregexp.cls:48`'s `LIBRARY rxregexp` with 98.903 ("9a close", "The 9d set").
+TEST_FACTOR refuses `NEW` on a `String` subclass and TEST_MAKESTRING fails: `makestring.rex` loads
+`rxregexp` and stops at `SysTempFileName`, a 9b RexxUtil refusal ("9a close", "The 9d set").
 
 ## 9a close
 
@@ -402,11 +403,24 @@ TEST_ENVIRONMENT_HANDLE, TEST_METHOD_HANDLE_RESULT, TEST_STREAM_PASS_BIF_STREAM_
 TEST_MAKESTRING, `scclient` TEST_04_SCCLIENT.REX and `sfclient` TEST_04_SFCLIENT.REX. No test reads
 the file.
 
-The three samples tests run a sample in a child `rexx` that loads an extension library. Run on the
-crate's `rexx-run` from a fresh directory with the oracle `bin`'s class file beside it,
-`scclient.rex` stops at `socket.cls:40`, `::requires "rxsock" LIBRARY`, `sfclient.rex` at its own
-`::requires 'rxsock' LIBRARY`, and `makestring.rex` at `rxregexp.cls:48`'s `LIBRARY rxregexp`, each
-98.903 "Unable to load library". Those libraries are Phase 10 Extension; the tests have no row.
+The three samples tests run a sample in a child `rexx`, which inherits the `LD_LIBRARY_PATH` the
+harness sets on the crate side (`support/group_runner.rs:518-521`), so extension libraries load
+there: the crate passes `extensions/rxregexp/rxregexp` and `extensions/rxmath/RxMath` whole in this
+run. With that path, `makestring.rex` loads `rxregexp` and stops at `rexx-exec: routine
+"SYSTEMPFILENAME" is not implemented (Phase 9)`, rc 120, which is 9b's RexxUtil. `scclient` and
+`sfclient` TEST_04 run `"rexx" prefix || "server"` and `"rexx" prefix || "client"` (prefix `sc` or
+`sf`) after `cd` into the samples directory; `rexx-run` answers `rexx-run: scclient: No such file
+or directory (os error 2)` where the oracle's `rexx` finds `scclient.rex`, which is 9c's front end. Run without the harness's
+path, `makestring.rex` ends in 98.903 loading `rxregexp` instead, which is the measurement an
+earlier version of this paragraph and its ruling rested on. The tests have no row.
+
+From a fresh directory holding `build/samples/makestring.rex`, `build/bin/rxregexp.cls` and an
+`in.txt` of one line `n`:
+
+```
+LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib \
+  memcap 2G rust/target/release/rexx-run makestring.rex < in.txt
+```
 
 ### Environment and Flaky candidates for Moritz
 
@@ -448,17 +462,14 @@ Deferred minors and queued items from `.superpowers/sdd/2026-10-11-phase-9a/prog
 * `:142` Task 8b minor 3, `Routine~call`'s cold block per call.
 * `:144` `Package~copy` retention per copy (queued).
 * `:150` queued `2026-10-12-package-as-real-object.md` (owns `TESTRECLAIM01`).
-* `:165` `.D~new~instanceMethod('M') == .C~method('M')`; `sim-gate.tsv`'s stale rest rows for
-  Method and METHOD.
-* `:167` `lib.rs:1428`'s double-hyphen dash; `method_object_for`'s `class_owns` on a non-class scope.
+* `:165` `.D~new~instanceMethod('M') == .C~method('M')`.
+* `:167` `method_object_for`'s `class_owns` on a non-class scope.
 * `:169` `debug_ms` and the MutexSemaphore/STREAM `k` not re-derived; REPLY every-mode rows kept.
 * `:172` TEST_SLEEP_DURATION, Flaky candidate (above): the S2 list in `concurrency_tests` has no
   licence path (9d).
-* This close: `samples` TEST_MAKESTRING, `scclient` TEST_04_SCCLIENT.REX and `sfclient`
-  TEST_04_SFCLIENT.REX end in 98.903 for `rxregexp` and `rxsock`, Phase 10 Extension libraries.
-  Ruling: loading a Phase 10 extension library becomes a loud refusal carrying
-  `Deferral::Extension`, the first item of 9b; the three tests then take Phase 10 Extension rows
-  and leave the 9d set.
+* This close: `samples` TEST_MAKESTRING stops at `SysTempFileName` (9b); `scclient`
+  TEST_04_SCCLIENT.REX and `sfclient` TEST_04_SFCLIENT.REX fail because `rexx-run` does not resolve
+  a program name to its `.rex` file (9c). All three are in the derived 9d set.
 * This close: `extensions/yaml/yaml`'s
   TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS, blocked by "a compiled ... has no driver arm"
   refusals in a Phase 10 Extension group (`suite-close/table.tsv`).

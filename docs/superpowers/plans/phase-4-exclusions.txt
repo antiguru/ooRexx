@@ -1952,7 +1952,9 @@ DEVIATIONS -- permanent, chosen
      integer cache shares -10..100 (`x = 100` named, then `(99+1)~objectName`
      answers the name), and `||''` and `~string` answer their receiver; a
      computed string or number is a fresh object. Measured, probes `objname2`
-     and `objname4` (Task 8b report, section 1), oracle rc 0:
+     and `objname4` (Task 8b report, section 1), oracle rc 0, kept with the
+     table's own probe `objname-table.rex` in
+     docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/:
 
        `longs = 'a longer string than seven'; longs~objectName = 'long'`
        `'a longer string than seven'~objectName`        long
@@ -1995,8 +1997,9 @@ DEVIATIONS -- permanent, chosen
      The same holds one level up. `RexxClass::subclass` sends `NEW` to the
      metaclass and rewires whatever class answers into the new subclass
      (interpreter/classes/ClassClass.cpp:1579-1626), so a metaclass `NEW`
-     answering a class `Class~new` did not just build rewires a class others
-     hold. Measured, Phase 9a Task 8b review probes, oracle rc 0:
+     answering a class `Class~new` did not build, or one an earlier
+     `~subclass` already rewired, rewires a class others hold. Measured,
+     Phase 9a Task 8b review probes, oracle rc 0:
 
        `metaarr.rex`, `NEW` answers `.array`:
          `.object~subclass("k", .MyMeta)~id`        id Array
@@ -2005,8 +2008,13 @@ DEVIATIONS -- permanent, chosen
          a second `~subclass("k2", ...)`            id FOO 1
 
      This crate refuses that answer, rc 120, "a metaclass NEW answering a
-     class it did not just build is not implemented"; an answer that is not
-     a class is corpus/oracle-crashes.txt entry 8. The oracle's answers are
+     class Class~new did not build or a subclass already took is not
+     implemented"; an answer that is not a class is
+     corpus/oracle-crashes.txt entry 8. A class `Class~new` built and no
+     `~subclass` has rewired is rewired here as on the oracle, wherever
+     else it is held: `metaheld.rex` in
+     docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/ answers
+     `XX Object 1 XX Object`, rc 0, on both. The oracle's answers are
      damage to a shared behaviour or class, not specified observables.
      Moritz 2026-10-12. Not witnessed in the corpus; pinned by
      `a_metaclass_new_answering_no_new_class_is_loud`.
@@ -2030,10 +2038,11 @@ DEVIATIONS -- permanent, chosen
      identity keys. This crate's hash stores walk in the same bucket order
      where they model the same geometry, and its `instanceMethods` lists in
      name order where the oracle lists its method dictionary's bucket order
-     with shadowed entries repeated (Task 8b probe `ord.rex`: oracle `MANGO
-     UM ALPHA QUUX BETA ZETA FOO`, this crate `ALPHA BETA FOO MANGO QUUX UM
-     ZETA`). A program whose order agrees still depends on an order that is
-     not specified.
+     with shadowed entries repeated (Task 8b probe `ord.rex`, its `enh:`
+     line, kept in docs/superpowers/records/2026-10-11-phase-9a/
+     deviation-probes/: oracle `MANGO UM ALPHA QUUX BETA ZETA FOO`, this
+     crate `ALPHA BETA FOO MANGO QUUX UM ZETA`). A program whose order
+     agrees still depends on an order that is not specified.
 
      MECHANISM. `rust/crates/rexx-exec/tests/corpus.rs`'s `HASH_ORDERED_STDOUT`
      names the corpus programs whose stdout prints hash-ordered output, and

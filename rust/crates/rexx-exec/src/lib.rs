@@ -525,13 +525,14 @@ impl Loud {
         }
     }
 
-    /// A metaclass `NEW` answering a class `Class~new` did not just build,
-    /// which the oracle rewires into a subclass in place (Deviation 32).
+    /// A metaclass `NEW` answering a class that `Class~new` did not build, or
+    /// one an earlier `~subclass` already rewired, which the oracle rewires
+    /// into a subclass in place (Deviation 32).
     #[cold]
     fn metaclass_new_reused_class() -> Loud {
         Loud {
             message: owned_message(
-                "a metaclass NEW answering a class it did not just build",
+                "a metaclass NEW answering a class Class~new did not build or a subclass already took",
                 None,
             ),
         }

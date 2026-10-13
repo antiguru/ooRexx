@@ -781,8 +781,9 @@ pub(crate) fn new_subclass(
             )
             .into());
         };
-        // A class `Class~new` did not just build is rewired in place by the
-        // oracle, which damages a class others hold (Deviation 32).
+        // A class `Class~new` did not build, or one a subclass already took,
+        // is rewired in place by the oracle, which damages a class others
+        // hold (Deviation 32).
         if !interp.classes().is_cloned(id) {
             return Err(Loud::metaclass_new_reused_class().into());
         }

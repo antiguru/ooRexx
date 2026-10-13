@@ -18,7 +18,8 @@
 # starting at FNV-1a 64 of `group:part`. Its policy is entry i mod 7 of pre:1, pre:2, pre:3,
 # pct:3, uniform:0.01, uniform:0.2, uniform:1, with k=k for pre and pct. A run's deadline is
 # its calibrated time in the build times 10, and at least 60 s. The calibration and the seed
-# counts are recorded in docs/superpowers/plans/phase-6-1-gate.md, ## Task 10.
+# counts are recorded in docs/superpowers/plans/phase-6-1-gate.md, ## Task 10; the rows Phase 9a
+# re-derived, and the rest rows it removed, in .superpowers/sdd/2026-10-11-phase-9a/task-10-sim-report.md.
 # STREAM runs under clock=real: TEST_QUERYDIR_EXISTS and TEST_QUERYFILE_EXISTS_NOTOPEN compare
 # .DateTime~new with the timestamp of a file just made on the real file system.
 base/bif/STREAM.testGroup	whole	0	70	0	76	81	clock=real	-

@@ -1853,7 +1853,7 @@ fn an_entry_method_send_with_no_value_is_loud() {
 /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
 /// and two answers are refused: one that is not a class, which the oracle
 /// casts unchecked (`oracle-crashes.txt` entry 8), and a class `Class~new`
-/// did not just build, which the oracle rewires in place (Deviation 32).
+/// did not build, which the oracle rewires in place (Deviation 32).
 #[test]
 fn a_metaclass_new_answering_no_new_class_is_loud() {
     let program = |body: &str| {
@@ -1872,11 +1872,11 @@ fn a_metaclass_new_answering_no_new_class_is_loud() {
         ),
         (
             "return .array",
-            "a metaclass NEW answering a class it did not just build",
+            "a metaclass NEW answering a class Class~new did not build or a subclass already took",
         ),
         (
             "return .Foo",
-            "a metaclass NEW answering a class it did not just build",
+            "a metaclass NEW answering a class Class~new did not build or a subclass already took",
         ),
     ] {
         assert_eq!(
