@@ -75,13 +75,15 @@ call value 'HOME', home, 'ENVIRONMENT'
 -- bracket forms over one-byte names, with and without I
 g = here'/filetree.g/'
 call SysMkDir g
-do name over 'a', 'b', 'c', 'd', 'A', 'B', '-', ']', '^', '!', '[', '=', 'x.y'
+do name over 'a', 'b', 'c', 'd', 'A', 'B', '-', ']', '^', '!', '[', '=', ':', 'x.y', 'c]', 'A]'
   call make g || name, ''
 end
 patterns = '[[=a=]] [[.a.]] [[.-.]] [a-[.c.]] [[=a=]b] [[.a.]-c] [[=a=]-c] [a-[=c=]]' ,
   '[[.ab.]] [[=ab=]] [[.].]] [[.[.]] [[..]] [[==]] [[.a] [[=a] [[.a.] [![.a.]] [[.A.]]' ,
   '[[=A=]] [[.a.][=b=]] [b-[.d.]] [[.b.]-[.d.]] [a-] []-a] [!]] [[:alpha:][:digit:]]' ,
-  '[\]] [[:ALPHA:]] [[:alpha:] [[] *[ [!-] [a-c-e]'
+  '[\]] [[:ALPHA:]] [[:alpha:] [[] *[ [!-] [a-c-e] [b[=a] [bc[=a] [abc[=x] [a-c[=x]' ,
+  '[b[=.] [b[=] [b[=ab] [b[:alpha:][=x] [!b[=x] [!bc[=x] [^bc[=x] [b[.a] [b[.a.]' ,
+  '[!b[.a] [b[:a] [!b[:a] [b[:alpha] [b[:Alpha:]] [[.a.]-] [b[=a=]] [!b[=a=]]'
 do i = 1 to words(patterns)
   p = word(patterns, i)
   do o over 'o', 'oi'

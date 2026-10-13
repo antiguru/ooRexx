@@ -446,17 +446,20 @@ fn matches(pattern: &[u8], name: &[u8], caseless: bool) -> bool {
     pattern[pattern_at..].iter().all(|byte| *byte == b'*')
 }
 
+/// The longest character class name glibc's `fnmatch` scans for.
+const CLASS_NAME_LIMIT: usize = 256;
+
 /// One bracket expression opening at `open` against one byte: the index
-/// just past its `]` when it matches, `None` when it does not. A bracket with
-/// no closing `]` is a literal `[`.
-///
-/// Measured against glibc through the oracle: a `[.c.]` or `[=c=]` naming one
-/// byte is that byte, compared without folding case, and `[.c.]` may end a
-/// range. A `[.` with no `.]`, a collating symbol of any other length, and
-/// `[=c=]` ending a range make the whole pattern fail. A `[=` not closed by
-/// `=]` two bytes on is a literal `[`, and `[=c=]` followed by `-` starts no
-/// range.
+/// just past its `]` when it matches, `None` when it does not. A port of the
+/// bracket case of glibc's `posix/fnmatch_loop.c` (2.43, the oracle's libc)
+/// in the C locale with `FNM_NOESCAPE`. Each item is tried in turn and the
+/// first that matches ends the scan, which then skips to the `]` and fails
+/// the pattern on a malformed `[=` or `[.` it passes over. A bracket with no
+/// `]` is a literal `[`. A `^` negates as `!` does, which glibc does unless
+/// `POSIXLY_CORRECT` is set.
 fn bracket(pattern: &[u8], open: usize, byte: u8, caseless: bool) -> Option<usize> {
+    // The pattern is a C string: past its end every read is a NUL.
+    let at = |index: usize| pattern.get(index).copied().unwrap_or(0);
     let fold = |value: u8| {
         if caseless {
             value.to_ascii_lowercase()
@@ -464,92 +467,183 @@ fn bracket(pattern: &[u8], open: usize, byte: u8, caseless: bool) -> Option<usiz
             value
         }
     };
-    let mut at = open + 1;
-    if matches!(pattern.get(at), Some(b'!' | b'^')) {
-        at += 1;
+    let literal = (byte == b'[').then_some(open + 1);
+    let folded = fold(byte);
+    let mut p = open + 1;
+    let negated = matches!(at(p), b'!' | b'^');
+    if negated {
+        p += 1;
     }
-    let negated = at > open + 1;
-    let mut hit = false;
-    let mut first = true;
-    while at < pattern.len() {
-        // A `]` in the first position is the literal character, not the close.
-        if pattern[at] == b']' && !first {
-            return (hit != negated).then_some(at + 1);
-        }
-        first = false;
-        if pattern[at] == b'['
-            && pattern.get(at + 1) == Some(&b':')
-            && let Some(length) = pattern[at + 2..].windows(2).position(|pair| pair == b":]")
-        {
-            let class = &pattern[at + 2..at + 2 + length];
-            if !in_class(class, byte) {
-                // An unknown class name makes the whole pattern fail.
-                if !is_class(class) {
+    let mut c = at(p);
+    p += 1;
+    let matched = loop {
+        // `Some(item)` runs glibc's `normal_bracket` on `item`.
+        let mut normal = None;
+        // The low end of a range, when the item can start one.
+        let mut low = None;
+        if c == b'[' && at(p) == b':' {
+            let start = p;
+            let mut class = Vec::new();
+            let is_name = loop {
+                if class.len() == CLASS_NAME_LIMIT {
                     return None;
                 }
-            } else {
-                hit = true;
-            }
-            at += length + 4;
-            continue;
-        }
-        if let Some(equivalent) = equivalence(pattern, at) {
-            if equivalent == byte {
-                hit = true;
-            }
-            at += 5;
-            continue;
-        }
-        let (low, low_end, symbol) = match pattern.get(at + 1) {
-            Some(b'.') if pattern[at] == b'[' => {
-                let (low, end) = collating(pattern, at)?;
-                (low, end, true)
-            }
-            _ => (pattern[at], at + 1, false),
-        };
-        if pattern.get(low_end) == Some(&b'-')
-            && pattern.get(low_end + 1).is_some_and(|end| *end != b']')
-        {
-            let (high, high_end) = match (pattern[low_end + 1], pattern.get(low_end + 2)) {
-                (b'[', Some(b'.')) => collating(pattern, low_end + 1)?,
-                (b'[', Some(b'=')) if equivalence(pattern, low_end + 1).is_some() => return None,
-                (high, _) => (high, low_end + 2),
+                p += 1;
+                c = at(p);
+                if c == b':' && at(p + 1) == b']' {
+                    p += 2;
+                    break true;
+                }
+                if !in_class_name(c) {
+                    break false;
+                }
+                class.push(c);
             };
-            if (fold(low)..=fold(high)).contains(&fold(byte)) {
-                hit = true;
+            if is_name {
+                if !is_class(&class) {
+                    return None;
+                }
+                if in_class(&class, byte) {
+                    break true;
+                }
+                c = at(p);
+                p += 1;
+            } else {
+                p = start;
+                normal = Some(b'[');
             }
-            at = high_end;
+        } else if c == b'[' && at(p) == b'=' {
+            let start = p;
+            let named = at(p + 1);
+            if named != 0 && at(p + 2) == b'=' && at(p + 3) == b']' {
+                p += 4;
+                if byte == named {
+                    break true;
+                }
+                c = at(p);
+                p += 1;
+            } else {
+                p = start;
+                normal = Some(b'[');
+            }
+        } else if c == 0 {
+            return literal;
+        } else if c == b'[' && at(p) == b'.' {
+            let (symbol, after) = collating(pattern, p)?;
+            p = after;
+            let is_range = at(p) == b'-' && at(p + 1) != 0;
+            if !is_range && byte == symbol {
+                break true;
+            }
+            low = Some(symbol);
+            c = at(p);
+            p += 1;
         } else {
-            let matched = if symbol {
-                low == byte
-            } else {
-                fold(low) == fold(byte)
-            };
-            if matched {
-                hit = true;
+            normal = Some(fold(c));
+        }
+        if let Some(item) = normal {
+            let is_range = at(p) == b'-' && at(p + 1) != 0 && at(p + 1) != b']';
+            if !is_range && item == folded {
+                break true;
             }
-            at = low_end;
+            low = Some(item);
+            c = at(p);
+            p += 1;
+        }
+        if let Some(low) = low
+            && c == b'-'
+            && at(p) != b']'
+        {
+            let mut high = at(p);
+            p += 1;
+            if high == b'[' && at(p) == b'.' {
+                let (symbol, after) = collating(pattern, p)?;
+                high = symbol;
+                p = after;
+            } else {
+                if high == 0 {
+                    return None;
+                }
+                high = fold(high);
+            }
+            if low <= folded && folded <= high {
+                break true;
+            }
+            c = at(p);
+            p += 1;
+        }
+        if c == b']' {
+            break false;
+        }
+    };
+    if !matched {
+        return negated.then_some(p);
+    }
+    // Skip the rest of a bracket that matched.
+    loop {
+        c = at(p);
+        p += 1;
+        match c {
+            b']' => break,
+            0 => return literal,
+            b'[' if at(p) == b':' => {
+                let start = p;
+                let mut scanned = 0;
+                loop {
+                    p += 1;
+                    c = at(p);
+                    scanned += 1;
+                    if scanned == CLASS_NAME_LIMIT {
+                        return None;
+                    }
+                    if at(p) == b':' && at(p + 1) == b']' {
+                        break;
+                    }
+                    if !in_class_name(c) {
+                        p = start - 2;
+                        break;
+                    }
+                }
+                p += 2;
+            }
+            b'[' if at(p) == b'=' => {
+                if at(p + 1) == 0 || at(p + 2) != b'=' || at(p + 3) != b']' {
+                    return None;
+                }
+                p += 4;
+            }
+            b'[' if at(p) == b'.' => {
+                p = collating_end(pattern, p)?;
+            }
+            _ => {}
         }
     }
-    (byte == b'[').then_some(open + 1)
+    (!negated).then_some(p)
 }
 
-/// The byte a `[.c.]` at `at` names and the index past it, `None` where it
-/// does not close or names other than one byte.
-fn collating(pattern: &[u8], at: usize) -> Option<(u8, usize)> {
+/// Whether `c` may continue a `[:` class name: glibc tests
+/// `c < 'a' || c >= 'z'`, which leaves `z` out.
+fn in_class_name(c: u8) -> bool {
+    (b'a'..=b'y').contains(&c)
+}
+
+/// The index just past the `.]` closing a `[.` whose `.` is at `dot`.
+fn collating_end(pattern: &[u8], dot: usize) -> Option<usize> {
     let length = pattern
-        .get(at + 2..)?
+        .get(dot + 1..)?
         .windows(2)
         .position(|pair| pair == b".]")?;
-    (length == 1).then(|| (pattern[at + 2], at + length + 4))
+    let symbol = &pattern[dot + 1..dot + 1 + length];
+    // A NUL ends the C string before any `.]` past it.
+    (!symbol.contains(&0)).then_some(dot + 1 + length + 2)
 }
 
-/// The byte a well-formed `[=c=]` at `at` names.
-fn equivalence(pattern: &[u8], at: usize) -> Option<u8> {
-    match pattern.get(at..at + 5)? {
-        [b'[', b'=', c, b'=', b']'] => Some(*c),
-        _ => None,
-    }
+/// The byte a `[.c.]` whose `.` is at `dot` names and the index past it.
+/// `None`, which fails the pattern, where it does not close or names other
+/// than one byte, the only names the C locale has.
+fn collating(pattern: &[u8], dot: usize) -> Option<(u8, usize)> {
+    let after = collating_end(pattern, dot)?;
+    (after - dot == 4).then(|| (pattern[dot + 1], after))
 }
 
 /// Whether `name` is a character class the C locale defines.

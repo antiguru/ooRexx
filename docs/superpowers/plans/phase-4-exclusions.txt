@@ -2061,11 +2061,13 @@ DEVIATIONS -- permanent, chosen
      Every name the oracle qualifies (`QUALIFY`, `.File`, streams, the
      RexxUtil path arguments, `SysFileTree`'s directory part) passes through
      `SysFileSystem::normalizePathName`
-     (interpreter/platform/unix/SysFileSystem.cpp:687-776, the same in this
-     checkout's interpreter/). It copies byte by byte into an output buffer
-     and remembers `previousSlash`, the output position a `..` returns to. It
-     sets `previousSlash` at an input `/` only when the next input byte is
-     not `.` (line 706), and before it drops a repeated `/`. So the second of
+     (/home/moritz/dev/repos/ooRexx/interpreter/platform/unix/SysFileSystem.cpp:687-776,
+     the oracle's tree; the same function is this checkout's
+     interpreter/platform/unix/SysFileSystem.cpp:604-693). It copies byte by
+     byte into an output buffer and remembers `previousSlash`, the output
+     position a `..` returns to. It sets `previousSlash` at an input `/` only
+     when the next input byte is not `.` (line 706 there, 623 here), and
+     before it drops a repeated `/`. So the second of
      two slashes records the last byte of the component before them, and a
      `..` right after a doubled slash returns there and removes nothing.
      A component starting with `.` (`.hidden`, `..x`, `...`) never records
