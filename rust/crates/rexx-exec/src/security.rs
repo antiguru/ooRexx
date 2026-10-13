@@ -158,12 +158,14 @@ impl Interp {
 
     /// One entry of an info directory the manager has answered, or `None`
     /// where it left the name unset. `DirectoryClass::get`, which is an
-    /// exact-string lookup and not `ENTRY`'s upcasing one.
+    /// exact-string lookup and not `ENTRY`'s upcasing one. Roots
+    /// `directory`, which [`Interp::security_check`] answers unrooted.
     pub(crate) fn security_entry(
         &mut self,
         directory: ObjRef,
         name: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
+        self.roots.activity_mut().push_temp(directory);
         let index = self.text(name);
         self.roots.activity_mut().push_temp(index);
         let caller = self.caller();
