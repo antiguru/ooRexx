@@ -790,6 +790,11 @@ impl Interp {
                 .run_library_routine(code, name, arguments)
                 .map(library_begun);
         }
+        if let Resolved::MergedInternal(row) = resolved {
+            return self
+                .run_internal_as(row, Some(name), arguments)
+                .map(internal_begun);
+        }
         if let Resolved::Routine(installed) = resolved {
             if let Some(code) = self.library_routine_code(installed) {
                 return self
@@ -807,8 +812,10 @@ impl Interp {
             // Answered above, before the loop that just ran.
             Resolved::Builtin(_) => unreachable!("the builtin path returns before this"),
             Resolved::Internal(_) => unreachable!("the internal path returns before this"),
-            Resolved::LibraryRoutine(_) | Resolved::MergedLibraryRoutine(_) => {
-                unreachable!("a library routine is run before this")
+            Resolved::LibraryRoutine(_)
+            | Resolved::MergedLibraryRoutine(_)
+            | Resolved::MergedInternal(_) => {
+                unreachable!("a library or merged internal routine is run before this")
             }
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),

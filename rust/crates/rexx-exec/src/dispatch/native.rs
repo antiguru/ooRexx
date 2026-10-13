@@ -27,6 +27,7 @@ use rexx_parse::{
 };
 
 use super::{Arity, NativeMethod, ScopedBegin, native_file_path_separator, native_file_separator};
+use crate::internal_routines::Package;
 use crate::{Loud, accessor_setter_name};
 use rexx_core::{Deferral, Owner};
 
@@ -528,6 +529,20 @@ pub(crate) fn entry_point(name: &[u8]) -> Option<&'static NativeExternal> {
         .find(|entry| entry.name.as_bytes().eq_ignore_ascii_case(name))
 }
 
+/// The method entry point `package` exports under `name`. `REXXUTIL` exports
+/// routines only: measured, oracle, `::method m external 'LIBRARY rexxutil
+/// SysFileTree'` is 90.998 rc 166 and `loadExternalMethod('x', 'LIBRARY
+/// rexxutil SysSleep')` answers `.nil`.
+pub(crate) fn package_entry_point(
+    package: Package,
+    name: &[u8],
+) -> Option<&'static NativeExternal> {
+    match package {
+        Package::Rexx => entry_point(name),
+        Package::RexxUtil => None,
+    }
+}
+
 /// What a `::METHOD` or `::ATTRIBUTE` directive's `EXTERNAL` names, or `None`
 /// for a directive that carries no `EXTERNAL` at all.
 pub(crate) enum MethodExternal {
@@ -590,12 +605,17 @@ pub(crate) struct AttributeBind {
 /// ::attribute at set external 'LIBRARY REXX file_separator'           rc 0
 /// ::method m attribute external 'LIBRARY REXX'             90.998 rc 166 on "GETM"
 /// ```
-fn attribute_binds(upper: &[u8], style: AttributeStyle, spec: &ExternalSpec) -> Vec<AttributeBind> {
+fn attribute_binds(
+    package: Package,
+    upper: &[u8],
+    style: AttributeStyle,
+    spec: &ExternalSpec,
+) -> Vec<AttributeBind> {
     attribute_accessors(upper, style, spec)
         .into_iter()
         .map(|(key, procedure)| AttributeBind {
             key,
-            entry: entry_point(&procedure).ok_or(procedure),
+            entry: package_entry_point(package, &procedure).ok_or(procedure),
         })
         .collect()
 }
@@ -647,12 +667,13 @@ pub(crate) fn method_external(method: &MethodDirective) -> Option<MethodExternal
     // library before it looks for either accessor's procedure in it. Measured,
     // oracle: `::method m attribute external 'LIBRARY nosuchlib x'` is
     // `98.903 Unable to load library "nosuchlib"` at rc 158 and not 90.998.
-    if *spec.library != *b"REXX" {
+    let Some(package) = Package::named(&spec.library) else {
         let style = method.attribute.then_some(AttributeStyle::Both);
         return Some(other_library(&upper, style, spec));
-    }
+    };
     if method.attribute {
         return Some(MethodExternal::Attribute(attribute_binds(
+            package,
             &upper,
             AttributeStyle::Both,
             spec,
@@ -663,7 +684,7 @@ pub(crate) fn method_external(method: &MethodDirective) -> Option<MethodExternal
         None => upper,
     };
     Some(MethodExternal::LibraryRexx(
-        entry_point(&entry).ok_or(entry),
+        package_entry_point(package, &entry).ok_or(entry),
     ))
 }
 
@@ -673,10 +694,11 @@ pub(crate) fn method_external(method: &MethodDirective) -> Option<MethodExternal
 pub(crate) fn attribute_external(attribute: &AttributeDirective) -> Option<MethodExternal> {
     let spec = attribute.external.as_ref()?;
     let upper = attribute.name.to_ascii_uppercase();
-    if *spec.library != *b"REXX" {
+    let Some(package) = Package::named(&spec.library) else {
         return Some(other_library(&upper, Some(attribute.style), spec));
-    }
+    };
     Some(MethodExternal::Attribute(attribute_binds(
+        package,
         &upper,
         attribute.style,
         spec,
@@ -684,10 +706,9 @@ pub(crate) fn attribute_external(attribute: &AttributeDirective) -> Option<Metho
 }
 
 /// [`MethodExternal`] for one `::ROUTINE` naming a shared library, or `None`
-/// for `REGISTERED` and for the `REXX` package, whose routine table is
-/// `rexx_routines[]` and not the method registry above
-/// (`runtime/InternalPackage.cpp:230`) and whose entries [`rexx_routine_entry`]
-/// names.
+/// for `REGISTERED` and for the internal packages, whose routine tables are
+/// not the method registry above (`runtime/InternalPackage.cpp:230`) and
+/// whose entries [`internal_routine_entry`] names.
 ///
 /// The entry defaults to the routine's own name, which the parser upcases for
 /// a symbol and keeps as written for a string -- measured, oracle: `::routine
@@ -695,21 +716,25 @@ pub(crate) fn attribute_external(attribute: &AttributeDirective) -> Option<Metho
 /// "ZZZ"` and `::routine 'zq' external "LIBRARY rxmath"` names `"zq"`.
 pub(crate) fn routine_external(routine: &RoutineDirective) -> Option<MethodExternal> {
     let spec = routine.external.as_ref()?;
-    if spec.registered || *spec.library == *b"REXX" {
+    if spec.registered || Package::named(&spec.library).is_some() {
         return None;
     }
     Some(other_library(&routine.name, None, spec))
 }
 
-/// The entry point a `::ROUTINE`'s `EXTERNAL "LIBRARY REXX ..."` names,
-/// defaulting as [`routine_external`]'s does, or `None` for every other
-/// directive.
-pub(crate) fn rexx_routine_entry(routine: &RoutineDirective) -> Option<Vec<u8>> {
+/// The internal package and the entry point a `::ROUTINE`'s `EXTERNAL
+/// "LIBRARY REXX ..."` or `"LIBRARY rexxutil ..."` names, defaulting as
+/// [`routine_external`]'s does, or `None` for every other directive.
+pub(crate) fn internal_routine_entry(routine: &RoutineDirective) -> Option<(Package, Vec<u8>)> {
     let spec = routine.external.as_ref()?;
-    if spec.registered || *spec.library != *b"REXX" {
+    if spec.registered {
         return None;
     }
-    Some(spec.entry.as_deref().unwrap_or(&routine.name).to_vec())
+    let package = Package::named(&spec.library)?;
+    Some((
+        package,
+        spec.entry.as_deref().unwrap_or(&routine.name).to_vec(),
+    ))
 }
 
 /// [`MethodExternal::OtherLibrary`] for one directive: the accessors of an

@@ -1,0 +1,5 @@
+count 4
+/* A routine rexxutil does not export is 90.999 on the directive's line. */
+say 'not reached'
+
+::routine rr external 'LIBRARY rexxutil SysNoSuch'

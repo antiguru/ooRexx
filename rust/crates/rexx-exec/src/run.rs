@@ -199,6 +199,10 @@ pub(crate) enum Resolved {
     /// `::ROUTINE` is, before the security manager is asked, and run under the
     /// name as the call wrote it.
     MergedLibraryRoutine(usize),
+    /// An internal package routine a `::REQUIRES ... LIBRARY` merged into the
+    /// running package's own lookup, found and run as
+    /// [`Resolved::MergedLibraryRoutine`] is.
+    MergedInternal(&'static crate::internal_routines::InternalRoutine),
     /// An external Rexx file the search found for this name, entered the way
     /// [`Resolved::Library`] is: a whole program with its own directives and
     /// its own `ProgramId`.

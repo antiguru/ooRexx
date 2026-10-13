@@ -529,6 +529,9 @@ fn load_library(
     let name = required_string_named_argument(interp, name, "name")?;
     let name = interp.to_text(name).into_owned();
     writable_package_of(interp, receiver)?;
+    if crate::internal_routines::Package::named(&name).is_some() {
+        return Ok(Some(interp.counted(1)));
+    }
     // A version refusal raises here as it does at a directive: measured,
     // oracle rc 158, `loadLibrary` of a package entry asking for a newer
     // interpreter is 98.982 on the first ask and answers `1` on the next.

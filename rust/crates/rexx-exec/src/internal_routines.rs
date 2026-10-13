@@ -31,6 +31,19 @@ pub(crate) enum Package {
 }
 
 impl Package {
+    /// The internal package a `LIBRARY` name or `::REQUIRES ... LIBRARY`
+    /// names, matched byte for byte as `PackageManager::loadLibrary` matches
+    /// its table (`package/PackageManager.cpp:81-88`, `memory/GlobalNames.h`):
+    /// measured, oracle, `LIBRARY REXXUTIL` is 98.903 where `LIBRARY
+    /// rexxutil` loads.
+    pub(crate) fn named(name: &[u8]) -> Option<Package> {
+        match name {
+            b"REXX" => Some(Package::Rexx),
+            b"rexxutil" => Some(Package::RexxUtil),
+            _ => None,
+        }
+    }
+
     /// The package's name, as the C++ registers it.
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -221,19 +234,32 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     util_run("SysWaitEventSem", crate::builtin::rexxutil::wait_sem),
 ];
 
-/// The `REXX` package's row `name` names, found as
-/// `LibraryPackage::resolveRoutine` finds a routine table entry
+/// Every row `package` exports, in table order.
+fn package_rows(package: Package) -> impl Iterator<Item = &'static InternalRoutine> {
+    INTERNAL_ROUTINES
+        .iter()
+        .filter(move |row| row.package == package)
+}
+
+/// The [`INTERNAL_ROUTINES`] index of every row `package` exports.
+pub(crate) fn package_indexes(package: Package) -> impl Iterator<Item = usize> {
+    INTERNAL_ROUTINES
+        .iter()
+        .enumerate()
+        .filter(move |(_, row)| row.package == package)
+        .map(|(index, _)| index)
+}
+
+/// `package`'s row `name` names, found as `LibraryPackage::resolveRoutine`
+/// finds a routine table entry
 /// (`interpreter/package/LibraryPackage.cpp:410-435`): by exact spelling, then
 /// without regard to case.
-pub(crate) fn rexx_package_routine(name: &[u8]) -> Option<&'static InternalRoutine> {
-    let rows = || {
-        INTERNAL_ROUTINES
-            .iter()
-            .filter(|row| row.package == Package::Rexx)
-    };
-    rows()
+pub(crate) fn package_routine(package: Package, name: &[u8]) -> Option<&'static InternalRoutine> {
+    package_rows(package)
         .find(|row| row.name.as_bytes() == name)
-        .or_else(|| rows().find(|row| row.name.as_bytes().eq_ignore_ascii_case(name)))
+        .or_else(|| {
+            package_rows(package).find(|row| row.name.as_bytes().eq_ignore_ascii_case(name))
+        })
 }
 
 /// The row `name` names, matched caselessly as the oracle's own lookup does.

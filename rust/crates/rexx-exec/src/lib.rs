@@ -1433,6 +1433,10 @@ struct Interp {
     /// `mergeLibrary` merges the library package's own routine objects, so
     /// every package importing one answers the same object.
     library_routine_objects: FxHashMap<usize, ObjRef>,
+    /// The one `Routine` object standing for each internal package routine,
+    /// by its [`internal_routines::INTERNAL_ROUTINES`] index: measured,
+    /// oracle, every package importing `rexxutil` answers the same object.
+    internal_routine_objects: FxHashMap<usize, ObjRef>,
     /// The source-less `Routine` a REXX package native routine level answers
     /// for `StackFrame~executable`, by upcased name, each rooted globally.
     rexx_routine_executables: FxHashMap<Box<[u8]>, ObjRef>,
@@ -1751,6 +1755,9 @@ enum MergedRoutine {
     Installed(InstalledRoutine),
     /// A library routine, as its [`Interp::library_codes`] row.
     Library(usize),
+    /// An internal package's routine, as its
+    /// [`internal_routines::INTERNAL_ROUTINES`] index.
+    Internal(usize),
 }
 
 /// What a routine lookup through a package whose `.ROUTINES` table a
@@ -1768,6 +1775,9 @@ impl MergedRoutine {
         match self {
             MergedRoutine::Installed(installed) => run::Resolved::Routine(installed),
             MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code),
+            MergedRoutine::Internal(index) => {
+                run::Resolved::MergedInternal(&internal_routines::INTERNAL_ROUTINES[index])
+            }
         }
     }
 }
@@ -2167,6 +2177,7 @@ impl Interp {
             package_tables: FxHashMap::default(),
             routine_objects: FxHashMap::default(),
             library_routine_objects: FxHashMap::default(),
+            internal_routine_objects: FxHashMap::default(),
             rexx_routine_executables: FxHashMap::default(),
             package_imports: FxHashMap::default(),
             package_parents: FxHashMap::default(),
@@ -2990,6 +3001,8 @@ impl Interp {
             routine_objects: _,
             // `RootSet::add_global`, under `library_routine_root_key`.
             library_routine_objects: _,
+            // `RootSet::add_global`, under `internal_routine_root_key`.
+            internal_routine_objects: _,
             rexx_routine_executables: _,
             package_imports: _,
             // Program identities and nothing else.

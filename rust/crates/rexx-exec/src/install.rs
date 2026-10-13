@@ -325,13 +325,13 @@ impl Interp {
                 }
             }
 
-            // The `REXX` package's routine table, found as a library's is:
-            // measured, oracle, `"LIBRARY REXX nosuch"` is 90.999 rc 166 on
-            // the directive's line.
+            // An internal package's routine table, found as a library's is:
+            // measured, oracle, `"LIBRARY REXX nosuch"` and `"LIBRARY rexxutil
+            // SysNoSuch"` are 90.999 rc 166 on the directive's line.
             if let DirectiveKind::Routine(routine) = &directive.kind
-                && let Some(entry) = dispatch::native::rexx_routine_entry(routine)
+                && let Some((package, entry)) = dispatch::native::internal_routine_entry(routine)
             {
-                let Some(row) = internal_routines::rexx_package_routine(&entry) else {
+                let Some(row) = internal_routines::package_routine(package, &entry) else {
                     self.blame_directive_in(id, program, directive);
                     return Err(Raised::external_routine_not_found(&entry).into());
                 };
@@ -553,6 +553,10 @@ impl Interp {
                     continue;
                 }
                 if library {
+                    if let Some(package) = internal_routines::Package::named(&requires.name) {
+                        self.merge_internal_package(id, package);
+                        continue;
+                    }
                     match self.require_library(&requires.name) {
                         Ok(loaded) => self.merge_library(id, &requires.name, &loaded),
                         Err(failure) => {
@@ -2205,6 +2209,19 @@ impl Interp {
                     routine: true,
                 });
                 (upper.into_boxed_slice(), MergedRoutine::Library(code))
+            })
+            .collect();
+        self.merge_routines(id, routines);
+    }
+
+    /// `PackageClass::mergeLibrary` over an internal package: its routines
+    /// join `id`'s own routine lookup where no earlier merge put the name.
+    fn merge_internal_package(&mut self, id: ProgramId, package: internal_routines::Package) {
+        let routines: Vec<(Box<[u8]>, MergedRoutine)> = internal_routines::package_indexes(package)
+            .map(|index| {
+                let name = internal_routines::INTERNAL_ROUTINES[index].name;
+                let upper = name.to_ascii_uppercase().into_bytes();
+                (upper.into_boxed_slice(), MergedRoutine::Internal(index))
             })
             .collect();
         self.merge_routines(id, routines);

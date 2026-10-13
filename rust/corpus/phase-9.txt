@@ -97,3 +97,9 @@ lang/requires_manager_rename.rex
 
 # 9b Task 8: semaphore names sem_open rejects, answered without a semaphore.
 lang/sys_semaphore_names_rejected.rex
+
+# 9b Task 9: LIBRARY rexxutil and LIBRARY REXX name the internal packages.
+lang/rexxutil_library_requires.rex
+lang/rexxutil_library_external.rex
+lang/rexxutil_library_method.rex
+lang/rexxutil_library_routine_missing.rex

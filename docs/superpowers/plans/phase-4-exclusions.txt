@@ -532,8 +532,8 @@ EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
   `corpus/lang/parse_error_requires.rex`. EXTERNAL was DELIVERED by the
   phase that loads libraries: measured 2026-09-28 at 2ae06085c, the second
   row above agrees at rc 214, and with a ::METHOD naming `LIBRARY rxmath
-  RxCalcSqrt` in its place at rc 166. What does not agree is the `LIBRARY
-  rexxutil` spelling, re-homed with its own entry under "PHASE 8 CLOSES". The
+  RxCalcSqrt` in its place at rc 166. The `LIBRARY rexxutil` spelling has
+  its own entry under "PHASE 8 CLOSES". The
   ::ANNOTATE shapes this paragraph used to carry are in CLOSED DEFECTS.
 
   CLOSED BY R33, AND IT WAS RECORDED HERE FIRST AS UNFIXED. The oracle walks
@@ -6225,22 +6225,17 @@ probes are in
 docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
 
   `LIBRARY rexxutil` NAMES THE ORACLE'S INTERNAL RexxUtil PACKAGE, NOT A
-  FILE. The oracle loads REXXUTIL as an internal package beside REXX
-  (interpreter/package/PackageManager.cpp:87-88), and no librexxutil.so
-  exists on this machine. extrout.rex, a ::routine r external 'LIBRARY
-  rexxutil SysSleep' called with 0: the oracle prints go and done, rc 0;
-  ours prints go and ends at rc 158 with 98.903 'Unable to load library
-  "rexxutil"'. The ::METHOD form (extmeth.rex, SysFileTree) is 90.998 rc
-  166 there against 98.903 rc 158 here. Spelled REXXUTIL, both sides give
-  98.903 rc 158 (extmeth2.rex). The functions themselves answer here:
-  `call SysSleep 0` is rc 0 with result 0 on both (syssleep.rex); what is
-  missing is the package name. The roadmap's D11 reads "Decision: build the
-  `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in
-  Phase 10." OWNER: Phase 9, as non-macrospace RexxUtil (Phase 9 spec R2);
-  binding the internal package's names is new mechanism beside `LIBRARY
-  REXX`'s. Row 521's ::REQUIRES LIBRARY and ::CONSTANT-before-EXTERNAL
-  shapes match (constlib.rex rc 214, constlib2.rex rc 166, reqlib.rex rc 0,
-  each identical on all three descriptors).
+  FILE (interpreter/package/PackageManager.cpp:87-88, the name "rexxutil" in
+  memory/GlobalNames.h), as `LIBRARY REXX` names the REXX package. CLOSED by
+  Phase 9b Task 9: ::REQUIRES ... LIBRARY, EXTERNAL 'LIBRARY ...',
+  loadExternalRoutine, loadExternalMethod and Package~loadLibrary find both
+  internal packages by their byte-exact names, witnessed by
+  corpus/lang/rexxutil_library_requires.rex, rexxutil_library_external.rex,
+  rexxutil_library_method.rex and rexxutil_library_routine_missing.rex.
+  Spelled REXXUTIL, both sides give 98.903 rc 158 (extmeth2.rex). Row 521's
+  ::REQUIRES LIBRARY and ::CONSTANT-before-EXTERNAL shapes match (constlib.rex
+  rc 214, constlib2.rex rc 166, reqlib.rex rc 0, each identical on all three
+  descriptors).
 
   A RELEASED LOCAL REFERENCE RETURNED BY A NATIVE ROUTINE WAS REFUSED.
   CLOSED at Phase 8's close (Task 9, ruling 3): a released handle resolves

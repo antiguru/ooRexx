@@ -1,0 +1,5 @@
+/* rexxutil exports routines only, so a method bound to it is 90.998. */
+say 'not reached'
+
+::class t
+::method m external 'LIBRARY rexxutil SysFileTree'

@@ -345,18 +345,18 @@ pub(super) fn native_load_external(
     // `library REXX file_separator` and `LiBrArY REXX file_separator` each
     // answer a `Method`, while `LIBRARY rexx file_separator` and
     // `LIBRARY Rexx file_separator` answer `.nil`.
-    if library == b"REXX" {
-        // The `REXX` package's routine table is `rexx_routines[]` and not
-        // this registry (`runtime/InternalPackage.cpp:230`).
+    if let Some(package) = crate::internal_routines::Package::named(&library) {
+        // An internal package's routine table is not this registry
+        // (`runtime/InternalPackage.cpp:230`).
         if routine {
-            let Some(row) = crate::internal_routines::rexx_package_routine(&entry) else {
+            let Some(row) = crate::internal_routines::package_routine(package, &entry) else {
                 return Ok(Some(ObjRef::NIL));
             };
             let object = interp.native_instance(class);
             interp.record_rexx_routine_object(object, row);
             return Ok(Some(object));
         }
-        let Some(external) = native::entry_point(&entry) else {
+        let Some(external) = native::package_entry_point(package, &entry) else {
             return Ok(Some(ObjRef::NIL));
         };
         let object = interp.native_instance(class);

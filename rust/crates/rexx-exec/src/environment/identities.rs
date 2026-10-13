@@ -1016,7 +1016,25 @@ impl Interp {
         match merged {
             crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
             crate::MergedRoutine::Library(code) => Some(self.library_routine_object(code)),
+            crate::MergedRoutine::Internal(index) => Some(self.internal_routine_object(index)),
         }
+    }
+
+    /// The one `Routine` object for the internal package routine at `index`.
+    pub(crate) fn internal_routine_object(&mut self, index: usize) -> ObjRef {
+        if let Some(found) = self.internal_routine_objects.get(&index).copied() {
+            return found;
+        }
+        let class = self.routine_class();
+        let object = self.native_instance(class);
+        self.roots
+            .add_global(&internal_routine_root_key(index), object);
+        self.internal_routine_objects.insert(index, object);
+        self.record_rexx_routine_object(
+            object,
+            &crate::internal_routines::INTERNAL_ROUTINES[index],
+        );
+        object
     }
 
     /// The one `Routine` object for the library routine at `code`'s row,
@@ -1104,6 +1122,7 @@ impl Interp {
             package_tables: _,
             routine_objects: _,
             library_routine_objects: _,
+            internal_routine_objects: _,
             rexx_routine_executables: _,
             package_imports,
             package_parents,
@@ -1385,6 +1404,12 @@ impl Interp {
 /// [`Interp::library_codes`] row is held under.
 fn library_routine_root_key(code: usize) -> String {
     format!("the imported library routine of code row {code}")
+}
+
+/// The [`rexx_core::RootSet::add_global`] key the internal package routine at
+/// `index` is held under.
+fn internal_routine_root_key(index: usize) -> String {
+    format!("the internal package routine of index {index}")
 }
 
 /// The [`rexx_core::RootSet::add_global`] key one program's own main-section
