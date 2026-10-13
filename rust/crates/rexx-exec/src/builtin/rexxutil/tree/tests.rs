@@ -42,9 +42,10 @@ impl Drop for Scratch {
 }
 
 /// **A dangling link is listed as a link, with the link's own size**, and
-/// counts as a file for `F` and `D`. The oracle's `stat64` fails on it and
-/// the line carries whatever its buffer last held (`corpus/oracle-crashes.txt`
-/// entry 40), so this is this crate's own answer. The regular file beside it
+/// counts as a file for `F` and `D`. The oracle's `stat64` fails on it, as on
+/// any name `stat` fails on (a dangling link, `ELOOP`), and the line carries
+/// whatever its buffer last held (`corpus/oracle-crashes.txt` entry 40), so
+/// this is this crate's own answer. The regular file beside it
 /// is the control that the listing reached the directory.
 #[test]
 fn a_dangling_link_is_listed_by_its_own_status() {
@@ -54,7 +55,7 @@ fn a_dangling_link_is_listed_by_its_own_status() {
     let mut directory = scratch.0.as_os_str().as_bytes().to_vec();
     directory.push(b'/');
 
-    let found = entries(&directory);
+    let found = entries(&directory, |_| true);
     let kind = |wanted: &[u8]| {
         let (_, stat) = found
             .iter()

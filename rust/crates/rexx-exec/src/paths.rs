@@ -19,7 +19,9 @@
 /// `SysFileSystem::canonicalizeName` followed by `normalizePathName`
 /// (`platform/unix/SysFileSystem.cpp:628`, `:687`). Purely lexical -- the
 /// oracle avoids `realpath` here precisely so that a path that does not exist
-/// still normalises.
+/// still normalises. Each `..` removes the component before it, which the
+/// oracle's loop does not do after a doubled slash or after a component
+/// starting with `.` (Deviation 34).
 pub(crate) fn normalize(path: &str, cwd: &str) -> String {
     String::from_utf8(normalize_bytes(path.as_bytes(), cwd.as_bytes()))
         .expect("removing whole components keeps UTF-8 valid")
@@ -70,6 +72,29 @@ mod tests {
         assert_eq!(normalize("/..", "/x"), "/");
         // `..b` is a file name, not a parent reference.
         assert_eq!(normalize("/a/..b", "/x"), "/a/..b");
+    }
+
+    /// Deviation 34: a `..` removes the component before it, after a doubled
+    /// slash and after a component starting with `.` too. The oracle's
+    /// `normalizePathName` answers the second column, measured through
+    /// `QUALIFY`, which names a different file.
+    #[test]
+    fn a_parent_reference_removes_one_component_where_the_oracle_does_not() {
+        for (path, oracle, this_crate) in [
+            ("/a/b//../c", "/a/b/c", "/a/c"),
+            ("/a/b///../c", "/a/b/c", "/a/c"),
+            ("/a/b/.//../c", "/a/b/c", "/a/c"),
+            ("/a/b//..", "/a/b", "/a"),
+            ("/a/b/c/..//../d", "/a/b/d", "/a/d"),
+            ("/a/b/c//../../d", "/a/b/d", "/a/d"),
+            ("/a/.hidden/../c", "/c", "/a/c"),
+            ("/a/.config/../x", "/x", "/a/x"),
+            ("/a/b/..x/../c", "/a/c", "/a/b/c"),
+            ("/a/b/.../../c", "/a/c", "/a/b/c"),
+        ] {
+            assert_ne!(oracle, this_crate);
+            assert_eq!(normalize(path, "/x"), this_crate, "{path}");
+        }
     }
 
     /// A name that is not UTF-8 keeps its bytes.

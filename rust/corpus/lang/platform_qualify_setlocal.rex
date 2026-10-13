@@ -5,6 +5,12 @@
    USERID's value is the host's, so only its shape is printed. */
 say qualify('/a/../b/c.txt')
 say qualify('/x//y/./z/')
+/* Forms both interpreters reduce alike. A `..` after a doubled slash or
+   after a component starting with a dot is Deviation 34. */
+do n over '/a/.b/../../c', '/a/b/./../c', '/a//b/../c', '//a/../b', '/a/./../b',,
+    '/a/b/../../..', '/a/b/../c', '/a/b/.', '/a/b/./c'
+  say n qualify(n)
+end
 say '[' || qualify('') || ']'
 say qualify('rel.txt') == qualify('./rel.txt')
 say length(userid()) > 0

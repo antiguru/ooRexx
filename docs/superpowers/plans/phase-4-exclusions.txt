@@ -2054,6 +2054,44 @@ DEVIATIONS -- permanent, chosen
      an order that is not specified. The programs are the ones that const
      lists.
 
+ 34. A `..` IN A QUALIFIED NAME REMOVES THE COMPONENT BEFORE IT, AFTER A
+     DOUBLED SLASH AND AFTER A COMPONENT STARTING WITH `.` TOO (Phase 9b
+     Task 5). OWNER: none.
+
+     Every name the oracle qualifies (`QUALIFY`, `.File`, streams, the
+     RexxUtil path arguments, `SysFileTree`'s directory part) passes through
+     `SysFileSystem::normalizePathName`
+     (interpreter/platform/unix/SysFileSystem.cpp:687-776, the same in this
+     checkout's interpreter/). It copies byte by byte into an output buffer
+     and remembers `previousSlash`, the output position a `..` returns to. It
+     sets `previousSlash` at an input `/` only when the next input byte is
+     not `.` (line 706), and before it drops a repeated `/`. So the second of
+     two slashes records the last byte of the component before them, and a
+     `..` right after a doubled slash returns there and removes nothing.
+     A component starting with `.` (`.hidden`, `..x`, `...`) never records
+     its slash, so a later `..` removes it and its parent. Measured through
+     `say qualify(n)`, oracle then this crate, probe `q.rex` in
+     docs/superpowers/records/2026-10-13-phase-9b/task-5/probes/:
+
+       `/a/b//../c`          /a/b/c   /a/c
+       `/a/b///../c`         /a/b/c   /a/c
+       `/a/b/.//../c`        /a/b/c   /a/c
+       `/a/b//..`            /a/b     /a
+       `/a/b/c/..//../d`     /a/b/d   /a/d
+       `/a/b/c//../../d`     /a/b/d   /a/d
+       `/a/.hidden/../c`     /c       /a/c
+       `/a/.config/../x`     /x       /a/x
+       `/a/b/..x/../c`       /a/c     /a/b/c
+       `/a/b/.../../c`       /a/c     /a/b/c
+
+     The oracle's answers name a different file than the one the name
+     spells. This crate removes one component per `..`, whatever precedes
+     it. Controller ruling 2026-10-13 (ledger
+     .superpowers/sdd/2026-10-13-phase-9b/progress.md), on Moritz's
+     "oracle bug" stance. The rows both sides reduce alike are witnessed in
+     corpus/lang/platform_qualify_setlocal.rex. The rows above are pinned by
+     `paths::tests::a_parent_reference_removes_one_component_where_the_oracle_does_not`.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

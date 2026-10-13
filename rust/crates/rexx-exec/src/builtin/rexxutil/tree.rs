@@ -245,10 +245,7 @@ fn search(
     zone: &tz::TimeZone,
     out: &mut Vec<Vec<u8>>,
 ) {
-    for (name, stat) in entries(directory) {
-        if !matches(pattern, &name, options.caseless) {
-            continue;
-        }
+    for (name, stat) in entries(directory, |name| matches(pattern, name, options.caseless)) {
         let mut path = directory.to_vec();
         path.extend_from_slice(&name);
         if let Some(line) = entry_line(options, zone, path, &stat) {
@@ -256,7 +253,7 @@ fn search(
         }
     }
     if options.recurse {
-        for (name, stat) in entries(directory) {
+        for (name, stat) in entries(directory, |_| true) {
             if FileType::from_raw_mode(stat.st_mode) != FileType::Directory {
                 continue;
             }
@@ -268,11 +265,14 @@ fn search(
     }
 }
 
-/// The names in `directory` other than `.` and `..`, each with what `stat`
-/// answers for it, following a symbolic link. Where `stat` fails, a dangling
-/// link among them, it is `lstat`'s answer: the oracle reports whatever its
-/// buffer last held (`corpus/oracle-crashes.txt` entry 40).
-fn entries(directory: &[u8]) -> Vec<(Vec<u8>, Stat)> {
+/// The names in `directory` other than `.` and `..` that `wanted` accepts,
+/// each with what `stat` answers for it, following a symbolic link. Only
+/// those names are stat'ed, as `SysFileIterator` does. Where `stat` fails (a
+/// dangling link, a chain of links past the kernel's limit) it is `lstat`'s
+/// answer: the oracle reports whatever its buffer last held
+/// (`corpus/oracle-crashes.txt` entry 40). A name both fail on, removed since
+/// it was read, is left out.
+fn entries(directory: &[u8], wanted: impl Fn(&[u8]) -> bool) -> Vec<(Vec<u8>, Stat)> {
     use std::os::unix::ffi::OsStrExt as _;
     let Ok(listing) = std::fs::read_dir(os_path(directory)) else {
         return Vec::new();
@@ -280,6 +280,9 @@ fn entries(directory: &[u8]) -> Vec<(Vec<u8>, Stat)> {
     let mut out = Vec::new();
     for entry in listing.flatten() {
         let name = entry.file_name().as_bytes().to_vec();
+        if !wanted(&name) {
+            continue;
+        }
         let mut path = directory.to_vec();
         path.extend_from_slice(&name);
         let stat =
@@ -399,8 +402,8 @@ fn mode_string(kind: FileType, mode: u32) -> [u8; 10] {
 
 /// `fnmatch(3)` with `FNM_PATHNAME | FNM_NOESCAPE` in the C locale, over one
 /// name, folding ASCII case under `caseless` as `FNM_CASEFOLD` does: `*`,
-/// `?`, and a bracket expression with ranges, `[:class:]` names and a leading
-/// `!` or `^`. A backslash is an ordinary byte, and a leading `.` needs no
+/// `?`, and a bracket expression with ranges, `[:class:]`, `[.c.]` and
+/// `[=c=]` forms and a leading `!` or `^`. A backslash is an ordinary byte, and a leading `.` needs no
 /// literal match.
 fn matches(pattern: &[u8], name: &[u8], caseless: bool) -> bool {
     let fold = |byte: u8| {
@@ -446,6 +449,13 @@ fn matches(pattern: &[u8], name: &[u8], caseless: bool) -> bool {
 /// One bracket expression opening at `open` against one byte: the index
 /// just past its `]` when it matches, `None` when it does not. A bracket with
 /// no closing `]` is a literal `[`.
+///
+/// Measured against glibc through the oracle: a `[.c.]` or `[=c=]` naming one
+/// byte is that byte, compared without folding case, and `[.c.]` may end a
+/// range. A `[.` with no `.]`, a collating symbol of any other length, and
+/// `[=c=]` ending a range make the whole pattern fail. A `[=` not closed by
+/// `=]` two bytes on is a literal `[`, and `[=c=]` followed by `-` starts no
+/// range.
 fn bracket(pattern: &[u8], open: usize, byte: u8, caseless: bool) -> Option<usize> {
     let fold = |value: u8| {
         if caseless {
@@ -483,22 +493,63 @@ fn bracket(pattern: &[u8], open: usize, byte: u8, caseless: bool) -> Option<usiz
             at += length + 4;
             continue;
         }
-        let low = pattern[at];
-        if pattern.get(at + 1) == Some(&b'-') && pattern.get(at + 2).is_some_and(|end| *end != b']')
+        if let Some(equivalent) = equivalence(pattern, at) {
+            if equivalent == byte {
+                hit = true;
+            }
+            at += 5;
+            continue;
+        }
+        let (low, low_end, symbol) = match pattern.get(at + 1) {
+            Some(b'.') if pattern[at] == b'[' => {
+                let (low, end) = collating(pattern, at)?;
+                (low, end, true)
+            }
+            _ => (pattern[at], at + 1, false),
+        };
+        if pattern.get(low_end) == Some(&b'-')
+            && pattern.get(low_end + 1).is_some_and(|end| *end != b']')
         {
-            let high = pattern[at + 2];
+            let (high, high_end) = match (pattern[low_end + 1], pattern.get(low_end + 2)) {
+                (b'[', Some(b'.')) => collating(pattern, low_end + 1)?,
+                (b'[', Some(b'=')) if equivalence(pattern, low_end + 1).is_some() => return None,
+                (high, _) => (high, low_end + 2),
+            };
             if (fold(low)..=fold(high)).contains(&fold(byte)) {
                 hit = true;
             }
-            at += 3;
+            at = high_end;
         } else {
-            if fold(low) == fold(byte) {
+            let matched = if symbol {
+                low == byte
+            } else {
+                fold(low) == fold(byte)
+            };
+            if matched {
                 hit = true;
             }
-            at += 1;
+            at = low_end;
         }
     }
     (byte == b'[').then_some(open + 1)
+}
+
+/// The byte a `[.c.]` at `at` names and the index past it, `None` where it
+/// does not close or names other than one byte.
+fn collating(pattern: &[u8], at: usize) -> Option<(u8, usize)> {
+    let length = pattern
+        .get(at + 2..)?
+        .windows(2)
+        .position(|pair| pair == b".]")?;
+    (length == 1).then(|| (pattern[at + 2], at + length + 4))
+}
+
+/// The byte a well-formed `[=c=]` at `at` names.
+fn equivalence(pattern: &[u8], at: usize) -> Option<u8> {
+    match pattern.get(at..at + 5)? {
+        [b'[', b'=', c, b'=', b']'] => Some(*c),
+        _ => None,
+    }
 }
 
 /// Whether `name` is a character class the C locale defines.

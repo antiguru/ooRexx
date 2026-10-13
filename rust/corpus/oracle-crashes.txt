@@ -1383,7 +1383,7 @@ fixed, and this crate follows it: the move copies and unlinks, answering 0, pinn
 `builtin::rexxutil::files::tests::a_move_across_file_systems_copies_and_unlinks`. No corpus
 witness can run it.
 
-## 40. `SysFileTree` over a dangling symbolic link
+## 40. `SysFileTree` over a name `stat` fails on: a dangling link, or `ELOOP`
 
     'ln -s nowhere dangling'
     call SysFileTree 'dangling', f.
@@ -1396,7 +1396,10 @@ Not a crash: an UNDEFINED ANSWER. 3 runs under the standard wrapper, measured 20
 so the line carries whatever its `findFileData` held: a longer probe program printed
 `1/01/70   1:00a          23  l-----S--T` for the same call, and in a `*` listing whose previous
 entry was a directory the link carried that directory's date, size and mode and was counted under
-`D` and not `F`. This checkout's `interpreter/` is the same. This crate lists the link
+`D` and not `F`. Any `stat` failure does the same: a chain of links past the kernel's limit
+fails with `ELOOP`, and the Task 5 review's loop probe (`loop.d/s/up -> ..` searched with `S`)
+printed the previous entry's `80  drwxrwxr-x` for the deepest `up`, where this crate prints the
+link's own `2  lrwxrwxrwx`; both stop there, count 123. This checkout's `interpreter/` is the same. This crate lists the link
 by `lstat`, a link with its own size that counts as a file, pinned by
 `builtin::rexxutil::tree::tests::a_dangling_link_is_listed_by_its_own_status`. The corpus
 witness `lang/rexxutil_file_tree.rex` makes no dangling link.

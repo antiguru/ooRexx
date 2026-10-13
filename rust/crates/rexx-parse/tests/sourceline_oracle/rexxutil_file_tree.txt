@@ -1,11 +1,11 @@
-count 160
+count 185
 /* SysFileTree over a tree this program makes and removes: each option and
    date layout, the size cap, the mode letters, specs naming the current, a
    parent and the home directory, names with a blank, with bytes that are not
    UTF-8 and with a NUL, a link to a directory, a directory that cannot be
-   read, the pattern forms, the stem and array targets, and the argument
-   errors. Each result is printed sorted, since the order entries are found
-   in is the directory's own. */
+   read, the pattern and bracket forms, the stem and array targets, and the
+   argument errors. Each result is printed sorted, since the order entries
+   are found in is the directory's own. */
 here = directory()
 d = 'filetree.d'
 call SysMkDir d
@@ -72,6 +72,31 @@ call value 'HOME', 'relative.d', 'ENVIRONMENT'
 call show 'relative ~|o', '~', 'o'
 call show 'relative ~/|o', '~/', 'o'
 call value 'HOME', home, 'ENVIRONMENT'
+
+-- bracket forms over one-byte names, with and without I
+g = here'/filetree.g/'
+call SysMkDir g
+do name over 'a', 'b', 'c', 'd', 'A', 'B', '-', ']', '^', '!', '[', '=', 'x.y'
+  call make g || name, ''
+end
+patterns = '[[=a=]] [[.a.]] [[.-.]] [a-[.c.]] [[=a=]b] [[.a.]-c] [[=a=]-c] [a-[=c=]]' ,
+  '[[.ab.]] [[=ab=]] [[.].]] [[.[.]] [[..]] [[==]] [[.a] [[=a] [[.a.] [![.a.]] [[.A.]]' ,
+  '[[=A=]] [[.a.][=b=]] [b-[.d.]] [[.b.]-[.d.]] [a-] []-a] [!]] [[:alpha:][:digit:]]' ,
+  '[\]] [[:ALPHA:]] [[:alpha:] [[] *[ [!-] [a-c-e]'
+do i = 1 to words(patterns)
+  p = word(patterns, i)
+  do o over 'o', 'oi'
+    drop f.
+    call SysFileTree g || p, f., o
+    names = .array~new
+    do j = 1 to f.0
+      names~append(f.j~substr(length(g) + 1))
+    end
+    names~sort
+    say left(p, 22) left(o, 3) names~toString('l', ' ')
+  end
+end
+'rm -rf' g
 
 -- the targets: a stem name, a stem object, an array emptied first
 say 'name ' SysFileTree('sub/', 'out', 'o') out.0
