@@ -2,8 +2,9 @@
    with a blank, with bytes that are not UTF-8 and with a NUL, a trailing
    slash, a link to a directory, a dangling link, a directory that cannot be
    read or searched, and the home-directory forms; the same qualification in
-   QUALIFY and .File; and the argument errors. Everything is made under a
-   directory this program makes and removes. */
+   QUALIFY, .File, .Stream, the stream builtins and DIRECTORY; and the
+   argument errors. Everything is made under a directory this program makes
+   and removes. */
 d = 'filetests.d'
 call SysMkDir d
 call SysMkDir d'/sub'
@@ -41,6 +42,22 @@ say 'nul    ' (qualify(d'/f.txt' || '00'x || 'x') == qualify(d'/f.txt')) '['qual
 say 'file   ' quiet(.File~new('~')~absolutePath) .File~new('~root/x')~absolutePath ,
   '['.File~new('~nosuchuser.rexxutil/a')~absolutePath']' '['.File~new('')~absolutePath']'
 say 'home   ' (qualify('~') == value('HOME', , 'ENVIRONMENT'))
+-- with HOME moved into this program's directory, a tilde name reaches the
+-- same file through the routines, QUALIFY, .File, .Stream, the stream
+-- builtins and DIRECTORY
+here = directory()
+home = value('HOME', qualify(d), 'ENVIRONMENT')
+call lineout '~/home.txt', 'via tilde'
+call lineout '~/home.txt'
+say 'tilde  ' SysFileExists(d'/home.txt') SysIsFile('~/home.txt') linein('~/home.txt') ,
+  (stream('~/home.txt', 'c', 'query exists') == qualify(d'/home.txt')) ,
+  (.Stream~new('~/home.txt')~qualify == qualify(d'/home.txt')) ,
+  (.File~new('~/home.txt')~absolutePath == qualify(d'/home.txt'))
+call stream '~/home.txt', 'c', 'close'
+moved = qualify(d)
+say 'chdir  ' (directory('~') == moved) '['directory('~nosuchuser.rexxutil')']' ,
+  (directory(here || '00'x || 'more') == here)
+call value 'HOME', home, 'ENVIRONMENT'
 call t "call SysFileExists .nil"
 call t "call SysIsFile .nil"
 call t "call SysIsFileDirectory .nil"
