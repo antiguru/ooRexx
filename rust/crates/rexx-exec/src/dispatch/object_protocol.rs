@@ -1795,24 +1795,42 @@ pub(super) fn array_argument(
 
 /// [`array_argument`]'s converted array itself, rooted: `value` where it
 /// already is one.
+#[inline]
 pub(super) fn array_argument_object(
     interp: &mut Interp,
     value: ObjRef,
     overload: ArrayArgument,
 ) -> Result<ObjRef, Failure> {
-    let single = |dimensions: Option<&[usize]>| dimensions.is_none_or(|held| held.len() == 1);
+    if let Some((_, dimensions)) = interp.array_body(value)
+        && single_dimensional(dimensions)
+    {
+        interp.roots.activity_mut().push_temp(value);
+        return Ok(value);
+    }
+    converted_array_argument(interp, value, overload)
+}
+
+/// Whether an array's dimensions array leaves it single-dimensional.
+fn single_dimensional(dimensions: Option<&[usize]>) -> bool {
+    dimensions.is_none_or(|held| held.len() == 1)
+}
+
+/// [`array_argument_object`] for a `value` that is not a single-dimensional
+/// array.
+#[inline(never)]
+fn converted_array_argument(
+    interp: &mut Interp,
+    value: ObjRef,
+    overload: ArrayArgument,
+) -> Result<ObjRef, Failure> {
     let array = match interp.array_body(value) {
-        Some((_, dimensions)) if single(dimensions) => {
-            interp.roots.activity_mut().push_temp(value);
-            return Ok(value);
-        }
         Some(_) => Some(value),
         None => interp.request_array_value(value)?,
     };
     if let Some(array) = array {
         interp.roots.activity_mut().push_temp(array);
         if let Some((_, dimensions)) = interp.array_body(array)
-            && single(dimensions)
+            && single_dimensional(dimensions)
         {
             return Ok(array);
         }

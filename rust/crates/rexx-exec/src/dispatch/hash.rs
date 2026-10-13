@@ -1916,7 +1916,7 @@ pub(super) fn native_hash_unknown(
         return Err(Raised::missing_method_argument(1).into());
     };
     let message = required_string_argument(interp, message, 1)?;
-    let name = interp.to_text(message).to_vec();
+    let mut name = interp.to_text(message).to_vec();
     let Some(Some(arguments)) = args.get(1).copied() else {
         return Err(Raised::missing_method_argument(2).into());
     };
@@ -1929,15 +1929,15 @@ pub(super) fn native_hash_unknown(
         interp.heap.get(receiver).map(|object| &object.body),
         Some(Body::Native(_))
     ) && owns(interp, receiver);
-    let Some(index) = name.strip_suffix(b"=") else {
-        let index = name.to_ascii_uppercase();
+    name.make_ascii_uppercase();
+    if name.pop_if(|last| *last == b'=').is_none() {
         if store {
-            let index = interp.text_built(index);
+            let index = interp.text_built(name);
             return store_entry_read(interp, receiver, index);
         }
-        return Ok(Some(interp.hash_entry_read(receiver, &index)));
-    };
-    let index = index.to_ascii_uppercase();
+        return Ok(Some(interp.hash_entry_read(receiver, &name)));
+    }
+    let index = name;
     let Some(Some(item)) = interp
         .array_slots(forwarded)
         .and_then(|slots| slots.first().copied())
