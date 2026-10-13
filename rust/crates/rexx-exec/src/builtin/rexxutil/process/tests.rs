@@ -143,3 +143,22 @@ fn this_process_has_a_usage() {
     let usage = Usage::of_this_process().expect("/proc/self is readable");
     assert!(usage.max_rss > 0);
 }
+
+/// A read that fails, from a descriptor open only for writing: no key, and
+/// the terminal's settings restored all the same.
+#[test]
+fn a_failed_read_answers_none_and_restores_the_settings() {
+    let (_controller, terminal) = pseudo_terminal();
+    let before = rustix::termios::tcgetattr(&terminal)
+        .expect("terminal settings")
+        .local_modes;
+    let (_reader, writer) = std::io::pipe().expect("a pipe");
+    assert_eq!(
+        read_key(Some(terminal.as_fd()), writer.as_fd(), false),
+        None
+    );
+    let after = rustix::termios::tcgetattr(&terminal)
+        .expect("terminal settings")
+        .local_modes;
+    assert_eq!(after, before, "the settings are restored");
+}

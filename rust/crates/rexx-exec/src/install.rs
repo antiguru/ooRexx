@@ -613,9 +613,15 @@ impl Interp {
         // resolved one after the search: `PackageManager::loadRequires`
         // (`package/PackageManager.cpp:718`-`:766`) checks each in turn, so a
         // manager that renames or forbids a package is asked twice.
+        // The search, a miss and the cache entry use the name as written,
+        // and the manager's short-name answer is only looked up:
+        // `PackageClass::loadRequires` (`classes/PackageClass.cpp:1319`)
+        // resolves before asking it, and `InterpreterInstance::loadRequires`
+        // (`runtime/InterpreterInstance.cpp:1060`) caches the original.
+        let original = name;
         let mut inherited = None;
         let Some(name) = self.check_requires_access(name, &mut inherited)? else {
-            return Err(Raised::requires_file_not_found(name).into());
+            return Err(Raised::requires_file_not_found(original).into());
         };
         let name = &name[..];
         if let Some(&loaded) = self.required_packages.get(name) {
@@ -623,15 +629,15 @@ impl Interp {
             return Ok(loaded);
         }
         let resolved = match from {
-            Some(id) => self.resolve_requires(id, name),
-            None => self.resolve_search(None, name, true),
+            Some(id) => self.resolve_requires(id, original),
+            None => self.resolve_search(None, original, true),
         };
         let resolved = match resolved {
             Some(resolved) => {
                 let Some(checked) =
                     self.check_requires_access(resolved.as_bytes(), &mut inherited)?
                 else {
-                    return Err(Raised::requires_file_not_found(name).into());
+                    return Err(Raised::requires_file_not_found(original).into());
                 };
                 Some(String::from_utf8_lossy(&checked).into_owned())
             }
@@ -641,18 +647,18 @@ impl Interp {
             && let Some(&loaded) = self.required_packages.get(resolved.as_bytes())
         {
             self.check_not_installing(loaded)?;
-            self.required_packages.insert(name.into(), loaded);
+            self.required_packages.insert(original.into(), loaded);
             return Ok(loaded);
         }
         let Some(resolved) = resolved else {
-            return Err(Raised::requires_file_not_found(name).into());
+            return Err(Raised::requires_file_not_found(original).into());
         };
         // The search already answered that this names a regular file, so a
         // read failing here is a permission or a race rather than a miss --
         // and the oracle reports the same 43.901 for it, since
         // `PackageManager::loadRequires` answers `OREF_NULL` either way.
         let Ok(text) = std::fs::read(&resolved) else {
-            return Err(Raised::requires_file_not_found(name).into());
+            return Err(Raised::requires_file_not_found(original).into());
         };
         let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
         let required = ProgramId(self.programs.len());
@@ -669,7 +675,7 @@ impl Interp {
         // `InterpreterInstance.cpp:1060`: a name reached again from inside
         // that prologue must find this entry, or the circularity check has
         // nothing to fire on.
-        self.required_packages.insert(name.into(), required);
+        self.required_packages.insert(original.into(), required);
         self.required_packages
             .insert(resolved.as_bytes().into(), required);
         if let Err(failure) = self.run_loaded(parsed, required, CallType::Requires, None, None) {
@@ -678,7 +684,7 @@ impl Interp {
             // whose translation raised translates it again; a package that
             // failed to install or in its prologue stays cached.
             if self.untranslated.contains(&required) {
-                self.required_packages.remove(name);
+                self.required_packages.remove(original);
                 self.required_packages.remove(resolved.as_bytes());
             }
             return Err(failure);

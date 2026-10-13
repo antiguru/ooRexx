@@ -10,8 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 //! The `REXXUTIL` package's file-system, message, process, sleep, semaphore, stem and version
-//! routines --
-//! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
+//! routines: `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
 
 pub(crate) mod files;

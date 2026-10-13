@@ -43,8 +43,7 @@ pub(crate) fn load_funcs(
     Ok(answer(interp, 0))
 }
 
-/// `SysCls()`: `system("clear")`, answering its raw wait status -- measured,
-/// `256` where `clear` exits 1 and `32512` where the shell finds no `clear`.
+/// `SysCls()`: `system("clear")`, answering its raw wait status.
 /// The child's output reaches this interpreter's own sinks.
 pub(crate) fn cls(
     interp: &mut Interp,
@@ -340,7 +339,8 @@ pub(crate) fn fork(
 const NO_CHILD: i64 = -1;
 
 /// `SysWait()`: `wait` for any child of this process, answering its raw
-/// status, or [`NO_CHILD`].
+/// status, or [`NO_CHILD`]. Any child: another activity's command, or one of
+/// another interpreter in the process, as the oracle's `wait` reaps any.
 pub(crate) fn wait(
     interp: &mut Interp,
     _name: &'static [u8],

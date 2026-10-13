@@ -91,3 +91,6 @@ lang/address_cd.rex
 
 # 9b Task 7: the RexxUtil process and session routines.
 lang/rexxutil_process.rex
+
+# 9b Task 7 fix round 1: a security manager renaming a REQUIRES.
+lang/requires_manager_rename.rex
