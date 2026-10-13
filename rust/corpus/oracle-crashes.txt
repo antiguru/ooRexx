@@ -25,9 +25,9 @@
 # it. Every such entry states the deadline it was killed at, and rc 137 there
 # is the kill and not the oracle's answer.
 #
-# A fourth mode, an UNDEFINED ANSWER -- a value the oracle reads from memory
-# it never set, different from run to run -- was added on 2026-10-13 for
-# entry 39.
+# A fourth mode, an UNDEFINED ANSWER, was added on 2026-10-13 for entry 39:
+# a value the oracle reads from memory it never set, different from run to
+# run.
 
 ## 1. `select; when 1 = 0 then; when 2 = 2 then nop; end`
 
@@ -1377,7 +1377,7 @@ Not a crash: an UNDEFINED ANSWER, a fourth mode. Run from a directory on another
 `/tmp`, 3 runs under the standard wrapper and `memcap 4G`, measured 2026-10-13 by Phase 9b Task 4:
 stdout `32617 1 0`, `32685 1 0`, `32756 1 0`, nothing moved and rc 0. The oracle's
 `temporaryFilename` (`platform/unix/SysFileSystem.cpp` at the oracle's `cb9563364`) returns
-without setting `errInfo` on success, so `moveFile` answers whatever the stack held; it also
+without setting `errInfo` on success, so `moveFile` answers whatever the stack held. It also
 formats the spare name into a 7-byte `snprintf` bound. This checkout's `interpreter/` has both
 fixed, and this crate follows it: the move copies and unlinks, answering 0, pinned by
 `builtin::rexxutil::files::tests::a_move_across_file_systems_copies_and_unlinks`. No corpus

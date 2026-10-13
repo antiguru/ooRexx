@@ -2,9 +2,9 @@ count 110
 /* SysFileCopy and SysFileMove: the answers for a missing source, one file
    named twice, a directory at either end, a link at either end, a target
    that exists, a source that cannot be read, a name with a blank and names
-   that are not UTF-8; the times and mode a copy keeps; and the argument
-   errors. Everything is made under a directory this program makes and
-   removes. A move across file systems is not here: the oracle answers an
+   that are not UTF-8. Then the times and mode a copy keeps, and the
+   argument errors. Everything is made under a directory this program makes
+   and removes. A move across file systems is not here: the oracle answers an
    uninitialised errno for it (oracle-crashes.txt entry 39). */
 d = 'copymove.d'
 call SysMkDir d

@@ -2,9 +2,9 @@ count 101
 /* SysFileExists, SysIsFile, SysIsFileDirectory and SysIsFileLink over names
    with a blank, with bytes that are not UTF-8 and with a NUL, a trailing
    slash, a link to a directory, a dangling link, a directory that cannot be
-   read or searched, and the home-directory forms; the same qualification in
-   QUALIFY, .File, .Stream, the stream builtins and DIRECTORY; and the
-   argument errors. Everything is made under a directory this program makes
+   read or searched, and the home-directory forms. Then the same
+   qualification in QUALIFY, .File, .Stream, the stream builtins and
+   DIRECTORY, and the argument errors. Everything is made under a directory this program makes
    and removes. */
 d = 'filetests.d'
 call SysMkDir d
