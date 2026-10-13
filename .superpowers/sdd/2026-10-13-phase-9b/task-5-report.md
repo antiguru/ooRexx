@@ -177,3 +177,57 @@ stdout, then reversed by an exact edit and confirmed with `git diff --stat` and 
 Derived rows: no concurrency whole-group row, `sim-gate.tsv` row or 9d-set line names this group
 (`grep -rn SysFileTree corpus/ crates/rexx-exec/tests/`), so the suite record above is the only
 derived row this task re-derives.
+
+## Fix round 1
+
+Commit `00ba9f620`, against `task-5-review.md` and the Task 5 rulings in `progress.md`.
+
+**(1) Deviation 34, `normalize_bytes` unchanged.** Added to
+`docs/superpowers/plans/phase-4-exclusions.txt` after 33, in its format. It cites
+`normalizePathName` (`platform/unix/SysFileSystem.cpp:687-776` in the oracle's tree, line 706 for
+the `previousSlash` condition; the function is identical in this checkout's `interpreter/`), the
+rule the oracle applies, and the differing rows. I re-measured them with `probes/q.rex` (oracle
+and crate side by side in `probes/q.oracle-then-crate.out`). Ten rows differ, the review's nine
+plus `/a/.config/../x` (`/x` against `/a/x`). Nine rows agree. The agreeing rows are now in
+`corpus/lang/platform_qualify_setlocal.rex`, run on both sides with stdout, stderr and rc
+identical, and its sourceline file was regenerated. The differing rows are pinned by
+`paths::tests::a_parent_reference_removes_one_component_where_the_oracle_does_not`, which names
+Deviation 34. `normalize`'s doc says the same in one sentence.
+
+**(2) `[.c.]` and `[=c=]`.** I measured every form on the oracle first (`probes/brackets.rex`,
+`probes/brackets.oracle.out`, names `a b c d A B - ] ^ ! [ = x.y`). What glibc does in the C
+locale:
+- A one-byte `[.c.]` or `[=c=]` is that byte, compared without folding even under `I`.
+  `[[.a.]]` and `[[=a=]]` with `I` match `a` and not `A`.
+- `[.c.]` can start or end a range, and the range folds.
+- `[=c=]` followed by `-` starts no range: `[[=a=]-c]` is `- a c`.
+- `[=c=]` ending a range fails the whole pattern, as do an unclosed `[.`, an empty symbol and a
+  symbol longer than one byte.
+- A `[=` not closed by `=]` two bytes on is a literal `[`.
+
+`bracket` now does each of these, through the helpers `collating` and `equivalence`. The probe
+is identical on both sides. The witness carries every form the review measured, every one of its
+agreeing controls, and the forms above, each with `o` and `oi`. That is 37 patterns in a
+`filetree.g` directory the program makes and removes, and I read each row of the oracle's output.
+
+**(3)** `entries` takes a filter, and the first pass stats only the names `matches` accepts, as
+`findNextEntry` does. The recursion pass accepts every name. The doc now also covers the
+both-fail drop, which was left as it is.
+
+**(4)** Entry 40 is retitled to cover any `stat` failure and names `ELOOP`, with the review's loop
+probe. I re-ran that probe here (`probes/loop.rex`): both sides give count 123, and the deepest
+`up` prints `80  drwxrwxr-x` on the oracle and `2  lrwxrwxrwx` here. The unit test's doc says the
+same.
+
+Mutation: folding the lone-symbol comparison (`low == byte` to `fold(low) == fold(byte)`, built
+with `--profile mutation`) turns four witness rows red (`[[.a.]] oi`, `[![.a.]] oi`, `[[.A.]] oi`,
+`[[.a.][=b=]] oi`). It was restored from a copy, `git diff --stat` empty.
+
+| check | result at `00ba9f620` (raw output in `records/.../task-5/fix1/`) |
+|---|---|
+| `cargo fmt --all --check` | exit 0 |
+| `cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0 |
+| lib + tables (the command above) and `rexx-parse --test sourceline_oracle` | exit 0: lib 1096, then 8, 2, 1, 6, 5, 3, 5; sourceline 1 (`lib-tables-output.txt`) |
+| suite group `base/rexxutil/SysFileTree` | exit 0, green, 26 of 26 (`run-output.txt`, `tests.tsv`) |
+| corpus, `REXX_CORPUS_GATE=1` release | exit 0, `1037 of 1037 matching` (`corpus-output.txt`) |
+| `collect_stress`, `ir_recorded`, `trace_oracle`, `coverage` release | exit 0: 37, 28, 41, 21 passed (`other-tests-output.txt`) |

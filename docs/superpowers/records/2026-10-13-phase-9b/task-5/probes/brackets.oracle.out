@@ -1,0 +1,42 @@
+[[=a=]]      o   a
+[[=a=]]      oi  a
+[[.a.]]      o   a
+[[.a.]]      oi  a
+[[.-.]]      o   -
+[[.-.]]      oi  -
+[a-[.c.]]    o   a b c
+[a-[.c.]]    oi  A B a b c
+[[=a=]b]     o   a b
+[[=a=]b]     oi  B a b
+[[.a.]-c]    o   a b c
+[[.a.]-c]    oi  A B a b c
+[[=a=]-c]    o   - a c
+[[=a=]-c]    oi  - a c
+[a-[=c=]]    o   
+[a-[=c=]]    oi  
+[[.ab.]]     o   
+[[.ab.]]     oi  
+[[=ab=]]     o   
+[[=ab=]]     oi  
+[[.].]]      o   ]
+[[.].]]      oi  ]
+[[.[.]]      o   [
+[[.[.]]      oi  [
+[[=.=]]      o   
+[[=.=]]      oi  
+[[..]]       o   
+[[..]]       oi  
+[[==]]       o   
+[[==]]       oi  
+[[.a]        o   
+[[.a]        oi  
+[[=a]        o   = [ a
+[[=a]        oi  = A [ a
+[[.a.]       o   
+[[.a.]       oi  
+[![.a.]]     o   ! - = A B [ ] ^ b c d
+[![.a.]]     oi  ! - = A B [ ] ^ b c d
+[[.A.]]      o   A
+[[.A.]]      oi  A
+[[=A=]]      o   A
+[[=A=]]      oi  A
