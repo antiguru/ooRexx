@@ -85,3 +85,50 @@ fn pgid_is_the_parents_group() {
     assert_eq!(group, ours.to_string(), "{text}");
     assert_ne!(group, pid, "{text}");
 }
+
+/// A command whose child a `SysWait` on another activity reaped answers `127`
+/// with a `FAILURE`, where the oracle reads the status of its own failed
+/// `waitpid` (`corpus/oracle-crashes.txt` entry 45). The wait itself answers
+/// the child's status, `exit 5` as `1280`. The command marks that it has
+/// started, and the main activity waits for the mark before it calls
+/// `SysWait`, a bounded number of times. `timeout` kills a run that outlives
+/// its deadline.
+#[test]
+fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
+    let program = "a = .w~new~start('RUN')\n\
+        do 400 until SysFileExists('started'); call SysSleep 0.05; end\n\
+        say 'wait' SysWait()\n\
+        say 'cmd' a~result\n\
+        ::class w\n\
+        ::method run\n\
+        call on failure name failed\n\
+        'touch started; sleep 0.6; exit 5'\n\
+        return 'rc' rc\n\
+        failed:\n\
+        say 'failure' rc\n\
+        return\n";
+    let (_, dir) = rexx_run("sys-wait-reaped", program);
+    let output = Command::new("timeout")
+        .args(["-k", "5", "60"])
+        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(dir.join("p.rex"))
+        .current_dir(&dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("timeout runs rexx-run");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        output.status.success(),
+        "{:?}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut lines: Vec<&str> = stdout.lines().collect();
+    lines.sort_unstable();
+    assert_eq!(
+        lines,
+        ["cmd rc 127", "failure 127", "wait 1280"],
+        "{stdout}"
+    );
+}

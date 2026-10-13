@@ -62,7 +62,7 @@ pub(crate) fn cls(
             std::ffi::OsStr::from_bytes(value),
         );
     }
-    command.current_dir(interp.cwd_text());
+    command.current_dir(std::ffi::OsStr::from_bytes(interp.cwd_bytes()));
     let status = match command.output() {
         Ok(output) => {
             interp.write_out(&output.stdout);

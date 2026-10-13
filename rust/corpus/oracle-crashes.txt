@@ -1341,7 +1341,9 @@ The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTe
 group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
 it sorts is reported untrapped as usual: 40.919 (`call SysStemSort '*'`) and 40.921 (`first` 3,
 `last` 2) measured 2026-10-13, 3 runs of 3 each, rc 216 with the ordinary report, and 40.920 is
-the witness's own last clause. This crate raises each of the three as the trapped oracle does.
+the witness's own last clause. This crate raises each of the three as the trapped oracle does. Pinned
+by `builtin::rexxutil::stems::tests::an_untrapped_error_inside_the_sort_is_reported`, which reads
+`crates/rexx-exec/tests/stem_sort_untrapped_cases/crate`.
 
 ## 38. `SysDumpVariables` over a variable whose `STRING` method raises
 
@@ -1486,7 +1488,8 @@ and `SysWait` after `SysSleep 0.2` on the main one, 3 runs printed the wait's an
 command's `rc` as `1280` and `3` twice, then `32631` and `5`
 (`docs/superpowers/records/2026-10-13-phase-9b/task-7/probe-runs.txt`). This crate answers `-1` for a wait that finds no
 child or fails, pinned by `tests/rexxutil_process.rs`, and a command whose child was reaped elsewhere
-answers `127` with a `FAILURE`. No upstream ticket.
+answers `127` with a `FAILURE`, pinned by that file's
+`a_command_whose_child_was_reaped_elsewhere_fails_with_127`. No upstream ticket.
 
 ## 46. `SysFork` with a second activity running
 
@@ -1559,3 +1562,17 @@ the oracle does when it does not collect, collecting or not: pinned by
 `builtin::rexxutil::stems::tests::a_stem_named_by_its_variable_outlives_the_variable`, which reads
 `crates/rexx-exec/tests/stem_dropped_by_name_cases/crate` and runs each case normally and
 collecting at every allocation. No corpus witness can run it. No upstream ticket.
+
+## 48. `~` with `HOME` unset, as a file name
+
+    say qualify('~')
+
+From source, not run. `SysFileSystem::resolveTilde` (`platform/unix/SysFileSystem.cpp:569` at the
+oracle's `cb9563364`, `:486` in this checkout's `interpreter/`) assigns `getenv("HOME")` to a
+`FileNameBuffer`, whose `operator=` (`memory/FileNameBuffer.hpp:122`) runs `strlen` on it:
+`strlen(NULL)` where `HOME` is unset, as in entry 44's `cd ~`, which was measured.
+`canonicalizeName` calls it for a name starting `~`, and `qualifyStreamName` calls
+`canonicalizeName`. In this crate the same names go through `qualify_name`: `QUALIFY`, stream names,
+`DIRECTORY` and the RexxUtil file routines. This crate reads the missing `HOME` as empty: `~`
+qualifies to the null string and `~/x` to `/x`, pinned by
+`builtin::platform::tests::a_tilde_with_home_unset_qualifies_without_a_home`. No upstream ticket.

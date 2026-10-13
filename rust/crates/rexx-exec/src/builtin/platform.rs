@@ -380,3 +380,22 @@ fn process_environment(
     }
     Ok(interp.text_built(old))
 }
+
+#[cfg(test)]
+mod tests {
+    /// **A `~` with `HOME` unset qualifies to the null string, and `~/x` to
+    /// `/x`**, the empty home read as no directory at all. The oracle runs
+    /// `strlen` on the null `getenv("HOME")` there (`corpus/oracle-crashes.txt`
+    /// entry 48), so this is the crate's own answer. The adjacent success is
+    /// the same names with `HOME` set.
+    #[test]
+    fn a_tilde_with_home_unset_qualifies_without_a_home() {
+        let source = b"call value 'HOME', '/h', 'ENVIRONMENT'\n\
+            say qualify('~') qualify('~/x')\n\
+            'unset HOME'\n\
+            say '['qualify('~')']' qualify('~/x')\n";
+        let outcome = crate::run_program("/t.rex", source.to_vec(), crate::Invocation::none());
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), "/h /h/x\n[] /x\n");
+    }
+}

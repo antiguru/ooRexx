@@ -162,3 +162,37 @@ fn a_failed_read_answers_none_and_restores_the_settings() {
         .local_modes;
     assert_eq!(after, before, "the settings are restored");
 }
+
+/// **`SysCls` runs its shell in a working directory whose name is not
+/// UTF-8**, as `system` does wherever the process stands. `-1` is the answer
+/// for no child at all. The adjacent success is the same call from a
+/// directory whose name is UTF-8.
+#[test]
+fn sys_cls_runs_in_a_directory_whose_name_is_not_utf8() {
+    use std::os::unix::ffi::OsStrExt as _;
+    let base = std::env::temp_dir().join(format!("rexx-cls-{}", std::process::id()));
+    let plain = base.join("plain");
+    let mut name = b"odd".to_vec();
+    name.push(0xff);
+    let odd = base.join(std::ffi::OsStr::from_bytes(&name));
+    std::fs::create_dir_all(&plain).expect("a directory");
+    std::fs::create_dir_all(&odd).expect("a directory");
+    let mut source = b"'cd' '".to_vec();
+    source.extend_from_slice(plain.as_os_str().as_bytes());
+    source.extend_from_slice(b"'\nr = SysCls()\nsay 'plain' (r \\= -1)\n'cd' '");
+    source.extend_from_slice(odd.as_os_str().as_bytes());
+    source.extend_from_slice(b"'\nr = SysCls()\nsay 'odd' (r \\= -1)\n");
+    let outcome = crate::run_program("/t.rex", source, crate::Invocation::none());
+    let _ = std::fs::remove_dir_all(&base);
+    assert_eq!(outcome.exit_code, 0);
+    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
+    let answers: Vec<&str> = ["plain ", "odd "]
+        .iter()
+        .filter_map(|label| {
+            stdout
+                .find(label)
+                .map(|at| &stdout[at..at + label.len() + 1])
+        })
+        .collect();
+    assert_eq!(answers, ["plain 1", "odd 1"], "{stdout:?}");
+}

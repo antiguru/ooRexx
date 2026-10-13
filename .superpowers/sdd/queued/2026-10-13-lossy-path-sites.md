@@ -10,3 +10,14 @@ the wrong file:
 - CD command: command.rs:309/567
 - external file read: install.rs:1859/1866
 Fix: pass OsStr from bytes, with an 'ff'x-name witness and a lossy decoy file per site.
+
+Added by the Phase 9b final fix, from the final review's M2 (.superpowers/sdd/2026-10-13-phase-9b/final-review.md).
+Task 6's `cd` resolves by bytes, so `'cd' 'dir'||'ff'x` now enters a non-UTF-8 directory and the
+`Interp::cwd_text` sites are reachable. The review's measurements after that `cd`, oracle beside it:
+- DIRECTORY(): platform.rs:181 (`interp.cwd_text()`). Crate ends `EFBFBD`, oracle ends `FF`.
+- ADDRESS command working directory: command.rs:621 (`builder.current_dir(interp.cwd_text())`).
+  `address system 'pwd'` answers rc 127 in the crate, rc 0 on the oracle.
+- `SysCls` (process.rs:65) was the third such site, crate -1 against oracle 256. The final fix
+  passes it the bytes.
+`grep -rn 'cwd_text()' rust/crates --include=*.rs` at the final fix also lists install.rs:1905
+(`normalize(&path, &self.cwd_text())`), which the review did not probe.
