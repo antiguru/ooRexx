@@ -1,0 +1,24 @@
+$ git grep --no-index -n -I -e REXX_CLASSIC_ROUTINE -e ROUTINE_CLASSIC_STYLE -- ootest testbinaries extensions samples
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4227:    REXX_CLASSIC_ROUTINE(WSRegistryKey,    WSRegistryKey),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4228:    REXX_CLASSIC_ROUTINE(WSRegistryValue,  WSRegistryValue),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4229:    REXX_CLASSIC_ROUTINE(WSRegistryFile,   WSRegistryFile),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4230:    REXX_CLASSIC_ROUTINE(WSProgManager,    WSProgManager),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4231:    REXX_CLASSIC_ROUTINE(WSCtrlWindow,     WSCtrlWindow),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4232:    REXX_CLASSIC_ROUTINE(WSCtrlSend,       WSCtrlSend),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4233:    REXX_CLASSIC_ROUTINE(WSCtrlMenu,       WSCtrlMenu),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4234:    REXX_CLASSIC_ROUTINE(WSClipboard,      WSClipboard),
+extensions/platform/windows/rxwinsys/rxwinsys.cpp:4235:    REXX_CLASSIC_ROUTINE(InstWinFuncs,     InstWinSysFuncs),
+exit 0
+
+$ git grep --no-index -l -I -e RexxRoutineEntry -- ootest testbinaries extensions samples
+extensions/orxncurses/orxncurses.cpp
+extensions/platform/unix/rxunixsys/rxunixsys.cpp
+extensions/platform/windows/oodialog/oodPackageEntry.cpp
+extensions/platform/windows/rxwinsys/rxwinsys.cpp
+extensions/rxmath/rxmath.cpp
+extensions/rxsock/rxsock.cpp
+samples/api/c++/external/external_methods_routines.cpp
+samples/api/c++/external/external_routines.cpp
+testbinaries/orxclassic.cpp
+testbinaries/orxfunction.cpp
+exit 0

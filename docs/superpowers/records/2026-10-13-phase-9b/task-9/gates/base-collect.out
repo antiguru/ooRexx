@@ -1,0 +1,24 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/collect_stress.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t9/base-target/release/deps/collect_stress-0bbf07e6e60c438c)
+
+running 1 test
+test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+test the_l0_subset_passes_again_under_collect_on_every_allocation ... FAILED
+
+failures:
+
+---- the_l0_subset_passes_again_under_collect_on_every_allocation stdout ----
+
+thread 'the_l0_subset_passes_again_under_collect_on_every_allocation' (3501509) panicked at crates/rexx-exec/tests/collect_stress.rs:255:5:
+the subset diverges under collect-on-every-allocation:
+lang/requires_manager_rename.rex: plain exit=0 stdout="-- an existing file renamed to another\nloaded the replaced file 1\nevent name ends with the original 1\nevent name ends with the original 1\n-- a missing file renamed to an existing one\n43.901 Could not find file \"rq_missing.cls\" for ::REQUIRES.\n1 events\n-- a file loaded twice\nfirst load 1 2 events\nsecond load 1 2 events\nby its full name 1 2 events\n" stderr=""; stress exit=120 stdout="-- an existing file renamed to another\n" stderr="rexx-exec: a message send to a value whose object is no longer live is not implemented\n"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_l0_subset_passes_again_under_collect_on_every_allocation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 36 filtered out; finished in 149.18s
+
+error: test failed, to rerun pass `-p rexx-exec --test collect_stress`
+exit 101
