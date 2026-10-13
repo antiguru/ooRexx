@@ -1,0 +1,357 @@
+# ootest revision 13178
+# groups base/class/File,base/keyword/ADDRESS,base/rexxutil/SysDumpVariables,base/rexxutil/SysFileDateTime,base/rexxutil/SysFileSearch,base/rexxutil/SysFileTree,base/rexxutil/SysFileXXX,base/rexxutil/SysFormatMessage,base/rexxutil/SysSearchPath,base/rexxutil/SysStemCopy,base/rexxutil/SysStemDelete,base/rexxutil/SysStemInsert,base/rexxutil/SysStemSort,base/rexxutil/platform/unix/SysGetMessage,base/rexxutil/platform/unix/tilde,base/rexxutil/platform/windows/SysFileTree,base/rexxutil/platform/windows/SysIsFileDirectory,base/security.manager/SecurityManager
+group	test	row	oracle	crate
+base/class/File	TEST_ABSOLUTEFILE_ONE_ARG	-	passed	passed
+base/class/File	TEST_ABSOLUTEPATH	-	passed	passed
+base/class/File	TEST_ABSOLUTEPATH_ONE_ARG	-	passed	passed
+base/class/File	TEST_COMPARETO	-	passed	passed
+base/class/File	TEST_COMPARETO_NO_ARG	-	passed	passed
+base/class/File	TEST_COMPARETO_TWO_ARGS	-	passed	passed
+base/class/File	TEST_EXTENSION	-	passed	passed
+base/class/File	TEST_EXTENSION_ONE_ARG_TOO_MANY	-	passed	passed
+base/class/File	TEST_FILE_ACCESSED_FRACTIONS	-	passed	passed
+base/class/File	TEST_FILE_CANREAD_ONE_ARG	-	passed	passed
+base/class/File	TEST_FILE_CANWRITE_ONE_ARG	-	passed	passed
+base/class/File	TEST_FILE_LASTACCESSED	-	passed	blocked: rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 9)
+base/class/File	TEST_FILE_LASTACCESSED_DIRECTORY	-	passed	passed
+base/class/File	TEST_FILE_LASTACCESSED_NIL	-	passed	passed
+base/class/File	TEST_FILE_LASTACCESSED_ONE_ARG	-	passed	passed
+base/class/File	TEST_FILE_LASTACCESSED_SET_INVALID	-	passed	passed
+base/class/File	TEST_FILE_LASTACCESSED_SET_NO_ARGS	-	passed	passed
+base/class/File	TEST_FILE_LASTACCESSED_SET_TOO_MANY_ARGS	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED	-	passed	blocked: rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 9)
+base/class/File	TEST_FILE_LASTMODIFIED_DIRECTORY	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED_FRACTIONS	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED_NIL	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED_ONE_ARG	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED_SET_INVALID	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED_SET_NO_ARGS	-	passed	passed
+base/class/File	TEST_FILE_LASTMODIFIED_SET_TOO_MANY_ARGS	-	passed	passed
+base/class/File	TEST_FILE_READWRITE_DIRECTORY_EXIST	-	passed	passed
+base/class/File	TEST_FILE_READWRITE_FILE_EXIST	-	passed	passed
+base/class/File	TEST_FILE_READWRITE_FILE_NOT_EXIST	-	passed	passed
+base/class/File	TEST_FILE_SETREADONLY_ONE_ARG	-	passed	passed
+base/class/File	TEST_FILE_SETWRITABLE_ONE_ARG	-	passed	passed
+base/class/File	TEST_FILE_TIMESTAMPS	-	passed	passed
+base/class/File	TEST_ISCASESENSITIVE_CLASS_ONE_ARG	-	passed	passed
+base/class/File	TEST_ISCASESENSITIVE_DIRECTORY	-	passed	passed
+base/class/File	TEST_ISCASESENSITIVE_FILE	-	passed	passed
+base/class/File	TEST_ISCASESENSITIVE_FSUTIL_WINDOWS_ONLY	-	passed	passed
+base/class/File	TEST_ISCASESENSITIVE_NO_ARGS	-	passed	passed
+base/class/File	TEST_LISTROOTS	-	passed	passed
+base/class/File	TEST_LISTROOTS_ONE_ARG	-	passed	passed
+base/class/File	TEST_MAKESTRING_ONE_ARG	-	passed	passed
+base/class/File	TEST_PARENTFILE_ONE_ARG_TOO_MANY	-	passed	passed
+base/class/File	TEST_PARENT_CURRENT_DIRECTORY	-	passed	passed
+base/class/File	TEST_PARENT_ONE_ARG_TOO_MANY	-	passed	passed
+base/class/File	TEST_PARENT_ROOT	-	passed	passed
+base/class/File	TEST_PARENT_WINDOWS_NAMESPACE	-	passed	passed
+base/class/File	TEST_PARENT_WINDOWS_UNC	-	passed	passed
+base/class/File	TEST_READ_WRITE_FILES	-	passed	passed
+base/class/File	TEST_RELATIVE	-	passed	passed
+base/class/File	TEST_ROOT_PARENT_PATH	-	passed	passed
+base/class/File	TEST_SEARCHPATH_NO_ARG	-	passed	passed
+base/class/File	TEST_SEARCHPATH_ONE_ARG	-	passed	passed
+base/class/File	TEST_SEARCHPATH_ONE_ARG_NOT_VALID	-	passed	passed
+base/class/File	TEST_SEARCHPATH_THREE_ARGS_TOO_MANY	-	passed	passed
+base/class/File	TEST_SEARCHPATH_TWO_ARGS	-	passed	passed
+base/class/File	TEST_SEARCHPATH_TWO_ARGS_FIRST_OMITTED	-	passed	passed
+base/class/File	TEST_SEARCHPATH_TWO_ARGS_NOT_VALID	-	passed	passed
+base/class/File	TEST_STRING_MAKESTRING	-	passed	passed
+base/class/File	TEST_STRING_ONE_ARG	-	passed	passed
+base/class/File	TEST_SYSTEM_FILES_WINDOWS_ONLY	-	passed	passed
+base/class/File	TEST_TEMPORARYPATH_ACCESSIBLE	-	passed	passed
+base/class/File	TEST_TEMPORARYPATH_ENVIRONMENT_VARIABLES_UNIX	-	passed	passed
+base/class/File	TEST_TEMPORARYPATH_ENVIRONMENT_VARIABLES_WINDOWS	-	passed	passed
+base/class/File	TEST_TEMPORARYPATH_FILE	-	passed	passed
+base/class/File	TEST_TEMPORARYPATH_ONE_ARG	-	passed	passed
+base/keyword/ADDRESS	TEST_1	-	passed	passed
+base/keyword/ADDRESS	TEST_BUFFERING	-	passed	passed
+base/keyword/ADDRESS	TEST_COMMAND_CD	-	passed	blocked: rexx-exec: routine "SYSGETERRORTEXT" is not implemented (Phase 9)
+base/keyword/ADDRESS	TEST_COMMAND_DRIVE_WINDOWS_ONLY	-	passed	passed
+base/keyword/ADDRESS	TEST_COMMAND_EXISTS_RC_2	-	passed	passed
+base/keyword/ADDRESS	TEST_COMMAND_NOT_EXISTS	-	passed	passed
+base/keyword/ADDRESS	TEST_COMMAND_SET	-	passed	passed
+base/keyword/ADDRESS	TEST_CONFIGURATION_CONSTANT	-	passed	passed
+base/keyword/ADDRESS	TEST_CONFIGURATION_EXPRESSION	-	passed	passed
+base/keyword/ADDRESS	TEST_CONFIGURATION_NOCASE	-	passed	passed
+base/keyword/ADDRESS	TEST_CONFIGURATION_OBJECT	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_COMMAND_EXISTS	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_EXPRESSION_EXTRA	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_EXPRESSION_WITH	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_INITIAL	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_MAX_LENGTH	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_NOSHELL	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_NOT_EXISTS_COMMAND	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_PATH_CAT	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_PATH_NULL	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_SHELL	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_STRING	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_STRING_VALUE	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_SYMBOL	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_TOO_LONG	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_UNIX	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_VALUE	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_VALUE_EXTRA	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_VALUE_MISSING	-	passed	passed
+base/keyword/ADDRESS	TEST_ENVIRONMENT_VALUE_WITH	-	passed	passed
+base/keyword/ADDRESS	TEST_FILE_INPUT	-	passed	passed
+base/keyword/ADDRESS	TEST_GLOBAL_SETTING	-	passed	passed
+base/keyword/ADDRESS	TEST_INPUT_INPUT_STREAM_ERROR	-	passed	passed
+base/keyword/ADDRESS	TEST_INPUT_OUTPUT_STREAM	-	passed	passed
+base/keyword/ADDRESS	TEST_INPUT_OUTPUT_STREAM_ERROR	-	passed	passed
+base/keyword/ADDRESS	TEST_PATH_COMMAND	-	passed	passed
+base/keyword/ADDRESS	TEST_PATH_COMMAND_NOT_EXISTS	-	passed	passed
+base/keyword/ADDRESS	TEST_PPREXXREF_EXAMPLE	-	passed	passed
+base/keyword/ADDRESS	TEST_REXXQUEUE	Phase10(Rxapi)	not started	not started
+base/keyword/ADDRESS	TEST_SIMPLE_WITH	-	passed	passed
+base/keyword/ADDRESS	TEST_STEM_INPUT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_DUPLICATE_INPUT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_DUPLICATE_INPUT_CONSECUTIVE	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_DUPLICATE_REDIRECTION_DIFFERENT_	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_DATA_LENGTHS	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_INVALID_IO	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_STEM_STEM_OBJECT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_STREAM_NULLSTRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_USING_APPEND_STREAM	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_USING_DIRECTORY	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_USING_LITERAL_STRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_USING_NULLSTRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_USING_REPLACE_STREAM	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_ERROR_USING_STRING_VARIABLE	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT_INVALID_IO	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT_STEM_NULLSTRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT_STEM_STEM_OBJECT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT_STREAM_NULLSTRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT_USING_NIL	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INPUT_USING_SUPPLIER	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INVALID_REDIRECTION	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_INVALID_REDIRECTION_SUBKEYWORD	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_NO_REDIRECTION	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_NULL_COMMAND_WITH_LARGE_INPUT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_DATA_LENGTHS	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_DUPLICATE	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_DUPLICATE_CONSECUTIVE	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_INVALID_IO	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_STEM_STEM_OBJECT	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_STREAM_NULLSTRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_USING_APPEND_STREAM	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_USING_DIRECTORY	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_USING_LITERAL_STRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_USING_NULLSTRING	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_USING_REPLACE_STREAM	-	passed	passed
+base/keyword/ADDRESS	TEST_WITH_OUTPUT_USING_STRING_VARIABLE	-	passed	passed
+base/keyword/ADDRESS	TEST_WRITE_BUFFER	-	passed	passed
+base/rexxutil/SysDumpVariables	TEST_LONG	-	passed	blocked: rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 9)
+base/rexxutil/SysDumpVariables	TEST_NONE	-	passed	blocked: rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 9)
+base/rexxutil/SysDumpVariables	TEST_NO_ARGS_TOO_MANY	-	passed	blocked: rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 9)
+base/rexxutil/SysDumpVariables	TEST_SIMPLE_AND_STEM	-	passed	blocked: rexx-exec: routine "SYSDUMPVARIABLES" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_GET_NO_ARGS	-	passed	blocked: rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_GET_OPTION_INVALID	-	passed	blocked: rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_GET_OPTION_NULL	-	passed	blocked: rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_GET_THREE_ARGS_TOO_MANY	-	passed	blocked: rexx-exec: routine "SYSGETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_SET_DATETIME_INVALID	-	passed	blocked: rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_SET_FOUR_ARGS_TOO_MANY	-	passed	blocked: rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_SET_GET_DATETIME	-	passed	blocked: rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileDateTime	TEST_SET_NO_ARGS	-	passed	blocked: rexx-exec: routine "SYSSETFILEDATETIME" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_BUFFER_SIZE	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_FIVE_ARGS_TOO_MANY	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_INVALID_OPTION	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_LONG_LINE	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_LONG_LINENUMBERS	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_NO_ARGS	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_NO_FILE	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_NO_STEM	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_NUL_CHARACTER	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_ONE_ARG_TOO_FEW	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_STEM_ARRAY_OBJECT	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_STEM_ARRAY_ZERO	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_STEM_NAME	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileSearch	TEST_TWO_ARGS_TOO_FEW	-	passed	blocked: rexx-exec: routine "SYSFILESEARCH" is not implemented (Phase 9)
+base/rexxutil/SysFileTree	TEST_ARG_FIVE_BLANK	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_FIVE_INVALID	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_FIVE_TOO_LONG	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_FOUR_BLANK	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_FOUR_FIVE	-	passed	passed
+base/rexxutil/SysFileTree	TEST_ARG_FOUR_INVALID	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_FOUR_TOO_LONG	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_ONE	-	passed	passed
+base/rexxutil/SysFileTree	TEST_ARG_ONE_INVALID_CHAR_WINDOWSONLY	-	passed	passed
+base/rexxutil/SysFileTree	TEST_ARG_ONE_NULL	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_THREE	-	passed	passed
+base/rexxutil/SysFileTree	TEST_ARG_THREE_BLANK	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_THREE_INVALID	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_THREE_NULL	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_TWO	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_TWO_INVALID	-	passed	failed
+base/rexxutil/SysFileTree	TEST_ARG_TWO_NULL	-	passed	failed
+base/rexxutil/SysFileTree	TEST_HUGE	-	passed	failed
+base/rexxutil/SysFileTree	TEST_LONG_PATHS_WINDOWSONLY	-	passed	passed
+base/rexxutil/SysFileTree	TEST_NO_ARGS	-	passed	passed
+base/rexxutil/SysFileTree	TEST_ONE_ARG	-	passed	passed
+base/rexxutil/SysFileTree	TEST_SIX_ARGS_TOO_MANY	-	passed	passed
+base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	failed
+base/rexxutil/SysFileTree	TEST_TREE_SINGLE_FILE	-	passed	failed
+base/rexxutil/SysFileTree	TEST_TREE_SUBDIRECTORIES	-	passed	failed
+base/rexxutil/SysFileTree	TEST_TREE_WINDOWS_TATTRIB	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILECOPY	-	passed	blocked: rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILECOPY_INVALID	-	passed	blocked: rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILECOPY_NO_ARG	-	passed	blocked: rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILECOPY_ONE_ARG	-	passed	blocked: rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILECOPY_THREE_ARGS	-	passed	blocked: rexx-exec: routine "SYSFILECOPY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILEDELETE	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEDELETE_INVALID	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEDELETE_NO_ARG	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEDELETE_TWO_ARGS	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEEXISTS	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEEXISTS_INVALID	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEEXISTS_NIL_INVALID	-	passed	failed
+base/rexxutil/SysFileXXX	TEST_FILEEXISTS_NO_ARG	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEEXISTS_TWO_ARGS	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_FILEMOVE	-	passed	blocked: rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILEMOVE_INVALID	-	passed	blocked: rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILEMOVE_NO_ARG	-	passed	blocked: rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILEMOVE_ONE_ARG	-	passed	blocked: rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_FILEMOVE_THREE_ARGS	-	passed	blocked: rexx-exec: routine "SYSFILEMOVE" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_ISFILE	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_ISFILEDIRECTORY	-	passed	blocked: rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_ISFILEDIRECTORY_INVALID	-	passed	blocked: rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_ISFILEDIRECTORY_NO_ARG	-	passed	blocked: rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_ISFILEDIRECTORY_TWO_ARGS	-	passed	blocked: rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_ISFILE_INVALID	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_ISFILE_NO_ARG	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_ISFILE_TWO_ARGS	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_MKDIR	-	passed	blocked: rexx-exec: routine "SYSISFILEDIRECTORY" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_MKDIR_INVALID	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_MKDIR_NO_ARG	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_RMDIR	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_RMDIR_INVALID	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_RMDIR_NO_ARG	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_RMDIR_TWO_ARGS	-	passed	passed
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_EXHAUST	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_FILLER_LONG	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_FILLER_NULL	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_NO_ARG	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_PATH	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_SIMPLE	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_TEMPLATE_FILLER_MISMATCH	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_TEMPFILE_THREE_ARGS	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/SysFileXXX	TEST_UNC_WINDOWS_ONLY	-	passed	passed
+base/rexxutil/SysFormatMessage	TEST_LONG_SUBSTITUTIONS	-	passed	blocked: rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 9)
+base/rexxutil/SysFormatMessage	TEST_NO_ARGS_TOO_FEW	-	passed	blocked: rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 9)
+base/rexxutil/SysFormatMessage	TEST_ONE_ARG_TOO_FEW	-	passed	blocked: rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 9)
+base/rexxutil/SysFormatMessage	TEST_SUBSTITUTIONS	-	passed	blocked: rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 9)
+base/rexxutil/SysFormatMessage	TEST_TOO_MANY_SUBS	-	passed	blocked: rexx-exec: routine "SYSFORMATMESSAGE" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_ABSOLUTE	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_ARGS_FOUR	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_ARGS_NONE	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_ARGS_ONE	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_EMPTY	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_OPTION_INVALID	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_OPTION_NULL	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_RELATIVE	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_SHELL	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysSearchPath	TEST_SEARCHPATH_VARIABLE	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_BAD_FROM_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_BAD_TO_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_COPIES	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_COUNT_OUT_OF_RANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_FROM_OUT_OF_RANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_INVALID_OPTION	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_SPARSE_INSERT_SOURCE	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_SPARSE_INSERT_TARGET	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_SPARSE_OVERLAY_SOURCE	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_TO_OUT_OF_RANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_UNSET_FROM_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemCopy	TEST_UNSET_TO_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMCOPY" is not implemented (Phase 9)
+base/rexxutil/SysStemDelete	TEST_BAD_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 9)
+base/rexxutil/SysStemDelete	TEST_DELETES	-	passed	blocked: rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 9)
+base/rexxutil/SysStemDelete	TEST_OUT_OF_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 9)
+base/rexxutil/SysStemDelete	TEST_OUT_OF_RANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 9)
+base/rexxutil/SysStemDelete	TEST_UNSET_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMDELETE" is not implemented (Phase 9)
+base/rexxutil/SysStemInsert	TEST_INSERT_EMPTY	-	passed	blocked: rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 9)
+base/rexxutil/SysStemInsert	TEST_INSERT_OUT_OF_RANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 9)
+base/rexxutil/SysStemInsert	TEST_INSET	-	passed	blocked: rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 9)
+base/rexxutil/SysStemInsert	TEST_STEM_SIZE_BAD_VALUE	-	passed	blocked: rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 9)
+base/rexxutil/SysStemInsert	TEST_STEM_SIZE_NOT_SET	-	passed	blocked: rexx-exec: routine "SYSSTEMINSERT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TESTSORTRANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_ALREADY_SORTED	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_BAD_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_BAD_DIRECTION_ARG	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_CASE_SENSITIVITY	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_COMPOUND_NAME	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_DESCENDING_SIMPLE	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_INVALID_FIRSTCOL_LASTCOL	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_INVALID_FIRST_LAST	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_INVALID_ORDER	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_INVALID_STEM	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_OUT_OF_RANGE	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_SIMPLE_LETTERS	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_SORT	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_SORT_COLS	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_SPARSE_ARRAY	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_TOO_MANY	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/SysStemSort	TEST_UNSET_COUNT	-	passed	blocked: rexx-exec: routine "SYSSTEMSORT" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_CATALOG_INVALID	Phase10(Rxapi)	not started	not started
+base/rexxutil/platform/unix/SysGetMessage	TEST_GENCAT	Phase10(Rxapi)	not started	not started
+base/rexxutil/platform/unix/SysGetMessage	TEST_MESSAGE	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_MESSAGE_INSERTS	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_MESSAGE_SET	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGEX" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_MESSAGE_SURPLUS_INSERTS	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_NO_ARGS	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_NO_MESSAGE	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_REXX_ALL	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_REXX_MAJOR	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGE" is not implemented (Phase 9)
+base/rexxutil/platform/unix/SysGetMessage	TEST_X_NO_ARGS	-	passed	blocked: rexx-exec: routine "SYSGETMESSAGEX" is not implemented (Phase 9)
+base/rexxutil/platform/unix/tilde	TEST_TILDE	-	passed	blocked: rexx-exec: routine "SYSTEMPFILENAME" is not implemented (Phase 9)
+base/rexxutil/platform/windows/SysFileTree	TESTBASICSYNTAX1	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTBASICSYNTAX2	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTBASICSYNTAX3	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTBASICSYNTAX4	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTCURRENTDIRECTORY	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTILLEGALCHARS	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTLEGALCHARS	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTNULLFILENAME	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTSHORTNAME	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTSPACES	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TESTSPACESWITHQUOTES	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TEST_NAME_LEADING_BLANKS	NotRun	not started	not started
+base/rexxutil/platform/windows/SysFileTree	TEST_NAME_UNC	NotRun	not started	not started
+base/rexxutil/platform/windows/SysIsFileDirectory	TESTISFILEDIRECTORY1	NotRun	not started	not started
+base/rexxutil/platform/windows/SysIsFileDirectory	TESTISFILEDIRECTORY2	NotRun	not started	not started
+base/rexxutil/platform/windows/SysIsFileDirectory	TESTISFILEDIRECTORY3	NotRun	not started	not started
+base/rexxutil/platform/windows/SysIsFileDirectory	TESTISFILEDIRECTORY4	NotRun	not started	not started
+base/rexxutil/platform/windows/SysIsFileDirectory	TESTISFILEDIRECTORY5	NotRun	not started	not started
+base/rexxutil/platform/windows/SysIsFileDirectory	TESTISFILEDIRECTORY6	NotRun	not started	not started
+base/security.manager/SecurityManager	TEST_CALL_HANDLE_NOT_EXISTS	-	passed	passed
+base/security.manager/SecurityManager	TEST_CALL_HANDLE_NO_RESULT	-	passed	blocked: rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_CALL_HANDLE_RESULT	-	passed	blocked: rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_CALL_PASS_NO_ARGS	-	passed	blocked: rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_CALL_PASS_THREE_ARGS	-	passed	blocked: rexx-exec: routine "SYSSEARCHPATH" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_COMMAND_HANDLE_ERROR	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_HANDLE_FAILURE	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_HANDLE_RC	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	-	passed	failed
+base/security.manager/SecurityManager	TEST_ENVIRONMENT_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_LOCAL_HANDLE_RESULT	-	passed	passed
+base/security.manager/SecurityManager	TEST_LOCAL_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	-	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	-	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_NO_EVENT	-	passed	passed
+base/security.manager/SecurityManager	TEST_METHOD_PASS	-	passed	failed
+base/security.manager/SecurityManager	TEST_REQUIRES_HANDLE	-	passed	blocked: rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_REQUIRES_HANDLE_FORBIDDEN	-	passed	passed
+base/security.manager/SecurityManager	TEST_REQUIRES_HANDLE_SECURITY_MANAGER	-	passed	blocked: rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_REQUIRES_PASS	-	passed	blocked: rexx-exec: routine "SYSDROPFUNCS" is not implemented (Phase 9)
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_CHARIN	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_CHAROUT	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_CHARS	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_LINEIN	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_LINEOUT	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_LINES	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_STREAM_OPEN	-	passed	failed
+base/security.manager/SecurityManager	TEST_STREAM_REPLACE	-	passed	passed
