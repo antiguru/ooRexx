@@ -2,7 +2,9 @@
    object values, dropped variables and tails, a method's variables, the file
    form appending, and the errors. The oracle lists the variables in hash
    order, so the file form's lines are sorted before they are shown. The
-   stdout form is only used where it prints one line or none. */
+   stdout form is only used where its order is fixed: one line or none, or a
+   stem's own line before its one tail, where a STRING method's SAY lands
+   between the two. */
 f = 'dumpvariables.out'
 call SysFileDelete f
 call one
@@ -15,6 +17,7 @@ call several f
 call show f
 .k~new~m(f)
 call show f
+call talk
 call t "call SysDumpVariables 1, 2"
 call t "call SysDumpVariables .nil"
 call t "call SysDumpVariables ''"
@@ -65,6 +68,11 @@ show: procedure
   call SysFileDelete f
   return
 
+talk: procedure
+  s.1 = .talker~new
+  call SysDumpVariables
+  return
+
 t: procedure
   parse arg code
   signal on syntax name bad
@@ -83,3 +91,8 @@ bad:
   ivar = 'iv'
   local = 'lv'
   call SysDumpVariables f
+
+::class talker
+::method string
+  say 'STRING ran'
+  return 'K'

@@ -689,6 +689,7 @@ pub(crate) fn sort(
             return Err(Raised::stem_element_unset(index).into());
         };
         let value = interp.required_string_value(value)?;
+        interp.roots.activity_mut().push_temp(value);
         texts.push(interp.to_text(value).into_owned());
         values.push(value);
     }
@@ -766,11 +767,10 @@ pub(crate) fn dump_variables(
     for (_, value) in &variables {
         interp.roots.activity_mut().push_temp(*value);
     }
-    let mut out = Vec::new();
     for (variable, value) in variables {
         if variable.last() == Some(&b'.') && interp.is_stem_object(value) {
             let own = interp.stem_own_value(value);
-            dump_line(interp, &mut out, &variable, own, b"\n")?;
+            dump_line(interp, &mut file, &variable, own, b"\n")?;
             let tails = interp.stem_live_tails(value);
             for (_, held) in &tails {
                 interp.roots.activity_mut().push_temp(*held);
@@ -778,38 +778,40 @@ pub(crate) fn dump_variables(
             for (tail, held) in tails {
                 let mut compound = variable.clone();
                 compound.extend_from_slice(&tail);
-                dump_line(interp, &mut out, &compound, held, b"\r\n")?;
+                dump_line(interp, &mut file, &compound, held, b"\r\n")?;
             }
         } else {
-            dump_line(interp, &mut out, &variable, value, b"\n")?;
+            dump_line(interp, &mut file, &variable, value, b"\n")?;
         }
-    }
-    match file.as_mut() {
-        Some(file) => {
-            use std::io::Write as _;
-            // The oracle ignores a failed write.
-            let _ = file.write_all(&out);
-        }
-        None => interp.write_out(&out),
     }
     Ok(answer(interp, 0))
 }
 
-/// One `Name=..., Value='...'` line, the value as its string value.
+/// Writes one `Name=..., Value='...'` line to `file`, or to standard output
+/// where there is none, as soon as the value's string value is in hand: a
+/// `STRING` method's own output lands between the lines, as on the oracle.
 fn dump_line(
     interp: &mut Interp,
-    out: &mut Vec<u8>,
+    file: &mut Option<std::fs::File>,
     name: &[u8],
     value: ObjRef,
     end: &[u8],
 ) -> Result<(), Failure> {
     let text = interp.required_string_value(value)?;
-    out.extend_from_slice(b"Name=");
-    out.extend_from_slice(name);
-    out.extend_from_slice(b", Value='");
-    out.extend_from_slice(&interp.to_text(text));
-    out.extend_from_slice(b"'");
-    out.extend_from_slice(end);
+    let mut line = b"Name=".to_vec();
+    line.extend_from_slice(name);
+    line.extend_from_slice(b", Value='");
+    line.extend_from_slice(&interp.to_text(text));
+    line.extend_from_slice(b"'");
+    line.extend_from_slice(end);
+    match file {
+        Some(file) => {
+            use std::io::Write as _;
+            // The oracle ignores a failed write.
+            let _ = file.write_all(&line);
+        }
+        None => interp.write_out(&line),
+    }
     Ok(())
 }
 

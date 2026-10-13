@@ -93,3 +93,40 @@ fn a_dumped_stem_keeps_its_tails_when_a_string_method_empties_it() {
         ]
     );
 }
+
+/// **`SysDumpVariables` over a variable whose `STRING` method raises
+/// reports the raise**, after the lines already written, where the oracle
+/// crashes even under `SIGNAL ON SYNTAX` (`corpus/oracle-crashes.txt` entry
+/// 38). No differential can run it, so this is the crate's own answer: the
+/// method's 93.900 trapped as any raise from a routine is. The line for `A`
+/// is written first where the variable order puts it first, as the oracle's
+/// order did before it crashed.
+#[test]
+fn a_string_method_raising_inside_the_dump_is_trapped() {
+    let source = b"signal on syntax\n\
+        call p\n\
+        exit\n\
+        syntax: say 'trapped' condition('O')~code\n\
+        exit\n\
+        p: procedure\n\
+        a = 'first'\n\
+        b = .k~new\n\
+        call SysDumpVariables\n\
+        return\n\
+        ::class k\n\
+        ::method string\n\
+        raise syntax 93.900 array('boom')\n";
+    let outcome = crate::run_program("/t.rex", source.to_vec(), crate::Invocation::none());
+    assert_eq!(outcome.exit_code, 0);
+    assert_eq!(String::from_utf8_lossy(&outcome.stderr), "");
+    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
+    let (written, trapped) = stdout
+        .trim_end_matches('\n')
+        .rsplit_once('\n')
+        .unwrap_or(("", stdout.trim_end_matches('\n')));
+    assert_eq!(trapped, "trapped 93.900", "{stdout:?}");
+    assert!(
+        written.is_empty() || written == "Name=A, Value='first'",
+        "{stdout:?}"
+    );
+}

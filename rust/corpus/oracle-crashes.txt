@@ -1334,5 +1334,30 @@ on stderr:
 
 The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTest's `SysStemSort`
 group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
-it sorts (40.919, 40.920, 40.921) is reported untrapped as usual. This crate raises each of the
-three as the trapped oracle does.
+it sorts is reported untrapped as usual: 40.919 (`call SysStemSort '*'`) and 40.921 (`first` 3,
+`last` 2) measured 2026-10-13, 3 runs of 3 each, rc 216 with the ordinary report, and 40.920 is
+the witness's own last clause. This crate raises each of the three as the trapped oracle does.
+
+## 38. `SysDumpVariables` over a variable whose `STRING` method raises
+
+    signal on syntax
+    call p
+    exit
+    syntax: say 'trapped' condition('O')~code
+    exit
+    p: procedure
+      a = 'first'
+      b = .k~new
+      call SysDumpVariables
+      return
+    ::class k
+    ::method string
+      raise syntax 93.900 array('boom')
+
+SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper and `memcap 4G`, measured 2026-10-13 by
+Phase 9b Task 3's fix round: stdout `Name=A, Value='first'`, nothing from the interpreter on
+stderr. The `SIGNAL ON SYNTAX` does not save it. Found by Task 3's review. Cause not read: the
+raise comes out of `ObjectToString` inside `writeVariable` (`runtime/RexxUtilCommon.cpp:1449`).
+This crate traps the 93.900 and prints `trapped 93.900`, pinned by
+`builtin::rexxutil::stems::tests::a_string_method_raising_inside_the_dump_is_trapped`. No
+upstream ticket.
