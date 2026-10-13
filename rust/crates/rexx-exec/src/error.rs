@@ -1479,6 +1479,75 @@ impl Raised {
         raised
     }
 
+    /// 40.1: a routine of an internal package failed (`InvalidRoutine`).
+    /// `routine` is the upcased name.
+    pub(crate) fn routine_failed(routine: &[u8]) -> Raised {
+        Raised::syntax(40, 1, vec![routine.to_vec()])
+    }
+
+    /// 40.919 raised by a routine's own body rather than its argument
+    /// marshalling, so it names the calling clause's line.
+    pub(crate) fn stem_argument_unresolved(position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            919,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        )
+    }
+
+    /// 40.920: `routine`'s `argument` is not one of `options`.
+    pub(crate) fn invalid_routine_option(
+        routine: &str,
+        argument: &str,
+        options: &str,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            920,
+            vec![
+                routine.as_bytes().to_vec(),
+                argument.as_bytes().to_vec(),
+                options.as_bytes().to_vec(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.921: `last`, named `last_name`, is below `first`.
+    pub(crate) fn arguments_out_of_order(
+        last_name: &str,
+        last: i64,
+        first_name: &str,
+        first: i64,
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            921,
+            vec![
+                last_name.as_bytes().to_vec(),
+                last.to_string().into_bytes(),
+                first_name.as_bytes().to_vec(),
+                first.to_string().into_bytes(),
+            ],
+        )
+    }
+
+    /// 40.922: a stem argument's element 0 is not a usable count.
+    pub(crate) fn stem_count_invalid() -> Raised {
+        Raised::syntax(40, 922, Vec::new())
+    }
+
+    /// 40.923: an operation past the stem array's `size`.
+    pub(crate) fn stem_range(size: i64) -> Raised {
+        Raised::syntax(40, 923, vec![size.to_string().into_bytes()])
+    }
+
+    /// 40.924: the stem array has no element at `position`.
+    pub(crate) fn stem_element_unset(position: i64) -> Raised {
+        Raised::syntax(40, 924, vec![position.to_string().into_bytes()])
+    }
+
     /// 88.909 for an argument the oracle names rather than numbers.
     pub(crate) fn named_argument_needs_a_string_value(argument: &str) -> Raised {
         Raised::syntax(88, 909, vec![argument.as_bytes().to_vec()])

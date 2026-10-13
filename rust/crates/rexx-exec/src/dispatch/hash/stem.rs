@@ -157,6 +157,30 @@ impl Interp {
         let scope = self.object_model.as_ref()?.stem;
         pools.entries(scope).first().map(|(_, store)| *store)
     }
+
+    /// `StemClass::dropElement`: drops `tail` where the stem holds it, and
+    /// leaves a tail it never held absent.
+    pub(crate) fn stem_drop_element(&mut self, stem: ObjRef, tail: &[u8]) {
+        let held = exposed_tail(self, stem, tail).is_some()
+            || matches!(
+                self.heap.get(stem).map(|object| &object.body),
+                Some(Body::Stem { tails, .. }) if tails.get(tail).is_some()
+            );
+        if held {
+            stem_write(self, stem, tail.to_vec(), None);
+        }
+    }
+
+    /// `StemClass::toDirectory`'s pairs: every tail that holds a value, in
+    /// the order the stem answers its tails.
+    pub(crate) fn stem_live_tails(&self, stem: ObjRef) -> Vec<(Vec<u8>, ObjRef)> {
+        stem_live(self, stem)
+    }
+
+    /// `StemClass::getStemValue`: the stem's default, else its own name.
+    pub(crate) fn stem_own_value(&mut self, stem: ObjRef) -> ObjRef {
+        stem_value(self, stem)
+    }
 }
 
 /// The `Body::Stem` a `Stem` method works on: the receiver itself, or the

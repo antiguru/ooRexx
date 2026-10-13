@@ -1,0 +1,88 @@
+count 87
+/* SysStemDelete and SysStemInsert: the position and count arguments, the stem
+   shapes that are not plain arrays, the partial work a missing element leaves
+   behind, and every error the two routines raise. */
+abc = "a.0 = 3; a.1 = 'a'; a.2 = 'b'; a.3 = 'c'"
+call t abc, "call SysStemDelete 'a.', 1"
+call t abc, "call SysStemDelete a., 2"
+call t abc, "call SysStemDelete 'a', 3"
+call t abc, "call SysStemDelete 'a.', 1, 2"
+call t abc, "call SysStemDelete 'a.', 2, 2"
+call t abc, "call SysStemDelete 'a.', 1, 3"
+call t abc"; a. = 'z'; a.0 = 2; a.1 = 'a'; a.2 = 'b'", "call SysStemDelete 'a.', 1"
+call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
+call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 2"
+call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.3 = 'o'", "call SysStemDelete 'a.', 1"
+call t "a.0 = 0", "call SysStemDelete 'a.', 1, 0"
+call t abc, "r = SysStemDelete('a.', 1); say 'returned' r"
+call t abc, "call SysStemInsert 'a.', 1, 'n'"
+call t abc, "call SysStemInsert a., 2, 'n'"
+call t abc, "call SysStemInsert 'a', 4, 'n'"
+call t abc, "call SysStemInsert 'a.', 3, .array~of(1, 2); say a.3~class~id"
+call t "a.0 = 0", "call SysStemInsert 'a.', 1, 'n'"
+call t "a. = 'z'; a.0 = 2; a.1 = 'a'; a.2 = 'b'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = '2.0'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = ' 2 '; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 3, 'n'"
+call t "a.0 = 2; a.1 = 'q'; a.2 = 'p'; a.x = 'r'; a.3 = 'o'", "call SysStemInsert 'a.', 3, 'n'"
+call t "a.0 = -1", "call SysStemInsert 'a.', 1, 'n'"
+call t abc, "r = SysStemInsert('a.', 1, 'n'); say 'returned' r"
+-- errors
+call t abc, "call SysStemDelete"
+call t abc, "call SysStemDelete 'a.'"
+call t abc, "call SysStemDelete 'a.', 0"
+call t abc, "call SysStemDelete 'a.', 'q'"
+call t abc, "call SysStemDelete 'a.', 1, 0"
+call t abc, "call SysStemDelete 'a.', 1.5"
+call t abc, "call SysStemDelete 'a.', 1, 1, 1"
+call t abc, "call SysStemDelete '*', 1"
+call t abc, "call SysStemDelete 'a.b', 1"
+call t abc, "call SysStemDelete 'zz', 1"
+call t abc, "call SysStemDelete 'a.', 4"
+call t abc, "call SysStemDelete 'a.', 2, 3"
+call t "a. = 'd'", "call SysStemDelete 'a.', 1"
+call t "a.1 = 'q'", "call SysStemDelete 'a.', 1"
+call t "a.0 = 'x'; a.1 = 'q'", "call SysStemDelete 'a.', 1"
+call t "a.0 = -1", "call SysStemDelete 'a.', 1"
+call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
+call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemDelete 'a.', 1"
+call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemDelete 'a.', 1"
+call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemDelete 'a.', 1"
+call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemDelete 'a.', 1"
+call t abc"; drop a.3", "call SysStemDelete 'a.', 1"
+call t abc, "call SysStemInsert"
+call t abc, "call SysStemInsert 'a.', 1"
+call t abc, "call SysStemInsert 'a.', , 'n'"
+call t abc, "call SysStemInsert 'a.', 0, 'n'"
+call t abc, "call SysStemInsert 'a.', 1, 'n', 'm'"
+call t abc, "call SysStemInsert '*', 1, 'n'"
+call t abc, "call SysStemInsert 'a.', 5, 'n'"
+call t "a. = 'd'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = 'x'; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = '2.5'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = 3; a.1 = 'q'; a.3 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = '1E1'; a.1 = 'q'; a.2 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a. = 'd'; a.0 = 2; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = 2; a.01 = 'q'; a.02 = 'p'", "call SysStemInsert 'a.', 1, 'n'"
+call t "a.0 = 1234567890; a.1 = 'q'", "call SysStemInsert 'a.', 1, 'n'"
+a.0 = 1; a.1 = 'q'
+call SysStemInsert 'a.', 1, 'n'
+say a.0 a.1 a.2
+call SysStemDelete 'a.', 3
+exit
+
+t: procedure
+  parse arg setup, code
+  interpret setup
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code '|' show()
+  return
+bad:
+  c = condition('O')
+  say 'error' code '|' c~code c~message '|' show()
+  return
+
+show: procedure expose a.
+  o = ''
+  do i = 0 to 5; o = o a.i; end
+  return o

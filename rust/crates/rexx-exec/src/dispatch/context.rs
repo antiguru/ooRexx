@@ -382,24 +382,31 @@ fn context_variables(
 /// `RexxActivation::getAllLocalVariables`: a `Directory` of every variable
 /// the activation at `depth` has set, a stem under its name with the period.
 pub(crate) fn local_variables(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
+    let entries = local_variable_entries(interp, depth)?;
+    hash::directory_of(interp, entries)
+}
+
+/// [`local_variables`]'s pairs, name and value, with no `Directory` built.
+pub(crate) fn local_variable_entries(
+    interp: &Interp,
+    depth: usize,
+) -> Result<Vec<(Vec<u8>, ObjRef)>, Failure> {
+    let activation = interp
+        .frame_at(depth)
+        .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
+    let named = activation
+        .plan
+        .names
+        .iter()
+        .map(|(name, slot)| (&**name, *slot))
+        .chain(activation.extra.iter().map(|(name, slot)| (&**name, *slot)));
     let mut entries = Vec::new();
-    {
-        let activation = interp
-            .frame_at(depth)
-            .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
-        let named = activation
-            .plan
-            .names
-            .iter()
-            .map(|(name, slot)| (&**name, *slot))
-            .chain(activation.extra.iter().map(|(name, slot)| (&**name, *slot)));
-        for (name, slot) in named {
-            if let Some(value) = interp.variable_in(activation, slot) {
-                entries.push((name.to_vec(), value));
-            }
+    for (name, slot) in named {
+        if let Some(value) = interp.variable_in(activation, slot) {
+            entries.push((name.to_vec(), value));
         }
     }
-    hash::directory_of(interp, entries)
+    Ok(entries)
 }
 
 /// `RexxContext::copyRexx`, whose whole body is the 93.970 raise.

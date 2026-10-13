@@ -32,7 +32,6 @@ use rexx_core::{BehaviourId, Body, Decoded, ObjRef, Owner};
 use rexx_num::{DIGITS64, Number};
 
 use super::Resolution;
-use crate::builtin::datatype::{SymbolKind, classify};
 use crate::error::Raised;
 use crate::island::{InterpBaton, Islanded, Lent};
 use crate::run::Started;
@@ -1567,14 +1566,8 @@ impl Host for Interp {
 
     fn context_stem(&mut self, object: ObjRef) -> Result<Option<ObjRef>, Condition> {
         let text = self.native_string_conversion(object)?;
-        let mut name = self.to_text(text).to_ascii_uppercase();
-        if name.last() != Some(&b'.') {
-            name.push(b'.');
-        }
-        if classify(&name) != SymbolKind::Stem {
-            return Ok(None);
-        }
-        Ok(Some(self.read_stem(&name)))
+        let name = self.to_text(text).into_owned();
+        Ok(self.context_stem_named(&name))
     }
 
     fn is_instance_of(&mut self, object: ObjRef, class: Class) -> bool {

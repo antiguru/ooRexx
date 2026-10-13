@@ -9,9 +9,11 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The `REXXUTIL` package's file-system, sleep, semaphore and version routines --
+//! The `REXXUTIL` package's file-system, sleep, semaphore, stem and version routines --
 //! `interpreter/platform/unix/SysRexxUtil.cpp` and the shared
 //! `RexxUtilCommon.cpp`.
+
+pub(crate) mod stems;
 
 use rexx_core::{Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};

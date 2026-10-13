@@ -185,6 +185,22 @@ impl Interp {
         self.read_stem_at(name, None)
     }
 
+    /// `NativeActivation::getContextStem`: the stem variable `name` names in
+    /// the running activation, a period appended where it has none, or `None`
+    /// where the name is not a stem symbol. Upcased first, as a variable
+    /// retriever reads a name.
+    pub(crate) fn context_stem_named(&mut self, name: &[u8]) -> Option<ObjRef> {
+        use crate::builtin::datatype::{SymbolKind, classify};
+        let mut name = name.to_ascii_uppercase();
+        if name.last() != Some(&b'.') {
+            name.push(b'.');
+        }
+        if classify(&name) != SymbolKind::Stem {
+            return None;
+        }
+        Some(self.read_stem(&name))
+    }
+
     /// [`Interp::read_stem`] with the slot already in hand. Two callers have
     /// one and they do not take it from the same place: `crate::ir::Op::Load`
     /// carries the slot the chunk was compiled with, and a controlled loop's

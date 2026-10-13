@@ -61,3 +61,9 @@ lang/package_local_class_search_raise.rex
 
 # 9b Task 1 fix round 1: a native FindClass of STDQUE answers no class.
 lang/native_find_class_stdque.rex
+
+# 9b Task 3: the RexxUtil stem routines and SysDumpVariables.
+lang/rexxutil_stem_sort.rex
+lang/rexxutil_stem_copy.rex
+lang/rexxutil_stem_delete_insert.rex
+lang/rexxutil_dump_variables.rex

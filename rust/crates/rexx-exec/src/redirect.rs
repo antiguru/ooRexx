@@ -808,7 +808,7 @@ impl Interp {
 
     /// One tail's own value, with no fallback to the stem's default and none
     /// to a derived name. A tombstone answers `None`, as an absent tail does.
-    fn stem_object_tail(&self, object: ObjRef, key: &[u8]) -> Option<ObjRef> {
+    pub(crate) fn stem_object_tail(&self, object: ObjRef, key: &[u8]) -> Option<ObjRef> {
         let Body::Stem { tails, exposed, .. } = &self.heap.get(object)?.body else {
             return None;
         };
@@ -911,7 +911,7 @@ impl Interp {
     }
 
     /// Whether `value` is a stem object.
-    fn is_stem_object(&self, value: ObjRef) -> bool {
+    pub(crate) fn is_stem_object(&self, value: ObjRef) -> bool {
         matches!(value.decode(), Decoded::Heap { .. })
             && matches!(
                 self.heap.get(value).map(|found| &found.body),

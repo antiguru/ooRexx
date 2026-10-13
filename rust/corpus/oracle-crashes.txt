@@ -1312,3 +1312,27 @@ SIGSEGV, rc 139, 3 runs of 3 under the standard wrapper, nothing on stdout or st
 `.object~package~options('T')` answers `?n/a?` and a `DIGITS` write to the same package answers,
 so it is the trace write that crashes. Measured 2026-10-12 by Phase 9a Task 7 (probe `t7-crash`).
 This crate stores the setting and answers `?n/a?`. Cause not read. No upstream ticket.
+
+## 37. An untrapped error raised from inside `SysStemSort`'s sort
+
+    call SysStemSort "s."
+
+SIGSEGV, rc 139, deterministic: upstream **SF #2068**, reduced to this line on 2026-07-25 (project
+memory), not re-run since. Any error `StemClass::sort` (`classes/StemClass.cpp:1605`) raises
+itself crashes the same way when nothing traps it: an element 0 that is not a count (40.922, the
+line above), a first or last element past it (40.923), and a missing element (40.924). Measured
+2026-10-13 by Phase 9b Task 3, 3 runs of 3 each under the standard wrapper, stdout `go` and nothing
+on stderr:
+
+    say 'go'
+    a.0 = 2; a.1 = 'q'
+    call SysStemSort 'a.'
+
+    say 'go'
+    a.0 = 2; a.1 = 'q'; a.2 = 'p'
+    call SysStemSort 'a.', , , 3
+
+The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTest's `SysStemSort`
+group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
+it sorts (40.919, 40.920, 40.921) is reported untrapped as usual. This crate raises each of the
+three as the trapped oracle does.

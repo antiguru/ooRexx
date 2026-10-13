@@ -1,0 +1,77 @@
+# SysStemSort with an error raised inside its sort and nothing to trap it.
+# The oracle crashes on every program here that raises (oracle-crashes.txt
+# entry 37), so the expected blocks are this crate's own output: the error
+# the oracle raises for the same stem under SIGNAL ON SYNTAX
+# (corpus/lang/rexxutil_stem_sort.rex), reported against the calling line.
+
+# SF #2068's one line: no element 0 at all
+program
+call SysStemSort "s."
+----
+rc> 216
+err>        *-* Compiled routine "SYSSTEMSORT".
+err>      1 *-* call SysStemSort "s."
+err> Error 40 running /t.rex line 1:  Incorrect call to routine.
+err> Error 40.922:  Stem argument does not have a valid count for element 0.
+
+# a stem default and no element 0
+program
+s. = ''
+call SysStemSort "s."
+----
+rc> 216
+err>        *-* Compiled routine "SYSSTEMSORT".
+err>      2 *-* call SysStemSort "s."
+err> Error 40 running /t.rex line 2:  Incorrect call to routine.
+err> Error 40.922:  Stem argument does not have a valid count for element 0.
+
+# elements from 4 up and no element 0
+program
+do i = 4 to 6; s.i = i; end
+call SysStemSort "s."
+----
+rc> 216
+err>        *-* Compiled routine "SYSSTEMSORT".
+err>      2 *-* call SysStemSort "s."
+err> Error 40 running /t.rex line 2:  Incorrect call to routine.
+err> Error 40.922:  Stem argument does not have a valid count for element 0.
+
+# a first element past the count
+program
+s.0 = 2; s.1 = 'q'; s.2 = 'p'
+call SysStemSort "s.", , , 3
+----
+rc> 216
+err>        *-* Compiled routine "SYSSTEMSORT".
+err>      2 *-* call SysStemSort "s.", , , 3
+err> Error 40 running /t.rex line 2:  Incorrect call to routine.
+err> Error 40.923:  The operation is outside the size of the stem array ("2").
+
+# a missing element below the count
+program
+s.0 = 2; s.1 = 'q'
+call SysStemSort "s."
+----
+rc> 216
+err>        *-* Compiled routine "SYSSTEMSORT".
+err>      2 *-* call SysStemSort "s."
+err> Error 40 running /t.rex line 2:  Incorrect call to routine.
+err> Error 40.924:  Stem element at position "2" is not set.
+
+# the adjacent success: a count of zero
+program
+s.0 = 0
+call SysStemSort "s."
+say result s.0
+----
+rc> 0
+out> 0 0
+
+# the adjacent success: a count and every element
+program
+s.0 = 2; s.1 = 'q'; s.2 = 'p'
+call SysStemSort "s."
+say result s.1 s.2
+----
+rc> 0
+out> 0 p q

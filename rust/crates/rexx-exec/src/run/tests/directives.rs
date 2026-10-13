@@ -303,6 +303,7 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
         (b"say length(directory()) > 0\n", "1\n"),
         (b"say SysFileExists('.')\n", "1\n"),
         (b"say words(SysVersion()) > 0\n", "1\n"),
+        (b"s.0 = 0; say SysStemSort('s.')\n", "0\n"),
     ] {
         let outcome = routine_program(source);
         assert_eq!(
@@ -316,8 +317,8 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
 
     let cases: &[(&[u8], &str)] = &[
         (
-            b"say SysStemSort('a.')\n",
-            "routine \"SYSSTEMSORT\" is not implemented (Phase 9)",
+            b"say SysGetKey()\n",
+            "routine \"SYSGETKEY\" is not implemented (Phase 9)",
         ),
         (
             b"say SysOpenEventSem('sem')\n",
