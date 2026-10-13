@@ -15,8 +15,8 @@ REXX_SUITE_TABLE=/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/rec
 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite
 ```
 
-Exit status 101 (the gate is red, as expected at the start). Wall time 29 s, of which 26.8 s was the
-release build of `rexx-exec`; the test itself reports `finished in 2.05s`. The raw output, the table,
+Exit status (101, red as expected) and wall time (2 s, the release build already cached; the first run
+including the build took 29 s) are the last two lines of `run-output.txt`. The raw output, the table,
 the verdicts and the per-test record are in
 `docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/` (`run-output.txt`, `table.tsv`,
 `verdicts.tsv`, `tests.tsv`, `oracle-differences.tsv`). The oracle denominator is `equal` for every
@@ -47,4 +47,22 @@ refusal, failed, not started because a row owns the test):
 | base/security.manager/SecurityManager | 29 | 17 | 7 | 5 | 0 |
 
 The two `platform/windows` groups are green already: every test carries a `NotRun` row (`restrictOS`),
-so they stay in the file and never move. The remaining red groups are the 9b work.
+so they stay in the file and never move.
+
+The 9b close criterion (Moritz ruling, 2026-10-13) is that every test in a group of the file passes, or
+is listed in `rust/corpus/suite-9d-set.txt`. The 9d set is the carried list, so 9b judges only what it
+owns. `base/security.manager/SecurityManager`'s 5 failed tests (`TEST_ENVIRONMENT_HANDLE`,
+`TEST_METHOD_HANDLE_NO_RESULT`, `TEST_METHOD_HANDLE_RESULT`, `TEST_METHOD_PASS`,
+`TEST_STREAM_PASS_BIF_STREAM_OPEN`) are in `suite-9d-set.txt:200-204`, owned by 9d. Its 7 blocked tests
+are 9b's. `SysFileXXX.TEST_FILEEXISTS_NIL_INVALID` is 9b's although the 9d set also lists it (line 198):
+Task 4 removes that line once the test is green.
+
+Owning 9b task of each red group (plan `2026-10-13-phase-9b.md`):
+
+| group | task |
+|---|---|
+| base/rexxutil/SysStemCopy, SysStemDelete, SysStemInsert, SysStemSort, SysDumpVariables | Task 3 |
+| base/rexxutil/SysFileXXX, SysFileDateTime, SysSearchPath, SysFileSearch, platform/unix/tilde, base/class/File | Task 4 |
+| base/rexxutil/SysFileTree | Task 5 |
+| base/rexxutil/platform/unix/SysGetMessage, SysFormatMessage, base/keyword/ADDRESS | Task 6 |
+| base/security.manager/SecurityManager (7 blocked tests; the 5 failed are 9d's) | Task 7 |
