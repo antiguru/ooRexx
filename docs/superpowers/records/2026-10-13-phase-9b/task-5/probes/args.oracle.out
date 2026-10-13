@@ -1,0 +1,34 @@
+1 SYNTAX 40.21 | SysFileTree argument 1 must not be a null string. | f.0 0
+2 SYNTAX 40.925 | Argument 2 must be an array object, a stem object, or a stem name value; found "". | f.0 unset
+3 SYNTAX 40.925 | Argument 2 must be an array object, a stem object, or a stem name value; found "". | f.0 unset
+4 SYNTAX 40.21 | SysFileTree argument 3 must not be a null string. | f.0 0
+5 SYNTAX 40.900 | SysFileTree options argument must be a combination of F, D, B, S, T, L, I, O, or H; found "X". | f.0 0
+6 SYNTAX 40.900 | SysFileTree options argument must be a combination of F, D, B, S, T, L, I, O, or H; found "f d". | f.0 0
+7 SYNTAX 40.900 | SysFileTree argument 4 must be 5 characters or less in length containing only '+', '-', or '*'; found " ". | f.0 0
+8 SYNTAX 40.900 | SysFileTree argument 4 must be 5 characters or less in length containing only '+', '-', or '*'; found "******". | f.0 0
+9 SYNTAX 40.900 | SysFileTree argument 5 must be 5 characters or less in length containing only '+', '-', or '*'; found "x". | f.0 0
+10 SYNTAX 40.925 | Argument 2 must be an array object, a stem object, or a stem name value; found "". | f.0 unset
+11 SYNTAX 40.21 | SysFileTree argument 1 must not be a null string. | f.0 0
+12 SYNTAX 40.900 | SysFileTree options argument must be a combination of F, D, B, S, T, L, I, O, or H; found "X". | f.0 0
+13 SYNTAX 40.21 | SysFileTree argument 1 must not be a null string. | f.0 unset
+14 SYNTAX 40.21 | SysFileTree argument 3 must not be a null string. | f.0 0
+15 SYNTAX 40.900 | SysFileTree options argument must be a combination of F, D, B, S, T, L, I, O, or H; found "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ. | f.0 0
+16 SYNTAX 40.900 | SysFileTree argument 4 must be 5 characters or less in length containing only '+', '-', or '*'; found "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++. | f.0 0
+17 returned 0 f.0 0
+18 returned 0 f.0 unset
+19 returned 0 f.0 0
+20 returned 0 f.0 0
+21 SYNTAX 88.909 | Argument 3 must have a string value. | f.0 unset
+22 returned 0 f.0 0
+23 SYNTAX 88.922 | Too many arguments in invocation; 5 expected. | f.0 unset
+24 SYNTAX 88.901 | Missing argument; argument 1 is required. | f.0 unset
+25 SYNTAX 88.901 | Missing argument; argument 2 is required. | f.0 unset
+name.0 0
+26 returned 0 f.0 unset
+27 SYNTAX 88.909 | Argument 1 must have a string value. | f.0 unset
+28 SYNTAX 40.925 | Argument 2 must be an array object, a stem object, or a stem name value; found "". | f.0 unset
+29 SYNTAX 40.925 | Argument 2 must be an array object, a stem object, or a stem name value; found "". | f.0 unset
+30 SYNTAX 40.900 | SysFileTree options argument must be a combination of F, D, B, S, T, L, I, O, or H; found "dÿ". | f.0 0
+31 SYNTAX 40.900 | SysFileTree options argument must be a combination of F, D, B, S, T, L, I, O, or H; found "%%". | f.0 0
+32 returned 0 f.0 0
+33 SYNTAX 40.21 | SysFileTree argument 1 must not be a null string. | f.0 0

@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/rexxutil/SysFileTree	oracle	26	26	26			-	-	1	yes	ulimit -v 1048576	26
+base/rexxutil/SysFileTree	crate	26	26	26			-	-	1	yes	memcap 2G	26
