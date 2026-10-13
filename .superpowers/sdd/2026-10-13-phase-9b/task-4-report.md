@@ -246,3 +246,74 @@ file without line numbers. `refusal-sites.tsv` re-derived in `92d2868fc`.
    it was left alone.
 6. **`~user` reads `/etc/passwd`**, as `USERID()` already does, so an account known only through
    NSS is not found where the oracle's `getpwnam` would find it.
+
+## Fix round 1
+
+Commit `ab305b53e`, against `task-4-review.md` and the Task 4 rulings in `progress.md`. This
+section replaces Concerns 1 and 5 and the Mutations paragraph above.
+
+1. **The shared qualifier (ratified) is witnessed.** I ran the reviewer's `shared.rex`,
+   `emptyredir.rex` and `nouserredir.rex` on the oracle first, then folded them into a new
+   witness, `rust/corpus/lang/rexxutil_qualified_names.rex`. It is listed in `phase-9.txt` and
+   works inside its own directory with `HOME` moved into it. It covers:
+   - the stream builtins and `.Stream` with a NUL, with an unknown `~user`, and with `''`;
+   - redirects to a NUL name and to `~/t.txt`;
+   - trapped redirects to `''` and to `~nosuchuser.../x`, both 98.920 with `Unable to open file ""`;
+   - an untrapped `''` redirect as its last line.
+   Oracle and crate are identical on all three descriptors, rc 158.
+2. **The date and time routines read the program's own `TZ`.** They now convert through the new
+   `tz-rs` 0.7.3 dependency. It has `#![forbid(unsafe_code)]` and no dependencies of its own, and
+   `Cargo.lock` gains only its entry.
+   - `program_zone` resolves `TZ` from the interpreter's environment, as glibc does: unset reads
+     `/etc/localtime`, a name a zoneinfo file, `:path` that path, and anything else a POSIX rule.
+     A value that reads as nothing, the empty one included, is UTC.
+   - The zone is read only inside the two routines, and only after the `stat` succeeds. No other
+     call path changed.
+   - `make_time` takes the offsets a day either side of the reading. A candidate that reads back
+     as the same reading wins, and of two the earlier wins. For a skipped reading it takes the
+     candidate whose own local time type `is_dst`, else the offset before the skip.
+   - **TDD:** `dublin.rex` under `TZ=Europe/Dublin` and `tzenv.rex` under process
+     `TZ=America/New_York` are now identical to the oracle. Their lines are now in
+     `rexxutil_file_date_time.rex`, which sets `TZ` itself through `VALUE(..., 'ENVIRONMENT')`:
+     - Dublin: the 2020, 2021 and 2045 gaps, the edges, and the repeated reading;
+     - UTC and Kolkata;
+     - the POSIX rule `IST-1GMT0,M10.5.0,M3.5.0/1`, `:Europe/Zurich`, `''` and `No/Such_Zone`.
+   - By hand, the whole witness is identical under process `TZ` Zurich, New_York, UTC, Lord_Howe,
+     Kolkata, Sao_Paulo, Dublin, Chatham, Casablanca and unset.
+   - **Mutants**, each reversed from a copy and confirmed by `cmp`. Both made the witness differ
+     from the oracle:
+     - the gap rule fixed at the earlier offset, which reproduces the old Dublin answer:
+       `1585445400` against `1585441800`;
+     - `program_zone` ignoring the program's `TZ`: the Dublin and Kolkata lines.
+3. **I dropped the `push_temp` at `files.rs:663`, because it cannot be load-bearing.** `Interp`
+   collects only inside `alloc_with` → `collect_if_due`. Between `text_built` and the slot write,
+   `array_append` → `array_grow` → `charge_growth` only marks a collection due. So no collection
+   can fall in that window, and that is why the removal run stayed green.
+4. **The entry-39 test now uses two `Scratch` directories**, each unique per run (pid plus a
+   random key) and removed by `Drop`. A failed assertion leaves nothing behind. It still fails
+   loudly where `target/` and `TMPDIR` are one file system.
+5. **`datetime_zone.rs` compares stdout and stderr as bytes.** It renders them lossily only in the
+   failure message.
+6. **The `.File~new('n'||'ff'x)~absolutePath` case** is in `rexxutil_qualified_names.rex`. It
+   answers raw `6EFF`, which equals both `QUALIFY` and `directory()'/n'||'ff'x`.
+
+Checks at `ab305b53e`, from `rust/`, in the foreground:
+
+| check | result |
+|---|---|
+| `cargo fmt --all --check` | exit 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0 |
+| the lib and table command above, plus `no_process_state` | exit 0, lib 1093 passed, then 8, 2, 1, 6, 5, 3, 5 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse --test sourceline_oracle` | exit 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib rexxutil::files` | 1 passed; no `rexxutil-move-*` left in `target/tmp` or `/tmp` |
+| corpus gate command above | exit 0, `1035 of 1035` before this round, now `1036 of 1036 matching` |
+| `... --test ir_recorded --test trace_oracle --test coverage --test datetime_zone` | exit 0: 28, 41, 21, 22 passed |
+| the suite command above over the same eight groups | exit 101, the same verdicts as before: seven groups green, SecurityManager 18 of 29 (Task 7's 6 and 9d's 5) |
+| `collect_stress` command above | exit 0, 37 passed |
+
+The records in `docs/superpowers/records/2026-10-13-phase-9b/task-4/` were re-run at `ab305b53e`:
+`run-output.txt`, the suite tables, `corpus-output.txt`, `collect-stress-output.txt` and
+`other-tests-output.txt`.
+
+Concerns left: 2 (other lossy path sites, which the controller is queuing), 3 (no callgrind; the
+reviewer measured it), 4 is closed by item 3 above, and 6 (`/etc/passwd`). Concern 1 is closed.
