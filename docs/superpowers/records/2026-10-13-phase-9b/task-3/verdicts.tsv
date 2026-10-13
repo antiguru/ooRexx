@@ -1,0 +1,7 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/rexxutil/SysDumpVariables	green		equal
+base/rexxutil/SysStemCopy	green		equal
+base/rexxutil/SysStemDelete	green		equal
+base/rexxutil/SysStemInsert	green		equal
+base/rexxutil/SysStemSort	green		equal

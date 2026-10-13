@@ -1,0 +1,12 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/rexxutil/SysDumpVariables	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/rexxutil/SysDumpVariables	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/rexxutil/SysStemCopy	oracle	12	12	12			-	-	1	yes	ulimit -v 1048576	12
+base/rexxutil/SysStemCopy	crate	12	12	12			-	-	1	yes	memcap 2G	12
+base/rexxutil/SysStemDelete	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/rexxutil/SysStemDelete	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/rexxutil/SysStemInsert	oracle	5	5	5			-	-	1	yes	ulimit -v 1048576	5
+base/rexxutil/SysStemInsert	crate	5	5	5			-	-	1	yes	memcap 2G	5
+base/rexxutil/SysStemSort	oracle	18	18	18			-	-	1	yes	ulimit -v 1048576	18
+base/rexxutil/SysStemSort	crate	18	18	18			-	-	1	yes	memcap 2G	18
