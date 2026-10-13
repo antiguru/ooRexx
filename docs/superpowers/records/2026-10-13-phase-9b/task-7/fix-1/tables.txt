@@ -1,0 +1,22 @@
+commit ad69540d2
+     Running unittests src/lib.rs (target/debug/deps/rexx_exec-aaedc271dbf1a724)
+test result: ok. 1116 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.44s
+     Running tests/closed_phases.rs (target/debug/deps/closed_phases-93f671cb72e64cbf)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests/internal_routines.rs (target/debug/deps/internal_routines-c210d75ecc6ecbc6)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/no_process_state.rs (target/debug/deps/no_process_state-ab5d8d9d148d5d0c)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/owners.rs (target/debug/deps/owners-5fdac0e6f27fa26d)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/phase_ten_reasons.rs (target/debug/deps/phase_ten_reasons-3a4f356b7f818e8b)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+     Running tests/refusal_dispositions.rs (target/debug/deps/refusal_dispositions-9f9413fdad73d4f2)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests/refusal_sites.rs (target/debug/deps/refusal_sites-5bd41193e27a5bdd)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+     Running tests/rexxutil_process.rs (target/debug/deps/rexxutil_process-7424024a1a4366c5)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+exit 0
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+sourceline exit 0

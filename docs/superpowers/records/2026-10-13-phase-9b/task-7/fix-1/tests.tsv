@@ -1,0 +1,32 @@
+# ootest revision 13178
+# groups base/security.manager/SecurityManager
+group	test	row	oracle	crate
+base/security.manager/SecurityManager	TEST_CALL_HANDLE_NOT_EXISTS	-	passed	passed
+base/security.manager/SecurityManager	TEST_CALL_HANDLE_NO_RESULT	-	passed	passed
+base/security.manager/SecurityManager	TEST_CALL_HANDLE_RESULT	-	passed	passed
+base/security.manager/SecurityManager	TEST_CALL_PASS_NO_ARGS	-	passed	passed
+base/security.manager/SecurityManager	TEST_CALL_PASS_THREE_ARGS	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_HANDLE_ERROR	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_HANDLE_FAILURE	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_HANDLE_RC	-	passed	passed
+base/security.manager/SecurityManager	TEST_COMMAND_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	-	passed	failed
+base/security.manager/SecurityManager	TEST_ENVIRONMENT_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_LOCAL_HANDLE_RESULT	-	passed	passed
+base/security.manager/SecurityManager	TEST_LOCAL_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	-	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	-	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_NO_EVENT	-	passed	passed
+base/security.manager/SecurityManager	TEST_METHOD_PASS	-	passed	failed
+base/security.manager/SecurityManager	TEST_REQUIRES_HANDLE	-	passed	passed
+base/security.manager/SecurityManager	TEST_REQUIRES_HANDLE_FORBIDDEN	-	passed	passed
+base/security.manager/SecurityManager	TEST_REQUIRES_HANDLE_SECURITY_MANAGER	-	passed	passed
+base/security.manager/SecurityManager	TEST_REQUIRES_PASS	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_CHARIN	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_CHAROUT	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_CHARS	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_LINEIN	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_LINEOUT	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_LINES	-	passed	passed
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_STREAM_OPEN	-	passed	failed
+base/security.manager/SecurityManager	TEST_STREAM_REPLACE	-	passed	passed

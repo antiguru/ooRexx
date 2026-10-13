@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/security.manager/SecurityManager	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	87
+base/security.manager/SecurityManager	crate	29	29	24	TEST_ENVIRONMENT_HANDLE TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_HANDLE_RESULT TEST_METHOD_PASS TEST_STREAM_PASS_BIF_STREAM_OPEN		-	-	1	yes	memcap 2G	87
