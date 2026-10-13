@@ -1,0 +1,1305 @@
+# Review package: f9105f68f..0368229d1
+
+## Commits
+0368229d1 Phase 9b Task 1: the 9a carry-in
+
+## Files changed
+ .../sdd/2026-10-13-phase-9b/task-1-report.md       | 167 +++++++++++++++++++++
+ docs/superpowers/plans/phase-9a-gate.md            |  15 ++
+ .../2026-10-11-phase-9a/deviation-probes/README.md |   6 +-
+ .../task-1-callgrind/cg-extcall2/binaries.txt      |   5 +
+ .../task-1-callgrind/cg-extcall2/summary.tsv       |   9 ++
+ .../task-1-callgrind/cg-extcall2/table.txt         |   2 +
+ .../task-1-callgrind/cg-full-a/binaries.txt        |   4 +
+ .../task-1-callgrind/cg-full-a/summary.tsv         |  30 ++++
+ .../task-1-callgrind/cg-full-a/table.txt           |  16 ++
+ .../task-1-callgrind/cg-full-b/binaries.txt        |   4 +
+ .../task-1-callgrind/cg-full-b/summary.tsv         |  28 ++++
+ .../task-1-callgrind/cg-full-b/table.txt           |  15 ++
+ rust/bench-programs/README.md                      |   3 +-
+ rust/bench-programs/callgrind.sh                   |  57 ++++---
+ .../package_local_class_search_raise.d/lib.cls     |   5 +
+ .../lang/package_local_class_search_raise.env      |   4 +
+ .../lang/package_local_class_search_raise.rex      |  15 ++
+ rust/corpus/lang/package_local_miss_repeat.rex     |  13 ++
+ rust/corpus/phase-9.txt                            |   5 +
+ rust/crates/rexx-exec/src/activity.rs              |  13 +-
+ rust/crates/rexx-exec/src/dispatch/hash.rs         |   6 +
+ rust/crates/rexx-exec/src/dispatch/library.rs      |  12 +-
+ .../rexx-exec/src/dispatch/library/surface.rs      |   3 +-
+ rust/crates/rexx-exec/src/dispatch/tests.rs        |  23 ++-
+ rust/crates/rexx-exec/src/environment.rs           |  33 ++--
+ rust/crates/rexx-exec/src/environment/tests.rs     |  32 ++++
+ rust/crates/rexx-exec/src/run/tests.rs             |  44 +++---
+ rust/crates/rexx-exec/src/scheduler.rs             |   6 +-
+ rust/crates/rexx-exec/src/tests.rs                 |  49 +++---
+ .../package_local_class_search_raise.txt           |  16 ++
+ .../package_local_miss_repeat.txt                  |  14 ++
+ 31 files changed, 565 insertions(+), 89 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-13-phase-9b/task-1-report.md b/.superpowers/sdd/2026-10-13-phase-9b/task-1-report.md
+new file mode 100644
+index 000000000..3feea640c
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-13-phase-9b/task-1-report.md
+@@ -0,0 +1,167 @@
++# Phase 9b Task 1 report: the 9a carry-in
++
++Base `f9105f68f`. Status: DONE_WITH_CONCERNS (concerns at the end).
++
++## Step 1: the budget instrument
++
++`rust/bench-programs/callgrind.sh`: the table now leads with the whole-process median per binary and
++its delta against the first binary, then the libc-and-ld-subtracted median and delta, then the
++whole-process spread. `-B PCT` fails the run (`OVER` on stderr, exit 1) when any binary's
++whole-process delta exceeds PCT. SPREAD is judged on whole-process. `summary.tsv`'s row format is
++unchanged, so `-T` re-tables an old run. README updated. `rexx-bench` has no test for this table, so
++none was added; the witness is the runs below: with `-B 0.5` the HEAD-before binary is flagged
++`OVER extcall before +3.0454% > 0.5%` and exits 1, and the full-set runs exit 0.
++
++## Step 2: the pin
++
++Built from `git archive a98238be5` into `/tmp/claude-1000/p9b-pin/src`, tree touched,
++`CARGO_TARGET_DIR=/tmp/claude-1000/p9b-pin/target`,
++`CARGO_INCREMENTAL=0 memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run`, exit 0, one
++`Compiling rexx-exec` line. Copied to `/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run` (the only file
++there):
++
++* sha256 `c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67`, 58,197,968 bytes,
++  rustc 1.99.0 (b940084d7 2026-09-28).
++
++A second build at the old paths (`/tmp/claude-1000/p9/pin/`) gave sha256 `93934309...899b8c`, same
++size; neither matches the lost pin's 58,283,928 bytes. Recorded in `phase-9a-gate.md`'s pin section
++beside the old hash. Both build directories deleted (`rm -rf /tmp/claude-1000/p9b-pin
++/tmp/claude-1000/p9/pin`; `ls` afterwards: no such file). As a check on the rebuilt pin, its extcall
++whole-process count is 8,975,966,708, against 8,975,965,522 in the 9a rereview's pin.
++
++## Step 3: N1
++
++`Activity::native_handles` and `native_spares` hold `Box<NativeFrame>`, and the scheduler's abandoned
++frames are boxed too, so `push_native_frame`, `take_native_frame`, `pop_native_frame` and
++`abandon_native_call` move a pointer. A box is allocated only when `native_spares` is empty. Two
++`#[expect(clippy::vec_box)]` with reasons, as `spare_activations` has.
++
++memcpy (`__memcpy_avx_unaligned_erms`, exclusive Ir, `callgrind_annotate --threshold=100` on
++`extcall.*.r1.cg`): pin 1,112,287,697; before 1,376,289,727 (callers include five native-frame sites,
++`push_native_frame` twice); after 68,289,853, with no native-frame caller left in the caller tree.
++
++extcall, interleaved, 3 rounds, from `rust/`:
++
++```
++bench-programs/callgrind.sh -r 3 -j 9 -B 0.5 -p extcall -o .../t1/cg-extcall2 \
++    pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run before=.../t1/head-before after=.../t1/head-after
++```
++
++exit 1 (`OVER extcall before +3.0454% > 0.5%`; `after` is not flagged):
++
++| program | pin | before | after | before d% | after d% | pin -libc | before -libc | after -libc | before -libc d% | after -libc d% |
++|---|---|---|---|---|---|---|---|---|---|---|
++| extcall | 8975966708 | 9249317821 | 7773316365 | +3.0454 | -13.3986 | 7536919758 | 7558131839 | 7390131667 | +0.2814 | -1.9476 |
++
++Spread 0.0000 on all three. `head-before` is `f9105f68f` rebuilt after `touch` (Compiling line
++present, sha256 `16acf5b4...f86`); `head-after` is the commit's tree (sha256 `9f619d0d...584f`).
++
++Full set, pin vs after, one round, two invocations (`-r 1 -j 15 -B 0.5 -p "<batch>"`), both exit 0:
++
++| program | pin | after | d% | pin -libc | after -libc | -libc d% |
++|---|---|---|---|---|---|---|
++| alloc | 22825678004 | 22858608561 | +0.1443 | 20362612047 | 20388007210 | +0.1247 |
++| alloc4c | 3673339058 | 3665696521 | -0.2081 | 3106074440 | 3098440032 | -0.2458 |
++| arith | 12084068328 | 12093904717 | +0.0814 | 11478090242 | 11486760903 | +0.0755 |
++| assign | 18443711984 | 18444071179 | +0.0019 | 18381875604 | 18382087938 | +0.0012 |
++| compound | 9247948373 | 9252621542 | +0.0505 | 8836768877 | 8836980906 | +0.0024 |
++| decloop | 2503233107 | 2506500903 | +0.1305 | 2404646660 | 2407730451 | +0.1282 |
++| decrender | 4631810561 | 4623811653 | -0.1727 | 4171162211 | 4162245663 | -0.2138 |
++| dirread | 3130118068 | 3142410616 | +0.3927 | 2663580961 | 2675465087 | +0.4462 |
++| dispatch | 22105710248 | 22136061007 | +0.1373 | 20673777230 | 20663990667 | -0.0473 |
++| dispatchclass | 16952025925 | 16288379026 | -3.9149 | 15654209631 | 15242423783 | -2.6305 |
++| emptyloop | 7797087649 | 7797444651 | +0.0046 | 7735375461 | 7735587725 | +0.0027 |
++| extcall | 8975966325 | 7773316365 | -13.3986 | 7536919758 | 7390131667 | -1.9476 |
++| fibcall | 9109404653 | 8816064451 | -3.2202 | 8469931688 | 8296485078 | -2.0478 |
++| fibfunc | 8938581998 | 8646467383 | -3.2680 | 8300416595 | 8126969985 | -2.0896 |
++| hashnew | 2355780743 | 2362991924 | +0.3061 | 1588972591 | 1595703588 | +0.4236 |
++| heapshape | 2432938994 | 2427482362 | -0.2243 | 2306076206 | 2300494163 | -0.2421 |
++| nop | 9243390364 | 9243738598 | +0.0038 | 9181614211 | 9181825920 | +0.0023 |
++| parse | 1654598628 | 1655716685 | +0.0676 | 1552802916 | 1553728594 | +0.0596 |
++| pkglocal | 4185405439 | 4071779398 | -2.7148 | 3917669232 | 3767896530 | -3.8230 |
++| sayloop | 179667649 | 180002888 | +0.1866 | 107724363 | 107936081 | +0.1965 |
++| sendloop | 14584920991 | 14575275672 | -0.0661 | 13818085980 | 13808299421 | -0.0708 |
++| startup | 119095416 | 119430319 | +0.2812 | 57373104 | 57584822 | +0.3690 |
++| strings | 18808435209 | 18793356727 | -0.0802 | 17536541845 | 17521278847 | -0.0870 |
++| textnum | 1224168037 | 1224509727 | +0.0279 | 1150021499 | 1150233217 | +0.0184 |
++| varlookup | 13194527955 | 13194882317 | +0.0027 | 13132805929 | 13133018184 | +0.0016 |
++| rexxcps | 19278651778 | 19280231948 | +0.0082 | 17792033303 | 17792136296 | +0.0006 |
++| pingguard | 1314662440 | 1315775033 | +0.0846 | 1148211424 | 1148412295 | +0.0175 |
++| pingmsg | 7581728655 | 7489615984 | -1.2149 | 1667809819 | 1617263106 | -3.0307 |
++| pingsem | 1299613521 | 1300733623 | +0.0862 | 1171642180 | 1171847393 | +0.0175 |
++
++Worst three whole-process: dirread +0.3927%, hashnew +0.3061%, startup +0.2812%. Each run's
++`summary.tsv`, `table.txt` and `binaries.txt` are in
++`docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/` (`cg-extcall2`, `cg-full-a`,
++`cg-full-b`).
++
++## Step 4
++
++**m1.** `package_local_get` carries `directory_get`'s view assertion again. Witness
++`corpus/lang/package_local_miss_repeat.rex` (in `phase-9.txt`, sourceline file generated by the
++driver): a miss read twice after a write under another name, a miss read in a loop that writes
++nothing, then a fill and a remove each followed by two reads. Oracle and crate byte-identical on
++stdout, stderr and rc 0; stdout read: `.PLMRNAME .PLMRNAME`, `.PLMRNONE` three times,
++`filled filled`, `.PLMRNAME .PLMRNAME`.
++Reach, by mutation on a debug `rexx-run` over every program in the `phase-*.txt` union (1024), each
++run from a fresh directory with its `.d` copied:
++* memo assertion changed to expect `Found(_)` (fires on every memo hit): fires on
++  `package_local_miss_repeat`, and also on `package_local_find_class` and `package_store_tables`;
++* view assertion changed to `debug_assert_ne!`: fires on `package_local_class_search_raise`,
++  `package_local_find_class`, `package_local_miss_repeat`, `package_local_symbol_writes`,
++  `package_namespace`, `package_store_tables`.
++Both mutants reversed by exact edit; `git diff --stat` matched the pre-mutant figures.
++
++**m2.** `class_in_program` answers `Result<Option<ObjRef>, Failure>` and propagates `Err` and `Owed`
++from the package local and from the `.local`/`.environment` lookup, as `package_find_class` does
++(`Loud::environment_entry` for `Owed`). Its one caller, `Surface::find_class`, holds the failure as
++the native call's condition (`held`).
++* Witness `corpus/lang/package_local_class_search_raise.rex` (+ `.d/lib.cls`, `.env`): a native
++  method (`orxmethod TestFindClass`) whose package local's `UNKNOWN` raises 93.900. Oracle:
++  `unknown called NOSUCH`, `syntax 93.900 from unknown NOSUCH.`, position 6, rc 0. Crate before the
++  fix: `syntax 91.999 Message "FINDC" did not return a result.`, position 1. After: byte-identical
++  to the oracle on all three descriptors. (`TestFindContextClass` cannot tell the two apart: it raises
++  88.900 on any NULL, and both sides already agreed on it.)
++* `Owed` cannot be reached from Rexx (the placeholder is the crate's). Crate test
++  `environment::tests::a_class_search_from_a_program_refuses_an_owed_entry`: the owed placeholder in
++  a program's local and `.local`'s `STDQUE` refuse loudly, a class beside it answers, a missing name
++  answers none. Red with the package-local `Owed` arm folded into `Absent` (panic at
++  `environment/tests.rs:286`), restored from a copy.
++
++**m3.** `deviation-probes/README.md`: `objname-table.rex`'s fourth line is an internal routine; the
++`::ROUTINE` row is `objname4.rex`'s `::routine other` (lines 10, 25-26), oracle `long`, its eighth
++output line (read from `objname4.oracle.out`).
++
++**m4.** `a_metaclass_new_answering_no_new_class_is_loud` adds the "a subclass already took" shape:
++the held class answered to a second `~subclass`. Crate rc 120, stdout `XX`, the refusal on stderr;
++oracle `XX` then `Array`, rc 0 (run here, `metatwice.rex` in the scratchpad).
++
++## Checks (from `rust/`, all `CARGO_INCREMENTAL=0 ... memcap 8G ... -j 4`, statuses unpiped)
++
++| command | exit |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `cargo clippy -p rexx-exec --all-targets -- -D warnings` | 0 |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --no-fail-fast --test corpus --test release_local_reference --test phase_ten_reasons --test owners --test refusal_sites --test refusal_dispositions --test loud --test collect_stress` | 0 (corpus 29 passed 1 ignored; collect_stress 37; release_local_reference 3; others all passed) |
++| `cargo test --release -p rexx-exec --lib` (in a run whose concurrency_tests leg hit `timeout 590`, rc 124) | lib 1088 passed; closed_phases 8 passed |
++| `REXX_CORPUS_GATE=1 REXX_WHOLE_GROUPS_ONLY=base/rexxutil/SysSleep.testGroup,base/directives/METHOD.testGroup,base/directives/ATTRIBUTE.testGroup,base/keyword/CALL.testGroup,base/class/Method.testGroup cargo test --release -p rexx-exec --test concurrency_tests each_group_of_the_derived_list_in_one_run_in_both_modes` | 0 |
++| `REXX_CORPUS_GATE=1 cargo test -p rexx-exec --test corpus` (debug) | 0 (29 passed 1 ignored) |
++| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
++| `cargo test --release -p rexx-core --test unsafe_sites` | 0 |
++| `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=API/oo/METHOD,API/oo/FUNCTION,base/class/Package,base/rexxutil/SysSleep cargo test --release -p rexx-exec --test suite` | 101: FUNCTION and SysSleep green; METHOD 319/320 (`TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA`, the 9c rexxc test) and Package 77/80 (`TEST_NEW01 TEST_PROLOG`, `TESTRECLAIM01` timeout), the same sets the 9a final fix report records |
++
++## Concerns
++
++1. **m2 turns one oracle-matching answer into a refusal.** The `.local` step now propagates `Owed`,
++   so a native method's `FindClass('STDQUE')` from a program refuses (rc 120) where it answered NULL
++   before; on the oracle `STDQUE` is a queue, not a class, so NULL was right. This follows the brief
++   ("as `package_find_class` does"); the controller may prefer the `.local` step to answer `None` for
++   `Owed`. Not run against the oracle as a program.
++2. **m1's premise was partly wrong.** The memo's hit assertion was already reached by
++   `package_local_find_class` and `package_store_tables` (a second `.context` read hits it). The new
++   witness still pins the miss-after-write shape the item names.
++3. `Surface::find_class`'s other branch (`class_named`, `dot_variable(...).ok()`) still drops a
++   raised condition for a routine or a method whose scope is not a program class. Not in m2's scope.
++4. The pin is not bit-reproducible; Phase 9 measures against the rebuilt hash, not the old one.
++5. The whole `concurrency_tests` binary was not run (over the 10-minute bound); the native-call
++   groups slice above was.
+diff --git a/docs/superpowers/plans/phase-9a-gate.md b/docs/superpowers/plans/phase-9a-gate.md
+index cd0025570..6b0ed390d 100644
+--- a/docs/superpowers/plans/phase-9a-gate.md
++++ b/docs/superpowers/plans/phase-9a-gate.md
+@@ -25,20 +25,35 @@ git archive a98238be5 | tar -x -C /tmp/claude-1000/p9/pin/src
+ find /tmp/claude-1000/p9/pin/src -exec touch {} +
+ cd /tmp/claude-1000/p9/pin/src/rust
+ CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/claude-1000/p9/pin/target \
+     memcap 8G cargo build --release -j 4 -p rexx-exec --bin rexx-run
+ cp /tmp/claude-1000/p9/pin/target/release/rexx-run /tmp/claude-1000/p9/pin/rexx-run
+ sha256sum /tmp/claude-1000/p9/pin/rexx-run
+ ```
+ 
+ The source and target directories were deleted after the copy.
+ 
++### Rebuilt pin, 2026-10-13
++
++Rebuilt by Phase 9b Task 1 with the commands above, source at `/tmp/claude-1000/p9b-pin/src`,
++target at `/tmp/claude-1000/p9b-pin/target`, rustc 1.99.0 (b940084d7 2026-09-28); the build log has
++one `Compiling rexx-exec` line. Only the binary is kept, outside `/tmp`:
++
++* path: `/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run`
++* sha256: `c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67`
++* size: 58,197,968 bytes
++
++The build is not bit-reproducible: a second build at the old paths (`/tmp/claude-1000/p9/pin/`) gave
++the same size and sha256 `93934309be19406cbb5b5c8b2af55699a43673f545348706162e3894cd899b8c`, and
++neither matches the 2026-10-11 size. Phase 9 measures against this binary, not against the old hash.
++Both build directories were deleted after the copy.
++
+ ## Row files
+ 
+ The tests the suite gate does not require to pass, one row per test (`dir/group`, test, owner,
+ reason), each file headed by the ootest revision it was derived at (13178):
+ 
+ * `docs/superpowers/plans/phase-9-exclusions.txt`: Phase 10, by `reaching_rxapi`, by group, or by
+   a captured refusal that names a queue or the function registry.
+ * `rust/corpus/suite-licences.txt`: the `common.txt` Flaky rows. No Deviation or Environment row
+   is seeded; those need Moritz's ruling.
+ * `rust/corpus/suite-not-run.txt`: `restrictOS` and skipped-test-type rows.
+diff --git a/docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/README.md b/docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/README.md
+index aa2ab3401..0b6b90fc4 100644
+--- a/docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/README.md
++++ b/docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/README.md
+@@ -4,18 +4,20 @@
+ on 2026-10-13 from a fresh directory holding only these `.rex` files, once on the oracle and once on
+ this crate at the Phase 9a final fix (`rust/target/release/rexx-run`); stdout, stderr and exit
+ status are kept per side as `NAME.oracle.{out,err,rc}` and `NAME.crate.{out,err,rc}`:
+ 
+ ```
+ ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib \
+   timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx NAME.rex )
+ memcap 2G timeout 20 rust/target/release/rexx-run NAME.rex
+ ```
+ 
+-* `objname-table.rex`: Deviation 31's table, one line per row. Oracle rc 0; crate rc 120 at the
+-  first `OBJECTNAME=`.
++* `objname-table.rex`: Deviation 31's table, one line per row, except the `::ROUTINE` row: its
++  fourth line reads the literal in an internal routine (`r: procedure`). The `::ROUTINE` row is
++  `objname4.rex`'s `::routine other` (lines 10 and 25-26), oracle `long`, its eighth output line.
++  Oracle rc 0; crate rc 120 at the first `OBJECTNAME=`.
+ * `objname2.rex`, `objname4.rex`: Task 8b's probes the table was drawn from (`objname2`,
+   `objname4` in `.superpowers/sdd/2026-10-11-phase-9a/task-8b-report.md`). Oracle rc 0; crate rc
+   120 at the first `OBJECTNAME=` on a string.
+ * `ord.rex`: Deviation 33's two `instanceMethods` orders, its `enh:` line. Both sides end rc 159 at
+   line 8 (97.2, `SETMETHOD` is private from this context) after the two lines the deviation reads;
+   the `dir:` line agrees.
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/binaries.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/binaries.txt
+new file mode 100644
+index 000000000..9a5820ef8
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/binaries.txt
+@@ -0,0 +1,5 @@
++# 2026-10-13T06:07:48Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# before /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t1/head-before 16acf5b4e5930ce5796cf6fb851ab056cb188572ab388801ae4f5daaabf35f86
++# after /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t1/head-after 9f619d0d0856b449bf333fa80437f2ad65ceb66b98ad61795883ffc21bb8584f
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/summary.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/summary.tsv
+new file mode 100644
+index 000000000..fc93e6ac3
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/summary.tsv
+@@ -0,0 +1,9 @@
++pin	extcall	r1	8975966708	1438625601	421349	7536919758	rc=0
++before	extcall	r1	9249317821	1690764849	421133	7558131839	rc=0
++after	extcall	r1	7773316365	382763551	421147	7390131667	rc=0
++pin	extcall	r2	8975966708	1438625601	421349	7536919758	rc=0
++before	extcall	r2	9249317821	1690764849	421133	7558131839	rc=0
++after	extcall	r2	7773316100	382763431	421002	7390131667	rc=0
++pin	extcall	r3	8975966708	1438625601	421349	7536919758	rc=0
++before	extcall	r3	9249317438	1690764611	420988	7558131839	rc=0
++after	extcall	r3	7773316365	382763551	421147	7390131667	rc=0
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/table.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/table.txt
+new file mode 100644
+index 000000000..a6c389080
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-extcall2/table.txt
+@@ -0,0 +1,2 @@
++program	pin	before	after	before d%	after d%	pin -libc	before -libc	after -libc	before -libc d%	after -libc d%	pin spread%	before spread%	after spread%
++extcall	8975966708	9249317821	7773316365	+3.0454	-13.3986	7536919758	7558131839	7390131667	+0.2814	-1.9476	0.0000	0.0000	0.0000
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/binaries.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/binaries.txt
+new file mode 100644
+index 000000000..f93a8743c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-13T06:09:38Z rounds=1 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# after /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t1/head-after 9f619d0d0856b449bf333fa80437f2ad65ceb66b98ad61795883ffc21bb8584f
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/summary.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/summary.tsv
+new file mode 100644
+index 000000000..f71c203fd
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/summary.tsv
+@@ -0,0 +1,30 @@
++pin	alloc	r1	22825678004	2462719745	346212	20362612047	rc=0
++after	alloc	r1	22858608561	2470255326	346025	20388007210	rc=0
++pin	alloc4c	r1	3673339058	566918577	346041	3106074440	rc=0
++after	alloc4c	r1	3665696521	566910609	345880	3098440032	rc=0
++pin	arith	r1	12084068328	605631874	346212	11478090242	rc=0
++after	arith	r1	12093904717	606797934	345880	11486760903	rc=0
++pin	assign	r1	18443711984	61490168	346212	18381875604	rc=0
++after	assign	r1	18444071179	61637361	345880	18382087938	rc=0
++pin	compound	r1	9247948373	410833324	346172	8836768877	rc=0
++after	compound	r1	9252621542	415294625	346011	8836980906	rc=0
++pin	decloop	r1	2503233107	98240261	346186	2404646660	rc=0
++after	decloop	r1	2506500903	98424572	345880	2407730451	rc=0
++pin	decrender	r1	4631810561	460302138	346212	4171162211	rc=0
++after	decrender	r1	4623811653	461219965	346025	4162245663	rc=0
++pin	dirread	r1	3130118068	466190921	346186	2663580961	rc=0
++after	dirread	r1	3142410616	466599504	346025	2675465087	rc=0
++pin	dispatch	r1	22105710248	1431586846	346172	20673777230	rc=0
++after	dispatch	r1	22136061007	1471724329	346011	20663990667	rc=0
++pin	dispatchclass	r1	16952025925	1297470227	346067	15654209631	rc=0
++after	dispatchclass	r1	16288379026	1045609218	346025	15242423783	rc=0
++pin	emptyloop	r1	7797087649	61365976	346212	7735375461	rc=0
++after	emptyloop	r1	7797444651	61511046	345880	7735587725	rc=0
++pin	extcall	r1	8975966325	1438625363	421204	7536919758	rc=0
++after	extcall	r1	7773316365	382763551	421147	7390131667	rc=0
++pin	fibcall	r1	9109404653	639126924	346041	8469931688	rc=0
++after	fibcall	r1	8816064451	519233348	346025	8296485078	rc=0
++pin	fibfunc	r1	8938581998	637819217	346186	8300416595	rc=0
++after	fibfunc	r1	8646467383	519151518	345880	8126969985	rc=0
++pin	hashnew	r1	2355780743	766461966	346186	1588972591	rc=0
++after	hashnew	r1	2362991924	766942311	346025	1595703588	rc=0
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/table.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/table.txt
+new file mode 100644
+index 000000000..640f7e634
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-a/table.txt
+@@ -0,0 +1,16 @@
++program	pin	after	after d%	pin -libc	after -libc	after -libc d%	pin spread%	after spread%
++alloc	22825678004	22858608561	+0.1443	20362612047	20388007210	+0.1247	0.0000	0.0000
++alloc4c	3673339058	3665696521	-0.2081	3106074440	3098440032	-0.2458	0.0000	0.0000
++arith	12084068328	12093904717	+0.0814	11478090242	11486760903	+0.0755	0.0000	0.0000
++assign	18443711984	18444071179	+0.0019	18381875604	18382087938	+0.0012	0.0000	0.0000
++compound	9247948373	9252621542	+0.0505	8836768877	8836980906	+0.0024	0.0000	0.0000
++decloop	2503233107	2506500903	+0.1305	2404646660	2407730451	+0.1282	0.0000	0.0000
++decrender	4631810561	4623811653	-0.1727	4171162211	4162245663	-0.2138	0.0000	0.0000
++dirread	3130118068	3142410616	+0.3927	2663580961	2675465087	+0.4462	0.0000	0.0000
++dispatch	22105710248	22136061007	+0.1373	20673777230	20663990667	-0.0473	0.0000	0.0000
++dispatchclass	16952025925	16288379026	-3.9149	15654209631	15242423783	-2.6305	0.0000	0.0000
++emptyloop	7797087649	7797444651	+0.0046	7735375461	7735587725	+0.0027	0.0000	0.0000
++extcall	8975966325	7773316365	-13.3986	7536919758	7390131667	-1.9476	0.0000	0.0000
++fibcall	9109404653	8816064451	-3.2202	8469931688	8296485078	-2.0478	0.0000	0.0000
++fibfunc	8938581998	8646467383	-3.2680	8300416595	8126969985	-2.0896	0.0000	0.0000
++hashnew	2355780743	2362991924	+0.3061	1588972591	1595703588	+0.4236	0.0000	0.0000
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/binaries.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/binaries.txt
+new file mode 100644
+index 000000000..a3f1b6630
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-13T06:13:04Z rounds=1 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# after /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t1/head-after 9f619d0d0856b449bf333fa80437f2ad65ceb66b98ad61795883ffc21bb8584f
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/summary.tsv b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/summary.tsv
+new file mode 100644
+index 000000000..83bcbf54c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/summary.tsv
+@@ -0,0 +1,28 @@
++pin	heapshape	r1	2432938994	126516691	346097	2306076206	rc=0
++after	heapshape	r1	2427482362	126642144	346055	2300494163	rc=0
++pin	nop	r1	9243390364	61429967	346186	9181614211	rc=0
++after	nop	r1	9243738598	61566653	346025	9181825920	rc=0
++pin	parse	r1	1654598628	101449645	346067	1552802916	rc=0
++after	parse	r1	1655716685	101642211	345880	1553728594	rc=0
++pin	pkglocal	r1	4185405439	267390035	346172	3917669232	rc=0
++after	pkglocal	r1	4071779398	303536857	346011	3767896530	rc=0
++pin	sayloop	r1	179667649	71597100	346186	107724363	rc=0
++after	sayloop	r1	180002888	71720782	346025	107936081	rc=0
++pin	sendloop	r1	14584920991	766488839	346172	13818085980	rc=0
++after	sendloop	r1	14575275672	766630240	346011	13808299421	rc=0
++pin	startup	r1	119095416	61376271	346041	57373104	rc=0
++after	startup	r1	119430319	61499617	345880	57584822	rc=0
++pin	strings	r1	18808435209	1271547323	346041	17536541845	rc=0
++after	strings	r1	18793356727	1271731855	346025	17521278847	rc=0
++pin	textnum	r1	1224168037	73800352	346186	1150021499	rc=0
++after	textnum	r1	1224509727	73930485	346025	1150233217	rc=0
++pin	varlookup	r1	13194527955	61375814	346212	13132805929	rc=0
++after	varlookup	r1	13194882317	61518108	346025	13133018184	rc=0
++pin	rexxcps	r1	19278651778	1486272273	346202	17792033303	rc=0
++after	rexxcps	r1	19280231948	1487749611	346041	17792136296	rc=0
++pin	pingguard	r1	1314662440	166104804	346212	1148211424	rc=0
++after	pingguard	r1	1315775033	167016713	346025	1148412295	rc=0
++pin	pingmsg	r1	7581728655	5913572664	346172	1667809819	rc=0
++after	pingmsg	r1	7489615984	5872006867	346011	1617263106	rc=0
++pin	pingsem	r1	1299613521	127625169	346172	1171642180	rc=0
++after	pingsem	r1	1300733623	128540219	346011	1171847393	rc=0
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/table.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/table.txt
+new file mode 100644
+index 000000000..3af37530a
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-1-callgrind/cg-full-b/table.txt
+@@ -0,0 +1,15 @@
++program	pin	after	after d%	pin -libc	after -libc	after -libc d%	pin spread%	after spread%
++heapshape	2432938994	2427482362	-0.2243	2306076206	2300494163	-0.2421	0.0000	0.0000
++nop	9243390364	9243738598	+0.0038	9181614211	9181825920	+0.0023	0.0000	0.0000
++parse	1654598628	1655716685	+0.0676	1552802916	1553728594	+0.0596	0.0000	0.0000
++pkglocal	4185405439	4071779398	-2.7148	3917669232	3767896530	-3.8230	0.0000	0.0000
++sayloop	179667649	180002888	+0.1866	107724363	107936081	+0.1965	0.0000	0.0000
++sendloop	14584920991	14575275672	-0.0661	13818085980	13808299421	-0.0708	0.0000	0.0000
++startup	119095416	119430319	+0.2812	57373104	57584822	+0.3690	0.0000	0.0000
++strings	18808435209	18793356727	-0.0802	17536541845	17521278847	-0.0870	0.0000	0.0000
++textnum	1224168037	1224509727	+0.0279	1150021499	1150233217	+0.0184	0.0000	0.0000
++varlookup	13194527955	13194882317	+0.0027	13132805929	13133018184	+0.0016	0.0000	0.0000
++rexxcps	19278651778	19280231948	+0.0082	17792033303	17792136296	+0.0006	0.0000	0.0000
++pingguard	1314662440	1315775033	+0.0846	1148211424	1148412295	+0.0175	0.0000	0.0000
++pingmsg	7581728655	7489615984	-1.2149	1667809819	1617263106	-3.0307	0.0000	0.0000
++pingsem	1299613521	1300733623	+0.0862	1171642180	1171847393	+0.0175	0.0000	0.0000
+diff --git a/rust/bench-programs/README.md b/rust/bench-programs/README.md
+index af4b0660d..03b749d19 100644
+--- a/rust/bench-programs/README.md
++++ b/rust/bench-programs/README.md
+@@ -55,16 +55,17 @@ criterion harness) and adjusting until each landed between 0.5s and 2s. See
+ `say a"|"b` does not concatenate three values — `"|"b` is read as a **binary string literal** (the
+ `b` suffix binds to the preceding quote) and the program dies with error 15.4. None of these
+ programs use that form; string concatenation here uses explicit `||`.
+ 
+ `.integer` and `.rexxinfo` are not usable as environment classes (`.integer` is internal and
+ unexposed; `.rexxinfo` is an instance, not a class). None of these programs reference either.
+ 
+ ## Instruction counts: `callgrind.sh`
+ 
+ `callgrind.sh NAME=BINARY NAME=BINARY...` runs every program here, `pingpong/*.rex` (named
+-`pingmsg`, `pingsem`, `pingguard`) and `../bench-rexxcps/rexxcps.rex` under callgrind on each binary and prints instruction counts less libc.so.6 and ld-linux
++`pingmsg`, `pingsem`, `pingguard`) and `../bench-rexxcps/rexxcps.rex` under callgrind on each binary and prints whole-process instruction
++counts, which the Phase 9 budget judges (`-B PCT`), beside the counts less libc.so.6 and ld-linux
+ (`cgsum.py`). `layout-pad.py TREE COUNT` adds never-called functions to a tree's IR driver.
+ `wallclock.sh NAME=BINARY...` times the same programs, interleaved, or those `PROGRAMS` names
+ (`PROGRAMS="pingpong/pingmsg pingpong/pingsem pingpong/pingguard"`).
+ `cgdiff.py A B` prints per-function differences between two callgrind files.
+ Measurements: `docs/superpowers/plans/phase-6-perf.md`.
+diff --git a/rust/bench-programs/callgrind.sh b/rust/bench-programs/callgrind.sh
+index 35085d4ae..8a8d6449d 100755
+--- a/rust/bench-programs/callgrind.sh
++++ b/rust/bench-programs/callgrind.sh
+@@ -1,40 +1,46 @@
+ #!/bin/bash
+-# Callgrind instruction counts, libc.so.6 and ld-linux subtracted, per program per binary.
++# Callgrind instruction counts per program per binary: the whole process, and the same
++# with libc.so.6 and ld-linux subtracted.
+ #
+-# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-T] NAME=BINARY...
++# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY...
+ #   ROUNDS  rounds (default 3); round r starts at binary r
+ #   JOBS    programs run at once (default 8)
+ #   OUTDIR  output directory (default: mktemp -d)
+ #   PROGRAMS  space-separated subset of PROGRAMS (default: all)
++#   PCT     budget: a whole-process delta over PCT percent fails (flagged OVER)
+ #   -T      print the table for OUTDIR's summary.tsv without running
+ # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
+ #
+-# Table: median per binary, delta against the first binary, spread across rounds.
++# Table: the whole-process median per binary and its delta against the first binary,
++# which the budget judges; the libc-and-ld-subtracted median and delta; the
++# whole-process spread across rounds.
+ # Exits 1 if a run exits non-zero, if its stdout differs from the first binary's
+-# (except on TIMED), or if a cell's spread exceeds 0.01% (flagged SPREAD).
++# (except on TIMED), if a whole-process spread exceeds 0.01% (flagged SPREAD), or if
++# a whole-process delta exceeds PCT.
+ set -u
+ here=$(cd "$(dirname "$0")" && pwd)
+-rounds=3 jobs=8 out= table_only= sel=
+-while getopts r:j:o:p:T opt; do
++rounds=3 jobs=8 out= table_only= sel= budget=
++while getopts r:j:o:p:B:T opt; do
+     case $opt in
+         r) rounds=$OPTARG ;;
+         j) jobs=$OPTARG ;;
+         o) out=$OPTARG ;;
+         p) sel=$OPTARG ;;
++        B) budget=$OPTARG ;;
+         T) table_only=1 ;;
+         *) exit 2 ;;
+     esac
+ done
+ shift $((OPTIND - 1))
+ if [ $# -lt 1 ]; then
+-    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-T] NAME=BINARY..." >&2
++    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY..." >&2
+     exit 2
+ fi
+ lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
+ [ -f "$lib/liborxfunction.so" ] || { echo "no liborxfunction.so in $lib; set REXX_LIB_DIR" >&2; exit 2; }
+ [ -n "$out" ] || out=$(mktemp -d)
+ mkdir -p "$out"
+ out=$(cd "$out" && pwd)
+ 
+ # Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
+ PINGPONG="pingguard pingmsg pingsem"
+@@ -107,40 +113,55 @@ for p in $PROGRAMS; do
+             if [ "$(cat "$out/$p.$name.r$r.rc")" != 0 ]; then
+                 echo "$p $name r$r exited $(cat "$out/$p.$name.r$r.rc")" >&2; status=1
+             fi
+             if ! [[ " $TIMED " == *" $p "* ]] && ! cmp -s "$out/$p.$name.r$r.out" "$out/$p.${names[0]}.r1.out"; then
+                 echo "$p $name r$r stdout differs from ${names[0]} r1" >&2; status=1
+             fi
+         done
+     done
+ done
+ fi
+-python3 - "$out/summary.tsv" "${names[@]}" > "$out/table.txt" <<'EOF'
++python3 - "$out/summary.tsv" "$budget" "${names[@]}" > "$out/table.txt" <<'EOF'
+ import statistics
+ import sys
+-rows = {}
++whole = {}
++less = {}
+ flagged = False
+ for line in open(sys.argv[1]):
+     b, p, r, summ, libc, ld, ex, rc = line.rstrip("\n").split("\t")
+-    rows.setdefault((b, p), []).append(int(ex))
+-names = sys.argv[2:]
+-progs = list(dict.fromkeys(p for (_, p) in rows))
+-head = ["program"] + names + [f"{b} d%" for b in names[1:]] + [f"{b} spread%" for b in names]
++    whole.setdefault((b, p), []).append(int(summ))
++    less.setdefault((b, p), []).append(int(ex))
++budget = float(sys.argv[2]) if sys.argv[2] else None
++names = sys.argv[3:]
++progs = list(dict.fromkeys(p for (_, p) in whole))
++head = ["program"] + names + [f"{b} d%" for b in names[1:]]
++head += [f"{b} -libc" for b in names] + [f"{b} -libc d%" for b in names[1:]]
++head += [f"{b} spread%" for b in names]
+ print("\t".join(head))
+ for p in progs:
+-    mid = {b: statistics.median(rows[(b, p)]) for b in names}
+-    base = mid[names[0]]
+-    cells = [p] + [f"{mid[b]:.0f}" for b in names]
+-    cells += [f"{100 * (mid[b] - base) / base:+.4f}" for b in names[1:]]
+-    spread = {b: 100 * (max(rows[(b, p)]) - min(rows[(b, p)])) / mid[b] for b in names}
++    cells = [p]
++    deltas = {}
++    for kind, counts in (("whole", whole), ("less", less)):
++        mid = {b: statistics.median(counts[(b, p)]) for b in names}
++        deltas[kind] = {b: 100 * (mid[b] - mid[names[0]]) / mid[names[0]] for b in names[1:]}
++        cells += [f"{mid[b]:.0f}" for b in names]
++        cells += [f"{deltas[kind][b]:+.4f}" for b in names[1:]]
++    spread = {
++        b: 100 * (max(whole[(b, p)]) - min(whole[(b, p)])) / statistics.median(whole[(b, p)])
++        for b in names
++    }
+     cells += [f"{spread[b]:.4f}" for b in names]
+     print("\t".join(cells))
+     for b in names:
+         if spread[b] > 0.01:
+             print(f"SPREAD {p} {b} {spread[b]:.4f}%", file=sys.stderr)
+             flagged = True
++    for b in names[1:]:
++        if budget is not None and deltas["whole"][b] > budget:
++            print(f"OVER {p} {b} {deltas['whole'][b]:+.4f}% > {budget}%", file=sys.stderr)
++            flagged = True
+ sys.exit(1 if flagged else 0)
+ EOF
+ [ $? = 0 ] || status=1
+ cat "$out/table.txt"
+ echo "# outputs in $out" >&2
+ exit $status
+diff --git a/rust/corpus/lang/package_local_class_search_raise.d/lib.cls b/rust/corpus/lang/package_local_class_search_raise.d/lib.cls
+new file mode 100644
+index 000000000..2804decc3
+--- /dev/null
++++ b/rust/corpus/lang/package_local_class_search_raise.d/lib.cls
+@@ -0,0 +1,5 @@
++l = .context~package~local
++l~put(.array, 'PLFIND')
++l~setMethod('UNKNOWN', 'say "unknown called" arg(1); raise syntax 93.900 array("from unknown" arg(1))')
++::class T public
++::method findc external "LIBRARY orxmethod TestFindClass"
+diff --git a/rust/corpus/lang/package_local_class_search_raise.env b/rust/corpus/lang/package_local_class_search_raise.env
+new file mode 100644
+index 000000000..ae05c3a0d
+--- /dev/null
++++ b/rust/corpus/lang/package_local_class_search_raise.env
+@@ -0,0 +1,4 @@
++# The oracle's own builds of the extensions these programs load. The spawned
++# side is given this directory anyway; the in-process side reads it from here
++# because the process loader cannot be told later.
++LD_LIBRARY_PATH={oraclelib}
+diff --git a/rust/corpus/lang/package_local_class_search_raise.rex b/rust/corpus/lang/package_local_class_search_raise.rex
+new file mode 100644
+index 000000000..1a3552323
+--- /dev/null
++++ b/rust/corpus/lang/package_local_class_search_raise.rex
+@@ -0,0 +1,15 @@
++/* A native method's FindClass searches its own package's local, and a
++   condition that local's UNKNOWN method raises is the call's condition. */
++t = .T~new
++say 'class:' t~findc('LIST')
++say 'local:' t~findc('PLFIND')
++signal on syntax
++r = t~findc('NOSUCH')
++say 'answered:' r
++exit
++syntax:
++  c = condition('o')
++  say 'syntax' c~code c~message
++  say 'additional' c~additional~toString(,'|')
++  say 'position' c~position
++::requires 'lib.cls'
+diff --git a/rust/corpus/lang/package_local_miss_repeat.rex b/rust/corpus/lang/package_local_miss_repeat.rex
+new file mode 100644
+index 000000000..36b528aa4
+--- /dev/null
++++ b/rust/corpus/lang/package_local_miss_repeat.rex
+@@ -0,0 +1,13 @@
++/* The same missing environment symbol read twice in a row, once after a write
++   to the package local under another name and once after the write that
++   fills it, and in a loop that writes nothing. */
++l = .context~package~local
++l~put('other', 'PLMROTHER')
++say .plmrname .plmrname
++do 3
++  say .plmrnone
++end
++l~put('filled', 'PLMRNAME')
++say .plmrname .plmrname
++l~remove('PLMRNAME')
++say .plmrname .plmrname
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index dbb325431..c23a7abe5 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -46,10 +46,15 @@ lang/package_copy.rex
+ 
+ # 9a Task 10 fix: class-side Method objects keyed by their defining class.
+ lang/class_side_method_objects.rex
+ 
+ # 9a final review fixes: a package's store-backed local in the class search,
+ # a Method/Routine subclass copy's own annotation table, and .NAME read again
+ # after each kind of write to the package local.
+ lang/package_local_find_class.rex
+ lang/executable_subclass_copy_annotations.rex
+ lang/package_local_symbol_writes.rex
++
++# 9b Task 1: the package local miss memo answering a repeated miss, and a
++# native method's class search raising its package local's UNKNOWN condition.
++lang/package_local_miss_repeat.rex
++lang/package_local_class_search_raise.rex
+diff --git a/rust/crates/rexx-exec/src/activity.rs b/rust/crates/rexx-exec/src/activity.rs
+index 47b0fcee7..9a8b5a6a8 100644
+--- a/rust/crates/rexx-exec/src/activity.rs
++++ b/rust/crates/rexx-exec/src/activity.rs
+@@ -50,24 +50,33 @@ pub(crate) struct Activity {
+                   return the very thing this parks"
+     )]
+     pub(crate) spare_activations: Vec<Box<Activation>>,
+     /// An ended method activation's emptied `EXPOSE` list, kept for its
+     /// capacity until the next `EXPOSE` takes it.
+     pub(crate) spare_exposed: Vec<(usize, crate::activation::InstanceVar)>,
+     /// The native activations on the stack, innermost last. Each carries the
+     /// objects an extension's handles name (D5), rooted by
+     /// [`Activity::object_roots`] for exactly as long as the frame is on this
+     /// stack, so a handle that outlives its activation resolves to nothing.
+-    pub(crate) native_handles: Vec<NativeFrame>,
++    #[expect(
++        clippy::vec_box,
++        reason = "pushing, popping and abandoning a native call move a pointer \
++                  instead of the frame"
++    )]
++    pub(crate) native_handles: Vec<Box<NativeFrame>>,
+     /// Frames popped off [`Activity::native_handles`] with the buffers that held
+     /// objects cleared, whose allocations the next native call reuses.
+-    pub(crate) native_spares: Vec<NativeFrame>,
++    #[expect(
++        clippy::vec_box,
++        reason = "the box is the allocation being kept for the next native call"
++    )]
++    pub(crate) native_spares: Vec<Box<NativeFrame>>,
+     /// The thread context every native call and package hook is handed,
+     /// which an extension may keep for as long as this interpreter runs;
+     /// made by the first ([`crate::Interp::thread_context`]).
+     pub(crate) thread: Option<rexx_api::ffi::ThreadContext>,
+     /// `current_value_indent` and `current_clause_line`, bundled -- see
+     /// `ClauseState`'s own doc comment for what the two share, the property
+     /// that decides what belongs alongside them, and why they are one field
+     /// rather than two.
+     pub(crate) clause_state: ClauseState,
+     /// The flattened `DO`/`LOOP`s the op driver has open, innermost
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash.rs b/rust/crates/rexx-exec/src/dispatch/hash.rs
+index 2b772f7e3..9416cf2b7 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -1739,20 +1739,26 @@ pub(crate) fn directory_get(
+ /// `.local` and `.environment` lookup is its one caller.
+ pub(crate) fn package_local_get(
+     interp: &mut Interp,
+     local: ObjRef,
+     key: Key<'_>,
+     view: Option<&StoreView>,
+ ) -> Result<(DirectoryEntry, Option<StoreView>), Failure> {
+     if let Some(view) = view
+         && view.generation == interp.store_generation
+     {
++        debug_assert_eq!(
++            Some(*view),
++            unshared!(interp, read_view(interp, local).ok()),
++            "a StoreView was reused after its directory's pool changed without a \
++             bump_store_generation"
++        );
+         return Ok((view_get(interp, local, key, view)?, None));
+     }
+     let view = read_view(interp, local)?;
+     Ok((view_get(interp, local, key, &view)?, Some(view)))
+ }
+ 
+ fn view_get(
+     interp: &mut Interp,
+     directory: ObjRef,
+     key: Key<'_>,
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index e0fce640a..4204a8bf2 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -641,46 +641,44 @@ impl Interp {
+     /// given, a routine's otherwise.
+     fn push_native_frame(
+         &mut self,
+         owner: ObjRef,
+         scope: ObjRef,
+         receiver: Option<ObjRef>,
+         name: &[u8],
+         args: &[Option<ObjRef>],
+         code: Option<usize>,
+     ) {
+-        let mut frame = self
+-            .activity
+-            .native_spares
+-            .pop()
+-            .unwrap_or_else(|| NativeFrame {
++        let mut frame = self.activity.native_spares.pop().unwrap_or_else(|| {
++            Box::new(NativeFrame {
+                 owner: ObjRef::NIL,
+                 scope: ObjRef::NIL,
+                 method: false,
+                 receiver: ObjRef::NIL,
+                 name: Vec::new(),
+                 arguments: Vec::new(),
+                 argument_list: None,
+                 locals: Table::new(),
+                 raised: None,
+                 additional: None,
+                 result: None,
+                 condition: None,
+                 code: None,
+                 kept: rustc_hash::FxHashSet::default(),
+                 lent: Vec::new(),
+                 caller: None,
+                 id: 0,
+                 packaged: false,
+                 reserved: false,
+                 temps_floor: 0,
+-            });
++            })
++        });
+         frame.owner = owner;
+         frame.scope = scope;
+         frame.method = receiver.is_some();
+         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
+         frame.code = code;
+         frame.caller = self.running_activation().map(|activation| activation.id);
+         frame.id = self.next_native_id();
+         frame.packaged = false;
+         frame.reserved = false;
+         frame.temps_floor = self.roots.activity().temps_len();
+@@ -718,21 +716,21 @@ impl Interp {
+     /// Releases what the native frame of an abandoned call, named by the
+     /// frame token `token`, holds, once that call's completion is drained.
+     pub(crate) fn end_abandoned_call(&mut self, token: u64) {
+         if let Some(mut frame) = self.activities.take_abandoned(token) {
+             self.end_native_frame(&mut frame);
+         }
+     }
+ 
+     /// Pops the innermost native frame and takes its held condition out of
+     /// it, leaving the rest held.
+-    fn take_native_frame(&mut self) -> (Popped, crate::NativeFrame) {
++    fn take_native_frame(&mut self) -> (Popped, Box<crate::NativeFrame>) {
+         let mut frame = self
+             .activity
+             .native_handles
+             .pop()
+             .expect("the frame pushed for this call is still the innermost");
+         let answer = Popped {
+             raised: frame.raised.take(),
+             method: frame.method,
+             reserved: std::mem::take(&mut frame.reserved),
+             additional: frame.additional.take(),
+diff --git a/rust/crates/rexx-exec/src/dispatch/library/surface.rs b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+index f7f608b38..4531abc5f 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library/surface.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+@@ -534,21 +534,22 @@ impl Surface for Interp {
+             let found = self.system_symbol(name)?;
+             return self.is_class_object(found).then_some(found);
+         }
+         // A method's executable is its own package's
+         // (`NativeActivation::findClass`, `execution/NativeActivation.cpp:3094`),
+         // which is the package that defined its scope.
+         if frame.method
+             && let Some(crate::plan::ClassPackage::Program(program)) =
+                 self.class_packages.get(&frame.scope).copied()
+         {
+-            let found = self.class_in_program(program, name)?;
++            let lookup = self.class_in_program(program, name);
++            let found = self.held(lookup)??;
+             return self.is_class_object(found).then_some(found);
+         }
+         self.class_named(name)
+     }
+ 
+     fn environment(&mut self, local: bool) -> Option<ObjRef> {
+         let name: &[u8] = if local { b".LOCAL" } else { b".ENVIRONMENT" };
+         self.dot_variable(name).ok()
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/tests.rs b/rust/crates/rexx-exec/src/dispatch/tests.rs
+index c685d0e80..bb5e716b9 100644
+--- a/rust/crates/rexx-exec/src/dispatch/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/tests.rs
+@@ -1846,21 +1846,22 @@ fn an_entry_method_send_with_no_value_is_loud() {
+              .local~MYTHING = 'w'\n\
+              say .MYTHING\n"
+         ),
+         (0, "v\nw\n".to_string(), String::new())
+     );
+ }
+ 
+ /// **A metaclass carrying its own `NEW` decides what `~subclass` builds**,
+ /// and two answers are refused: one that is not a class, which the oracle
+ /// casts unchecked (`oracle-crashes.txt` entry 8), and a class `Class~new`
+-/// did not build, which the oracle rewires in place (Deviation 32).
++/// did not build or a subclass already took, which the oracle rewires in
++/// place (Deviation 32).
+ #[test]
+ fn a_metaclass_new_answering_no_new_class_is_loud() {
+     let program = |body: &str| {
+         format!(
+             "say 'id' .object~subclass(\"k\", .MyMeta)~id\n\
+              ::CLASS MyMeta SUBCLASS Class\n\
+              ::METHOD new CLASS\n\
+              {body}\n\
+              ::CLASS Foo SUBCLASS Directory\n"
+         )
+@@ -1886,20 +1887,40 @@ fn a_metaclass_new_answering_no_new_class_is_loud() {
+                 String::new(),
+                 format!("rexx-exec: {refusal} is not implemented\n")
+             ),
+             "{answer}"
+         );
+     }
+     assert_eq!(
+         run_source(&program("forward class (super)")),
+         (0, "id k\n".to_string(), String::new())
+     );
++    // The oracle answers `XX` then `Array`: the second `~subclass` rewires the
++    // class the first one already took.
++    assert_eq!(
++        run_source(
++            "x = .class~new('XX')\n\
++             .local~held = x\n\
++             say .object~subclass('k', .meta)~id\n\
++             say .array~subclass('k2', .meta)~superclass~id\n\
++             ::class meta subclass class\n\
++             ::method new class\n\
++             \x20 return .held\n"
++        ),
++        (
++            120,
++            "XX\n".to_string(),
++            "rexx-exec: a metaclass NEW answering a class Class~new did not build or a subclass \
++             already took is not implemented\n"
++                .to_string()
++        )
++    );
+ }
+ 
+ /// **`.RESOURCES` holds each `::RESOURCE` body as an `Array` of its own
+ /// lines**, and this is the whole instrument for it.
+ #[test]
+ fn the_package_tables_hold_what_their_directives_declare() {
+     assert_eq!(
+         run_source(
+             "say .resources~class\n\
+              say .resources~x~class\n\
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 6a5db1031..684b6aa92 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -569,46 +569,59 @@ impl Interp {
+ 
+         // `variableName->concatToCstring(".")`
+         // (`expression/ExpressionDotVariable.cpp:167`, and `:218` for the
+         // route `VALUE` takes).
+         Ok(self.text(dotted))
+     }
+ 
+     /// `PackageClass::findClass` for `program` rather than the running
+     /// package: [`Interp::dot_variable`]'s order without the reflection names,
+     /// which only an activation has.
+-    pub(crate) fn class_in_program(&mut self, program: ProgramId, bare: &[u8]) -> Option<ObjRef> {
++    ///
++    /// # Errors
++    /// The condition a searched directory's `UNKNOWN` method raised, and
++    /// [`Loud`] for an entry this crate does not build.
++    pub(crate) fn class_in_program(
++        &mut self,
++        program: ProgramId,
++        bare: &[u8],
++    ) -> Result<Option<ObjRef>, Failure> {
+         let own = |table: &rexx_core::NameMap<ProgramId, rexx_core::NameMap<Box<[u8]>, ObjRef>>| {
+             table
+                 .get(&program)
+                 .and_then(|classes| classes.get(bare))
+                 .copied()
+         };
+         if let Some(found) = own(&self.package_classes).or_else(|| own(&self.merged_public_classes))
+         {
+-            return Some(found);
++            return Ok(Some(found));
+         }
+         if let Some(found) = self.rexx_package_class(bare) {
+-            return Some(found);
++            return Ok(Some(found));
+         }
+-        if let Some(&local) = self.package_locals.get(&Package::Program(program))
+-            && let Ok(hash::DirectoryEntry::Found(found)) = self.package_local_entry(local, bare)
+-        {
+-            return Some(found);
++        if let Some(&local) = self.package_locals.get(&Package::Program(program)) {
++            match self.package_local_entry(local, bare)? {
++                hash::DirectoryEntry::Found(found) => return Ok(Some(found)),
++                hash::DirectoryEntry::Owed(owner) => {
++                    return Err(Loud::environment_entry(bare, owner).into());
++                }
++                hash::DirectoryEntry::Absent => {}
++            }
+         }
+         match self.directory_lookup(
+             &[EnvScope::Local, EnvScope::Environment],
+             bare,
+             &env_seam::Access::Resolve,
+-        ) {
+-            Ok(hash::DirectoryEntry::Found(found)) => Some(found),
+-            _ => None,
++        )? {
++            hash::DirectoryEntry::Found(found) => Ok(Some(found)),
++            hash::DirectoryEntry::Owed(owner) => Err(Loud::environment_entry(bare, owner).into()),
++            hash::DirectoryEntry::Absent => Ok(None),
+         }
+     }
+ 
+     /// What `Interpreter::findClass` (`runtime/Interpreter.cpp:601`) answers
+     /// for `bare`: the `REXX` package's class, then `.local`'s and
+     /// `.environment`'s entry, with no program's own classes in the search.
+     pub(crate) fn system_symbol(&mut self, bare: &[u8]) -> Option<ObjRef> {
+         if let Some(found) = self.rexx_package_class(bare) {
+             return Some(found);
+         }
+diff --git a/rust/crates/rexx-exec/src/environment/tests.rs b/rust/crates/rexx-exec/src/environment/tests.rs
+index b5164556a..03976886b 100644
+--- a/rust/crates/rexx-exec/src/environment/tests.rs
++++ b/rust/crates/rexx-exec/src/environment/tests.rs
+@@ -258,10 +258,42 @@ fn every_directory_method_answers_on_both_directories_as_on_a_copy() {
+             transcripts[1].lines().count() > names.len(),
+             ".{directory}'s copy printed too little to compare: {}",
+             transcripts[1]
+         );
+         assert_eq!(
+             transcripts[0], transcripts[1],
+             ".{directory} answered differently from a Directory holding its entries"
+         );
+     }
+ }
++
++/// A native method's class search over its program refuses an entry this
++/// crate does not build, in the program's own local and in `.local`, where a
++/// class beside it in the same local answers and a missing name answers none.
++#[test]
++fn a_class_search_from_a_program_refuses_an_owed_entry() {
++    let mut interp = Interp::new();
++    let program = ProgramId(0);
++    let local = interp.package_local(Package::Program(program));
++    let owed = interp.environment_model().owed[1].0;
++    let array = interp.classes().lookup("Array").expect("Array is native");
++    hash::directory_put(&mut interp, local, b"OWEDCLASS", owed).expect("puts");
++    hash::directory_put(&mut interp, local, b"FOUNDCLASS", array).expect("puts");
++    assert_eq!(
++        interp.class_in_program(program, b"FOUNDCLASS").ok(),
++        Some(Some(array))
++    );
++    for name in [b"OWEDCLASS".as_slice(), b"STDQUE"] {
++        assert!(
++            matches!(
++                interp.class_in_program(program, name),
++                Err(Failure::Loud(_))
++            ),
++            "{}",
++            String::from_utf8_lossy(name)
++        );
++    }
++    assert_eq!(
++        interp.class_in_program(program, b"NOSUCHCLASS").ok(),
++        Some(None)
++    );
++}
+diff --git a/rust/crates/rexx-exec/src/run/tests.rs b/rust/crates/rexx-exec/src/run/tests.rs
+index 699448133..7a39ccf0f 100644
+--- a/rust/crates/rexx-exec/src/run/tests.rs
++++ b/rust/crates/rexx-exec/src/run/tests.rs
+@@ -138,41 +138,43 @@ fn say_output_traced(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
+ 
+ /// A native frame's name for rexx-api resolves while that frame is live and
+ /// is refused once another frame holds its row, as a context kept past its
+ /// call names it.
+ #[test]
+ fn a_stale_native_frame_token_is_refused() {
+     let mut interp = Interp::new();
+     activate(&mut interp, parse_program(b"nop".to_vec()).expect("parses"));
+     let caller = interp.activation().id;
+     activate(&mut interp, parse_program(b"nop".to_vec()).expect("parses"));
+-    let frame = |id| crate::NativeFrame {
+-        owner: ObjRef::NIL,
+-        scope: ObjRef::NIL,
+-        method: false,
+-        receiver: ObjRef::NIL,
+-        name: Vec::new(),
+-        arguments: Vec::new(),
+-        argument_list: None,
+-        locals: rexx_api::handles::Table::new(),
+-        raised: None,
+-        additional: None,
+-        result: None,
+-        condition: None,
+-        code: None,
+-        kept: rustc_hash::FxHashSet::default(),
+-        lent: Vec::new(),
+-        caller: Some(caller),
+-        id,
+-        packaged: false,
+-        reserved: false,
+-        temps_floor: 0,
++    let frame = |id| {
++        Box::new(crate::NativeFrame {
++            owner: ObjRef::NIL,
++            scope: ObjRef::NIL,
++            method: false,
++            receiver: ObjRef::NIL,
++            name: Vec::new(),
++            arguments: Vec::new(),
++            argument_list: None,
++            locals: rexx_api::handles::Table::new(),
++            raised: None,
++            additional: None,
++            result: None,
++            condition: None,
++            code: None,
++            kept: rustc_hash::FxHashSet::default(),
++            lent: Vec::new(),
++            caller: Some(caller),
++            id,
++            packaged: false,
++            reserved: false,
++            temps_floor: 0,
++        })
+     };
+     interp.activity.native_handles.push(frame(6));
+     assert_eq!(interp.suspended_caller(6), Some(0));
+     interp.activity.native_handles.pop();
+     interp.activity.native_handles.push(frame(7));
+     assert_eq!(interp.suspended_caller(7), Some(0));
+     assert_eq!(interp.suspended_caller(6), None, "the old frame's token");
+     assert_eq!(
+         interp.suspended_caller(1 << 32 | 7),
+         None,
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index e2a854f20..c38168f4b 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -296,21 +296,21 @@ pub(crate) struct Activities {
+     /// The next [`crate::NativeFrame`] number, wrapping: one counter for
+     /// every activity, so a frame token names its call on one of them.
+     next_native: u32,
+     /// Failures kept by [`Interp::keep_late_failure`].
+     late_failures: Vec<Failure>,
+     /// Native calls and blocking operations that have left their driver and
+     /// whose completions have not been drained.
+     in_flight: usize,
+     /// The native frames of calls abandoned while they ran, by frame token
+     /// ([`Interp::native_token`]), until their completions are drained.
+-    abandoned: Vec<(u64, crate::NativeFrame)>,
++    abandoned: Vec<(u64, Box<crate::NativeFrame>)>,
+     /// Those of them whose run is below the running loop, under a callback,
+     /// so that no loop above them can wait for their completions.
+     runs_below: usize,
+     /// The last token a blocking operation was posted under.
+     next_block: u64,
+     /// The tokens of blocking operations a halt abandoned, no longer in
+     /// flight, until their ends are drained.
+     abandoned_blocks: Vec<u64>,
+     /// The guard locks, and what each parked activity waits on.
+     pub(crate) guards: crate::guards::GuardTable,
+@@ -441,26 +441,26 @@ impl Activities {
+         let next = &mut self.next_message;
+         *self.message_ids.entry(message).or_insert_with(|| {
+             *next += 1;
+             MessageId(*next)
+         })
+     }
+ 
+     /// Whether a native call or a blocking operation is in flight.
+     /// Holds the native frame of a call abandoned while it ran, named by the
+     /// frame token `token`, until its completion is drained.
+-    pub(crate) fn keep_abandoned(&mut self, token: u64, frame: crate::NativeFrame) {
++    pub(crate) fn keep_abandoned(&mut self, token: u64, frame: Box<crate::NativeFrame>) {
+         self.abandoned.push((token, frame));
+     }
+ 
+     /// The native frame [`Activities::keep_abandoned`] holds for `token`.
+-    pub(crate) fn take_abandoned(&mut self, token: u64) -> Option<crate::NativeFrame> {
++    pub(crate) fn take_abandoned(&mut self, token: u64) -> Option<Box<crate::NativeFrame>> {
+         let row = self.abandoned.iter().position(|(held, _)| *held == token)?;
+         Some(self.abandoned.swap_remove(row).1)
+     }
+ 
+     pub(crate) fn in_flight(&self) -> bool {
+         self.in_flight > 0
+     }
+ 
+     #[cfg(test)]
+     pub(crate) fn retired(&self) -> &[rexx_api::ffi::ThreadContext] {
+diff --git a/rust/crates/rexx-exec/src/tests.rs b/rust/crates/rexx-exec/src/tests.rs
+index 28a814096..79981568a 100644
+--- a/rust/crates/rexx-exec/src/tests.rs
++++ b/rust/crates/rexx-exec/src/tests.rs
+@@ -1016,21 +1016,21 @@ fn a_native_activations_local_references_are_roots_only_while_it_lives() {
+         code: None,
+         kept: rustc_hash::FxHashSet::default(),
+         lent: Vec::new(),
+         caller: None,
+         id: 0,
+         packaged: false,
+         reserved: false,
+         temps_floor: 0,
+     };
+     let handle = frame.locals.register(object);
+-    interp.activity.native_handles.push(frame);
++    interp.activity.native_handles.push(Box::new(frame));
+     interp.collect_now();
+     assert!(
+         interp.heap.get(object).is_some(),
+         "a live native activation's local reference was collected"
+     );
+     assert_eq!(
+         interp.activity.native_handles[0].locals.resolve(handle),
+         Some(object)
+     );
+ 
+@@ -1053,42 +1053,45 @@ fn a_native_activations_call_state_is_rooted_only_while_it_lives() {
+     let fresh = |interp: &mut Interp| {
+         interp.heap.alloc(rexx_core::Body::Array {
+             slots: Vec::new().into(),
+             dimensions: None,
+         })
+     };
+     let (receiver, argument, list) = (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+     let (additional, result, condition) =
+         (fresh(&mut interp), fresh(&mut interp), fresh(&mut interp));
+     let lent = fresh(&mut interp);
+-    interp.activity.native_handles.push(crate::NativeFrame {
+-        owner: rexx_core::ObjRef::NIL,
+-        scope: rexx_core::ObjRef::NIL,
+-        method: true,
+-        receiver,
+-        name: b"NAME".to_vec(),
+-        arguments: vec![None, Some(argument)],
+-        argument_list: Some(list),
+-        locals: rexx_api::handles::Table::new(),
+-        raised: None,
+-        additional: Some(additional),
+-        result: Some(result),
+-        condition: Some(condition),
+-        code: None,
+-        kept: rustc_hash::FxHashSet::default(),
+-        lent: vec![lent],
+-        caller: None,
+-        id: 0,
+-        packaged: false,
+-        reserved: false,
+-        temps_floor: 0,
+-    });
++    interp
++        .activity
++        .native_handles
++        .push(Box::new(crate::NativeFrame {
++            owner: rexx_core::ObjRef::NIL,
++            scope: rexx_core::ObjRef::NIL,
++            method: true,
++            receiver,
++            name: b"NAME".to_vec(),
++            arguments: vec![None, Some(argument)],
++            argument_list: Some(list),
++            locals: rexx_api::handles::Table::new(),
++            raised: None,
++            additional: Some(additional),
++            result: Some(result),
++            condition: Some(condition),
++            code: None,
++            kept: rustc_hash::FxHashSet::default(),
++            lent: vec![lent],
++            caller: None,
++            id: 0,
++            packaged: false,
++            reserved: false,
++            temps_floor: 0,
++        }));
+     let held = [
+         (receiver, "receiver"),
+         (argument, "argument"),
+         (list, "list"),
+         (additional, "held ADDITIONAL"),
+         (result, "held RESULT"),
+         (condition, "held condition object"),
+         (lent, "lent buffer"),
+     ];
+     interp.collect_now();
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_local_class_search_raise.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_local_class_search_raise.txt
+new file mode 100644
+index 000000000..b955bb11c
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_local_class_search_raise.txt
+@@ -0,0 +1,16 @@
++count 15
++/* A native method's FindClass searches its own package's local, and a
++   condition that local's UNKNOWN method raises is the call's condition. */
++t = .T~new
++say 'class:' t~findc('LIST')
++say 'local:' t~findc('PLFIND')
++signal on syntax
++r = t~findc('NOSUCH')
++say 'answered:' r
++exit
++syntax:
++  c = condition('o')
++  say 'syntax' c~code c~message
++  say 'additional' c~additional~toString(,'|')
++  say 'position' c~position
++::requires 'lib.cls'
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_local_miss_repeat.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_local_miss_repeat.txt
+new file mode 100644
+index 000000000..d2cd7a889
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_local_miss_repeat.txt
+@@ -0,0 +1,14 @@
++count 13
++/* The same missing environment symbol read twice in a row, once after a write
++   to the package local under another name and once after the write that
++   fills it, and in a loop that writes nothing. */
++l = .context~package~local
++l~put('other', 'PLMROTHER')
++say .plmrname .plmrname
++do 3
++  say .plmrnone
++end
++l~put('filled', 'PLMRNAME')
++say .plmrname .plmrname
++l~remove('PLMRNAME')
++say .plmrname .plmrname
