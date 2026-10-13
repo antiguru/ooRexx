@@ -2111,7 +2111,9 @@ DEVIATIONS -- permanent, chosen
      oracle then this crate:
 
        `linein('HANDLE:0')`                       '' at NOTREADY:EOF   the next line
-       `chars` and `lines` on HANDLE:0, unopened  0 0                  1 0, as `.Stream~new('STDIN')`
+       `chars` and `lines` on HANDLE:0, unopened  0 0                  the standard input's
+                                                                       answer: 1 0 in h3.rex,
+                                                                       two lines left
        QUERY HANDLE after an open                 18446744073709551615 0, 1 or 2
        QUERY SIZE after an open                   uninitialised memory ''
        a second open after a close                ERROR:2, a file      READY:
