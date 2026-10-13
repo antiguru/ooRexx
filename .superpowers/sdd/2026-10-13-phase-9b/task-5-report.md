@@ -207,7 +207,7 @@ locale:
 
 `bracket` now does each of these, through the helpers `collating` and `equivalence`. The probe
 is identical on both sides. The witness carries every form the review measured, every one of its
-agreeing controls, and the forms above, each with `o` and `oi`. That is 37 patterns in a
+agreeing controls, and the forms above, each with `o` and `oi`, in a
 `filetree.g` directory the program makes and removes, and I read each row of the oracle's output.
 
 **(3)** `entries` takes a filter, and the first pass stats only the names `matches` accepts, as
