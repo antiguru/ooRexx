@@ -56,9 +56,11 @@ directory, stdout, stderr and status read separately.
   `Interp::string_conversion` (`requiredString`).
 - An error raised before the routine's work stops it: `SysStemSort 's.', 'Q'` leaves the stem
   unsorted though the C++ code continues past `ThrowException` (measured, stem unchanged).
-- `SysStemSort` with element 0 of `999999999` answers 5.0 on the oracle (`new_array(bounds * 3)`
-  under the 1 GiB cap). This crate answers 40.924 for that program. Licensed best-effort OOM
-  divergence, not in any witness.
+- `SysStemSort` with element 0 of `999999999` answers 5.0 on the oracle: its eager
+  `new_array(bounds * 3)` (`classes/StemClass.cpp:1654`), made before any element is read, hits
+  the memory cap. Trapped, a count of 30000000 gives 5.0 under `ulimit -v` 1 GiB and 40.924 under
+  4 GiB (measured by the Task 3 review). This crate answers 40.924, the oracle's answer without
+  memory pressure, which is what the OOM licence covers. No check added, not in any witness.
 - Review Focus 1 shapes: a stem default never counts as an element (40.922 with no element 0,
   40.924 for a missing element below the count, on all four routines); `'2.0'` and `' 2 '` are
   counts, `'2.5'`, `''`, `'x'` are 40.922; `-1` is 40.922 for Delete and Sort but a usable count
@@ -189,4 +191,60 @@ RexxUtil groups. The five groups were blocked by the refusal, not by a row, so n
 4. **No callgrind run**, per the dispatch. Nothing on a per-clause or dispatch path changed: the
    bodies are new, `context_stem` is the native API's `ResolveStemVariable` path, and
    `local_variables` only split its loop out.
-5. `SysStemSort` with a 999999999 count: oracle 5.0, crate 40.924 (licensed OOM divergence).
+5. `SysStemSort` with a 999999999 count: oracle 5.0 from its capped eager allocation, crate 40.924,
+   the oracle's answer when the allocation fits (corrected in fix round 1).
+
+## Fix round 1
+
+Commit `d6c1b2d85`, against `task-3-review.md`.
+
+1. **Entry 38, a new oracle crash.** The review's program (`SysDumpVariables` over a variable whose
+   `STRING` method raises, under `SIGNAL ON SYNTAX`) was run 3 times on the oracle, under
+   `ulimit -v 1048576` and `memcap 4G`, from a fresh `mktemp -d` each time: rc 139 all 3, stdout
+   `Name=A, Value='first'`, the only stderr is memcap's own `Segmentation fault` line. Recorded as
+   `oracle-crashes.txt` entry 38 and kept out of every witness. The crate's answer is pinned by
+   `builtin::rexxutil::stems::tests::a_string_method_raising_inside_the_dump_is_trapped`, whose doc
+   states the reason: rc 0, empty stderr, last line `trapped 93.900`. The line for `A` is allowed
+   before it but not required, because this crate's variable order is not the oracle's.
+2. **The 999999999 sentence is corrected** (Oracle measurements and Concern 5). The oracle's 5.0
+   comes from its eager `new_array(bounds * 3)` (`StemClass.cpp:1654`) hitting the cap. Trapped,
+   30000000 gives 5.0 at 1 GiB and 40.924 at 4 GiB (the review's measurement). The crate's 40.924
+   is the oracle's answer without memory pressure. Code unchanged.
+3. **`SysDumpVariables` writes each line as its value converts**, to the file or to standard output.
+   It no longer buffers the whole dump. RED: before the change, the crate printed `STRING ran` first
+   for a stem with one tail whose `STRING` method says it, where the oracle printed
+   `Name=S., Value='S.'`, then `STRING ran`, then `Name=S.1, Value='K'` (oracle run 4 times, same
+   order each time). GREEN: the new `talk` clause in `corpus/lang/rexxutil_dump_variables.rex`
+   gives oracle and crate identical stdout, stderr and rc 216. Its header now says where the
+   standard-output form is used. The `sourceline_oracle` file was regenerated.
+4. **`sort` holds its converted values explicitly** (`push_temp` after `required_string_value`).
+   The probe is a temporary test, run and then deleted, that runs `run_program_collect_every_alloc`
+   and `run_program` on each program and compares all three descriptors:
+   - `s.1`, `s.2` computed strings, `s.3` an object whose `STRING` empties the stem: 10
+     collections, rc 0, `[K] [aaaaaaaaa] [bbbbbbbbb]`, same as the plain run.
+   - 30 computed strings under `s.foo`, sorted: 88 collections, rc 0, the letters in order, same as
+     the plain run.
+
+   This replaces the earlier report's sentence that the hold was dropped.
+5. **Entry 37's sentence is measured now.** Untrapped `call SysStemSort '*'` (40.919) and
+   `first` 3, `last` 2 (40.921) were each run 3 times: rc 216 every time, with the ordinary report.
+   40.920 is the witness's own last clause.
+
+Left alone as directed: sort write-back by element identity (9b1), and the class-side `::method
+string`.
+
+Checks at `d6c1b2d85`, from `rust/`, foreground:
+
+| check | result |
+|---|---|
+| `cargo fmt --all --check` | exit 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib --test closed_phases --test internal_routines --test owners --test phase_ten_reasons --test refusal_dispositions --test refusal_sites` | exit 0, lib 1091 passed, the tables 8, 2, 6, 5, 3, 5 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse --test sourceline_oracle` | exit 0 |
+| the suite command above over the five groups | exit 0, 44 of 44 passed on both sides |
+| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | exit 0, `1029 of 1029 matching` |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress` | exit 0, 37 passed |
+
+The records in `docs/superpowers/records/2026-10-13-phase-9b/task-3/` (`run-output.txt`, the suite
+tables, `corpus-output.txt`, `collect-stress-output.txt`) were re-run at `d6c1b2d85`. The
+ir_recorded and trace/coverage records stay at `28aa77b29`.

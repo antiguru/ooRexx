@@ -1,48 +1,48 @@
-commit 28aa77b29
+commit d6c1b2d85
    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
-    Finished `release` profile [optimized + debuginfo] target(s) in 46.06s
+    Finished `release` profile [optimized + debuginfo] target(s) in 46.08s
      Running tests/collect_stress.rs (target/release/deps/collect_stress-3e828767363293d0)
 
 running 37 tests
 test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
-test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
-test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
 test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
 test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
-test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
-test support::arity::tests::directives_are_appended_after_the_program ... ok
 test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
 test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
-test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
 test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
 test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
 test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
 test support::tests::a_changed_value_still_differs_after_normalisation ... ok
-test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
 test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
 test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
-test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
 test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
-test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
 test the_stress_subset_reads_every_phase_subset_file ... ok
-test a_running_activation_keeps_its_context_object_across_a_collection ... ok
-test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
-test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
-test a_command_line_argument_survives_collect_on_every_allocation ... ok
-test a_parked_activitys_registers_survive_the_activity_that_wakes_it ... ok
 test a_method_that_assigns_over_self_keeps_its_exposed_variables ... ok
+test a_running_activation_keeps_its_context_object_across_a_collection ... ok
+test a_parked_activitys_registers_survive_the_activity_that_wakes_it ... ok
+test a_pinned_activitys_registers_survive_the_activity_its_wait_runs ... ok
 test a_message_driven_loops_to_and_by_survive_collect_on_every_allocation ... ok
+test a_command_line_argument_survives_collect_on_every_allocation ... ok
+test a_weak_reference_clears_only_when_its_referent_becomes_unreachable ... ok
 test a_pending_reply_keeps_its_registers_across_a_collection ... ok
 test a_trapped_conditions_object_survives_collect_on_every_allocation ... ok
 test a_clause_value_survives_the_handler_its_boundary_runs ... ok
 test a_parked_reply_keeps_its_variables_across_a_collection ... ok
 test values_compound_write_roots_the_old_value_before_the_stems_first_allocation ... ok
-test a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop ... ok
 test values_environment_write_roots_the_old_value_before_the_stores_allocation ... ok
+test a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop ... ok
 test a_stream_builtins_values_survive_a_pinned_yield ... ok
 test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
 test the_l0_subset_passes_again_under_collect_on_every_allocation ... ok
 
-test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 155.27s
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 157.01s
 
-exit 0, wall 201 s
+exit 0, wall 204 s

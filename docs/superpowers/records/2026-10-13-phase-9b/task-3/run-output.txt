@@ -1,6 +1,6 @@
-commit 28aa77b29
+commit d6c1b2d85
    Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
-    Finished `release` profile [optimized + debuginfo] target(s) in 23.20s
+    Finished `release` profile [optimized + debuginfo] target(s) in 23.50s
      Running tests/suite.rs (target/release/deps/suite-22d700f0bfa93c32)
 
 running 1 test
@@ -8,4 +8,4 @@ test l3_core_suite ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.14s
 
-exit 0, wall 23 s
+exit 0, wall 24 s
