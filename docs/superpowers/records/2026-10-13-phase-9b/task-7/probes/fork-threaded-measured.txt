@@ -1,0 +1,9 @@
+fork-threaded.rex under orx.sh (timeout -k 5 20, memcap 4G), 5 runs, 2026-10-13, transcribed from
+the session's tool output (not re-run: oracle-crashes.txt entry 46 says never to run it).
+run 1: rc=124, stdout "before", "parent: child pid positive 1"; HALT reports at line 11 (SysWait) and line 24
+run 2: rc=124, stdout as run 1
+run 3: rc=124, stdout as run 1 plus "child: alive"
+run 4: rc=124, stdout as run 3
+run 5: rc=124, stdout as run 3
+Each run memcap reported "processes are still in it"; ps showed five orphaned
+`build/bin/rexx f2.rex` children, killed with pkill -KILL.

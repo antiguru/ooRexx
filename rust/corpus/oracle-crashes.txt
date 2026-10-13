@@ -1480,9 +1480,10 @@ same run answers the same value as the first. `SysWait` (`platform/unix/SysRexxU
 the status `wait` would have set, and `wait` fails with `ECHILD` and sets nothing. This checkout's
 `interpreter/` is the same. A command whose child a `SysWait` on another activity reaped is the
 same defect one step on: `ioCommandHandler` (`platform/unix/SystemCommands.cpp`) reads the status
-of its own failed `waitpid`. With `'sleep 0.6; exit 5'` started on an activity and `SysWait` after
-`SysSleep 0.2` on the main one, 3 runs printed `32735` and `5`, `32619` and `5`, then `1280` and
-`3` (the wait's answer and the command's `rc`). This crate answers `-1` for a wait that finds no
+of its own failed `waitpid`. With `'exit 3'` then `'sleep 0.6; exit 5'` run on a started activity
+and `SysWait` after `SysSleep 0.2` on the main one, 3 runs printed the wait's answer and the
+command's `rc` as `1280` and `3` twice, then `32631` and `5`
+(`docs/superpowers/records/2026-10-13-phase-9b/task-7/probe-runs.txt`). This crate answers `-1` for a wait that finds no
 child or fails, pinned by `tests/rexxutil_process.rs`, and a command whose child was reaped elsewhere
 answers `127` with a `FAILURE`. No upstream ticket.
 

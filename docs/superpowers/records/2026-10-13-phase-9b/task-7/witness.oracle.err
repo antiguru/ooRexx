@@ -1,0 +1,6 @@
+'nosuchterm': unknown terminal type.
+sh: 1: clear: not found
+       *-* Compiled routine "SYSQUERYPROCESS".
+    90 *-* say SysQueryProcess('PTIMES')
+Error 40 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t7/wit.4Li1/rexxutil_process.rex line 90:  Incorrect call to routine.
+Error 40.1:  External routine "SYSQUERYPROCESS" failed.

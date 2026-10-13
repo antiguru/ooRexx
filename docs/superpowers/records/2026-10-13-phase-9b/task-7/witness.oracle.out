@@ -1,0 +1,66 @@
+-- version and the no-ops
+5.3.0 1
+0 0
+0
+SysUtilVersion(1) -> 88.922 Too many arguments in invocation; 0 expected.
+SysLoadFuncs('x') -> 88.922 Too many arguments in invocation; 0 expected.
+SysDropFuncs(, ) -> 0
+SysCls(1) -> 88.922 Too many arguments in invocation; 0 expected.
+SysWait(1) -> 88.922 Too many arguments in invocation; 0 expected.
+SysFork(1) -> 88.922 Too many arguments in invocation; 0 expected.
+-- SysQueryProcess
+pid 1 1 1
+ppid 1
+pgid of the parent 1
+pprio 1
+CPU_Time Summary:  9:99:99:999  Kernel:  9:99:99:999  User:  9:99:99:999
+Max_Memory_RSS: 1 1
+Memory_swaps: 0
+Received_signals: 0
+SysQueryProcess('bogus') -> 40.1 External routine "SYSQUERYPROCESS" failed.
+SysQueryProcess('') -> 40.1 External routine "SYSQUERYPROCESS" failed.
+SysQueryProcess('PID', 1) -> 88.922 Too many arguments in invocation; 1 expected.
+SysQueryProcess(.array~new) -> 40.1 External routine "SYSQUERYPROCESS" failed.
+-- SysSetPriority
+0 1
+thread 1
+0 1
+0 19
+SysSetPriority() -> 88.901 Missing argument; argument 2 is required.
+SysSetPriority(1) -> 88.901 Missing argument; argument 2 is required.
+SysSetPriority('a') -> 88.907 Argument 1 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority('a', 0) -> 88.907 Argument 1 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority(, 'a') -> 88.907 Argument 2 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority(, 1.5) -> 88.907 Argument 2 must be in the range -2147483648 to 2147483647; found "1.5".
+SysSetPriority(, 2147483648) -> 88.907 Argument 2 must be in the range -2147483648 to 2147483647; found "2147483648".
+SysSetPriority(1, 2, 3) -> 88.922 Too many arguments in invocation; 2 expected.
+-- SysCls
+before
+[H[2J[3Jafter 0
+dumb 256
+unknown 256
+no clear 32512
+-- SysGetKey, standard input not a terminal
+[] [] [] []
+SysGetKey('bogus') -> 40.920 SysGetKey argument echo must be one of 'ECHO' or 'NOECHO'; found "bogus".
+SysGetKey('') -> 40.920 SysGetKey argument echo must be one of 'ECHO' or 'NOECHO'; found "".
+SysGetKey('echo', 1) -> 88.922 Too many arguments in invocation; 1 expected.
+-- SysCreatePipe
+default 2 1 1 1
+default flags 00 01
+b 2 1 1 1
+b flags 00 01
+Blocking 2 1 1 1
+Blocking flags 00 01
+n 2 1 1 1
+n flags 04000 01
+Nonblocking 2 1 1 1
+Nonblocking flags 04000 01
+SysCreatePipe('') -> 40.920 SysCreatePipe argument blocking must be one of 'B' or 'N'; found "".
+SysCreatePipe('x') -> 40.920 SysCreatePipe argument blocking must be one of 'B' or 'N'; found "x".
+SysCreatePipe('00'x||'n') -> 40.920 SysCreatePipe argument blocking must be one of 'B' or 'N'; found "".
+SysCreatePipe('b', 1) -> 88.922 Too many arguments in invocation; 1 expected.
+-- two activities at once
+0 1 first through a pipe
+0 1 second through a pipe
+-- an untrapped error

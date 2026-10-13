@@ -1,0 +1,253 @@
+commit 022590321
+=== routines.rex oracle
+rc=0
+--- stdout
+ver 5.3.0
+load 0 0
+pid 3407882 3407882
+ppid 3407881
+pgid 3407881
+pprio 0
+ptime CPU_Time Summary:  0:00:00:005  Kernel:  0:00:00:005  User:  0:00:00:000
+pmem Max_Memory_RSS: 8148
+pswaps Memory_swaps: 0
+psig Received_signals: 0
+key   
+wait 32703
+wait 32703
+pipe 5 6
+pipe 7 8
+pipe 9 10
+setprio 0
+pprio 0
+setprio 0
+pprio 3
+setprio 13
+pprio 3
+--- stderr
+=== routines.rex crate
+rc=0
+--- stdout
+ver 5.3.0
+load 0 0
+pid 3407899 3407899
+ppid 3407898
+pgid 3407898
+pprio 0
+ptime CPU_Time Summary:  0:00:00:010  Kernel:  0:00:00:000  User:  0:00:00:010
+pmem Max_Memory_RSS: 20336
+pswaps Memory_swaps: 0
+psig Received_signals: 0
+key   
+wait -1
+wait -1
+pipe 6 7
+pipe 8 9
+pipe 10 11
+setprio 0
+pprio 0
+setprio 0
+pprio 3
+setprio 13
+pprio 3
+--- stderr
+=== arguments.rex oracle
+rc=0
+--- stdout
+SysUtilVersion(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysLoadFuncs(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysDropFuncs('x') -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysWait(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysFork(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysCls(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysQueryProcess('bogus') -> error SYNTAX 40 | Incorrect call to routine. | 40.1 | External routine "SYSQUERYPROCESS" failed.
+SysQueryProcess('') -> error SYNTAX 40 | Incorrect call to routine. | 40.1 | External routine "SYSQUERYPROCESS" failed.
+SysQueryProcess('pid', 2) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 1 expected.
+SysQueryProcess('PID'||'00'x||'x') -> 3407917
+SysGetKey('bogus') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysGetKey argument echo must be one of 'ECHO' or 'NOECHO'; found "bogus".
+SysGetKey('') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysGetKey argument echo must be one of 'ECHO' or 'NOECHO'; found "".
+SysGetKey(,) -> 
+SysCreatePipe('') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysCreatePipe argument blocking must be one of 'B' or 'N'; found "".
+SysCreatePipe('x') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysCreatePipe argument blocking must be one of 'B' or 'N'; found "x".
+SysCreatePipe('b', 1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 1 expected.
+SysSetPriority() -> error SYNTAX 88 | Invalid argument. | 88.901 | Missing argument; argument 2 is required.
+SysSetPriority(1) -> error SYNTAX 88 | Invalid argument. | 88.901 | Missing argument; argument 2 is required.
+SysSetPriority(,'a') -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 2 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority(,1.5) -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 2 must be in the range -2147483648 to 2147483647; found "1.5".
+SysSetPriority('a', 0) -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 1 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority(,99999999999) -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 2 must be in the range -2147483648 to 2147483647; found "99999999999".
+SysSetPriority(,-30) -> 0
+SysSetPriority(,1,2) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 2 expected.
+SysQueryProcess('pprio') -> 19
+--- stderr
+=== arguments.rex crate
+rc=0
+--- stdout
+SysUtilVersion(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysLoadFuncs(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysDropFuncs('x') -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysWait(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysFork(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysCls(1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 0 expected.
+SysQueryProcess('bogus') -> error SYNTAX 40 | Incorrect call to routine. | 40.1 | External routine "SYSQUERYPROCESS" failed.
+SysQueryProcess('') -> error SYNTAX 40 | Incorrect call to routine. | 40.1 | External routine "SYSQUERYPROCESS" failed.
+SysQueryProcess('pid', 2) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 1 expected.
+SysQueryProcess('PID'||'00'x||'x') -> 3407934
+SysGetKey('bogus') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysGetKey argument echo must be one of 'ECHO' or 'NOECHO'; found "bogus".
+SysGetKey('') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysGetKey argument echo must be one of 'ECHO' or 'NOECHO'; found "".
+SysGetKey(,) -> 
+SysCreatePipe('') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysCreatePipe argument blocking must be one of 'B' or 'N'; found "".
+SysCreatePipe('x') -> error SYNTAX 40 | Incorrect call to routine. | 40.920 | SysCreatePipe argument blocking must be one of 'B' or 'N'; found "x".
+SysCreatePipe('b', 1) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 1 expected.
+SysSetPriority() -> error SYNTAX 88 | Invalid argument. | 88.901 | Missing argument; argument 2 is required.
+SysSetPriority(1) -> error SYNTAX 88 | Invalid argument. | 88.901 | Missing argument; argument 2 is required.
+SysSetPriority(,'a') -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 2 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority(,1.5) -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 2 must be in the range -2147483648 to 2147483647; found "1.5".
+SysSetPriority('a', 0) -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 1 must be in the range -2147483648 to 2147483647; found "a".
+SysSetPriority(,99999999999) -> error SYNTAX 88 | Invalid argument. | 88.907 | Argument 2 must be in the range -2147483648 to 2147483647; found "99999999999".
+SysSetPriority(,-30) -> 0
+SysSetPriority(,1,2) -> error SYNTAX 88 | Invalid argument. | 88.922 | Too many arguments in invocation; 2 expected.
+SysQueryProcess('pprio') -> 19
+--- stderr
+=== cls.rex oracle
+rc=0
+--- stdout
+a
+^[[H^[[2J^[[3Jb 0
+c 256
+d 256
+e 256
+f 32512
+--- stderr
+'': unknown terminal type.
+'nosuchterm': unknown terminal type.
+sh: 1: clear: not found
+=== cls.rex crate
+rc=0
+--- stdout
+a
+^[[H^[[2J^[[3Jb 0
+c 256
+d 256
+e 256
+f 32512
+--- stderr
+'': unknown terminal type.
+'nosuchterm': unknown terminal type.
+sh: 1: clear: not found
+=== proc-fd-stream.rex oracle
+rc=0
+--- stdout
+READY:
+0
+READY:
+ERROR:2
+1 1
+[llo] READY READY:
+READY:
+pos:	0
+flags:	00
+mnt_id:	18
+ino:	34366764
+--- stderr
+=== proc-fd-stream.rex crate
+rc=0
+--- stdout
+READY:
+1
+READY:
+ERROR:2
+0 0
+[] NOTREADY NOTREADY:EOF
+READY:
+pos:	0
+flags:	00
+mnt_id:	18
+ino:	34364636
+--- stderr
+=== requires-handle.rex oracle
+rc=0
+--- stdout
+requires name R_handle.cls
+requires name /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t7/rec.6xr6/R_handle.cls
+answer 1 /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t7/rec.6xr6/R_replaced.cls
+events  REQUIRES REQUIRES
+--- stderr
+=== requires-handle.rex crate
+rc=0
+--- stdout
+requires name R_handle.cls
+requires name /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t7/rec.ERSO/R_replaced.cls
+answer 1 /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t7/rec.ERSO/R_replaced.cls
+events  REQUIRES REQUIRES
+--- stderr
+=== fork-plain.rex oracle run 1
+rc=0
+--- stdout
+before
+parent: child pid positive 1
+child: ppid matches 1
+parent: wait status 768
+parent: second wait (no child) 1
+--- stderr
+=== fork-plain.rex oracle run 2
+rc=0
+--- stdout
+before
+parent: child pid positive 1
+child: ppid matches 1
+parent: wait status 768
+parent: second wait (no child) 1
+--- stderr
+=== fork-plain.rex oracle run 3
+rc=0
+--- stdout
+before
+parent: child pid positive 1
+child: ppid matches 1
+parent: wait status 768
+parent: second wait (no child) 1
+--- stderr
+=== wait-steals.rex oracle run 1
+rc=0
+--- stdout
+wait 1280
+command rc 3
+--- stderr
+=== wait-steals.rex oracle run 2
+rc=0
+--- stdout
+wait 1280
+command rc 3
+--- stderr
+=== wait-steals.rex oracle run 3
+rc=0
+--- stdout
+wait 32631
+command rc 5
+--- stderr
+=== wait-steals.rex crate run 1
+rc=0
+--- stdout
+wait 1280
+command rc 127
+--- stderr
+     9 *-* 'sleep 0.6; exit 5'
+       >>>   "sleep 0.6; exit 5"
+       +++   "RC(127)"
+=== wait-steals.rex crate run 2
+rc=0
+--- stdout
+wait 1280
+command rc 127
+--- stderr
+     9 *-* 'sleep 0.6; exit 5'
+       >>>   "sleep 0.6; exit 5"
+       +++   "RC(127)"
+=== wait-steals.rex crate sim:1
+rc=0
+--- stdout
+wait -1
+command rc 5
+--- stderr
+rexx-sim: seed=1 policy=fifo steps=8 contended=1 switches=2 trace=cbf29ce484222325 profile=release stack=536870912

@@ -1,0 +1,10 @@
+commit 022590321
+crate under the simulation mode, stdout compared with witness.oracle.out
+sim:1 rc=216 stdout same | seed=1 policy=fifo steps=1130 contended=12 switches=3
+sim:2,uniform:0.2 rc=216 stdout same | seed=2 policy=uniform:0.2 steps=1130 contended=12 switches=5
+sim:3,uniform:1 rc=216 stdout same | seed=3 policy=uniform:1 steps=1130 contended=13 switches=16
+sim:4,pct:3,k=12 rc=216 stdout same | seed=4 policy=pct:3,k=12 steps=1130 contended=10 switches=5
+sim:5,pre:2,k=12 rc=216 stdout same | seed=5 policy=pre:2,k=12 steps=1130 contended=12 switches=5
+sim:6,uniform:0.5,gc=0.5 rc=216 stdout same | seed=6 policy=uniform:0.5 steps=1130 contended=13 switches=9
+sim:7,pre:1,k=12 rc=216 stdout same | seed=7 policy=pre:1,k=12 steps=1130 contended=10 switches=5
+sim:8,pct:2,k=12 rc=216 stdout same | seed=8 policy=pct:2,k=12 steps=1130 contended=7 switches=4
