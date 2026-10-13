@@ -1,0 +1,113 @@
+diff --git a/docs/superpowers/plans/2026-10-13-phase-9b.md b/docs/superpowers/plans/2026-10-13-phase-9b.md
+index 5883cf36c..c3efb6b10 100644
+--- a/docs/superpowers/plans/2026-10-13-phase-9b.md
++++ b/docs/superpowers/plans/2026-10-13-phase-9b.md
+@@ -168,6 +168,8 @@ witnesses.
+ Routines: `SysFileCopy`, `SysFileMove`, `SysIsFileDirectory`, `SysIsFileLink`, `SysGetFileDateTime`,
+ `SysSetFileDateTime`, `SysTempFileName`, `SysSearchPath`, `SysFileSearch`; and the implemented
+ `SysFileExists` case `SysFileXXX.TEST_FILEEXISTS_NIL_INVALID`.
++`TEST_FILEEXISTS_NIL_INVALID` is 9b's although `suite-9d-set.txt` lists it (Moritz ruling, 2026-10-13):
++once it is green, this task removes its line from `suite-9d-set.txt`.
+ 
+ - [ ] **Step 1:** As Task 3 Step 1, with Review Focus 2's path shapes and Review Focus 5's `TZ` run.
+       Witness programs create their files under a directory they `mkdir` in the current directory and
+@@ -264,7 +266,8 @@ Routines: `SysOpenEventSem`, `SysOpenMutexSem`, and the named form of `SysCreate
+ - [ ] **Step 1:** Commit, then the controller runs the sub-phase close command
+       (`REXX_CORPUS_GATE=1 timeout 2400 memcap 8G cargo test -j 4 --workspace --release --no-fail-fast`)
+       and the whole suite (`REXX_SUITE_GATE=1`), writing outputs to a durable directory.
+-- [ ] **Step 2:** The gate record, each spec 9b criterion with its evidence: every Task 2 group passes
+-      under the harness apart from rows the exclusion test accepts; no `"Phase 10"` site in RexxUtil lacks a
++- [ ] **Step 2:** The gate record, each spec 9b criterion with its evidence: every test in a Task 2 group
++      passes under the harness, or is listed in `rust/corpus/suite-9d-set.txt` (the carried list, so 9b judges
++      only what it owns), or carries a row the exclusion test accepts; no `"Phase 10"` site in RexxUtil lacks a
+       D3 reason; the close command's exit status; the whole-process callgrind table against the pin. The
+       suite outputs copied to the records directory. Commit.
+diff --git a/docs/superpowers/plans/phase-9b-gate.md b/docs/superpowers/plans/phase-9b-gate.md
+index 68c1fe982..d9c030318 100644
+--- a/docs/superpowers/plans/phase-9b-gate.md
++++ b/docs/superpowers/plans/phase-9b-gate.md
+@@ -15,8 +15,8 @@ REXX_SUITE_TABLE=/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/rec
+ CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite
+ ```
+ 
+-Exit status 101 (the gate is red, as expected at the start). Wall time 29 s, of which 26.8 s was the
+-release build of `rexx-exec`; the test itself reports `finished in 2.05s`. The raw output, the table,
++Exit status (101, red as expected) and wall time (2 s, the release build already cached; the first run
++including the build took 29 s) are the last two lines of `run-output.txt`. The raw output, the table,
+ the verdicts and the per-test record are in
+ `docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/` (`run-output.txt`, `table.tsv`,
+ `verdicts.tsv`, `tests.tsv`, `oracle-differences.tsv`). The oracle denominator is `equal` for every
+@@ -47,4 +47,22 @@ refusal, failed, not started because a row owns the test):
+ | base/security.manager/SecurityManager | 29 | 17 | 7 | 5 | 0 |
+ 
+ The two `platform/windows` groups are green already: every test carries a `NotRun` row (`restrictOS`),
+-so they stay in the file and never move. The remaining red groups are the 9b work.
++so they stay in the file and never move.
++
++The 9b close criterion (Moritz ruling, 2026-10-13) is that every test in a group of the file passes, or
++is listed in `rust/corpus/suite-9d-set.txt`. The 9d set is the carried list, so 9b judges only what it
++owns. `base/security.manager/SecurityManager`'s 5 failed tests (`TEST_ENVIRONMENT_HANDLE`,
++`TEST_METHOD_HANDLE_NO_RESULT`, `TEST_METHOD_HANDLE_RESULT`, `TEST_METHOD_PASS`,
++`TEST_STREAM_PASS_BIF_STREAM_OPEN`) are in `suite-9d-set.txt:200-204`, owned by 9d. Its 7 blocked tests
++are 9b's. `SysFileXXX.TEST_FILEEXISTS_NIL_INVALID` is 9b's although the 9d set also lists it (line 198):
++Task 4 removes that line once the test is green.
++
++Owning 9b task of each red group (plan `2026-10-13-phase-9b.md`):
++
++| group | task |
++|---|---|
++| base/rexxutil/SysStemCopy, SysStemDelete, SysStemInsert, SysStemSort, SysDumpVariables | Task 3 |
++| base/rexxutil/SysFileXXX, SysFileDateTime, SysSearchPath, SysFileSearch, platform/unix/tilde, base/class/File | Task 4 |
++| base/rexxutil/SysFileTree | Task 5 |
++| base/rexxutil/platform/unix/SysGetMessage, SysFormatMessage, base/keyword/ADDRESS | Task 6 |
++| base/security.manager/SecurityManager (7 blocked tests; the 5 failed are 9d's) | Task 7 |
+diff --git a/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/run-output.txt b/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/run-output.txt
+index 97117682c..3c51f26bb 100644
+--- a/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/run-output.txt
++++ b/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/run-output.txt
+@@ -1,5 +1,4 @@
+-   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+-    Finished `release` profile [optimized + debuginfo] target(s) in 26.78s
++    Finished `release` profile [optimized + debuginfo] target(s) in 0.05s
+      Running tests/suite.rs (target/release/deps/suite-22d700f0bfa93c32)
+ 
+ running 1 test
+@@ -10,7 +9,7 @@ failures:
+ ---- l3_core_suite stdout ----
+ suite: 18 groups, 16 red, table /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/table.tsv, verdicts /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/verdicts.tsv
+ 
+-thread 'l3_core_suite' (2877755) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
++thread 'l3_core_suite' (2881777) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
+ 16 of 18 groups are not green; each reason is in /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/verdicts.tsv
+ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ 
+@@ -18,6 +17,8 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ failures:
+     l3_core_suite
+ 
+-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 2.05s
++test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 1.88s
+ 
+ error: test failed, to rerun pass `-p rexx-exec --test suite`
++exit status: 101
++wall time: 2 s
+diff --git a/rust/corpus/suite-9b-groups.txt b/rust/corpus/suite-9b-groups.txt
+index a9cd1a7de..6303be094 100644
+--- a/rust/corpus/suite-9b-groups.txt
++++ b/rust/corpus/suite-9b-groups.txt
+@@ -1,12 +1,12 @@
+ # Phase 9b's gate groups (spec 2026-10-10 section 4): the ooTest groups that
+ # name a RexxUtil routine 9b takes, other than the groups every test of which
+-# carries a Phase 10 row in the row files. Derived from ootest/ooRexx at the
+-# revision in suite-revision.txt, from the worktree root, by listing
++# carries a Phase 10 row in the row files. Derived from the worktree root by
++# listing
+ #
+ #   grep -rlawiE 'SysCls|SysCreatePipe|SysDropFuncs|SysDumpVariables|SysFileCopy|SysFileMove|SysFileSearch|SysFork|SysFormatMessage|SysGetErrorText|SysGetFileDateTime|SysGetKey|SysGetMessage|SysGetMessageX|SysIsFileDirectory|SysIsFileLink|SysLoadFuncs|SysOpenEventSem|SysOpenMutexSem|SysQueryProcess|SysSearchPath|SysSetFileDateTime|SysSetPriority|SysStemCopy|SysStemDelete|SysStemInsert|SysStemSort|SysTempFileName|SysUtilVersion|SysWait|SysFileTree|SysFileXXX' ootest/ooRexx
+ #
+ # keeping each hit named *.testGroup as dir/group (a hit in another file is
+-# dropped), in path order, and removing a group whose every test has an
++# dropped), in byte (LC_ALL=C) order of the group file's path, and removing a group whose every test has an
+ # Owner::Phase10 row. The test the_9b_group_file_is_what_its_derivation_gives
+ # (crates/rexx-exec/tests/suite.rs) re-runs this and asserts the list below
+ # equals it. Pass the list to the suite gate as REXX_SUITE_GROUPS, comma-joined.
