@@ -3,6 +3,29 @@
    imported-routine table naming the row answers it, and ::ANNOTATE ROUTINE
    on any directive bound to it writes one table. */
 p = .context~package
+
+-- a row's object outlives every reference a program holds to it
+h = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')~identityHash
+a = .array~new; do i = 1 to 50; a[i] = 'x' || i; end
+r = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')
+say 'kept' (r~identityHash == h) r~call(0)
+drop r a
+
+-- ~addRoutine files a row's object, whatever reached it and before any
+-- package's routine table was asked for
+p~addRoutine('S1', .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep'))
+say 'add loaded' s1(0) (p~findRoutine('s1') == .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep'))
+p~addPublicRoutine('S2', p~findRoutine('SysVersion'))
+say 'add imported' s2()~word(1) (p~publicRoutines['S2'] == p~findRoutine('SysVersion'))
+p~addRoutine('F1', .Routine~loadExternalRoutine('y', 'LIBRARY REXX Filespec'))
+say 'add REXX' f1('n', '/a/b.c') (p~findRoutine('f1') == .Routine~loadExternalRoutine('y', 'LIBRARY REXX Filespec'))
+z = .Package~new('z', "::routine zz external 'LIBRARY rexxutil SysSleep'")
+p~addRoutine('S3', .Routine~loadExternalRoutine('w', 'LIBRARY rexxutil SysSleep'))
+say 'before reflection' s3(0)
+say 'reflection' (z~findRoutine('zz') == p~findRoutine('s3'))
+p~addRoutine('S4', z~findRoutine('zz'))
+say 'after reflection' s4(0) (p~findRoutine('s4') == p~findRoutine('s3'))
+
 u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')
 f = .Routine~loadExternalRoutine('y', 'LIBRARY REXX Filespec')
 say 'loadExternalRoutine twice' (.Routine~loadExternalRoutine('z', 'LIBRARY rexxutil syssleep') == u) -

@@ -1180,11 +1180,6 @@ impl Interp {
                         let index = crate::internal_routines::index_of(row);
                         let object = self.internal_routine_object(index);
                         self.routine_objects.insert(installed, object);
-                        // The first directive bound to the row is the one
-                        // `~addRoutine` files the object under.
-                        if let Some(record) = self.executable_sources.get_mut(&object) {
-                            record.routine.get_or_insert((program, directive));
-                        }
                         object
                     } else {
                         let class = self

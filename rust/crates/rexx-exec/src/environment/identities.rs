@@ -935,7 +935,6 @@ impl Interp {
         let chain = || self.package_lineage(program);
         chain()
             .find_map(|package| self.routines.get(&package)?.get(upper).copied())
-            .map(crate::MergedRoutine::Installed)
             .or_else(|| {
                 chain().find_map(|package| {
                     self.merged_public_routines
@@ -962,12 +961,10 @@ impl Interp {
                 if let Some(object) = self.native_entry(table, upper) {
                     return Some(crate::FoundRoutine::Object(object));
                 }
-            } else if let Some(installed) =
+            } else if let Some(merged) =
                 self.routines.get(&package).and_then(|held| held.get(upper))
             {
-                return Some(crate::FoundRoutine::Merged(
-                    crate::MergedRoutine::Installed(*installed),
-                ));
+                return Some(crate::FoundRoutine::Merged(*merged));
             }
         }
         lineage

@@ -639,7 +639,7 @@ fn imported_routines(
 fn routine_entries(
     interp: &mut Interp,
     program: Option<ProgramId>,
-    which: fn(&Interp) -> &FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
+    which: fn(&Interp) -> &FxHashMap<ProgramId, FxHashMap<Box<[u8]>, crate::MergedRoutine>>,
 ) -> Vec<(Box<[u8]>, ObjRef)> {
     let Some(program) = program else {
         return Vec::new();
@@ -648,7 +648,7 @@ fn routine_entries(
         .get(&program)
         .into_iter()
         .flatten()
-        .map(|(name, installed)| (name.clone(), crate::MergedRoutine::Installed(*installed)))
+        .map(|(name, merged)| (name.clone(), *merged))
         .collect();
     rooted_routine_objects(interp, named)
 }
@@ -942,32 +942,37 @@ fn install_routine(
     let admitted = interp
         .class_of_value(routine)
         .is_some_and(|class| interp.classes().is_a(class, routine_class));
-    let Some(installed) = interp
+    let installed = interp
         .executable_sources
         .get(&routine)
         .and_then(|record| record.routine)
-        .filter(|_| admitted)
-    else {
-        return Err(Raised::argument_not_an_instance("routine", "Routine").into());
+        .map(|(program, directive)| InstalledRoutine { program, directive });
+    // An internal package row's own object is filed as its row.
+    let row = interp
+        .rexx_routine_object(routine)
+        .map(crate::internal_routines::index_of)
+        .filter(|index| interp.internal_routine_objects[*index] == Some(routine));
+    let merged = match (installed, row) {
+        (Some(installed), _) if admitted => crate::MergedRoutine::Installed(installed),
+        (None, Some(index)) if admitted => crate::MergedRoutine::Internal(index),
+        _ => return Err(Raised::argument_not_an_instance("routine", "Routine").into()),
     };
     let program = writable_package_of(interp, receiver)?;
-    let installed = InstalledRoutine {
-        program: installed.0,
-        directive: installed.1,
-    };
     interp.routines_changed();
-    interp.routine_objects.insert(installed, routine);
+    if let crate::MergedRoutine::Installed(installed) = merged {
+        interp.routine_objects.insert(installed, routine);
+    }
     interp
         .routines
         .entry(program)
         .or_default()
-        .insert(name.clone(), installed);
+        .insert(name.clone(), merged);
     if public {
         interp
             .package_public_routines
             .entry(program)
             .or_default()
-            .insert(name.clone(), installed);
+            .insert(name.clone(), merged);
     }
     // `.ROUTINES` answers this same table, so the write has to reach it --
     // measured, oracle rc 0, `.routines~allIndexes` carries a name added by

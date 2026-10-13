@@ -5977,8 +5977,11 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   install_routine (dispatch/package.rs) accepts any Routine whose record
   names a ::ROUTINE directive, a ::ROUTINE ... EXTERNAL "LIBRARY ..."
   directive's object included (added 4 on the oracle, cb13f0033 and
-  9ff11e465, measured by fix round 3's re-review), and refuses one with no
-  directive, which the library's shared Routine is.
+  9ff11e465, measured by fix round 3's re-review), and an internal package
+  row's own object (rexxutil_library_identity.rex). It refuses one with no
+  directive, which the library's shared Routine is, and a copy of a row's
+  object, which the oracle adds (probe add2.rex in
+  docs/superpowers/records/2026-10-13-phase-9b/task-9/probes/).
   NO OWNER: no surface task names ~addRoutine.
 
   A ::ROUTINE ... EXTERNAL "LIBRARY ..." DIRECTIVE'S Routine OBJECT IS NOT

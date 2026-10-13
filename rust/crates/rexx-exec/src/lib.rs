@@ -1355,10 +1355,9 @@ struct Interp {
     /// never because a body contains a construct the compiler does not
     /// know, which does not exist (D21: every instruction compiles).
     chunks_refused: usize,
-    /// Every `::ROUTINE` a program installs, keyed by the program and then by
-    /// the routine's **upcased** name, holding its index in
-    /// `Program::directives`.
-    routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
+    /// Every `::ROUTINE` a program installs and every routine `~addRoutine`
+    /// files, keyed by the program and then by the routine's **upcased** name.
+    routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, MergedRoutine>>,
     /// The programs whose `.ROUTINES` table a program has written, whose
     /// routine lookups read that table in place of [`routines`], as
     /// `PackageClass::findLocalRoutine` does (`classes/PackageClass.cpp:822`).
@@ -1366,7 +1365,7 @@ struct Interp {
     /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
     /// oracle's `publicRoutines`, a second table beside `routines` exactly as
     /// [`package_public_classes`] is beside [`package_classes`].
-    package_public_routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, InstalledRoutine>>,
+    package_public_routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, MergedRoutine>>,
     /// The routines a program imported -- `mergedPublicRoutines`: every
     /// `::REQUIRES ... LIBRARY`'s library routines, then each `::REQUIRES`'s
     /// public and imported routines, a name keeping its first entry

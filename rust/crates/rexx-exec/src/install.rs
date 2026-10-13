@@ -343,13 +343,18 @@ impl Interp {
             }
         }
         if !routines.is_empty() {
-            self.routines.entry(id).or_default().extend(routines);
+            self.routines.entry(id).or_default().extend(
+                routines
+                    .into_iter()
+                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
+            );
         }
         if !public_routines.is_empty() {
-            self.package_public_routines
-                .entry(id)
-                .or_default()
-                .extend(public_routines);
+            self.package_public_routines.entry(id).or_default().extend(
+                public_routines
+                    .into_iter()
+                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
+            );
         }
         self.library_routine_codes.extend(routine_codes);
         self.rexx_routine_rows.extend(rexx_routines);
@@ -801,7 +806,7 @@ impl Interp {
             .get(&from)
             .into_iter()
             .flatten()
-            .map(|(name, installed)| (name.clone(), MergedRoutine::Installed(*installed)))
+            .map(|(name, merged)| (name.clone(), *merged))
             .chain(
                 self.merged_public_routines
                     .get(&from)
@@ -897,7 +902,7 @@ impl Interp {
                 .package_public_routines
                 .get(&program)
                 .and_then(|table| table.get(name))
-                .map(|installed| run::Resolved::Routine(*installed))
+                .map(|merged| merged.resolved())
                 .or_else(|| {
                     self.merged_public_routines
                         .get(&program)
