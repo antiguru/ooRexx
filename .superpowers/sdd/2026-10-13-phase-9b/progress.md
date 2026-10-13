@@ -124,3 +124,9 @@ Ruling: fix I1 (install_routine accepts rexx_routine_object(obj) as MergedIntern
 Task 9: fix round 1 dispatched (resume b9-impl).
 Task 9: fix round 1 at 2722d0049, 01e1c2e2a, 70f39437e, 8726348ba. Copy-of-row-object addRoutine 88.914 (pre-existing) -> queued to 9b1. Re-review dispatched (sonnet).
 Task 9: complete (6869f47ac, baeb16fdc, 9c9becde7, 0ed17d225, 249246d13, 1b6212fe1, 8739071a1, 52bcef6ce, 5dfb998ae, 2722d0049, 01e1c2e2a, 70f39437e, 8726348ba). Re-review approved.
+Task 10: close run started at afc3b895b via docs/superpowers/records/2026-10-13-phase-9b/close/run.sh
+Task 10: close run done: workspace exit 0, suite exit 101 (expected); 356/402 green (9a: 340), 0 test regressions, 143 tests flipped to passed; every Task 2 group green except SecurityManager's 5 9d-set tests. Callgrind vs pin started.
+Task 10: callgrind OVER: dirread +0.5180% whole-process vs pin (budget 0.5); top self delta array_argument_object +10.2M (200001 calls). pingsem SPREAD 0.0158% (concurrent bench, noted). Perf fix dispatched (opus).
+Task 10: perf fix f3efac9a1, 954f4aa3e: dirread -0.1560% vs pin; full set passes -B 0.5; worst hashnew +0.3246%, startup +0.2886%, alloc +0.2535%. Pin counts move between invocations (alloc, dispatch ~0.03-0.2%), zero spread within one run.
+Raw .cg outputs (~1.1 GB) moved to /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b-close/; summaries stay in records.
+Plan: final whole-branch review (opus), then one re-run of the close gates + callgrind at the final HEAD (close run 1 at afc3b895b predates the perf fix).

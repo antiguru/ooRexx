@@ -1,0 +1,391 @@
+# self
+-6800054	rexx_exec::dispatch::hash::native_hash_unknown
+-340936	rexx_exec::execute_on
+-200049	<rexx_exec::Interp>::dot_variable
+-73581	rexx_exec::dispatch::native::method_external
+-13158	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::map::Map<core::slice::iter::Iter<(alloc::string::String, rexx_core::handle::ObjRef)>, <rexx_core::roots::RootSet>::iter::{closure#0}>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#1}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>> as core::iter::traits::iterator::Iterator>::next
+-8097	<rexx_exec::Interp>::install_directives
+-5183	<hashbrown::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::plan::ProgramId, rustc_hash::FxBuildHasher>>::get::<[u8]>
+-3586	<rexx_classes::class_graph::ClassGraph>::cascade_build'2
+-3384	<rexx_exec::Interp>::redirect_of
+-2622	<rexx_exec::Interp>::native_instance
+-2574	<rexx_classes::registry::ClassRegistry>::define_unregistered_class
+-2459	<hashbrown::raw::RawTable<(alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
+-2128	alloc::fmt::format::format_inner
+-2016	<hashbrown::raw::RawTable<((rexx_core::handle::ObjRef, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<(rexx_core::handle::ObjRef, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
+-1917	__rustc::__rust_alloc
+-1805	<hashbrown::map::HashMap<(rexx_core::handle::ObjRef, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::insert
+-1801	<rexx_core::body::NativeObject>::set_entry
+-1691	core::fmt::write
+-1423	<rexx_classes::class_graph::ClassGraph>::cascade_build
+-1403	<rexx_classes::registry::ClassRegistry>::set_rexx_defined
+-1385	strcmp
+-1306	<rexx_core::body::NativeObject>::entry
+-1292	<alloc::string::String as core::fmt::Write>::write_str
+-1140	<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+-912	<core::fmt::Formatter>::pad
+-880	rexx_exec::dispatch::hash::hash_index
+-778	core::ptr::drop_glue::<rexx_core::body::NativeObject>
+-672	<rexx_exec::Interp>::native_entry
+-561	<rexx_classes::class_graph::ClassGraph>::rebuild_behaviour
+-552	<alloc::raw_vec::RawVec<(alloc::string::String, rexx_core::handle::ObjRef)>>::grow_one
+-508	<rexx_exec::Interp>::annotation_table
+-429	<rexx_classes::class_graph::ClassGraph>::copy_instance_behaviour
+-429	<rexx_classes::class_graph::ClassGraph>::define
+-429	<rexx_classes::class_graph::ClassGraph>::update_instance_sub_classes
+-360	<alloc::raw_vec::RawVec<alloc::boxed::Box<[u8]>>>::grow_one
+-353	<rexx_classes::method_dict::MethodDict>::add_scope
+-247	<rexx_classes::class_graph::ClassGraph>::define_class
+-185	<&str as core::fmt::Display>::fmt
+-156	<hashbrown::map::HashMap<rexx_core::handle::ObjRef, alloc::vec::Vec<rexx_core::handle::ObjRef>, rustc_hash::FxBuildHasher>>::insert
+-143	<rexx_classes::registry::ClassRegistry>::refresh_parent_has_uninit
+-135	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::map::Map<core::slice::iter::Iter<(alloc::string::String, rexx_core::handle::ObjRef)>, <rexx_core::roots::RootSet>::iter::{closure#0}>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#1}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>> as core::iter::traits::iterator::Iterator>::size_hint
+-135	<rexx_exec::Interp>::resolve_class_target
+-132	<rexx_classes::class_graph::ClassGraph>::check_uninit
+-113	std::sys::backtrace::__rust_begin_short_backtrace::<rexx_exec::timer::run_timer, ()>
+-112	<rexx_exec::Interp>::scoped_method
+-100	rexx_exec::dispatch::hash::native_hash_new
+-94	<rustc_hash::FxBuildHasher as core::hash::BuildHasher>::hash_one::<&rexx_exec::environment::Annotated>
+-92	<rexx_classes::class_graph::ClassGraph>::inherit_at
+-78	rexx_exec::dispatch::class_protocol::add_installed_class
+-72	<hashbrown::map::HashMap<rexx_core::handle::ObjRef, rexx_classes::class_graph::ClassDef, rustc_hash::FxBuildHasher>>::insert
+-54	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::plan::ProgramId, std::collections::hash::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::InstalledRoutine, rustc_hash::FxBuildHasher>, rustc_hash::FxBuildHasher>>
+-42	rexx_exec::dispatch::package::public_classes
+-30	__internal_syscall_cancel
+-28	<rexx_exec::Interp>::interpreter_directory
+-26	core::ptr::drop_glue::<core::option::Option<alloc::boxed::Box<rexx_core::body::ObjectMethods>>>
+-26	strlen
+-25	__memset_avx2_unaligned_erms
+-22	<rexx_classes::class_graph::ClassGraph>::behaviour_has_scope
+-22	<rexx_exec::Interp>::build_environment
+-20	rexx_exec::dispatch::method_arguments::whole_method_argument::<<rexx_exec::error::Raised>::invalid_length>
+-19	0x0000000004cea3d0
+-16	<std::sys::pal::unix::time::Timespec>::now
+-16	do_lookup_x
+-14	0x00000000000f7600
+-14	__syscall_cancel_arch
+-12	0x00000000000f7640
+-11	<rexx_classes::class_graph::ClassGraph>::class_define
+-10	__strrchr_avx2
+-10	clock_gettime@@GLIBC_2.17
+-9	__syscall_cancel
+-9	recv
+-7	rexx_exec::dispatch::hash::directory_put
+-6	0x000000000441e13c
+-6	0x0000000004c82000
+-6	0x0000000004c98000
+-6	<&&str as core::fmt::Display>::fmt
+-5	0x00000000000f7590
+-4	0x0000000004cea3d8
+-4	__memchr_avx2
+-3	0x000000000441e154
+-3	0x0000000004c82284
+-3	0x0000000004cbb198
+-2	rexx_exec::dispatch::construct::native_directory_new
+-1	0x0000000004c82030
+-1	0x0000000004c983b0
+-1	<rexx_exec::Interp>::say_evaluated
++1	0x0000000004cba030
++1	0x0000000004cd03b0
++1	<rexx_exec::Interp>::begin_invoke'2
++2	<rexx_exec::Interp>::find_routine
++2	<rexx_exec::Interp>::resolve_routine_call
++3	0x0000000004455fdc
++3	0x0000000004cba284
++3	0x0000000004cf3198
++3	<rexx_exec::Interp>::enter_library_program
++3	rexx_exec::ir::compile::compile
++4	0x0000000004d223d8
++4	<hashbrown::raw::RawTable<(rexx_exec::plan::ProgramId, rexx_exec::options::PackageOptions)>>::reserve_rehash::<hashbrown::map::make_hasher<rexx_exec::plan::ProgramId, rexx_exec::options::PackageOptions, rustc_hash::FxBuildHasher>::{closure#0}>
++4	<rexx_exec::Interp>::begin_call
++4	__strlen_avx2
++5	0x00000000000ff520
++5	core::ptr::drop_glue::<rexx_classes::registry::ClassRegistry>
++6	0x0000000004455fc4
++6	0x0000000004cba000
++6	0x0000000004cd0000
++9	<std::sys::pal::unix::stack_overflow::Handler as core::ops::drop::Drop>::drop
++10	mprotect
++12	0x00000000000ff5d0
++12	<hashbrown::map::HashMap<rexx_core::handle::ObjRef, rexx_exec::ExecutableRecord, rustc_hash::FxBuildHasher>>::insert
++13	rexx_exec::dispatch::hash::run_stored_method
++14	0x00000000000ff590
++16	<rexx_exec::Interp>::define_class_method_object
++18	core::ptr::drop_glue::<hashbrown::raw::RawTable<(alloc::string::String, alloc::vec::Vec<rexx_classes::method_dict::MethodSlot>)>>
++18	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::plan::ProgramId, std::collections::hash::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::plan::Package, rustc_hash::FxBuildHasher>, rustc_hash::FxBuildHasher>>
++19	0x0000000004d223d0
++20	<rexx_exec::Interp>::array_slots
++21	memset
++24	<alloc::raw_vec::RawVec<core::ptr::non_null::NonNull<core::cell::Cell<rexx_core::handle::ObjRef>>>>::grow_one
++35	<rexx_exec::Interp>::hold_method_object
++36	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::plan::ProgramId, std::collections::hash::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::MergedRoutine, rustc_hash::FxBuildHasher>, rustc_hash::FxBuildHasher>>
++42	rexx_exec::dispatch::hash::store_entry_write
++48	<[&[u8]] as alloc::slice::Concat<u8>>::concat
++52	rexx_exec::dispatch::construct::native_capacity_init
++56	rexx_exec::dispatch::hash::holds_store_class
++57	<hashbrown::raw::RawTable<(rexx_exec::plan::ProgramId, alloc::boxed::Box<[u8]>)>>::reserve_rehash::<hashbrown::map::make_hasher<rexx_exec::plan::ProgramId, alloc::boxed::Box<[u8]>, rustc_hash::FxBuildHasher>::{closure#0}>
++64	rexx_exec::dispatch::class_protocol::native_new
++68	<rexx_exec::Interp>::override_package_settings
++72	<alloc::raw_vec::RawVec<rexx_classes::method_dict::MethodSlot>>::grow_one
++74	rexx_exec::dispatch::hash::new_directory
++84	rexx_exec::dispatch::package::package_of
++87	<hashbrown::map::HashMap<(rexx_exec::plan::ProgramId, rexx_exec::environment::PackageTable), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::insert
++91	__malloc_arena_thread_freeres
++127	<rexx_exec::Interp>::package_object
++132	sysmalloc
++141	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<std::collections::hash::map::Values<alloc::string::String, rexx_core::handle::ObjRef>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#0}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>> as core::iter::traits::iterator::Iterator>::size_hint
++156	____strtoul_l_internal
++201	<rexx_classes::registry::ClassRegistry>::system_lookup
++244	<hashbrown::map::HashMap<rexx_exec::plan::ProgramId, (), rustc_hash::FxBuildHasher>>::insert
++248	<rexx_exec::Interp>::build_package_string_table
++270	rexx_exec::dispatch::hash::set_free
++275	<hashbrown::map::HashMap<alloc::string::String, alloc::vec::Vec<rexx_classes::method_dict::MethodSlot>, rustc_hash::FxBuildHasher>>::rustc_entry
++287	_dl_check_map_versions
++305	<rexx_classes::method_dict::MethodDict>::add_hidden
++360	<alloc::raw_vec::RawVec<core::option::Option<rexx_core::handle::ObjRef>>>::grow_one
++431	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::environment::Annotated, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>
++459	std::env::vars_os
++481	rexx_exec::dispatch::hash::native_hash_put
++483	core::ptr::drop_glue::<rexx_core::roots::RootSet>
++507	<rexx_exec::Interp>::which_package
++532	rexx_exec::dispatch::hash::write_slot
++536	rexx_exec::dispatch::hash::write_link
++560	rexx_exec::dispatch::hash::native_hash_at
++589	rexx_exec::dispatch::hash::new_string_table
++608	rexx_exec::dispatch::hash::insert
++728	rexx_exec::environment::identities::annotation_root_key
++798	core::ptr::drop_glue::<rexx_classes::method_dict::MethodDict>
++815	rexx_exec::dispatch::hash::read_view
++832	rexx_exec::dispatch::hash::store_in
++906	realloc
++912	<alloc::raw_vec::RawVec<(rexx_core::handle::ObjRef, alloc::vec::Vec<(alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef)>)>>::grow_one
++912	<alloc::raw_vec::RawVec<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>::grow_one
++930	alloc_perturb
++992	rexx_exec::dispatch::hash::merged_get
++1120	_int_realloc
++1287	<alloc::string::String>::from_utf8_lossy
++1324	<rustc_hash::FxBuildHasher as core::hash::BuildHasher>::hash_one::<&(rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>)>
++1342	<hashbrown::map::HashMap<(rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::insert
++1392	<hashbrown::raw::RawTable<((rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<(rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
++1424	<alloc::raw_vec::RawVecInner>::finish_grow
++1536	<rexx_exec::Interp>::class_of_value
++1548	_dl_relocate_object_no_relro
++1568	<rexx_exec::dispatch::hash::Half as core::cmp::PartialEq>::eq
++1584	<rexx_exec::Interp>::to_text
++1696	<rexx_exec::Interp>::receiver_behaviour
++1757	<hashbrown::raw::RawTableInner>::fallible_with_capacity::<alloc::alloc::Global>
++1876	rexx_exec::dispatch::hash::counted
++1967	<rexx_core::roots::RootSet>::add_global
++2139	<hashbrown::raw::RawTable<(alloc::string::String, rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<alloc::string::String, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
++2272	<rexx_exec::Interp>::receiver_kind
++2391	rexx_exec::dispatch::class_protocol::new_instance
++2400	rexx_exec::dispatch::hash::store_of
++2469	<rexx_classes::method_dict::MethodDict as core::clone::Clone>::clone
++2613	rexx_exec::dispatch::hash::insert_in
++2672	rexx_exec::dispatch::hash::class_is_one_of
++2944	rexx_exec::dispatch::hash::same_index
++3173	rexx_exec::dispatch::hash::probe_in
++3174	<rexx_exec::dispatch::ObjectModel>::build
++3604	core::ptr::drop_glue::<rexx_core::body::Body>
++3942	<rexx_exec::Interp>::alloc_with
++4134	rexx_exec::dispatch::class_protocol::builds_in_place
++4215	rexx_exec::dispatch::class_protocol::new_subclass
++4243	<core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
++4254	_int_free_maybe_trim
++4712	rexx_exec::dispatch::hash::hash_of
++4926	<rexx_classes::registry::ClassRegistry>::lookup_class_method
++6249	_int_free_chunk
++7410	<alloc::raw_vec::RawVecInner>::try_allocate_in
++7581	<rexx_core::body::ScopePools>::set
++7776	<rexx_classes::registry::ClassRegistry>::is_a'2
++7907	unlink_chunk.isra.0
++8064	rexx_exec::dispatch::array::array_slots
++8592	rexx_exec::dispatch::hash::keys_of
++8904	_int_free_create_chunk
++9272	__libc_malloc2
++9289	_int_free_merge_chunk
++9414	<hashbrown::map::HashMap<alloc::string::String, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::get::<alloc::string::String>
++9744	<rexx_classes::registry::ClassRegistry>::is_a
++9768	<rexx_classes::registry::ClassRegistry>::lookup
++9984	<rexx_classes::registry::ClassRegistry>::lookup_instance_method
++11511	malloc
++12386	<rexx_exec::Interp>::install_class
++14217	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<std::collections::hash::map::Values<alloc::string::String, rexx_core::handle::ObjRef>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#0}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>> as core::iter::traits::iterator::Iterator>::next
++16649	free
++22818	rexx_exec::dispatch::hash::read_parts
++29285	rexx_exec::dispatch::hash::install_store
++29633	<rexx_classes::method_dict::MethodDict>::slot
++51039	__memcpy_avx_unaligned_erms
++53298	_int_malloc
++65841	<rexx_core::body::Body>::trace
++78831	rexx_exec::dispatch::native::package_entry_point
++341375	core::ptr::drop_glue::<rexx_core::heap::Heap>
++400006	<rexx_exec::Interp>::lookup
++400239	rexx_exec::environment::env_seam::admit
++400680	<rexx_exec::Interp>::classify_string_conversion
++411384	<rexx_exec::Interp>::collect_now
++800379	rexx_exec::dispatch::hash::view_get
++800580	<rexx_exec::Interp>::begin_invoke
++800788	rexx_exec::dispatch::hash::item_at
++1532516	__memcmp_avx2_movbe
++7004440	<rexx_exec::Interp>::directory_lookup
++10200051	rexx_exec::dispatch::object_protocol::array_argument_object
+# calls
+-588	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::map::Map<core::slice::iter::Iter<(alloc::string::String, rexx_core::handle::ObjRef)>, <rexx_core::roots::RootSet>::iter::{closure#0}>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#1}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>> as core::iter::traits::iterator::Iterator>::next
+-564	<rexx_exec::Interp>::redirect_of
+-213	__rustc::__rust_alloc
+-39	<rexx_classes::registry::ClassRegistry>::define_unregistered_class
+-39	<rexx_classes::registry::ClassRegistry>::set_rexx_defined
+-38	<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+-38	<alloc::string::String as core::fmt::Write>::write_str
+-38	<core::fmt::Formatter>::pad
+-37	<&str as core::fmt::Display>::fmt
+-23	<alloc::raw_vec::RawVec<(alloc::string::String, rexx_core::handle::ObjRef)>>::grow_one
+-19	0x0000000004cea3d0
+-19	<rexx_exec::Interp>::native_instance
+-19	alloc::fmt::format::format_inner
+-19	core::fmt::write
+-19	core::ptr::drop_glue::<rexx_core::body::NativeObject>
+-16	<hashbrown::map::HashMap<(rexx_core::handle::ObjRef, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::insert
+-16	<rexx_core::body::NativeObject>::entry
+-16	<rexx_core::body::NativeObject>::set_entry
+-16	<rexx_exec::Interp>::native_entry
+-16	rexx_exec::dispatch::hash::hash_index
+-15	<alloc::raw_vec::RawVec<alloc::boxed::Box<[u8]>>>::grow_one
+-4	0x0000000004cea3d8
+-4	<hashbrown::raw::RawTable<((rexx_core::handle::ObjRef, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<(rexx_core::handle::ObjRef, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
+-4	<hashbrown::raw::RawTable<(alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
+-3	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::map::Map<core::slice::iter::Iter<(alloc::string::String, rexx_core::handle::ObjRef)>, <rexx_core::roots::RootSet>::iter::{closure#0}>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#1}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>> as core::iter::traits::iterator::Iterator>::size_hint
+-3	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::plan::ProgramId, std::collections::hash::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::InstalledRoutine, rustc_hash::FxBuildHasher>, rustc_hash::FxBuildHasher>>
+-2	core::ptr::drop_glue::<core::option::Option<alloc::boxed::Box<rexx_core::body::ObjectMethods>>>
+-1	0x00000000000f7590
+-1	0x00000000000f7600
+-1	0x00000000000f7640
+-1	0x000000000441e13c
+-1	0x000000000441e154
+-1	0x0000000004c82000
+-1	0x0000000004c82030
+-1	0x0000000004c82284
+-1	0x0000000004c98000
+-1	0x0000000004c983b0
+-1	0x0000000004cbb198
+-1	<&&str as core::fmt::Display>::fmt
+-1	<std::sys::pal::unix::time::Timespec>::now
+-1	__internal_syscall_cancel
+-1	__syscall_cancel
+-1	__syscall_cancel_arch
+-1	clock_gettime@@GLIBC_2.17
+-1	recv
+-1	rexx_exec::dispatch::hash::native_hash_new
+-1	rexx_exec::dispatch::method_arguments::whole_method_argument::<<rexx_exec::error::Raised>::invalid_length>
++1	0x00000000000ff520
++1	0x00000000000ff590
++1	0x00000000000ff5d0
++1	0x0000000004455fc4
++1	0x0000000004455fdc
++1	0x0000000004cba000
++1	0x0000000004cba030
++1	0x0000000004cba284
++1	0x0000000004cd0000
++1	0x0000000004cd03b0
++1	0x0000000004cf3198
++1	<alloc::raw_vec::RawVec<core::ptr::non_null::NonNull<core::cell::Cell<rexx_core::handle::ObjRef>>>>::grow_one
++1	<hashbrown::map::HashMap<(rexx_exec::plan::ProgramId, rexx_exec::environment::PackageTable), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::insert
++1	<hashbrown::raw::RawTable<(rexx_exec::plan::ProgramId, alloc::boxed::Box<[u8]>)>>::reserve_rehash::<hashbrown::map::make_hasher<rexx_exec::plan::ProgramId, alloc::boxed::Box<[u8]>, rustc_hash::FxBuildHasher>::{closure#0}>
++1	<rexx_classes::method_dict::MethodDict as core::clone::Clone>::clone
++1	<rexx_exec::Interp>::array_slots
++1	__memset_avx2_unaligned_erms
++1	core::ptr::drop_glue::<hashbrown::raw::RawTable<(alloc::string::String, alloc::vec::Vec<rexx_classes::method_dict::MethodSlot>)>>
++1	core::ptr::drop_glue::<rexx_core::heap::Heap>
++1	core::ptr::drop_glue::<rexx_core::roots::RootSet>
++1	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::environment::Annotated, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>
++1	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::plan::ProgramId, std::collections::hash::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::plan::Package, rustc_hash::FxBuildHasher>, rustc_hash::FxBuildHasher>>
++1	realloc
++1	rexx_exec::dispatch::class_protocol::native_new
++1	rexx_exec::dispatch::hash::holds_store_class
++1	rexx_exec::dispatch::hash::store_entry_write
++1	strcmp
++1	sysmalloc
++2	core::ptr::drop_glue::<rexx_classes::method_dict::MethodDict>
++2	core::ptr::drop_glue::<std::collections::hash::map::HashMap<rexx_exec::plan::ProgramId, std::collections::hash::map::HashMap<alloc::boxed::Box<[u8]>, rexx_exec::MergedRoutine, rustc_hash::FxBuildHasher>, rustc_hash::FxBuildHasher>>
++2	mprotect
++2	rexx_exec::dispatch::hash::new_directory
++2	rexx_exec::dispatch::package::package_of
++3	<alloc::raw_vec::RawVec<rexx_classes::method_dict::MethodSlot>>::grow_one
++3	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<std::collections::hash::map::Values<alloc::string::String, rexx_core::handle::ObjRef>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#0}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>> as core::iter::traits::iterator::Iterator>::size_hint
++3	<hashbrown::map::HashMap<alloc::string::String, alloc::vec::Vec<rexx_classes::method_dict::MethodSlot>, rustc_hash::FxBuildHasher>>::rustc_entry
++3	<rexx_classes::method_dict::MethodDict>::add_hidden
++3	<rexx_classes::registry::ClassRegistry>::system_lookup
++4	0x0000000004d223d8
++4	<hashbrown::map::HashMap<rexx_exec::plan::ProgramId, (), rustc_hash::FxBuildHasher>>::insert
++4	<hashbrown::raw::RawTable<((rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<(rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
++4	<hashbrown::raw::RawTable<(alloc::string::String, rexx_core::handle::ObjRef)>>::reserve_rehash::<hashbrown::map::make_hasher<alloc::string::String, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>::{closure#0}>
++4	<rexx_exec::Interp>::override_package_settings
++5	rexx_exec::dispatch::hash::set_free
++10	rexx_exec::dispatch::hash::read_view
++10	rexx_exec::dispatch::hash::write_link
++10	rexx_exec::dispatch::hash::write_slot
++15	<alloc::raw_vec::RawVec<core::option::Option<rexx_core::handle::ObjRef>>>::grow_one
++16	<hashbrown::map::HashMap<(rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>), rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::insert
++16	rexx_exec::dispatch::hash::class_is_one_of
++16	rexx_exec::dispatch::hash::insert
++16	rexx_exec::dispatch::hash::insert_in
++16	rexx_exec::dispatch::hash::item_at
++16	rexx_exec::dispatch::hash::merged_get
++17	_int_realloc
++18	rexx_exec::environment::identities::annotation_root_key
++19	0x0000000004d223d0
++19	<alloc::raw_vec::RawVecInner>::finish_grow
++19	rexx_exec::dispatch::class_protocol::new_instance
++19	rexx_exec::dispatch::hash::install_store
++19	rexx_exec::dispatch::hash::new_string_table
++24	<hashbrown::raw::RawTableInner>::fallible_with_capacity::<alloc::alloc::Global>
++28	rexx_exec::dispatch::hash::same_index
++32	rexx_exec::dispatch::hash::hash_of
++32	rexx_exec::dispatch::hash::probe_in
++32	rexx_exec::dispatch::hash::store_in
++38	<alloc::raw_vec::RawVec<(rexx_core::handle::ObjRef, alloc::vec::Vec<(alloc::boxed::Box<[u8]>, rexx_core::handle::ObjRef)>)>>::grow_one
++38	<alloc::raw_vec::RawVec<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>::grow_one
++39	<alloc::string::String>::from_utf8_lossy
++39	<core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
++39	<rexx_exec::Interp>::install_class
++39	rexx_exec::dispatch::class_protocol::new_subclass
++40	<rustc_hash::FxBuildHasher as core::hash::BuildHasher>::hash_one::<&(rexx_core::handle::ObjRef, bool, alloc::boxed::Box<[u8]>)>
++48	<rexx_exec::dispatch::hash::Half as core::cmp::PartialEq>::eq
++48	rexx_exec::dispatch::hash::keys_of
++48	rexx_exec::dispatch::hash::store_of
++64	<rexx_exec::Interp>::class_of_value
++64	<rexx_exec::Interp>::receiver_behaviour
++64	<rexx_exec::Interp>::receiver_kind
++66	rexx_exec::dispatch::hash::read_parts
++72	<rexx_exec::Interp>::to_text
++73	<rexx_exec::Interp>::alloc_with
++73	core::ptr::drop_glue::<rexx_core::body::Body>
++78	<rexx_classes::registry::ClassRegistry>::lookup_class_method
++78	rexx_exec::dispatch::class_protocol::builds_in_place
++100	<rexx_core::body::ScopePools>::set
++116	<rexx_classes::registry::ClassRegistry>::lookup
++119	<hashbrown::map::HashMap<alloc::string::String, rexx_core::handle::ObjRef, rustc_hash::FxBuildHasher>>::get::<alloc::string::String>
++134	rexx_exec::dispatch::hash::counted
++144	<rexx_classes::registry::ClassRegistry>::is_a'2
++144	rexx_exec::dispatch::array::array_slots
++156	<rexx_classes::registry::ClassRegistry>::lookup_instance_method
++171	<rexx_core::body::Body>::trace
++186	alloc_perturb
++191	__memcpy_avx_unaligned_erms
++192	<rexx_classes::registry::ClassRegistry>::is_a
++195	<alloc::raw_vec::RawVecInner>::try_allocate_in
++198	rexx_exec::dispatch::native::package_entry_point
++237	_int_free_chunk
++237	_int_free_create_chunk
++237	_int_free_maybe_trim
++237	_int_free_merge_chunk
++238	<rexx_classes::method_dict::MethodDict>::slot
++244	__libc_malloc2
++258	_int_malloc
++327	unlink_chunk.isra.0
++481	free
++481	malloc
++545	__memcmp_avx2_movbe
++597	<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<std::collections::hash::map::Values<alloc::string::String, rexx_core::handle::ObjRef>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::RootSet>::iter::{closure#0}>>, core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::chain::Chain<core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>, core::iter::adapters::flatten::FlatMap<core::ops::range::Range<usize>, core::iter::adapters::map::Map<core::slice::iter::Iter<core::cell::Cell<rexx_core::handle::ObjRef>>, <core::cell::Cell<rexx_core::handle::ObjRef>>::get>, <rexx_core::frame::FrameArena>::iter::{closure#0}>>, core::iter::adapters::filter_map::FilterMap<core::slice::iter::Iter<core::option::Option<rexx_core::handle::ObjRef>>, <rexx_core::roots::ActivityRoots>::iter::{closure#0}>>, core::iter::adapters::copied::Copied<core::iter::adapters::flatten::Flatten<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<core::option::Option<alloc::vec::Vec<rexx_core::handle::ObjRef>>>>>>>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<rexx_core::handle::ObjRef>>> as core::iter::traits::iterator::Iterator>::next
++200001	rexx_exec::dispatch::object_protocol::array_argument_object
