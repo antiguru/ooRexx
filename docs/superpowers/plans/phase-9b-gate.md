@@ -15,8 +15,7 @@ REXX_SUITE_TABLE=/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/rec
 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite
 ```
 
-Exit status (101, red as expected) and wall time (2 s, the release build already cached; the first run
-including the build took 29 s) are the last two lines of `run-output.txt`. The raw output, the table,
+Exit status (101, red as expected) and wall time (2 s, the release build already cached) are the last two lines of `run-output.txt`. The raw output, the table,
 the verdicts and the per-test record are in
 `docs/superpowers/records/2026-10-13-phase-9b/task-2-baseline/` (`run-output.txt`, `table.tsv`,
 `verdicts.tsv`, `tests.tsv`, `oracle-differences.tsv`). The oracle denominator is `equal` for every
@@ -65,4 +64,7 @@ Owning 9b task of each red group (plan `2026-10-13-phase-9b.md`):
 | base/rexxutil/SysFileXXX, SysFileDateTime, SysSearchPath, SysFileSearch, platform/unix/tilde, base/class/File | Task 4 |
 | base/rexxutil/SysFileTree | Task 5 |
 | base/rexxutil/platform/unix/SysGetMessage, SysFormatMessage, base/keyword/ADDRESS | Task 6 |
-| base/security.manager/SecurityManager (7 blocked tests; the 5 failed are 9d's) | Task 7 |
+| base/security.manager/SecurityManager, 6 tests blocked on `SYSDROPFUNCS` | Task 7 |
+| base/security.manager/SecurityManager, `TEST_CALL_PASS_THREE_ARGS` (blocked on `SysSearchPath`) | Task 4 |
+
+SecurityManager's 5 failed tests are 9d's, as above.
