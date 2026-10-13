@@ -70,6 +70,9 @@ pub static PROGRAMS: &[&str] = &[
     // Added in Phase 9a Task 8's fix round: hash-collection construction,
     // whose INIT sizes the store.
     "hashnew",
+    // Added in the Phase 9a final review's fix: an environment symbol read
+    // once the running package has a local, which searches that local first.
+    "pkglocal",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

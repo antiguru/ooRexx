@@ -48,6 +48,8 @@ lang/package_copy.rex
 lang/class_side_method_objects.rex
 
 # 9a final review fixes: a package's store-backed local in the class search,
-# and a Method/Routine subclass copy's own annotation table.
+# a Method/Routine subclass copy's own annotation table, and .NAME read again
+# after each kind of write to the package local.
 lang/package_local_find_class.rex
 lang/executable_subclass_copy_annotations.rex
+lang/package_local_symbol_writes.rex

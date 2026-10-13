@@ -1345,6 +1345,11 @@ struct Interp {
     /// ask -- `PackageClass::getPackageLocal` (`classes/PackageClass.cpp:2131`
     /// region), which creates it lazily too.
     package_locals: FxHashMap<Package, ObjRef>,
+    /// The last package local [`Interp::package_local_entry`] read, with a
+    /// reading of its pool; one that is not current is read again.
+    package_local_view: Option<(ObjRef, dispatch::hash::StoreView)>,
+    /// The last name `.NAME` found absent from a program's package local.
+    package_local_miss: environment::PackageLocalMiss,
     /// The object model message dispatch resolves against: `Setup.cpp`'s
     /// native classes, whatever `::CLASS`/`::METHOD`/`::ATTRIBUTE` have
     /// installed beside them, and the primitive methods this crate
@@ -1633,6 +1638,8 @@ struct Interp {
     /// What a `dispatch::hash::StoreView` is valid against.
     /// `hash::bump_store_generation` moves it.
     store_generation: u64,
+    /// Bumped by every slot a hash store's arrays are written at.
+    store_writes: u64,
     /// `SAY`'s route as of [`Interp::route_generation`]: `None` writes
     /// straight to the buffer. Deciding it afresh costs 764 instructions a
     /// line -- measured, `sayloop` at 1.40x -- and both halves of that are
@@ -2112,6 +2119,8 @@ impl Interp {
             rexx_class_cache: NameMap::default(),
             package_namespaces: FxHashMap::default(),
             package_locals: FxHashMap::default(),
+            package_local_view: None,
+            package_local_miss: environment::PackageLocalMiss::default(),
             object_model: None,
             class_variables: FxHashMap::default(),
             environment: None,
@@ -2194,6 +2203,7 @@ impl Interp {
             bootstrap_stdout: None,
             route_generation: 0,
             store_generation: 0,
+            store_writes: 0,
             output_route: None,
             collect_at: COLLECT_FLOOR,
             bytes_due: COLLECT_BYTES_FLOOR,
@@ -2909,6 +2919,11 @@ impl Interp {
             package_namespaces: _,
             // `RootSet::add_global`, under `package_local_root_key`.
             package_locals: _,
+            // The directory is one of `package_locals`, and its view's store
+            // arrays are held as `environment`'s views' are.
+            package_local_view: _,
+            // A program, two counters and a name.
+            package_local_miss: _,
             // Handles into the class registry, so class identities again.
             object_model: _,
             // `.environment`, `.local` and the owed placeholders are globals;
@@ -3025,6 +3040,7 @@ impl Interp {
             bootstrap_stdout: _,
             route_generation: _,
             store_generation: _,
+            store_writes: _,
             // The route it names is `.local`'s own entry, which that global
             // root holds; this caches the decision, not the object.
             output_route: _,

@@ -1,0 +1,30 @@
+/* An environment symbol read again after the package local changes: each
+   read follows a put, a replacement, a remove, a method entry, an unknown
+   method and an empty, so no earlier answer outlives the write. */
+l = .context~package~local
+do i = 1 to 3
+  say i .plwname
+  select
+    when i = 1 then l~put('first', 'PLWNAME')
+    when i = 2 then l['PLWNAME'] = 'second'
+    otherwise l~remove('PLWNAME')
+  end
+end
+say .plwname
+l~setMethod('PLWNAME', 'return "from a method"')
+say .plwname
+l~unsetMethod('PLWNAME')
+say .plwname
+l~setMethod('UNKNOWN', 'return "unknown" arg(1)')
+say .plwname .plwother
+l~unsetMethod('UNKNOWN')
+say .plwname
+l~put('kept', 'PLWNAME'); l~put('other', 'PLWOTHER')
+say .plwname .plwother
+l~empty
+say .plwname .plwother
+do i = 1 to 2
+  say .plwname
+  l~put('loop' i, 'PLWNAME')
+end
+say .plwname

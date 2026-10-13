@@ -152,6 +152,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "pkglocal",
+        role: Role::Loop,
+    },
+    Axis {
         name: "sayloop",
         role: Role::Loop,
     },

@@ -279,6 +279,16 @@ impl EnvironmentModel {
     }
 }
 
+/// A name `.NAME` found absent from `program`'s package local, and the
+/// store counters it was found at.
+#[derive(Default, Debug)]
+pub(crate) struct PackageLocalMiss {
+    program: Option<ProgramId>,
+    generation: u64,
+    writes: u64,
+    name: Vec<u8>,
+}
+
 /// What one `::ANNOTATE` directive's pairs belong to, once the object that
 /// carries them exists.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -531,9 +541,8 @@ impl Interp {
 
         if !self.package_locals.is_empty()
             && let Some(program) = self.running_program()
-            && let Some(&local) = self.package_locals.get(&Package::Program(program))
         {
-            match self.package_local_entry(local, bare)? {
+            match self.package_local_symbol(program, bare)? {
                 hash::DirectoryEntry::Found(found) => return Ok(found),
                 hash::DirectoryEntry::Owed(owner) => {
                     return Err(Loud::environment_symbol(dotted, owner).into());
@@ -768,7 +777,62 @@ impl Interp {
         local: ObjRef,
         bare: &[u8],
     ) -> Result<hash::DirectoryEntry, Failure> {
-        hash::directory_get(self, local, hash::Key::new(bare), None).map(|(entry, _)| entry)
+        let view = match self.package_local_view {
+            Some((held, view)) if held == local => Some(view),
+            _ => None,
+        };
+        let (entry, fresh) = hash::directory_get(self, local, hash::Key::new(bare), view.as_ref())?;
+        if let Some(fresh) = fresh {
+            self.package_local_view = Some((local, fresh));
+        }
+        Ok(entry)
+    }
+
+    /// [`Interp::package_local_entry`] for `program`'s own local, answering a
+    /// repeat of the last miss without a probe while no hash store has been
+    /// written since.
+    fn package_local_symbol(
+        &mut self,
+        program: ProgramId,
+        bare: &[u8],
+    ) -> Result<hash::DirectoryEntry, Failure> {
+        let miss = &self.package_local_miss;
+        if miss.program == Some(program)
+            && miss.generation == self.store_generation
+            && miss.writes == self.store_writes
+            && miss.name == bare
+        {
+            debug_assert!(
+                matches!(
+                    unshared!(self, self.package_local_probe(program, bare)),
+                    Ok(hash::DirectoryEntry::Absent)
+                ),
+                "the package local miss memo answered {bare:?} absent, so a write to the \
+                 local's store moved neither store_generation nor store_writes"
+            );
+            return Ok(hash::DirectoryEntry::Absent);
+        }
+        let entry = self.package_local_probe(program, bare)?;
+        if matches!(entry, hash::DirectoryEntry::Absent) {
+            let miss = &mut self.package_local_miss;
+            miss.program = Some(program);
+            miss.generation = self.store_generation;
+            miss.writes = self.store_writes;
+            miss.name.clear();
+            miss.name.extend_from_slice(bare);
+        }
+        Ok(entry)
+    }
+
+    fn package_local_probe(
+        &mut self,
+        program: ProgramId,
+        bare: &[u8],
+    ) -> Result<hash::DirectoryEntry, Failure> {
+        match self.package_locals.get(&Package::Program(program)) {
+            Some(&local) => self.package_local_entry(local, bare),
+            None => Ok(hash::DirectoryEntry::Absent),
+        }
     }
 
     /// A public class of the interpreter's own package --
