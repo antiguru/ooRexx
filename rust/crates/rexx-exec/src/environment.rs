@@ -310,6 +310,9 @@ pub(crate) enum Annotated {
     Routine(ProgramId, usize),
     /// The one `Routine` object of a library procedure, by its code row.
     LibraryRoutine(usize),
+    /// The one `Routine` object of an internal package row, by its
+    /// `INTERNAL_ROUTINES` index.
+    InternalRoutine(usize),
     /// A method compiled from source text, by a count of its own.
     Compiled(usize),
     /// A native routine of the REXX package, by its upcased name.
@@ -1170,6 +1173,18 @@ impl Interp {
                     {
                         let object = self.library_routine_object(code);
                         self.routine_objects.insert(installed, object);
+                        object
+                    } else if let Some(row) =
+                        routine.then(|| self.rexx_routine_row(installed)).flatten()
+                    {
+                        let index = crate::internal_routines::index_of(row);
+                        let object = self.internal_routine_object(index);
+                        self.routine_objects.insert(installed, object);
+                        // The first directive bound to the row is the one
+                        // `~addRoutine` files the object under.
+                        if let Some(record) = self.executable_sources.get_mut(&object) {
+                            record.routine.get_or_insert((program, directive));
+                        }
                         object
                     } else {
                         let class = self

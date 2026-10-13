@@ -1002,6 +1002,9 @@ impl Interp {
                 installed: None,
                 ..
             }) => Ok(crate::run::Resolved::MergedLibraryRoutine(code)),
+            _ if let Some(row) = self.rexx_routine_object(object) => {
+                Ok(crate::run::Resolved::MergedInternal(row))
+            }
             _ => Err(crate::Loud::receiver_class(
                 "a .ROUTINES entry that is not a routine this crate built",
             )
@@ -1022,14 +1025,15 @@ impl Interp {
 
     /// The one `Routine` object for the internal package routine at `index`.
     pub(crate) fn internal_routine_object(&mut self, index: usize) -> ObjRef {
-        if let Some(found) = self.internal_routine_objects.get(&index).copied() {
+        if let Some(found) = self.internal_routine_objects[index] {
             return found;
         }
         let class = self.routine_class();
         let object = self.native_instance(class);
         self.roots
             .add_global(&internal_routine_root_key(index), object);
-        self.internal_routine_objects.insert(index, object);
+        self.internal_routine_objects[index] = Some(object);
+        self.attach_annotations(object, Annotated::InternalRoutine(index));
         self.record_rexx_routine_object(
             object,
             &crate::internal_routines::INTERNAL_ROUTINES[index],
@@ -1443,6 +1447,9 @@ fn annotation_root_key(site: &Annotated) -> String {
         }
         Annotated::LibraryRoutine(code) => {
             format!("annotations of the library routine at code row {code}")
+        }
+        Annotated::InternalRoutine(index) => {
+            format!("annotations of the internal package routine of index {index}")
         }
         Annotated::Compiled(count) => format!("annotations of compiled method {count}"),
         Annotated::RexxRoutine(name) => format!(

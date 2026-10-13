@@ -103,3 +103,4 @@ lang/rexxutil_library_requires.rex
 lang/rexxutil_library_external.rex
 lang/rexxutil_library_method.rex
 lang/rexxutil_library_routine_missing.rex
+lang/rexxutil_library_identity.rex

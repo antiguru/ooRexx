@@ -1433,10 +1433,11 @@ struct Interp {
     /// `mergeLibrary` merges the library package's own routine objects, so
     /// every package importing one answers the same object.
     library_routine_objects: FxHashMap<usize, ObjRef>,
-    /// The one `Routine` object standing for each internal package routine,
-    /// by its [`internal_routines::INTERNAL_ROUTINES`] index: measured,
-    /// oracle, every package importing `rexxutil` answers the same object.
-    internal_routine_objects: FxHashMap<usize, ObjRef>,
+    /// The one `Routine` object of each internal package row, by its
+    /// [`internal_routines::INTERNAL_ROUTINES`] index, built on the first ask:
+    /// the routine table of `LibraryPackage` (`package/LibraryPackage.cpp`),
+    /// which every path naming the row answers from.
+    internal_routine_objects: Vec<Option<ObjRef>>,
     /// The source-less `Routine` a REXX package native routine level answers
     /// for `StackFrame~executable`, by upcased name, each rooted globally.
     rexx_routine_executables: FxHashMap<Box<[u8]>, ObjRef>,
@@ -1609,11 +1610,11 @@ struct Interp {
     /// The [`Interp::library_codes`] row each library-backed `::ROUTINE`
     /// directive bound, which is the package its routine reports.
     library_routine_codes: FxHashMap<InstalledRoutine, usize>,
-    /// The `REXX` package routine each `::ROUTINE ... EXTERNAL "LIBRARY REXX"`
-    /// directive bound.
+    /// The internal package routine each `::ROUTINE ... EXTERNAL "LIBRARY
+    /// REXX"` or `"LIBRARY rexxutil"` directive bound.
     rexx_routine_rows: FxHashMap<InstalledRoutine, &'static internal_routines::InternalRoutine>,
-    /// The `REXX` package routine each `loadExternalRoutine` answer over that
-    /// package is.
+    /// The internal package routine each row's `Routine` object, and each
+    /// copy of one, runs.
     rexx_routine_objects: FxHashMap<ObjRef, &'static internal_routines::InternalRoutine>,
     /// The [`Interp::library_codes`] row of each method a `~define` installed
     /// from a `loadExternalMethod` answer, which is the package it reports.
@@ -2177,7 +2178,7 @@ impl Interp {
             package_tables: FxHashMap::default(),
             routine_objects: FxHashMap::default(),
             library_routine_objects: FxHashMap::default(),
-            internal_routine_objects: FxHashMap::default(),
+            internal_routine_objects: vec![None; internal_routines::INTERNAL_ROUTINES.len()],
             rexx_routine_executables: FxHashMap::default(),
             package_imports: FxHashMap::default(),
             package_parents: FxHashMap::default(),

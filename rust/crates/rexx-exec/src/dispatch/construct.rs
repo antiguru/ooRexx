@@ -352,9 +352,8 @@ pub(super) fn native_load_external(
             let Some(row) = crate::internal_routines::package_routine(package, &entry) else {
                 return Ok(Some(ObjRef::NIL));
             };
-            let object = interp.native_instance(class);
-            interp.record_rexx_routine_object(object, row);
-            return Ok(Some(object));
+            let index = crate::internal_routines::index_of(row);
+            return Ok(Some(interp.internal_routine_object(index)));
         }
         let Some(external) = native::package_entry_point(package, &entry) else {
             return Ok(Some(ObjRef::NIL));

@@ -241,6 +241,14 @@ fn package_rows(package: Package) -> impl Iterator<Item = &'static InternalRouti
         .filter(move |row| row.package == package)
 }
 
+/// `row`'s [`INTERNAL_ROUTINES`] index.
+pub(crate) fn index_of(row: &'static InternalRoutine) -> usize {
+    INTERNAL_ROUTINES
+        .iter()
+        .position(|candidate| std::ptr::eq(candidate, row))
+        .expect("every row is an INTERNAL_ROUTINES element")
+}
+
 /// The [`INTERNAL_ROUTINES`] index of every row `package` exports.
 pub(crate) fn package_indexes(package: Package) -> impl Iterator<Item = usize> {
     INTERNAL_ROUTINES

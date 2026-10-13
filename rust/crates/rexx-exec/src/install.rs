@@ -462,6 +462,12 @@ impl Interp {
                     &[environment::Annotated::LibraryRoutine(code)],
                     &[(name, value)],
                 );
+            } else if let Some(row) = self.rexx_routine_rows.get(&installed).copied() {
+                let index = internal_routines::index_of(row);
+                self.record_annotations(
+                    &[environment::Annotated::InternalRoutine(index)],
+                    &[(name, value)],
+                );
             }
         }
 
@@ -2348,7 +2354,7 @@ impl Interp {
         self.library_routine_codes.get(&installed).copied()
     }
 
-    /// The `REXX` package routine a `::ROUTINE` directive bound, or `None`
+    /// The internal package routine a `::ROUTINE` directive bound, or `None`
     /// for any other routine.
     pub(crate) fn rexx_routine_row(
         &self,
@@ -2357,8 +2363,8 @@ impl Interp {
         self.rexx_routine_rows.get(&installed).copied()
     }
 
-    /// The `REXX` package routine a `loadExternalRoutine` answer is, or
-    /// `None` for any other object.
+    /// The internal package routine `object` runs, or `None` for any other
+    /// object.
     pub(crate) fn rexx_routine_object(
         &self,
         object: ObjRef,
@@ -2366,7 +2372,7 @@ impl Interp {
         self.rexx_routine_objects.get(&object).copied()
     }
 
-    /// Records `object` as the `loadExternalRoutine` answer over `row`.
+    /// Records `object` as a `Routine` that runs `row`.
     pub(crate) fn record_rexx_routine_object(
         &mut self,
         object: ObjRef,

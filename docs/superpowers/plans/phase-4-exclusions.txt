@@ -5995,13 +5995,6 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   The oracle evaluates the arguments first (CallInstruction.cpp:436, then
   :450). Silent when trapped. NO OWNER: namespaces are the package model's.
 
-  loadExternalRoutine OF A LIBRARY REXX ROUTINE ANSWERS A NEW OBJECT EACH TIME.
-  Two loadExternalRoutine('r', 'LIBRARY REXX FILESPEC') answers compared by
-  identity: oracle 1, this 0 (native_load_external's REXX arm builds a fresh
-  object). Fix round 3 shared the object for a non-REXX library only. NO
-  OWNER: identity of Routine objects is observable only through identityHash
-  here, since == on a Routine still refuses naming Phase 5.
-
   A ::routine WHOSE CALL RAISED STAYS KEPT AT ITS CALL SITE. An internal
   routine sub: calls foo(), which raises 42.3 (trapped); then
   .context~package~addRoutine('FOO', r); then sub: again:
@@ -6231,7 +6224,8 @@ docs/superpowers/records/2026-09-14-phase-8-surface/task-9-probes/.
   loadExternalRoutine, loadExternalMethod and Package~loadLibrary find both
   internal packages by their byte-exact names, witnessed by
   corpus/lang/rexxutil_library_requires.rex, rexxutil_library_external.rex,
-  rexxutil_library_method.rex and rexxutil_library_routine_missing.rex.
+  rexxutil_library_method.rex, rexxutil_library_routine_missing.rex and
+  rexxutil_library_identity.rex, the last for one Routine object per row.
   Spelled REXXUTIL, both sides give 98.903 rc 158 (extmeth2.rex). Row 521's
   ::REQUIRES LIBRARY and ::CONSTANT-before-EXTERNAL shapes match (constlib.rex
   rc 214, constlib2.rex rc 166, reqlib.rex rc 0, each identical on all three

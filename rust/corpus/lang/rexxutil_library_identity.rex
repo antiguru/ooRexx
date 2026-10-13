@@ -1,0 +1,31 @@
+/* One Routine object per internal package row, REXX and rexxutil alike:
+   every directive, loadExternalRoutine, findRoutine, findPublicRoutine and
+   imported-routine table naming the row answers it, and ::ANNOTATE ROUTINE
+   on any directive bound to it writes one table. */
+p = .context~package
+u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')
+f = .Routine~loadExternalRoutine('y', 'LIBRARY REXX Filespec')
+say 'loadExternalRoutine twice' (.Routine~loadExternalRoutine('z', 'LIBRARY rexxutil syssleep') == u) -
+  (.Routine~loadExternalRoutine('z', 'LIBRARY REXX FILESPEC') == f)
+say 'directive' (p~findRoutine('rr') == u) (p~findRoutine('ff') == f) (p~findRoutine('gg') == f)
+say 'routines table' (p~routines['RR'] == u) (p~routines['FF'] == f)
+say 'imported' (p~importedRoutines['SYSSLEEP'] == u) (p~importedRoutines['FILESPEC'] == f)
+say 'findRoutine' (p~findRoutine('SysSleep') == u) (p~findRoutine('Filespec') == f)
+say 'findPublicRoutine' (p~findPublicRoutine('SysSleep') == u) (p~findPublicRoutine('Filespec') == f)
+q = .Package~new('q', "::requires 'rexxutil' library")
+say 'another package' (q~findRoutine('SysSleep') == u) (q~importedRoutines['SYSSLEEP'] == u)
+say 'copy' (u~copy == u) u~copy~call(0)
+say 'annotations' f~annotations~items f~annotation('k1') f~annotation('k2') u~annotation('k3')
+
+p~addRoutine('FF2', p~findRoutine('ff'))
+p~addRoutine('RR2', p~findRoutine('rr'))
+say 'added' ff2('n', '/a/b.c') rr2(0) (p~findRoutine('rr2') == u)
+
+::routine rr external 'LIBRARY rexxutil SysSleep'
+::routine ff external 'LIBRARY REXX Filespec'
+::routine gg external 'LIBRARY REXX Filespec'
+::annotate routine ff k1 'one'
+::annotate routine gg k2 'two'
+::annotate routine rr k3 'three'
+::requires 'rexxutil' library
+::requires 'REXX' library
