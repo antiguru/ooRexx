@@ -58,3 +58,6 @@ lang/package_local_symbol_writes.rex
 # native method's class search raising its package local's UNKNOWN condition.
 lang/package_local_miss_repeat.rex
 lang/package_local_class_search_raise.rex
+
+# 9b Task 1 fix round 1: a native FindClass of STDQUE answers no class.
+lang/native_find_class_stdque.rex

@@ -579,7 +579,8 @@ impl Interp {
     ///
     /// # Errors
     /// The condition a searched directory's `UNKNOWN` method raised, and
-    /// [`Loud`] for an entry this crate does not build.
+    /// [`Loud`] for an entry this crate does not build, except `.local`'s
+    /// owed queue, which answers none.
     pub(crate) fn class_in_program(
         &mut self,
         program: ProgramId,
@@ -613,8 +614,9 @@ impl Interp {
             &env_seam::Access::Resolve,
         )? {
             hash::DirectoryEntry::Found(found) => Ok(Some(found)),
-            hash::DirectoryEntry::Owed(owner) => Err(Loud::environment_entry(bare, owner).into()),
-            hash::DirectoryEntry::Absent => Ok(None),
+            // `.STDQUE` is owed with an owner; it is a queue, which no class search answers.
+            hash::DirectoryEntry::Owed(Some(_)) | hash::DirectoryEntry::Absent => Ok(None),
+            hash::DirectoryEntry::Owed(None) => Err(Loud::environment_entry(bare, None).into()),
         }
     }
 

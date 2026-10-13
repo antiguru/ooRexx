@@ -267,8 +267,8 @@ fn every_directory_method_answers_on_both_directories_as_on_a_copy() {
 }
 
 /// A native method's class search over its program refuses an entry this
-/// crate does not build, in the program's own local and in `.local`, where a
-/// class beside it in the same local answers and a missing name answers none.
+/// crate does not build in the program's own local, where a class beside it
+/// answers; `.local`'s owed `STDQUE` and a missing name answer none.
 #[test]
 fn a_class_search_from_a_program_refuses_an_owed_entry() {
     let mut interp = Interp::new();
@@ -282,18 +282,16 @@ fn a_class_search_from_a_program_refuses_an_owed_entry() {
         interp.class_in_program(program, b"FOUNDCLASS").ok(),
         Some(Some(array))
     );
-    for name in [b"OWEDCLASS".as_slice(), b"STDQUE"] {
-        assert!(
-            matches!(
-                interp.class_in_program(program, name),
-                Err(Failure::Loud(_))
-            ),
+    assert!(matches!(
+        interp.class_in_program(program, b"OWEDCLASS"),
+        Err(Failure::Loud(_))
+    ));
+    for name in [b"STDQUE".as_slice(), b"NOSUCHCLASS"] {
+        assert_eq!(
+            interp.class_in_program(program, name).ok(),
+            Some(None),
             "{}",
             String::from_utf8_lossy(name)
         );
     }
-    assert_eq!(
-        interp.class_in_program(program, b"NOSUCHCLASS").ok(),
-        Some(None)
-    );
 }

@@ -1,0 +1,7 @@
+/* A native method's FindClass of STDQUE answers no class: .local's STDQUE is
+   a queue, so the method returns nothing. */
+t = .T~new
+say 'class:' t~findc('LIST')
+say 'q:' t~findc('STDQUE')
+say 'not reached'
+::requires 'lib.cls'
