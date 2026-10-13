@@ -149,3 +149,35 @@ There is no callgrind run, per the dispatch.
 
 - A security manager set with `.context~package~setSecurityManager` is seen by the running activation here and not by the oracle, which captures it when an activation starts (`sec1.rex`: the oracle sends no event, the crate sends `CALL SYSSLEEP`). This is pre-existing and does not depend on this task's change.
 - `libraries.rs`'s `PackageTable::new` puts `REXXUTIL`, while the oracle's key is `rexxutil` (`GlobalNames.h:201`). That table models unload order by bucket, so the key's hash may place later libraries differently. Not measured.
+
+## Fix round 1
+
+Commits:
+- 2722d0049: I1, `~addRoutine` files a row's object as its row
+- 01e1c2e2a: M3, `security_check` roots the info directory it answers
+- 70f39437e: M2, Deviation 35's chars and lines cell states its condition
+
+**I1.** `Interp::routines` and `package_public_routines` now hold `MergedRoutine` rather than `InstalledRoutine`. `install_routine` files a `Routine` with a directive record as `Installed`, and files an internal package row's own object (`rexx_routine_object` is `Some` and the store holds this object) as `Internal(index)`. Lookups through those tables (`find_routine`, `find_written_routine`, `merge_required`, `namespace_routine`, `~routines`, `~publicRoutines`) read the `MergedRoutine` as stored. The `get_or_insert` of a first directive in `environment.rs` is gone. `rexxutil_library_identity.rex` now opens with probe a6's shapes on both sides, with no reflection before them:
+- `addRoutine` of `loadExternalRoutine(SysSleep)` (a1);
+- `addPublicRoutine` of an imported-only `findRoutine('SysVersion')` (a2);
+- `addRoutine` of REXX `Filespec`;
+- `addRoutine` before and after `z~findRoutine('zz')` (a6).
+
+All of them are identical to the oracle (`both.sh` run and corpus gate below). Probe `add2.rex` also covers an importer through `addPackage`, which agrees, and a copy of a row's object. The copy is still refused, 88.914, where the oracle adds it. That refusal comes from BASE (a copy carries no directive record), and the exclusions row "Package~addRoutine REFUSES A LIBRARY Routine OBJECT" now says so.
+
+**I2.** The identity witness's first lines take a row object's `identityHash` and drop the object. They then allocate 50 strings and ask `loadExternalRoutine` again, comparing the hash and calling the new answer. As a mutant, `add_global` was deleted from `internal_routine_object` and `cargo test -j 4 --release -p rexx-exec --test collect_stress` was run: exit 101, with `the_l0_subset_passes_again_under_collect_on_every_allocation` failing on `rexxutil_library_identity.rex` at stress exit 120, stdout empty and stderr `rexx-exec: a message send to a value whose object is no longer live is not implemented` (`gates/fix1/collect-mutant.out`). The line was restored by an exact edit, and `git diff --stat -- crates/` printed nothing.
+
+**M3.** `security_check` pushes the directory as a temp of the caller's frame after `pop_frame`, and its doc says so. `security_entry` no longer pushes.
+
+**M2.** The cell now reads "the standard input's answer: 1 0 in h3.rex, two lines left".
+
+Checks (foreground, from `rust/`, under memcap):
+
+| check | result |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0, exit 0 |
+| `cargo test -j 4 -p rexx-exec --test package_requires --test refusal_sites --test refusal_dispositions --test closed_phases --test owners --test stream_handle --test internal_routines --test native_entries`, and `-p rexx-parse --test sourceline_oracle` | all ok |
+| `cargo test -j 4 --release -p rexx-exec --test collect_stress` | 37 passed, exit 0 (`gates/fix1/collect-fr1.out`) |
+| `REXX_CORPUS_GATE=1 cargo test -j 4 --release -p rexx-exec --test corpus` | exit 0, 1048 of 1048 matching (`gates/fix1/corpus-fr1.out`) |
+| `cargo test -j 4 --release -p rexx-exec --lib` | 1116 passed, exit 0 |
+| suite: Package, ROUTINE, MethodArgs, SecurityManager, ADDRESS | exit 101. 3 green. The red tests are the 9d set plus Package TESTRECLAIM01, the same as before (`gates/fix1/verdicts.tsv`) |

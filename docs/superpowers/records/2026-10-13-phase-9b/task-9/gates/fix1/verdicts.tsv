@@ -1,0 +1,7 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/class/MethodArgs	green		equal
+base/class/Package	red	not passed: TESTRECLAIM01 TEST_NEW01 TEST_PROLOG	equal
+base/directives/ROUTINE	green		equal
+base/keyword/ADDRESS	green		equal
+base/security.manager/SecurityManager	red	not passed: TEST_ENVIRONMENT_HANDLE TEST_METHOD_HANDLE_NO_RESULT TEST_METHOD_HANDLE_RESULT TEST_METHOD_PASS TEST_STREAM_PASS_BIF_STREAM_OPEN	equal
