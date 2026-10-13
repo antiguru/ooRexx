@@ -141,6 +141,8 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
     "lang/options.rex",
+    "lang/rexxutil_library_method.rex",
+    "lang/rexxutil_library_routine_missing.rex",
     "lang/scope_case_text_absorbed.rex",
     "lang/scope_case_text_absorbed_other.rex",
     "lang/select_when.rex",
