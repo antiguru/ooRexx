@@ -243,3 +243,14 @@ not measured against the suite and is outside this round.
 | corpus | `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | exit 0, `1041 of 1041 matching` (`fix-1/corpus.txt`) |
 | package_requires | `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test package_requires` | exit 0, 24 passed |
 | suite group | as in the first round, table in `fix-1/` | exit 101 (the group stays red on the 9d set): **24 of 29**, failing exactly the five `suite-9d-set.txt` tests |
+
+### SysFork deferred (Moritz, 2026-10-13)
+
+Commit `5a403729f`. `SysFork` stays a loud refusal with no `unsafe` and no fork site.
+`Loud::unsafe_grant` became `Loud::fork_child`, which says `routine "SYSFORK", whose forked child
+cannot continue without the timer thread and the joining main thread, is not implemented (Phase 9)`.
+Its doc points at `.superpowers/sdd/queued/2026-10-13-sysfork-design.md`, and so do `fork`'s doc
+and `oracle-crashes.txt` entry 46. `refusal-sites.tsv` was refreshed (one row renamed), the
+`directives.rs` example was updated, and fmt, clippy, the lib (1116) and the table binaries
+(closed_phases, internal_routines, owners, phase_ten_reasons, refusal_dispositions, refusal_sites,
+no_process_state, rexxutil_process) all exit 0.
