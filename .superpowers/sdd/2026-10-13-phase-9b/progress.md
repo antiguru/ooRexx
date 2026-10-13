@@ -89,3 +89,17 @@ Task 6: fix round 1 at a516009f5, 1888b1d81 (ADDRESS 79/79); re-review dispatche
 Task 6 re-review: approved with M1 (shell-dependent rc in entry-44 test), entry 34/43 heading over-claim -> fix round 2 (resume b6-impl); M2 passwd_home ignores NSS -> queued.
 Task 6: fix round 2 at 6ecc75da0 (pin asserts cwd unchanged, not shell rc; entry headings). Controller read the diff (test + doc only).
 Task 6: complete (d1185ae85, 1bb5e9dc5, a516009f5, 1888b1d81, 6ecc75da0).
+Task 7: dispatched (implementer opus, BASE 464e5ab03).
+Task 7: implementer DONE_WITH_CONCERNS (6220bd401, 022590321, fe5191171). SecurityManager 23/29 (TEST_REQUIRES_HANDLE now fails: loadRequires resolves from the security-manager-changed name, oracle from the original).
+Ruling: SysWait with no child answers -1 -- oracle answers uninitialised stack (entry 45, undefined-answer mode like 39/40) -- if wrong, one constant.
+Ruling: SysFork stays a loud refusal pending Moritz's unsafe-grant decision (asked).
+Moritz 2026-10-13: SysFork -> "Grant, refuse if threaded": one unsafe fork() site in builtin/rexxutil/process.rs, recorded in unsafe_sites; SysFork refuses loudly when any other activity or interpreter thread is alive; child continues the Rexx program. Goes into Task 7's fix round.
+Task 7 review: spec OK (SecurityManager caveat), quality approved. TEST_REQUIRES_HANDLE: oracle resolves from original name (PackageClass.cpp:1319/:184), crate from renamed (install.rs:617-627); 3-line fix verified in copy -> 24/29; not-found errors install.rs:631/643/650 name renamed too. Minors: SysWait reaps any child (isolation hazard, oracle same), pty error-path restore untested, doc rule breaks (cls ' -- ', rexxutil.rs '--', wait doc).
+Ruling: fix load_requires (original name to resolve_requires/resolve_search, errors name the original) in Task 7's fix round -- 3 lines, all callers map to C++ paths resolving the original name; waives the shared-path rule -- if wrong, 9c re-touches it.
+Ruling: SysWait process-wide reaping matches the oracle; document it in the wait doc; queue nothing (Phase 6 isolation would need a reaper design, out of 9b).
+Task 7: fix round 1 dispatched (resume b7-impl): SysFork grant + above + doc minors.
+SysFork re-ask: rexx-run always has 3 threads (main joining, rexx-interp, rexx-timer never exits), so "refuse if threaded" refuses every call; working fork needs timer lock across fork + child timer restart + child end path + redefined "threaded" (few hundred lines).
+Moritz 2026-10-13: "Defer to 9b1/later". SysFork stays a loud refusal naming the timer and joining main thread; design queued. Verified after asking: no ooTest file mentions SysFork at all (grep -rlwi over ootest/ooRexx: no hits), so no gate depends on it.
+Task 7: fix round 1 at ad69540d2..f55cf090d (load_requires original name + cache key; cache before manager; SysFork deferred reason; docs; pty fail test). Re-review dispatched (sonnet).
+Task 7 re-review: approved; minor: queued sysfork-design.md untracked but cited -> committed here. Note: ::requires "rexxutil" library answers 98.903 (oracle loads it) -> Task 9 owns.
+Task 7: complete (6220bd401, 022590321, fe5191171, ad69540d2, fdcf3782c, 5a403729f, 38a2e0f3b, fb6dbddeb, f55cf090d).
