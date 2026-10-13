@@ -169,15 +169,17 @@ fn the_file_date_time_witness_reads_the_zone_the_oracle_does() {
             Termination::Exited(out.status.code().unwrap_or(-1)),
             "exit status under TZ={zone}"
         );
-        assert_eq!(
+        assert!(
+            out.stdout == cpp.stdout,
+            "stdout under TZ={zone}:\n{}\n---\n{}",
             String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&cpp.stdout),
-            "stdout under TZ={zone}"
+            String::from_utf8_lossy(&cpp.stdout)
         );
-        assert_eq!(
+        assert!(
+            out.stderr == cpp.stderr,
+            "stderr under TZ={zone}:\n{}\n---\n{}",
             String::from_utf8_lossy(&out.stderr),
-            String::from_utf8_lossy(&cpp.stderr),
-            "stderr under TZ={zone}"
+            String::from_utf8_lossy(&cpp.stderr)
         );
         outputs.push(out.stdout);
     }

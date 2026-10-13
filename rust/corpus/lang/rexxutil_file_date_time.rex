@@ -5,8 +5,10 @@
    apart), years before 1000 and before 1970, the access time a set keeps,
    either half omitted, links, a directory, names that resolve to nothing,
    and the argument errors. The daylight-saving lines are the zone's own
-   transitions in Europe and in North America. Everything is made under a
-   directory this program makes and removes. */
+   transitions in Europe and in North America. Last, TZ is set by the
+   program itself, to zones including one whose daylight saving is winter
+   time, a POSIX rule, an empty value and a name no file has. Everything is
+   made under a directory this program makes and removes. */
 d = 'datetime.d'
 call SysMkDir d
 f = d'/a.txt'
@@ -85,6 +87,28 @@ call t "call SysSetFileDateTime f, .nil"
 call t "call SysSetFileDateTime f, , .nil"
 call t "call SysSetFileDateTime f, 1, 2, 3"
 call t "r = SysSetFileDateTime(f, '2020-01-01'); say 'returned' r"
+-- the program's own TZ, set through the environment, is the zone both read
+call value 'TZ', 'Europe/Dublin', 'ENVIRONMENT'
+call s '2020-03-29', '01:30:00', 'epoch'
+call s '2020-03-29', '00:59:59', 'epoch'
+call s '2020-03-29', '02:00:00', 'epoch'
+call s '2020-10-25', '01:30:00', 'epoch'
+call s '2021-03-28', '01:30:00', 'epoch'
+call s '2045-03-26', '01:30:00', 'epoch'
+call value 'TZ', 'UTC', 'ENVIRONMENT'
+call s '2020-06-01', '12:00:00', 'epoch'
+call value 'TZ', 'Asia/Kolkata', 'ENVIRONMENT'
+say 'kolkata     ' SysGetFileDateTime(f)
+call s '2020-06-01', '12:00:00', 'epoch'
+call value 'TZ', 'IST-1GMT0,M10.5.0,M3.5.0/1', 'ENVIRONMENT'
+call s '2020-03-29', '01:30:00', 'epoch'
+call s '2020-07-01', '12:00:00', 'epoch'
+call value 'TZ', ':Europe/Zurich', 'ENVIRONMENT'
+call s '2020-03-29', '02:30:00', 'epoch'
+call value 'TZ', '', 'ENVIRONMENT'
+call s '2020-07-01', '12:00:00', 'epoch'
+call value 'TZ', 'No/Such_Zone', 'ENVIRONMENT'
+call s '2020-07-01', '12:00:00', 'epoch'
 'rm -rf' d
 call SysGetFileDateTime f, 'Q'
 exit

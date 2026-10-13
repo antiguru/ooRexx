@@ -75,3 +75,7 @@ lang/rexxutil_file_date_time.rex
 lang/rexxutil_temp_file_name.rex
 lang/rexxutil_search_path.rex
 lang/rexxutil_file_search.rex
+
+# 9b Task 4 fix round 1: names the shared qualifier reaches from streams,
+# .Stream, .File and redirects.
+lang/rexxutil_qualified_names.rex

@@ -1,0 +1,45 @@
+count 44
+/* Names the stream builtins, .Stream, .File and the redirects qualify as
+   SysFileSystem::qualifyStreamName does: a NUL ends the name, an unknown
+   ~user and the empty name qualify to the null string, ~/ is HOME, and bytes
+   that are not UTF-8 stay as they are. Everything is made under a directory
+   this program makes and removes, with HOME moved into it. */
+d = 'qualified.d'
+call SysMkDir d
+call directory d
+call lineout 'a' || '00'x || 'b', 'x'
+call lineout 'a' || '00'x || 'b'
+say 'nul stream     ' (stream('a', 'c', 'query exists') <> '') ,
+  (stream('a' || '00'x || 'zz', 'c', 'query exists') <> '')
+say 'nul .Stream    ' (.Stream~new('q' || '00'x || 'z')~qualify == qualify('q'))
+say 'no user lineout' lineout('~nosuchuser.rexxutil/x', 'y')
+say 'no user exists ' '[' || stream('~nosuchuser.rexxutil/x', 'c', 'query exists') || ']'
+say 'no user state  ' stream('~nosuchuser.rexxutil/x', 's') stream('~nosuchuser.rexxutil/x', 'd')
+say 'no user .Stream' '[' || .Stream~new('~nosuchuser.rexxutil/x')~qualify || ']'
+say 'empty .Stream  ' '[' || .Stream~new('')~qualify || ']'
+address system 'echo hi' with output stream ('o' || '00'x || 'p')
+say 'nul redirect   ' (stream('o', 'c', 'query exists') <> '') linein('o')
+h = value('HOME', directory(), 'ENVIRONMENT')
+address system 'echo tilde' with output stream '~/t.txt'
+say 'tilde redirect ' (stream(directory()'/t.txt', 'c', 'query exists') <> '') linein(directory()'/t.txt')
+call value 'HOME', h, 'ENVIRONMENT'
+call t "address system 'echo e' with output stream ''"
+call t "address system 'echo e' with output stream '~nosuchuser.rexxutil/x'"
+odd = .File~new('n' || 'ff'x)~absolutePath
+say 'not utf8 .File ' c2x(right(odd, 2)) (odd == qualify('n' || 'ff'x)) ,
+  (odd == directory()'/n' || 'ff'x)
+call directory '..'
+'rm -rf' d
+address system 'echo e' with output stream ''
+exit
+
+t: procedure
+  parse arg code
+  signal on syntax name bad
+  interpret code
+  say 'ok   ' code 'rc' rc
+  return
+bad:
+  c = condition('O')
+  say 'error' code '|' c~code c~message
+  return

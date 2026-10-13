@@ -611,6 +611,7 @@ dependencies = [
  "rexx-parse",
  "rustc-hash",
  "rustix",
+ "tz-rs",
 ]
 
 [[package]]
@@ -869,6 +870,12 @@ dependencies = [
  "tracing-core",
  "tracing-log",
 ]
+
+[[package]]
+name = "tz-rs"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fc6c929ffa10fb34f4a3c7e9a73620a83ef2e85e47f9ec3381b8289e6762f42"
 
 [[package]]
 name = "unicode-ident"

@@ -13,9 +13,7 @@
 //! `interpreter/runtime/RexxUtilCommon.cpp`, `platform/unix/SysRexxUtil.cpp`
 //! and the `platform/unix/SysFileSystem.cpp` calls they make.
 
-use chrono::{
-    Datelike as _, LocalResult, NaiveDate, NaiveDateTime, TimeDelta, TimeZone as _, Timelike as _,
-};
+use chrono::{Datelike as _, NaiveDate, TimeDelta, Timelike as _};
 use rexx_core::ObjRef;
 use rustix::fs::{AtFlags, FileType, Mode, OFlags, Timespec, Timestamps};
 use rustix::io::Errno;
@@ -262,9 +260,31 @@ struct CivilTime {
     second: i64,
 }
 
-/// `localtime`: the local reading of `seconds` since the epoch.
-fn local_time(seconds: i64) -> Option<CivilTime> {
-    let at = chrono::Local.timestamp_opt(seconds, 0).earliest()?;
+/// The zone the program's own `TZ` names, resolved as glibc's `tzset` does:
+/// unset is `/etc/localtime`, a name is a TZif file under the zoneinfo
+/// directories or a path after `:`, anything else a POSIX rule, and what none
+/// of these reads, an empty `TZ` among them, is UTC. Read on every call, as
+/// `localtime` and `mktime` read it.
+fn program_zone(interp: &Interp) -> tz::TimeZone {
+    let named = match interp.env_get(b"TZ") {
+        None => tz::TimeZone::local(),
+        Some(text) => match std::str::from_utf8(text) {
+            Ok(text) => tz::TimeZone::from_posix_tz(text),
+            Err(_) => return tz::TimeZone::utc(),
+        },
+    };
+    named.unwrap_or_else(|_| tz::TimeZone::utc())
+}
+
+/// The local time type `zone` has in force at `seconds` since the epoch.
+fn zone_type(zone: &tz::TimeZone, seconds: i64) -> Option<tz::LocalTimeType> {
+    zone.find_local_time_type(seconds).ok().copied()
+}
+
+/// `localtime`: the reading of `seconds` since the epoch in `zone`.
+fn local_time(zone: &tz::TimeZone, seconds: i64) -> Option<CivilTime> {
+    let offset = i64::from(zone_type(zone, seconds)?.ut_offset());
+    let at = chrono::DateTime::from_timestamp(seconds.checked_add(offset)?, 0)?;
     Some(CivilTime {
         year: i64::from(at.year()),
         month0: i64::from(at.month0()),
@@ -275,18 +295,14 @@ fn local_time(seconds: i64) -> Option<CivilTime> {
     })
 }
 
-/// `mktime` with `tm_isdst` of `-1`: fields past their range carry into the
-/// next, a reading the zone repeats is its earlier instant, and a reading the
-/// zone skips is taken at the offset in force before the skip. `-1` where the
-/// result is outside what the calendar holds.
-///
-/// glibc takes a skipped reading at whichever offset lands it in daylight
-/// saving time, which is the earlier offset wherever daylight saving is the
-/// later one. In a zone whose daylight saving is the earlier offset, as
-/// `Europe/Dublin`'s winter is, it lands an hour earlier than here: measured,
-/// `2020-03-29 01:30:00` there is `1585441800` on the oracle and `1585445400`
-/// here. chrono does not say which offset is daylight saving time.
-fn make_time(fields: CivilTime) -> i64 {
+/// `mktime` with `tm_isdst` of `-1` in `zone`: fields past their range carry
+/// into the next, and a reading the zone repeats is its earlier instant. A
+/// reading the zone skips is taken at whichever of the two offsets around it
+/// lands it in a local time type flagged daylight saving, which is glibc's
+/// choice: the offset before the skip in most zones, the one after it where
+/// the zone flags winter time as daylight saving (`Europe/Dublin`). `-1` where
+/// the result is outside what the calendar holds.
+fn make_time(zone: &tz::TimeZone, fields: CivilTime) -> i64 {
     let months = fields.year * 12 + fields.month0;
     let first = i32::try_from(months.div_euclid(12)).ok().and_then(|year| {
         let month = u32::try_from(months.rem_euclid(12) + 1).ok()?;
@@ -299,34 +315,26 @@ fn make_time(fields: CivilTime) -> i64 {
     else {
         return -1;
     };
-    let candidates = match chrono::Local.from_local_datetime(&local) {
-        LocalResult::Single(at) => [Some(at), None],
-        LocalResult::Ambiguous(one, other) => [Some(one), Some(other)],
-        LocalResult::None => [None, None],
-    };
-    // chrono answers both readings for the instant a transition happens at,
-    // so each is kept only where the zone reads that instant back as `local`.
-    candidates
-        .into_iter()
-        .flatten()
-        .map(|at| at.timestamp())
-        .filter(|seconds| {
-            chrono::Local
-                .timestamp_opt(*seconds, 0)
-                .earliest()
-                .is_some_and(|at| at.naive_local() == local)
-        })
-        .min()
-        .unwrap_or_else(|| skipped_reading(local))
-}
-
-/// [`make_time`] for a reading inside a skipped hour.
-fn skipped_reading(local: NaiveDateTime) -> i64 {
-    let Some(before) = local.checked_sub_signed(TimeDelta::days(1)) else {
+    let local = local.and_utc().timestamp();
+    // The offsets a day either side: a reading a transition repeats or skips
+    // lies between them.
+    let offsets = [local - 86_400, local + 86_400]
+        .map(|around| zone_type(zone, around).map(|found| i64::from(found.ut_offset())));
+    let [Some(before), Some(after)] = offsets else {
         return -1;
     };
-    let offset = chrono::Local.offset_from_utc_datetime(&before);
-    local.and_utc().timestamp() - i64::from(offset.local_minus_utc())
+    let candidates = [local - before, local - after];
+    let reads_back = |at: i64| {
+        zone_type(zone, at).is_some_and(|found| i64::from(found.ut_offset()) == local - at)
+    };
+    if let Some(at) = candidates.into_iter().filter(|at| reads_back(*at)).min() {
+        return at;
+    }
+    let daylight = |at: i64| zone_type(zone, at).is_some_and(|found| found.is_dst());
+    match candidates.map(daylight) {
+        [false, true] => candidates[1],
+        _ => candidates[0],
+    }
 }
 
 /// `sscanf` over `text` with the format `%<w>d<sep>%<w>d<sep>%<w>d`, the
@@ -413,7 +421,7 @@ pub(crate) fn get_file_date_time(
         return Ok(answer(interp, -1));
     };
     let seconds = if access { stat.st_atime } else { stat.st_mtime };
-    let Some(at) = local_time(seconds) else {
+    let Some(at) = local_time(&program_zone(interp), seconds) else {
         return Ok(answer(interp, -1));
     };
     let text = format!(
@@ -453,7 +461,8 @@ pub(crate) fn set_file_date_time(
                 i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
             })
     } else {
-        let Some(mut fields) = local_time(stat.st_mtime) else {
+        let zone = program_zone(interp);
+        let Some(mut fields) = local_time(&zone, stat.st_mtime) else {
             return Ok(answer(interp, -1));
         };
         if let Some(date) = date {
@@ -468,7 +477,7 @@ pub(crate) fn set_file_date_time(
             };
             (fields.hour, fields.minute, fields.second) = (hour, minute, second);
         }
-        make_time(fields)
+        make_time(&zone, fields)
     };
     let times = Timestamps {
         last_access: whole_second(stat.st_atime),
@@ -660,7 +669,6 @@ impl Found {
         let value = interp.text_built(line);
         match self {
             Found::Array(array) => {
-                interp.roots.activity_mut().push_temp(value);
                 interp.array_append(array, value)?;
             }
             Found::Stem(stem) => {

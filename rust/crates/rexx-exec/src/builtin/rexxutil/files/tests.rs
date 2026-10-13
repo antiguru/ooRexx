@@ -20,11 +20,32 @@ fn bytes(path: &Path) -> &[u8] {
     path.as_os_str().as_bytes()
 }
 
-/// A fresh empty directory at `path`.
-fn fresh(path: PathBuf) -> PathBuf {
-    let _ = fs::remove_dir_all(&path);
-    fs::create_dir_all(&path).unwrap_or_else(|e| panic!("cannot create {}: {e}", path.display()));
-    path
+/// A directory of this run's own under `parent`, removed when dropped, so a
+/// failed assertion leaves nothing behind and two runs never share one.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(parent: &Path) -> Scratch {
+        use std::hash::BuildHasher as _;
+        let unique = std::hash::RandomState::new().hash_one(std::process::id());
+        let path = parent.join(format!(
+            "rexxutil-move-{}-{unique:016x}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path)
+            .unwrap_or_else(|e| panic!("cannot create {}: {e}", path.display()));
+        Scratch(path)
+    }
+
+    fn join(&self, name: &str) -> PathBuf {
+        self.0.join(name)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 /// **A move across file systems copies and then unlinks**, keeping the
@@ -34,11 +55,11 @@ fn fresh(path: PathBuf) -> PathBuf {
 /// this crate's own answer, the one this checkout's `interpreter/` gives. The
 /// two directories are this crate's target directory and the system's
 /// temporary directory, and the test first checks that a rename between them
-/// is refused with `EXDEV`.
+/// is refused with `EXDEV`, failing where they are one file system.
 #[test]
 fn a_move_across_file_systems_copies_and_unlinks() {
-    let here = fresh(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/rexxutil-move"));
-    let there = fresh(std::env::temp_dir().join(format!("rexxutil-move-{}", std::process::id())));
+    let here = Scratch::new(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp"));
+    let there = Scratch::new(&std::env::temp_dir());
 
     let probe = here.join("probe");
     fs::write(&probe, b"").expect("a probe file");
@@ -46,8 +67,8 @@ fn a_move_across_file_systems_copies_and_unlinks() {
         rustix::fs::rename(bytes(&probe), bytes(&there.join("probe"))),
         Err(rustix::io::Errno::XDEV),
         "this test needs {} and {} on different file systems",
-        here.display(),
-        there.display()
+        here.0.display(),
+        there.0.display()
     );
 
     let from = here.join("f.txt");
@@ -87,7 +108,4 @@ fn a_move_across_file_systems_copies_and_unlinks() {
         "nothing is written through the link"
     );
     assert_eq!(fs::read(&second).expect("the source stays"), b"more");
-
-    let _ = fs::remove_dir_all(&here);
-    let _ = fs::remove_dir_all(&there);
 }

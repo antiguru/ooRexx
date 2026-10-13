@@ -50,7 +50,6 @@ rexx-lib = { path = "../rexx-lib" }
 # `SystemInterpreter::getCurrentTime` calls `localtime`; this crate cannot,
 # because that is `unsafe` and the workspace lint is `deny`.
 #
-# **The only external crate `src/` depends on**, so the reasons are here.
 # `default-features = false` drops `oldtime` (a no-op feature since 0.4.30,
 # and what used to pull the `time` 0.1 whose `localtime_r` is
 # RUSTSEC-2020-0071) and `wasmbind`. What is left compiles four crates on
@@ -70,6 +69,11 @@ rustix = { version = "1.1.4", features = ["event", "fs", "process", "system", "t
 # `sigaction` and the async-signal-safe `write` the signal module needs
 # (D-U3, `src/signal.rs`). Already in the graph through `std`'s users.
 libc = "0.2.186"
+# The zone `SysGetFileDateTime` and `SysSetFileDateTime` convert through: the
+# program's own `TZ` resolved as glibc resolves it, and each local time
+# type's `is_dst`, which glibc's `mktime` uses to place a skipped reading and
+# chrono does not expose. `#![forbid(unsafe_code)]`, no dependencies.
+tz-rs = "0.7.3"
 
 [features]
 # The pinned-park counter, `src/pinning.rs`.
