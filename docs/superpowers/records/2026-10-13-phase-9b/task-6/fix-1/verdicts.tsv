@@ -1,0 +1,5 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/keyword/ADDRESS	green		equal
+base/rexxutil/SysFormatMessage	green		equal
+base/rexxutil/platform/unix/SysGetMessage	green		equal

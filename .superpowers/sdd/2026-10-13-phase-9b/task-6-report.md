@@ -145,3 +145,67 @@ on both sides.
    "catalog not found". Not measured on the oracle.
 5. **`__libc_enable_secure`** (a set-uid `rexx` ignoring a `LANG` with a `/`) is not modelled.
 6. **The whole catalog file is read into memory** after its magic matches, where glibc maps it.
+
+## Fix round 1
+
+Commit `a516009f5`. Records in `docs/superpowers/records/2026-10-13-phase-9b/task-6/fix-1/`.
+
+### What changed
+
+- **`cd` ports `sys_process_cd`** (`command.rs` `change_directory`, now answering
+  `Option<CommandOutcome>` so `None` hands the command to the shell):
+  - leading spaces only are skipped, and trailing blanks reach the directory change;
+  - a bare `cd` goes to `HOME`, and `~`, `~/rest` and `~ rest` go to `HOME` with a `/` after it,
+    keeping the rest only after `~/`;
+  - `~user` and `~user/rest` go through `platform::passwd_home` (now `pub(crate)`), and an unknown
+    account goes to the shell;
+  - an unset `HOME` goes to the shell, including `cd ~`, where the oracle dies (entry 44);
+  - `unquote` drops every `"` and a backslash keeps the next byte, applied last to every branch
+    (the false doc on the old `unquote` is gone);
+  - no lexical normalisation: the target is joined to the interpreter's directory when relative,
+    resolved with `canonicalize` (its errno is the rc), must be a directory (20) with search
+    permission (`access(X_OK)`, 13), and the interpreter's directory becomes the physical path.
+- **Other cwd state checked.** `change_directory` has one caller (`run_internally`). The only other
+  `set_cwd` caller is `DIRECTORY(new)` (`platform.rs`), which already canonicalises, and the
+  witness shows `DIRECTORY(link)` answering `<base>/real/sub` on both sides. The starting directory
+  is `std::env::current_dir`, which is `getcwd`.
+- **Entry 44** (`cd ~` with `HOME` unset): SIGSEGV 3 of 3 runs (`crash44.rex` under `env -u HOME`).
+  Pinned by `command::tests::cd_home_with_home_unset_goes_to_the_shell` (`rc 2`, directory
+  unchanged). That test lets the shell's message reach the test run's stderr.
+- **Entries 34 and 43** rewritten. 43 carries the review's per-string table, and 34 points to it.
+  The short strings (`''`, `'x'`, `'abc'`) through both programs are now in
+  `lang/rexxutil_messages.rex` (98.913 on both sides, the oracle 3 runs of 3 byte-identical).
+- `messages.rs` `open` doc names the interpreter's current directory.
+- `unquote` has a unit test of its byte rules.
+
+### Witness
+
+`rust/corpus/lang/address_cd.rex`, in `phase-9.txt`, sourceline file generated from an empty
+directory. Run from fresh directories on both sides: stdout, stderr and rc 0 identical
+(`address-cd.oracle.out`/`.err`), and the run directory is left empty. The oracle's stdout was read
+and each row prints what its label claims:
+- the home forms, including `cd ~ real` landing in `HOME`;
+- `~<me>` and `~<me>/` landing in the account's home;
+- `~nosuchuser.cd` and its `/x` form going to `/bin/sh` (its message on stderr, rc 2);
+- `"~"`, quotes and escapes, a trailing backslash, a trailing blank, and `cd ""` (rc 2);
+- `link`, `link/..`, `link/../sub` and `link/../../ab` resolved physically, `nowhere/..` (2);
+- a file (20), `file/..` (20), and a directory without search permission (13);
+- absolute paths, and `DIRECTORY(link)`;
+- `HOME` set to the null string: `cd ~` lands in `/`, and a bare `cd` is rc 2.
+
+Mutation: resolving without `canonicalize` (the joined path kept as is) turned the witness red at
+the first home row. Reversed from a copy, confirmed with `cmp` and `git diff --stat`, and the
+release binary rebuilt.
+
+### Checks
+
+| check | command | result |
+|---|---|---|
+| fmt | `cargo fmt --all --check` | exit 0 |
+| clippy | `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | exit 0 |
+| refusal sites | `REXX_REFUSAL_SITES_REFRESH=1 ... --test refusal_sites` | one row moved location only (`escalated`, `command.rs:409` to `:463`) |
+| lib + tables | same command as above | exit 0: 1110, 8, 2, 1, 6, 5, 3, 5 passed |
+| sourceline | `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse --test sourceline_oracle` | exit 0 |
+| suite groups | the three groups, as above | **exit 0** at `a516009f5`, wall 77 s: ADDRESS 79/79, SysFormatMessage 5/5, SysGetMessage 9/9, all green |
+| corpus | `REXX_CORPUS_GATE=1 ... --test corpus` | exit 0, `1039 of 1039 matching` |
+| collect_stress | `... --test collect_stress` | exit 0, 37 passed |

@@ -1,0 +1,961 @@
+-- strerror
+-3 Unknown error -3
+-2 Unknown error -2
+-1 Unknown error -1
+0 Success
+1 Operation not permitted
+2 No such file or directory
+3 No such process
+4 Interrupted system call
+5 Input/output error
+6 No such device or address
+7 Argument list too long
+8 Exec format error
+9 Bad file descriptor
+10 No child processes
+11 Resource temporarily unavailable
+12 Cannot allocate memory
+13 Permission denied
+14 Bad address
+15 Block device required
+16 Device or resource busy
+17 File exists
+18 Invalid cross-device link
+19 No such device
+20 Not a directory
+21 Is a directory
+22 Invalid argument
+23 Too many open files in system
+24 Too many open files
+25 Inappropriate ioctl for device
+26 Text file busy
+27 File too large
+28 No space left on device
+29 Illegal seek
+30 Read-only file system
+31 Too many links
+32 Broken pipe
+33 Numerical argument out of domain
+34 Numerical result out of range
+35 Resource deadlock avoided
+36 File name too long
+37 No locks available
+38 Function not implemented
+39 Directory not empty
+40 Too many levels of symbolic links
+41 Unknown error 41
+42 No message of desired type
+43 Identifier removed
+44 Channel number out of range
+45 Level 2 not synchronized
+46 Level 3 halted
+47 Level 3 reset
+48 Link number out of range
+49 Protocol driver not attached
+50 No CSI structure available
+51 Level 2 halted
+52 Invalid exchange
+53 Invalid request descriptor
+54 Exchange full
+55 No anode
+56 Invalid request code
+57 Invalid slot
+58 Unknown error 58
+59 Bad font file format
+60 Device not a stream
+61 No data available
+62 Timer expired
+63 Out of streams resources
+64 Machine is not on the network
+65 Package not installed
+66 Object is remote
+67 Link has been severed
+68 Advertise error
+69 Srmount error
+70 Communication error on send
+71 Protocol error
+72 Multihop attempted
+73 RFS specific error
+74 Bad message
+75 Value too large for defined data type
+76 Name not unique on network
+77 File descriptor in bad state
+78 Remote address changed
+79 Can not access a needed shared library
+80 Accessing a corrupted shared library
+81 .lib section in a.out corrupted
+82 Attempting to link in too many shared libraries
+83 Cannot exec a shared library directly
+84 Invalid or incomplete multibyte or wide character
+85 Interrupted system call should be restarted
+86 Streams pipe error
+87 Too many users
+88 Socket operation on non-socket
+89 Destination address required
+90 Message too long
+91 Protocol wrong type for socket
+92 Protocol not available
+93 Protocol not supported
+94 Socket type not supported
+95 Operation not supported
+96 Protocol family not supported
+97 Address family not supported by protocol
+98 Address already in use
+99 Cannot assign requested address
+100 Network is down
+101 Network is unreachable
+102 Network dropped connection on reset
+103 Software caused connection abort
+104 Connection reset by peer
+105 No buffer space available
+106 Transport endpoint is already connected
+107 Transport endpoint is not connected
+108 Cannot send after transport endpoint shutdown
+109 Too many references: cannot splice
+110 Connection timed out
+111 Connection refused
+112 Host is down
+113 No route to host
+114 Operation already in progress
+115 Operation now in progress
+116 Stale file handle
+117 Structure needs cleaning
+118 Not a XENIX named type file
+119 No XENIX semaphores available
+120 Is a named type file
+121 Remote I/O error
+122 Disk quota exceeded
+123 No medium found
+124 Wrong medium type
+125 Operation canceled
+126 Required key not available
+127 Key has expired
+128 Key has been revoked
+129 Key was rejected by service
+130 Owner died
+131 State not recoverable
+132 Operation not possible due to RF-kill
+133 Memory page has hardware error
+134 Inappropriate file type or format
+135 Unknown error 135
+136 Unknown error 136
+137 Unknown error 137
+138 Unknown error 138
+139 Unknown error 139
+140 Unknown error 140
+SysGetErrorText(2147483647) -> [Unknown error 2147483647]
+SysGetErrorText(-2147483647) -> syntax 88.907 : Argument 1 must be in the range -2147483648 to 2147483647; found "-2.14748365E+9".
+SysGetErrorText(' 2 ') -> [No such file or directory]
+SysGetErrorText(2.0) -> [No such file or directory]
+SysGetErrorText(2147483648) -> syntax 88.907 : Argument 1 must be in the range -2147483648 to 2147483647; found "2147483648".
+SysGetErrorText('x') -> syntax 88.907 : Argument 1 must be in the range -2147483648 to 2147483647; found "x".
+SysGetErrorText() -> syntax 88.901 : Missing argument; argument 1 is required.
+SysGetErrorText(1, 2) -> syntax 88.922 : Too many arguments in invocation; 1 expected.
+-- the interpreter's messages
+3 Failure during initialization.
+4 Program interrupted.
+5 System resources exhausted.
+6 Unmatched "/*" or quote.
+7 WHEN or OTHERWISE expected.
+8 Unexpected THEN or ELSE.
+9 Unexpected WHEN or OTHERWISE.
+10 Unexpected or unmatched END.
+11 Control stack full.
+13 Invalid character in program.
+14 Incomplete DO/LOOP/SELECT/IF.
+15 Invalid hexadecimal or binary string.
+16 Label not found.
+17 Unexpected PROCEDURE.
+18 THEN expected.
+19 String or symbol expected.
+20 Symbol expected.
+21 Invalid data on end of clause.
+22 Invalid character string.
+23 Invalid data string.
+24 Invalid TRACE request.
+25 Invalid subkeyword found.
+26 Invalid whole number.
+27 Invalid DO or LOOP syntax.
+28 Invalid LEAVE or ITERATE.
+29 Environment name too long.
+30 Name or symbol too long.
+31 Name starts with number or ".".
+33 Invalid expression result.
+34 Logical value not 0 or 1.
+35 Invalid expression.
+36 Unmatched "(" or "[" in expression.
+37 Unexpected ",", ")", or "]".
+38 Invalid template or pattern.
+39 Evaluation stack overflow.
+40 Incorrect call to routine.
+41 Bad arithmetic conversion.
+42 Arithmetic overflow/underflow.
+43 Routine not found.
+44 Function or message did not return data.
+45 No data specified on function RETURN.
+46 Invalid variable reference.
+47 Unexpected label.
+48 Failure in system service.
+49 Interpretation error.
+88 Invalid argument.
+89 Variable or message term expected.
+90 External name not found.
+91 No result object.
+92 OLE error.
+93 Incorrect call to method.
+97 Object method not found.
+98 Execution error.
+99 Translation error.
+100 Error  running , line :.
+102 January
+103 February
+104 March
+105 April
+106 May
+107 June
+108 July
+109 August
+110 September
+111 October
+112 November
+113 December
+114 +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+126 +++ Interactive trace.  Error
+200 Failure during initialization: File "" is unreadable.
+201 Program interrupted with  condition.
+202 Unmatched comment delimiter ("/*") on line .
+203 Unmatched single quote (').
+204 Unmatched double quote (").
+205 SELECT on line  requires WHEN.
+206 SELECT on line  requires WHEN, OTHERWISE, or END.
+207 All WHEN expressions of SELECT are false; OTHERWISE expected.
+208 THEN has no corresponding IF or WHEN clause.
+209 ELSE has no corresponding THEN clause.
+210 WHEN has no corresponding SELECT.
+211 OTHERWISE has no corresponding SELECT.
+212 END has no corresponding DO, LOOP, or SELECT.
+213 Symbol following END ("") must match block specification name ("") on line  or be omitted.
+214 END corresponding to block on line  must not have a symbol following it because there is no LABEL or control variable; found "".
+215 END must not immediately follow THEN.
+216 END must not immediately follow ELSE.
+217 Symbol following END ("") must match LABEL of SELECT specification ("") on line  or be omitted.
+218 Insufficient control stack space; cannot continue execution.
+219 Incorrect character in program "" (''X).
+220 DO instruction on line  requires matching END.
+221 SELECT instruction on line  requires matching END.
+222 THEN on line  must be followed by an instruction.
+223 ELSE on line  must be followed by an instruction.
+224 OTHERWISE on line  requires matching END.
+225 Incorrect location of whitespace character in position  in hexadecimal string.
+226 Incorrect location of whitespace character in position  in binary string.
+227 Only 0-9, a-f, A-F, and whitespace characters are valid in a hexadecimal string; found "".
+228 Only 0, 1, and whitespace characters are valid in a binary string; found "".
+229 Label "" not found.
+230 PROCEDURE is valid only when it is the first instruction executed after an internal CALL or function invocation.
+231 INTERPRET data must not contain PROCEDURE.
+232 IF instruction on line  requires matching THEN clause.
+233 WHEN instruction on line  requires matching THEN clause.
+234 String or symbol expected after ADDRESS keyword.
+235 String or symbol expected after CALL keyword.
+236 String or symbol expected after NAME keyword.
+237 String or symbol expected after SIGNAL keyword.
+238 String or symbol expected after STREAM keyword.
+239 String or symbol expected after TRACE keyword.
+240 String or symbol expected after PARSE keyword.
+241 String or symbol expected after ::CLASS keyword.
+242 String or symbol expected after ::METHOD keyword.
+243 String or symbol expected after ::ROUTINE keyword.
+244 String or symbol expected after ::REQUIRES keyword.
+245 String expected after EXTERNAL keyword.
+246 String or symbol expected after METACLASS keyword.
+247 String or symbol expected after SUBCLASS keyword.
+248 String or symbol expected after INHERIT keyword.
+249 String or symbol expected after tilde (~).
+250 String or symbol expected after superclass colon (:).
+251 Symbol expected after DROP keyword.
+252 Symbol expected after EXPOSE keyword.
+253 Symbol expected after PARSE keyword.
+254 Symbol expected after PARSE VAR.
+255 NUMERIC must be followed by one of the keywords DIGITS, FORM, or FUZZ; found "".
+256 Symbol expected after "(" of a variable reference.
+257 Symbol expected after LEAVE keyword.
+258 Symbol expected after ITERATE keyword.
+259 Symbol expected after END keyword.
+260 Symbol expected after ON keyword.
+261 Symbol expected after OFF keyword.
+262 Symbol expected after USE ARG.
+263 Symbol expected after RAISE keyword.
+264 Symbol expected after USER keyword.
+265 Symbol expected after ::.
+266 Symbol expected after superclass colon (:).
+267 Data must not follow the NOP keyword; found "".
+268 Data must not follow the SELECT keyword; found "".
+269 Data must not follow the NAME trap name; found "".
+270 Data must not follow the condition name; found "".
+271 Data must not follow the SIGNAL label name; found "".
+272 Data must not follow the TRACE setting; found "".
+273 Data must not follow the LEAVE name; found "".
+274 Data must not follow the ITERATE name; found "".
+275 Data must not follow the END name; found "".
+276 Data must not follow the NUMERIC FORM specification; found "".
+277 Data must not follow the GUARD OFF specification; found "".
+278 Incorrect character string "" (''X).
+279 Incorrect double-byte character.
+280 Incorrect data string "" (''X).
+281 TRACE request letter must be one of "ACEFILNOR"; found "".
+282 Numeric TRACE requests are valid only from interactive debugging.
+283 CALL ON must be followed by one of the keywords ERROR, FAILURE, HALT, NOTREADY, USER, or ANY; found "".
+284 CALL OFF must be followed by one of the keywords ERROR, FAILURE, HALT, NOTREADY, USER, or ANY; found "".
+285 SIGNAL ON must be followed by one of the keywords ERROR, FAILURE, HALT, LOSTDIGITS, NOTREADY, NOMETHOD, NOSTRING, NOVALUE, SYNTAX, USER, or ANY; found "".
+286 SIGNAL OFF must be followed by one of the keywords ERROR, FAILURE, HALT, LOSTDIGITS, NOTREADY, NOMETHOD, NOSTRING, NOVALUE, SYNTAX, USER, or ANY; found "".
+287 NUMERIC must be followed by one of the keywords DIGITS, FORM, or FUZZ; found "".
+288 NUMERIC FORM must be followed by one of the keywords SCIENTIFIC or ENGINEERING; found "".
+289 Unknown keyword on ::CLASS directive; found "".
+290 Unknown keyword on ::METHOD directive; found "".
+291 Unknown keyword on ::ROUTINE directive; found "".
+292 Unknown keyword on ::REQUIRES directive; found "".
+293 PROCEDURE must be followed by the keyword EXPOSE or nothing; found "".
+294 CALL ON condition must be followed by the keyword NAME; found "".
+295 SIGNAL ON condition must be followed by the keyword NAME; found "".
+296 PARSE must be followed by optional keywords LOWER or UPPER, by an optional keyword CASELESS, and by one of the keywords ARG, LINEIN, PULL, SOURCE, VALUE, VAR, or VERSION; found "".
+297 USE must be followed by the keyword ARG, LOCAL or STRICT; found "".
+298 RAISE must be followed by one of the keywords ERROR, FAILURE, HALT, LOSTDIGITS, NOMETHOD, NOSTRING, NOTREADY, NOVALUE, PROPAGATE, SYNTAX, or USER; found "".
+299 Unknown keyword on RAISE instruction; found "".
+300 Duplicate DESCRIPTION keyword found.
+301 Duplicate ADDITIONAL or ARRAY keyword found.
+302 Duplicate RETURN or EXIT keyword found.
+303 GUARD ON or GUARD OFF must be followed by the keyword WHEN; found "".
+304 Operand to the right of the power operator (**) must be a whole number; found "".
+305 Value of repetition count expression in DO or LOOP instruction must be zero or a positive whole number; found "".
+306 Value of FOR expression in DO or LOOP instruction must be zero or a positive whole number; found "".
+307 Positional pattern of PARSE template must be a whole number; found "".
+308 DIGITS value must be a positive whole number; found "".
+309 FUZZ value must be zero or a positive whole number; found "".
+310 Number used in TRACE setting must be a whole number; found "".
+311 Result of % operation did not result in a whole number.
+312 Result of // operation did not result in a whole number.
+313 Only one WHILE or UNTIL condition can be used on the same loop.
+314 Incorrect data following FOREVER keyword on the loop; found "".
+315 LEAVE is valid only within a repetitive loop or labeled block instruction.
+316 ITERATE is valid only within a repetitive loop.
+317 Symbol following LEAVE ("") must either match the label of a current loop or block instruction.
+318 Symbol following ITERATE ("") must either match the label of a current loop or be omitted.
+319 Environment name exceeds  characters; found "".
+320 Name or symbol exceeds 250 characters:  "".
+321 Labels are not allowed within a DO/LOOP block; found "".
+322 Labels are not allowed within an IF block; found "".
+323 Labels are not allowed within a SELECT block; found "".
+324 A value cannot be assigned to a number; found "".
+325 Variable symbol must not start with a number; found "".
+326 Variable symbol must not start with a "."; found "".
+327 Value of NUMERIC DIGITS ("") must exceed value of NUMERIC FUZZ ("").
+328 Value of NUMERIC DIGITS ("") must not exceed .
+329 Incorrect expression result following VALUE keyword of ADDRESS instruction.
+330 Incorrect expression result following VALUE keyword of SIGNAL instruction.
+331 Incorrect expression result following VALUE keyword of TRACE instruction.
+332 Incorrect expression result following SYNTAX keyword of RAISE instruction.
+333 Value of expression following IF keyword must be exactly "0" or "1"; found "".
+334  argument  must be a character class name or a single character; found "".
+335 Value of expression following WHILE keyword must be exactly "0" or "1"; found "".
+336 Value of expression following UNTIL keyword must be exactly "0" or "1"; found "".
+337 Value of expression to the left of the logical operator "" must be exactly "0" or "1"; found "".
+338 Logical value must be exactly "0" or "1"; found "".
+339 Value of expression following GUARD keyword must be exactly "0" or "1"; found "".
+340 Incorrect expression detected at "".
+341 Prefix operator "" is not followed by an expression term.
+342 Missing conditional expression following IF keyword.
+343 Missing conditional expression following WHEN keyword.
+344 Missing initial expression for DO or LOOP control variable.
+345 Missing expression following BY keyword.
+346 Missing expression following TO keyword.
+347 Missing expression following FOR keyword.
+348 Missing expression following WHILE keyword.
+349 Missing expression following UNTIL keyword.
+350 Missing expression following OVER keyword.
+351 Missing expression following INTERPRET keyword.
+352 Missing expression following OPTIONS keyword.
+353 Missing expression following VALUE keyword of an ADDRESS instruction.
+354 Missing expression following VALUE keyword of a SIGNAL instruction.
+355 Missing expression following VALUE keyword of a TRACE instruction.
+356 Missing expression following VALUE keyword of a NUMERIC FORM instruction.
+357 Missing expression following assignment instruction.
+358 Operator "" is not followed by an expression term.
+359 Missing expression following GUARD keyword.
+360 Missing expression following DESCRIPTION keyword of a RAISE instruction.
+361 Missing expression following ADDITIONAL keyword of a RAISE instruction.
+362 Missing "(" on expression list of the ARRAY keyword.
+363 Left parenthesis "(" in position  on line  requires a corresponding right parenthesis ")".
+364 Square bracket "[" in position  on line  requires a corresponding right square bracket "]".
+365 Unexpected ",".
+366 Unmatched ")" in expression.
+367 Unexpected "]".
+368 Incorrect PARSE template detected at "".
+369 Incorrect PARSE position detected at "".
+370 PARSE VALUE instruction requires WITH keyword.
+371 Missing PARSE relative position.
+372 External routine "" failed.
+373 Result returned by  is longer than :  "".
+374 Not enough arguments in invocation of ; minimum expected is .
+375 Too many arguments in invocation of ; maximum expected is .
+376 Missing argument in invocation of ; argument  is required.
+377  argument  must be a number; found "".
+378  argument  must be a whole number; found "".
+379  argument  must be zero or positive; found "".
+380  argument  must be positive; found "".
+381  argument  must not exceed the whole number limit.
+382  argument  must be in the range 0-99; found "".
+383  argument  must not be a null string.
+384  argument  must be a single character or null; found "".
+385  argument  must be a single character; found "".
+386  argument  must be a binary string; found "".
+387  argument  must be a hexadecimal string; found "".
+388  argument  must be a valid symbol; found "".
+389  argument  must be one of ; found "".
+390 TRACE setting letter must be one of "ACEFILNOR"; found "".
+391 RANDOM argument 1 ("") must be less than or equal to argument 2 ("").
+392 SOURCELINE argument 1 ("") must be less than or equal to the number of lines in the program ().
+393 X2D argument 1 cannot be expressed as a whole number; found "".
+394  argument 2, "", is not in the format described by argument 3, "".
+395  conversion to format "" is not allowed.
+396 RANDOM difference between argument 1 ("") and argument 2 ("") must not exceed 999,999,999.
+397  argument 1 must be a valid stream name; found "".
+398 Positioning of transient streams is not valid.
+399 USE STRICT must be followed by the keyword ARG; found "".
+400  argument  must be a single-dimensional array; found "".
+401  argument  must have a string value; found "".
+402 Unknown VALUE function variable environment selector; found "".
+403  method target must be a whole number; found "".
+404 Nonnumeric value ("") used in arithmetic operation.
+405 Nonnumeric value ("") used with prefix operator.
+406 Exponent exceeds  digits; found "".
+407 Value of TO expression of DO or LOOP instruction must be numeric; found "".
+408 Value of BY expression of DO or LOOP instruction must be numeric; found "".
+409 Value of control variable expression of DO or LOOP instruction must be numeric; found "".
+410 Value of RAISE instruction SYNTAX expression must be numeric; found "".
+411 Arithmetic overflow detected at:  "".
+412 Arithmetic underflow detected at:  "".
+413 Arithmetic overflow; divisor must not be zero.
+414 Arithmetic overflow; exponent ("") exceeds  digits.
+415 Arithmetic underflow; exponent ("") exceeds  digits.
+416 Arithmetic underflow; zero raised to a negative power.
+417 Could not find routine "".
+418 Could not find file "" for ::REQUIRES.
+419 No data returned from function "".
+420 Data expected on RETURN instruction because routine "" was called as a function.
+421 Extra token ("") found in variable reference list; ")" expected.
+422 Missing ")" in variable reference.
+423 Extra token ("") found in USE ARG variable reference; "," or end of instruction expected.
+424 INTERPRET data must not contain labels; found "".
+425 Failure in system service: .
+426 Unable to find external class "".
+427 Unable to find external method "".
+428 Unable to find external routine "".
+429 Message "" did not return a result.
+431 Not enough arguments for method;  expected.
+432 Too many arguments in invocation of method;  expected.
+433 Missing argument in method; argument  is required.
+434 Method argument  must be a number; found "".
+435 Method argument  must be a whole number; found "".
+436 Method argument  must be zero or a positive whole number; found "".
+437 Method argument  must be a positive whole number; found "".
+438 Method argument  must not exceed ; found "".
+439 Method argument  must be in the range 0-99; found "".
+440 Method argument  must not be null.
+441 Method argument  must be a hexadecimal string; found "".
+442 Method argument  must be a valid symbol; found "".
+443 Method argument  must be one of ; found "".
+444 Method option must be one of ""; found "".
+446 Method  does not exist.
+447 Incorrect list index "".
+448 Incorrect array position "".
+449 Argument missing on binary operator.
+450 Incorrect pad or character argument specified; found "".
+451 Invalid length argument specified; found "".
+452 Invalid position argument specified; found "".
+453 Not enough subscripts for array;  expected.
+454 Too many subscripts for array;  expected.
+455 Length must be specified to convert a negative value.
+456 D2X value must be a valid whole number; found "".
+457 D2C value must be a valid whole number; found "".
+458 Incorrect location of whitespace character in position  in hexadecimal string.
+459 Incorrect location of whitespace character in position  in binary string.
+460 Only 0-9, a-f, A-F, and whitespace characters are valid in a hexadecimal string; character found "".
+461 Only 0, 1, and whitespace characters are valid in a binary string; character found "".
+462 X2D result is not a valid whole number with NUMERIC DIGITS .
+463 C2D result is not a valid whole number with NUMERIC DIGITS .
+464 No more supplier items available.
+465 Method argument  must have a string value.
+466 Method argument  must have a single-dimensional array value.
+467 Exponent of "" is too large for  spaces.
+468 Integer part of "" is too large for  spaces.
+469  method target must be a number; found "".
+470 Method argument  must be a message object.
+471 Missing argument in message array; argument  is required.
+472 A message array must be a single-dimensional array with 2 elements.
+473 Method SECTION can be used only on single-dimensional arrays.
+474 Method argument  must be of the  class.
+475 The value and index objects must be the same for PUT to an index-only collection.
+476 Object "" does not understand message "".
+477 Encoded compiled program "" cannot be decoded.
+478 Unable to convert object "" to a double-float value.
+479 Unable to load library "".
+480 Abnormal termination occurred.
+481 Deadlock detected on a guarded method.
+482 Incorrect object reference detected.
+483 Object of type "" was required.
+484 Metaclass "" not found.
+485 Class "" not found.
+486 Cyclic inheritance in program "".
+487 Symbol expected after COUNTER keyword.
+488 Unable to convert object "" to a single-dimensional array value.
+489 Unable to convert object "" to a string value.
+490 A message object that was sent a START message cannot be sent another START, SEND, or REPLY message.
+491 Message object "" received an error from message "".
+492 Incorrect condition object received for RAISE OBJECT; found "".
+493 No active condition available for PROPAGATE.
+494 Unable to convert object "" to a method.
+495 External command "" ended with return code .
+496 External command "" failed with return code .
+497 Number  has more digits than the current precision.
+498 Object "" does not have a string representation.
+499 Stream "" is not ready.
+500 REPLY can be issued only once per method invocation.
+501 RETURN cannot return a value after a REPLY.
+502 EXIT cannot return a value after a REPLY.
+503 Message search overrides can be used only from methods of the target object.
+504 Additional information for SYNTAX errors must be a single-dimensional array of values.
+505 Unknown error number specified on RAISE SYNTAX; found "".
+506 Duplicate ::CLASS directive instruction.
+507 Duplicate ::METHOD directive instruction.
+508 Duplicate ::ROUTINE directive instruction.
+509 Duplicate ::REQUIRES directive instruction.
+510 CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.
+511 "" is not a valid metaclass.
+512 EXPOSE must be the first instruction executed after a method invocation.
+513 INTERPRET data must not contain EXPOSE.
+514 GUARD must be the first instruction executed after EXPOSE or USE.
+515 GUARD can only be issued in an object method invocation.
+516 INTERPRET data must not contain GUARD.
+517 GUARD instruction did not include references to exposed variables.
+518 INTERPRET data must not contain directive instructions.
+519 INTERPRET data must not contain USE LOCAL.
+520 Unrecognized directive instruction.
+521 Incorrect external name specification "".
+522 USE ARG requires a "," between variable names; found "".
+523 REPLY can only be issued in an object method invocation.
+524 Error
+525 running
+526 line
+527 ORDERABLE comparison method "" argument cannot be .nil.
+528 The  argument must be a string or array object.
+529 Interpretation error: unexpected failure initializing the interpreter.
+530 GUARD must be followed by the keyword ON or OFF; found "".
+531 Incorrect alarm time; found "".
+532 Class "" must be a MIXINCLASS for INHERIT.
+533 Class "" is not a subclass of "" base class "".
+534 Failure during initialization: Program "" was not found.
+535 Class "" cannot inherit from itself, a superclass, or a subclass ("").
+536 Class "" has not inherited class "".
+537 Incorrect program line in method source array.
+538 ::REQUIRES directives must appear before other directive instructions.
+539 The  argument must be a string, array, or method object.
+540 Method argument  could not be converted to type .
+541 Method "" can be used only on a single-dimensional array.
+542 Method argument  is an array and does not contain all string values.
+543 Element  of the array must be a string.
+544 Target object "" is not a subclass of the message override scope ().
+545 DO or LOOP keyword  can be specified only once.
+546 An array cannot contain more than  elements.
+547 Error writing output file "".
+548 FORWARD arguments must be a single-dimensional array of values.
+549 Unknown keyword on FORWARD instruction; found "".
+550 Duplicate TO keyword found.
+551 Duplicate ARGUMENTS or ARRAY keyword found.
+552 Duplicate RETURN or CONTINUE keyword found.
+553 Duplicate CLASS keyword found.
+554 Duplicate MESSAGE keyword found.
+555 Missing expression following TO keyword of a FORWARD instruction.
+556 Missing expression following ARGUMENTS keyword of a FORWARD instruction.
+557 Missing expression following MESSAGE keyword of a FORWARD instruction.
+558 Missing expression following CLASS keyword of a FORWARD instruction.
+559 FORWARD can only be issued in an object method invocation.
+560 Program "" cannot be run by this version of the REXX interpreter.
+561 INTERPRET data must not contain REPLY.
+562 INTERPRET data must not contain FORWARD.
+563 Authorization return value must be exactly "0" or "1"; found "".
+564 Authorization failure:  .
+565 An ATTRIBUTE method name must be a valid variable name; found "".
+566 String or symbol expected after MIXINCLASS keyword.
+580 Incorrect class external; too many parameters.
+581 Concurrency not supported.
+582 USE LOCAL must be the first instruction executed after a method invocation.
+583 Incorrect class external; class name missing or invalid.
+584 Incorrect class external; invalid class server "".
+585 Interpretation error: unmatched  .
+586  argument  must be a single non-alphanumeric character or the null string; found "".
+587  argument , "", is a format incompatible with the separator specified in argument .
+588  cannot be used with QUEUE:.
+590 An unknown OLE error occurred (HRESULT=).
+591 Cannot convert OLE VARIANT to REXX object: The conversion of the VARIANT type  into a REXX object failed.
+592 Cannot convert REXX object to OLE VARIANT: The conversion of  into a VARIANT failed.
+593 The number of elements provided to the method or property is different from the number of parameters accepted by it.
+594 One of the parameters is not a valid VARIANT type.
+595 OLE exception: .
+596 The requested method does not exist, or you tried to set the value of a read-only property.
+597 One of the parameters could not be coerced to the desired type.
+598 One or more of the parameters could not be coerced to the desired type. The first parameter with incorrect type is argument .
+599 A required parameter was omitted.
+600 Could not create OLE instance.
+601 The object invoked has disconnected from its clients.
+603 Cannot read from a write-only property.
+604 Cannot write to a read-only property or typelib element.
+611 Invalid Base64 encoded string.
+612 Call to unsupported or unimplemented method.
+613 Application error:  .
+614 .
+615 .
+616 .
+617 .
+618 .
+619 .
+620 .
+621 .
+622 .
+623 .
+624 .
+625 .
+626 .
+627 .
+628 .
+629 .
+630 .
+631 .
+632 .
+633 .
+634 .
+635 .
+636 .
+637 .
+638 .
+639 .
+640 .
+641 .
+642 .
+643 .
+644 .
+645 .
+646 .
+647 .
+648 .
+649 .
+650 Result of a method call did not result in a whole number; found "".
+651 Property logical value must be exactly "0", "1", "true", or "false"; found "".
+652 Argument  must be an array object, a stem object, or a stem name value; found "".
+653 The USE instruction requires a comma-separated list of variables or assignment message terms.
+654 The PARSE instruction was expecting a variable or a message term.
+655 Symbol expected after LABEL keyword.
+656 SELECT must be followed by the keyword LABEL or CASE; found "".
+657 Symbol following ITERATE ("") does not match a repetitive block instruction.
+658 END corresponding to SELECT on line  must not have a symbol following it because there is no LABEL; found "".
+659 Value of logical list expression element must be exactly "0" or "1"; found "".
+660 Missing expression in logical expression list.
+661 Symbol expected as a class name of qualified class name.
+662 Symbol expected after NAMESPACE keyword.
+663 The "..." argument marker can only appear at the end of the argument list.
+664 Invalid or missing expression following "=" token of a USE ARG instruction.
+665 Method  is ABSTRACT and cannot be directly invoked.
+666 Result of a COMPARETO method call did not result in a whole number; found "".
+667 Result of a COMPARE method call did not result in a whole number; found "".
+668 Missing array element at position .
+669 Incorrect queue index "".
+670 Stem object default value cannot be another stem object.
+671 .
+672 Missing argument; argument  is required.
+673 The  argument must be a number; found "".
+674 The  argument must be a whole number; found "".
+675 The  argument must be zero or a positive whole number; found "".
+676 Argument  must be a positive whole number; found "".
+677 Argument  must not exceed ; found "".
+678 Argument  must be in the range  to ; found "".
+679 Argument  must not be a null string.
+680 Argument  must have a string value.
+681 Argument  is an invalid pad or character argument; found "".
+682 Argument  is an invalid length value; found "".
+683 Argument  is an invalid position value; found "".
+684 Argument  must be a single-dimensional array.
+685 Argument  must be an instance of the  class.
+686 Argument  could not be converted to a  type.
+687 Argument  must be one of ; found "".
+688 Argument  .
+689 Duplicate ::ATTRIBUTE directive instruction.
+690 Argument  is not in a valid format; found "".
+691 NEW method is not supported for the  class.
+692 String or symbol expected as ::ATTRIBUTE directive name.
+693 String or symbol expected as ::CONSTANT directive name.
+694 String or symbol expected as ::CONSTANT value.
+695 Duplicate ::CONSTANT directive instruction.
+696 Missing ::RESOURCE end marker "" for resource "".
+697 Unable to load method "" from library "".
+698 Unable to load routine "" from library "".
+699 Unable to load native routine "".
+700 Invalid native function signature specification.
+701 Invalid native method signature specification.
+702 Argument  must have a stem object or stem name value; found "".
+703 Method argument  must have a stem object value; found "".
+704 Argument  is not in valid pointer format; found "".
+705 Argument  must be a stem object or stem name; found "".
+706 Argument  must be a valid double value; found "".
+707 Too many arguments in invocation;  expected.
+708 Data must not follow the ::CONSTANT value; found "".
+709 COPY method is not supported for object .
+710 Target RexxContext is no longer active.
+711 Library "" is not compatible with current interpreter version.
+712 Unknown keyword on ::OPTIONS directive; found "".
+713 String or symbol expected as DIGITS value.
+714 String or symbol expected as FUZZ value.
+715 String or symbol expected as TRACE value.
+716 Execution thread does not match API thread context.
+717 Missing expression following "(" of parse template.
+718 Missing expression for calculated CALL name.
+719 Routine "" in package "".
+720 Method "" with scope "" in package "".
+721 Method argument  cannot have more than a single dimension.
+722        *-* Compiled method "" with scope "".
+723        *-* Compiled routine "".
+724 Package "" (no source available).
+725 DO or LOOP instruction on line  requires matching END.
+726 Unknown keyword on ::ATTRIBUTE directive; found "".
+727 Abstract methods cannot have a method body.
+728 Attribute methods cannot have a method body.
+729 External attributes cannot have a method body.
+730 External methods cannot have a method body.
+731 Attribute methods without a SET or GET designation cannot have a method body.
+732 Constant methods cannot have a method body.
+733 External routines cannot have a code body.
+734 Abstract attributes cannot have a method body.
+735 Interpreter code (no source available).
+736 Method  with scope "" in package "" (no source available).
+737 Routine  in package "" (no source available).
+738 Program in "" (no source available).
+739 Missing expression following CASE keyword of a SELECT instruction.
+740 Method or routine code may not contain directive instructions.
+741 User additions are not allowed to the REXX package.
+742 User additions are not allowed to the REXX language classes.
+743 String or symbol expected as ::RESOURCE directive name.
+744 Unknown keyword on ::RESOURCE directive; found "".
+745 String or symbol expected after ::RESOURCE END keyword.
+746 Data must not follow the ::RESOURCE directive; found "".
+747 Duplicate ::RESOURCE directive instruction.
+748 The REXX name is reserved for the language-provided namespace.
+749  argument  must be a single-dimensional array; found "".
+750  argument  must be an array with exactly  items.
+751 String or symbol expected after  keyword.
+752 Unknown keyword following ""; found "".
+753 Reference to unassigned variable "".
+754 SELECT CASE comparison result must be exactly "0" or "1"; found "".
+755 Missing expression in WHEN case expression list.
+756 Value of expression following WHEN keyword must be exactly "0" or "1"; found "".
+757 Symbol expected as ::ANNOTATE attribute name; found "".
+758 Symbol or string expected as ::ANNOTATE attribute value; found "".
+759 Symbol or string expected as ::ANNOTATE attribute value.
+760 Symbol or string expected after   keyword.
+761 Namespace "" not found in package "".
+762 Class "" not found in namespace "".
+763 Routine "" not found in namespace "".
+764 Symbol expected as a routine name of qualified CALL instruction.
+765 Symbol expected as a name of namespace-qualified symbol.
+766 Symbol expected for the ::ANNOTATE type.
+767 ::ANNOTATE target  "" not found.
+768 Unknown keyword on ::ANNOTATE directive; found "".
+769 Class  is ABSTRACT and cannot be directly created.
+770 Class  is a metaclass and cannot be made ABSTRACT.
+771 Symbol expected after the FORM keyword.
+772 A message name argument must be a string or an array with 2 elements; found "".
+773 Method  may only be invoked from a method of the same object or one of its classes.
+774 Delegate methods cannot have a method body.
+775 Symbol expected after the DELEGATE keyword.
+776 Delegate attributes cannot have a method body.
+777 Symbol expected after USE LOCAL.
+778 USE LOCAL cannot process compound variables; found "".
+779 Symbol expected as an indirect variable name; found "".
+780 The EXPOSE instruction may only be used from method invocations.
+781 The USE LOCAL instruction may only be used from method invocations.
+782 Supplier AVAILABLE method did not return exactly "0" or "1"; found "".
+783 Unable to convert object "" to a supplier object.
+784 Symbol expected after  keyword.
+785 No INDEX or ITEM control variable specified on a WITH loop.
+786 OVER keyword expected for a WITH loop.
+787 "" is not a valid class.
+788 The  argument must be zero or a positive number; found "".
+789 The  argument must be a positive number; found "".
+790 The  argument must be exactly "0" or "1"; found "".
+791 Invalid  value; found "".
+792 The  argument must be a VariableReference instance; found "".
+793 The  argument must be a VariableReference for a Stem variable; found "".
+794 The  argument must be a VariableReference for a simple variable; found "".
+795 Simple variable or stem symbol expected after > or < prefix operator; found .
+796 Argument  was omitted. A VariableReference argument is required.
+797 Simple variable or stem symbol expected after > or < USE ARG reference operator; found .
+798 A USE ARG default value is not allowed for variable references.
+799 Unable to reference variable ""; it must be an uninitialized local variable.
+800 Object "" is not a valid ADDRESS WITH INPUT source.
+801 Object "" is not a valid ADDRESS WITH OUTPUT or ERROR target.
+802 REPLACE or APPEND cannot be specified with a Stream object USING target.
+803 Stem "" element 0 is not a whole number; found "".
+804 Stem "" does not contain a size count in element 0.
+805 Unable to open file "" for reading; open result was "".
+806 Unable to open file "" for writing; open result was "".
+807 WITH must be followed by one of the keywords INPUT, OUTPUT, or ERROR; found "".
+808 Duplicate INPUT keyword found.
+809 Duplicate OUTPUT keyword found.
+810 Duplicate ERROR keyword found.
+811 Acceptable ADDRESS WITH I/O types are NORMAL, STEM, STREAM, and USING; found "".
+812 Stem symbol expected after STEM keyword.
+813 Missing expression following  keyword of a  instruction.
+814 Symbol expected after WITH keyword.
+815 Address environment "" does not support input/output redirection.
+816 REPLACE or APPEND cannot be specified with a RexxQueue object USING target.
+817 Address command redirection failed ().
+818 Object "" cannot accept private message "" from this context.
+819 Object "" cannot accept package scope message "" from a different package caller.
+820 Object "" was not correctly initialized.
+821 Constant "" of object "" has not been initialized.
+822 Missing expression on ::CONSTANT directive.
+823 A ::CONSTANT directive with an expression requires a matching ::CLASS directive.
+824  argument  must be one of ; found "".
+825 Argument  ("") must be greater than argument  ("").
+826 Stem argument does not have a valid count for element 0.
+827 The operation is outside the size of the stem array ("").
+828 Stem element at position "" is not set.
+829 COUNTER keyword not allowed on a simple DO instruction.
+830 An unhandled NOMETHOD condition has been raised.
+831 Hexadecimal strings must be grouped in units that are multiples of two characters.
+832 Binary strings must be grouped in units that are multiples of four characters.
+833 Hexadecimal strings must be grouped in units that are multiples of two characters.
+834 Binary strings must be grouped in units that are multiples of four characters.
+835 Date template  contains an invalid pattern; found "".
+836 Unable to parse date "" with template "".
+837 Method argument  could not be converted to type ; found "".
+838 Circular ::REQUIRES references detected with .
+839 Symbol expected after the NUMERIC subdirective keyword.
+840 Subdirective NUMERIC must be followed by one of the keywords INHERIT or NOINHERIT; found "".
+687 found
+SysGetMessage(5, 'rexx.cat') -> [System resources exhausted.]
+SysGetMessage(5, 'rexx.cat' || '00'x || 'tail') -> [System resources exhausted.]
+SysGetMessage(5, 'REXX.CAT') -> [Error: Message catalog not found]
+SysGetMessage(5, '') -> [Error: Message catalog not found]
+SysGetMessageX(2, 5) -> [Error: Message not found]
+SysGetMessageX(2, 5, 'rexx.cat') -> [Error: Message not found]
+SysGetMessageX(4294967297, 5) -> [System resources exhausted.]
+SysGetMessage(4294967301) -> [System resources exhausted.]
+SysGetMessage(999999999999999999) -> [Error: Message not found]
+SysGetMessage(678) -> [Argument  must be in the range  to ; found "".]
+SysGetMessage(678, , 1) -> [Argument 1 must be in the range  to ; found "".]
+SysGetMessage(678, , 1, 2, , 4) -> [Argument 1 must be in the range 2 to ; found "4".]
+SysGetMessage(678, , , , 3, 4, 5) -> [Argument  must be in the range  to 3; found "4".]
+SysGetMessage(678, , 1, 2, 3, 4, 5, 6, 7, 8, 9) -> [Argument 1 must be in the range 2 to 3; found "4".]
+SysGetMessage(678, , 1, 2, 3, 4, 5, 6, 7, 8, 9, 10) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysGetMessage(678, 'nowhere.cat', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysGetMessage(678, , .array~of(1, 2), 'a' || '00'x || 'b') -> [Argument 1
+2 must be in the range a to ; found "".]
+SysGetMessage(0) -> syntax 88.905 : Argument 1 must be a positive whole number; found "0".
+SysGetMessage(-1) -> syntax 88.905 : Argument 1 must be a positive whole number; found "-1".
+SysGetMessage(1.5) -> syntax 88.905 : Argument 1 must be a positive whole number; found "1.5".
+SysGetMessage('x') -> syntax 88.905 : Argument 1 must be a positive whole number; found "x".
+SysGetMessage(1000000000000000000) -> syntax 88.905 : Argument 1 must be a positive whole number; found "1000000000000000000".
+SysGetMessage(.seven~new) -> [WHEN or OTHERWISE expected.]
+SysGetMessage(5, .arrayString~new) -> syntax 88.909 : Argument 2 must have a string value.
+SysGetMessage() -> syntax 88.901 : Missing argument; argument 1 is required.
+SysGetMessageX(1) -> syntax 88.901 : Missing argument; argument 2 is required.
+SysGetMessageX(0, 5) -> syntax 88.905 : Argument 1 must be a positive whole number; found "0".
+-- substitution
+SysFormatMessage('&1', 'abc') -> [abc]
+SysFormatMessage('&1&2', 'abc' || nl || 'def') -> [abcdef]
+SysFormatMessage('&1 + &2 + &3', ('abc', , 'def')) -> [abc +  + def]
+SysFormatMessage('&0 &1 && &', 'abc') -> [&0 abc && &]
+SysFormatMessage('&&1&', '&') -> [&&&]
+SysFormatMessage('&9 &8 &7 &6 &5 &4 &3 &2 &1 &0', .array~new(9)~fill(0)~allIndexes) -> [9 8 7 6 5 4 3 2 1 &0]
+SysFormatMessage('a' || '00'x || '&1', 'q') -> [a]
+SysFormatMessage(.array~of('&1'), 'q') -> [q]
+SysFormatMessage('&1', 12) -> [12]
+SysFormatMessage('&1', .array~new(9)) -> []
+SysFormatMessage('&1', .array~new(10)) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysFormatMessage('&1', .array~new(10)~~put('a', 1)) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysFormatMessage('&5', a) -> [x]
+SysFormatMessage('&9', r) -> [9]
+SysFormatMessage('&9', r) -> syntax 40.1 : External routine "SysFormatMessage" failed.
+SysFormatMessage('&1&2', .array~of(.array~of(1, 2), .object~new)) -> [1
+2an Object]
+SysFormatMessage('&1', .array~of(.nil)) -> [The NIL object]
+SysFormatMessage('&1', .array~of(.arrayString~new)) -> [s1
+s2]
+SysFormatMessage('&1', .array~of(.seven~new)) -> [7]
+SysFormatMessage('&1', .array~of(.nilString~new)) -> []
+SysFormatMessage('&1', .array~of(.noString~new)) -> [a NOSTRING]
+string of one
+string of two
+SysFormatMessage('&2', .array~of(.loud~new('one'), .loud~new('two'))) -> [two]
+string of after
+SysFormatMessage('x', .array~of(.raiser~new('first'), .loud~new('after'))) -> syntax 93.900 : raised first.
+SysFormatMessage('x', .array~of(.raiser~new('first'), .raiser~new('last'))) -> syntax 93.900 : raised last.
+SysGetMessage(5, , .raiser~new('argument')) -> syntax 93.900 : raised argument.
+SysFormatMessage('&1 &2', g) -> [g grown]
+SysFormatMessage('&1', .makesArray~new) -> [m1]
+SysFormatMessage('&1', .makesString~new('')) -> syntax 98.913 : Unable to convert object "a MAKESSTRING" to a single-dimensional array value.
+.environment~unknown('ARRAY', .makesString~new('')) -> syntax 98.913 : Unable to convert object "a MAKESSTRING" to a single-dimensional array value.
+SysFormatMessage('&1', .makesString~new('x')) -> syntax 98.913 : Unable to convert object "a MAKESSTRING" to a single-dimensional array value.
+.environment~unknown('ARRAY', .makesString~new('x')) -> syntax 98.913 : Unable to convert object "a MAKESSTRING" to a single-dimensional array value.
+SysFormatMessage('&1', .makesString~new('abc')) -> syntax 98.913 : Unable to convert object "a MAKESSTRING" to a single-dimensional array value.
+.environment~unknown('ARRAY', .makesString~new('abc')) -> syntax 98.913 : Unable to convert object "a MAKESSTRING" to a single-dimensional array value.
+SysFormatMessage('&1', .array~new(2, 2)) -> syntax 98.913 : Unable to convert object "an Array" to a single-dimensional array value.
+SysFormatMessage('&1', .object~new) -> syntax 98.913 : Unable to convert object "an Object" to a single-dimensional array value.
+SysFormatMessage('&1', .nil) -> syntax 98.913 : Unable to convert object "The NIL object" to a single-dimensional array value.
+SysFormatMessage(.loud~new('message'), .array~of(1)) -> syntax 88.909 : Argument 1 must have a string value.
+SysFormatMessage(.arrayString~new, .array~of(1)) -> syntax 88.909 : Argument 1 must have a string value.
+SysFormatMessage(, 'q') -> syntax 88.901 : Missing argument; argument 1 is required.
+SysFormatMessage('&1') -> syntax 88.901 : Missing argument; argument 2 is required.
+SysFormatMessage() -> syntax 88.901 : Missing argument; argument 1 is required.
+SysFormatMessage('&1', 'q', 'r') -> syntax 88.922 : Too many arguments in invocation; 2 expected.
+-- catalogs
+SysGetMessage(1, cat) -> [one]
+SysGetMessage(2, cat, 'a', 'b', 'c') -> [two a b]
+SysGetMessage(3, cat) -> [Error: Message not found]
+SysGetMessage(4, cat) -> [Error: Message not found]
+SysGetMessageX(2, 5, cat) -> [five]
+SysGetMessageX(100, 1, cat, 'x', 'y') -> [far y]
+SysGetMessageX(3, 1, cat) -> [Error: Message not found]
+SysGetMessageX(2147483647, 1, cat) -> [Error: Message not found]
+SysGetMessageX(4294967296, 1, cat) -> [Error: Message not found]
+SysGetMessage(4294967297, cat) -> [one]
+SysGetMessage(4294967295, cat) -> [Error: Message not found]
+SysGetMessage(1, d'/w.cat') -> [one]
+SysGetMessage(1, './'d'/w.cat') -> [one]
+SysGetMessage(1, cat || '00'x || 'tail') -> [one]
+SysGetMessage(1, 'w.cat') -> [Error: Message catalog not found]
+SysGetMessage(1, './w.cat') -> [one]
+SysGetMessage(1, '../'d'/w.cat') -> [one]
+-- the search path
+[] [de_CH.UTF-8] w.cat -> Error: Message catalog not found
+[<here>/messages.d/%N] [de_CH.UTF-8] w.cat -> one
+[<here>/messages.d/%N] [de_CH.UTF-8] none.cat -> Error: Message catalog not found
+[messages.d/%N] [de_CH.UTF-8] w.cat -> one
+[<here>/messages.d/%L/%N] [de_CH.UTF-8] w.cat -> locale
+[<here>/messages.d/%l/%N] [de_CH.UTF-8] w.cat -> language
+[<here>/messages.d/%t/%N] [de_CH.UTF-8] w.cat -> territory
+[<here>/messages.d/%c/%N] [de_CH.UTF-8] w.cat -> code set
+[<here>/messages.d/%L/%N] [] w.cat -> C
+[<here>/messages.d/%t/%N] [de] w.cat -> one
+[<here>/messages.d/%q/%N:<here>/messages.d/%N] [C] w.cat -> one
+[/nowhere/%N::] [C] w.cat -> current directory
+[<here>/100%%] [C] ignored -> percent
+[<here>/messages.d/%N:<here>/messages.d/de/%N] [C] dir.cat -> Error: Message catalog not found
+[<here>/messages.d/%N] [C]  -> Error: Message catalog not found
+-- files that are not catalogs
+SysGetMessage(1, here'/'d'/short.cat') -> [Error: Message catalog not found]
+SysGetMessage(1, here'/'d'/magic.cat') -> [Error: Message catalog not found]
+SysGetMessage(1, here'/'d'/dir.cat') -> [Error: Message catalog not found]
+SysGetMessage(1, here'/'d) -> [Error: Message catalog not found]
+SysGetMessage(1, here'/'d'/cut.cat') -> [Error: Message catalog not found]
+SysGetMessage(1, here'/'d'/open.cat') -> [one]
+SysGetMessageX(100, 1, here'/'d'/open.cat') -> [far ]
+SysGetMessage(1, here'/'d'/swapped.cat') -> [one]

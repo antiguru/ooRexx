@@ -1,0 +1,34 @@
+cd                             0 <base>/ab
+cd                             0 <base>/ab
+cd ~                           0 <base>/ab
+cd ~/                          0 <base>/ab
+cd ~/../real                   0 <base>/real
+cd ~ real                      0 <base>/ab
+cd ~<me>                       0 <home>
+cd ~<me>/                      0 <home>
+cd ~nosuchuser.cd              2 <base>
+cd ~nosuchuser.cd/x            2 <base>
+cd "~"                         2 <base>
+cd ab                          0 <base>/ab
+cd   ab                        0 <base>/ab
+cd ab                          2 <base>
+cd "ab"                        0 <base>/ab
+cd "a"b                        0 <base>/ab
+cd "a b"                       0 <base>/a b
+cd a\ b                        0 <base>/a b
+cd a\"b                        0 <base>/a"b
+cd a\                          2 <base>
+cd ""                          2 <base>
+cd link                        0 <base>/real/sub
+cd link/..                     0 <base>/real
+cd link/../sub                 0 <base>/real/sub
+cd link/../../ab               0 <base>/ab
+cd nowhere/..                  2 <base>
+cd file                        20 <base>
+cd file/..                     20 <base>
+cd closed                      13 <base>
+cd <base>/link                 0 <base>/real/sub
+cd <base>/real/sub/../..       0 <base>
+DIRECTORY(link) <base>/real/sub
+cd ~                           0 /
+cd                             2 <base>
