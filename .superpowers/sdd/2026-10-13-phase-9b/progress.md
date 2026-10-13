@@ -103,3 +103,11 @@ Moritz 2026-10-13: "Defer to 9b1/later". SysFork stays a loud refusal naming the
 Task 7: fix round 1 at ad69540d2..f55cf090d (load_requires original name + cache key; cache before manager; SysFork deferred reason; docs; pty fail test). Re-review dispatched (sonnet).
 Task 7 re-review: approved; minor: queued sysfork-design.md untracked but cited -> committed here. Note: ::requires "rexxutil" library answers 98.903 (oracle loads it) -> Task 9 owns.
 Task 7: complete (6220bd401, 022590321, fe5191171, ad69540d2, fdcf3782c, 5a403729f, 38a2e0f3b, fb6dbddeb, f55cf090d).
+Task 8: dispatched (implementer opus, BASE de86f333f).
+Task 8: implementer BLOCKED at Step 1 gate (50147a7be, report only): names are POSIX sem_open, cross-process, never unlinked.
+Moritz 2026-10-13: "Defer, keep refusal". Design queued (.superpowers/sdd/queued/2026-10-13-named-semaphores-design.md). Verified: no ooTest file mentions the four routines.
+Task 8: refusal reason update dispatched (resume b8-impl).
+Task 8: deferral at db87a3b53, 2ec9dd4f2 -- grew beyond text: open_sem body (arg errors, invalid-name 0), shared rejected-name length bound (>251 bytes). Review dispatched (sonnet).
+Task 8 review: open_sem PASS; finding: refuse_name checks full text not NUL-truncated C string -> SysCreateEventSem('t8nul'||'0'x||'/b') answers '' where oracle creates. Fix round 1 dispatched (resume b8-impl).
+Task 8: fix round 1 at e8d5e0b6e, 168a035a5 (c_string cut before rejected-name check; 2 crate-only pins; witness gains 'create nul' rows that match oracle). Controller read the diff (one line plus tests).
+Task 8: complete (50147a7be, db87a3b53, 2ec9dd4f2, e8d5e0b6e, 168a035a5). Named semaphores deferred by Moritz.
