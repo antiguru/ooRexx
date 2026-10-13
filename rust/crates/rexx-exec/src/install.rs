@@ -609,16 +609,31 @@ impl Interp {
         from: Option<ProgramId>,
         name: &[u8],
     ) -> Result<ProgramId, Failure> {
-        // **The manager sees the short name before the cache**, and the
-        // resolved one after the search: `PackageManager::loadRequires`
-        // (`package/PackageManager.cpp:718`-`:766`) checks each in turn, so a
-        // manager that renames or forbids a package is asked twice.
-        // The search, a miss and the cache entry use the name as written,
-        // and the manager's short-name answer is only looked up:
-        // `PackageClass::loadRequires` (`classes/PackageClass.cpp:1319`)
-        // resolves before asking it, and `InterpreterInstance::loadRequires`
-        // (`runtime/InterpreterInstance.cpp:1060`) caches the original.
+        // The name as written, and the file it resolves to, are looked up
+        // before the manager is asked, and a hit asks it nothing:
+        // `InterpreterInstance::loadRequires`
+        // (`runtime/InterpreterInstance.cpp:1021`-`:1045`), whose callers
+        // resolve first (`classes/PackageClass.cpp:1319`). Then the manager
+        // sees the short name, then the resolved one
+        // (`package/PackageManager.cpp:718`-`:766`); its short-name answer is
+        // only looked up, and the search, a miss and the cache entries use
+        // the original.
         let original = name;
+        if let Some(&loaded) = self.required_packages.get(original) {
+            self.check_not_installing(loaded)?;
+            return Ok(loaded);
+        }
+        let found = match from {
+            Some(id) => self.resolve_requires(id, original),
+            None => self.resolve_search(None, original, true),
+        };
+        if let Some(found) = &found
+            && let Some(&loaded) = self.required_packages.get(found.as_bytes())
+        {
+            self.check_not_installing(loaded)?;
+            self.required_packages.insert(original.into(), loaded);
+            return Ok(loaded);
+        }
         let mut inherited = None;
         let Some(name) = self.check_requires_access(name, &mut inherited)? else {
             return Err(Raised::requires_file_not_found(original).into());
@@ -628,11 +643,7 @@ impl Interp {
             self.check_not_installing(loaded)?;
             return Ok(loaded);
         }
-        let resolved = match from {
-            Some(id) => self.resolve_requires(id, original),
-            None => self.resolve_search(None, original, true),
-        };
-        let resolved = match resolved {
+        let resolved = match found.clone() {
             Some(resolved) => {
                 let Some(checked) =
                     self.check_requires_access(resolved.as_bytes(), &mut inherited)?
@@ -678,6 +689,10 @@ impl Interp {
         self.required_packages.insert(original.into(), required);
         self.required_packages
             .insert(resolved.as_bytes().into(), required);
+        if let Some(found) = &found {
+            self.required_packages
+                .insert(found.as_bytes().into(), required);
+        }
         if let Err(failure) = self.run_loaded(parsed, required, CallType::Requires, None, None) {
             // `getRequiresFile` caches a package only once it has translated
             // (`package/PackageManager.cpp:828-836`), so a later ask for one
@@ -686,6 +701,9 @@ impl Interp {
             if self.untranslated.contains(&required) {
                 self.required_packages.remove(original);
                 self.required_packages.remove(resolved.as_bytes());
+                if let Some(found) = &found {
+                    self.required_packages.remove(found.as_bytes());
+                }
             }
             return Err(failure);
         }

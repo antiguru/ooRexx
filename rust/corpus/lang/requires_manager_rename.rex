@@ -1,6 +1,7 @@
 /* A security manager that renames a REQUIRES: the file is still found, and a
    miss still reported, by the name as written, and the second event names
-   the original resolved. */
+   the original resolved. A package loaded already is found before the
+   manager is asked, so a second load sends it no event. */
 src = .array~of("::class test_requires public")
 call write 'rq_replaced.cls', src
 call write 'rq_handle.cls', src
@@ -27,8 +28,23 @@ r~call
 say result
 say mgr~names~items 'events'
 
+say '-- a file loaded twice'
+call write 'rq_twice.cls', src
+mgr = .collector~new('', '')
+r = .Routine~new("", "return .Package~new('', '')~loadPackage('rq_twice.cls')~name")
+r~setSecurityManager(mgr)
+r~call
+say 'first load' result~endsWith('rq_twice.cls') mgr~names~items 'events'
+r~call
+say 'second load' result~endsWith('rq_twice.cls') mgr~names~items 'events'
+r = .Routine~new("", "return .Package~new('', '')~loadPackage('" || .File~new('rq_twice.cls')~absolutePath || "')~name")
+r~setSecurityManager(mgr)
+r~call
+say 'by its full name' result~endsWith('rq_twice.cls') mgr~names~items 'events'
+
 call SysFileDelete 'rq_replaced.cls'
 call SysFileDelete 'rq_handle.cls'
+call SysFileDelete 'rq_twice.cls'
 exit
 
 write: procedure
