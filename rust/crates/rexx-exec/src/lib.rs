@@ -513,13 +513,18 @@ impl Loud {
         }
     }
 
-    /// A routine whose body is a `call` that needs an `unsafe` grant this
-    /// crate does not hold (`rust/CLAUDE.md`, "No `unsafe` by default").
-    fn unsafe_grant(name: &[u8], call: &str) -> Loud {
+    /// `SysFork`: a forked child holds the calling thread only, and every run
+    /// has a timer thread and a joining main thread beside it, so the child
+    /// cannot continue the program
+    /// (`.superpowers/sdd/queued/2026-10-13-sysfork-design.md`).
+    fn fork_child(name: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
         Loud {
             message: owned_message(
-                &format!("routine \"{shown}\" without an unsafe grant for {call}"),
+                &format!(
+                    "routine \"{shown}\", whose forked child cannot continue without the timer \
+                     thread and the joining main thread,"
+                ),
                 Some(Owner::Phase9),
             ),
         }

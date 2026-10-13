@@ -1518,5 +1518,6 @@ wrapper with `timeout -k 5 20` and `memcap 4G`, measured 2026-10-13 by Phase 9b 
 killed at the deadline, rc 124; the child printed `child: alive` in 3 of the 5 and nothing in the
 other 2, and every child was still running after its parent was killed, to be killed by hand.
 `SysFork` with no other activity works: 3 runs of 3 printed the child's line and a wait status of
-`768` for its `exit 3`, rc 0. This crate refuses `SysFork`, whose `fork` is an `unsafe` call it
-holds no grant for. No upstream ticket.
+`768` for its `exit 3`, rc 0. This crate refuses `SysFork`: every run has a timer thread and a
+joining main thread, which a forked child would not have
+(`.superpowers/sdd/queued/2026-10-13-sysfork-design.md`). No upstream ticket.

@@ -318,7 +318,8 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
     let cases: &[(&[u8], &str)] = &[
         (
             b"say SysFork()\n",
-            "routine \"SYSFORK\" without an unsafe grant for fork(2) is not implemented (Phase 9)",
+            "routine \"SYSFORK\", whose forked child cannot continue without the timer thread and \
+             the joining main thread, is not implemented (Phase 9)",
         ),
         (
             b"say SysOpenEventSem('sem')\n",

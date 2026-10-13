@@ -323,15 +323,15 @@ pub(crate) fn set_priority(
     Ok(answer(interp, i64::from(code)))
 }
 
-/// `SysFork()`: refuses, since `fork` is an `unsafe` call this crate holds no
-/// grant for.
+/// `SysFork()`: refuses, as [`Loud::fork_child`] says
+/// (`.superpowers/sdd/queued/2026-10-13-sysfork-design.md`).
 pub(crate) fn fork(
     _interp: &mut Interp,
     name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
     check_arity(args, 0)?;
-    Err(Loud::unsafe_grant(name, "fork(2)").into())
+    Err(Loud::fork_child(name).into())
 }
 
 /// What `SysWait` answers where `wait` finds no child or fails: the oracle
