@@ -630,7 +630,7 @@ impl Interp {
         // (`runtime/InterpreterInstance.cpp:1021`-`:1045`), whose callers
         // resolve first (`classes/PackageClass.cpp:1319`). Then the manager
         // sees the short name, then the resolved one
-        // (`package/PackageManager.cpp:718`-`:766`); its short-name answer is
+        // (`package/PackageManager.cpp:718`-`:766`). Its short-name answer is
         // only looked up, and the search, a miss and the cache entries use
         // the original.
         let original = name;

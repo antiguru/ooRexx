@@ -2739,8 +2739,7 @@ impl Interp {
         self.cwd.as_os_str().as_bytes()
     }
 
-    /// Moves it. `DIRECTORY(new)` is the only caller: nothing else in the
-    /// interpreter changes where relative paths resolve from.
+    /// Moves it.
     pub(crate) fn set_cwd(&mut self, cwd: std::path::PathBuf) {
         self.cwd = cwd;
     }

@@ -617,7 +617,7 @@ impl Interp {
             &env_seam::Access::Resolve,
         )? {
             hash::DirectoryEntry::Found(found) => Ok(Some(found)),
-            // `.STDQUE` is owed with an owner; it is a queue, which no class search answers.
+            // `.STDQUE` is owed with an owner. It is a queue, which no class search answers.
             hash::DirectoryEntry::Owed(Some(_)) | hash::DirectoryEntry::Absent => Ok(None),
             hash::DirectoryEntry::Owed(None) => Err(Loud::environment_entry(bare, None).into()),
         }

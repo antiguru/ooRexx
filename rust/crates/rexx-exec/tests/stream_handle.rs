@@ -65,7 +65,7 @@ fn handle_one_and_two_write_standard_output_and_error() {
 }
 
 /// Deviation 35: an opened `HANDLE:n` answers its descriptor for `QUERY
-/// HANDLE`, where the oracle answers `18446744073709551615`; unopened, both
+/// HANDLE`, where the oracle answers `18446744073709551615`. Unopened, both
 /// answer the null string.
 #[test]
 fn query_handle_after_open_answers_the_descriptor() {
@@ -102,7 +102,7 @@ fn a_second_open_opens_the_descriptor_again() {
 }
 
 /// An opened `HANDLE:n`'s stream type is the one the `Invocation` reports for
-/// that standard stream; unopened it is `UNKNOWN`, as on the oracle.
+/// that standard stream. Unopened it is `UNKNOWN`, as on the oracle.
 #[test]
 fn the_stream_type_follows_the_invocation_once_opened() {
     let program = "do n = 0 to 2\n\
@@ -128,7 +128,7 @@ fn the_stream_type_follows_the_invocation_once_opened() {
 }
 
 /// Deviation 35: a descriptor other than `0`, `1` or `2` is refused loudly
-/// when the stream is made, where the oracle makes an inert stream; the
+/// when the stream is made, where the oracle makes an inert stream. The
 /// adjacent `HANDLE:2` is made.
 #[test]
 fn another_descriptor_is_refused_loudly() {
