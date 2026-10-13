@@ -18,3 +18,17 @@ Source: `.superpowers/sdd/2026-10-11-phase-9a/final-review.md`, `final-rereview.
    the "a subclass already took" shape.
 6. The three samples tests in `rust/corpus/suite-9d-set.txt` are owned by 9b (SysTempFileName) and
    9c (front-end `.rex` resolution).
+
+## Moritz 2026-10-13
+
+* Item 2 ruled: "Whole process in the limit, but we have to account for timing noise on this
+  machine. Callgrind might avoid this, though." The Phase 9 close judges the +0.5% budget on
+  callgrind's whole-process instruction count (libc and ld included); callgrind is deterministic, so
+  no timing noise enters. `callgrind.sh` already records the libc and ld columns; the comparison
+  must add them back.
+* Timing tests: "timing tests under load are hard to get right, or we run them using DST." SysSleep
+  TEST_SLEEP_DURATION in `concurrency_tests`' S2 list runs under the deterministic simulation's
+  clock, or is licensed there; owner 9d.
+* "/tmp is not durable here": the perf pin and any artifact a later phase needs live outside /tmp.
+  The pin is rebuilt from a98238be5 into /home/moritz/dev/repos/ooRexx-p9-pin/ (outside the
+  worktree, not tracked) before the Phase 9 close.
