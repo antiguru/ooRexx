@@ -1,12 +1,13 @@
-count 103
+count 113
 /* SysFileSearch: line ends (LF, CR LF, a lone CR, none at the end, empty
    lines), case and its options, line numbers, a NUL in the needle and in
    a line, an empty needle, a line longer than the reader's buffer, an
    array, a stem object, a stem name with and without its period, tails
    past the count left alone, a missing file, a directory, a file that
    cannot be read, names with a blank and bytes that are not UTF-8, and the
-   errors. Everything is made under a directory this program makes and
-   removes. */
+   errors. The array is given lines longer than a string held inline, so
+   it grows while it holds values that live in the heap. Everything is
+   made under a directory this program makes and removes. */
 d = 'filesearch.d'
 call SysMkDir d
 f = d'/a.txt'
@@ -32,6 +33,15 @@ say SysFileSearch('a', f || '00'x || 'junk', 's.') s.0
 a = .array~of(1, 2, 3)
 say SysFileSearch('a', f, a, 'n') a~items a~size
 do x over a; say '  ' c2x(x); end
+long = ''
+do i = 1 to 6
+  long = long || copies('alpha', 10 + i) || '0a'x
+end
+call charout d'/long.txt', long
+call charout d'/long.txt'
+a = .array~of('x')
+say SysFileSearch('alpha', d'/long.txt', a, 'n') a~items a~size
+do x over a; say '  ' x~length left(x, 3); end
 st = .stem~new
 say SysFileSearch('alpha', f, st) st[0]
 call charout d'/e.txt', ''
