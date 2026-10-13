@@ -2094,6 +2094,40 @@ DEVIATIONS -- permanent, chosen
      corpus/lang/platform_qualify_setlocal.rex. The rows above are pinned by
      `paths::tests::a_parent_reference_removes_one_component_where_the_oracle_does_not`.
 
+ 35. A `HANDLE:0`, `HANDLE:1` OR `HANDLE:2` STREAM READS AND WRITES THE
+     STANDARD STREAM OF THAT NUMBER, AND ANY OTHER DESCRIPTOR IS REFUSED
+     (Phase 9b Task 9). OWNER: none.
+
+     The oracle's `HANDLE:n` stream never reaches its descriptor.
+     `handle_set` hands it to `SysFile::open(int)`, and the first open runs
+     `handleOpen` (interpreter/streamLibrary/StreamNative.cpp:607), whose
+     `resetFields()` calls `fileInfo.reset()`
+     (common/platform/unix/SysFile.cpp, `SysFile::reset`). That flushes, frees
+     the buffer and sets the handle to -1, and `resetFields()` also clears
+     `opened_as_handle`. A write through the freed buffer is
+     corpus/oracle-crashes.txt entry 12a. Measured with read shapes only,
+     stdin a file holding three lines, probes `h1.rex`, `h2.rex`, `h3.rex` and
+     `h5.rex` in docs/superpowers/records/2026-10-13-phase-9b/task-9/probes/,
+     oracle then this crate:
+
+       `linein('HANDLE:0')`                       '' at NOTREADY:EOF   the next line
+       `chars` and `lines` on HANDLE:0, unopened  0 0                  1 0, as `.Stream~new('STDIN')`
+       QUERY HANDLE after an open                 18446744073709551615 0, 1 or 2
+       QUERY SIZE after an open                   uninitialised memory ''
+       a second open after a close                ERROR:2, a file      READY:
+                                                  named HANDLE:0
+       `.Stream~new('HANDLE:7')`                  an inert stream      rc 120 refusal
+
+     A write has no oracle answer, since it crashes (entry 12a); here
+     `HANDLE:1` and `HANDLE:2` write to standard output and standard error.
+     Adopting a descriptor other than the three needs `unsafe`, so it is
+     refused when the stream is made. Moritz 2026-10-12 (option 3), ruled
+     again by the controller 2026-10-13 against the measurement above
+     (ledger .superpowers/sdd/2026-10-13-phase-9b/progress.md), on the
+     standing rule not to copy oracle bugs. The shapes both sides answer
+     alike are witnessed in corpus/lang/stream_handle_names.rex, and the
+     rows above are pinned by crates/rexx-exec/tests/stream_handle.rs.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -5351,10 +5385,8 @@ green result would be the oracle's. The spec and the roadmap's row 8 first
 read the partition as two embedding groups and six extension-only, from
 the group names.
 
-handle_set WAS RE-HOMED TO PHASE 10 at 08d232ecc. The scoping survey had
-listed it among this phase's refusals; it needs from_raw_fd and never
-needed the loader, and the grant it waits on is the one RXAPI and the
-external queues need.
+handle_set is Deviation 35: HANDLE:0, HANDLE:1 and HANDLE:2 go through the
+standard streams with no from_raw_fd, and any other descriptor is refused.
 
 THREE DIVERGENCES THE SURFACE PLAN'S TASK 4 LEAVES, measured 2026-09-25/26
 with a forged extension built against the oracle's headers (NEEDED libc.so.6

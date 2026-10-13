@@ -458,11 +458,10 @@ pub struct StreamState {
     /// Set by `!std_set` for `STDIN`, `STDOUT` and `STDERR`, with or without a
     /// trailing colon.
     pub standard: Option<StandardStream>,
-    /// Set by `!handle_set` for a `HANDLE:` name. This crate refuses to open
-    /// one -- adopting an already-open descriptor needs `unsafe`, which D-U1
-    /// grants to `rexx-api`'s `ffi.rs` and `load.rs` alone -- so the marker
-    /// exists to answer the queries that do not open.
-    pub handle: Option<Vec<u8>>,
+    /// Set by `!handle_set` for `HANDLE:0`, `HANDLE:1` and `HANDLE:2`, which
+    /// read and write through the standard stream of that number
+    /// (Deviation 35). `standard` is set with it.
+    pub handle: Option<StandardStream>,
     pub status: StreamStatus,
     /// `None` until something opens the stream, and again after a close.
     pub open: Option<OpenFile>,
@@ -480,7 +479,7 @@ impl Clone for StreamState {
             name: self.name.clone(),
             qualified: self.qualified.clone(),
             standard: self.standard,
-            handle: self.handle.clone(),
+            handle: self.handle,
             status: StreamStatus::Unknown,
             open: None,
             mode: OpenMode::default(),

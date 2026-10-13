@@ -104,3 +104,6 @@ lang/rexxutil_library_external.rex
 lang/rexxutil_library_method.rex
 lang/rexxutil_library_routine_missing.rex
 lang/rexxutil_library_identity.rex
+
+# 9b Task 9: HANDLE: streams, the shapes Deviation 35 leaves agreeing.
+lang/stream_handle_names.rex

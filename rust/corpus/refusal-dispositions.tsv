@@ -36,6 +36,7 @@ environment_entry	GUARD	-	scout A b18: envx_* (every .environment and .local ind
 environment_symbol	GUARD	-	scout A b16 and b18: c2_stream_first_clause, c2_address_with_stream_first (.STREAM before StreamClasses.orx), envx_*, env_new_activity, env_reply_activity; only STDQUE (Phase 10) refused. Phase 9a Task 5 probes nt1, nt2 (Message~notify after removing MESSAGENOTIFICATION from .environment and .local, and from a ::REQUIRES prolog) and info (.rexxinfo~executable and ~libraryPath, which build a .FILE) answer
 expose_receiver	GUARD	-	Task 4 report, "Kept with owner None": EXPOSE from methods of Directory, .local, .environment and a Directory subclass, a borrowed Object RUN row on an instance; all answer, oracle-identical
 expression	GUARD	-	every ExprKind evaluates (expr_owner answers None for each); each site is a match arm for a form its caller routes elsewhere (census d-guard)
+handle_descriptor	DEVIATION	-	Deviation 35: a HANDLE: stream on a descriptor other than 0, 1 or 2 needs unsafe to adopt; the oracle's HANDLE: stream never reaches its descriptor (crates/rexx-exec/tests/stream_handle.rs)
 immovable_reply	LIMIT	-	Deviation 15 (spec 2026-09-29 section 5)
 instruction	GUARD	-	every InstructionKind executes (instruction_owner answers None for each); each site is a match arm for a kind its caller routes elsewhere (census d-guard)
 inverted_wait	LIMIT	-	Deviation 14 (spec 2026-09-29 section 2.6)

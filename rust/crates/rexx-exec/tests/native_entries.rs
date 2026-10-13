@@ -69,6 +69,9 @@ const IMPLEMENTED: &[&str] = &[
     "file_set_writable",
     "file_temporary_path",
     "this_file_case_sensitive",
+    // `HANDLE:0`, `HANDLE:1` and `HANDLE:2` through the standard streams
+    // (Deviation 35).
+    "handle_set",
     // Phase 7's stream family: the queries a stream answers without opening
     // anything, and the reading and writing entry points beside them. What
     // this phase still defers is what the family's own probe binds.

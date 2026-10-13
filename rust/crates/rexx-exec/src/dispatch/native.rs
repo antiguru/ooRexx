@@ -112,11 +112,8 @@ const fn scoped(
     }
 }
 
-/// A deferred entry, which names the phase that owes it a body.
-///
-/// **Named per row rather than per family**, because the two came apart:
-/// `handle_set` needs `from_raw_fd` and so stays refused after the stream
-/// family is built, and a refusal naming a closed phase would be a lie.
+/// A deferred entry, which names the phase that owes it a body, per row
+/// rather than per family.
 const fn deferred(name: &'static str, family: Family, owner: Owner) -> NativeExternal {
     NativeExternal {
         name,
@@ -259,7 +256,12 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
         Arity::Fixed(0),
         super::stream::query_time,
     ),
-    deferred("handle_set", Family::Stream, Owner::Phase9),
+    implemented(
+        "handle_set",
+        Family::Stream,
+        Arity::Fixed(1),
+        super::stream::handle_set,
+    ),
     implemented(
         "std_set",
         Family::Stream,

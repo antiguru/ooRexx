@@ -765,9 +765,10 @@ it without the `checkStreamInfo` guard its siblings use (`:3609`-`:3610`) --
 entries share `stream_state`'s shape and were not run.
 
 Found 2026-09-12 by the Phase 7 stream survey, re-measured by the controller with
-the controls above. **No upstream ticket.** This crate refuses `HANDLE:` loudly
-(reaching an open descriptor needs `unsafe`) and answers 48.1 from every entry
-point after `uninit`, so both are licensed divergences.
+the controls above. **No upstream ticket.** This crate writes `HANDLE:1` and
+`HANDLE:2` to standard output and standard error and refuses any other
+descriptor (Deviation 35), and answers 48.1 from every entry point after
+`uninit`, so both are licensed divergences.
 
 **Related, not a new entry**: the survey also reproduced entry 5's shape with a
 different condition -- two NOTREADY-raising reads in one clause under

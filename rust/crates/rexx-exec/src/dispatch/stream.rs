@@ -16,7 +16,8 @@
 //! state block itself.
 
 use chrono::TimeZone;
-use rexx_core::{Body, NativeState, ObjRef, StandardStream, StreamState, StreamStatus};
+use rexx_core::{Body, Decoded, NativeState, ObjRef, StandardStream, StreamState, StreamStatus};
+use rexx_num::{DIGITS64, Number};
 
 use super::{Cleared, new_instance};
 use crate::error::Raised;
@@ -155,6 +156,56 @@ pub(super) fn std_set(
     Ok(None)
 }
 
+/// `handle_set`: marks a `HANDLE:n` stream, `n` an `int`. `HANDLE:0`,
+/// `HANDLE:1` and `HANDLE:2` read and write through the standard stream of
+/// that number (Deviation 35), and any other descriptor is refused.
+pub(super) fn handle_set(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(Some(value)) = args.first().copied() else {
+        return Err(Raised::missing_native_argument(1).into());
+    };
+    let number = match value.decode() {
+        Decoded::SmallInt(number) => Some(number),
+        _ => {
+            let text = interp.to_text(value);
+            Number::parse_bytes(&text).and_then(|number| number.int64_value(DIGITS64))
+        }
+    };
+    let (min, max) = (i64::from(i32::MIN), i64::from(i32::MAX));
+    let Some(descriptor) = number.filter(|number| (min..=max).contains(number)) else {
+        // A marshalling raise, reported against the REXX package with no
+        // line: measured, oracle, `.Stream~new('HANDLE:x')` is `Error 88
+        // running REXX:`.
+        let found = interp.string_value_text(value);
+        let mut raised =
+            Raised::native_argument_outside_range(1, i128::from(min), i128::from(max), &found);
+        raised.delivery.lineless = true;
+        raised.delivery.internal_package = true;
+        return Err(raised.into());
+    };
+    let which = match descriptor {
+        0 => StandardStream::In,
+        1 => StandardStream::Out,
+        2 => StandardStream::Err,
+        _ => return Err(crate::Loud::handle_descriptor(descriptor).into()),
+    };
+    let state = require_mut(interp, receiver)?;
+    state.handle = Some(which);
+    state.standard = Some(which);
+    Ok(None)
+}
+
+/// Whether `receiver` is a `HANDLE:n` stream nothing has opened, which the
+/// queries answer as the oracle answers an unopened stream.
+fn unopened_handle(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+    let state = require(interp, receiver)?;
+    Ok(state.handle.is_some() && state.status == StreamStatus::Unknown)
+}
+
 /// `stream_state`: `UNKNOWN`, `READY`, `NOTREADY` or `ERROR`.
 pub(super) fn state(
     interp: &mut Interp,
@@ -225,7 +276,11 @@ pub(super) fn query_exists(
 ) -> Result<Option<ObjRef>, Failure> {
     let state = require(interp, receiver)?;
     if state.handle.is_some() {
-        return Ok(Some(interp.text(b"")));
+        let answer = match state.status {
+            StreamStatus::Unknown => Vec::new(),
+            _ => state.name.clone(),
+        };
+        return Ok(Some(interp.text_built(answer)));
     }
     let path = qualified_path(interp, receiver)?;
     let exists = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
@@ -293,6 +348,9 @@ pub(super) fn query_streamtype(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if unopened_handle(interp, receiver)? {
+        return Ok(Some(interp.text(b"UNKNOWN")));
+    }
     if let Some(which) = standard_of(interp, receiver)? {
         let answer: &[u8] = if standard_is_transient(interp, which) {
             b"TRANSIENT"
@@ -318,6 +376,9 @@ pub(super) fn query_handle(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if unopened_handle(interp, receiver)? {
+        return Ok(Some(interp.text(b"")));
+    }
     let answer: &[u8] = match standard_of(interp, receiver)? {
         Some(StandardStream::In) => b"0",
         Some(StandardStream::Out) => b"1",
@@ -546,6 +607,16 @@ pub(super) fn open(
     state.open = None;
     state.mode = rexx_core::OpenMode::default();
     state.status = StreamStatus::Unknown;
+    // A `HANDLE:n` stream takes the options a file does and reports its name
+    // as written from here on (`StreamNative.cpp`'s `handleOpen`).
+    if state.handle.is_some() {
+        state.qualified = state.name.clone();
+        if parse_open_options(&options).is_err() {
+            return Err(Raised::syntax(93, 0, Vec::new()).into());
+        }
+        state.status = StreamStatus::Ready;
+        return Ok(Some(interp.text(b"READY:")));
+    }
     // The three standard streams take only NOBUFFER, and are ready without
     // touching the file system (`StreamNative.cpp`'s `openStd`).
     if state.standard.is_some() {

@@ -780,6 +780,17 @@ impl Loud {
         }
     }
 
+    /// A `HANDLE:n` stream for a descriptor other than `0`, `1` or `2`,
+    /// which only `unsafe` could adopt (Deviation 35).
+    fn handle_descriptor(descriptor: i64) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("a HANDLE: stream on descriptor {descriptor}"),
+                None,
+            ),
+        }
+    }
+
     /// A `PARSE` template trigger that needs an operand and has none -- a
     /// parser guarantee, never a program error.
     fn parse_trigger_operand() -> Loud {
