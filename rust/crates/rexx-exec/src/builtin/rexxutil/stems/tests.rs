@@ -46,3 +46,50 @@ fn an_untrapped_error_inside_the_sort_is_reported() {
     });
     assert!(cases > 0, "{UNTRAPPED_SORT_CASES} ran no case");
 }
+
+/// **`SysDumpVariables` holds the tail values it read before it writes any
+/// of them**, as the oracle's `toDirectory` snapshot does: a `STRING` method
+/// that empties the stem midway leaves the rest of the dump intact. Measured,
+/// oracle rc 0, these lines in hash order. This crate writes tail 2 first, so
+/// the emptying runs before tail 1 is written, and collecting at every
+/// allocation sweeps an unheld value.
+#[test]
+fn a_dumped_stem_keeps_its_tails_when_a_string_method_empties_it() {
+    let source = b"s.1 = copies('heap ', 8)\n\
+        s.2 = .k~new(s.)\n\
+        call SysDumpVariables\n\
+        say s.1\n\
+        ::class k\n\
+        ::method init\n\
+        expose st.\n\
+        use arg st.\n\
+        ::method string\n\
+        expose st.\n\
+        st.~empty\n\
+        x = copies('filler', 50)\n\
+        return 'K'\n";
+    let outcome = crate::run_program_collect_every_alloc(
+        "/t.rex",
+        source.to_vec(),
+        crate::Invocation::none(),
+    );
+    assert!(outcome.collections > 0, "the mode collected nothing");
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&outcome.stdout).into_owned();
+    let mut lines: Vec<&str> = stdout.split_terminator('\n').collect();
+    lines.sort_unstable();
+    assert_eq!(
+        lines,
+        [
+            "Name=S., Value='S.'",
+            "Name=S.1, Value='heap heap heap heap heap heap heap heap '\r",
+            "Name=S.2, Value='K'\r",
+            "S.1",
+        ]
+    );
+}

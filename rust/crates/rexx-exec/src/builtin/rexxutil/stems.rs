@@ -689,7 +689,6 @@ pub(crate) fn sort(
             return Err(Raised::stem_element_unset(index).into());
         };
         let value = interp.required_string_value(value)?;
-        interp.roots.activity_mut().push_temp(value);
         texts.push(interp.to_text(value).into_owned());
         values.push(value);
     }
@@ -771,7 +770,6 @@ pub(crate) fn dump_variables(
     for (variable, value) in variables {
         if variable.last() == Some(&b'.') && interp.is_stem_object(value) {
             let own = interp.stem_own_value(value);
-            interp.roots.activity_mut().push_temp(own);
             dump_line(interp, &mut out, &variable, own, b"\n")?;
             let tails = interp.stem_live_tails(value);
             for (_, held) in &tails {
