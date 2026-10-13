@@ -1469,3 +1469,53 @@ shell where `getenv("HOME")` is null, but for `cd ~` and `cd ~ x` it runs `strle
 crate hands those to the shell too, and the shell's answer is the command's, the directory
 unchanged, pinned by `command::tests::cd_home_with_home_unset_goes_to_the_shell`. No upstream
 ticket.
+
+## 45. `SysWait` with no child to wait for
+
+    say SysWait()
+
+Not a crash: an UNDEFINED ANSWER. 3 runs under the standard wrapper and `memcap 4G`, measured
+2026-10-13 by Phase 9b Task 7: stdout `32582`, `32589`, `32624`, rc 0, and a second call in the
+same run answers the same value as the first. `SysWait` (`platform/unix/SysRexxUtil.cpp`) answers
+the status `wait` would have set, and `wait` fails with `ECHILD` and sets nothing. This checkout's
+`interpreter/` is the same. A command whose child a `SysWait` on another activity reaped is the
+same defect one step on: `ioCommandHandler` (`platform/unix/SystemCommands.cpp`) reads the status
+of its own failed `waitpid`. With `'sleep 0.6; exit 5'` started on an activity and `SysWait` after
+`SysSleep 0.2` on the main one, 3 runs printed `32735` and `5`, `32619` and `5`, then `1280` and
+`3` (the wait's answer and the command's `rc`). This crate answers `-1` for a wait that finds no
+child or fails, pinned by `tests/rexxutil_wait.rs`, and a command whose child was reaped elsewhere
+answers `127` with a `FAILURE`. No upstream ticket.
+
+## 46. `SysFork` with a second activity running
+
+    t = .worker~new
+    t~start('spin')
+    call SysSleep 0.2
+    pid = SysFork()
+    if pid = 0 then do
+      say 'child: alive'
+      exit 3
+    end
+    say 'parent: wait status' SysWait()
+    t~stop = 1
+    exit
+    ::class worker
+    ::attribute stop
+    ::method init
+      expose stop; stop = 0
+    ::method spin
+      expose stop
+      n = 0
+      do until stop
+        n = n + 1
+        if n // 1000 = 0 then call SysSleep 0.001
+      end
+
+An INDEFINITE BLOCK, and one that outlives its wrapper: the forked child holds no thread but the
+forking one and never ends, so the parent's `SysWait` waits for ever. 5 runs under the standard
+wrapper with `timeout -k 5 20` and `memcap 4G`, measured 2026-10-13 by Phase 9b Task 7: each
+killed at the deadline, rc 124; the child printed `child: alive` in 3 of the 5 and nothing in the
+other 2, and every child was still running after its parent was killed, to be killed by hand.
+`SysFork` with no other activity works: 3 runs of 3 printed the child's line and a wait status of
+`768` for its `exit 3`, rc 0. This crate refuses `SysFork`, whose `fork` is an `unsafe` call it
+holds no grant for. No upstream ticket.

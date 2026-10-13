@@ -513,6 +513,18 @@ impl Loud {
         }
     }
 
+    /// A routine whose body is a `call` that needs an `unsafe` grant this
+    /// crate does not hold (`rust/CLAUDE.md`, "No `unsafe` by default").
+    fn unsafe_grant(name: &[u8], call: &str) -> Loud {
+        let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
+        Loud {
+            message: owned_message(
+                &format!("routine \"{shown}\" without an unsafe grant for {call}"),
+                Some(Owner::Phase9),
+            ),
+        }
+    }
+
     /// A native method whose receiver is not of the type the method reads,
     /// reached by running a primitive's own row on an object of another class.
     /// The oracle reads such a receiver through the wrong layout: it crashes

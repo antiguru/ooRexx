@@ -335,6 +335,11 @@ impl Interp {
         self.input.read_line()
     }
 
+    /// Whether `.input` is the process's own standard input.
+    pub(crate) fn input_is_process_stdin(&self) -> bool {
+        self.input.is_live()
+    }
+
     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
     pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
         self.hand_over_before_read();

@@ -317,8 +317,8 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
 
     let cases: &[(&[u8], &str)] = &[
         (
-            b"say SysGetKey()\n",
-            "routine \"SYSGETKEY\" is not implemented (Phase 9)",
+            b"say SysFork()\n",
+            "routine \"SYSFORK\" without an unsafe grant for fork(2) is not implemented (Phase 9)",
         ),
         (
             b"say SysOpenEventSem('sem')\n",

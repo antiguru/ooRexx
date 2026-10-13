@@ -102,7 +102,7 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     util("SysClearRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
     util_run("SysCloseEventSem", crate::builtin::rexxutil::close_sem),
     util_run("SysCloseMutexSem", crate::builtin::rexxutil::close_sem),
-    util("SysCls", Owner::Phase9),
+    util_run("SysCls", crate::builtin::rexxutil::process::cls),
     util_run(
         "SysCreateEventSem",
         crate::builtin::rexxutil::create_event_sem,
@@ -111,8 +111,14 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         "SysCreateMutexSem",
         crate::builtin::rexxutil::create_mutex_sem,
     ),
-    util("SysCreatePipe", Owner::Phase9),
-    util("SysDropFuncs", Owner::Phase9),
+    util_run(
+        "SysCreatePipe",
+        crate::builtin::rexxutil::process::create_pipe,
+    ),
+    util_run(
+        "SysDropFuncs",
+        crate::builtin::rexxutil::process::load_funcs,
+    ),
     util("SysDropRexxMacro", Owner::Phase10(Deferral::Rxapi)),
     util_run(
         "SysDumpVariables",
@@ -127,7 +133,7 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         crate::builtin::rexxutil::files::file_search,
     ),
     util_run("SysFileTree", crate::builtin::rexxutil::tree::file_tree),
-    util("SysFork", Owner::Phase9),
+    util_run("SysFork", crate::builtin::rexxutil::process::fork),
     util_run(
         "SysFormatMessage",
         crate::builtin::rexxutil::messages::format,
@@ -140,7 +146,7 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         "SysGetFileDateTime",
         crate::builtin::rexxutil::files::get_file_date_time,
     ),
-    util("SysGetKey", Owner::Phase9),
+    util_run("SysGetKey", crate::builtin::rexxutil::process::get_key),
     util_run(
         "SysGetMessage",
         crate::builtin::rexxutil::messages::get_message,
@@ -159,13 +165,19 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         crate::builtin::rexxutil::files::is_file_link,
     ),
     util_run("SysLinVer", crate::builtin::rexxutil::version),
-    util("SysLoadFuncs", Owner::Phase9),
+    util_run(
+        "SysLoadFuncs",
+        crate::builtin::rexxutil::process::load_funcs,
+    ),
     util("SysLoadRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
     util_run("SysMkDir", crate::builtin::rexxutil::mk_dir),
     util("SysOpenEventSem", Owner::Phase9),
     util("SysOpenMutexSem", Owner::Phase9),
     util_run("SysPostEventSem", crate::builtin::rexxutil::post_event_sem),
-    util("SysQueryProcess", Owner::Phase9),
+    util_run(
+        "SysQueryProcess",
+        crate::builtin::rexxutil::process::query_process,
+    ),
     util("SysQueryRexxMacro", Owner::Phase10(Deferral::Rxapi)),
     util_run(
         "SysReleaseMutexSem",
@@ -187,7 +199,10 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         "SysSetFileDateTime",
         crate::builtin::rexxutil::files::set_file_date_time,
     ),
-    util("SysSetPriority", Owner::Phase9),
+    util_run(
+        "SysSetPriority",
+        crate::builtin::rexxutil::process::set_priority,
+    ),
     util_run("SysSleep", crate::builtin::rexxutil::sleep),
     util_run("SysStemCopy", crate::builtin::rexxutil::stems::copy),
     util_run("SysStemDelete", crate::builtin::rexxutil::stems::delete),
@@ -197,9 +212,12 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         "SysTempFileName",
         crate::builtin::rexxutil::files::temp_file_name,
     ),
-    util("SysUtilVersion", Owner::Phase9),
+    util_run(
+        "SysUtilVersion",
+        crate::builtin::rexxutil::process::util_version,
+    ),
     util_run("SysVersion", crate::builtin::rexxutil::version),
-    util("SysWait", Owner::Phase9),
+    util_run("SysWait", crate::builtin::rexxutil::process::wait),
     util_run("SysWaitEventSem", crate::builtin::rexxutil::wait_sem),
 ];
 

@@ -62,10 +62,11 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 # `UTIME_OMIT`, which sets one file stamp and leaves the other, and which
 # `std`'s own `File::set_times` cannot stand in for because it needs a
 # writable open handle where a read-only file's stamp is still the owner's to
-# set; and `uname`, for `SysVersion`. `event` and `time` are the timer
-# thread's `poll` and Linux `timerfd`. Each feature is a leaf here --
-# they gate their modules and pull no further crate.
-rustix = { version = "1.1.4", features = ["event", "fs", "param", "process", "system", "time"] }
+# set; `uname`, for `SysVersion`; and `tcsetattr`, for `SysGetKey`'s
+# terminal mode. `event` and `time` are the timer thread's `poll` and Linux
+# `timerfd`. Each feature is a leaf here -- they gate their modules and pull
+# no further crate.
+rustix = { version = "1.1.4", features = ["event", "fs", "param", "process", "system", "termios", "time"] }
 # `sigaction` and the async-signal-safe `write` the signal module needs
 # (D-U3, `src/signal.rs`). Already in the graph through `std`'s users.
 libc = "0.2.186"
@@ -104,6 +105,9 @@ rayon = "1.12.0"
 # `tests/loom.rs` compiles their sources against `loom`'s primitives under
 # `--cfg loom`. Test-only.
 loom = "0.7.2"
+
+# The pseudo-terminal `SysGetKey`'s unit tests read a key from. Test-only.
+rustix = { version = "1.1.4", features = ["pty"] }
 
 [lints]
 workspace = true

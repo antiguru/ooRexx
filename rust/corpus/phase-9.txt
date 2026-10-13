@@ -88,3 +88,6 @@ lang/rexxutil_messages.rex
 
 # 9b Task 6 fix round 1: cd run in this process.
 lang/address_cd.rex
+
+# 9b Task 7: the RexxUtil process and session routines.
+lang/rexxutil_process.rex
