@@ -341,6 +341,19 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
             "routine \"SYSCREATEMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
              shared between processes, is not implemented (Phase 9)",
         ),
+        // A name is a C string, cut at its first NUL before sem_open sees it,
+        // so what follows the NUL cannot make it rejected. These are not
+        // corpus witnesses because the oracle creates /dev/shm/sem.t8nul.
+        (
+            b"say SysCreateEventSem('t8nul' || '0'x || '/b')\n",
+            "routine \"SYSCREATEEVENTSEM\" with a named semaphore, a POSIX sem_open semaphore \
+             shared between processes, is not implemented (Phase 9)",
+        ),
+        (
+            b"say SysCreateMutexSem('t8nul' || '0'x || copies('z', 300))\n",
+            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
+             shared between processes, is not implemented (Phase 9)",
+        ),
         (
             b"say rxqueue('G')\n",
             "routine \"RXQUEUE\" is not implemented (Phase 10 Rxapi)",

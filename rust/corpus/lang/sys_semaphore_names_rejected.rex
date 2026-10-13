@@ -1,7 +1,8 @@
 /* A semaphore name sem_open rejects creates and opens nothing: nothing left
    once leading slashes go, a slash after them, or more than 251 bytes after
-   them. A create answers the empty string and an open answers zero. An open
-   checks its argument before it counts the arguments. */
+   them. A name ends at its first NUL. A create answers the empty string and
+   an open answers zero. An open checks its argument before it counts the
+   arguments. */
 say 'create' (SysCreateEventSem('') == '') (SysCreateEventSem('//') == '') (SysCreateEventSem('a/b') == '')
 say 'create mutex' (SysCreateMutexSem('/') == '') (SysCreateMutexSem('/a/') == '')
 say 'create long' (SysCreateEventSem(copies('r', 252)) == '') (SysCreateMutexSem('//' || copies('s', 252)) == '')
@@ -9,6 +10,7 @@ say 'open' SysOpenEventSem('') SysOpenEventSem('//') SysOpenEventSem('a/b')
 say 'open mutex' SysOpenMutexSem('/') SysOpenMutexSem('/a/')
 say 'open long' SysOpenEventSem(copies('q', 252)) SysOpenMutexSem('/' || copies('q', 300))
 say 'open nul' SysOpenEventSem('0'x || 'abc') SysOpenMutexSem('//' || '0'x)
+say 'create nul' (SysCreateEventSem('/' || '0'x || 'abc') == '') (SysCreateMutexSem('//' || '0'x || 'q/r') == '')
 signal on syntax name e1
 say SysOpenEventSem()
 e1: say 'error' condition('o')~code condition('o')~message
