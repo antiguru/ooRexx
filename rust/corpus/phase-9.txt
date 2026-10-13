@@ -79,3 +79,6 @@ lang/rexxutil_file_search.rex
 # 9b Task 4 fix round 1: names the shared qualifier reaches from streams,
 # .Stream, .File and redirects.
 lang/rexxutil_qualified_names.rex
+
+# 9b Task 5: SysFileTree.
+lang/rexxutil_file_tree.rex

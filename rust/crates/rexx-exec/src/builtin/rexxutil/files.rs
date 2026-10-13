@@ -251,13 +251,13 @@ pub(crate) fn is_file_link(
 /// A local time's fields as `struct tm` holds them: the full year, the month
 /// from zero, and the rest as read.
 #[derive(Clone, Copy)]
-struct CivilTime {
-    year: i64,
-    month0: i64,
-    day: i64,
-    hour: i64,
-    minute: i64,
-    second: i64,
+pub(super) struct CivilTime {
+    pub(super) year: i64,
+    pub(super) month0: i64,
+    pub(super) day: i64,
+    pub(super) hour: i64,
+    pub(super) minute: i64,
+    pub(super) second: i64,
 }
 
 /// The zone the program's own `TZ` names, resolved as glibc's `tzset` does:
@@ -265,7 +265,7 @@ struct CivilTime {
 /// directories or a path after `:`, anything else a POSIX rule, and what none
 /// of these reads, an empty `TZ` among them, is UTC. Read on every call, as
 /// `localtime` and `mktime` read it.
-fn program_zone(interp: &Interp) -> tz::TimeZone {
+pub(super) fn program_zone(interp: &Interp) -> tz::TimeZone {
     let named = match interp.env_get(b"TZ") {
         None => tz::TimeZone::local(),
         Some(text) => match std::str::from_utf8(text) {
@@ -282,7 +282,7 @@ fn zone_type(zone: &tz::TimeZone, seconds: i64) -> Option<tz::LocalTimeType> {
 }
 
 /// `localtime`: the reading of `seconds` since the epoch in `zone`.
-fn local_time(zone: &tz::TimeZone, seconds: i64) -> Option<CivilTime> {
+pub(super) fn local_time(zone: &tz::TimeZone, seconds: i64) -> Option<CivilTime> {
     let offset = i64::from(zone_type(zone, seconds)?.ut_offset());
     let at = chrono::DateTime::from_timestamp(seconds.checked_add(offset)?, 0)?;
     Some(CivilTime {
@@ -631,9 +631,9 @@ fn search(interp: &Interp, file: &[u8], path: &[u8]) -> Vec<u8> {
     Vec::new()
 }
 
-/// Where `SysFileSearch` puts what it finds: `StemHandler`.
+/// Where `SysFileSearch` and `SysFileTree` put what they find: `StemHandler`.
 #[derive(Clone, Copy)]
-enum Found {
+pub(super) enum Found {
     /// An `Array`, emptied first and appended to.
     Array(ObjRef),
     /// A stem, written from tail 1 with the count in tail 0 at the end. Tails
@@ -642,10 +642,14 @@ enum Found {
 }
 
 impl Found {
-    /// The third argument as `StemHandler::setStem` resolves it: an instance
-    /// of `Array` itself, a stem, or a string naming a stem variable. 40.925
-    /// for anything else.
-    fn resolve(interp: &mut Interp, value: ObjRef) -> Result<Found, Failure> {
+    /// The argument at `position` as `StemHandler::setStem` resolves it: an
+    /// instance of `Array` itself, a stem, or a string naming a stem variable.
+    /// 40.925 for anything else.
+    pub(super) fn resolve(
+        interp: &mut Interp,
+        value: ObjRef,
+        position: usize,
+    ) -> Result<Found, Failure> {
         if interp.array_body(value).is_some() {
             let caller = interp.caller();
             interp.send_message(value, b"EMPTY", None, &[], caller)?;
@@ -661,11 +665,16 @@ impl Found {
                 return Ok(Found::Stem(stem));
             }
         }
-        Err(Raised::not_an_array_or_stem(3).into())
+        Err(Raised::not_an_array_or_stem(position).into())
     }
 
     /// Adds `line` as the `count`th value.
-    fn add(self, interp: &mut Interp, count: usize, line: Vec<u8>) -> Result<(), Failure> {
+    pub(super) fn add(
+        self,
+        interp: &mut Interp,
+        count: usize,
+        line: Vec<u8>,
+    ) -> Result<(), Failure> {
         let value = interp.text_built(line);
         match self {
             Found::Array(array) => {
@@ -679,7 +688,7 @@ impl Found {
     }
 
     /// `StemHandler::complete`: a stem's count, into tail 0.
-    fn complete(self, interp: &mut Interp, count: usize) {
+    pub(super) fn complete(self, interp: &mut Interp, count: usize) {
         if let Found::Stem(stem) = self {
             let count = answer(interp, i64::try_from(count).unwrap_or(i64::MAX));
             interp.stem_object_write(stem, b"0", count);
@@ -723,7 +732,7 @@ fn contains(line: &[u8], needle: &[u8], caseless: bool) -> bool {
 
 /// The longest message `SysFileSearch` formats for a bad option: its
 /// `snprintf` buffer less the NUL.
-const OPTION_MESSAGE_LIMIT: usize = 255;
+pub(super) const OPTION_MESSAGE_LIMIT: usize = 255;
 
 /// `SysFileSearch(needle, file, stem [, options])`: the lines of `file`
 /// holding `needle`, into a stem or an array, each after its line number and
@@ -766,7 +775,7 @@ pub(crate) fn file_search(
         }
     }
 
-    let found = Found::resolve(interp, target)?;
+    let found = Found::resolve(interp, target, 3)?;
     let path = qualify_name(interp, &file);
     let contents = match file_type(&path) {
         Some(FileType::Directory) => None,

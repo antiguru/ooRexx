@@ -1533,6 +1533,19 @@ impl Raised {
         )
     }
 
+    /// 40.21: `Error_Incorrect_call_null`, the argument at `position` of the
+    /// routine named `routine` is the null string.
+    pub(crate) fn routine_null_argument(routine: &str, position: usize) -> Raised {
+        Raised::syntax(
+            40,
+            21,
+            vec![
+                routine.as_bytes().to_vec(),
+                position.to_string().into_bytes(),
+            ],
+        )
+    }
+
     /// 40.900: `Error_Incorrect_call_user_defined`, whose whole message the
     /// routine supplies.
     pub(crate) fn routine_user_defined(text: &[u8]) -> Raised {

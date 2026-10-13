@@ -1382,3 +1382,21 @@ formats the spare name into a 7-byte `snprintf` bound. This checkout's `interpre
 fixed, and this crate follows it: the move copies and unlinks, answering 0, pinned by
 `builtin::rexxutil::files::tests::a_move_across_file_systems_copies_and_unlinks`. No corpus
 witness can run it.
+
+## 40. `SysFileTree` over a dangling symbolic link
+
+    'ln -s nowhere dangling'
+    call SysFileTree 'dangling', f.
+    say f.0 f.1
+    'rm dangling'
+
+Not a crash: an UNDEFINED ANSWER. 3 runs under the standard wrapper, measured 2026-10-13 by Phase
+9b Task 5: stdout `1  1/01/70   1:00a           0  ----------  <dir>/dangling` each time, rc 0.
+`SysFileIterator::findNextEntry` (`platform/unix/SysFileSystem.cpp`) ignores `stat64`'s failure,
+so the line carries whatever its `findFileData` held: a longer probe program printed
+`1/01/70   1:00a          23  l-----S--T` for the same call, and in a `*` listing whose previous
+entry was a directory the link carried that directory's date, size and mode and was counted under
+`D` and not `F`. This checkout's `interpreter/` is the same. This crate lists the link
+by `lstat`, a link with its own size that counts as a file, pinned by
+`builtin::rexxutil::tree::tests::a_dangling_link_is_listed_by_its_own_status`. The corpus
+witness `lang/rexxutil_file_tree.rex` makes no dangling link.

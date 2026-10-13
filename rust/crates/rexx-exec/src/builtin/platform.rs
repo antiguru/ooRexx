@@ -64,7 +64,7 @@ pub(crate) fn qualify_name(interp: &Interp, name: &[u8]) -> Vec<u8> {
 /// `HOME`, a leading `~user` by that account's home directory, and `None`
 /// where no account has that name. Accounts are read from `/etc/passwd`, so
 /// one that lives only in NSS (LDAP and the like) is not found.
-fn expand_tilde(interp: &Interp, name: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn expand_tilde(interp: &Interp, name: &[u8]) -> Option<Vec<u8>> {
     let rest = &name[1..];
     if rest.is_empty() || rest[0] == b'/' {
         let mut out = interp.env_get(b"HOME").unwrap_or_default().to_vec();

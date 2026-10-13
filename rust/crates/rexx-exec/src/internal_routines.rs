@@ -126,7 +126,7 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
         "SysFileSearch",
         crate::builtin::rexxutil::files::file_search,
     ),
-    util_run("SysFileTree", crate::builtin::rexxutil::file_tree),
+    util_run("SysFileTree", crate::builtin::rexxutil::tree::file_tree),
     util("SysFork", Owner::Phase9),
     util("SysFormatMessage", Owner::Phase9),
     util("SysGetErrorText", Owner::Phase9),

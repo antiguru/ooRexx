@@ -1,0 +1,160 @@
+/* SysFileTree over a tree this program makes and removes: each option and
+   date layout, the size cap, the mode letters, specs naming the current, a
+   parent and the home directory, names with a blank, with bytes that are not
+   UTF-8 and with a NUL, a link to a directory, a directory that cannot be
+   read, the pattern forms, the stem and array targets, and the argument
+   errors. Each result is printed sorted, since the order entries are found
+   in is the directory's own. */
+here = directory()
+d = 'filetree.d'
+call SysMkDir d
+call SysMkDir d'/sub'
+call SysMkDir d'/.d'
+call SysMkDir d'/UpperDir'
+call SysMkDir d'/closed'
+call make d'/f', ''
+call make d'/.h', 'x'
+call make d'/b b', copies('b', 999)
+call make d'/UpperFile', 'xx'
+call make d'/sub/F', copies('F', 10)
+call make d'/sub/.h', copies('h', 11)
+call make d'/.d/f', copies('f', 20)
+call SysFileCopy d'/.h', d'/n' || 'ff'x
+call make d'/n' || 'efbfbd'x, 'z'
+call make d'/closed/inner', 'i'
+call make d'/sticky', ''
+call make d'/suid', ''
+call make d'/sgid', ''
+'ln -s sub' d'/link'
+'mkfifo' d'/pipe'
+'truncate -s 20G' d'/big'
+'find' d '-exec touch -h -d "2026-10-13 08:09:10" {} +'
+'touch -d "1890-01-02 03:04:05"' d'/f'
+'touch -d "2026-10-12 00:00:00"' d'/.h'
+'touch -d "2026-10-12 12:00:00"' '"'d'/b b"'
+'touch -d "2026-10-12 23:59:59"' d'/sub/F'
+'touch -d "2001-02-03 13:05:06"' d'/UpperDir'
+'touch -d "2026-10-12 13:00:00"' d'/sub'
+'chmod 444' d'/UpperFile'
+'chmod 1757' d'/sticky'
+'chmod 4755' d'/suid'
+'chmod 2645' d'/sgid'
+'chmod 000' d'/closed'
+
+call directory d
+root = here'/'d'/'
+cases = .array~of('f|', 'f|b', 'f|h', 'f|l', 'f|t', 'f|o', 'f|lt', 'f|th', 'f|lh', 'f|tl', ,
+  'sub|D', 'f|d', 'sub|f', 'UpperFile|bdf', 'UpperDir|fd', 'Upper*|dfb', 'Upper*|bdf', ,
+  'upperfile|fi', 'upperfile|o', 'u*|io', 'b b|f', 'b?b|fo', '*|o', '*|F', '*|D', '*|so', ,
+  '*|sD', 'f|FSI', 'f|S', '.|o', './.|o', 'sub/..|o', '..|o', '../'d'|do', '../'d'/|o', ,
+  'sub/|o', 'sub/.|o', 'sub//|o', './/sub|o', 'f/|o', 'f/.|o', 'ROOT|i', 'ROOT*|l', ,
+  'ROOTsub|tdh', '../'d'*/sub|o', '../*/sub|o', '?|o', '?|of', '[fs]*|o', '[!a-z]*|o', ,
+  '[[:upper:]]*|o', '[[:upper:]]*|oi', 'x\*|o', '*[|o', 'n*|o', 'n' || 'ff'x'|o', ,
+  'n' || 'efbfbd'x'|', 'f' || '00'x || 'zz|o', 'link|', 'link|f', 'link/|o', 'closed|', ,
+  'closed/|o', 'closed/*|so', 'sticky|', 'suid|', 'sgid|', 'pipe|', 'big|', 'big|h', ,
+  'big|ot')
+do c over cases
+  parse var c spec '|' opts
+  if spec~startsWith('ROOT') then spec = root || spec~substr(5)
+  call show c, spec, opts
+end
+
+-- with HOME moved to this tree, a leading tilde names it
+home = value('HOME', here'/'d, 'ENVIRONMENT')
+call show '~|o', '~', 'o'
+call show '~/|o', '~/', 'o'
+call show '~/sub|o', '~/sub', 'o'
+call show '~/../'d'|do', '~/../'d, 'do'
+call show '~nosuchuser.rexxutil/bin|do', '~nosuchuser.rexxutil/bin', 'do'
+call show '~nosuchuser.rexxutil|o', '~nosuchuser.rexxutil', 'o'
+call value 'HOME', 'relative.d', 'ENVIRONMENT'
+call show 'relative ~|o', '~', 'o'
+call show 'relative ~/|o', '~/', 'o'
+call value 'HOME', home, 'ENVIRONMENT'
+
+-- the targets: a stem name, a stem object, an array emptied first
+say 'name ' SysFileTree('sub/', 'out', 'o') out.0
+s = .stem~new
+say 'stem ' SysFileTree('sub/', s, 'o') s[0]
+a = .array~of('old', 'older', 'oldest')
+say 'array' SysFileTree('sub/', a, 'o') a~items
+say 'none ' SysFileTree('nothing.here', a) a~items
+stale. = 'default'
+stale.0 = 'none'
+stale.5 = 'kept'
+say 'stale' SysFileTree('sub/F', stale., 'o') stale.0 stale.2 stale.5
+
+-- the arguments
+call t 'call SysFileTree'
+call t 'call SysFileTree "%"'
+call t 'call SysFileTree "%", f., , , , ""'
+call t 'call SysFileTree .nil, f.'
+call t 'call SysFileTree "%", f., .nil'
+call t 'call SysFileTree "%", f., , .nil'
+call t 'call SysFileTree "", f.'
+call t 'call SysFileTree "00"x || "x", f.'
+call t 'call SysFileTree "%", ""'
+call t 'call SysFileTree "%", "s.1"'
+call t 'call SysFileTree "%", .nil'
+call t 'call SysFileTree "%", 12'
+call t 'call SysFileTree "", "", "X"'
+call t 'call SysFileTree "%", f., ""'
+call t 'call SysFileTree "%", f., "X"'
+call t 'call SysFileTree "%", f., "f d"'
+call t 'call SysFileTree "%", f., "fo" || "00"x || "Z"'
+call t 'call SysFileTree "%", f., "d" || "ff"x'
+call t 'call SysFileTree "%", f., copies("Q", 300)'
+call t 'call SysFileTree "%", f., "X", "x"'
+call t 'call SysFileTree "%", f., "", "x"'
+call t 'call SysFileTree "%", f., , " "'
+call t 'call SysFileTree "%", f., , "x"'
+call t 'call SysFileTree "%", f., , "******"'
+call t 'call SysFileTree "%", f., , copies("+", 300)'
+call t 'call SysFileTree "%", f., , "+" || "00"x || "x"'
+call t 'call SysFileTree "%", f., , "+-*+-", "-----"'
+call t 'call SysFileTree "%", f., , "", ""'
+call t 'call SysFileTree "%", f., , , " "'
+call t 'call SysFileTree "%", f., , , "******"'
+call t 'b = .array~of(1, 2); call SysFileTree "", b; say "never"', 'b'
+
+call directory here
+'chmod 700' d'/closed'
+'rm -rf' d
+call SysFileTree '', f.
+exit
+
+make: procedure
+  parse arg name, text
+  call charout name, text
+  call charout name
+  return
+
+show: procedure expose here
+  parse arg label, spec, opts
+  drop f.
+  if opts == '' then r = SysFileTree(spec, f.)
+  else r = SysFileTree(spec, f., opts)
+  lines = .array~new
+  do i = 1 to f.0
+    lines~append(f.i~changestr(here'/', ''))
+  end
+  lines~sort
+  say '['translate(label, '?', '00'x)'] rc' r 'count' f.0
+  do line over lines
+    say '  'line
+  end
+  return
+
+t: procedure
+  parse arg code, show
+  signal on syntax
+  f.0 = 'unset'
+  interpret code
+  say 'returned' result 'f.0' f.0
+  return
+syntax:
+  o = condition('o')
+  extra = ''
+  if show == 'b' then extra = 'b~items' b~items
+  say o~code o~message '| f.0' f.0 extra
+  return
