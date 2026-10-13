@@ -1,0 +1,30 @@
+# Phase 9b's gate groups (spec 2026-10-10 section 4): the ooTest groups that
+# name a RexxUtil routine 9b takes, other than the groups every test of which
+# carries a Phase 10 row in the row files. Derived from ootest/ooRexx at the
+# revision in suite-revision.txt, from the worktree root, by listing
+#
+#   grep -rlawiE 'SysCls|SysCreatePipe|SysDropFuncs|SysDumpVariables|SysFileCopy|SysFileMove|SysFileSearch|SysFork|SysFormatMessage|SysGetErrorText|SysGetFileDateTime|SysGetKey|SysGetMessage|SysGetMessageX|SysIsFileDirectory|SysIsFileLink|SysLoadFuncs|SysOpenEventSem|SysOpenMutexSem|SysQueryProcess|SysSearchPath|SysSetFileDateTime|SysSetPriority|SysStemCopy|SysStemDelete|SysStemInsert|SysStemSort|SysTempFileName|SysUtilVersion|SysWait|SysFileTree|SysFileXXX' ootest/ooRexx
+#
+# keeping each hit named *.testGroup as dir/group (a hit in another file is
+# dropped), in path order, and removing a group whose every test has an
+# Owner::Phase10 row. The test the_9b_group_file_is_what_its_derivation_gives
+# (crates/rexx-exec/tests/suite.rs) re-runs this and asserts the list below
+# equals it. Pass the list to the suite gate as REXX_SUITE_GROUPS, comma-joined.
+base/class/File
+base/keyword/ADDRESS
+base/rexxutil/SysDumpVariables
+base/rexxutil/SysFileDateTime
+base/rexxutil/SysFileSearch
+base/rexxutil/SysFileTree
+base/rexxutil/SysFileXXX
+base/rexxutil/SysFormatMessage
+base/rexxutil/SysSearchPath
+base/rexxutil/SysStemCopy
+base/rexxutil/SysStemDelete
+base/rexxutil/SysStemInsert
+base/rexxutil/SysStemSort
+base/rexxutil/platform/unix/SysGetMessage
+base/rexxutil/platform/unix/tilde
+base/rexxutil/platform/windows/SysFileTree
+base/rexxutil/platform/windows/SysIsFileDirectory
+base/security.manager/SecurityManager

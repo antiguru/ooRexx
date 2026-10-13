@@ -1125,6 +1125,174 @@ fn the_row_files_hold_only_checked_rows() {
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
+/// The 9b gate-group file (spec 2026-10-10 section 4), and the derivation it
+/// is committed from.
+mod gate_groups_9b {
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::Path;
+
+    use super::suite_rows::{Owner, Row};
+    use super::{expected_set_in, group_path, groups_root, read_rows, worktree};
+
+    /// The file, relative to the worktree.
+    const FILE: &str = "rust/corpus/suite-9b-groups.txt";
+
+    /// The RexxUtil routines spec section 4 lists, plus `SysFileTree` and
+    /// `SysFileXXX`.
+    const ROUTINES: &[&str] = &[
+        "SysCls",
+        "SysCreatePipe",
+        "SysDropFuncs",
+        "SysDumpVariables",
+        "SysFileCopy",
+        "SysFileMove",
+        "SysFileSearch",
+        "SysFork",
+        "SysFormatMessage",
+        "SysGetErrorText",
+        "SysGetFileDateTime",
+        "SysGetKey",
+        "SysGetMessage",
+        "SysGetMessageX",
+        "SysIsFileDirectory",
+        "SysIsFileLink",
+        "SysLoadFuncs",
+        "SysOpenEventSem",
+        "SysOpenMutexSem",
+        "SysQueryProcess",
+        "SysSearchPath",
+        "SysSetFileDateTime",
+        "SysSetPriority",
+        "SysStemCopy",
+        "SysStemDelete",
+        "SysStemInsert",
+        "SysStemSort",
+        "SysTempFileName",
+        "SysUtilVersion",
+        "SysWait",
+        "SysFileTree",
+        "SysFileXXX",
+    ];
+
+    /// The command line the file's header records.
+    fn command() -> String {
+        format!("grep -rlawiE '{}' ootest/ooRexx", ROUTINES.join("|"))
+    }
+
+    /// Whether `text` holds `name` as a whole word, ignoring ASCII case: the
+    /// match `grep -w -i` makes, where a word is letters, digits and `_`.
+    fn has_word(text: &[u8], name: &str) -> bool {
+        let text = text.to_ascii_lowercase();
+        let name = name.to_ascii_lowercase().into_bytes();
+        let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+        text.windows(name.len()).enumerate().any(|(at, window)| {
+            window == name.as_slice()
+                && (at == 0 || !word(text[at - 1]))
+                && text.get(at + name.len()).is_none_or(|&byte| !word(byte))
+        })
+    }
+
+    /// Every regular file below `at`, dotfiles and binary files included,
+    /// symbolic links not followed, as `grep -r` walks.
+    fn files_below(at: &Path, found: &mut Vec<std::path::PathBuf>) {
+        for entry in
+            fs::read_dir(at).unwrap_or_else(|e| panic!("cannot read {}: {e}", at.display()))
+        {
+            let entry = entry.expect("a directory entry");
+            let kind = entry.file_type().expect("a file type");
+            if kind.is_dir() {
+                files_below(&entry.path(), found);
+            } else if kind.is_file() {
+                found.push(entry.path());
+            }
+        }
+    }
+
+    /// The `dir/group` of each `.testGroup` file that names a routine.
+    fn grep_hits(root: &Path) -> BTreeSet<(String, String)> {
+        let mut files = Vec::new();
+        files_below(root, &mut files);
+        let mut hits = BTreeSet::new();
+        for path in files {
+            let Some(group) = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.strip_suffix(".testGroup"))
+            else {
+                continue;
+            };
+            let bytes = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            if ROUTINES.iter().any(|name| has_word(&bytes, name)) {
+                let dir = path
+                    .parent()
+                    .and_then(|parent| parent.strip_prefix(root).ok())
+                    .expect("a group below the root");
+                hits.insert((dir.to_string_lossy().into_owned(), group.to_string()));
+            }
+        }
+        hits
+    }
+
+    /// Whether every test of the group has a Phase 10 row.
+    fn phase_10_group(root: &Path, dir: &str, group: &str, rows: &[Row]) -> bool {
+        let path = group_path(dir, group);
+        let tests = expected_set_in(root, dir, group);
+        let owned: BTreeSet<&str> = rows
+            .iter()
+            .filter(|row| row.group == path && matches!(row.owner, Owner::Phase10(_)))
+            .map(|row| row.test.as_str())
+            .collect();
+        !tests.is_empty() && tests.iter().all(|test| owned.contains(test.as_str()))
+    }
+
+    /// The groups the derivation gives, as `dir/group` in path order.
+    fn derived(root: &Path, rows: &[Row]) -> Vec<String> {
+        let mut groups: Vec<(String, String)> = grep_hits(root)
+            .into_iter()
+            .filter(|(dir, group)| !phase_10_group(root, dir, group, rows))
+            .collect();
+        groups.sort_by_key(|(dir, group)| format!("{}.testGroup", group_path(dir, group)));
+        groups
+            .iter()
+            .map(|(dir, group)| group_path(dir, group))
+            .collect()
+    }
+
+    /// The names a file lists and the command its header records.
+    fn parse(text: &str) -> (Vec<String>, bool) {
+        let names = text
+            .lines()
+            .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+            .map(str::to_string)
+            .collect();
+        let recorded = format!("#   {}", command());
+        (names, text.lines().any(|line| line == recorded))
+    }
+
+    #[test]
+    fn the_9b_group_file_is_what_its_derivation_gives() {
+        let text = fs::read_to_string(worktree().join(FILE))
+            .unwrap_or_else(|e| panic!("cannot read {FILE}: {e}"));
+        let (rows, problems) = read_rows();
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+        let (listed, recorded) = parse(&text);
+        assert!(recorded, "{FILE}'s header does not record `{}`", command());
+        assert_eq!(listed, derived(&groups_root(), &rows));
+    }
+
+    #[test]
+    fn a_word_match_is_grep_dash_w_dash_i() {
+        assert!(has_word(b"call SYSSTEMSORT stem.", "SysStemSort"));
+        assert!(has_word(b"SysStemSort", "SysStemSort"));
+        assert!(!has_word(b"MySysStemSort", "SysStemSort"));
+        assert!(!has_word(b"SysStemSorter", "SysStemSort"));
+        assert!(!has_word(b"SysStemSort_x", "SysStemSort"));
+        assert!(has_word(b"xSysStemSortx SysStemSort(", "SysStemSort"));
+        assert!(!has_word(b"SysGetMessageX", "SysGetMessage"));
+    }
+}
+
 /// D1's judgement and the renaming rows ask for, on runs built by hand.
 mod judging {
     use std::collections::BTreeSet;
