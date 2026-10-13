@@ -1483,7 +1483,7 @@ same defect one step on: `ioCommandHandler` (`platform/unix/SystemCommands.cpp`)
 of its own failed `waitpid`. With `'sleep 0.6; exit 5'` started on an activity and `SysWait` after
 `SysSleep 0.2` on the main one, 3 runs printed `32735` and `5`, `32619` and `5`, then `1280` and
 `3` (the wait's answer and the command's `rc`). This crate answers `-1` for a wait that finds no
-child or fails, pinned by `tests/rexxutil_wait.rs`, and a command whose child was reaped elsewhere
+child or fails, pinned by `tests/rexxutil_process.rs`, and a command whose child was reaped elsewhere
 answers `127` with a `FAILURE`. No upstream ticket.
 
 ## 46. `SysFork` with a second activity running
