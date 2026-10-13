@@ -501,13 +501,17 @@ impl Loud {
         }
     }
 
-    /// A `Sys*Sem` routine given a name: a named semaphore is `sem_open`'s,
-    /// shared between processes (roadmap D11).
+    /// A `Sys*Sem` routine given a name: on Unix a named semaphore is a POSIX
+    /// semaphore from `sem_open`, shared between processes and outliving them
+    /// (`.superpowers/sdd/queued/2026-10-13-named-semaphores-design.md`).
     fn named_semaphore(name: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
         Loud {
             message: owned_message(
-                &format!("routine \"{shown}\" with a named semaphore"),
+                &format!(
+                    "routine \"{shown}\" with a named semaphore, a POSIX sem_open semaphore \
+                     shared between processes,"
+                ),
                 Some(Owner::Phase9),
             ),
         }

@@ -323,15 +323,23 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
         ),
         (
             b"say SysOpenEventSem('sem')\n",
-            "routine \"SYSOPENEVENTSEM\" is not implemented (Phase 9)",
+            "routine \"SYSOPENEVENTSEM\" with a named semaphore, a POSIX sem_open semaphore \
+             shared between processes, is not implemented (Phase 9)",
+        ),
+        (
+            b"say SysOpenMutexSem('/sem')\n",
+            "routine \"SYSOPENMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
+             shared between processes, is not implemented (Phase 9)",
         ),
         (
             b"say SysCreateEventSem('sem')\n",
-            "routine \"SYSCREATEEVENTSEM\" with a named semaphore is not implemented (Phase 9)",
+            "routine \"SYSCREATEEVENTSEM\" with a named semaphore, a POSIX sem_open semaphore \
+             shared between processes, is not implemented (Phase 9)",
         ),
         (
             b"say SysCreateMutexSem('sem')\n",
-            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore is not implemented (Phase 9)",
+            "routine \"SYSCREATEMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
+             shared between processes, is not implemented (Phase 9)",
         ),
         (
             b"say rxqueue('G')\n",

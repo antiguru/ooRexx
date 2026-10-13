@@ -171,8 +171,8 @@ pub(crate) static INTERNAL_ROUTINES: &[InternalRoutine] = &[
     ),
     util("SysLoadRexxMacroSpace", Owner::Phase10(Deferral::Rxapi)),
     util_run("SysMkDir", crate::builtin::rexxutil::mk_dir),
-    util("SysOpenEventSem", Owner::Phase9),
-    util("SysOpenMutexSem", Owner::Phase9),
+    util_run("SysOpenEventSem", crate::builtin::rexxutil::open_sem),
+    util_run("SysOpenMutexSem", crate::builtin::rexxutil::open_sem),
     util_run("SysPostEventSem", crate::builtin::rexxutil::post_event_sem),
     util_run(
         "SysQueryProcess",

@@ -319,15 +319,36 @@ pub(crate) fn create_mutex_sem(
 }
 
 /// A create given the name `value`: the empty string where `sem_open` rejects
-/// the name and creates nothing (glibc: nothing left once leading slashes go,
-/// or a slash after them, `EINVAL`), else the named-semaphore refusal.
+/// the name and creates nothing, else the named-semaphore refusal.
 fn refuse_name(interp: &mut Interp, name: &[u8], value: ObjRef) -> Result<ObjRef, Failure> {
-    let text = interp.to_text(value);
-    let rest = &text[text.iter().take_while(|&&byte| byte == b'/').count()..];
-    if rest.is_empty() || rest.contains(&b'/') {
+    if sem_open_rejects(&interp.to_text(value)) {
         return Ok(interp.text_built(Vec::new()));
     }
     Err(Loud::named_semaphore(name).into())
+}
+
+/// `SysOpenEventSem(name)` and `SysOpenMutexSem(name)`: zero where
+/// `sem_open` rejects the name, else the named-semaphore refusal.
+pub(crate) fn open_sem(
+    interp: &mut Interp,
+    name: &'static [u8],
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let text = required_c_string(interp, args, 1)?;
+    check_arity(args, 1)?;
+    if sem_open_rejects(&text) {
+        return Ok(answer(interp, 0));
+    }
+    Err(Loud::named_semaphore(name).into())
+}
+
+/// Whether glibc's `sem_open` fails on `text` before it looks for a
+/// semaphore: nothing left once leading slashes go, a slash after them
+/// (`EINVAL`), or more than 251 bytes after them (`ENAMETOOLONG`, the
+/// `sem.` prefix and the 255-byte file name limit).
+fn sem_open_rejects(text: &[u8]) -> bool {
+    let rest = &text[text.iter().take_while(|&&byte| byte == b'/').count()..];
+    rest.is_empty() || rest.contains(&b'/') || rest.len() > 251
 }
 
 /// `SysPostEventSem(handle)`: `sem_post`.

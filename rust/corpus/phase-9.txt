@@ -94,3 +94,6 @@ lang/rexxutil_process.rex
 
 # 9b Task 7 fix round 1: a security manager renaming a REQUIRES.
 lang/requires_manager_rename.rex
+
+# 9b Task 8: semaphore names sem_open rejects, answered without a semaphore.
+lang/sys_semaphore_names_rejected.rex
