@@ -216,3 +216,40 @@ fn a_make_array_answering_a_string_is_not_an_array() {
     assert_eq!(outcome.exit_code, 0);
     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "trapped 98.913\n");
 }
+
+/// **The array a `MAKEARRAY` answers is held while its values are
+/// converted**: nothing else refers to a fresh one, and each value's `STRING`
+/// allocates. Collecting at every allocation, an unheld array loses its
+/// values. Oracle rc 0, these lines, measured.
+#[test]
+fn a_fresh_make_array_answer_outlives_its_values_string_methods() {
+    let source = b"say SysFormatMessage('&1 / &2 / &3', .k~new)\n\
+        ::class k\n\
+        ::method makearray\n\
+        return .array~of(.v~new(copies('first', 4)), .v~new(copies('second', 4)),\
+        .v~new(copies('third', 4)))\n\
+        ::class v\n\
+        ::method init\n\
+        expose t\n\
+        use arg t\n\
+        ::method string\n\
+        expose t\n\
+        x = copies('filler ', 50)\n\
+        return t\n";
+    let outcome = crate::run_program_collect_every_alloc(
+        "/t.rex",
+        source.to_vec(),
+        crate::Invocation::none(),
+    );
+    assert!(outcome.collections > 0, "the mode collected nothing");
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "firstfirstfirstfirst / secondsecondsecondsecond / thirdthirdthirdthird\n"
+    );
+}

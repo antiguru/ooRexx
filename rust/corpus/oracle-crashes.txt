@@ -1522,3 +1522,40 @@ other 2, and every child was still running after its parent was killed, to be ki
 `768` for its `exit 3`, rc 0. This crate refuses `SysFork`: every run has a timer thread and a
 joining main thread, which a forked child would not have
 (`.superpowers/sdd/queued/2026-10-13-sysfork-design.md`). No upstream ticket.
+
+## 47. A stem passed by name whose variable a `STRING` method in the same call drops
+
+    .k~new~run
+    ::class k
+    ::method run
+      expose s.
+      s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
+      say SysStemCopy('s.', 't.', self) t.0
+      say t.1 '/' t.2
+      say symbol('s.0')
+    ::method string
+      expose s.
+      drop s.
+      do 200000; x = copies('filler ', 50); end
+      return 1
+
+Not one mode: what the oracle does depends on when it collects. `SysStemCopy`, `SysStemDelete`, `SysStemInsert`
+and `SysStemSort` resolve a stem named by a string and hold it only through the caller's variable,
+while later arguments and the sort's elements run `STRING` methods. Measured 2026-10-13 by the
+Phase 9b final fix, 3 runs of 3 each under the standard wrapper and `memcap 4G`, from a fresh
+empty directory:
+
+| program | `STRING` allocates `copies('filler ', 50)` once | 200000 times | 200000 times, no `drop` |
+|---|---|---|---|
+| the copy above | rc 0: `0 2`, the copied values, `LIT` | SIGSEGV, rc 139 | rc 0: `0 2`, the values, `VAR` |
+| `SysStemDelete('s.', self)` | rc 0: `0 S.0` | SIGSEGV, rc 139 | rc 0: `0 1` |
+| `SysStemInsert('s.', self, ...)` | rc 0: `0 S.0` | SIGSEGV, rc 139 | rc 0: `0 3` |
+| `SysStemSort('s.')`, `s.2 = self` | rc 0: `0 S.0` | rc 0: `0 S.0` | rc 0: `0 3` |
+| `SysStemSort('s.x')`, `s.x.2 = self` | rc 0: `0 S.X.0` | rc 0: `0 S.X.0` | rc 0: `0 3` |
+
+The Phase 9b final review measured 40.922 for its own program of the same shape, 3 runs of 3,
+where this program crashes. This crate holds the stem it resolved for the whole call, and answers as
+the oracle does when it does not collect, collecting or not: pinned by
+`builtin::rexxutil::stems::tests::a_stem_named_by_its_variable_outlives_the_variable`, which reads
+`crates/rexx-exec/tests/stem_dropped_by_name_cases/crate` and runs each case normally and
+collecting at every allocation. No corpus witness can run it. No upstream ticket.

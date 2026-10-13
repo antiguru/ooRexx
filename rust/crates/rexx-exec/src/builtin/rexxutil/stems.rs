@@ -46,6 +46,7 @@ fn stem_argument(
     if text != ObjRef::NIL {
         let name = interp.to_text(text).into_owned();
         if let Some(stem) = interp.context_stem_named(&name) {
+            interp.roots.activity_mut().push_temp(stem);
             return Ok(stem);
         }
     }
@@ -540,6 +541,7 @@ fn sort_target(interp: &mut Interp, argument: ObjRef) -> Result<(ObjRef, Vec<u8>
     let text = interp.required_string_value(argument)?;
     let name = interp.to_text(text).into_owned();
     if let Some(stem) = interp.context_stem_named(&name) {
+        interp.roots.activity_mut().push_temp(stem);
         return Ok((stem, Vec::new()));
     }
     let unresolved = || Failure::from(Raised::stem_argument_unresolved(1, &name));
@@ -552,6 +554,7 @@ fn sort_target(interp: &mut Interp, argument: ObjRef) -> Result<(ObjRef, Vec<u8>
     let Some(stem) = interp.context_stem_named(&name[..=period]) else {
         return Err(unresolved());
     };
+    interp.roots.activity_mut().push_temp(stem);
     let mut prefix = name[period + 1..].to_ascii_uppercase();
     if prefix.last() != Some(&b'.') {
         prefix.push(b'.');

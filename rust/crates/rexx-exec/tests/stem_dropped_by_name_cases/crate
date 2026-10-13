@@ -1,0 +1,94 @@
+# A stem passed by name to a RexxUtil stem routine, whose variable a STRING
+# method run by the same call drops before allocating. The oracle's answer
+# depends on when it collects (oracle-crashes.txt entry 47), so the expected
+# blocks are this crate's own output: the routine works on the stem it
+# resolved, as the oracle does when it does not collect.
+
+# SysStemCopy: the start argument's STRING drops the source stem
+program
+.k~new~run
+::class k
+::method run
+  expose s.
+  s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
+  say SysStemCopy('s.', 't.', self) t.0
+  say t.1 '/' t.2
+  say symbol('s.0')
+::method string
+  expose s.
+  drop s.
+  x = copies('filler ', 50)
+  return 1
+----
+rc> 0
+out> 0 2
+out> first first first  / second second second 
+out> LIT
+
+# SysStemDelete: the start argument's STRING drops the stem
+program
+.k~new~run
+::class k
+::method run
+  expose s.
+  s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
+  say SysStemDelete('s.', self) s.0
+::method string
+  expose s.
+  drop s.
+  x = copies('filler ', 50)
+  return 1
+----
+rc> 0
+out> 0 S.0
+
+# SysStemInsert: the position argument's STRING drops the stem
+program
+.k~new~run
+::class k
+::method run
+  expose s.
+  s.0 = 2; s.1 = copies('first ', 3); s.2 = copies('second ', 3)
+  say SysStemInsert('s.', self, copies('inserted ', 2)) s.0
+::method string
+  expose s.
+  drop s.
+  x = copies('filler ', 50)
+  return 1
+----
+rc> 0
+out> 0 S.0
+
+# SysStemSort: an element's STRING drops the stem midway through the sort
+program
+.k~new~run
+::class k
+::method run
+  expose s.
+  s.0 = 3; s.1 = copies('bravo ', 3); s.2 = self; s.3 = copies('alpha ', 3)
+  say SysStemSort('s.') s.0
+::method string
+  expose s.
+  drop s.
+  x = copies('filler ', 50)
+  return 1
+----
+rc> 0
+out> 0 S.0
+
+# SysStemSort over a name with a tail prefix, an element dropping the stem
+program
+.k~new~run
+::class k
+::method run
+  expose s.
+  s.x.0 = 3; s.x.1 = copies('bravo ', 3); s.x.2 = self; s.x.3 = copies('alpha ', 3)
+  say SysStemSort('s.x') s.x.0
+::method string
+  expose s.
+  drop s.
+  x = copies('filler ', 50)
+  return 1
+----
+rc> 0
+out> 0 S.X.0
