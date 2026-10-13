@@ -79,3 +79,13 @@ Task 5: fix round 2 at 064498811, 6c8d0e7fd (bracket = port of glibc 2.43 fnmatc
 Ruling: controller re-ran the committed sweep on the release binary (built from 064498811's tree) instead of a third re-review: 3400 rows, diff vs sweep.oracle.out empty -- the sweep is the reviewer's own instrument, widened -- if wrong, close review.
 Ruling: '^' always negates (glibc consults POSIXLY_CORRECT per process) accepted -- env-dependent glibc mode, not an interpreter observable worth a Deviation -- if wrong, one branch.
 Task 5: complete (813f71787, cc6e05caa, 00ba9f620, 0f35b56f9, 4764c16ae, 064498811, 6c8d0e7fd).
+Task 6: dispatched (implementer opus, BASE b1b3b8425).
+Task 6: implementer DONE_WITH_CONCERNS (d1185ae85, 1bb5e9dc5). SysGetMessage 9/9, SysFormatMessage 5/5, ADDRESS 78/79 (TEST_COMMAND_CD: change_directory vs sys_process_cd).
+Task 6 review: quality approved; spec fails on ADDRESS TEST_COMMAND_CD. Oracle cd (SystemCommands.cpp:494) passes to chdir un-normalised; crate normalises lexically -> real bug (symlink: cd link/.. lands elsewhere; DIRECTORY() after cd link shows link not real/sub; cd "" succeeds; cd ~ foo fails). New oracle crash: cd ~ with HOME unset (139, 3/3). Entries 34/43 over-general (depends on MAKEARRAY string). Minors: messages.rs:317 doc wrong; command.rs:282 unquote doc false.
+Ruling: port sys_process_cd into command.rs in Task 6's fix round (shared-path rule: routed by controller here): leading-space skip, ~/~//~ x -> HOME, ~user via passwd_home, unknown user -> shell, unquote last (drop every ", \ escapes next byte); resolve physically (canonicalize), check dir + search permission; NOT qualify_name (normalises, drops trailing /, cannot hand back to shell) -- if wrong, cd diverges under symlinks as today.
+Ruling: entry 44 for cd ~ with HOME unset + crate-only pin; entries 34 and 43 rewritten as the review's per-string table; agreeing short MAKEARRAY strings witnessed in corpus.
+Task 6: fix round 1 dispatched (resume b6-impl).
+Task 6: fix round 1 at a516009f5, 1888b1d81 (ADDRESS 79/79); re-review dispatched (sonnet).
+Task 6 re-review: approved with M1 (shell-dependent rc in entry-44 test), entry 34/43 heading over-claim -> fix round 2 (resume b6-impl); M2 passwd_home ignores NSS -> queued.
+Task 6: fix round 2 at 6ecc75da0 (pin asserts cwd unchanged, not shell rc; entry headings). Controller read the diff (test + doc only).
+Task 6: complete (d1185ae85, 1bb5e9dc5, a516009f5, 1888b1d81, 6ecc75da0).
