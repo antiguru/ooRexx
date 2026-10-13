@@ -188,3 +188,49 @@ No two-activity witness was added: it would need a working named semaphore.
 
 The suite harness was not run. No ooTest test uses `SysOpenEventSem`, `SysOpenMutexSem` or a named
 create (the queued design's survey).
+
+## Fix round 1
+
+Finding (task-8-review.md): `refuse_name` checked the full text, not the C string `sem_open` sees.
+`SysCreateEventSem('t8nul'||'0'x||'/b')` answered `''` where the oracle creates `sem.t8nul`.
+
+Oracle, confirmed here (fresh dir, memcap, `/dev/shm` empty before): `t8nul||'0'x||'/b'` (event)
+and `'t8nulm'||'0'x||copies('z',300)` (mutex) each print `0` for `== ''` and leave
+`/dev/shm/sem.t8nul` and `/dev/shm/sem.t8nulm`. Those were removed by literal path. Both
+`'/'||'0'x||'abc'` and `'//'||'0'x||'q/r'` print `1` and create nothing.
+
+Commit `e8d5e0b6e`:
+
+* `sem_open_rejects` (`builtin/rexxutil.rs`) cuts its argument at the first NUL with `c_string`,
+  so create and open share the truncation. The open already passed a truncated name. The second cut
+  is a no-op there.
+* Crate-only test, in `run/tests/directives.rs`
+  `an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises`:
+  `SysCreateEventSem('t8nul' || '0'x || '/b')` and
+  `SysCreateMutexSem('t8nul' || '0'x || copies('z', 300))` take the named-semaphore refusal. The
+  comment above the cases says why it is not a corpus witness: the oracle creates a semaphore.
+* Corpus witness `sys_semaphore_names_rejected.rex` gains `create nul` with the two shapes that are
+  rejected after truncation. Its header says a name ends at its first NUL. The sourceline file was
+  regenerated with the driver.
+
+RED, before the fix:
+* `cargo test -p rexx-exec --lib run::tests::directives` failed at directives.rs:364,
+  `left: 0 right: 120`, on the first new case. The loop stops at its first failure.
+* Each shape run alone on the pre-fix release binary (`target/release/rexx-run`, built at
+  db87a3b53) printed `1` with status 0 for both, so both answered `''`.
+* The extended witness on the pre-fix binary exited 120 at `create nul`
+  (`routine "SYSCREATEEVENTSEM" with a named semaphore ...`).
+
+GREEN, after the fix (release rebuilt, `Compiling rexx-exec` seen):
+* Both shapes exit 120 with the named-semaphore refusal on stderr.
+* Witness stdout `cmp`-identical to the oracle's, stderr empty on both sides, status 0 on both.
+  Oracle: 3 runs, identical. `create nul 1 1` is printed. `/dev/shm` is empty afterwards.
+
+Checks (foreground, CARGO_INCREMENTAL=0, memcap 8G, -j 4):
+* `cargo fmt --all --check`: exit 0.
+* `cargo clippy -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `cargo test -p rexx-exec --lib`: 1116 passed. The new cases sit inside an existing test, so the
+  count did not change.
+* `cargo test -p rexx-exec --test refusal_sites --test refusal_dispositions`: 5 and 3 passed. No
+  `lib.rs` line moved, so the TSV needed no refresh.
+* `cargo test -p rexx-parse --test sourceline_oracle`: 1 passed.
