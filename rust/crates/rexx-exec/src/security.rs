@@ -81,8 +81,9 @@ impl Interp {
     /// One checkpoint: `SecurityManager::callSecurityManager`
     /// (`execution/SecurityManager.cpp:147`-`158`).
     ///
-    /// Answers the info directory when the manager handled the checkpoint,
-    /// and `None` when it did not or when no manager is installed. A manager
+    /// Answers the info directory, rooted as a temp of the caller's frame,
+    /// when the manager handled the checkpoint, and `None` when it did not or
+    /// when no manager is installed. A manager
     /// that returns nothing is 91.999 and one that returns anything but `0`
     /// or `1` is 34.903, both raised here rather than by the caller.
     pub(crate) fn security_check(
@@ -96,6 +97,9 @@ impl Interp {
         let frame = self.roots.activity_mut().push_frame();
         let outcome = self.security_send(manager, message, entries);
         self.roots.activity_mut().pop_frame(frame);
+        if let Ok(Some(directory)) = outcome {
+            self.roots.activity_mut().push_temp(directory);
+        }
         outcome
     }
 
@@ -158,14 +162,12 @@ impl Interp {
 
     /// One entry of an info directory the manager has answered, or `None`
     /// where it left the name unset. `DirectoryClass::get`, which is an
-    /// exact-string lookup and not `ENTRY`'s upcasing one. Roots
-    /// `directory`, which [`Interp::security_check`] answers unrooted.
+    /// exact-string lookup and not `ENTRY`'s upcasing one.
     pub(crate) fn security_entry(
         &mut self,
         directory: ObjRef,
         name: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
-        self.roots.activity_mut().push_temp(directory);
         let index = self.text(name);
         self.roots.activity_mut().push_temp(index);
         let caller = self.caller();
