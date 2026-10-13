@@ -28,7 +28,7 @@ use rexx_api::values::{
     Activation, CStringPool, Class, Constants, Conversion, Failure as Refused, Host, HostRef,
     Numeric, Raised as Condition,
 };
-use rexx_core::{BehaviourId, Body, Decoded, ObjRef, Owner};
+use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
 
 use super::Resolution;
@@ -852,12 +852,7 @@ impl Interp {
                     .expect("a signature refusal carries its number");
                 Raised::incorrect_native_signature(number, refused == Refused::Signature)
             }
-            Refused::ClassicStyle => {
-                return Loud {
-                    message: crate::owned_message(&format!("{refused}"), Some(Owner::Phase9)),
-                }
-                .into();
-            }
+            Refused::ClassicStyle => return Loud::classic_style_routine().into(),
             Refused::UnfilledSlot { entry } => {
                 return Loud {
                     message: crate::owned_message(

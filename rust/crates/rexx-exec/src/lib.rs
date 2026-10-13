@@ -769,6 +769,17 @@ impl Loud {
         }
     }
 
+    /// A call to a `ROUTINE_CLASSIC_STYLE` row of a loaded package's routine
+    /// table. No library this crate loads on Linux carries one: `git grep
+    /// --no-index -n -I -e REXX_CLASSIC_ROUTINE -e ROUTINE_CLASSIC_STYLE --
+    /// ootest testbinaries extensions samples` finds only
+    /// `extensions/platform/windows/rxwinsys/rxwinsys.cpp`.
+    fn classic_style_routine() -> Loud {
+        Loud {
+            message: owned_message("a call to a ROUTINE_CLASSIC_STYLE routine", None),
+        }
+    }
+
     /// A `PARSE` template trigger that needs an operand and has none -- a
     /// parser guarantee, never a program error.
     fn parse_trigger_operand() -> Loud {
