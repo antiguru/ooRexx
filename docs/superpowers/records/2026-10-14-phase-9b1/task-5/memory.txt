@@ -1,0 +1,47 @@
+# Peak RSS, /usr/bin/time -f %M on each interpreter binary itself, from a fresh empty directory.
+# oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f 'oracle NAME %M kB' /home/moritz/dev/repos/ooRexx/build/bin/rexx NAME.rex )
+# crate:  ( ulimit -v 4194304 -t 120; /usr/bin/time -f 'BIN NAME %M kB' BIN NAME.rex )
+# rexx-run-9b1-t5a is built at dd5017a8e; rexx-run-9b1-t4f is Task 4's final binary.
+
+oracle pkgloop20k 20436 kB
+oracle pkgloop80k 20312 kB
+oracle pkghold20k 52028 kB
+oracle methloop20k 20436 kB
+rexx-run-9b1-t5a pkgloop20k 593424 kB
+rexx-run-9b1-t5a pkgloop40k 1146484 kB
+rexx-run-9b1-t5a pkgloop80k 2229888 kB
+rexx-run-9b1-t5a pkghold20k 635000 kB
+rexx-run-9b1-t5a methloop20k 449424 kB
+rexx-run-9b1-t4f pkgloop20k 639184 kB
+rexx-run-9b1-t4f pkgloop40k 1256980 kB
+rexx-run-9b1-t4f pkgloop80k 2494268 kB
+rexx-run-9b1-t4f pkghold20k 638300 kB
+rexx-run-9b1-t4f methloop20k 502908 kB
+
+# programs
+== pkgloop20k.rex
+do i = 1 to 20000
+  p = .Package~new('p', 'return 1')
+end
+say 'done'
+== pkgloop40k.rex
+do i = 1 to 40000
+  p = .Package~new('p', 'return 1')
+end
+say 'done'
+== pkgloop80k.rex
+do i = 1 to 80000
+  p = .Package~new('p', 'return 1')
+end
+say 'done'
+== pkghold20k.rex
+a = .array~new
+do i = 1 to 20000
+  a~append(.Package~new('p', 'return 1'))
+end
+say 'done'
+== methloop20k.rex
+do i = 1 to 20000
+  m = .Method~new('m', 'return 1')
+end
+say 'done'
