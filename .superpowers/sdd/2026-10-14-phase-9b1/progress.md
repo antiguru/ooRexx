@@ -59,3 +59,12 @@ Task 3: fix round 1 dispatched (resume c3-impl).
 Task 3: fix round 1 at 8f4ff5096, c0ffb9391, 386a4797f, a094cad6b, 1cd3928eb. intcall -10.73% vs pin (+2.78% vs Task 3 base, 67 Ir/call); extcall +0.23% vs Task 3 head. Package~routines now reads a written .ROUTINES table (oracle). Re-review dispatched (sonnet).
 Task 3 re-review: PASS, no open findings (lent buffer swapped back on every exit; re-entry via next slot; intcall -10.73% vs pin reproduced).
 Task 3: complete (0bce0e10c, 25d47538e, 3536722be, 8f4ff5096, c0ffb9391, 386a4797f, a094cad6b, 1cd3928eb).
+Task 4: dispatched (implementer opus, BASE 097038252).
+Task 4 question: package ~copy rooting. Ruling: (a) copies unrooted, collectable when unreachable -- oracle answer, no new root, (b)'s only test would pin a leak -- if wrong, Task 5 adds nothing. pkg_copy_weak witness flips to the oracle answer in Task 4.
+Task 4: implementer DONE_WITH_CONCERNS (4a5b8b571, fc0266803, 7f26fbd71, b2ae5bd48, cd01d7fd6, 03e4cf1c7). (a) chosen (matches ruling). Body access via type_id downcast; startup +0.3219% (headroom 0.18%). REXX-package-copy class-merge shape unmeasured.
+Task 4 review: spec fails (REXX-package copy not "like any other"); I1 REXX copy addRoutine of a row/library Routine collected (routines field untraced, REXX copy has no .ROUTINES table); I2 REXX copy findClass/findPublicClass skip addPackage-merged classes; I3 merge from REXX copy redefining ARRAY keeps .array (oracle .list); I4 imports and parent traces have no red test now that copies are collectable. Perf: Task 4's own share of startup +0.034%. Minors: options_armed process-wide; is_rexx_package treats non-package as REXX.
+Ruling: "required packages" (spec bullet) read as the per-package imports field plus the global requires cache (Task 5 makes it weak) -- accepted.
+Task 4: fix round 1 dispatched (resume c4-impl).
+Task 4: copy-witness 2cf1141c2; fix round 1 at 5194b8428, bafd6fd43 (REXX copy gets .ROUTINES table on addRoutine; findClass order own-public, registry, merged; merge table single; imports/parent traces witnessed; is_rexx_package Result). startup +0.3229%. Re-review dispatched (sonnet).
+Task 4 re-review: resolved, no open findings.
+Task 4: complete (4a5b8b571, fc0266803, 7f26fbd71, b2ae5bd48, cd01d7fd6, 03e4cf1c7, 2cf1141c2, 5194b8428, bafd6fd43). startup +0.3229% vs pin (Task 4's own share +0.034%).

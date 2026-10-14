@@ -1,0 +1,558 @@
+diff --git a/.superpowers/sdd/2026-10-14-phase-9b1/task-4-report.md b/.superpowers/sdd/2026-10-14-phase-9b1/task-4-report.md
+index 78404eace..9118a39c7 100644
+--- a/.superpowers/sdd/2026-10-14-phase-9b1/task-4-report.md
++++ b/.superpowers/sdd/2026-10-14-phase-9b1/task-4-report.md
+@@ -259,17 +259,110 @@ exit 0). TESTRECLAIM01 is still red, Task 5's.
+ 
+ ## Concerns
+ 
+-1. **A package copy is collectable now.** Nothing holds a copy by id, so the global root that kept
+-   copies alive went with `copy_package`. Measured: `w = .WeakReference~new(.context~package~copy)`
+-   then 3000 allocating passes answers `1` here, as on the oracle (Task 3's binary `0`);
+-   `.Package~new('src','nop')` still answers `0` (oracle `1`), Task 5's. I told the lead I would keep
+-   copies rooted unless told otherwise and did not: a root kept only to preserve the leak has no test
+-   that pins anything but the leak. Restoring it is a `RootSet::add_global` keyed by the copy's
+-   identity in `object_protocol.rs`'s package arm.
++1. Resolved by the lead's ruling, see "L7's copy half" below.
+ 2. **The downcast is a virtual `type_id` call** (`PackageState::downcast_ref`), a few Ir per package
+    read. The hot reads are behind latches or take one body; a future reader on a per-clause path
+    should take the body once.
+ 3. **startup** is at +0.3219% against the pin.
+-4. A `Package~addPublicClass` of a REXX-package class name on a copy of the REXX package: the copy's
+-   `~classes` answers the added class, but a merge from that copy keeps the REXX one (first entry
+-   wins). Not measured on the oracle.
++4. Fixed in fix round 1 (I3), measured on the oracle.
++
++## L7's copy half (ruling (a), copies unrooted)
++
++Task 4 delivers this part of L7: a package copy nothing holds is collected, and a weak reference to
++it clears. Nothing holds a copy by id, so no root replaces the one `copy_package` gave each copy.
++Original packages stay global roots, as before; Task 5 keeps them.
++
++Oracle first, from a fresh empty directory, the program of the new test with a loop of
++`z = copies('y', 100000); q = .array~new(100)` in place of the filler: at 100 and 300 passes rc 0,
++`dropped 1` / `held 1` (at 30 passes `dropped 0`: the oracle had not collected yet, and when it
++collects is not specified). The crate's release binary at those counts answers `dropped 0`, its
++collector not yet due. That timing difference falls under the GC-ordering licence, so the witness is
++a `collect_stress` test, as with `corpus/lang/weak_reference_value.rex`'s clearing half:
++`a_dropped_package_copy_is_collected` asserts `dropped 1` / `held 1` under
++collect-on-every-allocation. Mutation: a global root added for each copy in
++`object_protocol.rs`'s package arm turns it red; restored from a saved copy, `git diff --stat` empty.
++
++The commands, from `rust/`, all exit 0: `cargo fmt --all --check`;
++`CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`;
++`REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress`,
++41 passed.
++
++## Fix round 1
++
++Commit `5194b8428`. The review is `task-4-review.md`.
++
++**I1. A REXX package copy's added `Routine` object.** I followed the oracle's model, in which a
++package's routines table holds whatever `~addRoutine` filed. `build_package_string_table` now
++builds a table for a package with no program when a write asks for one, so the copy's `.ROUTINES`
++table holds the object and the body's `tables` trace reaches it. `routines` stays untraced, and its
++comment now states the invariant this rests on. I did not take the alternative, tracing `routines`:
++that would also hold an entry a written `.ROUTINES` table has replaced, which is the shape
++`an_added_public_routine_object_survives_its_table_entry` exists to keep untraced.
++
++**I2. Lookups on a REXX package copy.** `package_public_class_of` for a package with no program now
++reads its own public classes, then the registry, then what it merged. That matches the oracle,
++where the copy's installed public classes (the REXX package's, copied) come before
++`mergedPublicClasses`. `installed_class_of` keeps its own classes and then the registry.
++
++**I3. A merge from a REXX package copy.** I read the oracle's rule in `PackageClass::mergeRequired`
++(`classes/PackageClass.cpp:693-745`). The source's `installedPublicClasses` merges first, then its
++`mergedPublicClasses`, and each `merge` adds only names the target lacks. `addInstalledClass` uses
++`setEntry` (`:1401-1419`), so a redefined name replaces the old one within the source's own table.
++`package_class_table` now builds that one table: the registry's entries minus every name the
++package's own fields hold, then the package's own. `merge_package`'s first-wins order then takes
++the copy's class.
++
++The oracle was measured first, from fresh empty directories. The reviewer's three probes give
++`weak 1` / `found Routine 1 0`, `importedClasses 1 1` / `findClass 1 1`, and `List` / `1 1`; the
++crate agrees on all three. Witness `rust/corpus/lang/package_rexx_copy_lookups.rex` (listed in
++`corpus/phase-9.txt`, with its sourceline expectation from the module driver). On the oracle it
++gives rc 0, empty stderr, and:
++
++```
++imported 1 1
++find 1 1
++own first 1 1
++redefined 1 1 1 1
++importer List 1 1
++original 1 0
++```
++
++The crate at `5194b8428` matches it byte for byte. The binary before the fix round
++(`rexx-run-9b1-t4f`) answers `find 0 0` and `importer Array 1 0`.
++
++**I4 and I1 witnesses** (`tests/collect_stress.rs`, under collect-on-every-allocation; each program
++was measured on the oracle with a 3000-pass `copies('y', 100000)` loop in place of the filler, rc 0,
++same lines):
++
++| test | expects | goes red when |
++|---|---|---|
++| `a_rexx_package_copys_added_routine_survives` | `weak 1` / `found Routine 1 0` | a package with no program builds no table (I1 reverted) |
++| `a_package_copy_held_as_an_import_survives` | `weak 1 1` / `import 1 1` / `ns 1` | `imports` untraced |
++| `a_package_copy_held_as_a_parent_survives` | `weak 1` / `parent jmark` | `parent` untraced |
++
++Each mutant was applied by an exact edit and restored from a saved copy, and `cmp` shows the file
++identical afterwards. The parent test's copy is a copy of a source package that declares the
++routine. My first version followed the reviewer's probe and filed the routine with `~addRoutine` on
++the copy, and it stayed green with the parent trace deleted: after `j~addRoutine(name,
++.routine~new(...))` the copy survives being dropped, on the crate and also on the oracle (`weak 1`
++after 3000 passes). So that shape cannot isolate the parent trace.
++
++**Minor.** `is_rexx_package` returns `Result`. A value that is not a package is refused as `a
++message send to a value that is not a package`, not read as the REXX package.
++`package_find_public_class` propagates the refusal.
++
++**Checks at `5194b8428`**, from `rust/`, statuses read unpiped: `cargo fmt --all --check` 0;
++`CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 -p rexx-core -p rexx-exec --all-targets -- -D warnings`
++0; `... cargo test -j 4 --release -p rexx-exec --lib` 0 (1121 passed); the refusal, owners, phase
++and package test binaries 0; `... -p rexx-parse --test sourceline_oracle` 0;
++`REXX_CORPUS_GATE=1 ... cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus --test collect_stress`
++0 (collect_stress 44 passed; corpus `1056 of 1056 matching`, 29 passed, 1 ignored).
++
++**Budget**: `timeout 590 bench-programs/callgrind.sh -B 0.5 -j 12 -p "startup pkglocal" -o
++/home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-4-fix1 pin=.../rexx-run head=.../rexx-run-9b1-t4g`
++(built at `5194b8428`), exit 0, three rounds. Records are in `task-4/fix1-callgrind/`.
++
++| program | whole d% | -libc d% |
++|---|---|---|
++| startup | +0.3229 | +0.4476 |
++| pkglocal | -6.8709 | -9.0802 |
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/binaries.txt
+new file mode 100644
+index 000000000..37e31d88d
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-14T15:36:59Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# head /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t4g 7ed1a8555f72a8c797e3142ad6073af420a447fe0fabed296aea193ae706bf58
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/callgrind.log b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/callgrind.log
+new file mode 100644
+index 000000000..064f7a93b
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/callgrind.log
+@@ -0,0 +1,4 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++startup	119095647	119480170	+0.3229	57372966	57629749	+0.4476	0.0000	0.0000
++pkglocal	4185406087	3897829917	-6.8709	3917669094	3561937363	-9.0802	0.0000	0.0000
++# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-4-fix1
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/summary.tsv
+new file mode 100644
+index 000000000..1ffd431dd
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/summary.tsv
+@@ -0,0 +1,12 @@
++pin	startup	r1	119095647	61376495	346186	57372966	rc=0
++head	startup	r1	119480170	61503093	347328	57629749	rc=0
++pin	startup	r2	119095647	61376495	346186	57372966	rc=0
++head	startup	r2	119480170	61503093	347328	57629749	rc=0
++pin	startup	r3	119095647	61376495	346186	57372966	rc=0
++head	startup	r3	119480170	61503093	347328	57629749	rc=0
++pin	pkglocal	r1	4185406352	267391086	346172	3917669094	rc=0
++head	pkglocal	r1	3897829917	335545385	347169	3561937363	rc=0
++pin	pkglocal	r2	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r2	3897831146	335546607	347314	3561937225	rc=0
++pin	pkglocal	r3	4185406087	267390966	346027	3917669094	rc=0
++head	pkglocal	r3	3897829917	335545385	347169	3561937363	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/table.txt
+new file mode 100644
+index 000000000..af91c59ed
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-4/fix1-callgrind/table.txt
+@@ -0,0 +1,3 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++startup	119095647	119480170	+0.3229	57372966	57629749	+0.4476	0.0000	0.0000
++pkglocal	4185406087	3897829917	-6.8709	3917669094	3561937363	-9.0802	0.0000	0.0000
+diff --git a/rust/corpus/lang/package_rexx_copy_lookups.rex b/rust/corpus/lang/package_rexx_copy_lookups.rex
+new file mode 100644
+index 000000000..b32a0d1c3
+--- /dev/null
++++ b/rust/corpus/lang/package_rexx_copy_lookups.rex
+@@ -0,0 +1,20 @@
++/* A copy of the REXX package is one package table, as any copy is: what
++   ~addPackage merges reaches its findClass and findPublicClass, its own
++   classes come ahead of what it merged, and a class it redefines is the one
++   a package importing it takes. */
++q = .package~new('q', .array~of('::class qk public', '::routine qr public', 'return "qr"'))
++c = .array~package~copy
++c~addPackage(q)
++say 'imported' c~importedClasses~hasIndex('QK') c~importedRoutines~hasIndex('QR')
++say 'find' (c~findClass('QK') \== .nil) (c~findPublicClass('QK') \== .nil)
++r = .package~new('r', .array~of('::class array public'))
++d = .array~package~copy
++d~addPackage(r)
++say 'own first' (d~findClass('ARRAY') == .array) (d~findPublicClass('ARRAY') == .array)
++e = .array~package~copy
++e~addPublicClass('ARRAY', .list)
++say 'redefined' (e~publicClasses['ARRAY'] == .list) (e~classes['ARRAY'] == .list) (e~findClass('ARRAY') == .list) (e~findPublicClass('ARRAY') == .list)
++p = .package~new('pp', .array~of('return .array~id'))
++p~addPackage(e)
++say 'importer' p~findClass('ARRAY')~id p~importedClasses~hasIndex('ARRAY') (p~importedClasses['ARRAY'] == .list)
++say 'original' (.array~package~findClass('ARRAY') == .array) .array~package~importedClasses~items
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 2ed63edf6..537ecb18c 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -122,3 +122,6 @@ lang/stackframes_native_routine.rex
+ 
+ # 9b1 Task 4: a copied package mutated, L5 and L6.
+ lang/package_copy_mutated.rex
++
++# 9b1 Task 4 fix round 1: a REXX package copy's lookups and merge (I2, I3).
++lang/package_rexx_copy_lookups.rex
+diff --git a/rust/crates/rexx-exec/src/dispatch/package.rs b/rust/crates/rexx-exec/src/dispatch/package.rs
+index 25eb28451..853e235f5 100644
+--- a/rust/crates/rexx-exec/src/dispatch/package.rs
++++ b/rust/crates/rexx-exec/src/dispatch/package.rs
+@@ -783,7 +783,7 @@ fn find_public_class(
+ ) -> Result<Option<ObjRef>, Failure> {
+     fields_of(interp, receiver)?;
+     let name = upper_name_argument(interp, args)?;
+-    Ok(Some(interp.package_find_public_class(receiver, &name)))
++    Ok(Some(interp.package_find_public_class(receiver, &name)?))
+ }
+ 
+ /// `PackageClass::findRoutineRexx`: the package's own routines, then the
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 38cd4b320..2157aed2a 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -1131,12 +1131,14 @@ impl Interp {
+         if let Some(found) = data.tables[kind.index()] {
+             return Some(found);
+         }
+-        let program = data.program?;
+-        let source = std::rc::Rc::clone(self.programs.get(program.0)?);
+-        let entries = if self.untranslated.contains(&program) {
+-            Vec::new()
+-        } else {
+-            package_table_entries(program, &source, kind)
++        // A copy of the REXX package has no directives, and gets a table only
++        // for a write, which is where `~addRoutine` files its routines.
++        let entries = match data.program {
++            Some(program) if !self.untranslated.contains(&program) => {
++                let source = std::rc::Rc::clone(self.programs.get(program.0)?);
++                package_table_entries(program, &source, kind)
++            }
++            _ => Vec::new(),
+         };
+         if entries.is_empty() && !force {
+             return None;
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index 31ca343bd..a78a024f4 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -737,7 +737,13 @@ impl Interp {
+         if data.program.is_some() {
+             return own;
+         }
+-        let mut entries = self.registered_classes();
++        // One table, as the oracle's is: a name the package's own fields hold
++        // replaces the registry's entry rather than following it.
++        let mut entries: Vec<(Box<[u8]>, ObjRef)> = self
++            .registered_classes()
++            .into_iter()
++            .filter(|(name, _)| !own.iter().any(|(held, _)| held == name))
++            .collect();
+         entries.extend(own);
+         entries
+     }
+@@ -763,10 +769,10 @@ impl Interp {
+         package: ObjRef,
+         upper: &[u8],
+     ) -> Result<ObjRef, Failure> {
+-        if let Some(found) = self.installed_class_of(package, upper) {
++        if let Some(found) = self.installed_class_of(package, upper)? {
+             return Ok(found);
+         }
+-        if let Some(found) = self.package_public_class_of(package, upper) {
++        if let Some(found) = self.package_public_class_of(package, upper)? {
+             return Ok(found);
+         }
+         if let Some(local) = self.package_data(package).and_then(|data| data.local) {
+@@ -792,45 +798,67 @@ impl Interp {
+     /// `PackageClass::findPublicClass` (`classes/PackageClass.cpp:1013`) at
+     /// the `findPublicClassRexx` stub: this package's own public classes, the
+     /// ones it imported, and then the REXX package's.
+-    pub(crate) fn package_find_public_class(&mut self, package: ObjRef, upper: &[u8]) -> ObjRef {
+-        self.package_public_class_of(package, upper)
+-            .unwrap_or(ObjRef::NIL)
++    pub(crate) fn package_find_public_class(
++        &mut self,
++        package: ObjRef,
++        upper: &[u8],
++    ) -> Result<ObjRef, Failure> {
++        Ok(self
++            .package_public_class_of(package, upper)?
++            .unwrap_or(ObjRef::NIL))
+     }
+ 
+-    /// Whether `package` is the REXX package, which no program compiled.
+-    fn is_rexx_package(&self, package: ObjRef) -> bool {
+-        self.package_data(package)
+-            .is_none_or(|data| data.program.is_none())
++    /// Whether `package` is the REXX package or a copy of it, which no
++    /// program compiled, and the refusal for a value that is not a package.
++    fn is_rexx_package(&self, package: ObjRef) -> Result<bool, Failure> {
++        match self.package_data(package) {
++            Some(data) => Ok(data.program.is_none()),
++            None => Err(Loud::receiver_class("a value that is not a package").into()),
++        }
+     }
+ 
+     /// `installedClasses`: the classes `package`'s own directives and
+     /// `~addClass` installed, which for the REXX package is the native class
+     /// registry plus what the shipped `.orx` files declared.
+-    fn installed_class_of(&mut self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
+-        if self.is_rexx_package(package) {
++    fn installed_class_of(
++        &mut self,
++        package: ObjRef,
++        upper: &[u8],
++    ) -> Result<Option<ObjRef>, Failure> {
++        if self.is_rexx_package(package)? {
+             if let Some(found) = self
+                 .package_data(package)
+                 .and_then(|data| data.classes.get(upper))
+             {
+-                return Some(*found);
++                return Ok(Some(*found));
+             }
+-            return self.classes().lookup_upper(upper);
++            return Ok(self.classes().lookup_upper(upper));
+         }
+-        self.chain_installed_class(Some(package), upper)
++        Ok(self.chain_installed_class(Some(package), upper))
+     }
+ 
+-    /// `PackageClass::findPublicClass`'s steps, as an `Option`.
+-    fn package_public_class_of(&mut self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
+-        if self.is_rexx_package(package) {
+-            return self
+-                .package_data(package)
+-                .and_then(|data| data.public_classes.get(upper).copied())
+-                .or_else(|| self.rexx_package_class(upper));
++    /// `PackageClass::findPublicClass`'s steps: the package's installed public
++    /// classes, then its merged ones, then its parent's, then the REXX
++    /// package's.
++    fn package_public_class_of(
++        &mut self,
++        package: ObjRef,
++        upper: &[u8],
++    ) -> Result<Option<ObjRef>, Failure> {
++        if self.is_rexx_package(package)? {
++            // Its installed public classes are its own fields and the native
++            // registry, ahead of what it merged.
++            let data = self.package_data(package);
++            if let Some(found) = data.and_then(|data| data.public_classes.get(upper)) {
++                return Ok(Some(*found));
++            }
++            let merged = data.and_then(|data| data.merged_public_classes.get(upper).copied());
++            return Ok(self.classes().lookup_upper(upper).or(merged));
+         }
+         if let Some(found) = self.chain_public_class(Some(package), upper) {
+-            return Some(found);
++            return Ok(Some(found));
+         }
+-        self.rexx_package_class(upper)
++        Ok(self.rexx_package_class(upper))
+     }
+ 
+     /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`), as the
+diff --git a/rust/crates/rexx-exec/src/package_state.rs b/rust/crates/rexx-exec/src/package_state.rs
+index 18a82acc6..e8168eb85 100644
+--- a/rust/crates/rexx-exec/src/package_state.rs
++++ b/rust/crates/rexx-exec/src/package_state.rs
+@@ -87,8 +87,8 @@ impl PackageFields for PackageData {
+             options: _,
+             initial_options: _,
+             security_manager,
+-            // Held by the `.ROUTINES` table, which every reader reads once a
+-            // program writes it.
++            // Each `Routine` object here is in the package's `.ROUTINES`
++            // table too, which `~addRoutine` writes.
+             routines: _,
+             routines_written: _,
+             public_routines,
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index db17814a1..7797c2125 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -888,6 +888,143 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
+     );
+ }
+ 
++/// A package copy nothing holds is collected and its weak reference clears,
++/// while a held copy stays, as on the oracle (L7's copy half): measured,
++/// oracle rc 0, `dropped 1` and `held 1` for the same program with a 100-pass
++/// loop of `copies('y', 100000)` in place of the filler.
++#[test]
++fn a_dropped_package_copy_is_collected() {
++    let program = concat!(
++        "w = .WeakReference~new(.context~package~copy)\n",
++        "h = .context~package~copy\n",
++        "v = .WeakReference~new(h)\n",
++        "do i = 1 to 20\n",
++        "  zj = 'filler' i\n",
++        "end\n",
++        "say 'dropped' (w~value == .nil)\n",
++        "say 'held' (v~value == h)\n",
++    );
++    let stress = run_program_collect_every_alloc(
++        "<package-copy-collected>",
++        program.as_bytes().to_vec(),
++        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
++    );
++    assert_eq!(
++        (
++            stress.exit_code,
++            String::from_utf8_lossy(&stress.stdout).as_ref()
++        ),
++        (0, "dropped 1\nheld 1\n"),
++        "stderr: {}",
++        String::from_utf8_lossy(&stress.stderr)
++    );
++    assert!(
++        stress.collections > 0,
++        "the stress mode did not collect, so this proves nothing"
++    );
++}
++
++/// Runs `program` collecting at every allocation and asserts it exited 0
++/// having printed `expected`, and that it collected.
++fn assert_stress_prints(label: &str, program: &str, expected: &str) {
++    let stress = run_program_collect_every_alloc(
++        label,
++        program.as_bytes().to_vec(),
++        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
++    );
++    assert_eq!(
++        (
++            stress.exit_code,
++            String::from_utf8_lossy(&stress.stdout).as_ref()
++        ),
++        (0, expected),
++        "stderr: {}",
++        String::from_utf8_lossy(&stress.stderr)
++    );
++    assert!(
++        stress.collections > 0,
++        "the stress mode did not collect, so this proves nothing"
++    );
++}
++
++/// A REXX package copy's `~addRoutine` of a library row's `Routine` object
++/// keeps it while the copy holds it. Measured, oracle rc 0, the same lines
++/// with a 3000-pass allocating loop in place of the filler.
++#[test]
++fn a_rexx_package_copys_added_routine_survives() {
++    assert_stress_prints(
++        "<rexx-copy-added-routine>",
++        concat!(
++            "c = .array~package~copy\n",
++            "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
++            "c~addRoutine('CC', u~copy)\n",
++            "w = .WeakReference~new(c~routines['CC'])\n",
++            "do i = 1 to 20\n",
++            "  zj = 'filler' i\n",
++            "end\n",
++            "say 'weak' (w~value \\== .nil)\n",
++            "f = c~findRoutine('CC')\n",
++            "say 'found' f~class~id (f \\== u) f~call(0)\n",
++        ),
++        "weak 1\nfound Routine 1 0\n",
++    );
++}
++
++/// A package copy that only another package imports survives as that
++/// import, under a namespace too. Measured, oracle rc 0, the same lines with
++/// a 3000-pass allocating loop in place of the filler.
++#[test]
++fn a_package_copy_held_as_an_import_survives() {
++    assert_stress_prints(
++        "<package-copy-import>",
++        concat!(
++            "p = .context~package\n",
++            "h = p~copy\n",
++            "i = p~copy\n",
++            "i~addRoutine('IMARK', .routine~new('im', 'return \"imark\"'))\n",
++            "wi = .WeakReference~new(i)\n",
++            "h~addPackage(i)\n",
++            "drop i\n",
++            "h2 = p~copy\n",
++            "i2 = p~copy\n",
++            "wn = .WeakReference~new(i2)\n",
++            "h2~addPackage(i2, 'NSI2')\n",
++            "drop i2\n",
++            "do k = 1 to 20\n",
++            "  zj = 'filler' k\n",
++            "end\n",
++            "say 'weak' (wi~value \\== .nil) (wn~value \\== .nil)\n",
++            "say 'import' h~importedPackages~items h~importedPackages[1]~routines~hasIndex('IMARK')\n",
++            "say 'ns' (h2~findNamespace('NSI2') \\== .nil)\n",
++        ),
++        "weak 1 1\nimport 1 1\nns 1\n",
++    );
++}
++
++/// A package copy that is only another package's parent survives as that
++/// parent, and the routine it holds answers through the child. Measured,
++/// oracle rc 0, the same lines with a 3000-pass allocating loop in place of
++/// the filler.
++#[test]
++fn a_package_copy_held_as_a_parent_survives() {
++    assert_stress_prints(
++        "<package-copy-parent>",
++        concat!(
++            "src = .package~new('js', .array~of('::routine jmark', 'return \"jmark\"'))\n",
++            "j = src~copy\n",
++            "wj = .WeakReference~new(j)\n",
++            "n = .package~new('n', .array~of('return 1'), j)\n",
++            "drop j\n",
++            "do k = 1 to 20\n",
++            "  zj = 'filler' k\n",
++            "end\n",
++            "say 'weak' (wj~value \\== .nil)\n",
++            "say 'parent' n~findRoutine('JMARK')~call\n",
++        ),
++        "weak 1\nparent jmark\n",
++    );
++}
++
+ /// Runs `program` collecting at every allocation and asserts it printed
+ /// `0 Routine 0`: a copy of a row's `Routine` object, held only by a routine
+ /// table once the package's `.ROUTINES` entry stops naming it, still answers.
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_rexx_copy_lookups.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_rexx_copy_lookups.txt
+new file mode 100644
+index 000000000..dc5b564cd
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_rexx_copy_lookups.txt
+@@ -0,0 +1,21 @@
++count 20
++/* A copy of the REXX package is one package table, as any copy is: what
++   ~addPackage merges reaches its findClass and findPublicClass, its own
++   classes come ahead of what it merged, and a class it redefines is the one
++   a package importing it takes. */
++q = .package~new('q', .array~of('::class qk public', '::routine qr public', 'return "qr"'))
++c = .array~package~copy
++c~addPackage(q)
++say 'imported' c~importedClasses~hasIndex('QK') c~importedRoutines~hasIndex('QR')
++say 'find' (c~findClass('QK') \== .nil) (c~findPublicClass('QK') \== .nil)
++r = .package~new('r', .array~of('::class array public'))
++d = .array~package~copy
++d~addPackage(r)
++say 'own first' (d~findClass('ARRAY') == .array) (d~findPublicClass('ARRAY') == .array)
++e = .array~package~copy
++e~addPublicClass('ARRAY', .list)
++say 'redefined' (e~publicClasses['ARRAY'] == .list) (e~classes['ARRAY'] == .list) (e~findClass('ARRAY') == .list) (e~findPublicClass('ARRAY') == .list)
++p = .package~new('pp', .array~of('return .array~id'))
++p~addPackage(e)
++say 'importer' p~findClass('ARRAY')~id p~importedClasses~hasIndex('ARRAY') (p~importedClasses['ARRAY'] == .list)
++say 'original' (.array~package~findClass('ARRAY') == .array) .array~package~importedClasses~items
