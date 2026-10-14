@@ -1,0 +1,69 @@
+# Peak RSS, /usr/bin/time -f %M on each interpreter binary itself, from a fresh directory holding only the programs below.
+# oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f 'oracle NAME %M kB' /home/moritz/dev/repos/ooRexx/build/bin/rexx NAME.rex )
+# crate:  ( ulimit -v 4194304 -t 120; /usr/bin/time -f 'BIN NAME %M kB' /home/moritz/dev/repos/ooRexx-p9-pin/BIN NAME.rex )
+# rexx-run-9b1-t6d is this task's binary (.text identical to a release build at c27f3b938).
+# rexx-run-9b1-t5c is Task 5's final binary.
+# rexx-run-9b1-t6-charge-experiment is t6d plus `self.charge_unheld(20_000)` where package_object
+# builds a program's package, measured once and not committed.
+
+oracle empty 8248 kB
+rexx-run-9b1-t6d empty 19900 kB
+rexx-run-9b1-t5c empty 20100 kB
+oracle methloop20000 20888 kB
+rexx-run-9b1-t6d methloop20000 175540 kB
+rexx-run-9b1-t5c methloop20000 450332 kB
+oracle methloop80000 20748 kB
+rexx-run-9b1-t6d methloop80000 175688 kB
+rexx-run-9b1-t5c methloop80000 1728540 kB
+oracle routloop20000 19984 kB
+rexx-run-9b1-t6d routloop20000 174776 kB
+rexx-run-9b1-t5c routloop20000 447536 kB
+oracle routloop80000 20692 kB
+rexx-run-9b1-t6d routloop80000 175120 kB
+rexx-run-9b1-t5c routloop80000 1722964 kB
+oracle setmloop20000 20324 kB
+rexx-run-9b1-t6d setmloop20000 162844 kB
+rexx-run-9b1-t5c setmloop20000 441144 kB
+oracle setmloop80000 20324 kB
+rexx-run-9b1-t6d setmloop80000 163868 kB
+rexx-run-9b1-t5c setmloop80000 1737580 kB
+oracle pkgloop20000 20084 kB
+rexx-run-9b1-t6d pkgloop20000 420604 kB
+rexx-run-9b1-t5c pkgloop20000 593488 kB
+oracle pkgloop80000 20488 kB
+rexx-run-9b1-t6d pkgloop80000 421156 kB
+rexx-run-9b1-t5c pkgloop80000 2240644 kB
+
+charge-experiment methloop80000 54532 kB
+charge-experiment routloop80000 53796 kB
+charge-experiment setmloop80000 54624 kB
+charge-experiment pkgloop80000 67028 kB
+
+# programs
+== empty.rex
+say 'done'
+== methloop20000.rex
+do i = 1 to 20000
+  m = .Method~new('m', 'return 1')
+end
+say 'done'
+== routloop20000.rex
+do i = 1 to 20000
+  r = .Routine~new('r', 'return 1')
+end
+say 'done'
+== setmloop20000.rex
+o = .k~new
+do i = 1 to 20000
+  o~go
+end
+say 'done'
+::class k
+::method go
+  self~setMethod('FOO', 'return 1')
+== pkgloop20000.rex
+do i = 1 to 20000
+  p = .Package~new('p', 'return 1')
+end
+say 'done'
+# the 80000 programs are the 20000 ones with 80000 as the bound
