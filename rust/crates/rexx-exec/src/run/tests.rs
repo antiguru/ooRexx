@@ -218,11 +218,12 @@ fn a_freed_programs_id_never_resolves_again() {
     for (index, id) in issued.iter().enumerate() {
         assert!(!issued[..index].contains(id), "{id} was issued twice");
     }
+    let freed = interp.programs.freed.clone();
     assert!(
-        issued.iter().enumerate().any(|(index, id)| issued[..index]
+        freed.iter().any(|stale| issued
             .iter()
-            .any(|earlier| earlier.slot_index() == id.slot_index())),
-        "no slot was reused, so no stale id was put to the test: {issued:?}"
+            .any(|id| id != stale && id.slot_index() == stale.slot_index())),
+        "no freed slot was reused, so no stale id was put to the test: {issued:?}"
     );
     assert!(
         !interp
@@ -231,13 +232,12 @@ fn a_freed_programs_id_never_resolves_again() {
             .any(|site| matches!(site, crate::environment::Annotated::Compiled(_))),
         "a compiled method's annotation table is held by a row of its own"
     );
-    let freed: Vec<ProgramId> = issued
-        .iter()
-        .copied()
-        .filter(|id| interp.programs.get(*id).is_none())
-        .collect();
-    assert!(!freed.is_empty(), "no program was freed");
     for id in &freed {
+        assert!(issued.contains(id), "{id} was freed and never issued");
+        assert!(
+            interp.programs.get(*id).is_none(),
+            "{id} resolves after its free"
+        );
         assert_eq!(interp.programs.package(*id), None, "{id}'s package");
         assert!(
             !interp.plans.keys().any(|key| key.program == *id),

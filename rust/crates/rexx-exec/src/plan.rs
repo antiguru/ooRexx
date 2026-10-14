@@ -101,6 +101,9 @@ pub(crate) struct Programs {
     /// Every id [`Programs::insert`] issued, in order.
     #[cfg(test)]
     pub(crate) issued: Vec<ProgramId>,
+    /// Every id [`Programs::free_unheld`] freed, in order.
+    #[cfg(test)]
+    pub(crate) freed: Vec<ProgramId>,
 }
 
 impl Programs {
@@ -185,6 +188,8 @@ impl Programs {
                 continue;
             }
             freed.push(held.id);
+            #[cfg(test)]
+            self.freed.push(held.id);
             held.program = None;
             *package = PackageSlot::default();
             self.live -= 1;
