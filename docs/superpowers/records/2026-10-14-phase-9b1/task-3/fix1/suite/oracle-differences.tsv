@@ -1,0 +1,8 @@
+# ootest revision 13178
+group	test	oracle	crate
+base/class/Package	TESTRECLAIM01	passed	blocked: timeout after 60 s
+base/class/Package	TEST_NEW01	passed	failed
+base/class/Package	TEST_PROLOG	passed	failed
+base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	passed	failed
+base/class/Routine	TEST_NEW_FILE_COMPILED	passed	failed
+base/class/StackFrame	TESTNATIVECODEFRAME	passed	failed

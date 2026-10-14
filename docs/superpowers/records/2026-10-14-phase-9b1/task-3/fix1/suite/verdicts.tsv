@@ -1,0 +1,6 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/class/Package	red	not passed: TESTRECLAIM01 TEST_NEW01 TEST_PROLOG	equal
+base/class/Routine	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
+base/class/StackFrame	red	not passed: TESTNATIVECODEFRAME	equal
+base/rexxutil/SysStemSort	green		equal

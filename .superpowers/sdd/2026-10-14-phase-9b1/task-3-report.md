@@ -172,3 +172,110 @@ it in malloc". That is true of hashnew only. alloc's growth was memcmp.
 5. `Interp::frame_record` (TraceObject caller frames, the spawner frame) still answers `.nil` as
    the executable for every non-activation level, the new internal level included. Not measured
    against the oracle.
+
+## Fix round 1
+
+Commits: `8f4ff5096` (I2 and intcall), `c0ffb9391` (I1), `386a4797f` (q2 and M1). The records
+commit follows this section.
+
+### I2: no copy on the internal call path
+
+`run_internal_as` (`run/call.rs`) now takes the caller's argument buffer and an offset
+(`&mut Vec<Option<ObjRef>>, from`) in place of a slice. `begin_call`, `begin_call_over_values`,
+`begin_installed_routine` and the callers in `executable.rs` changed with it. The level is a reused
+slot in `Activity::internal_levels`, with `internal_depth` counting the slots in use. The caller's
+buffer is swapped into the slot's `Rc<Vec<..>>` for the call and swapped back after, and the body
+reads `&shared[from..]` from a clone of that `Rc`. The swap is three words each way. No argument
+is copied, and nothing is allocated once the slot exists.
+The frame's name comes from the row (`LevelName::Upper` or `Row`). The one remaining byte copy is
+the called name for a call through a `::ROUTINE ... EXTERNAL` directive or a merged table
+(`InternalName::Called`), into the slot's own reused buffer, because that name is the caller's
+spelling and not the row's. It is not on the `intcall` path.
+`Rc::make_mut` was not inlined (22 Ir per call twice). `Rc::get_mut` with a cold fallback replaced
+it.
+
+`bench-programs/intcall.rex`: `FILESPEC` and `SysFileExists` 150,000 times each, registered in
+`callgrind.sh`, `rexx-bench`'s `PROGRAMS` and suite axes, and the README. `SysUtilVersion` was the
+first choice, but the pin refuses it ("not implemented (Phase 10)"). The pin runs
+`SysFileExists`, and its output is identical (`1050000`). Oracle 1.63-1.71s over 3 runs, crate
+0.22s.
+
+Budget at `386a4797f` (head `rexx-run-9b1-t3f`, sha `019c2841...`), `-B 0.5`, exit 0:
+
+| program | head d% | head -libc d% | against the Task 3 head (`t3b`), whole process |
+|---|---|---|---|
+| intcall | -10.7270 | -9.8616 | |
+| fibcall | -3.3903 | -2.3521 | +0.0586 |
+| fibfunc | -3.5556 | -2.4002 | +0.0609 |
+| extcall | -13.1310 | -1.7882 | +0.2314 |
+| dispatch | -0.2472 | -0.0715 | |
+| dispatchclass | -3.7968 | -2.6560 | +0.1474 |
+| sendloop | -0.1004 | -0.1069 | |
+| varlookup | +0.0028 | +0.0017 | |
+| pkglocal | -2.6189 | -3.7206 | |
+| startup | +0.2876 | +0.3925 | +0.0004 |
+| alloc | +0.2534 | +0.2868 | +0.0127 |
+| hashnew | +0.3080 | +0.4716 | +0.0090 |
+
+Command: `timeout 600 bench-programs/callgrind.sh -B 0.5 -j 12 -p "intcall fibcall fibfunc extcall
+dispatch dispatchclass sendloop varlookup pkglocal startup alloc hashnew" -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-3-fix1 pin=.../rexx-run head=.../rexx-run-9b1-t3f`.
+The records are in `docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/`.
+
+intcall against the Task 3 base (`rexx-run-9b1-t2c`, the code of `485c13720`), from
+`fix1/intcall-base/` and the final run:
+- base 729440297, Task 3 head (`t3b`) 774290111, which is 149.5 Ir per call.
+- fix round head 749689909, which is **+2.776%** and 67.5 Ir per call.
+
+The level still costs that much. The two swaps, the `Rc` clone and drop, three bounds checks, and
+the slot writes are what is left (callgrind_annotate on `run_internal_as`). extcall's +0.24% -libc
+against `t3b` is the library-routine arm slicing `&values[mark..]` from the lent buffer, 6 Ir per
+call. The first try (`Rc::make_mut`) and the second (`get_mut` without the cold paths) were +5.2%
+and +3.4% against the base. Their raw files are `cg-9b1/task-3-fix1-try`, `-try2` and `-try3`.
+
+### I1: roots
+
+The `routines` map is out of the root loop (`lib.rs`). Each entry is also in the package's
+`.ROUTINES` table, which is rooted. Once a program writes that table, every reader reads the
+table instead. That includes `Package~routines`, which read the map until this round
+(`dispatch/package.rs`). The oracle answers what the write stored: `p~routines['C4'] == u` is 1 on
+the oracle and was 0 here, probe `rC.rex`. The witness `routine_object_add_copy.rex` gains that
+line (`written 1 0 1`, identical, rc 0/0) and its sourceline file was regenerated.
+`package_public_routines` and `merged_public_routines` stay rooted. Each has a collect_stress test
+that goes red without it:
+- `an_added_public_routine_object_survives_its_table_entry` holds the copy only through a weak
+  reference, replaces its `.ROUTINES` entry, collects, then merges it into an importer. Without
+  the public root it prints `collected` and fails.
+- `an_added_routine_object_survives_in_its_importer` fails without the merged root.
+
+Each mutation was the root loop's table list edited and restored by copying the saved file back,
+with `Compiling rexx-exec` in each log. The review's `root2`/`root3` shapes and my first form of
+the public test (no weak reference) stayed green without the roots. The stale handle happened to
+answer, so they are not witnesses, and the package-copy test I tried is dropped (the copy's own
+table holds the object).
+
+### q2 and M1
+
+`oracle-crashes.txt` entry 37 gains the shape: an untrapped 93.900 raised by an element's `STRING`
+method inside the sort, SIGSEGV rc 139, from my 1-of-1 run of 2026-10-14. It is not re-run. It is
+filed under 37 because it leaves the sort by an error, as 37's do. The C++ path was not read.
+The crate's answer (rc 163, the method line, `Compiled routine "SYSSTEMSORT".`, the call line,
+93.900) is a new case in `crates/rexx-exec/tests/stem_sort_untrapped_cases/crate`.
+M1: both routine-row docs in `body.rs` name `INTERNAL_ROUTINES`.
+
+### Checks (from `rust/`, `...` = `CARGO_INCREMENTAL=0 timeout 600 memcap 8G`)
+
+| command | tree | exit | result |
+|---|---|---|---|
+| `cargo fmt --all --check` | 386a4797f | 0 | |
+| `... cargo clippy -j 4 -p rexx-core -p rexx-exec -p rexx-bench --all-targets -- -D warnings` | 386a4797f | 0 | `Checking` rexx-core, rexx-bench, rexx-exec printed |
+| `... cargo check -j 4 -p rexx-exec --all-features` | 386a4797f | 0 | |
+| `... cargo test -j 4 -p rexx-bench --no-fail-fast` | 386a4797f | 0 | 6 binaries, no failures |
+| `... cargo test -j 4 -p rexx-core --no-fail-fast` | 386a4797f | 0 | no failures |
+| `... cargo test -j 4 -p rexx-exec --no-fail-fast --lib --test refusal_sites --test refusal_dispositions --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test licensed_divergences` | 386a4797f | 0 | lib 1121, 8, 22, 6, 5, 3, 5, 3 passed |
+| `... cargo test -j 4 -p rexx-parse --test sourceline_oracle` | 386a4797f | 0 | 1 passed |
+| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 900 memcap 8G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus --test collect_stress` | 386a4797f | 0 | collect_stress 39 passed, `1054 of 1054 matching`, corpus 29 passed 1 ignored |
+| suite groups Package, StackFrame, Routine, SysStemSort (command as above, table under `fix1/suite/`) | 386a4797f | 101 | the same red tests as before, SysStemSort green |
+
+The witnesses and the probes `q1 q3 r2 p5 l11b add2 rC rD` were re-run against the oracle at the
+final binary: identical, except q1's queued `CALL` method frame.
