@@ -1,0 +1,32 @@
+# ootest revision 13178
+group	test	oracle	crate
+API/oo/METHOD	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	passed	failed
+base/class/Method	TEST_NEW_ARRAY_FROM_FILE	passed	failed
+base/class/Method	TEST_NEW_FILE_COMPILED	passed	failed
+base/class/Package	TESTRECLAIM01	passed	blocked: timeout after 60 s
+base/class/Package	TEST_NEW01	passed	failed
+base/class/Package	TEST_PROLOG	passed	failed
+base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	passed	failed
+base/class/Routine	TEST_NEW_FILE_COMPILED	passed	failed
+base/directives/REQUIRES	TEST_ACTIVATE	passed	failed
+base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	passed	failed
+base/directives/REQUIRES	TEST_CASCADED_REQUIRES	passed	failed
+base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	passed	failed
+base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	passed	failed
+base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	passed	failed
+base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	passed	failed
+base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	passed	failed
+base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	passed	failed
+base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	passed	failed
+base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	passed	failed
+base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	passed	failed
+base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	passed	failed
+base/directives/REQUIRES	TEST_PROLOG	passed	failed
+base/directives/REQUIRES	TEST_PROLOG2	passed	failed
+base/directives/REQUIRES	TEST_PROLOG3	passed	failed
+base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	passed	failed
+base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	passed	failed
+base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	passed	failed
+base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	passed	failed
+base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
+base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)

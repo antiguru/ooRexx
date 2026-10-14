@@ -39,8 +39,9 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 impl Interp {
-    /// Resolves every `::` directive of `program`, filling [`Interp::routines`]
-    /// and refusing the ones this crate cannot resolve.
+    /// Resolves every `::` directive of `program`, filling its package's
+    /// routine and class tables and refusing the ones this crate cannot
+    /// resolve.
     /// ```text
     /// ::class foo
     /// ::class foo + ::method bar

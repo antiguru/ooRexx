@@ -1360,8 +1360,8 @@ struct Interp {
     /// Whether a program has written any package's `.ROUTINES` table, which
     /// is the one test a routine lookup makes while none has.
     routines_written: bool,
-    /// Whether any program package's `.ROUTINES` table has been built, which
-    /// is the one test a hash write makes before asking whether it wrote one.
+    /// Whether any package's `.ROUTINES` table has been built, which is the
+    /// one test a hash write makes before asking whether it wrote one.
     routines_tables: bool,
     /// `.NAME` answers [`Interp::rexx_package_class`] has already found,
     /// keyed by the bare uppercased name.
@@ -1881,8 +1881,8 @@ enum GeneratedKind {
     /// arrived with, to the value of the delegate variable in the declaring
     /// scope's pool on the receiver.
     Delegate,
-    /// A `::CONSTANT` accessor: it answers the value
-    /// [`Interp::constant_values`] holds for the directive.
+    /// A `::CONSTANT` accessor: it answers the value its package holds for
+    /// the directive.
     Constant,
 }
 
