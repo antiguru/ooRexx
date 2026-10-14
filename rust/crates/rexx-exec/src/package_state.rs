@@ -87,8 +87,8 @@ impl PackageFields for PackageData {
             options: _,
             initial_options: _,
             security_manager,
-            // Held by the `.ROUTINES` table, which every reader reads once a
-            // program writes it.
+            // Each `Routine` object here is in the package's `.ROUTINES`
+            // table too, which `~addRoutine` writes.
             routines: _,
             routines_written: _,
             public_routines,

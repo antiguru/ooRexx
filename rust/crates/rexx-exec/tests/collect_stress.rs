@@ -924,6 +924,107 @@ fn a_dropped_package_copy_is_collected() {
     );
 }
 
+/// Runs `program` collecting at every allocation and asserts it exited 0
+/// having printed `expected`, and that it collected.
+fn assert_stress_prints(label: &str, program: &str, expected: &str) {
+    let stress = run_program_collect_every_alloc(
+        label,
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+    );
+    assert_eq!(
+        (
+            stress.exit_code,
+            String::from_utf8_lossy(&stress.stdout).as_ref()
+        ),
+        (0, expected),
+        "stderr: {}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
+/// A REXX package copy's `~addRoutine` of a library row's `Routine` object
+/// keeps it while the copy holds it. Measured, oracle rc 0, the same lines
+/// with a 3000-pass allocating loop in place of the filler.
+#[test]
+fn a_rexx_package_copys_added_routine_survives() {
+    assert_stress_prints(
+        "<rexx-copy-added-routine>",
+        concat!(
+            "c = .array~package~copy\n",
+            "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
+            "c~addRoutine('CC', u~copy)\n",
+            "w = .WeakReference~new(c~routines['CC'])\n",
+            "do i = 1 to 20\n",
+            "  zj = 'filler' i\n",
+            "end\n",
+            "say 'weak' (w~value \\== .nil)\n",
+            "f = c~findRoutine('CC')\n",
+            "say 'found' f~class~id (f \\== u) f~call(0)\n",
+        ),
+        "weak 1\nfound Routine 1 0\n",
+    );
+}
+
+/// A package copy that only another package imports survives as that
+/// import, under a namespace too. Measured, oracle rc 0, the same lines with
+/// a 3000-pass allocating loop in place of the filler.
+#[test]
+fn a_package_copy_held_as_an_import_survives() {
+    assert_stress_prints(
+        "<package-copy-import>",
+        concat!(
+            "p = .context~package\n",
+            "h = p~copy\n",
+            "i = p~copy\n",
+            "i~addRoutine('IMARK', .routine~new('im', 'return \"imark\"'))\n",
+            "wi = .WeakReference~new(i)\n",
+            "h~addPackage(i)\n",
+            "drop i\n",
+            "h2 = p~copy\n",
+            "i2 = p~copy\n",
+            "wn = .WeakReference~new(i2)\n",
+            "h2~addPackage(i2, 'NSI2')\n",
+            "drop i2\n",
+            "do k = 1 to 20\n",
+            "  zj = 'filler' k\n",
+            "end\n",
+            "say 'weak' (wi~value \\== .nil) (wn~value \\== .nil)\n",
+            "say 'import' h~importedPackages~items h~importedPackages[1]~routines~hasIndex('IMARK')\n",
+            "say 'ns' (h2~findNamespace('NSI2') \\== .nil)\n",
+        ),
+        "weak 1 1\nimport 1 1\nns 1\n",
+    );
+}
+
+/// A package copy that is only another package's parent survives as that
+/// parent, and the routine it holds answers through the child. Measured,
+/// oracle rc 0, the same lines with a 3000-pass allocating loop in place of
+/// the filler.
+#[test]
+fn a_package_copy_held_as_a_parent_survives() {
+    assert_stress_prints(
+        "<package-copy-parent>",
+        concat!(
+            "src = .package~new('js', .array~of('::routine jmark', 'return \"jmark\"'))\n",
+            "j = src~copy\n",
+            "wj = .WeakReference~new(j)\n",
+            "n = .package~new('n', .array~of('return 1'), j)\n",
+            "drop j\n",
+            "do k = 1 to 20\n",
+            "  zj = 'filler' k\n",
+            "end\n",
+            "say 'weak' (wj~value \\== .nil)\n",
+            "say 'parent' n~findRoutine('JMARK')~call\n",
+        ),
+        "weak 1\nparent jmark\n",
+    );
+}
+
 /// Runs `program` collecting at every allocation and asserts it printed
 /// `0 Routine 0`: a copy of a row's `Routine` object, held only by a routine
 /// table once the package's `.ROUTINES` entry stops naming it, still answers.

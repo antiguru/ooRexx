@@ -783,7 +783,7 @@ fn find_public_class(
 ) -> Result<Option<ObjRef>, Failure> {
     fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
-    Ok(Some(interp.package_find_public_class(receiver, &name)))
+    Ok(Some(interp.package_find_public_class(receiver, &name)?))
 }
 
 /// `PackageClass::findRoutineRexx`: the package's own routines, then the

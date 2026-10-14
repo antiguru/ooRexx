@@ -122,3 +122,6 @@ lang/stackframes_native_routine.rex
 
 # 9b1 Task 4: a copied package mutated, L5 and L6.
 lang/package_copy_mutated.rex
+
+# 9b1 Task 4 fix round 1: a REXX package copy's lookups and merge (I2, I3).
+lang/package_rexx_copy_lookups.rex

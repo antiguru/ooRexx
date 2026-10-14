@@ -1131,12 +1131,14 @@ impl Interp {
         if let Some(found) = data.tables[kind.index()] {
             return Some(found);
         }
-        let program = data.program?;
-        let source = std::rc::Rc::clone(self.programs.get(program.0)?);
-        let entries = if self.untranslated.contains(&program) {
-            Vec::new()
-        } else {
-            package_table_entries(program, &source, kind)
+        // A copy of the REXX package has no directives, and gets a table only
+        // for a write, which is where `~addRoutine` files its routines.
+        let entries = match data.program {
+            Some(program) if !self.untranslated.contains(&program) => {
+                let source = std::rc::Rc::clone(self.programs.get(program.0)?);
+                package_table_entries(program, &source, kind)
+            }
+            _ => Vec::new(),
         };
         if entries.is_empty() && !force {
             return None;

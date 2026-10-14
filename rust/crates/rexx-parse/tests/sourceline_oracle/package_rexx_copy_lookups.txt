@@ -1,0 +1,21 @@
+count 20
+/* A copy of the REXX package is one package table, as any copy is: what
+   ~addPackage merges reaches its findClass and findPublicClass, its own
+   classes come ahead of what it merged, and a class it redefines is the one
+   a package importing it takes. */
+q = .package~new('q', .array~of('::class qk public', '::routine qr public', 'return "qr"'))
+c = .array~package~copy
+c~addPackage(q)
+say 'imported' c~importedClasses~hasIndex('QK') c~importedRoutines~hasIndex('QR')
+say 'find' (c~findClass('QK') \== .nil) (c~findPublicClass('QK') \== .nil)
+r = .package~new('r', .array~of('::class array public'))
+d = .array~package~copy
+d~addPackage(r)
+say 'own first' (d~findClass('ARRAY') == .array) (d~findPublicClass('ARRAY') == .array)
+e = .array~package~copy
+e~addPublicClass('ARRAY', .list)
+say 'redefined' (e~publicClasses['ARRAY'] == .list) (e~classes['ARRAY'] == .list) (e~findClass('ARRAY') == .list) (e~findPublicClass('ARRAY') == .list)
+p = .package~new('pp', .array~of('return .array~id'))
+p~addPackage(e)
+say 'importer' p~findClass('ARRAY')~id p~importedClasses~hasIndex('ARRAY') (p~importedClasses['ARRAY'] == .list)
+say 'original' (.array~package~findClass('ARRAY') == .array) .array~package~importedClasses~items

@@ -737,7 +737,13 @@ impl Interp {
         if data.program.is_some() {
             return own;
         }
-        let mut entries = self.registered_classes();
+        // One table, as the oracle's is: a name the package's own fields hold
+        // replaces the registry's entry rather than following it.
+        let mut entries: Vec<(Box<[u8]>, ObjRef)> = self
+            .registered_classes()
+            .into_iter()
+            .filter(|(name, _)| !own.iter().any(|(held, _)| held == name))
+            .collect();
         entries.extend(own);
         entries
     }
@@ -763,10 +769,10 @@ impl Interp {
         package: ObjRef,
         upper: &[u8],
     ) -> Result<ObjRef, Failure> {
-        if let Some(found) = self.installed_class_of(package, upper) {
+        if let Some(found) = self.installed_class_of(package, upper)? {
             return Ok(found);
         }
-        if let Some(found) = self.package_public_class_of(package, upper) {
+        if let Some(found) = self.package_public_class_of(package, upper)? {
             return Ok(found);
         }
         if let Some(local) = self.package_data(package).and_then(|data| data.local) {
@@ -792,45 +798,67 @@ impl Interp {
     /// `PackageClass::findPublicClass` (`classes/PackageClass.cpp:1013`) at
     /// the `findPublicClassRexx` stub: this package's own public classes, the
     /// ones it imported, and then the REXX package's.
-    pub(crate) fn package_find_public_class(&mut self, package: ObjRef, upper: &[u8]) -> ObjRef {
-        self.package_public_class_of(package, upper)
-            .unwrap_or(ObjRef::NIL)
+    pub(crate) fn package_find_public_class(
+        &mut self,
+        package: ObjRef,
+        upper: &[u8],
+    ) -> Result<ObjRef, Failure> {
+        Ok(self
+            .package_public_class_of(package, upper)?
+            .unwrap_or(ObjRef::NIL))
     }
 
-    /// Whether `package` is the REXX package, which no program compiled.
-    fn is_rexx_package(&self, package: ObjRef) -> bool {
-        self.package_data(package)
-            .is_none_or(|data| data.program.is_none())
+    /// Whether `package` is the REXX package or a copy of it, which no
+    /// program compiled, and the refusal for a value that is not a package.
+    fn is_rexx_package(&self, package: ObjRef) -> Result<bool, Failure> {
+        match self.package_data(package) {
+            Some(data) => Ok(data.program.is_none()),
+            None => Err(Loud::receiver_class("a value that is not a package").into()),
+        }
     }
 
     /// `installedClasses`: the classes `package`'s own directives and
     /// `~addClass` installed, which for the REXX package is the native class
     /// registry plus what the shipped `.orx` files declared.
-    fn installed_class_of(&mut self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
-        if self.is_rexx_package(package) {
+    fn installed_class_of(
+        &mut self,
+        package: ObjRef,
+        upper: &[u8],
+    ) -> Result<Option<ObjRef>, Failure> {
+        if self.is_rexx_package(package)? {
             if let Some(found) = self
                 .package_data(package)
                 .and_then(|data| data.classes.get(upper))
             {
-                return Some(*found);
+                return Ok(Some(*found));
             }
-            return self.classes().lookup_upper(upper);
+            return Ok(self.classes().lookup_upper(upper));
         }
-        self.chain_installed_class(Some(package), upper)
+        Ok(self.chain_installed_class(Some(package), upper))
     }
 
-    /// `PackageClass::findPublicClass`'s steps, as an `Option`.
-    fn package_public_class_of(&mut self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
-        if self.is_rexx_package(package) {
-            return self
-                .package_data(package)
-                .and_then(|data| data.public_classes.get(upper).copied())
-                .or_else(|| self.rexx_package_class(upper));
+    /// `PackageClass::findPublicClass`'s steps: the package's installed public
+    /// classes, then its merged ones, then its parent's, then the REXX
+    /// package's.
+    fn package_public_class_of(
+        &mut self,
+        package: ObjRef,
+        upper: &[u8],
+    ) -> Result<Option<ObjRef>, Failure> {
+        if self.is_rexx_package(package)? {
+            // Its installed public classes are its own fields and the native
+            // registry, ahead of what it merged.
+            let data = self.package_data(package);
+            if let Some(found) = data.and_then(|data| data.public_classes.get(upper)) {
+                return Ok(Some(*found));
+            }
+            let merged = data.and_then(|data| data.merged_public_classes.get(upper).copied());
+            return Ok(self.classes().lookup_upper(upper).or(merged));
         }
         if let Some(found) = self.chain_public_class(Some(package), upper) {
-            return Some(found);
+            return Ok(Some(found));
         }
-        self.rexx_package_class(upper)
+        Ok(self.rexx_package_class(upper))
     }
 
     /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`), as the
