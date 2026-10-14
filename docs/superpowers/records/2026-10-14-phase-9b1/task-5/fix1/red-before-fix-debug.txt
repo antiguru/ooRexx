@@ -1,0 +1,35 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.05s
+     Running tests/collect_stress.rs (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/debug/deps/collect_stress-573c82435f8a8544)
+
+running 3 tests
+test an_external_routines_package_survives_two_calls ... FAILED
+test an_external_routines_added_public_class_is_merged ... FAILED
+test an_external_routines_package_survives_interpret ... FAILED
+
+failures:
+
+---- an_external_routines_package_survives_two_calls stdout ----
+
+thread 'rexx-interp' (574852) panicked at crates/rexx-exec/src/environment/identities.rs:156:13:
+Program(ProgramId(4))'s package was asked for after it was collected
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- an_external_routines_added_public_class_is_merged stdout ----
+
+thread 'rexx-interp' (574850) panicked at crates/rexx-exec/src/environment/identities.rs:156:13:
+Program(ProgramId(4))'s package was asked for after it was collected
+
+---- an_external_routines_package_survives_interpret stdout ----
+
+thread 'rexx-interp' (574851) panicked at crates/rexx-exec/src/environment/identities.rs:156:13:
+Program(ProgramId(4))'s package was asked for after it was collected
+
+
+failures:
+    an_external_routines_added_public_class_is_merged
+    an_external_routines_package_survives_interpret
+    an_external_routines_package_survives_two_calls
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.07s
+
+error: test failed, to rerun pass `-p rexx-exec --test collect_stress`

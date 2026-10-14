@@ -236,3 +236,121 @@ gives. Both programs' plain runs still match the oracle in the corpus gate.
 6. `rexxutil_file_tests.rex` leaves `filetests.d/closed` at mode 000 when its stress run dies early,
    and the next collect_stress run then fails to empty the run directory (`Permission denied`). This
    happened twice while the File constant was broken. `chmod u+rwx` on the directory fixed it.
+
+## Fix round 1
+
+Code commit `728d715da`. Records are in `docs/superpowers/records/2026-10-14-phase-9b1/task-5/fix1/`.
+
+### I1: external call merge
+
+`enter_external_program` (`lib.rs`) now builds the caller's and the callee's packages before
+`run_loaded`. Both are rooted as temps of the calling frame, and the merge after the return uses those
+handles. The audit of the other places where a package handle is held across an allocation found
+two more:
+
+- A requires cache hit could return a package that only the weak cache reached. `load_requires` is
+  now a wrapper that roots the package it answers as a temp, and `find_requires` holds the old body.
+- `package_from_source` builds its package before the prologue runs. A package that the prologue
+  built would otherwise be popped with the prologue's frame before `Package~new` or `loadPackage`
+  read it.
+
+The other holders were already rooted: the `::REQUIRES` install's `into` is built at install start,
+`record_package_class` and `record_executable` do not allocate between the build and the store, and
+`merge_library`'s `into` is the package being installed.
+
+New tests in `collect_stress.rs`, each with an external file written into a run directory of its
+own (`assert_stress_prints_beside`):
+
+- `an_external_routines_added_public_class_is_merged` (p09e)
+- `an_external_routines_package_survives_two_calls` (p01)
+- `an_external_routines_package_survives_interpret` (p06)
+
+I measured the oracle first, with a 3000-pass `copies('y', 100000)` filler, rc 0: `p09e v1 dk`,
+`p01 1 1 7` twice, `p06 1 7`. RED before the fix, debug: `CARGO_INCREMENTAL=0 timeout 590 memcap 8G
+cargo test -j 4 -p rexx-exec --test collect_stress -- an_external_routines`, exit 101. All three
+failed with `Program(ProgramId(4))'s package was asked for after it was collected`
+(`fix1/red-before-fix-debug.txt`). They pass after the fix.
+
+### I2: p10
+
+p10 is now a row of `a_package_in_use_is_never_collected`, with `ext10.rex` written beside it, and
+it prints `p10 1 1 7`. **It does not go red under M1**, in debug or in release (`M1 exit 0` for both).
+The I1 fix roots the callee's package in the calling frame. In p10 that frame is `go`'s, on the
+parked activity, and that activity's parked temps now hold the package. p10 was red under M1 only
+because of the defect I1 fixes. I also tried one more shape: a `Routine~new` object, used only as a
+temporary, called on the started activity and parked there. It stayed green under M1 too, so I
+removed it. I know of no shape now in which the walk of activities that are not running is the
+only holder. I kept the walk. Please rule: keep it unwitnessed, or delete it.
+
+M2, the running-activity walk with no programs, goes red in both builds: debug panics with
+`Program(ProgramId(3))'s package was asked for after it was collected`, and release gives
+`left: (120, "")`.
+
+### I3: the replied-continuation branch
+
+I deleted it. `split_level` (`ir/drive.rs`) gives the continuation's activity the parked level, its
+frames and loops, but no `Activation`. The replying activation stays on its own activity's stack until
+it ends, and that walk covers it. Then `spawn_continuation` moves it into the continuation's `running`,
+and the walk covers it there. The doc comment of `running_programs` says so.
+
+### I4: loud fallback
+
+`package_object` returns `Result<ObjRef, Failure>`. For a package that was built and then collected it
+answers `Loud::unknown_receiver("a package whose object is no longer live")`, after the
+`debug_assert`. This new string is in `ALLOWED` as `Task 8`, with a comment marking it as an
+internal guard. `refusal-sites.tsv` did not change after a refresh, because it has no
+`unknown_receiver` rows. The `Result` is passed up through `package_fields_mut`,
+`program_fields_mut`, `set_package_parent`, `override_package_settings`, `record_package_class`,
+`record_executable`, `method_object`, `running_method_executable`, `program_routine_object`,
+`record_compiled_body`/`_routine`, `merge_library`, `merge_internal_package`,
+`executable_context_package`, `build_package_shares` and `method_object_for`.
+
+Some readers cannot return a `Result`. Each of them only ever meets a package that a running
+activation, an install in progress or a reachable package's table holds. These readers call
+`held_package_object` instead, which panics with `{package:?}'s package was collected while it was
+held`. They are:
+
+- `rexx_package_object`, for the REXX package, which is a global root
+- `program_string_table`, which serves `.METHODS`, `.ROUTINES` and `.RESOURCES`
+- `record_constant_value`
+- `enter_library_program`
+
+One more such reader is in `build_package_string_table`: its `record_executable` call ends in
+`expect`, because the package whose table it builds holds the program.
+
+### Minors
+
+- The copy branch of `class_holds_package` is gone. `copy_class_package` says why in one line: the
+  original class, which is never collected under D59, already holds the package.
+- `object_roots`'s doc comment is restored, and `running_programs` has its own.
+
+### Checks at `728d715da`
+
+Statuses were read unpiped, and the outputs are in the scratchpad's `t5/fr1/`.
+
+| command (from `rust/`) | exit | result |
+|---|---|---|
+| `cargo fmt --all --check` | 0 | |
+| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings` | 0 | |
+| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 -p rexx-exec --test collect_stress` (debug) | 0 | 49 passed |
+| the same, `--release` | 0 | 49 passed |
+| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 -p rexx-exec --lib` (debug) | 0 | 1122 passed |
+| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | 0 | 29 passed, 1 ignored |
+| the same, debug | 0 | 29 passed, 1 ignored |
+| the refusal tables, owners, closed_phases, phase_ten_reasons, package_requires, class_lifetime, class_weak_reference (`--release`) | 0 | all passed |
+| `... --release -p rexx-core -p rexx-parse` | 0 | all passed |
+| the Task 5 suite command (groups as above) | 101 | 5 of 9 groups red. `tests.tsv` is byte-identical to `task-5/suite/tests.tsv` (sorted `diff`, exit 0), and TESTRECLAIM01 is still `passed` |
+
+The two collect_stress runs came after the last code change. After them, the test file changed in its
+comments only: I added and then removed the Routine-object row, and corrected the comment on p10.
+
+### Budget
+
+`rexx-run-9b1-t5b` was built at `728d715da` (sha256 `c20c1cfc125c1b8eb728...`). From `rust/`:
+`timeout 590 bench-programs/callgrind.sh -B 0.5 -j 12 -p "startup alloc hashnew pkglocal intcall
+fibcall fibfunc extcall dispatch dispatchclass sendloop varlookup" -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-5-fix1 pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run
+head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t5b`, exit 0. Whole-process deltas against the
+pin: startup +0.3239, alloc -1.5329, hashnew -0.0544, pkglocal -7.6357, intcall -10.7947, fibcall
+-3.3330, fibfunc -3.3830, extcall -13.2640, dispatch -0.4731, dispatchclass -3.7020, sendloop
+-0.4428, varlookup +0.0031. Records: `fix1/callgrind/`.

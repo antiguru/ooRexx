@@ -1,0 +1,20 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 24.62s
+     Running tests/suite.rs (target/release/deps/suite-ce2523362fb74026)
+
+running 1 test
+suite: 9 groups, 5 red, table /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t5/fr1/suite/table.tsv, verdicts /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t5/fr1/suite/verdicts.tsv
+
+thread 'l3_core_suite' (618787) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
+5 of 9 groups are not green; each reason is in /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t5/fr1/suite/verdicts.tsv
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test l3_core_suite ... FAILED
+
+failures:
+
+failures:
+    l3_core_suite
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 5.61s
+
+error: test failed, to rerun pass `-p rexx-exec --test suite`
