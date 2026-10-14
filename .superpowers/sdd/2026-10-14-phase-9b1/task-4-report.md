@@ -259,13 +259,7 @@ exit 0). TESTRECLAIM01 is still red, Task 5's.
 
 ## Concerns
 
-1. **A package copy is collectable now.** Nothing holds a copy by id, so the global root that kept
-   copies alive went with `copy_package`. Measured: `w = .WeakReference~new(.context~package~copy)`
-   then 3000 allocating passes answers `1` here, as on the oracle (Task 3's binary `0`);
-   `.Package~new('src','nop')` still answers `0` (oracle `1`), Task 5's. I told the lead I would keep
-   copies rooted unless told otherwise and did not: a root kept only to preserve the leak has no test
-   that pins anything but the leak. Restoring it is a `RootSet::add_global` keyed by the copy's
-   identity in `object_protocol.rs`'s package arm.
+1. Resolved by the lead's ruling, see "L7's copy half" below.
 2. **The downcast is a virtual `type_id` call** (`PackageState::downcast_ref`), a few Ir per package
    read. The hot reads are behind latches or take one body; a future reader on a per-clause path
    should take the body once.
@@ -273,3 +267,24 @@ exit 0). TESTRECLAIM01 is still red, Task 5's.
 4. A `Package~addPublicClass` of a REXX-package class name on a copy of the REXX package: the copy's
    `~classes` answers the added class, but a merge from that copy keeps the REXX one (first entry
    wins). Not measured on the oracle.
+
+## L7's copy half (ruling (a), copies unrooted)
+
+Task 4 delivers this part of L7: a package copy nothing holds is collected, and a weak reference to
+it clears. Nothing holds a copy by id, so no root replaces the one `copy_package` gave each copy.
+Original packages stay global roots, as before; Task 5 keeps them.
+
+Oracle first, from a fresh empty directory, the program of the new test with a loop of
+`z = copies('y', 100000); q = .array~new(100)` in place of the filler: at 100 and 300 passes rc 0,
+`dropped 1` / `held 1` (at 30 passes `dropped 0`: the oracle had not collected yet, and when it
+collects is not specified). The crate's release binary at those counts answers `dropped 0`, its
+collector not yet due. That timing difference falls under the GC-ordering licence, so the witness is
+a `collect_stress` test, as with `corpus/lang/weak_reference_value.rex`'s clearing half:
+`a_dropped_package_copy_is_collected` asserts `dropped 1` / `held 1` under
+collect-on-every-allocation. Mutation: a global root added for each copy in
+`object_protocol.rs`'s package arm turns it red; restored from a saved copy, `git diff --stat` empty.
+
+The commands, from `rust/`, all exit 0: `cargo fmt --all --check`;
+`CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`;
+`REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress`,
+41 passed.

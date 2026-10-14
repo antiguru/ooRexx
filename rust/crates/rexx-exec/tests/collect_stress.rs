@@ -888,6 +888,42 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
     );
 }
 
+/// A package copy nothing holds is collected and its weak reference clears,
+/// while a held copy stays, as on the oracle (L7's copy half): measured,
+/// oracle rc 0, `dropped 1` and `held 1` for the same program with a 100-pass
+/// loop of `copies('y', 100000)` in place of the filler.
+#[test]
+fn a_dropped_package_copy_is_collected() {
+    let program = concat!(
+        "w = .WeakReference~new(.context~package~copy)\n",
+        "h = .context~package~copy\n",
+        "v = .WeakReference~new(h)\n",
+        "do i = 1 to 20\n",
+        "  zj = 'filler' i\n",
+        "end\n",
+        "say 'dropped' (w~value == .nil)\n",
+        "say 'held' (v~value == h)\n",
+    );
+    let stress = run_program_collect_every_alloc(
+        "<package-copy-collected>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+    );
+    assert_eq!(
+        (
+            stress.exit_code,
+            String::from_utf8_lossy(&stress.stdout).as_ref()
+        ),
+        (0, "dropped 1\nheld 1\n"),
+        "stderr: {}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
 /// Runs `program` collecting at every allocation and asserts it printed
 /// `0 Routine 0`: a copy of a row's `Routine` object, held only by a routine
 /// table once the package's `.ROUTINES` entry stops naming it, still answers.
