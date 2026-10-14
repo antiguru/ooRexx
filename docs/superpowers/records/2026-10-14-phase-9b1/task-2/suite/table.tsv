@@ -1,0 +1,6 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/class/String/arithmetic	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/class/String/arithmetic	crate	1	1	1			-	-	1	yes	memcap 2G	1
+base/class/WeakReference	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/WeakReference	crate	2	2	2			-	-	1	yes	memcap 2G	2
