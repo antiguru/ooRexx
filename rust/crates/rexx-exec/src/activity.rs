@@ -71,14 +71,11 @@ pub(crate) struct Activity {
     )]
     pub(crate) native_spares: Vec<Box<NativeFrame>>,
     /// The routines of an internal package running on this activity,
-    /// innermost last.
+    /// innermost last, below [`Activity::internal_depth`]; the slots above it
+    /// are kept for the next call to fill.
     pub(crate) internal_levels: Vec<InternalLevel>,
-    /// The names of [`Activity::internal_levels`], each one's from its `name`
-    /// offset to the next one's.
-    pub(crate) internal_names: Vec<u8>,
-    /// The arguments of [`Activity::internal_levels`], each one's from its
-    /// `arguments` offset to the next one's.
-    pub(crate) internal_arguments: Vec<Option<ObjRef>>,
+    /// How many of [`Activity::internal_levels`] are running.
+    pub(crate) internal_depth: usize,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs;
     /// made by the first ([`crate::Interp::thread_context`]).
@@ -331,10 +328,39 @@ pub(crate) struct InternalLevel {
     /// The activation the call was made from.
     pub(crate) caller: Option<crate::activation::ActivationId>,
     pub(crate) row: &'static crate::internal_routines::InternalRoutine,
-    /// Where its name starts in [`Activity::internal_names`].
-    pub(crate) name: usize,
-    /// Where its arguments start in [`Activity::internal_arguments`].
-    pub(crate) arguments: usize,
+    pub(crate) name: LevelName,
+    /// The name a [`LevelName::Called`] level was called by.
+    pub(crate) called: Vec<u8>,
+    /// The caller's argument buffer, lent for the call and shared with the
+    /// routine's body, so neither copies it.
+    pub(crate) arguments: Rc<Vec<Option<ObjRef>>>,
+    /// Where the call's arguments start in [`InternalLevel::arguments`].
+    pub(crate) from: usize,
+}
+
+/// The name an [`InternalLevel`]'s frame reports.
+#[derive(Clone, Copy)]
+pub(crate) enum LevelName {
+    /// The row's name, upcased.
+    Upper,
+    /// The row's name as the row spells it.
+    Row,
+    /// [`InternalLevel::called`].
+    Called,
+}
+
+impl InternalLevel {
+    /// A slot no call has filled yet.
+    pub(crate) fn spare() -> InternalLevel {
+        InternalLevel {
+            caller: None,
+            row: &crate::internal_routines::INTERNAL_ROUTINES[0],
+            name: LevelName::Upper,
+            called: Vec::new(),
+            arguments: Rc::new(Vec::new()),
+            from: 0,
+        }
+    }
 }
 
 impl Activity {
@@ -352,8 +378,7 @@ impl Activity {
             native_handles: _,
             native_spares: _,
             internal_levels: _,
-            internal_names: _,
-            internal_arguments: _,
+            internal_depth: _,
             thread: _,
             clause_state: _,
             flat_loops: _,
@@ -477,8 +502,7 @@ impl Activity {
             native_handles: Vec::new(),
             native_spares: Vec::new(),
             internal_levels: Vec::new(),
-            internal_names: Vec::new(),
-            internal_arguments: Vec::new(),
+            internal_depth: 0,
             clause_state: ClauseState::new(),
             flat_loops: Vec::new(),
             flat_top: None,
@@ -579,10 +603,10 @@ impl Activity {
             // overwrites the handle fields before anything reads them, so a
             // spare names nothing to root.
             native_spares: _,
-            // A running call's arguments are its caller's temps.
+            // A running call's arguments are its caller's temps, and a slot
+            // above the depth holds an emptied buffer.
             internal_levels: _,
-            internal_names: _,
-            internal_arguments: _,
+            internal_depth: _,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
             // lifetime, and `RootSet` reaches a register as a temp.

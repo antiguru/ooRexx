@@ -2512,7 +2512,7 @@ impl Interp {
         &mut self,
         program: ProgramId,
         directive: usize,
-        arguments: &[Option<ObjRef>],
+        arguments: &mut Vec<Option<ObjRef>>,
         name: &[u8],
     ) -> Result<crate::dispatch::NativeStarted, Failure> {
         let installed = InstalledRoutine { program, directive };
@@ -2521,6 +2521,7 @@ impl Interp {
                 crate::run::Resolved::Routine(installed),
                 name,
                 arguments,
+                0,
                 crate::activation::CallType::Subroutine,
                 crate::run::CallEntry::Written,
             )? {

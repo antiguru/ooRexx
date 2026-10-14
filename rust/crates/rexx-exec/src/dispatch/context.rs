@@ -569,7 +569,8 @@ pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
     let mut levels = Vec::new();
     for (depth, activation) in interp.frames().enumerate() {
         let id = activation.id;
-        for (row, level) in interp.activity.internal_levels.iter().enumerate().rev() {
+        let running = &interp.activity.internal_levels[..interp.activity.internal_depth];
+        for (row, level) in running.iter().enumerate().rev() {
             if level.caller == Some(id) {
                 levels.push(LiveLevel::Internal(row));
             }
@@ -938,14 +939,13 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
 /// # Panics
 /// If no internal level is in that row.
 fn build_internal_frame_at(interp: &mut Interp, row: usize) -> ObjRef {
-    let activity = &interp.activity;
-    let level = &activity.internal_levels[row];
-    let next = activity.internal_levels.get(row + 1);
-    let names = level.name..next.map_or(activity.internal_names.len(), |next| next.name);
-    let name = activity.internal_names[names].to_vec();
-    let arguments =
-        level.arguments..next.map_or(activity.internal_arguments.len(), |next| next.arguments);
-    let arguments = activity.internal_arguments[arguments].to_vec();
+    let level = &interp.activity.internal_levels[row];
+    let name = match level.name {
+        crate::activity::LevelName::Upper => level.row.name.to_ascii_uppercase().into_bytes(),
+        crate::activity::LevelName::Row => level.row.name.as_bytes().to_vec(),
+        crate::activity::LevelName::Called => level.called.clone(),
+    };
+    let arguments = level.arguments[level.from..].to_vec();
     let (caller, row) = (level.caller, level.row);
     let depth = interp
         .frames()

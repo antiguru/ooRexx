@@ -11,11 +11,54 @@
 
 //! `CALL` and function calls: resolving the name, running the arguments, entering the callee.
 
+use crate::activity::LevelName;
+
 use super::{
     Activation, BehaviourId, Body, BodyKey, CallContext, CallType, Code, Ended, Expr, ExprKind,
     Failure, Flow, Inherited, InstalledRoutine, Interp, Loud, ObjRef, Raised, Rc, Resolved,
     VarRefHome, body_of, builtin,
 };
+
+/// The name an internal routine's call passes it, which its frame and
+/// traceback line report.
+#[derive(Clone, Copy)]
+pub(crate) enum InternalName<'a> {
+    /// The row's name, upcased: a call that found the row by its own name.
+    Upper,
+    /// The row's name as the row spells it: `Routine~call`.
+    Row,
+    /// The name it was called by.
+    Called(&'a [u8]),
+}
+
+/// Swaps `args` with the buffer `slot` holds, which nothing else shares
+/// between calls.
+#[inline(always)]
+fn lend_arguments(slot: &mut Rc<Vec<Option<ObjRef>>>, args: &mut Vec<Option<ObjRef>>) {
+    match Rc::get_mut(slot) {
+        Some(buffer) => std::mem::swap(buffer, args),
+        None => lend_shared_arguments(slot, args),
+    }
+}
+
+/// [`lend_arguments`] where something else holds `slot` too.
+#[cold]
+#[inline(never)]
+fn lend_shared_arguments(slot: &mut Rc<Vec<Option<ObjRef>>>, args: &mut Vec<Option<ObjRef>>) {
+    let mut owned = Vec::clone(slot);
+    std::mem::swap(&mut owned, args);
+    *slot = Rc::new(owned);
+}
+
+/// A new slot on `levels`, for a call deeper than any before it.
+#[cold]
+#[inline(never)]
+fn add_internal_level(
+    levels: &mut Vec<crate::activity::InternalLevel>,
+) -> &mut crate::activity::InternalLevel {
+    levels.push(crate::activity::InternalLevel::spare());
+    levels.last_mut().expect("just pushed")
+}
 
 /// A call's target as it stands when its arguments are about to run.
 #[derive(Clone, Copy)]
@@ -415,14 +458,16 @@ impl Interp {
                 return Ok(Begun::Done(Ended::Returned(handled)));
             }
             return match resolved {
-                Resolved::Internal(row) => Ok(internal_begun(self.run_internal(row, &arguments)?)),
+                Resolved::Internal(row) => {
+                    Ok(internal_begun(self.run_internal(row, &mut arguments, 0)?))
+                }
                 Resolved::LibraryRoutine(slot) => self
                     .run_package_routine(slot, name, &arguments)
                     .map(library_begun),
                 _ => unreachable!("only the two arms above reach here"),
             };
         }
-        let begun = self.begin_call(resolved, name, &arguments, call_type, entry)?;
+        let begun = self.begin_call(resolved, name, &mut arguments, 0, call_type, entry)?;
         // An enclosing builtin's run stands on the stack while this call's
         // callee clears it at its first clause.
         if let Begun::Entered = begun {
@@ -487,7 +532,7 @@ impl Interp {
                 .map(Started::Ran);
         }
         let mut values = std::mem::take(&mut self.activity.value_buffer);
-        let started = self.begin_call_over_values(resolved, name, &values[mark..]);
+        let started = self.begin_call_over_values(resolved, name, &mut values, mark);
         values.truncate(mark);
         self.lend_stack(self.entered_body(&started), values);
         started
@@ -561,26 +606,30 @@ impl Interp {
         Ok(Some(result))
     }
 
-    /// One internal-package routine over its evaluated arguments. No
-    /// activation, no `SIGL`, no depth guard -- the builtin discipline, since
-    /// the oracle runs these as native code too. `Entered` where it parked
-    /// the activity, with the park on its record.
+    /// One internal-package routine over the evaluated arguments in `args`
+    /// from `from`. No activation, no `SIGL`, no depth guard -- the builtin
+    /// discipline, since the oracle runs these as native code too. `Entered`
+    /// where it parked the activity, with the park on its record.
     fn run_internal(
         &mut self,
         row: &'static crate::internal_routines::InternalRoutine,
-        values: &[Option<ObjRef>],
+        args: &mut Vec<Option<ObjRef>>,
+        from: usize,
     ) -> Result<Started<ObjRef>, Failure> {
-        self.run_internal_as(row, None, values)
+        self.run_internal_as(row, InternalName::Upper, args, from)
     }
 
-    /// [`Interp::run_internal`] for a call that passes the routine `name`
-    /// rather than its upcased row name, which is what a `::ROUTINE` bound to
-    /// the row and `Routine~call` pass.
+    /// [`Interp::run_internal`] for a call that passes the routine a `name`
+    /// other than its upcased row name, which is what a `::ROUTINE` bound to
+    /// the row and `Routine~call` pass. `args` is lent to the routine's
+    /// level while it runs, so a live `.context~stackFrames` reads the
+    /// arguments without a copy, and is handed back unchanged.
     pub(crate) fn run_internal_as(
         &mut self,
         row: &'static crate::internal_routines::InternalRoutine,
-        name: Option<&[u8]>,
-        values: &[Option<ObjRef>],
+        name: InternalName<'_>,
+        args: &mut Vec<Option<ObjRef>>,
+        from: usize,
     ) -> Result<Started<ObjRef>, Failure> {
         let Some(body) = row.body else {
             let owner = row
@@ -588,18 +637,48 @@ impl Interp {
                 .expect("a row with no body names the phase that owes it");
             return Err(Loud::internal_routine(row.name.as_bytes(), owner).into());
         };
-        let level = self.push_internal_level(row, name, values);
-        let outcome = body(self, row.name.as_bytes(), values);
-        self.pop_internal_level(level);
+        let caller = self.running_activation().map(|activation| activation.id);
+        let depth = self.activity.internal_depth;
+        let level = match self.activity.internal_levels.get_mut(depth) {
+            Some(level) => level,
+            None => add_internal_level(&mut self.activity.internal_levels),
+        };
+        level.caller = caller;
+        level.row = row;
+        level.from = from;
+        level.name = match name {
+            InternalName::Upper => LevelName::Upper,
+            InternalName::Row => LevelName::Row,
+            InternalName::Called(name) => {
+                level.called.clear();
+                level.called.extend_from_slice(name);
+                LevelName::Called
+            }
+        };
+        lend_arguments(&mut level.arguments, args);
+        let shared = Rc::clone(&level.arguments);
+        self.activity.internal_depth = depth + 1;
+        let outcome = body(self, row.name.as_bytes(), &shared[from..]);
+        self.activity.internal_depth = depth;
+        drop(shared);
+        if let Some(level) = self.activity.internal_levels.get_mut(depth) {
+            lend_arguments(&mut level.arguments, args);
+        }
         if let Err(failure) = &outcome {
             // The oracle reports one of these under its own routine line,
             // whether the argument marshalling or the body raised -- measured,
             // `filespec('D')` and `SysSleep('abc')` both carry it.
+            let values = &args[from..];
             match name {
-                Some(name) => self.blame_internal_routine(row, name, values, failure),
-                None => {
+                InternalName::Upper => {
                     let upper = row.name.to_ascii_uppercase();
                     self.blame_internal_routine(row, upper.as_bytes(), values, failure);
+                }
+                InternalName::Row => {
+                    self.blame_internal_routine(row, row.name.as_bytes(), values, failure);
+                }
+                InternalName::Called(name) => {
+                    self.blame_internal_routine(row, name, values, failure);
                 }
             }
         }
@@ -610,62 +689,26 @@ impl Interp {
         })
     }
 
-    /// Records `row`, called by `name` (its upcased row name where `None`)
-    /// with `values`, as a running internal level, answering its index.
-    fn push_internal_level(
-        &mut self,
-        row: &'static crate::internal_routines::InternalRoutine,
-        name: Option<&[u8]>,
-        values: &[Option<ObjRef>],
-    ) -> usize {
-        let caller = self.running_activation().map(|activation| activation.id);
-        let activity = &mut self.activity;
-        let level = crate::activity::InternalLevel {
-            caller,
-            row,
-            name: activity.internal_names.len(),
-            arguments: activity.internal_arguments.len(),
-        };
-        match name {
-            Some(name) => activity.internal_names.extend_from_slice(name),
-            None => activity
-                .internal_names
-                .extend(row.name.bytes().map(|byte| byte.to_ascii_uppercase())),
-        }
-        activity.internal_arguments.extend_from_slice(values);
-        activity.internal_levels.push(level);
-        activity.internal_levels.len() - 1
-    }
-
-    /// Ends the internal level at `index` and every level above it.
-    fn pop_internal_level(&mut self, index: usize) {
-        let activity = &mut self.activity;
-        if let Some(level) = activity.internal_levels.get(index) {
-            activity.internal_names.truncate(level.name);
-            activity.internal_arguments.truncate(level.arguments);
-            activity.internal_levels.truncate(index);
-        }
-    }
-
     /// [`Interp::begin_call_over_pushed_args`] with the run in hand.
     fn begin_call_over_values(
         &mut self,
         resolved: Resolved,
         name: &[u8],
-        values: &[Option<ObjRef>],
+        values: &mut Vec<Option<ObjRef>>,
+        mark: usize,
     ) -> Result<Started<ObjRef>, Failure> {
         if let Resolved::Internal(row) = resolved {
-            if let Some(handled) = self.call_checkpoint(name, values)? {
+            if let Some(handled) = self.call_checkpoint(name, &values[mark..])? {
                 return handled
                     .map(Started::Ran)
                     .ok_or_else(|| Raised::no_data_returned(name).into());
             }
-            return self.run_internal(row, values);
+            return self.run_internal(row, values, mark);
         }
         if let Resolved::LibraryRoutine(slot) = resolved {
-            let answered = match self.call_checkpoint(name, values)? {
+            let answered = match self.call_checkpoint(name, &values[mark..])? {
                 Some(handled) => Started::Ran(handled),
-                None => self.run_package_routine(slot, name, values)?,
+                None => self.run_package_routine(slot, name, &values[mark..])?,
             };
             return match answered {
                 Started::Ran(value) => value
@@ -678,6 +721,7 @@ impl Interp {
             resolved,
             name,
             values,
+            mark,
             CallType::Function,
             CallEntry::Written,
         )?;
@@ -749,11 +793,11 @@ impl Interp {
         &mut self,
         resolved: Resolved,
         name: &[u8],
-        arguments: Vec<Option<ObjRef>>,
+        mut arguments: Vec<Option<ObjRef>>,
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Ended, Failure> {
-        let begun = self.begin_call(resolved, name, &arguments, call_type, entry)?;
+        let begun = self.begin_call(resolved, name, &mut arguments, 0, call_type, entry)?;
         self.complete_call(begun)
     }
 
@@ -770,12 +814,14 @@ impl Interp {
 
     /// [`Interp::invoke_call_over`] up to the point its callee's body would
     /// run: the whole call for a callee that runs no activation, or the
-    /// activation pushed and the caller's level state saved.
+    /// activation pushed and the caller's level state saved. The arguments
+    /// are `arguments` from `from`.
     pub(crate) fn begin_call(
         &mut self,
         resolved: Resolved,
         name: &[u8],
-        arguments: &[Option<ObjRef>],
+        arguments: &mut Vec<Option<ObjRef>>,
+        from: usize,
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Begun, Failure> {
@@ -800,7 +846,7 @@ impl Interp {
         if matches!(
             resolved,
             Resolved::Library(_) | Resolved::External | Resolved::Unresolved
-        ) && let Some(handled) = self.call_checkpoint(name, arguments)?
+        ) && let Some(handled) = self.call_checkpoint(name, &arguments[from..])?
         {
             return Ok(Begun::Done(Ended::Returned(handled)));
         }
@@ -809,7 +855,7 @@ impl Interp {
         }
         if let Resolved::Library(program) = resolved {
             return self
-                .enter_library_program(program, Some(arguments.to_vec()))
+                .enter_library_program(program, Some(arguments[from..].to_vec()))
                 .map(|value| Begun::Done(Ended::Returned(value)));
         }
         // **And the external file ends here for the same reason**, which is
@@ -817,7 +863,7 @@ impl Interp {
         // a program, entered the way the command line's is.
         if let Resolved::External = resolved {
             return self
-                .enter_external_program(name, arguments.to_vec(), call_type)
+                .enter_external_program(name, arguments[from..].to_vec(), call_type)
                 .map(|value| Begun::Done(Ended::Returned(value)));
         }
 
@@ -826,23 +872,23 @@ impl Interp {
         // manager is asked.
         if let Resolved::MergedLibraryRoutine(code) = resolved {
             return self
-                .run_library_routine(code, name, arguments)
+                .run_library_routine(code, name, &arguments[from..])
                 .map(library_begun);
         }
         if let Resolved::MergedInternal(row) = resolved {
             return self
-                .run_internal_as(row, Some(name), arguments)
+                .run_internal_as(row, InternalName::Called(name), arguments, from)
                 .map(internal_begun);
         }
         if let Resolved::Routine(installed) = resolved {
             if let Some(code) = self.library_routine_code(installed) {
                 return self
-                    .run_library_routine(code, name, arguments)
+                    .run_library_routine(code, name, &arguments[from..])
                     .map(library_begun);
             }
             if let Some(row) = self.rexx_routine_row(installed) {
                 return self
-                    .run_internal_as(row, Some(name), arguments)
+                    .run_internal_as(row, InternalName::Called(name), arguments, from)
                     .map(internal_begun);
             }
         }
@@ -1050,7 +1096,7 @@ impl Interp {
         let saved_offset = std::mem::take(&mut self.activity.indent_offset);
         let saved_line = std::mem::take(&mut self.activity.clause_line_override);
         let inherited = entered_receiver(entered, entry, self.activity.call_context.receiver);
-        let arguments = self.shared_arguments(arguments);
+        let arguments = self.shared_arguments(&arguments[from..]);
         let name = self.activity.invocation_name(name);
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
@@ -1487,7 +1533,7 @@ impl Interp {
             Resolved::Internal(row) => match self.call_checkpoint(name, &values[mark..]) {
                 Ok(Some(handled)) => Ok(Started::Ran(Ended::Returned(handled))),
                 Ok(None) => self
-                    .run_internal(row, &values[mark..])
+                    .run_internal(row, &mut values, mark)
                     .map(|started| subroutine_started(internal_begun(started))),
                 Err(failure) => Err(failure),
             },
@@ -1502,7 +1548,8 @@ impl Interp {
                 .begin_call(
                     resolved,
                     name,
-                    &values[mark..],
+                    &mut values,
+                    mark,
                     CallType::Subroutine,
                     CallEntry::Written,
                 )

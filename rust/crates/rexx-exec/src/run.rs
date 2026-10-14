@@ -78,8 +78,8 @@ mod condition;
 // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
 mod call;
 pub(crate) use call::{
-    Begun, CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, function_started,
-    subroutine_started,
+    Begun, CallEntry, CallResolution, CallTail, InternalName, MAX_ACTIVATION_DEPTH, Started,
+    function_started, subroutine_started,
 };
 #[cfg(test)]
 use call::{Entered, entered_receiver};

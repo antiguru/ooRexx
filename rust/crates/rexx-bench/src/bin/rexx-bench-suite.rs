@@ -144,6 +144,10 @@ const AXES: &[Axis] = &[
         role: Role::SelfTimed,
     },
     Axis {
+        name: "intcall",
+        role: Role::Loop,
+    },
+    Axis {
         name: "nop",
         role: Role::Loop,
     },

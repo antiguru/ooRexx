@@ -573,7 +573,7 @@ pub(crate) fn call_routine_directly(
 fn begin_routine(
     interp: &mut Interp,
     receiver: ObjRef,
-    values: Vec<Option<ObjRef>>,
+    mut values: Vec<Option<ObjRef>>,
     name: &[u8],
 ) -> Result<NativeStarted, Failure> {
     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
@@ -609,7 +609,7 @@ fn begin_routine(
     };
     if let Some(row) = row {
         return interp
-            .run_internal_as(row, Some(row.name.as_bytes()), &values)
+            .run_internal_as(row, crate::run::InternalName::Row, &mut values, 0)
             .map(|started| match started {
                 Started::Ran(value) => NativeStarted::Ran(Some(value)),
                 Started::Entered => NativeStarted::Entered(Then::Pass),
@@ -623,7 +623,7 @@ fn begin_routine(
             .call_program_main(program, values, name)
             .map(NativeStarted::Ran);
     };
-    let started = interp.begin_installed_routine(program, directive, &values, name)?;
+    let started = interp.begin_installed_routine(program, directive, &mut values, name)?;
     // `.context~executable` inside answers the object the call came through:
     // measured, oracle rc 0, `r~call == r` and `r~copy~call == r~copy`.
     if let NativeStarted::Entered(_) = started {

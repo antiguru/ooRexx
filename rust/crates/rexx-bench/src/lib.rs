@@ -73,6 +73,9 @@ pub static PROGRAMS: &[&str] = &[
     // Added in the Phase 9a final review's fix: an environment symbol read
     // once the running package has a local, which searches that local first.
     "pkglocal",
+    // Added in Phase 9b1 Task 3's fix round: internal package routine calls,
+    // which push a stack-frame level around the routine's body.
+    "intcall",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does
