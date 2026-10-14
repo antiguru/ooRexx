@@ -18,7 +18,8 @@ s~objectName = 'named sub'
 call show 'subclass      ', s
 say 'subclass name' s~objectName pass(s)~objectName .array~of(s)[1]~objectName
 t = s; say 'subclass alias' t~objectName (t~identityHash == s~identityHash)
-say 'subclass two' (.mystr~new('abc')~identityHash == .mystr~new('abc')~identityHash)
+s1 = .mystr~new('abc'); s2 = .mystr~new('abc')
+say 'subclass two' (s1~identityHash == s2~identityHash)
 say 'subclass class' s~class~id (s == 'abc')
 
 m = .directory~new
@@ -28,7 +29,8 @@ e~objectName = 'named enh'
 call show 'enhanced      ', e
 say 'enhanced name' e~objectName pass(e)~objectName .array~of(e)[1]~objectName e~foo
 f = e; say 'enhanced alias' f~objectName f~foo (f~identityHash == e~identityHash)
-say 'enhanced two' (.String~enhanced(m, 'abc')~identityHash == .String~enhanced(m, 'abc')~identityHash)
+e1 = .String~enhanced(m, 'abc'); e2 = .String~enhanced(m, 'abc')
+say 'enhanced two' (e1~identityHash == e2~identityHash)
 exit
 
 show: procedure

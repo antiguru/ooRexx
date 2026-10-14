@@ -20,7 +20,8 @@
 //! whose match is inside a string literal:
 //!
 //! ```text
-//! grep -rnE --include=*.rs 'did not build|does not keep|is no longer live|is value-based' \
+//! grep -rnE --include=*.rs \
+//!     'did not build|does not keep|is no longer live|is value-based|this crate did not|this crate does not|this crate built' \
 //!     crates/*/src | grep -vE '/tests(\.rs:|/)'
 //! ```
 
@@ -33,11 +34,15 @@ const PHRASES: &[&str] = &[
     "does not keep",
     "is no longer live",
     "is value-based",
+    "this crate did not",
+    "this crate does not",
+    "this crate built",
 ];
 
 /// `(file:substring, owner)`: a literal in `file` (relative to `crates/`)
-/// containing `substring` is allowed. The owner is a permanent Deviation or the
-/// task of `docs/superpowers/plans/2026-10-14-phase-9b1.md` that removes it.
+/// containing `substring` is allowed. The owner is a permanent Deviation, the
+/// phase that owes the construct, or the task of
+/// `docs/superpowers/plans/2026-10-14-phase-9b1.md` that removes it.
 const ALLOWED: &[(&str, &str)] = &[
     (
         "rexx-exec/src/lib.rs:a metaclass NEW answering a class Class~new did not build",
@@ -54,6 +59,22 @@ const ALLOWED: &[(&str, &str)] = &[
     (
         "rexx-exec/src/dispatch/class_protocol.rs:a package object this crate did not build",
         "Task 4",
+    ),
+    (
+        "rexx-exec/src/lib.rs:a directory whose entries this crate does not fill",
+        "Phase 10",
+    ),
+    (
+        "rexx-exec/src/environment/identities.rs:a .ROUTINES entry that is not a routine this crate built",
+        "Deviation 28",
+    ),
+    (
+        "rexx-exec/src/dispatch/context.rs:a program this crate did not load",
+        "Task 6",
+    ),
+    (
+        "rexx-exec/src/dispatch/class_protocol.rs:a method object whose body this crate did not record",
+        "Task 7",
     ),
     (
         "rexx-exec/src/dispatch/class_protocol.rs:a method object this crate did not build",
@@ -105,6 +126,7 @@ const ALLOWED: &[(&str, &str)] = &[
 
 /// The owners a row may name.
 const OWNERS: &[&str] = &[
+    "Deviation 28",
     "Deviation 32",
     "Deviation 36",
     "Task 2",
@@ -114,6 +136,7 @@ const OWNERS: &[&str] = &[
     "Task 6",
     "Task 7",
     "Task 8",
+    "Phase 10",
 ];
 
 fn crates_dir() -> PathBuf {

@@ -152,3 +152,39 @@ No callgrind: no send, call, package-entry, allocation or collector path was tou
    hold the objectName= row the spec requires.
 3. `ALLOWED` keys rows by file and literal, not by line, so one row covers every site in a file with
    that text. Sites in one file with the same text all share one owner here.
+
+## Fix round 1
+
+Against `task-1-review.md` and the controller's Task 1 rulings in `progress.md`.
+
+* **Important 1:** `PHRASES` gains "this crate did not", "this crate does not" and "this crate
+  built". Four rows were added: `dispatch/context.rs` "a program this crate did not load" (Task 6),
+  `dispatch/class_protocol.rs` "a method object whose body this crate did not record" (Task 7),
+  `environment/identities.rs` "a .ROUTINES entry that is not a routine this crate built"
+  (Deviation 28), and `lib.rs` "a directory whose entries this crate does not fill" (Phase 10).
+  `OWNERS` gains "Deviation 28" and "Phase 10". The doc comment's grep carries the new phrases. Its
+  output, with comment lines removed, matches the rows one to one: the four new lines are the only
+  additions over the round-0 list, and the test passes, so no row is stale.
+  The reviewer's mutant m2 (a new literal "a routine whose body this crate did not record", appended
+  to `rexx-core/src/lib.rs`) now FAILS `every_representation_refusal_is_on_the_allow_list`. I
+  restored the file from a copy and `git diff --stat` came back empty.
+* **Q1:** the new objectName= wording stays, as ruled.
+* **Minor 1:** the witness holds both objects in variables (`s1`/`s2`, `e1`/`e2`). I re-ran it from
+  a fresh dir after a release build that printed `Compiling rexx-exec`. Oracle rc 0, crate rc 0, both
+  stderr 0 bytes, stdout `cmp`-identical, and `subclass two 0` and `enhanced two 0` both print. The
+  sourceline expectation was regenerated with the module's driver (`count 68`, which matches
+  `wc -l`).
+* **Minor 2:** Deviation 36's WeakReference item now says "(L1, fixed by Task 2 of
+  docs/superpowers/plans/2026-10-14-phase-9b1.md)".
+* **Minor 3:** Deviation 4 regains the ootest checkout (r13169 / r13178, 2026-08-15) and entry 59's
+  6.448% `strings` / 6.154% `rexxcps` figures, plus "SmallInt predates the whole question".
+
+Checks, from `rust/`, exits read unpiped, `...` = `CARGO_INCREMENTAL=0 timeout 600 memcap 8G`:
+
+| command | exit | result |
+|---|---|---|
+| `cargo fmt --all --check` | 0 | |
+| `... cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | 0 | |
+| `... cargo test -j 4 -p rexx-exec --no-fail-fast --test refusal_sites --test refusal_dispositions --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test licensed_divergences` | 0 | 8, 22, 6, 5, 3, 5, 3 passed |
+| `... cargo test -j 4 -p rexx-parse --test sourceline_oracle` | 0 | 1 passed |
+| `REXX_CORPUS_GATE=1 ... cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus --test collect_stress` | 0 | collect_stress 37 passed, corpus 29 passed 1 ignored |

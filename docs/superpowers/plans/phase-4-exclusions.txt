@@ -976,7 +976,9 @@ DEVIATIONS -- permanent, chosen
      (.superpowers/sdd/2026-10-14-phase-9b1/scout-deviations.md, "Task 2")
      re-measured the merge side on both interpreters. This crate merges an
      inline string of seven bytes or fewer and any integer inside +/-2^61
-     with every equal one.
+     with every equal one. The inline strings are entry 59, which improved
+     every benchmark axis, by 6.448% on `strings` and 6.154% on `rexxcps`.
+     `SmallInt` predates the whole question.
 
      `~identityHash` IS ADDRESS-DERIVED AND VARIES BETWEEN RUNS. Measured:
      `"abc"~identityHash` printed -140497609849889 and -139929843694625 on
@@ -989,9 +991,11 @@ DEVIATIONS -- permanent, chosen
      `CoreClasses.orx:1305` sets `numeric digits 18` before differencing two
      of them for exactly this reason.
 
-     THE L2 COST, measured at the checked-out suite.
-     `ooRexx/base/class/IdentityTable.testGroup` builds its whole fixture on
-     this property:
+     THE L2 COST, measured at the checked-out suite:
+     `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest`,
+     last changed r13169, working copy r13178, checked out 2026-08-15 at the
+     worktree root. `ooRexx/base/class/IdentityTable.testGroup` builds its
+     whole fixture on this property:
 
        indexes = .array~of("22", "2"||"2", .object~new, .array~new)
 
@@ -2074,7 +2078,8 @@ DEVIATIONS -- permanent, chosen
          an argument, a return, and storage in and retrieval from a
          collection;
        - a WeakReference to a value never clears while the value is
-         reachable;
+         reachable (L1, fixed by Task 2 of
+         docs/superpowers/plans/2026-10-14-phase-9b1.md);
        - a subclass instance (`.MyString~new`) and an enhanced string are
          ordinary objects with full identity, and accept `objectName=` and
          every other per-object operation.
