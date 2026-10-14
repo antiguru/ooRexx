@@ -26,7 +26,7 @@ fn an_operand_that_spells_an_integer_reads_as_that_integer() {
     }
 }
 use super::*;
-use crate::plan::{BodyKey, ProgramId};
+use crate::plan::BodyKey;
 use crate::{Activation, error::Failure};
 use rexx_parse::{InstructionKind, Program, parse_program};
 use std::rc::Rc;
@@ -42,8 +42,7 @@ use std::rc::Rc;
 /// helper rather than sharing one through `run`.
 fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
     let program = Rc::new(program);
-    let program_id = ProgramId(interp.programs.len());
-    interp.programs.push(Rc::clone(&program));
+    let program_id = interp.programs.insert(Rc::clone(&program));
     let plan = interp.plan_for(
         BodyKey {
             program: program_id,

@@ -2567,9 +2567,10 @@ impl Interp {
                     crate::GeneratedKind::Getter
                         | crate::GeneratedKind::Setter
                         | crate::GeneratedKind::Delegate
-                ) && self.programs[generated.program.0]
-                    .directives
-                    .get(generated.directive)
+                ) && self
+                    .programs
+                    .get(generated.program)
+                    .and_then(|program| program.directives.get(generated.directive))
                     .is_some_and(|directive| crate::guards::directive_guarded(&directive.kind))
             }
             Invocable::External(_) | Invocable::Library(_) => {
@@ -3135,7 +3136,9 @@ impl Interp {
 
     /// The variable a `DELEGATE` method addresses.
     fn delegate_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
-        let program = &self.programs[generated.program.0];
+        let Some(program) = self.programs.get(generated.program) else {
+            return Err(Loud::missing_body().into());
+        };
         let Some(directive) = program.directives.get(generated.directive) else {
             return Err(Loud::missing_body().into());
         };
@@ -3147,10 +3150,13 @@ impl Interp {
 
     /// The variable a generated accessor addresses.
     fn accessor_variable(&self, generated: crate::GeneratedMethod) -> Result<Box<[u8]>, Failure> {
-        let program = &self.programs[generated.program.0];
         // `get` rather than an index, and `None` rather than a panic, for the
         // reason `Interp::begin_method`'s own reads carry.
-        let Some(directive) = program.directives.get(generated.directive) else {
+        let Some(directive) = self
+            .programs
+            .get(generated.program)
+            .and_then(|program| program.directives.get(generated.directive))
+        else {
             return Err(Loud::missing_body().into());
         };
         let Some(variable) = crate::accessor_variable(&directive.kind) else {
@@ -3177,8 +3183,10 @@ impl Interp {
         name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<(), Failure> {
-        let program = Rc::clone(&self.programs[installed.program.0]);
-        // Both reads are `get`, not an index: an `InstalledMethodBody`
+        let Some(program) = self.programs.get(installed.program).map(Rc::clone) else {
+            return Err(Loud::missing_body().into());
+        };
+        // Every read is `get`, not an index: an `InstalledMethodBody`
         // always names a real directive with a body, but this crate's rule for an internal
         // inconsistency is a loud refusal rather than a panic, and
         // `body_of`'s own `?` already follows it.

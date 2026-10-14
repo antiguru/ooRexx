@@ -764,7 +764,7 @@ impl Interp {
 mod tests {
     use super::*;
     use crate::plan::{BodyKind, Plan};
-    use crate::{Activation, BodyKey, ProgramId};
+    use crate::{Activation, BodyKey};
     use rexx_num::{Form, Number};
     use rexx_parse::{ExprKind, InstructionKind, Program, parse_program};
     use std::rc::Rc;
@@ -778,8 +778,7 @@ mod tests {
     /// nothing here needs the frame released early.
     fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
         let program = Rc::new(program);
-        let program_id = ProgramId(interp.programs.len());
-        interp.programs.push(Rc::clone(&program));
+        let program_id = interp.programs.insert(Rc::clone(&program));
         let plan = interp.plan_for(
             BodyKey {
                 program: program_id,

@@ -1100,14 +1100,10 @@ impl Interp {
         if !self.routines_tables {
             return None;
         }
-        self.program_packages
-            .iter()
-            .flatten()
-            .copied()
-            .find(|package| {
-                self.package_data(*package)
-                    .is_some_and(|data| data.tables[PackageTable::Routines.index()] == Some(table))
-            })
+        self.programs.packages().find(|package| {
+            self.package_data(*package)
+                .is_some_and(|data| data.tables[PackageTable::Routines.index()] == Some(table))
+        })
     }
 
     /// [`Interp::package_string_table`] for a caller that is about to write an
@@ -1135,7 +1131,7 @@ impl Interp {
         // for a write, which is where `~addRoutine` files its routines.
         let entries = match data.program {
             Some(program) if !self.untranslated.contains(&program) => {
-                let source = std::rc::Rc::clone(self.programs.get(program.0)?);
+                let source = std::rc::Rc::clone(self.programs.get(program)?);
                 package_table_entries(program, &source, kind)
             }
             _ => Vec::new(),
@@ -1457,7 +1453,7 @@ impl Interp {
 fn package_root_key(package: Package) -> String {
     match package {
         Package::Rexx => "the REXX package".to_string(),
-        Package::Program(ProgramId(id)) => format!("the package of program {id}"),
+        Package::Program(id) => format!("the package of program {id}"),
     }
 }
 

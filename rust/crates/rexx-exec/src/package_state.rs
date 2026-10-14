@@ -18,7 +18,7 @@ use rexx_core::NameMap;
 use rustc_hash::FxHashMap;
 
 use crate::options::PackageOptions;
-use crate::plan::{Package, ProgramId};
+use crate::plan::{Package, ProgramHold, ProgramId};
 use crate::{Interp, MergedRoutine};
 
 /// One package's fields. A copy is a field copy holding the same program.
@@ -27,6 +27,9 @@ pub(crate) struct PackageData {
     /// The program the package was compiled from, `None` for the REXX
     /// package. Every copy of a package holds the same one.
     pub(crate) program: Option<ProgramId>,
+    /// What keeps [`PackageData::program`] loaded, `None` for the REXX
+    /// package. Every copy holds it.
+    pub(crate) hold: Option<ProgramHold>,
     /// What `::OPTIONS` directives and `Package~options` writes left on the
     /// package, `None` where neither has.
     pub(crate) options: Option<PackageOptions>,
@@ -90,6 +93,7 @@ impl PackageFields for PackageData {
     fn trace(&self, out: &mut Vec<ObjRef>) {
         let PackageData {
             program: _,
+            hold: _,
             options: _,
             initial_options: _,
             security_manager,
@@ -156,7 +160,7 @@ impl Interp {
     /// been built.
     #[inline]
     pub(crate) fn program_package(&self, program: ProgramId) -> Option<ObjRef> {
-        self.program_packages.get(program.0).copied().flatten()
+        self.programs.package(program)
     }
 
     /// `package`'s fields, or `None` for an object that is not a package.

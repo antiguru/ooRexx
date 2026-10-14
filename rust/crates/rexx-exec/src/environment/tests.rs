@@ -272,7 +272,8 @@ fn every_directory_method_answers_on_both_directories_as_on_a_copy() {
 #[test]
 fn a_class_search_from_a_program_refuses_an_owed_entry() {
     let mut interp = Interp::new();
-    let program = ProgramId(0);
+    let parsed = rexx_parse::parse_program(b"nop\n".to_vec()).expect("it parses");
+    let program = interp.programs.insert(std::rc::Rc::new(parsed));
     let package = interp
         .package_object(Package::Program(program))
         .expect("a fresh program's package");

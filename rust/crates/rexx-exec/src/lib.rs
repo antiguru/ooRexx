@@ -1304,8 +1304,9 @@ struct Interp {
     /// The counter `RexxContext~invocation` mints from --
     /// `RexxActivation.cpp:94`'s file-scope `counter`.
     next_invocation: u32,
-    /// Every program the loader has issued an id for, indexed by that id.
-    programs: Vec<Rc<Program>>,
+    /// Every loaded program and the object standing for its package. A
+    /// program is freed at the collection after its last package object goes.
+    programs: plan::Programs,
     /// What `.Package~defaultOptions` writes keep.
     option_writes: crate::options::OptionWrites,
     /// Whether any package has ever carried a security manager, which is
@@ -1324,7 +1325,7 @@ struct Interp {
     /// the program between them.
     plans: NameMap<BodyKey, Rc<Plan>>,
     /// The entry of `plans` `Interp::plan_for` answered last, which it asks
-    /// ahead of the map: `plans` only inserts, so the entry stays right.
+    /// ahead of the map. Cleared with the rows of a freed program.
     last_plan: Option<(BodyKey, Rc<Plan>)>,
     /// The wall-clock bound `Interp::count_clause_against_deadline` honours,
     /// or `None` for the unbounded run every shipped caller asks for.
@@ -1395,9 +1396,6 @@ struct Interp {
     empty_arguments: Rc<[Option<ObjRef>]>,
     /// The REXX package's object, once built.
     rexx_package: Option<ObjRef>,
-    /// The package object `~package` answers for each program's code, by
-    /// [`ProgramId`], once built. A copy of a package is not here.
-    program_packages: Vec<Option<ObjRef>>,
     /// The one `Routine` object standing for each installed routine.
     routine_objects: FxHashMap<InstalledRoutine, ObjRef>,
     /// The one `Routine` object standing for each library routine an
@@ -1779,6 +1777,19 @@ pub(crate) struct ExecutableRecord {
     pub(crate) routine: Option<(ProgramId, usize)>,
 }
 
+impl ExecutableRecord {
+    /// Whether this record names a program `dead` answers for.
+    fn names_program(&self, dead: impl Fn(&ProgramId) -> bool) -> bool {
+        let source = match &self.source {
+            ExecutableSource::Directive { program, .. }
+            | ExecutableSource::Main { program }
+            | ExecutableSource::External { program } => Some(program),
+            ExecutableSource::Native | ExecutableSource::Loaded { .. } => None,
+        };
+        source.is_some_and(&dead) || self.routine.is_some_and(|(program, _)| dead(&program))
+    }
+}
+
 /// What a `Method` or `Routine` object's own readers report on -- its seven
 /// flags, its `~source` and its `~package`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -2115,7 +2126,7 @@ impl Interp {
             library_search: library_search_of(&env),
             env,
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
-            programs: Vec::new(),
+            programs: plan::Programs::default(),
             option_writes: crate::options::OptionWrites::default(),
             security_armed: false,
             options_armed: false,
@@ -2144,7 +2155,6 @@ impl Interp {
             class_packages: FxHashMap::default(),
             empty_arguments: Rc::from(&[][..]),
             rexx_package: None,
-            program_packages: Vec::new(),
             routine_objects: FxHashMap::default(),
             library_routine_objects: FxHashMap::default(),
             internal_routine_objects: vec![None; internal_routines::INTERNAL_ROUTINES.len()],
@@ -2243,8 +2253,7 @@ impl Interp {
     /// the activation down again.
     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::new(program);
-        let program_id = ProgramId(self.programs.len());
-        self.programs.push(Rc::clone(&program));
+        let program_id = self.programs.insert(Rc::clone(&program));
         self.run_loaded(program, program_id, CallType::Command, None, None)
     }
 
@@ -2321,8 +2330,7 @@ impl Interp {
         let caller = self
             .running_activation()
             .map(|activation| activation.program_id);
-        let program_id = ProgramId(self.programs.len());
-        self.programs.push(Rc::clone(&parsed));
+        let program_id = self.programs.insert(Rc::clone(&parsed));
         // Its own path, so the callee's `PARSE SOURCE`, `~package~name` and
         // traceback name the file rather than the program that called it.
         self.required_paths
@@ -2379,8 +2387,7 @@ impl Interp {
             }
         };
         let parsed = Rc::new(parsed);
-        let program_id = ProgramId(self.programs.len());
-        self.programs.push(Rc::clone(&parsed));
+        let program_id = self.programs.insert(Rc::clone(&parsed));
         // `rexx_package_class` searches this list, so a new library package
         // can turn a miss into a hit and shadow an earlier answer.
         self.invalidate_rexx_class_cache();
@@ -2530,7 +2537,9 @@ impl Interp {
         {
             return Err(Raised::insufficient_stack().into());
         }
-        let program = Rc::clone(&self.programs[program_id.0]);
+        let Some(program) = self.programs.get(program_id).map(Rc::clone) else {
+            return Err(Loud::missing_body().into());
+        };
         let address = self.activation().address.clone();
         let settings = self.activation().settings.clone();
         let saved = std::mem::replace(
@@ -2567,7 +2576,7 @@ impl Interp {
         // Note what does *not* happen here: the plan is looked up through
         // `&program.main`, a borrow of the local `Rc`, while `self` is
         // borrowed mutably by `plan_for`. Reaching the same body through
-        // `self.programs[id.0].main` instead would be the `E0502` that
+        // `self.programs`' own `main` instead would be the `E0502` that
         // `run_activation` writes out.
         let plan = self.plan_for(
             BodyKey {
@@ -2920,6 +2929,8 @@ impl Interp {
             result_buffer: _,
             next_activation_id: _,
             next_invocation: _,
+            // A package handle per program, not a root: the package lives
+            // while something reaches it, and its program goes with it.
             programs: _,
             option_writes: _,
             security_armed: _,
@@ -2973,7 +2984,6 @@ impl Interp {
             // reaches it and by `Interp::package_roots`. A package's body
             // traces every object its fields hold.
             rexx_package: _,
-            program_packages: _,
             // Rooted by the `.ROUTINES` table each entry is also in.
             routine_objects: _,
             // `RootSet::add_global`, under `library_routine_root_key`.
@@ -3150,12 +3160,14 @@ impl Interp {
         });
         self.activities
             .prune_senders(|message| heap.peek(message).is_some());
-        let packages = &self.program_packages;
+        let freed = self.programs.free_unheld();
+        if !freed.is_empty() {
+            self.prune_program_rows(&freed);
+        }
+        let (heap, programs) = (&self.heap, &self.programs);
         self.required_packages.retain(|_, program| {
-            packages
-                .get(program.0)
-                .copied()
-                .flatten()
+            programs
+                .package(*program)
                 .is_some_and(|package| heap.peek(package).is_some())
         });
         // A sweep can free a class the registry named, which unlinks its row
@@ -3193,6 +3205,84 @@ impl Interp {
         self.collect_due = self.stress_collect || self.sim_collects_at_random();
         #[cfg(feature = "sharing")]
         self.heap.sharing_pause(false);
+    }
+
+    /// Drops every row that names one of the `freed` programs.
+    #[cold]
+    #[inline(never)]
+    fn prune_program_rows(&mut self, freed: &[ProgramId]) {
+        let freed: rustc_hash::FxHashSet<ProgramId> = freed.iter().copied().collect();
+        let dead = |program: &ProgramId| freed.contains(program);
+        self.plans.retain(|key, _| !dead(&key.program));
+        if self
+            .last_plan
+            .as_ref()
+            .is_some_and(|(key, _)| dead(&key.program))
+        {
+            self.last_plan = None;
+        }
+        self.chunks.retain(|(key, _), _| !dead(&key.program));
+        self.compiled_method_names
+            .retain(|program, _| !dead(program));
+        self.required_paths.retain(|program, _| !dead(program));
+        self.untranslated.retain(|program| !dead(program));
+        self.required_packages.retain(|_, program| !dead(program));
+        let mut methods = rustc_hash::FxHashSet::default();
+        self.method_bodies.retain(|method, body| {
+            let keep = !dead(&body.program);
+            if !keep {
+                methods.insert(*method);
+            }
+            keep
+        });
+        self.generated_methods.retain(|method, generated| {
+            let keep = !dead(&generated.program);
+            if !keep {
+                methods.insert(*method);
+            }
+            keep
+        });
+        self.external_packages.retain(|method, program| {
+            let keep = !dead(program);
+            if !keep {
+                methods.insert(*method);
+            }
+            keep
+        });
+        if !methods.is_empty() {
+            self.executable_objects
+                .retain(|method, _| !methods.contains(method));
+            self.native_externals
+                .retain(|method, _| !methods.contains(method));
+            self.library_externals
+                .retain(|method, _| !methods.contains(method));
+            self.guarded_externals
+                .retain(|method| !methods.contains(method));
+        }
+        self.routine_objects
+            .retain(|installed, _| !dead(&installed.program));
+        self.library_routine_codes
+            .retain(|installed, _| !dead(&installed.program));
+        self.rexx_routine_rows
+            .retain(|installed, _| !dead(&installed.program));
+        self.executable_sources
+            .retain(|_, record| !record.names_program(dead));
+        let mut unrooted = Vec::new();
+        self.annotations.retain(|site, _| {
+            let program = match site {
+                environment::Annotated::Package(Package::Program(program))
+                | environment::Annotated::Unattached(program, _)
+                | environment::Annotated::Routine(program, _) => program,
+                _ => return true,
+            };
+            if dead(program) {
+                unrooted.push(site.clone());
+            }
+            !dead(program)
+        });
+        for site in unrooted {
+            self.unroot_annotation_table(&site);
+        }
     }
 
     /// Flags a class carrying a class-side `UNINIT` so the collector

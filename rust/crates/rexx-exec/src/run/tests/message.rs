@@ -229,7 +229,7 @@ fn a_trap_handler_and_an_internal_call_do_not_carry_the_same_receiver() {
     let caller = ObjRef::small_int(7).expect("7 fits the tag");
     let label = Entered::Label(0);
     let routine = Entered::Routine(crate::InstalledRoutine {
-        program: ProgramId(0),
+        program: ProgramId::nth(0),
         directive: 0,
     });
 

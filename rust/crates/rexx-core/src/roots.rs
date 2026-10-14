@@ -134,6 +134,11 @@ impl RootSet {
         }
     }
 
+    /// Drops the global root `name`, if there is one.
+    pub fn remove_global(&mut self, name: &str) {
+        self.globals.remove(name);
+    }
+
     /// The running activity's roots.
     #[inline(always)]
     pub fn activity(&self) -> &ActivityRoots {

@@ -857,8 +857,7 @@ mod tests {
         use std::rc::Rc;
 
         let program = Rc::new(rexx_parse::parse_program(Vec::new()).expect("the empty program"));
-        let program_id = crate::plan::ProgramId(interp.programs.len());
-        interp.programs.push(Rc::clone(&program));
+        let program_id = interp.programs.insert(Rc::clone(&program));
         let plan = interp.plan_for(
             crate::plan::BodyKey {
                 program: program_id,

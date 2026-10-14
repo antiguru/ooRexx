@@ -468,9 +468,10 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             // package table, and is its own executable: measured, oracle rc
             // 0, `.routine~new('r', 'return .context~executable~class~id')~call`
             // answers `Routine`.
-            let synthetic = interp.programs[program.0]
-                .directives
-                .get(directive)
+            let synthetic = interp
+                .programs
+                .get(program)
+                .and_then(|source| source.directives.get(directive))
                 .is_some_and(|declared| declared.clause_span.is_empty());
             if synthetic && let Some(object) = routine_object_running(interp, program, directive) {
                 return Ok(object);
@@ -509,9 +510,10 @@ fn routine_entry_name(
     program: ProgramId,
     directive: usize,
 ) -> Result<Vec<u8>, Failure> {
-    let source = interp.programs.get(program.0).ok_or_else(|| {
-        Failure::from(Loud::unknown_receiver("a program this crate did not load"))
-    })?;
+    let source = interp
+        .programs
+        .get(program)
+        .ok_or_else(|| Failure::from(Loud::missing_body()))?;
     match source.directives.get(directive).map(|found| &found.kind) {
         Some(rexx_parse::DirectiveKind::Routine(routine)) => Ok(routine.name.to_ascii_uppercase()),
         _ => Err(Loud::unknown_receiver("a routine activation with no directive").into()),
@@ -1022,7 +1024,7 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
 fn trace_line_text(interp: &Interp, snapshot: &Snapshot) -> Vec<u8> {
     let text = interp
         .programs
-        .get(snapshot.program.0)
+        .get(snapshot.program)
         .and_then(|program| {
             let span = crate::activation::body_of(program, snapshot.body)?
                 .instructions

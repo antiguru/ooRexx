@@ -37,8 +37,10 @@ fn the_object_model_is_built_on_first_use() {
 fn a_program_with_no_send_and_no_class_never_builds_the_object_model() {
     let mut interp = Interp::new();
     let program = rexx_parse::parse_program(b"say 1 + 1\n".to_vec()).expect("it parses");
+    let program = std::rc::Rc::new(program);
+    let id = interp.programs.insert(std::rc::Rc::clone(&program));
     interp
-        .install_directives(crate::ProgramId(0), &std::rc::Rc::new(program))
+        .install_directives(id, &program)
         .expect("no directives to install");
     assert!(interp.object_model.is_none());
 }
@@ -1169,7 +1171,7 @@ fn a_refused_send_reaches_unknown_and_the_unknown_lookup_is_not_checked() {
 /// than passing both refusals.
 #[test]
 fn package_scope_refuses_a_caller_from_another_package() {
-    let method_package = Package::Program(crate::ProgramId(0));
+    let method_package = Package::Program(crate::ProgramId::nth(0));
     assert_eq!(
         Interp::check_package(method_package, no_caller()),
         Err(Miss::PackageScope),
@@ -1180,7 +1182,7 @@ fn package_scope_refuses_a_caller_from_another_package() {
             method_package,
             Caller {
                 receiver: None,
-                package: CallerPackage::Package(Package::Program(crate::ProgramId(1))),
+                package: CallerPackage::Package(Package::Program(crate::ProgramId::nth(1))),
             },
         ),
         Err(Miss::PackageScope),
@@ -1202,7 +1204,7 @@ fn package_scope_refuses_a_caller_from_another_package() {
             Package::Rexx,
             Caller {
                 receiver: None,
-                package: CallerPackage::Package(Package::Program(crate::ProgramId(0))),
+                package: CallerPackage::Package(Package::Program(crate::ProgramId::nth(0))),
             },
         ),
         Err(Miss::PackageScope),
@@ -2181,8 +2183,7 @@ fn interp_awaiting_a_class_uninit() -> Interp {
     // The id `install_directives` is given has to name a program in
     // `Interp::programs`, which is what `Interp::run` pushes before it
     // installs anything; without it a finalizer's body cannot be reached.
-    let id = crate::ProgramId(interp.programs.len());
-    interp.programs.push(Rc::clone(&program));
+    let id = interp.programs.insert(Rc::clone(&program));
     interp
         .install_directives(id, &program)
         .expect("the directives install");

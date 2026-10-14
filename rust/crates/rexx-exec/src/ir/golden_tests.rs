@@ -1326,7 +1326,7 @@ fn the_instruction_map_has_an_entry_one_past_the_last_instruction() {
 fn chunk_for_compiles_a_body_once_across_repeated_lookups() {
     let program = parse_program(b"say 1\n".to_vec()).expect("test program parses");
     let key = BodyKey {
-        program: ProgramId(0),
+        program: ProgramId::nth(0),
         directive: None,
     };
     let plan = Plan::build(
@@ -1369,7 +1369,7 @@ fn chunk_for_compiles_a_body_once_across_repeated_lookups() {
 fn one_body_under_two_trace_settings_is_two_cached_chunks() {
     let program = parse_program(b"if 1 = 1 then say 1\n".to_vec()).expect("test program parses");
     let key = BodyKey {
-        program: ProgramId(0),
+        program: ProgramId::nth(0),
         directive: None,
     };
     let plan = Plan::build(

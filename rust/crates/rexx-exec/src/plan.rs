@@ -18,16 +18,182 @@
 use crate::Interp;
 use crate::run::{NameShape, shape_of};
 use crate::trace::{ChunkTrace, TraceEvent};
+use rexx_core::ObjRef;
 use rexx_parse::{
     Call, CallTarget, CodeBody, DirectiveKind, Expr, ExprKind, Fragment, Instruction,
-    InstructionKind, Loop, LoopKind, Parse, ParseSource, ProgramSource, Redirection, Signal,
-    SymbolId, SymbolTable, Tail, Trace, Use, VariableRef, compound_parts,
+    InstructionKind, Loop, LoopKind, Parse, ParseSource, Program, ProgramSource, Redirection,
+    Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef, compound_parts,
 };
 use std::rc::Rc;
 
-/// A loaded program's identity.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub(crate) struct ProgramId(pub(crate) usize);
+/// A loaded program's identity: a slot of [`Programs`] and the generation it
+/// was issued under. Never reused, so an id whose program was freed misses.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct ProgramId {
+    slot: u32,
+    generation: u32,
+}
+
+impl std::hash::Hash for ProgramId {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(u64::from(self.generation) << 32 | u64::from(self.slot));
+    }
+}
+
+impl std::fmt::Display for ProgramId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.slot, self.generation)
+    }
+}
+
+impl ProgramId {
+    /// The id the `slot`th program loaded into a fresh interpreter gets.
+    #[cfg(test)]
+    pub(crate) const fn nth(slot: u32) -> ProgramId {
+        ProgramId {
+            slot,
+            generation: 0,
+        }
+    }
+
+    /// The slot this id names.
+    #[cfg(test)]
+    pub(crate) fn slot_index(self) -> u32 {
+        self.slot
+    }
+}
+
+/// A package object's hold on its program. The program is freed at the first
+/// collection after the last hold is dropped.
+#[derive(Clone, Debug)]
+pub(crate) struct ProgramHold(#[allow(dead_code)] Rc<ProgramId>);
+
+/// One slot of [`Programs`].
+struct ProgramSlot {
+    generation: u32,
+    program: Option<Rc<Program>>,
+    /// The object standing for the program's package, once built.
+    package: Option<ObjRef>,
+    /// The holds of every package object over this program, once one is
+    /// built. A program no package object was built for is never freed.
+    holds: Option<std::rc::Weak<ProgramId>>,
+}
+
+/// Every program the loader has issued an id for, and what stands for each
+/// one's package. A freed slot is reused under the next generation.
+#[derive(Default)]
+pub(crate) struct Programs {
+    slots: Vec<ProgramSlot>,
+    free: Vec<u32>,
+    live: usize,
+    /// Every id [`Programs::insert`] issued, in order.
+    #[cfg(test)]
+    pub(crate) issued: Vec<ProgramId>,
+}
+
+impl Programs {
+    /// Files `program` under a fresh id.
+    pub(crate) fn insert(&mut self, program: Rc<Program>) -> ProgramId {
+        self.live += 1;
+        let id = if let Some(slot) = self.free.pop() {
+            let held = &mut self.slots[slot as usize];
+            held.program = Some(program);
+            ProgramId {
+                slot,
+                generation: held.generation,
+            }
+        } else {
+            let slot = u32::try_from(self.slots.len()).expect("fewer than 2^32 program slots");
+            self.slots.push(ProgramSlot {
+                generation: 0,
+                program: Some(program),
+                package: None,
+                holds: None,
+            });
+            ProgramId {
+                slot,
+                generation: 0,
+            }
+        };
+        #[cfg(test)]
+        self.issued.push(id);
+        id
+    }
+
+    #[inline]
+    fn slot(&self, id: ProgramId) -> Option<&ProgramSlot> {
+        self.slots
+            .get(id.slot as usize)
+            .filter(|held| held.generation == id.generation)
+    }
+
+    /// The program `id` names, or `None` once it has been freed.
+    #[inline]
+    pub(crate) fn get(&self, id: ProgramId) -> Option<&Rc<Program>> {
+        self.slot(id)?.program.as_ref()
+    }
+
+    /// How many programs are loaded.
+    pub(crate) fn len(&self) -> usize {
+        self.live
+    }
+
+    /// The object standing for `id`'s package, or `None` before one is built
+    /// and once the program is freed.
+    #[inline]
+    pub(crate) fn package(&self, id: ProgramId) -> Option<ObjRef> {
+        self.slot(id)?.package
+    }
+
+    /// Every built package object standing for a loaded program.
+    pub(crate) fn packages(&self) -> impl Iterator<Item = ObjRef> + '_ {
+        self.slots.iter().filter_map(|held| held.package)
+    }
+
+    /// Records `package` as the object standing for `id`'s package, and
+    /// answers the hold it keeps on the program. `None` for a freed `id`.
+    pub(crate) fn set_package(&mut self, id: ProgramId, package: ObjRef) -> Option<ProgramHold> {
+        let held = self
+            .slots
+            .get_mut(id.slot as usize)
+            .filter(|held| held.generation == id.generation && held.program.is_some())?;
+        let hold = Rc::new(id);
+        held.package = Some(package);
+        held.holds = Some(Rc::downgrade(&hold));
+        Some(ProgramHold(hold))
+    }
+
+    /// Frees every program whose package objects have all been dropped, and
+    /// answers their ids.
+    pub(crate) fn free_unheld(&mut self) -> Vec<ProgramId> {
+        let mut freed = Vec::new();
+        for (slot, held) in self.slots.iter_mut().enumerate() {
+            if held.program.is_none()
+                || held
+                    .holds
+                    .as_ref()
+                    .is_none_or(|holds| holds.strong_count() > 0)
+            {
+                continue;
+            }
+            freed.push(ProgramId {
+                slot: slot as u32,
+                generation: held.generation,
+            });
+            held.program = None;
+            held.package = None;
+            held.holds = None;
+            self.live -= 1;
+            // A slot whose generation would overflow is retired, not reused.
+            if let Some(next) = held.generation.checked_add(1) {
+                held.generation = next;
+                self.free.push(slot as u32);
+            }
+        }
+        freed
+    }
+}
 
 /// Which package something belongs to.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -757,7 +923,7 @@ impl Interp {
         };
         let kind = self
             .programs
-            .get(key.program.0)
+            .get(key.program)
             .and_then(|program| program.directives.get(index))
             .map(|directive| &directive.kind);
         match kind {

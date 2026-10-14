@@ -61,10 +61,6 @@ const ALLOWED: &[(&str, &str)] = &[
         "Deviation 28",
     ),
     (
-        "rexx-exec/src/dispatch/context.rs:a program this crate did not load",
-        "Task 6",
-    ),
-    (
         "rexx-exec/src/dispatch/class_protocol.rs:a method object whose body this crate did not record",
         "Task 7",
     ),
@@ -127,7 +123,6 @@ const OWNERS: &[&str] = &[
     "Deviation 28",
     "Deviation 32",
     "Deviation 36",
-    "Task 6",
     "Task 7",
     "Task 8",
     "Phase 10",

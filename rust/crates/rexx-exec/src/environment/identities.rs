@@ -173,6 +173,16 @@ impl Interp {
             Package::Rexx => self.rexx_package,
             Package::Program(program) => self.program_package(program),
         };
+        if let Package::Program(program) = package {
+            let loaded = self.programs.get(program).is_some();
+            debug_assert!(
+                loaded,
+                "{package:?}'s package was asked for after its program was freed"
+            );
+            if !loaded {
+                return Err(Loud::unknown_receiver("a package whose program was freed").into());
+            }
+        }
         if let Some(found) = built {
             let live = self.heap.get(found).is_some();
             debug_assert!(
@@ -213,12 +223,12 @@ impl Interp {
                 self.roots.add_global(&package_root_key(package), object);
                 self.rexx_package = Some(object);
             }
-            Package::Program(ProgramId(program)) => {
+            Package::Program(program) => {
                 self.roots.activity_mut().push_temp(object);
-                if self.program_packages.len() <= program {
-                    self.program_packages.resize(program + 1, None);
+                let hold = self.programs.set_package(program, object);
+                if let Some(data) = self.package_data_mut(object) {
+                    data.hold = hold;
                 }
-                self.program_packages[program] = Some(object);
             }
         }
         self.attach_annotations(object, Annotated::Package(package));
@@ -349,9 +359,10 @@ impl Interp {
         let object = self.native_instance(method_class);
         // A body compiled from source text is a synthetic directive, whose
         // object reports on the whole of its program.
-        let synthetic = self.programs[body.program.0]
-            .directives
-            .get(body.directive)
+        let synthetic = self
+            .programs
+            .get(body.program)
+            .and_then(|program| program.directives.get(body.directive))
             .is_some_and(|directive| directive.clause_span.is_empty());
         let source = match method {
             _ if synthetic => crate::ExecutableSource::Main {
@@ -382,9 +393,10 @@ impl Interp {
         // A class's own member, or else a table of its own: a `.nil` scope
         // names no class to key one by.
         let site = if self.heap.is_class(scope) {
-            let class_side = match self.programs[body.program.0]
-                .directives
-                .get(body.directive)
+            let class_side = match self
+                .programs
+                .get(body.program)
+                .and_then(|program| program.directives.get(body.directive))
                 .map(|directive| &directive.kind)
             {
                 Some(rexx_parse::DirectiveKind::Method(method)) => method.class_method,
@@ -705,19 +717,26 @@ impl Interp {
         }
         let table = crate::dispatch::hash::new_string_table(self)
             .expect("StringTable is not an abstract class");
-        // A class-owned site is held by its class and a program package's by
-        // the package object, which `attach_annotations` hands it to before
-        // anything allocates, so the table dies with its holder. Every other
-        // site keeps the global root.
+        // A class-owned site is held by its class, and a program package's
+        // and a compiled method's by the object `attach_annotations` hands it
+        // to before anything allocates, so the table dies with its holder.
+        // Every other site keeps the global root.
         match site {
             Annotated::Class(owner) | Annotated::Member(owner, _, _) => {
                 self.class_owns(owner, table);
             }
             Annotated::Package(Package::Program(_)) => {}
+            // Counted afresh for each object, so no later ask names it.
+            Annotated::Compiled(_) => return table,
             _ => self.roots.add_global(&annotation_root_key(&site), table),
         }
         self.annotations.insert(site, table);
         table
+    }
+
+    /// Drops the global root [`Interp::annotation_table`] gave `site`'s table.
+    pub(crate) fn unroot_annotation_table(&mut self, site: &Annotated) {
+        self.roots.remove_global(&annotation_root_key(site));
     }
 
     /// Records what one `::ANNOTATE` directive named, under every key that
@@ -1255,11 +1274,11 @@ fn annotation_root_key(site: &Annotated) -> String {
             String::from_utf8_lossy(name),
             class.bits()
         ),
-        Annotated::Unattached(ProgramId(program), name) => format!(
+        Annotated::Unattached(program, name) => format!(
             "annotations of the unattached method {} of program {program}",
             String::from_utf8_lossy(name)
         ),
-        Annotated::Routine(ProgramId(program), directive) => {
+        Annotated::Routine(program, directive) => {
             format!("annotations of the routine at directive {directive} of program {program}")
         }
         Annotated::LibraryRoutine(code) => {

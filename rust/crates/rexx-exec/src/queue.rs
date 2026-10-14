@@ -69,7 +69,7 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::{BodyKey, ProgramId};
+    use crate::plan::BodyKey;
     use crate::{Activation, Interp};
     use rexx_parse::{Program, parse_program};
     use std::rc::Rc;
@@ -136,8 +136,7 @@ mod tests {
     /// own rather than exporting one for every caller to share.
     fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
         let program = Rc::new(program);
-        let program_id = ProgramId(interp.programs.len());
-        interp.programs.push(Rc::clone(&program));
+        let program_id = interp.programs.insert(Rc::clone(&program));
         let plan = interp.plan_for(
             BodyKey {
                 program: program_id,

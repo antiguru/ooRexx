@@ -10,7 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 use super::super::dispatch;
-use crate::plan::{BodyKey, ProgramId};
+use crate::plan::BodyKey;
 use crate::{Activation, Interp, error::Failure};
 use rexx_parse::parse_program;
 use std::rc::Rc;
@@ -22,8 +22,7 @@ use std::rc::Rc;
 fn interp_with(digits: &str, form: &str, fuzz: &str) -> Interp {
     let mut interp = Interp::new();
     let program = Rc::new(parse_program(b"nop".to_vec()).expect("a NOP program parses"));
-    let program_id = ProgramId(interp.programs.len());
-    interp.programs.push(Rc::clone(&program));
+    let program_id = interp.programs.insert(Rc::clone(&program));
     let plan = interp.plan_for(
         BodyKey {
             program: program_id,

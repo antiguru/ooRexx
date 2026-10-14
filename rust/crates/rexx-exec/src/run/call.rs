@@ -1049,7 +1049,10 @@ impl Interp {
                 // activation's own `Rc`, so the plan's cache key and the
                 // activation's program are the same program by construction
                 // (`InstalledRoutine`'s own doc).
-                let routine_program = Rc::clone(&self.programs[installed.program.0]);
+                let Some(routine_program) = self.programs.get(installed.program).map(Rc::clone)
+                else {
+                    return Err(Loud::missing_body().into());
+                };
                 let Some(body) = body_of(&routine_program, Some(installed.directive)) else {
                     return Err(Loud::missing_body().into());
                 };

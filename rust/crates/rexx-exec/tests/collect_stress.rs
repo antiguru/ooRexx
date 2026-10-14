@@ -1566,3 +1566,71 @@ fn an_external_routines_merged_routine_is_found() {
         "e7 0 ext5.rex\n",
     );
 }
+
+/// A held `StackFrame` keeps the program of the `Method` it ran, after every
+/// other reference to the method is dropped. Measured, oracle rc 0, with a
+/// 300-pass loop of `copies('x', 100000)` in place of the filler.
+#[test]
+fn a_held_stack_frame_keeps_its_program() {
+    assert_stress_prints(
+        "<held-frame-program>",
+        concat!(
+            "do i = 1 to 3\n",
+            "  m = .Method~new('m' i, ('x = ' i, 'return .context~stackFrames'))\n",
+            "  frames = .runner~new~go(m)\n",
+            "  drop m\n",
+            "end\n",
+            "do i = 1 to 3\n",
+            "  zj = copies('x', 1000)\n",
+            "end\n",
+            "f = frames[1]\n",
+            "e = f~executable\n",
+            "say 'frame' f~name f~line f~traceline\n",
+            "say 'executable' e~class~id e~source~items e~source[1] e~package~sourceline(1)\n",
+            "say 'runs' .runner~new~go(e)[1]~traceline\n",
+            "::class runner\n",
+            "::method go\n",
+            "  use arg m\n",
+            "  return self~run(m)\n",
+        ),
+        concat!(
+            "frame *UNNAMED* 2      2 *-* return .context~stackFrames\n",
+            "executable Method 2 x =  3 x =  3\n",
+            "runs      2 *-* return .context~stackFrames\n",
+        ),
+    );
+}
+
+/// A running `Method` or `Routine` keeps its program, the method below once
+/// it has unset its own entry and so is reached by its frame alone. Measured,
+/// oracle rc 0, with 300 passes of `copies('y', 100000)`.
+#[test]
+fn a_running_frame_keeps_its_program() {
+    assert_stress_prints(
+        "<running-frame-program>",
+        concat!(
+            "say .runner~new~go(.Method~new('m', ('do i = 1 to 3', ",
+            "'  z = copies(\"y\", 1000)', 'end', 'call sub', ",
+            "'return \"ran\" .context~executable~source~items .context~package~sourceline(1)', ",
+            "'sub: return')))\n",
+            ".local['R'] = .Routine~new('r', ('x = .local~remove(\"R\")', 'do i = 1 to 3', ",
+            "'  z = copies(\"y\", 1000)', 'end', ",
+            "'return \"routine\" .context~executable~source~items .context~package~sourceline(1)'))\n",
+            "say .local['R']~call\n",
+            "o = .runner~new\n",
+            "o~put('X', ('self~unsetMethod(\"X\")', 'do i = 1 to 3', ",
+            "'  z = copies(\"y\", 1000)', 'end', 'call sub', ",
+            "'return \"unset\" .context~executable~source~items .context~package~sourceline(2)', ",
+            "'sub: return'))\n",
+            "say o~x o~hasMethod('X')\n",
+            "::class runner\n",
+            "::method go\n",
+            "  use arg m\n",
+            "  return self~run(m)\n",
+            "::method put\n",
+            "  use arg name, m\n",
+            "  self~setMethod(name, m)\n",
+        ),
+        "ran 6 do i = 1 to 3\nroutine 5 x = .local~remove(\"R\")\nunset 7 do i = 1 to 3 0\n",
+    );
+}

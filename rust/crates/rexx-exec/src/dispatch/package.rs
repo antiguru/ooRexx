@@ -477,7 +477,7 @@ fn source_line(
 
 /// The lines `~source`, `~sourceLine` and `~sourceSize` read.
 fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Vec<Vec<u8>> {
-    let Some(program) = program.and_then(|program| interp.programs.get(program.0)) else {
+    let Some(program) = program.and_then(|program| interp.programs.get(program)) else {
         return Vec::new();
     };
     (1..=program.source.line_count())

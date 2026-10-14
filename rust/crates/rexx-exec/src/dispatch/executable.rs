@@ -136,7 +136,7 @@ fn declared_flag(interp: &Interp, source: ExecutableSource, which: Flag) -> bool
     };
     let Some(directive) = interp
         .programs
-        .get(program.0)
+        .get(program)
         .and_then(|program| program.directives.get(directive))
     else {
         return false;
@@ -370,7 +370,7 @@ fn is_rexx_code(interp: &Interp, source: ExecutableSource) -> bool {
     };
     let Some(directive) = interp
         .programs
-        .get(program.0)
+        .get(program)
         .and_then(|program| program.directives.get(directive))
     else {
         return false;
@@ -428,7 +428,7 @@ fn block_source_lines(
     program: ProgramId,
     directive: Option<usize>,
 ) -> Vec<Vec<u8>> {
-    let Some(source) = interp.programs.get(program.0) else {
+    let Some(source) = interp.programs.get(program) else {
         return Vec::new();
     };
     let text = &source.source;

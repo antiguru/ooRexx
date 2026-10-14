@@ -21,8 +21,7 @@ use rexx_parse::{Program, parse_program};
 /// `plan.rs`, `stem.rs` each keep their own).
 fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
     let program = Rc::new(program);
-    let program_id = ProgramId(interp.programs.len());
-    interp.programs.push(Rc::clone(&program));
+    let program_id = interp.programs.insert(Rc::clone(&program));
     let plan = interp.plan_for(
         BodyKey {
             program: program_id,
@@ -59,8 +58,7 @@ fn run_source_with_directives(
 ) -> Result<Option<ObjRef>, Failure> {
     let program = parse_program(source.to_vec()).expect("test program parses");
     let program = Rc::new(program);
-    let program_id = ProgramId(interp.programs.len());
-    interp.programs.push(Rc::clone(&program));
+    let program_id = interp.programs.insert(Rc::clone(&program));
     interp.install_directives(program_id, &program)?;
     let plan = interp.plan_for(
         BodyKey {
@@ -196,3 +194,95 @@ mod result;
 mod routines;
 mod scope;
 mod signal;
+
+/// Programs freed under collect-on-every-allocation give their slots to later
+/// programs under a new generation: no id issued before a free resolves
+/// again, and no row naming a freed id is left.
+#[test]
+fn a_freed_programs_id_never_resolves_again() {
+    let mut interp = Interp::new();
+    interp.enable_stress_collect();
+    let out = say_output_with_directives(
+        &mut interp,
+        b"do i = 1 to 4\n  m = .Method~new('m', 'return' i)\n  \
+          r = .Routine~new('r', 'return' i)\n  \
+          p = .Package~new('p', ('::routine q public', 'return' i))\n  \
+          say .runner~new~go(m) r~call p~findRoutine('Q')~call\nend\n\
+          ::class runner\n::method go\n  use arg m\n  return self~run(m)\n",
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "1 1 1\n2 2 2\n3 3 3\n4 4 4\n"
+    );
+    let issued = interp.programs.issued.clone();
+    for (index, id) in issued.iter().enumerate() {
+        assert!(!issued[..index].contains(id), "{id} was issued twice");
+    }
+    assert!(
+        issued.iter().enumerate().any(|(index, id)| issued[..index]
+            .iter()
+            .any(|earlier| earlier.slot_index() == id.slot_index())),
+        "no slot was reused, so no stale id was put to the test: {issued:?}"
+    );
+    assert!(
+        !interp
+            .annotations
+            .keys()
+            .any(|site| matches!(site, crate::environment::Annotated::Compiled(_))),
+        "a compiled method's annotation table is held by a row of its own"
+    );
+    let freed: Vec<ProgramId> = issued
+        .iter()
+        .copied()
+        .filter(|id| interp.programs.get(*id).is_none())
+        .collect();
+    assert!(!freed.is_empty(), "no program was freed");
+    for id in &freed {
+        assert_eq!(interp.programs.package(*id), None, "{id}'s package");
+        assert!(
+            !interp.plans.keys().any(|key| key.program == *id),
+            "{id} in plans"
+        );
+        assert!(
+            !interp.chunks.keys().any(|(key, _)| key.program == *id),
+            "{id} in chunks"
+        );
+        assert!(
+            !interp.compiled_method_names.contains_key(id),
+            "{id}'s name"
+        );
+        assert!(!interp.required_paths.contains_key(id), "{id}'s path");
+        assert!(!interp.untranslated.contains(id), "{id} untranslated");
+        assert!(
+            !interp
+                .method_bodies
+                .values()
+                .any(|body| body.program == *id),
+            "{id} in method_bodies"
+        );
+        assert!(
+            !interp
+                .routine_objects
+                .keys()
+                .any(|installed| installed.program == *id),
+            "{id} in routine_objects"
+        );
+        assert!(
+            !interp
+                .executable_sources
+                .values()
+                .any(|record| record.names_program(|program| program == id)),
+            "{id} in executable_sources"
+        );
+        assert!(
+            !interp.annotations.keys().any(|site| matches!(
+                site,
+                crate::environment::Annotated::Package(crate::plan::Package::Program(program))
+                    | crate::environment::Annotated::Routine(program, _)
+                    | crate::environment::Annotated::Unattached(program, _)
+                    if program == id
+            )),
+            "{id} in annotations"
+        );
+    }
+}

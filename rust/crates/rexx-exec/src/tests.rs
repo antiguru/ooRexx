@@ -565,13 +565,15 @@ fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
 // registry `install_directives` leaves behind, instead. ----
 
 /// Parses `text` and installs its directives against a fresh `Interp`,
-/// under `ProgramId(0)`, handing both back so a test can read the
+/// under `ProgramId::nth(0)`, handing both back so a test can read the
 /// registry state left behind.
 fn installed(text: &[u8]) -> (Interp, Rc<Program>) {
     let program = Rc::new(parse_program(text.to_vec()).expect("test program parses"));
     let mut interp = Interp::new();
+    let id = interp.programs.insert(Rc::clone(&program));
+    assert_eq!(id, ProgramId::nth(0));
     interp
-        .install_directives(ProgramId(0), &program)
+        .install_directives(id, &program)
         .expect("test program installs without a raised condition");
     (interp, program)
 }
@@ -580,7 +582,7 @@ fn installed(text: &[u8]) -> (Interp, Rc<Program>) {
 /// table.
 fn installed_class(interp: &Interp, name: &str) -> rexx_core::ObjRef {
     interp
-        .program_data(ProgramId(0))
+        .program_data(ProgramId::nth(0))
         .expect("the program has a package")
         .classes[name.as_bytes()]
 }
@@ -932,9 +934,9 @@ fn method_bodies_names_each_directive_by_its_minted_identity() {
         .lookup_class_method(id, "BAZ")
         .expect("::method baz class resolves");
     assert_eq!(interp.method_bodies.len(), 2);
-    assert_eq!(interp.method_bodies[&bar].program, ProgramId(0));
+    assert_eq!(interp.method_bodies[&bar].program, ProgramId::nth(0));
     assert_eq!(interp.method_bodies[&bar].directive, index_of(b"BAR"));
-    assert_eq!(interp.method_bodies[&baz].program, ProgramId(0));
+    assert_eq!(interp.method_bodies[&baz].program, ProgramId::nth(0));
     assert_eq!(interp.method_bodies[&baz].directive, index_of(b"BAZ"));
 }
 

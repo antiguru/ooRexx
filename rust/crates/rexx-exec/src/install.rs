@@ -712,8 +712,7 @@ impl Interp {
             return Err(Raised::requires_file_not_found(original).into());
         };
         let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
-        let required = ProgramId(self.programs.len());
-        self.programs.push(Rc::clone(&parsed));
+        let required = self.programs.insert(Rc::clone(&parsed));
         self.required_paths
             .insert(required, resolved.as_str().into());
         // Built before it is cached: the cache holds the package object
@@ -996,8 +995,7 @@ impl Interp {
                 Ok(parsed) => Rc::new(parsed),
                 Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
             };
-        let id = ProgramId(self.programs.len());
-        self.programs.push(Rc::clone(&parsed));
+        let id = self.programs.insert(Rc::clone(&parsed));
         self.compiled_method_names.insert(id, name.into());
         // Recorded ahead of the prologue for the reason
         // `new_file_executable` records its own parent early: the prologue
@@ -1180,10 +1178,13 @@ impl Interp {
     /// The constant's name as its accessor was installed under, which is what
     /// a 97.4 report names.
     pub(crate) fn constant_name(&self, generated: GeneratedMethod) -> Result<Vec<u8>, Failure> {
-        let program = &self.programs[generated.program.0];
         // `get` rather than an index, and a refusal rather than a panic, for
         // the reason `Interp::begin_method`'s own reads carry.
-        let Some(directive) = program.directives.get(generated.directive) else {
+        let Some(directive) = self
+            .programs
+            .get(generated.program)
+            .and_then(|program| program.directives.get(generated.directive))
+        else {
             return Err(Loud::missing_body().into());
         };
         let DirectiveKind::Constant(constant) = &directive.kind else {
@@ -1667,7 +1668,7 @@ impl Interp {
                 )
                 .is_some(),
             InstallBody::Native(_) | InstallBody::Library(_)
-                if self.programs.get(program.0).is_some_and(|installed| {
+                if self.programs.get(program).is_some_and(|installed| {
                     installed
                         .directives
                         .get(directive)
@@ -1738,8 +1739,7 @@ impl Interp {
             }],
             symbols,
         });
-        let program_id = ProgramId(self.programs.len());
-        self.programs.push(program);
+        let program_id = self.programs.insert(program);
         self.compiled_method_names.insert(program_id, name.into());
         self.override_package_settings(program_id)?;
         // `generateMethod` and `generateRoutine` give the executable's own
@@ -1787,7 +1787,11 @@ impl Interp {
         directive: usize,
         name: &[u8],
     ) -> MethodId {
-        let source = Rc::clone(&self.programs[program.0]);
+        let source = Rc::clone(
+            self.programs
+                .get(program)
+                .expect("the package whose table names it holds the program"),
+        );
         let (body, access, protection) = match &source.directives[directive].kind {
             DirectiveKind::Method(method) => {
                 let external = dispatch::native::method_external(method);
@@ -1876,8 +1880,7 @@ impl Interp {
             }],
             symbols,
         });
-        let program_id = ProgramId(self.programs.len());
-        self.programs.push(program);
+        let program_id = self.programs.insert(program);
         self.compiled_method_names.insert(program_id, name.into());
         self.override_package_settings(program_id)?;
         // `generateMethod` and `generateRoutine` give the executable's own
@@ -1983,8 +1986,7 @@ impl Interp {
             directives,
             symbols,
         });
-        let id = ProgramId(self.programs.len());
-        self.programs.push(Rc::clone(&program));
+        let id = self.programs.insert(Rc::clone(&program));
         record(self, id);
         // **Recorded before the directives install, not after.** Installing
         // runs a `::REQUIRES` prologue, and code running there resolves
