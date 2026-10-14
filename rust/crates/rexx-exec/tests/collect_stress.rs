@@ -82,37 +82,10 @@ fn run_directory(rel_path: &str) -> PathBuf {
 /// it observed beside this list whenever the two differ, and a program added to
 /// the corpus that collects nothing belongs here.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
-    "gate-tables/directives/attribute__external__subkeyword.rex",
-    "gate-tables/directives/method__external__subkeyword.rex",
     "lang/call_trace_nested.rex",
-    "lang/class_duplicate_attribute.rex",
-    "lang/class_duplicate_class.rex",
-    "lang/class_duplicate_constant.rex",
-    "lang/class_duplicate_constant_and_method.rex",
-    "lang/class_duplicate_method.rex",
-    "lang/class_inherit_cycle.rex",
-    "lang/class_member_class_keyword_needs_class.rex",
-    "lang/class_metaclass_cycle.rex",
-    "lang/class_metaclass_not_a_metaclass.rex",
-    "lang/class_metaclass_not_found.rex",
-    "lang/class_subclass_cycle.rex",
-    "lang/class_subclass_not_found.rex",
-    "lang/class_target_not_a_class.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
-    "lang/directive_annotate_missing_target.rex",
-    "lang/directive_attribute_external_get_third_word.rex",
-    "lang/directive_attribute_external_missing.rex",
-    "lang/directive_attribute_external_set_default.rex",
-    "lang/directive_constant_expression_needs_class.rex",
-    "lang/directive_method_attribute_external_missing.rex",
-    "lang/directive_method_external_before_duplicate.rex",
-    "lang/directive_method_external_duplicate_wins.rex",
-    "lang/directive_method_external_missing.rex",
-    "lang/directive_method_external_source_order.rex",
-    "lang/directive_options_digits_below_fuzz.rex",
-    "lang/directive_options_trace.rex",
     "lang/do_counter_ctrl.rex",
     "lang/do_counter_forever.rex",
     "lang/do_counter_rep.rex",
@@ -125,11 +98,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/exit_with_value.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
-    "lang/library_attribute_entry_missing.rex",
-    "lang/library_method_entry_missing.rex",
-    "lang/library_requires_missing.rex",
-    "lang/library_routine_entry_missing.rex",
-    "lang/library_routine_external_site_twice.rex",
     "lang/loop_counter.rex",
     "lang/loop_label_counter.rex",
     "lang/message_assignment_form.rex",
@@ -141,8 +109,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
     "lang/options.rex",
-    "lang/rexxutil_library_method.rex",
-    "lang/rexxutil_library_routine_missing.rex",
     "lang/scope_case_text_absorbed.rex",
     "lang/scope_case_text_absorbed_other.rex",
     "lang/select_when.rex",
@@ -993,6 +959,64 @@ fn an_added_public_routine_object_survives_its_table_entry() {
             "f = r~findRoutine('C3')\n",
             "say (f == u) f~class~id f~call(0)\n",
         ),
+    );
+}
+
+/// The objects a package holds and nothing else does survive collections:
+/// its local directory's entry, a written `.ROUTINES` table's entry, its
+/// prolog `Routine` object, its security manager, and a `::CONSTANT`
+/// expression's value in a package a routine built, whose install temps went
+/// with the routine's frame. Measured, oracle rc 0, the same lines for the
+/// program with a 3000-pass allocating loop in place of the filler.
+#[test]
+fn the_objects_a_package_holds_survive_collect_on_every_allocation() {
+    let program = concat!(
+        "p = .context~package\n",
+        "p~local~put(.array~of('local'), 'PKGHELD')\n",
+        ".routines['ADDED'] = .routine~new('a', 'return \"table\"')\n",
+        "w = .WeakReference~new(p~prolog)\n",
+        "p~setSecurityManager(.sm~new)\n",
+        "c = mk()\n",
+        "do i = 1 to 20\n",
+        "  zj = 'filler' i\n",
+        "end\n",
+        "say .pkgheld[1]\n",
+        "say added()\n",
+        "say (w~value == p~prolog) (w~value \\== .nil)\n",
+        "say .k~v[1] c~v[1]\n",
+        "x = .local\n",
+        "exit\n",
+        "::routine mk\n",
+        "  p = .package~new('cp', .array~of('::class k public', \"::constant v (.array~of('built'))\"))\n",
+        "  return p~findClass('K')\n",
+        "::routine r1\n",
+        "  return 1\n",
+        "::class k\n",
+        "::constant v (.array~of('const'))\n",
+        "::class sm\n",
+        "::method local\n",
+        "  say 'mgr local'\n",
+        "  return 0\n",
+        "::method unknown\n",
+        "  return 0\n",
+    );
+    let stress = run_program_collect_every_alloc(
+        "<package-held-objects>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+    );
+    assert_eq!(
+        (
+            stress.exit_code,
+            String::from_utf8_lossy(&stress.stdout).as_ref()
+        ),
+        (0, "local\ntable\n1 1\nconst built\nmgr local\n"),
+        "stderr: {}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
     );
 }
 

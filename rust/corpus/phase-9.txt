@@ -119,3 +119,6 @@ lang/class_side_string.rex
 # 9b1 Task 3: L10 and L11.
 lang/routine_object_add_copy.rex
 lang/stackframes_native_routine.rex
+
+# 9b1 Task 4: a copied package mutated, L5 and L6.
+lang/package_copy_mutated.rex

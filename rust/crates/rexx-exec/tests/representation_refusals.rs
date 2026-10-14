@@ -53,14 +53,6 @@ const ALLOWED: &[(&str, &str)] = &[
         "Deviation 36",
     ),
     (
-        "rexx-exec/src/dispatch/package.rs:a package object this crate did not build",
-        "Task 4",
-    ),
-    (
-        "rexx-exec/src/dispatch/class_protocol.rs:a package object this crate did not build",
-        "Task 4",
-    ),
-    (
         "rexx-exec/src/lib.rs:a directory whose entries this crate does not fill",
         "Phase 10",
     ),
@@ -129,7 +121,6 @@ const OWNERS: &[&str] = &[
     "Deviation 28",
     "Deviation 32",
     "Deviation 36",
-    "Task 4",
     "Task 5",
     "Task 6",
     "Task 7",

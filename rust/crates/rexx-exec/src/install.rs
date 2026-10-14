@@ -796,25 +796,25 @@ impl Interp {
     }
 
     /// The public routines and classes `from` contributes to `into`: its own
-    /// first, then the ones it imported. The REXX package contributes its
-    /// public classes.
+    /// first, then the ones it imported. The REXX package's own public
+    /// classes are its whole class table's.
     pub(super) fn merge_package(&mut self, into: ObjRef, from: ObjRef) {
-        let (routines, classes): (Vec<(Box<[u8]>, MergedRoutine)>, Vec<(Box<[u8]>, ObjRef)>) =
-            match self.package_data(from) {
-                Some(data) if data.program.is_some() => (
-                    data.public_routines
-                        .iter()
-                        .chain(&data.merged_public_routines)
-                        .map(|(name, merged)| (name.clone(), *merged))
-                        .collect(),
-                    data.public_classes
-                        .iter()
-                        .chain(&data.merged_public_classes)
-                        .map(|(name, class)| (name.clone(), *class))
-                        .collect(),
-                ),
-                _ => (Vec::new(), self.rexx_package_class_table(true)),
-            };
+        let Some(data) = self.package_data(from) else {
+            return;
+        };
+        let routines: Vec<(Box<[u8]>, MergedRoutine)> = data
+            .public_routines
+            .iter()
+            .chain(&data.merged_public_routines)
+            .map(|(name, merged)| (name.clone(), *merged))
+            .collect();
+        let imported: Vec<(Box<[u8]>, ObjRef)> = data
+            .merged_public_classes
+            .iter()
+            .map(|(name, class)| (name.clone(), *class))
+            .collect();
+        let mut classes = self.package_class_table(from, true);
+        classes.extend(imported);
         self.merge_routines(into, routines);
         self.invalidate_rexx_class_cache();
         let Some(data) = self.package_data_mut(into) else {
@@ -941,10 +941,10 @@ impl Interp {
     /// C++ calls too (`classes/PackageClass.cpp:1842`).
     pub(crate) fn load_package(
         &mut self,
-        program: ProgramId,
+        program: Option<ProgramId>,
         name: &[u8],
     ) -> Result<ProgramId, Failure> {
-        self.load_requires(Some(program), name)
+        self.load_requires(program, name)
     }
 
     /// `PackageClass::newRexx`'s load: the same file load, searched from the
@@ -1129,9 +1129,11 @@ impl Interp {
         Ok(())
     }
 
-    /// Records what a `::CONSTANT` accessor answers, and roots it.
+    /// Records what a `::CONSTANT` accessor answers, which its package holds.
     fn record_constant_value(&mut self, program: ProgramId, directive: usize, value: ObjRef) {
-        self.roots.activity_mut().push_temp(value);
+        if self.program_package(program).is_none() {
+            self.roots.activity_mut().push_temp(value);
+        }
         self.program_fields_mut(program)
             .constants
             .insert(directive, value);

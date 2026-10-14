@@ -208,6 +208,14 @@ impl Interp {
         .take(self.programs.len() + 1)
     }
 
+    /// Whether `package` is the REXX package's own object, which
+    /// `checkRexxPackage` refuses writes to (`classes/PackageClass.cpp:470`).
+    /// A copy of it is not: the oracle's test is `isOldSpace`, and a copy is
+    /// new.
+    pub(crate) fn is_the_rexx_package(&self, package: ObjRef) -> bool {
+        self.rexx_package == Some(package)
+    }
+
     /// Which package a package object's code belongs to, or `None` for an
     /// object that is not a package.
     pub(crate) fn which_package(&self, package: ObjRef) -> Option<Package> {

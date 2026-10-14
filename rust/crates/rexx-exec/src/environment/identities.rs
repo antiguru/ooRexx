@@ -687,8 +687,7 @@ impl Interp {
         }
     }
 
-    /// `Package~name`'s answer for a package object this crate built, or
-    /// `None` for a handle [`Interp::package_object_for`] did not produce.
+    /// `Package~name`'s answer, or `None` for a value that is not a package.
     pub(crate) fn package_name(&self, package: ObjRef) -> Option<Vec<u8>> {
         Some(match self.which_package(package)? {
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
@@ -698,6 +697,33 @@ impl Interp {
             // requiring program's is its own.
             Package::Program(program) => self.program_display_name(program).to_vec(),
         })
+    }
+
+    /// The classes `Package~classes`, or `~publicClasses` where
+    /// `public_only`, answers for `package`: its own table, after the REXX
+    /// package's for the REXX package and a copy of it.
+    pub(crate) fn package_class_table(
+        &mut self,
+        package: ObjRef,
+        public_only: bool,
+    ) -> Vec<(Box<[u8]>, ObjRef)> {
+        let Some(data) = self.package_data(package) else {
+            return Vec::new();
+        };
+        let own: Vec<(Box<[u8]>, ObjRef)> = if public_only {
+            &data.public_classes
+        } else {
+            &data.classes
+        }
+        .iter()
+        .map(|(name, class)| (name.clone(), *class))
+        .collect();
+        if data.program.is_some() {
+            return own;
+        }
+        let mut entries = self.rexx_package_class_table(public_only);
+        entries.extend(own);
+        entries
     }
 
     /// The REXX package's own class table: this crate's native class registry
@@ -782,6 +808,12 @@ impl Interp {
     /// registry plus what the shipped `.orx` files declared.
     fn installed_class_of(&mut self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
         if self.is_rexx_package(package) {
+            if let Some(found) = self
+                .package_data(package)
+                .and_then(|data| data.classes.get(upper))
+            {
+                return Some(*found);
+            }
             for program in self.library_programs.clone() {
                 if let Some(found) = self
                     .program_data(program)
@@ -798,7 +830,10 @@ impl Interp {
     /// `PackageClass::findPublicClass`'s steps, as an `Option`.
     fn package_public_class_of(&mut self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
         if self.is_rexx_package(package) {
-            return self.rexx_package_class(upper);
+            return self
+                .package_data(package)
+                .and_then(|data| data.public_classes.get(upper).copied())
+                .or_else(|| self.rexx_package_class(upper));
         }
         if let Some(found) = self.chain_public_class(Some(package), upper) {
             return Some(found);
@@ -809,9 +844,6 @@ impl Interp {
     /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`), as the
     /// `Routine` object or `.nil`.
     pub(crate) fn package_find_routine(&mut self, package: ObjRef, upper: &[u8]) -> ObjRef {
-        if self.is_rexx_package(package) {
-            return ObjRef::NIL;
-        }
         if self.routines_written {
             return match self.find_written_routine(Some(package), upper) {
                 Some(crate::FoundRoutine::Merged(merged)) => {

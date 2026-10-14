@@ -129,11 +129,12 @@ fn package_of(interp: &Interp, receiver: ObjRef) -> Result<Option<ProgramId>, Fa
 
 /// `package_of` for the writes, which refuse the REXX package rather than
 /// answering for it -- `checkRexxPackage` (`classes/PackageClass.cpp:470`).
-fn writable_package_of(interp: &Interp, receiver: ObjRef) -> Result<ProgramId, Failure> {
-    match package_of(interp, receiver)? {
-        Some(program) => Ok(program),
-        None => Err(Raised::rexx_package_addition().into()),
+fn writable_package_of(interp: &Interp, receiver: ObjRef) -> Result<Option<ProgramId>, Failure> {
+    let program = package_of(interp, receiver)?;
+    if interp.is_the_rexx_package(receiver) {
+        return Err(Raised::rexx_package_addition().into());
     }
+    Ok(program)
 }
 
 /// The `::OPTIONS` settings a package carries, and the trace setting its
@@ -163,7 +164,7 @@ fn initial_of(
 fn fields_of(interp: &Interp, receiver: ObjRef) -> Result<&PackageData, Failure> {
     interp
         .package_data(receiver)
-        .ok_or_else(|| Loud::receiver_class("a package object this crate did not build").into())
+        .ok_or_else(|| Loud::receiver_class("a value that is not a package").into())
 }
 
 /// A package's settings with the trace setting its `~trace` reports, which
@@ -558,10 +559,8 @@ fn classes(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let entries = match package_of(interp, receiver)? {
-        Some(_) => cloned(&fields_of(interp, receiver)?.classes),
-        None => interp.rexx_package_class_table(false),
-    };
+    fields_of(interp, receiver)?;
+    let entries = interp.package_class_table(receiver, false);
     interp.string_table_of(entries).map(Some)
 }
 
@@ -572,10 +571,8 @@ fn public_classes(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let entries = match package_of(interp, receiver)? {
-        Some(_) => cloned(&fields_of(interp, receiver)?.public_classes),
-        None => interp.rexx_package_class_table(true),
-    };
+    fields_of(interp, receiver)?;
+    let entries = interp.package_class_table(receiver, true);
     interp.string_table_of(entries).map(Some)
 }
 
@@ -1120,10 +1117,9 @@ pub(super) fn native_package_name(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    // Loud rather than a panic where the receiver is a package handle this
-    // crate did not build, which is `Interp::package_name`'s own `None`.
+    // `Interp::package_name`'s `None` is a receiver that is not a package.
     let Some(name) = interp.package_name(receiver) else {
-        return Err(Loud::receiver_class("a package object this crate did not build").into());
+        return Err(Loud::receiver_class("a value that is not a package").into());
     };
     Ok(Some(interp.text_built(name)))
 }

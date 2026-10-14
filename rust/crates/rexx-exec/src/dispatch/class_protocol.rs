@@ -1133,14 +1133,14 @@ fn add_installed_class(
     if !interp.heap.is_class(class) {
         return Err(Raised::argument_not_a_class("class").into());
     }
-    match interp.package_data(receiver).map(|data| data.program) {
-        Some(Some(_)) => {
-            interp.add_installed_class(receiver, &name, class, public);
-            Ok(Some(receiver))
-        }
-        Some(None) => Err(Raised::rexx_package_addition().into()),
-        None => Err(Loud::receiver_class("a package object this crate did not build").into()),
+    if interp.package_data(receiver).is_none() {
+        return Err(Loud::receiver_class("a value that is not a package").into());
     }
+    if interp.is_the_rexx_package(receiver) {
+        return Err(Raised::rexx_package_addition().into());
+    }
+    interp.add_installed_class(receiver, &name, class, public);
+    Ok(Some(receiver))
 }
 
 /// `Class~package`: the package the class was defined in --
