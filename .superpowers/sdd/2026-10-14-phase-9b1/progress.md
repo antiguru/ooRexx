@@ -41,3 +41,10 @@ Ruling: plan amended (controller edit, no agent live on the plan): Task 8 Step 4
 Task 1: fix round 1 dispatched (resume c1-impl).
 Task 1: fix round 1 at e680ef13c; controller verified diff (phrases, owner tags, witness, Deviation notes) instead of a re-review -- mechanical list and doc edits, gate test self-checks every row -- if wrong, close review.
 Task 1: complete (5292aad56, e680ef13c).
+Task 2: dispatched (implementer opus, BASE 8db45ca6d).
+Task 2: implementer DONE_WITH_CONCERNS (0a055271c, 2fbfe9cba, 7c756e734). arith +0.12% after receiver-mode operand_number in value.rs (first form +0.996%).
+Ruling: oracle clearing a WeakReference to held .true/.Array/.environment/1 is an oracle bug, not copied (crate keeps them; Deviation 36 wording stands) -- if wrong, nothing to change in crate.
+Ruling: class-side DEFAULTNAME not consulted when a class renders (pre-existing) -> queued.
+Task 2 review: spec fails I1 (DO step + in controlled_step_wide converts first; oracle DoBlock.cpp:194 sends each step); M1 VarRef receiver arm unwitnessed; M2 full-set callgrind not recorded (reviewer: all under, hashnew +0.31%). Fix round 1 dispatched (resume c2-impl).
+Task 2: fix round 1 at 1566bcbe2, 59c3ec337 (one-word loops.rs fix, witness lines, full-set callgrind exit 0, worst hashnew +0.31%). Controller read the diff instead of a re-review -- the fix is the reviewer's own verified one-word change -- if wrong, close review.
+Task 2: complete (0a055271c, 2fbfe9cba, 7c756e734, 1566bcbe2, 59c3ec337).

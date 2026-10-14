@@ -1,3 +1,5 @@
+**CLOSED 2026-10-14 by Phase 9b1 Task 2 (0a055271c).**
+
 # A class-side ::method string is not sent for a class object's string value
 
 Source: Phase 9b Task 3 review (.superpowers/sdd/2026-10-13-phase-9b/task-3-review.md), pre-existing.
