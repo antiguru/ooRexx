@@ -1634,3 +1634,35 @@ fn a_running_frame_keeps_its_program() {
         "ran 6 do i = 1 to 3\nroutine 5 x = .local~remove(\"R\")\nunset 7 do i = 1 to 3 0\n",
     );
 }
+
+/// A method that unset its own entry and is parked in `GUARD WHEN` on a
+/// started activity is reached by that idle activity's frame alone, which
+/// keeps its program. Measured, oracle rc 0 in 3 of 3 runs, with 300 passes
+/// of `copies('x', 100000)` in `filler`.
+#[test]
+fn a_parked_activitys_frame_keeps_its_program() {
+    assert_stress_prints(
+        "<parked-frame-program>",
+        concat!(
+            "o = .k~new\n",
+            "o~put('REL', ('expose flag', 'flag = 1'))\n",
+            "o~put('W', ('expose flag', 'self~unsetMethod(\"W\")', 'guard on when flag = 1', ",
+            "'call filler2', ",
+            "'return \"parked\" .context~executable~source~items .context~package~sourceline(3)', ",
+            "'filler2: do j = 1 to 3; z = copies(\"q\", 1000); end; return'))\n",
+            "msg = o~start('W')\n",
+            "call syssleep 0.3\n",
+            "call filler\n",
+            "say 'hasW' o~hasMethod('W')\n",
+            "o~rel\n",
+            "say msg~result\n",
+            "exit\n",
+            "filler: do j = 1 to 3; z = copies('x', 1000); end; return\n",
+            "::class k\n",
+            "::method put\n",
+            "  use arg name, m\n",
+            "  self~setMethod(name, m)\n",
+        ),
+        "hasW 0\nparked 6 guard on when flag = 1\n",
+    );
+}

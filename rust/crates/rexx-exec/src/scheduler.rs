@@ -407,11 +407,8 @@ impl Activities {
     }
 
     /// [`crate::activity::Activity::running_programs`] of every activity
-    /// that is not running.
-    ///
-    /// No shape was found in which this is a package's only holder. It stays
-    /// so that a holder missed elsewhere cannot become a refusal partway
-    /// through a program.
+    /// that is not running: the only holder of a method that unset its own
+    /// entry and is parked in `GUARD WHEN` on a started activity.
     pub(crate) fn running_programs(&self, out: &mut Vec<crate::plan::ProgramId>) {
         for idle in self.idle.iter().flatten() {
             idle.activity.running_programs(out);
