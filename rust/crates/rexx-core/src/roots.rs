@@ -134,6 +134,11 @@ impl RootSet {
         }
     }
 
+    /// The name of every global root.
+    pub fn global_names(&self) -> impl Iterator<Item = &str> + '_ {
+        self.globals.keys().map(String::as_str)
+    }
+
     /// Drops the global root `name`, if there is one.
     pub fn remove_global(&mut self, name: &str) {
         self.globals.remove(name);

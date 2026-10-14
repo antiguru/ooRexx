@@ -3262,6 +3262,16 @@ impl Interp {
             self.guarded_externals
                 .retain(|method| !methods.contains(method));
         }
+        for row in &mut self.special_methods {
+            if row.is_some_and(
+                |scope| matches!(scope.package, Package::Program(program) if dead(&program)),
+            ) {
+                *row = None;
+            }
+        }
+        while matches!(self.special_methods.last(), Some(None)) {
+            self.special_methods.pop();
+        }
         self.routine_objects
             .retain(|installed, _| !dead(&installed.program));
         self.library_routine_codes

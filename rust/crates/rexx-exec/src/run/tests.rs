@@ -204,7 +204,7 @@ fn a_freed_programs_id_never_resolves_again() {
     interp.enable_stress_collect();
     let out = say_output_with_directives(
         &mut interp,
-        b"do i = 1 to 4\n  m = .Method~new('m', 'return' i)\n  \
+        b"do i = 1 to 4\n  m = .Method~new('m', 'return' i)\n  m~setPrivate\n  \
           r = .Routine~new('r', 'return' i)\n  \
           p = .Package~new('p', ('::routine q public', 'return' i))\n  \
           say .runner~new~go(m) r~call p~findRoutine('Q')~call\nend\n\
@@ -232,7 +232,24 @@ fn a_freed_programs_id_never_resolves_again() {
             .any(|site| matches!(site, crate::environment::Annotated::Compiled(_))),
         "a compiled method's annotation table is held by a row of its own"
     );
+    for method in interp.executable_objects.keys() {
+        assert!(
+            interp.method_bodies.contains_key(method)
+                || interp.generated_methods.contains_key(method)
+                || interp.native_externals.contains_key(method)
+                || interp.library_externals.contains_key(method),
+            "executable_objects names {method:?}, whose body was pruned"
+        );
+    }
     for id in &freed {
+        let suffix = format!(" of program {id}");
+        assert!(
+            !interp
+                .roots
+                .global_names()
+                .any(|name| name.ends_with(&suffix)),
+            "a global root names {id}"
+        );
         assert!(issued.contains(id), "{id} was freed and never issued");
         assert!(
             interp.programs.get(*id).is_none(),
@@ -259,6 +276,12 @@ fn a_freed_programs_id_never_resolves_again() {
                 .values()
                 .any(|body| body.program == *id),
             "{id} in method_bodies"
+        );
+        assert!(
+            !interp.special_methods.iter().flatten().any(
+                |scope| matches!(scope.package, crate::plan::Package::Program(program) if program == *id)
+            ),
+            "{id} in special_methods"
         );
         assert!(
             !interp
