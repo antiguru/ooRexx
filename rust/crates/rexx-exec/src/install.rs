@@ -121,6 +121,9 @@ impl Interp {
             &'static internal_routines::InternalRoutine,
         )> = Vec::new();
         self.untranslated.insert(id);
+        // Built before anything is installed, so that no write below
+        // allocates the object its fields live in.
+        self.package_object(Package::Program(id));
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
             // `Interp::new_file_executable` file a loaded file's main section
@@ -243,7 +246,10 @@ impl Interp {
                 // and never runs code, so this is the whole of installing it.
                 DirectiveKind::Options(options) => {
                     let outcome = {
-                        let package = self.package_options.entry(id).or_default();
+                        let package = self
+                            .package_fields_mut(Package::Program(id))
+                            .options
+                            .get_or_insert_default();
                         options.iter().try_for_each(|option| package.apply(option))
                     };
                     if let Err(error) = outcome {

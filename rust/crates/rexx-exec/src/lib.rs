@@ -211,6 +211,9 @@ mod variables;
 // they bind.
 mod install;
 
+// The fields a `Package` object holds.
+mod package_state;
+
 /// The exit code for a construct this crate does not implement.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
@@ -1303,12 +1306,7 @@ struct Interp {
     next_invocation: u32,
     /// Every program the loader has issued an id for, indexed by that id.
     programs: Vec<Rc<Program>>,
-    /// What each program's `::OPTIONS` directives left on its package,
-    /// entered by `Interp::install_directives` and read by every activation
-    /// of that program's code.
-    package_options: FxHashMap<ProgramId, PackageOptions>,
-    /// What `Package~options` and `.Package~defaultOptions` writes keep
-    /// beside [`Interp::package_options`].
+    /// What `.Package~defaultOptions` writes keep.
     option_writes: crate::options::OptionWrites,
     /// The security manager each package carries, written by all three
     /// `setSecurityManager` setters and read by every checkpoint.
@@ -1423,13 +1421,11 @@ struct Interp {
     class_packages: FxHashMap<ObjRef, ClassPackage>,
     /// The one empty argument list every call that has none shares.
     empty_arguments: Rc<[Option<ObjRef>]>,
-    /// The package objects `~package` answers, keyed by the package itself
-    /// -- see [`crate::plan::Package`] for why the interpreter's own is a
-    /// variant rather than an absent program id.
-    package_objects: FxHashMap<Package, ObjRef>,
-    /// [`Interp::package_objects`] the other way round, which
-    /// `Interp::which_package` reads.
-    object_packages: FxHashMap<ObjRef, Package>,
+    /// The REXX package's object, once built.
+    rexx_package: Option<ObjRef>,
+    /// The package object `~package` answers for each program's code, by
+    /// [`ProgramId`], once built. A copy of a package is not here.
+    program_packages: Vec<Option<ObjRef>>,
     /// The one `Routine` object standing for a program's own main section --
     /// what `RexxContext~executable` answers from a `PROGRAM` or
     /// `INTERNALCALL` context.
@@ -2152,7 +2148,6 @@ impl Interp {
             env,
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
             programs: Vec::new(),
-            package_options: FxHashMap::default(),
             option_writes: crate::options::OptionWrites::default(),
             security_managers: FxHashMap::default(),
             plans: NameMap::default(),
@@ -2185,8 +2180,8 @@ impl Interp {
             package_public_classes: NameMap::default(),
             class_packages: FxHashMap::default(),
             empty_arguments: Rc::from(&[][..]),
-            package_objects: FxHashMap::default(),
-            object_packages: FxHashMap::default(),
+            rexx_package: None,
+            program_packages: Vec::new(),
             program_routine_objects: FxHashMap::default(),
             package_tables: FxHashMap::default(),
             routine_objects: FxHashMap::default(),
@@ -2442,8 +2437,9 @@ impl Interp {
 
     /// What `program`'s own `::OPTIONS` directives left on its package, or
     /// `None` for a program carrying none.
+    #[inline]
     fn options_of(&self, program: ProgramId) -> Option<&PackageOptions> {
-        self.package_options.get(&program)
+        self.program_data(program)?.options.as_ref()
     }
 
     /// The numeric settings the running activation's own package declares --
@@ -2947,7 +2943,6 @@ impl Interp {
             next_activation_id: _,
             next_invocation: _,
             programs: _,
-            package_options: _,
             option_writes: _,
             security_managers,
             plans: _,
@@ -3003,8 +2998,8 @@ impl Interp {
             // Zero length.
             empty_arguments: _,
             // `RootSet::add_global`, under `package_root_key`.
-            package_objects: _,
-            object_packages: _,
+            rexx_package: _,
+            program_packages: _,
             // `RootSet::add_global`, under `program_routine_root_key`.
             program_routine_objects: _,
             // `RootSet::add_global`, under `package_table_root_key`.

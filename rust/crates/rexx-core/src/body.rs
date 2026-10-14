@@ -162,8 +162,8 @@ pub enum VarRefHome {
 }
 
 /// The native state an instance carries in its own body, for the classes whose
-/// C++ counterparts keep a `CSELF` block. It holds no [`ObjRef`], which is why
-/// [`Body::trace`]'s instance arm ignores the slot.
+/// C++ counterparts keep a `CSELF` block. Only [`NativeState::Package`] holds
+/// an [`ObjRef`].
 #[derive(Clone, Debug)]
 pub enum NativeState {
     /// A `MutableBuffer`'s contents.
@@ -186,6 +186,52 @@ pub enum NativeState {
     /// `RexxString::newRexx` (`interpreter/classes/StringClass.cpp:2352`)
     /// gives the subclass's behaviour.
     Text(Box<[u8]>),
+    /// A `Package` subclass instance's package state.
+    Package(PackageState),
+}
+
+/// The state a `Package` object holds. Its fields are the interpreter's own
+/// types, so the heap reaches them through this trait alone.
+pub trait PackageFields: std::any::Any + std::fmt::Debug {
+    /// Appends every object these fields hold.
+    fn trace(&self, out: &mut Vec<ObjRef>);
+    /// A copy of these fields, holding the same objects.
+    fn clone_fields(&self) -> Box<dyn PackageFields>;
+}
+
+/// A `Package` object's [`PackageFields`]. Cloning it clones the fields.
+#[derive(Debug)]
+pub struct PackageState(Box<dyn PackageFields>);
+
+impl Clone for PackageState {
+    fn clone(&self) -> PackageState {
+        PackageState(self.0.clone_fields())
+    }
+}
+
+impl PackageState {
+    pub fn new(fields: Box<dyn PackageFields>) -> PackageState {
+        PackageState(fields)
+    }
+
+    /// The fields as `T`, or `None` for fields of another type.
+    #[inline]
+    pub fn downcast_ref<T: PackageFields>(&self) -> Option<&T> {
+        let fields: &dyn std::any::Any = &*self.0;
+        fields.downcast_ref()
+    }
+
+    /// [`PackageState::downcast_ref`] for a caller that changes them.
+    #[inline]
+    pub fn downcast_mut<T: PackageFields>(&mut self) -> Option<&mut T> {
+        let fields: &mut dyn std::any::Any = &mut *self.0;
+        fields.downcast_mut()
+    }
+
+    /// Appends every object the fields hold.
+    pub fn trace(&self, out: &mut Vec<ObjRef>) {
+        self.0.trace(out);
+    }
 }
 
 /// One 16-byte unit of [`AlignedBytes`], aligned as `malloc` aligns on
@@ -265,7 +311,8 @@ impl NativeState {
             NativeState::Stream(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -276,7 +323,8 @@ impl NativeState {
             NativeState::Stream(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -287,7 +335,8 @@ impl NativeState {
             NativeState::Buffer(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -299,7 +348,8 @@ impl NativeState {
             NativeState::Buffer(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -313,7 +363,8 @@ impl NativeState {
             NativeState::Buffer(_)
             | NativeState::Stream(_)
             | NativeState::Data(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -324,7 +375,8 @@ impl NativeState {
             NativeState::Buffer(_)
             | NativeState::Stream(_)
             | NativeState::Pointer(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -336,7 +388,8 @@ impl NativeState {
             NativeState::Buffer(_)
             | NativeState::Stream(_)
             | NativeState::Pointer(_)
-            | NativeState::Text(_) => None,
+            | NativeState::Text(_)
+            | NativeState::Package(_) => None,
         }
     }
 
@@ -348,7 +401,25 @@ impl NativeState {
             NativeState::Buffer(_)
             | NativeState::Stream(_)
             | NativeState::Pointer(_)
-            | NativeState::Data(_) => None,
+            | NativeState::Data(_)
+            | NativeState::Package(_) => None,
+        }
+    }
+
+    /// A `Package` subclass instance's package state, or `None` for state of
+    /// another kind.
+    pub fn package(&self) -> Option<&PackageState> {
+        match self {
+            NativeState::Package(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// [`NativeState::package`] for a caller that changes it.
+    pub fn package_mut(&mut self) -> Option<&mut PackageState> {
+        match self {
+            NativeState::Package(state) => Some(state),
+            _ => None,
         }
     }
 
@@ -363,7 +434,7 @@ impl NativeState {
     pub fn renders_its_own_string_value(&self) -> bool {
         match self {
             NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Text(_) => true,
-            NativeState::Stream(_) | NativeState::Data(_) => false,
+            NativeState::Stream(_) | NativeState::Data(_) | NativeState::Package(_) => false,
         }
     }
 }
@@ -922,15 +993,18 @@ pub struct NativeObject {
     bound: Bound,
 }
 
-/// What a `Method` or `Routine` object is bound to, sharing one slot so that
-/// every other native object stays its size.
-#[derive(Clone, Copy, Debug)]
+/// What a `Method`, `Routine` or `Package` object is bound to, sharing one
+/// slot so that every other native object stays its size.
+#[derive(Clone, Debug)]
 enum Bound {
     Nothing,
     /// A method object's scope.
     Scope(ObjRef),
     /// The `INTERNAL_ROUTINES` row a routine object runs.
     RoutineRow(usize),
+    /// A package object's state, boxed so that every other native object
+    /// stays its size.
+    Package(Box<PackageState>),
 }
 
 /// Measured: a field beside `Bound` moves every native object's box to the
@@ -1043,6 +1117,40 @@ impl NativeObject {
     pub fn set_routine_row(&mut self, row: usize) {
         self.bound = Bound::RoutineRow(row);
     }
+
+    /// The state this `Package` object holds, or `None` for another object.
+    #[inline]
+    pub fn package(&self) -> Option<&PackageState> {
+        match &self.bound {
+            Bound::Package(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// [`NativeObject::package`] for a caller that changes it.
+    #[inline]
+    pub fn package_mut(&mut self) -> Option<&mut PackageState> {
+        match &mut self.bound {
+            Bound::Package(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Makes this object a package holding `state`.
+    pub fn set_package(&mut self, state: PackageState) {
+        self.bound = Bound::Package(Box::new(state));
+    }
+
+    /// Takes this object's package state, leaving it bound to nothing.
+    pub fn take_package(&mut self) -> Option<PackageState> {
+        match std::mem::replace(&mut self.bound, Bound::Nothing) {
+            Bound::Package(state) => Some(*state),
+            other => {
+                self.bound = other;
+                None
+            }
+        }
+    }
 }
 
 /// **A `Body` is every object in the heap, and `Slot` is what the arena holds
@@ -1098,6 +1206,33 @@ impl Body {
         }
     }
 
+    /// The state a `Package` object holds, whether it is the class's own
+    /// instance or a subclass's, or `None` for any other body.
+    #[inline]
+    pub fn package(&self) -> Option<&PackageState> {
+        match self {
+            Body::Native(native) => native.package(),
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.package(),
+            _ => None,
+        }
+    }
+
+    /// [`Body::package`] for a caller that changes it.
+    #[inline]
+    pub fn package_mut(&mut self) -> Option<&mut PackageState> {
+        match self {
+            Body::Native(native) => native.package_mut(),
+            Body::Instance {
+                native: Some(state),
+                ..
+            } => state.package_mut(),
+            _ => None,
+        }
+    }
+
     /// Appends every object this one can reach.
     pub fn trace(&self, out: &mut Vec<ObjRef>) {
         match self {
@@ -1129,10 +1264,17 @@ impl Body {
             // ([`crate::CLASS_SLOT_BASE`]), and the arm stays correct on the
             // day a class object is allocated like anything else.
             Body::Instance {
-                class, pools, own, ..
+                class,
+                pools,
+                own,
+                native,
+                ..
             } => {
                 out.push(*class);
                 pools.trace(out);
+                if let Some(state) = native.as_deref().and_then(NativeState::package) {
+                    state.trace(out);
+                }
                 // A one-off method's scope, in the position the class handle
                 // above is in and traced for the same reason.
                 if let Some(own) = own {
@@ -1153,6 +1295,9 @@ impl Body {
                 // Reachable from the object alone once a program holds the
                 // table and drops every other handle on it.
                 out.extend(native.annotations);
+                if let Some(state) = native.package() {
+                    state.trace(out);
+                }
             }
             // Deliberately reaches nothing: a weak reference must not keep
             // its target alive.

@@ -21,6 +21,7 @@ use crate::ProgramId;
 use crate::environment::PackageTable;
 use crate::error::Raised;
 use crate::options::{OptionName, PackageOptions};
+use crate::package_state::PackageData;
 use crate::plan::Package;
 use crate::trace::TraceMode;
 
@@ -141,35 +142,43 @@ fn writable_package_of(interp: &Interp, receiver: ObjRef) -> Result<ProgramId, F
 
 /// The `::OPTIONS` settings a package carries, and the trace setting its
 /// `~trace` reports.
-fn settings_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
-    match program {
-        None => {
-            let options = interp.option_writes.rexx.clone();
-            let trace = options.trace;
-            (options, trace)
-        }
-        Some(program) => shown(interp.package_options.get(&program).cloned()),
-    }
+fn settings_of(
+    interp: &Interp,
+    receiver: ObjRef,
+) -> Result<(PackageOptions, Option<TraceMode>), Failure> {
+    let data = fields_of(interp, receiver)?;
+    Ok(shown(data.program.is_none(), data.options.clone()))
 }
 
 /// [`settings_of`] as the package's first change found them --
 /// `PackageClass::getInitialPackageSettings`.
-fn initial_of(interp: &Interp, program: Option<ProgramId>) -> (PackageOptions, Option<TraceMode>) {
-    match interp.option_writes.initial.get(&program) {
-        None => settings_of(interp, program),
-        Some(options) if program.is_none() => (options.clone(), options.trace),
-        Some(options) => shown(Some(options.clone())),
+fn initial_of(
+    interp: &Interp,
+    receiver: ObjRef,
+) -> Result<(PackageOptions, Option<TraceMode>), Failure> {
+    let data = fields_of(interp, receiver)?;
+    match &data.initial_options {
+        None => settings_of(interp, receiver),
+        Some(options) => Ok(shown(data.program.is_none(), Some(options.clone()))),
     }
 }
 
-/// A file's package's settings with the trace setting its `~trace` reports,
-/// which is `NORMAL` where it names none.
-fn shown(options: Option<PackageOptions>) -> (PackageOptions, Option<TraceMode>) {
-    let trace = options.as_ref().and_then(|options| options.trace);
-    (
-        options.unwrap_or_default(),
-        Some(trace.unwrap_or(TraceMode::NORMAL)),
-    )
+/// `receiver`'s package fields.
+fn fields_of(interp: &Interp, receiver: ObjRef) -> Result<&PackageData, Failure> {
+    interp
+        .package_data(receiver)
+        .ok_or_else(|| Loud::receiver_class("a package object this crate did not build").into())
+}
+
+/// A package's settings with the trace setting its `~trace` reports, which
+/// for a file's package is `NORMAL` where it names none.
+fn shown(rexx: bool, options: Option<PackageOptions>) -> (PackageOptions, Option<TraceMode>) {
+    let options = options.unwrap_or_default();
+    let trace = match options.trace {
+        None if !rexx => Some(TraceMode::NORMAL),
+        trace => trace,
+    };
+    (options, trace)
 }
 
 /// `PackageClass::digitsRexx`: the package's own `DIGITS`.
@@ -179,7 +188,7 @@ fn digits(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let (options, _) = settings_of(interp, package_of(interp, receiver)?);
+    let (options, _) = settings_of(interp, receiver)?;
     let text = options.numeric.digits().to_string();
     Ok(Some(interp.text(text.as_bytes())))
 }
@@ -191,7 +200,7 @@ fn fuzz(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let (options, _) = settings_of(interp, package_of(interp, receiver)?);
+    let (options, _) = settings_of(interp, receiver)?;
     let text = options.numeric.fuzz().to_string();
     Ok(Some(interp.text(text.as_bytes())))
 }
@@ -204,7 +213,7 @@ fn form(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let (options, _) = settings_of(interp, package_of(interp, receiver)?);
+    let (options, _) = settings_of(interp, receiver)?;
     let text = match options.numeric.form() {
         rexx_num::Form::Scientific => b"SCIENTIFIC".as_slice(),
         rexx_num::Form::Engineering => b"ENGINEERING".as_slice(),
@@ -221,7 +230,7 @@ fn trace(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let (_, trace) = settings_of(interp, package_of(interp, receiver)?);
+    let (_, trace) = settings_of(interp, receiver)?;
     let text = trace.map(|mode| vec![mode.letter]).unwrap_or_default();
     Ok(Some(interp.text_built(text)))
 }
@@ -234,8 +243,7 @@ fn options(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
-    let (options, trace) = settings_of(interp, program);
+    let (options, trace) = settings_of(interp, receiver)?;
     let value = args.get(1).copied().flatten();
     let Some(name) = args.first().copied().flatten() else {
         if value.is_some() {
@@ -254,13 +262,15 @@ fn options(
                 return Err(Raised::not_enough_method_arguments(2).into());
             }
             Some(OptionName::Initial) => {
-                let (initial, trace) = initial_of(interp, program);
+                let (initial, trace) = initial_of(interp, receiver)?;
                 initial.value_of(OptionName::Initial, trace)
             }
             Some(OptionName::Reset) => {
-                let (initial, _) = initial_of(interp, program);
-                interp.package_settings_mut(program).take_settings(&initial);
-                interp.arm_option_latches(program);
+                let (initial, _) = initial_of(interp, receiver)?;
+                interp
+                    .package_settings_mut(receiver)
+                    .take_settings(&initial);
+                interp.arm_option_latches(receiver);
                 options.value_of(OptionName::Reset, trace)
             }
             Some(which) => options.value_of(which, trace),
@@ -334,8 +344,8 @@ fn options(
             }
         }
     }
-    *interp.package_settings_mut(program) = changed;
-    interp.arm_option_latches(program);
+    *interp.package_settings_mut(receiver) = changed;
+    interp.arm_option_latches(receiver);
     Ok(Some(interp.text_built(previous)))
 }
 

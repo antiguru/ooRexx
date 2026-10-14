@@ -13,11 +13,12 @@
 
 use rexx_num::{Form, Settings, SettingsError};
 use rexx_parse::{ConditionOption, OptionsForm, PackageOption};
-use rustc_hash::FxHashMap;
 
 use crate::error::{Failure, Raised};
+use crate::plan::Package;
 use crate::trace::{TraceMode, mode_from_setting};
 use crate::{Interp, ProgramId};
+use rexx_core::ObjRef;
 
 /// The six conditions `::OPTIONS` can turn from a condition into a SYNTAX
 /// error, in `subDirectives[]` order.
@@ -466,17 +467,10 @@ impl OptionName {
     }
 }
 
-/// What `Package~options` and `.Package~defaultOptions` writes keep: the
-/// statics `PackageClass` holds (`classes/PackageClass.cpp:70`), and each
-/// package's settings as they stood before their first change.
+/// What `.Package~defaultOptions` writes keep: the statics `PackageClass`
+/// holds (`classes/PackageClass.cpp:70`).
 #[derive(Default)]
 pub(crate) struct OptionWrites {
-    /// The REXX package's own settings, which a write reaches as it reaches
-    /// a file's.
-    pub(crate) rexx: PackageOptions,
-    /// `PackageClass::initialPackageSettings`, entered at a package's first
-    /// change. `None` is the REXX package.
-    pub(crate) initial: FxHashMap<Option<ProgramId>, PackageOptions>,
     /// `psOverridePackageSettings`.
     pub(crate) defaults: PackageOptions,
     /// `overrideCount`: a package compiled while it is not zero takes
@@ -508,31 +502,24 @@ fn trace_word(mode: TraceMode) -> &'static str {
 }
 
 impl Interp {
-    /// `program`'s settings for a change, whose first change enters what
-    /// `~options('I')` answers from then on. `None` is the REXX package.
-    pub(crate) fn package_settings_mut(
-        &mut self,
-        program: Option<ProgramId>,
-    ) -> &mut PackageOptions {
-        let settings = match program {
-            Some(program) => self.package_options.entry(program).or_default(),
-            None => &mut self.option_writes.rexx,
-        };
-        self.option_writes
-            .initial
-            .entry(program)
-            .or_insert_with(|| settings.clone());
+    /// `package`'s settings for a change, whose first change enters what
+    /// `~options('I')` answers from then on.
+    pub(crate) fn package_settings_mut(&mut self, package: ObjRef) -> &mut PackageOptions {
+        let data = self
+            .package_data_mut(package)
+            .expect("a package object holds package fields");
+        let settings = data.options.get_or_insert_default();
+        data.initial_options.get_or_insert_with(|| settings.clone());
         settings
     }
 
     /// The latches `Interp::install_directives` arms for an escalated
     /// `NOSTRING` or `LOSTDIGITS`, armed for a change that escalates one.
-    pub(crate) fn arm_option_latches(&mut self, program: Option<ProgramId>) {
-        let settings = match program {
-            Some(program) => self.package_options.get(&program),
-            None => Some(&self.option_writes.rexx),
-        };
-        let Some(settings) = settings else {
+    pub(crate) fn arm_option_latches(&mut self, package: ObjRef) {
+        let Some(settings) = self
+            .package_data(package)
+            .and_then(|data| data.options.as_ref())
+        else {
             return;
         };
         let (nostring, lostdigits) = (
@@ -553,7 +540,8 @@ impl Interp {
         // No latch to arm: the defaults are an `::OPTIONS` directive's,
         // whose own install armed any they escalate.
         let defaults = self.option_writes.defaults.clone();
-        self.package_settings_mut(Some(id)).take_defaults(&defaults);
+        let package = self.package_object(Package::Program(id));
+        self.package_settings_mut(package).take_defaults(&defaults);
         self.option_writes.count = self.option_writes.count.wrapping_sub(1);
     }
 
@@ -595,7 +583,7 @@ impl Interp {
         let mut compiled = None;
         self.install_executable(parsed, name, true, None, |_, id| compiled = Some(id))?;
         Ok(compiled
-            .and_then(|id| self.package_options.get(&id).cloned())
+            .and_then(|id| self.program_data(id)?.options.clone())
             .unwrap_or_default())
     }
 }

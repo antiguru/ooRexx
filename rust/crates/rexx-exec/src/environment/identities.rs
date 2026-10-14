@@ -118,7 +118,11 @@ impl Interp {
 
     /// The one object standing for `package`, built on first use.
     pub(crate) fn package_object(&mut self, package: Package) -> ObjRef {
-        if let Some(found) = self.package_objects.get(&package).copied() {
+        let built = match package {
+            Package::Rexx => self.rexx_package,
+            Package::Program(program) => self.program_package(program),
+        };
+        if let Some(found) = built {
             return found;
         }
         let package_class = self.package_class();
@@ -133,16 +137,25 @@ impl Interp {
                 .as_bytes()
                 .to_vec(),
         };
-        let object = self.alloc_with(
-            BehaviourId::OBJECT,
-            Body::Native(Box::new(NativeObject::new(package_class, &rendered))),
-        );
+        let mut native = NativeObject::new(package_class, &rendered);
+        native.set_package(crate::package_state::PackageData::state(match package {
+            Package::Rexx => None,
+            Package::Program(program) => Some(program),
+        }));
+        let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(Box::new(native)));
         // A package object outlives every send that can reach it and is
         // reachable from no other object, so the root is a global rather than
         // a temp -- the position `.environment` and `.local` are in.
         self.roots.add_global(&package_root_key(package), object);
-        self.package_objects.insert(package, object);
-        self.object_packages.insert(object, package);
+        match package {
+            Package::Rexx => self.rexx_package = Some(object),
+            Package::Program(ProgramId(program)) => {
+                if self.program_packages.len() <= program {
+                    self.program_packages.resize(program + 1, None);
+                }
+                self.program_packages[program] = Some(object);
+            }
+        }
         self.attach_annotations(object, Annotated::Package(package));
         object
     }
@@ -1108,8 +1121,7 @@ impl Interp {
             next_activation_id: _,
             next_invocation: _,
             programs,
-            package_options,
-            option_writes,
+            option_writes: _,
             security_managers,
             plans: _,
             last_plan: _,
@@ -1141,8 +1153,8 @@ impl Interp {
             package_public_classes,
             class_packages: _,
             empty_arguments: _,
-            package_objects: _,
-            object_packages: _,
+            rexx_package: _,
+            program_packages: _,
             program_routine_objects,
             package_tables: _,
             routine_objects: _,
@@ -1236,18 +1248,6 @@ impl Interp {
             "copying the tables loaded a program, so the copy's id is taken"
         );
         programs.push(std::rc::Rc::clone(&programs[program.0]));
-        if let Some(options) = package_options.get(&program).cloned() {
-            package_options.insert(copy, options);
-        }
-        let crate::options::OptionWrites {
-            rexx: _,
-            initial,
-            defaults: _,
-            count: _,
-        } = option_writes;
-        if let Some(settings) = initial.get(&Some(program)).cloned() {
-            initial.insert(Some(copy), settings);
-        }
         activity.copy_package();
         if let Some(model) = object_model {
             model.copy_package();
@@ -1307,7 +1307,17 @@ impl Interp {
         if untranslated.contains(&program) {
             untranslated.insert(copy);
         }
-        Ok(self.package_object(Package::Program(copy)))
+        let object = self.package_object(Package::Program(copy));
+        if let Some(source) = self.program_data(program).cloned() {
+            *self
+                .package_data_mut(object)
+                .expect("package_object builds a package body") =
+                crate::package_state::PackageData {
+                    program: Some(copy),
+                    ..source
+                };
+        }
+        Ok(object)
     }
 
     /// [`Interp::copy_package`]'s tables: `copy`'s `.ROUTINES` and annotation
@@ -1376,12 +1386,6 @@ impl Interp {
             .filter(|program| !self.compiled_method_names.contains_key(program))
             .map(|program| self.package_path(program));
         self.resolve_search(program, name, requires)
-    }
-
-    /// Which package a package object stands for, or `None` for a handle
-    /// [`Interp::package_object`] did not produce.
-    pub(crate) fn which_package(&self, package: ObjRef) -> Option<Package> {
-        self.object_packages.get(&package).copied()
     }
 
     /// The package a `Method` or `Routine` object passed as a context argument
