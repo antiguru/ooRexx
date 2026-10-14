@@ -3,7 +3,9 @@
    its own method answers even though '3' is a number. A subclass with no
    operator method of its own answers through String's. A controlled DO sends
    the setup's prefix + to a subclass instance in any of its numeric
-   positions. A stem whose default value is one forwards the operator to it. */
+   positions, and each step's + to a control variable that holds one. A stem
+   whose default value is one, and a variable reference to one, forward the
+   operator to it. */
 s = .mystr~new('3')
 say (s + 1) (s - 1) (s * 2) (s / 2) (s % 2) (s // 2) (s ** 2)
 say (-s) (+s) (\s) (s < 4) (s || 'x')
@@ -12,8 +14,12 @@ d = .plainsub~new('3'); say (d + 1) (-d) (d * 2) (d ** 2) (\.plainsub~new('0'))
 do i = .counter~new('1') to 3; say 'i' i; end
 do i = 1 to .counter~new('2') by .counter~new('1'); say 'j' i; end
 do i = s to 4; say 'k' i; end
+do i = 1 to 3; say 'm' i; if i = 1 then i = .counter~new('1'); end
+do i = 1.5 to 3; say 'w' i; if i = 1.5 then i = .counter~new('1.5'); end
+call vref >s
 say 'done'
 exit
+vref: use arg r; say (r + 1) (-r) (r * 2); return
 ::class mystr subclass string
 ::method '+'; if arg() = 0 then return 'pfx+'; return 'plus'
 ::method '-'; if arg() = 0 then return 'pfx-'; return 'minus'

@@ -2676,7 +2676,7 @@ impl Interp {
         by: &Number,
         digits: u64,
     ) -> Result<Option<Number>, Failure> {
-        let read = match self.to_number(previous) {
+        let read = match self.operand_number(previous) {
             Ok(read) => read,
             Err(_) if self.operator_message_receiver(previous).is_some() => return Ok(None),
             Err(_) => self.arith_operand(previous)?,
