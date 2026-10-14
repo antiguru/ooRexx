@@ -846,7 +846,10 @@ impl Activation {
         }
     }
 
-    /// The activation a message send into a `::METHOD` body pushes.
+    /// The activation a message send into a `::METHOD` body pushes. Built
+    /// in place in the send path: measured, out of line it costs `sendloop`
+    /// 11 instructions a send.
+    #[inline(always)]
     pub(crate) fn method(
         id: ActivationId,
         program: Rc<Program>,
