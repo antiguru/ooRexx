@@ -296,7 +296,7 @@ fn executable_context(
     let resolved = if class == Some(interp.package_class()) {
         interp.package_data(context).map(|_| context)
     } else if class == Some(interp.routine_class()) || class == Some(interp.method_class()) {
-        interp.executable_context_package(context)
+        interp.executable_context_package(context)?
     } else if class == Some(interp.string_class())
         && interp
             .to_text(context)

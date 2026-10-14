@@ -126,7 +126,7 @@ impl Interp {
         // allocates the object its fields live in. A program with no
         // directives writes none, and builds no package until asked.
         if !program.directives.is_empty() {
-            self.package_object(Package::Program(id));
+            self.package_object(Package::Program(id))?;
         }
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
@@ -252,7 +252,7 @@ impl Interp {
                     self.options_armed = true;
                     let outcome = {
                         let package = self
-                            .package_fields_mut(Package::Program(id))
+                            .package_fields_mut(Package::Program(id))?
                             .options
                             .get_or_insert_default();
                         options.iter().try_for_each(|option| package.apply(option))
@@ -354,7 +354,7 @@ impl Interp {
             }
         }
         if !routines.is_empty() || !public_routines.is_empty() {
-            let data = self.program_fields_mut(id);
+            let data = self.program_fields_mut(id)?;
             data.routines.extend(
                 routines
                     .into_iter()
@@ -371,7 +371,7 @@ impl Interp {
         self.untranslated.remove(&id);
         // Where the translation ends and before any `::REQUIRES` loads, which
         // is where `generateProgram` and `installPackage` run it.
-        self.override_package_settings(id);
+        self.override_package_settings(id)?;
 
         // **A second pass, because the oracle's own translation-time
         // refusals above happen before every install-time one below**
@@ -575,11 +575,11 @@ impl Interp {
                 }
                 if library {
                     if let Some(package) = internal_routines::Package::named(&requires.name) {
-                        self.merge_internal_package(id, package);
+                        self.merge_internal_package(id, package)?;
                         continue;
                     }
                     match self.require_library(&requires.name) {
-                        Ok(loaded) => self.merge_library(id, &requires.name, &loaded),
+                        Ok(loaded) => self.merge_library(id, &requires.name, &loaded)?,
                         Err(failure) => {
                             self.seal_site_level();
                             self.blame_directive_in(id, program, directive);
@@ -590,8 +590,8 @@ impl Interp {
                 }
                 match self.load_requires(Some(id), &requires.name) {
                     Ok(required) => {
-                        let into = self.package_object(Package::Program(id));
-                        let from = self.package_object(Package::Program(required));
+                        let into = self.package_object(Package::Program(id))?;
+                        let from = self.package_object(Package::Program(required))?;
                         self.add_imported_package(into, from);
                         self.merge_package(into, from);
                         // `RequiresDirective::install`
@@ -601,7 +601,7 @@ impl Interp {
                         // the merge nor replaces it.
                         if let Some(namespace) = requires.namespace {
                             let name = program.symbols.name(namespace).as_bytes().into();
-                            self.program_fields_mut(id).namespaces.insert(name, from);
+                            self.program_fields_mut(id)?.namespaces.insert(name, from);
                         }
                     }
                     Err(failure) => {
@@ -628,7 +628,23 @@ impl Interp {
     /// a global lookup still hits what a `::REQUIRES` loaded earlier --
     /// measured, `Package~new` after a `loadPackage` of the same short name
     /// answers the package already loaded.
+    ///
+    /// The package is rooted as a temp of the caller's frame: on a cache hit
+    /// the weak cache may be all that reaches it.
     fn load_requires(
+        &mut self,
+        from: Option<ProgramId>,
+        name: &[u8],
+    ) -> Result<ProgramId, Failure> {
+        let loaded = self.find_requires(from, name)?;
+        if let Some(package) = self.program_package(loaded) {
+            self.roots.activity_mut().push_temp(package);
+        }
+        Ok(loaded)
+    }
+
+    /// [`Interp::load_requires`]'s lookup and load.
+    fn find_requires(
         &mut self,
         from: Option<ProgramId>,
         name: &[u8],
@@ -704,7 +720,7 @@ impl Interp {
         // weakly (`PackageManager::addToRequiresCache`,
         // `package/PackageManager.cpp:921`), so an entry lives exactly as long
         // as its object.
-        let package = self.package_object(Package::Program(required));
+        let package = self.package_object(Package::Program(required))?;
         // Installed before the prologue runs, which is where
         // `getRequiresFile` puts it (`package/PackageManager.cpp:830`-`:833`).
         if let Some(manager) = inherited {
@@ -983,8 +999,11 @@ impl Interp {
         // Recorded ahead of the prologue for the reason
         // `new_file_executable` records its own parent early: the prologue
         // resolves routines, and must already reach the context.
+        // Built before the prologue, rooted as a temp of this frame: a package
+        // the prologue builds would otherwise go with the prologue's frame.
+        self.package_object(Package::Program(id))?;
         if let Some(parent) = parent {
-            self.set_package_parent(id, parent);
+            self.set_package_parent(id, parent)?;
         }
         self.run_loaded(parsed, id, CallType::Requires, None, None)?;
         Ok(id)
@@ -1140,9 +1159,10 @@ impl Interp {
         if self.program_package(program).is_none() {
             self.roots.activity_mut().push_temp(value);
         }
-        self.program_fields_mut(program)
-            .constants
-            .insert(directive, value);
+        let package = self.held_package_object(Package::Program(program));
+        if let Some(data) = self.package_data_mut(package) {
+            data.constants.insert(directive, value);
+        }
     }
 
     /// The value a `::CONSTANT` accessor answers, or `None` for an expression
@@ -1250,7 +1270,7 @@ impl Interp {
         // which files a public class in both of the package's tables and
         // every other class in one (`classes/PackageClass.cpp:1410`-`:1419`).
         // That is the difference `~publicClasses` reads back.
-        self.record_package_class(program, &class.name, id, class.access == Access::Public);
+        self.record_package_class(program, &class.name, id, class.access == Access::Public)?;
         Ok(id)
     }
 
@@ -1688,7 +1708,7 @@ impl Interp {
         name: &[u8],
         parsed: Program,
         parent: Option<ObjRef>,
-    ) {
+    ) -> Result<(), Failure> {
         let Program {
             source,
             main,
@@ -1718,12 +1738,12 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
-        self.override_package_settings(program_id);
+        self.override_package_settings(program_id)?;
         // `generateMethod` and `generateRoutine` give the executable's own
         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
         // which its routine and class lookups walk.
         if let Some(parent) = parent {
-            self.set_package_parent(program_id, parent);
+            self.set_package_parent(program_id, parent)?;
         }
         let method = self.mint_unattached_body(
             object,
@@ -1741,7 +1761,7 @@ impl Interp {
                 installed: Some(method),
                 routine: None,
             },
-        );
+        )
     }
 
     /// Mints the identity a `Method` object no class dictionary holds runs
@@ -1832,7 +1852,7 @@ impl Interp {
         name: &[u8],
         parsed: Program,
         parent: Option<ObjRef>,
-    ) {
+    ) -> Result<(), Failure> {
         let Program {
             source,
             main,
@@ -1856,12 +1876,12 @@ impl Interp {
         let program_id = ProgramId(self.programs.len());
         self.programs.push(program);
         self.compiled_method_names.insert(program_id, name.into());
-        self.override_package_settings(program_id);
+        self.override_package_settings(program_id)?;
         // `generateMethod` and `generateRoutine` give the executable's own
         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
         // which its routine and class lookups walk.
         if let Some(parent) = parent {
-            self.set_package_parent(program_id, parent);
+            self.set_package_parent(program_id, parent)?;
         }
         self.record_executable(
             object,
@@ -1872,7 +1892,7 @@ impl Interp {
                 installed: None,
                 routine: Some((program_id, 0)),
             },
-        );
+        )
     }
 
     /// `MethodClass::newFileRexx` and `RoutineClass::newFileRexx`
@@ -1903,7 +1923,8 @@ impl Interp {
             Some(parent) => Some(parent),
             None => self
                 .running_program()
-                .map(|program| self.package_object(Package::Program(program))),
+                .map(|program| self.package_object(Package::Program(program)))
+                .transpose()?,
         };
         self.install_executable(parsed, name, routine, parent, |interp, id| {
             interp.required_paths.insert(id, path.into());
@@ -1968,7 +1989,7 @@ impl Interp {
         // executable. `load_requires` caches ahead of its own prologue for
         // the same reason.
         if let Some(parent) = parent {
-            self.set_package_parent(id, parent);
+            self.set_package_parent(id, parent)?;
         }
         if let Err(failure) = self.install_directives(id, &program) {
             self.seal_package_level(&failure, id);
@@ -1999,7 +2020,7 @@ impl Interp {
                 installed,
                 routine: routine.then_some((id, body)),
             },
-        );
+        )?;
         Ok(object)
     }
 
@@ -2203,7 +2224,12 @@ impl Interp {
 
     /// `PackageClass::mergeLibrary`: `library`'s routines join `id`'s own
     /// routine lookup where no earlier merge put the name.
-    fn merge_library(&mut self, id: ProgramId, name: &[u8], library: &rexx_api::load::Library) {
+    fn merge_library(
+        &mut self,
+        id: ProgramId,
+        name: &[u8],
+        library: &rexx_api::load::Library,
+    ) -> Result<(), Failure> {
         let routines: Vec<(Box<[u8]>, MergedRoutine)> = library
             .package_routines()
             .into_iter()
@@ -2216,13 +2242,18 @@ impl Interp {
                 (upper.into_boxed_slice(), MergedRoutine::Library(code))
             })
             .collect();
-        let into = self.package_object(Package::Program(id));
+        let into = self.package_object(Package::Program(id))?;
         self.merge_routines(into, routines);
+        Ok(())
     }
 
     /// `PackageClass::mergeLibrary` over an internal package: its routines
     /// join `id`'s own routine lookup where no earlier merge put the name.
-    fn merge_internal_package(&mut self, id: ProgramId, package: internal_routines::Package) {
+    fn merge_internal_package(
+        &mut self,
+        id: ProgramId,
+        package: internal_routines::Package,
+    ) -> Result<(), Failure> {
         let routines: Vec<(Box<[u8]>, MergedRoutine)> = internal_routines::package_indexes(package)
             .map(|index| {
                 let name = internal_routines::INTERNAL_ROUTINES[index].name;
@@ -2230,8 +2261,9 @@ impl Interp {
                 (upper.into_boxed_slice(), MergedRoutine::Internal(index))
             })
             .collect();
-        let into = self.package_object(Package::Program(id));
+        let into = self.package_object(Package::Program(id))?;
         self.merge_routines(into, routines);
+        Ok(())
     }
 
     /// Adds each of `routines` to `into`'s imported routines where the name

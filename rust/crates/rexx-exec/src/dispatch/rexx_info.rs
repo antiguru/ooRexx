@@ -13,7 +13,6 @@
 //! `memory/Setup.cpp:1252`-`:1279`.
 
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised};
-use crate::plan::Package;
 use crate::version;
 
 /// `RexxInfo`'s instance methods. Chained into `ObjectModel::build` beside
@@ -388,7 +387,7 @@ fn package(
     _receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    Ok(Some(interp.package_object(Package::Rexx)))
+    Ok(Some(interp.rexx_package_object()))
 }
 
 /// `RexxInfo::getPathSeparator`: `SysFileSystem::getPathSeparator`

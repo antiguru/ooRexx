@@ -486,32 +486,27 @@ impl Activity {
         }
     }
 
-    /// Appends every `ObjRef` the activity must hand the collector to `out`,
-    /// and names every field that does not need to be handed over.
-    /// Appends the program of each activation on this activity's stack and
-    /// on each replied continuation's, and of the level the failure being
-    /// unwound came from.
+    /// Appends the program of each activation on this activity's stack, and
+    /// of the level the failure being unwound came from.
+    ///
+    /// A replied activation's continuation holds no activation of its own:
+    /// the replying activation stays on this stack, and so in this walk,
+    /// until it ends and moves into the continuation's activity.
     pub(crate) fn running_programs(&self, out: &mut Vec<crate::plan::ProgramId>) {
         if let Some((crate::plan::Package::Program(program), _)) = self.failure_origin {
             out.push(program);
         }
-        for activation in self
-            .running
-            .iter()
-            .map(std::ops::Deref::deref)
-            .chain(self.suspended.iter().map(Box::as_ref))
-        {
-            out.push(activation.program_id);
-            if let Some(continuation) = activation
-                .replied
-                .as_ref()
-                .and_then(|replied| replied.continuation.as_ref())
-            {
-                continuation.activity.running_programs(out);
-            }
-        }
+        out.extend(
+            self.running
+                .iter()
+                .map(std::ops::Deref::deref)
+                .chain(self.suspended.iter().map(Box::as_ref))
+                .map(|activation| activation.program_id),
+        );
     }
 
+    /// Appends every `ObjRef` the activity must hand the collector to `out`,
+    /// and names every field that does not need to be handed over.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         let Activity {
             // Every push site roots the value as a temp before it lands here.

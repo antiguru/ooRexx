@@ -1090,7 +1090,7 @@ impl Interp {
         program: ProgramId,
         kind: PackageTable,
     ) -> Option<ObjRef> {
-        let package = self.package_object(Package::Program(program));
+        let package = self.held_package_object(Package::Program(program));
         self.package_string_table(package, kind)
     }
 
@@ -1197,7 +1197,8 @@ impl Interp {
                                 installed: method,
                                 routine: routine.then_some((program, directive)),
                             },
-                        );
+                        )
+                        .expect("the package whose table this is holds its program");
                         if routine {
                             self.routine_objects.insert(installed, object);
                         }

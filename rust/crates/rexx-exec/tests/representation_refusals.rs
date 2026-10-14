@@ -114,6 +114,12 @@ const ALLOWED: &[(&str, &str)] = &[
         "rexx-exec/src/environment.rs:a value whose object is no longer live",
         "Task 8",
     ),
+    // An internal guard: a package asked for after it was collected is a
+    // rooting defect, refused rather than rebuilt.
+    (
+        "rexx-exec/src/environment/identities.rs:a package whose object is no longer live",
+        "Task 8",
+    ),
 ];
 
 /// The owners a row may name.

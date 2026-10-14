@@ -949,10 +949,45 @@ fn a_dropped_package_copy_is_collected() {
 /// Runs `program` collecting at every allocation and asserts it exited 0
 /// having printed `expected`, and that it collected.
 fn assert_stress_prints(label: &str, program: &str, expected: &str) {
+    assert_stress_run_prints(label, program, rexx_exec::Invocation::none(), expected);
+}
+
+/// [`assert_stress_prints`] for a program that calls external routines: each
+/// of `files` is written into a directory of the label's own, which the
+/// program runs in.
+fn assert_stress_prints_beside(label: &str, files: &[(&str, &str)], program: &str, expected: &str) {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("collect-stress-beside")
+        .join(label.trim_matches(['<', '>']));
+    if dir.exists() {
+        fs::remove_dir_all(&dir).unwrap_or_else(|e| panic!("cannot empty {}: {e}", dir.display()));
+    }
+    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot make {}: {e}", dir.display()));
+    for (name, text) in files {
+        fs::write(dir.join(name), text).unwrap_or_else(|e| panic!("cannot write {name}: {e}"));
+    }
+    let path = dir.join("main.rex");
+    assert_stress_run_prints(
+        path.to_str().expect("a UTF-8 target directory"),
+        program,
+        rexx_exec::Invocation::none().with_directory(dir.clone()),
+        expected,
+    );
+}
+
+/// Runs `program` as `path` under `invocation`, collecting at every
+/// allocation, and asserts it exited 0 having printed `expected`, and that
+/// it collected.
+fn assert_stress_run_prints(
+    path: &str,
+    program: &str,
+    invocation: rexx_exec::Invocation,
+    expected: &str,
+) {
     let stress = run_program_collect_every_alloc(
-        label,
+        path,
         program.as_bytes().to_vec(),
-        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+        invocation.with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
     assert_eq!(
         (
@@ -1365,6 +1400,103 @@ fn a_package_in_use_is_never_collected() {
     ] {
         assert_stress_prints(label, program, expected);
     }
+    // An external routine parked on another activity keeps its package,
+    // which an internal routine built. Oracle: `p10 1 1 7`, rc 0.
+    assert_stress_prints_beside(
+        "<package-of-a-parked-frame>",
+        &[(
+            "ext10.rex",
+            concat!(
+                "use arg sem, ready\n",
+                "h = pk()\n",
+                "ready~post\n",
+                "sem~wait\n",
+                "return (.local~w10~value \\== .nil) (.context~package~identityHash == h) ",
+                ".context~package~findRoutine('Z7')~call\n",
+                "pk:\n",
+                "  .local~w10 = .WeakReference~new(.context~package)\n",
+                "  .context~package~addRoutine('Z7', .routine~new('z', 'return 7'))\n",
+                "  return .context~package~identityHash\n",
+            ),
+        )],
+        concat!(
+            "sem = .EventSemaphore~new\n",
+            "ready = .EventSemaphore~new\n",
+            "msg = .starter~new~start('go', sem, ready)\n",
+            "ready~wait\n",
+            "do i = 1 to 20\n",
+            "  zj = 'filler' i\n",
+            "end\n",
+            "sem~post\n",
+            "say 'p10' msg~result\n",
+            "::class starter\n",
+            "::method go\n",
+            "  use arg sem, ready\n",
+            "  return ext10(sem, ready)\n",
+        ),
+        "p10 1 1 7\n",
+    );
+}
+
+/// The filler of the external-routine tests below, in place of the oracle's
+/// 3000-pass loop of `copies('y', 100000)`.
+const EXTERNAL_FILLER: &str = "do zi = 1 to 3\n  zz = 'f' zi\nend\n";
+
+/// An external routine's package outlives its return until the caller has
+/// merged what it made public, here a public class it added at run time,
+/// whether or not the caller's own package existed before the call.
+/// Measured, oracle rc 0, the same lines with the oracle's filler.
+#[test]
+fn an_external_routines_added_public_class_is_merged() {
+    let ext9e = format!(
+        ".context~package~addPublicClass('DK', .object~subclass('dk'))\n{EXTERNAL_FILLER}return 'v' || 1\n"
+    );
+    assert_stress_prints_beside(
+        "<external-public-class>",
+        &[("ext9e.rex", &ext9e)],
+        "v = ext9e()\nsay 'p09e' v .dk~id\n",
+        "p09e v1 dk\n",
+    );
+}
+
+/// The same for a routine an external routine added to its own package,
+/// called twice. Measured, oracle rc 0, the same lines with the oracle's
+/// filler.
+#[test]
+fn an_external_routines_package_survives_two_calls() {
+    let ext1 = format!(
+        "h = .context~package~identityHash\n\
+         w = .WeakReference~new(.context~package)\n\
+         .context~package~addRoutine('Z7', .routine~new('z', 'return 7'))\n\
+         {EXTERNAL_FILLER}\
+         return (w~value \\== .nil) (.context~package~identityHash == h) \
+         .context~package~findRoutine('Z7')~call\n"
+    );
+    assert_stress_prints_beside(
+        "<external-added-routine>",
+        &[("ext1.rex", &ext1)],
+        "say 'p01' ext1()\nsay 'p01' ext1()\n",
+        "p01 1 1 7\np01 1 1 7\n",
+    );
+}
+
+/// The same through INTERPRET. Measured, oracle rc 0, the same lines with
+/// the oracle's filler.
+#[test]
+fn an_external_routines_package_survives_interpret() {
+    let ext6 = format!(
+        "interpret \"h = .context~package~identityHash\"\n\
+         interpret \".context~package~addRoutine('Z7', .routine~new('z', 'return 7'))\"\n\
+         {EXTERNAL_FILLER}\
+         interpret \"r = (.context~package~identityHash == h) .context~package~findRoutine('Z7')~call\"\n\
+         return r\n"
+    );
+    assert_stress_prints_beside(
+        "<external-interpret>",
+        &[("ext6.rex", &ext6)],
+        "say 'p06' ext6()\n",
+        "p06 1 7\n",
+    );
 }
 
 /// A package nothing reaches is collected and its weak reference clears,

@@ -589,13 +589,15 @@ impl Surface for Interp {
     fn load_package(&mut self, name: &[u8]) -> Option<ObjRef> {
         let loaded = self.load_package_global(name);
         let program = self.held(loaded)?;
-        Some(self.package_object(Package::Program(program)))
+        let package = self.package_object(Package::Program(program));
+        self.held(package)
     }
 
     fn load_package_source(&mut self, name: &[u8], lines: &[Vec<u8>]) -> Option<ObjRef> {
         let loaded = self.package_from_source(name, lines, None);
         let program = self.held(loaded)?;
-        Some(self.package_object(Package::Program(program)))
+        let package = self.package_object(Package::Program(program));
+        self.held(package)
     }
 
     fn load_library(&mut self, name: &[u8]) -> bool {

@@ -347,7 +347,7 @@ fn context_package(
     at_context(interp, receiver, |interp, depth| {
         let program = frame(interp, depth)?.program_id;
         Ok(Some(
-            interp.package_object(crate::plan::Package::Program(program)),
+            interp.package_object(crate::plan::Package::Program(program))?,
         ))
     })
 }
@@ -451,7 +451,7 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             let (scope, name, receiver) =
                 (identity.scope, identity.name.to_vec(), identity.receiver);
             let body = crate::InstalledMethodBody { program, directive };
-            let executable = interp.running_method_executable(scope, &name, receiver, body);
+            let executable = interp.running_method_executable(scope, &name, receiver, body)?;
             // Kept on the activation, which roots it: measured, oracle rc 0,
             // a method that unsets its own entry answers the same object
             // before and after a forced collection.
@@ -487,7 +487,7 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
         // executable: measured, oracle rc 0, an internal routine called from
         // a `::METHOD` answers that `Method`.
         (Entry::InternalCall, ..) => executable_at(interp, depth + 1),
-        _ => Ok(interp.program_routine_object(program)),
+        _ => interp.program_routine_object(program),
     }
 }
 

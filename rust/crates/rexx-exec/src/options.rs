@@ -534,16 +534,17 @@ impl Interp {
     /// `PackageClass::overridePackageSettings`, which every compile of a
     /// package runs (`parser/LanguageParser.cpp:658`, `:856`) and an
     /// `INTERPRET` does not.
-    pub(crate) fn override_package_settings(&mut self, id: ProgramId) {
+    pub(crate) fn override_package_settings(&mut self, id: ProgramId) -> Result<(), Failure> {
         if self.option_writes.count == 0 {
-            return;
+            return Ok(());
         }
         // No latch to arm: the defaults are an `::OPTIONS` directive's,
         // whose own install armed any they escalate.
         let defaults = self.option_writes.defaults.clone();
-        let package = self.package_object(Package::Program(id));
+        let package = self.package_object(Package::Program(id))?;
         self.package_settings_mut(package).take_defaults(&defaults);
         self.option_writes.count = self.option_writes.count.wrapping_sub(1);
+        Ok(())
     }
 
     /// `PackageClass::setPackageSettings`: the settings `text`, a single

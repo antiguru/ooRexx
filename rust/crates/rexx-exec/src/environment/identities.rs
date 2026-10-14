@@ -27,9 +27,9 @@ impl Interp {
         name: &[u8],
         class: ObjRef,
         public: bool,
-    ) {
+    ) -> Result<(), Failure> {
         self.invalidate_rexx_class_cache();
-        let data = self.program_fields_mut(program);
+        let data = self.program_fields_mut(program)?;
         data.classes.insert(name.to_ascii_uppercase().into(), class);
         if public {
             data.public_classes
@@ -45,14 +45,14 @@ impl Interp {
         if !self.library_programs.contains(&program) {
             self.class_packages
                 .insert(class, ClassPackage::Program(program));
-            let package = self.package_object(Package::Program(program));
+            let package = self.package_object(Package::Program(program))?;
             self.class_holds_package(class, package);
-            return;
+            return Ok(());
         }
         self.roots.activity_mut().push_temp(class);
-        let rexx = self.package_object(Package::Rexx);
+        let rexx = self.rexx_package_object();
         let Some(data) = self.package_data_mut(rexx) else {
-            return;
+            return Ok(());
         };
         data.classes
             .entry(name.to_ascii_uppercase().into())
@@ -62,6 +62,7 @@ impl Interp {
                 .entry(name.to_ascii_uppercase().into())
                 .or_insert(class);
         }
+        Ok(())
     }
 
     /// Records a class `Class~subclass` or `Class~mixinClass` built, whose
@@ -74,12 +75,10 @@ impl Interp {
     /// Gives `copy` the package `class` answers, which is what a clone of the
     /// class object carries.
     pub(crate) fn copy_class_package(&mut self, class: ObjRef, copy: ObjRef) {
+        // The copy does not hold the package: `class`, which is never
+        // collected (D59), already does.
         if let Some(package) = self.class_packages.get(&class).copied() {
             self.class_packages.insert(copy, package);
-            if let ClassPackage::Program(program) = package {
-                let package = self.package_object(Package::Program(program));
-                self.class_holds_package(copy, package);
-            }
         }
     }
 
@@ -132,21 +131,44 @@ impl Interp {
 
     /// The package object `class~package` answers, or `.nil` for a class that
     /// belongs to no package.
-    pub(crate) fn package_object_for(&mut self, class: ObjRef) -> ObjRef {
+    pub(crate) fn package_object_for(&mut self, class: ObjRef) -> Result<ObjRef, Failure> {
         // A class this crate's own bootstrap registered is in no program's
         // table, and that absence is what `Package::Rexx` names -- the
         // distinction the enum exists to keep out of an `Option`.
         let package = match self.class_packages.get(&class).copied() {
             None => Package::Rexx,
-            Some(ClassPackage::Null) => return ObjRef::NIL,
+            Some(ClassPackage::Null) => return Ok(ObjRef::NIL),
             Some(ClassPackage::Program(program)) => Package::Program(program),
         };
         self.package_object(package)
     }
 
+    /// The REXX package's object, built on first use. It is a global root, so
+    /// [`Interp::package_object`] never refuses it.
+    pub(crate) fn rexx_package_object(&mut self) -> ObjRef {
+        self.held_package_object(Package::Rexx)
+    }
+
+    /// [`Interp::package_object`] for a package that a running activation,
+    /// an install in progress or a reachable package's table holds.
+    ///
+    /// # Panics
+    ///
+    /// If that package was collected, which is a rooting defect.
+    pub(crate) fn held_package_object(&mut self, package: Package) -> ObjRef {
+        match self.package_object(package) {
+            Ok(object) => object,
+            Err(_) => panic!("{package:?}'s package was collected while it was held"),
+        }
+    }
+
     /// The one object standing for `package`, built on first use. A freshly
     /// built program package is rooted as a temp of the caller's frame.
-    pub(crate) fn package_object(&mut self, package: Package) -> ObjRef {
+    ///
+    /// Refuses a package that was built and has been collected: whatever
+    /// asked for it is a holder the collector was not shown, and a rebuilt
+    /// package would answer with a new identity and none of its state.
+    pub(crate) fn package_object(&mut self, package: Package) -> Result<ObjRef, Failure> {
         let built = match package {
             Package::Rexx => self.rexx_package,
             Package::Program(program) => self.program_package(program),
@@ -157,9 +179,12 @@ impl Interp {
                 live,
                 "{package:?}'s package was asked for after it was collected"
             );
-            if live {
-                return found;
+            if !live {
+                return Err(
+                    Loud::unknown_receiver("a package whose object is no longer live").into(),
+                );
             }
+            return Ok(found);
         }
         let package_class = self.package_class();
         // The `REXX` package was given its name by the interpreter's own
@@ -197,7 +222,7 @@ impl Interp {
             }
         }
         self.attach_annotations(object, Annotated::Package(package));
-        object
+        Ok(object)
     }
 
     /// `Class~method`'s answer: the one `Method` object the dictionary entry
@@ -210,14 +235,14 @@ impl Interp {
         name: &[u8],
         scope: ObjRef,
         record: crate::ExecutableRecord,
-    ) -> ObjRef {
+    ) -> Result<ObjRef, Failure> {
         let key = (class, class_side, Box::<[u8]>::from(name));
         if let Some(found) = self.method_objects.get(&key).copied() {
-            return found;
+            return Ok(found);
         }
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
-        self.record_executable(object, record);
+        self.record_executable(object, record)?;
         if let Some(method) = record.installed {
             self.executable_objects.entry(method).or_insert(object);
         }
@@ -231,7 +256,7 @@ impl Interp {
         // The dictionary entry the caller found, which is what its
         // annotations are keyed by.
         self.attach_annotations(object, Annotated::Member(class, class_side, name.into()));
-        object
+        Ok(object)
     }
 
     /// The one `Method` object for the method `name` defined at `scope` --
@@ -255,7 +280,7 @@ impl Interp {
                     installed: Some(method),
                     routine: None,
                 };
-                Ok(self.method_object(scope, false, name, scope, record))
+                self.method_object(scope, false, name, scope, record)
             }
             _ => Err(crate::Loud::unknown_receiver(
                 "a method context whose scope no longer defines it",
@@ -276,7 +301,7 @@ impl Interp {
         name: &[u8],
         receiver: ObjRef,
         body: crate::InstalledMethodBody,
-    ) -> ObjRef {
+    ) -> Result<ObjRef, Failure> {
         let runs = |interp: &Self, method: rexx_classes::MethodId| {
             interp.method_bodies.get(&method).is_some_and(|found| {
                 found.program == body.program && found.directive == body.directive
@@ -286,7 +311,7 @@ impl Interp {
             && entry.scope == scope
             && runs(self, entry.method)
         {
-            return entry.executable;
+            return Ok(entry.executable);
         }
         if self.heap.is_class(scope)
             && let Some(rexx_classes::MethodSlot::Defined { scope, method }) = self
@@ -312,7 +337,7 @@ impl Interp {
             .min_by_key(|(method, _)| method.0)
             .map(|(_, object)| *object);
         if let Some(object) = standing {
-            return object;
+            return Ok(object);
         }
         let method = self
             .method_bodies
@@ -345,7 +370,7 @@ impl Interp {
                 installed: method,
                 routine: None,
             },
-        );
+        )?;
         if let Some(method) = method {
             self.executable_objects.insert(method, object);
         }
@@ -377,20 +402,20 @@ impl Interp {
         {
             self.executables_rebuilt += 1;
         }
-        object
+        Ok(object)
     }
 
     /// The one `Routine` object standing for `program`'s own main section --
     /// what `RexxContext~executable` answers from a `PROGRAM` or
     /// `INTERNALCALL` context, held by the program's package.
-    pub(crate) fn program_routine_object(&mut self, program: ProgramId) -> ObjRef {
+    pub(crate) fn program_routine_object(&mut self, program: ProgramId) -> Result<ObjRef, Failure> {
         if let Some(found) = self
             .program_data(program)
             .and_then(|data| data.main_routine)
         {
-            return found;
+            return Ok(found);
         }
-        let package = self.package_object(Package::Program(program));
+        let package = self.package_object(Package::Program(program))?;
         let class = self.routine_class();
         let object = self.native_instance(class);
         if let Some(data) = self.package_data_mut(package) {
@@ -403,23 +428,29 @@ impl Interp {
                 installed: None,
                 routine: None,
             },
-        );
-        object
+        )?;
+        Ok(object)
     }
 
     /// Files `record` as what the `Method` or `Routine` object `object`
     /// reports on and runs, and makes `object` keep the package its code
     /// belongs to alive, as `BaseExecutable::package` does. May allocate, so
     /// `object` must be rooted.
-    pub(crate) fn record_executable(&mut self, object: ObjRef, record: crate::ExecutableRecord) {
+    pub(crate) fn record_executable(
+        &mut self,
+        object: ObjRef,
+        record: crate::ExecutableRecord,
+    ) -> Result<(), Failure> {
         self.executable_sources.insert(object, record);
         let program = match record.source {
             crate::ExecutableSource::Directive { program, .. }
             | crate::ExecutableSource::Main { program }
             | crate::ExecutableSource::External { program } => program,
-            crate::ExecutableSource::Native | crate::ExecutableSource::Loaded { .. } => return,
+            crate::ExecutableSource::Native | crate::ExecutableSource::Loaded { .. } => {
+                return Ok(());
+            }
         };
-        let package = self.package_object(Package::Program(program));
+        let package = self.package_object(Package::Program(program))?;
         match self.heap.get_mut(object).map(|held| &mut held.body) {
             Some(Body::Native(native)) => native.set_executable_package(package),
             Some(Body::Instance { native, .. }) => {
@@ -427,6 +458,7 @@ impl Interp {
             }
             _ => {}
         }
+        Ok(())
     }
 
     /// `MethodClass::newScope` (`classes/MethodClass.cpp:183`): the same
@@ -935,9 +967,14 @@ impl Interp {
 
     /// Records `parent` as `program`'s parent package. May allocate `program`'s
     /// package, and so collect.
-    pub(crate) fn set_package_parent(&mut self, program: ProgramId, parent: ObjRef) {
+    pub(crate) fn set_package_parent(
+        &mut self,
+        program: ProgramId,
+        parent: ObjRef,
+    ) -> Result<(), Failure> {
         self.roots.activity_mut().push_temp(parent);
-        self.program_fields_mut(program).parent = Some(parent);
+        self.program_fields_mut(program)?.parent = Some(parent);
+        Ok(())
     }
 
     /// A class installed in `package` or up its parent chain --
@@ -1127,10 +1164,10 @@ impl Interp {
     /// Builds what a copy of `package` shares with it rather than holding
     /// alone: its program's main `Routine` object and its `.METHODS`,
     /// `.ROUTINES` and `.RESOURCES` tables, each where it has one.
-    pub(crate) fn build_package_shares(&mut self, package: ObjRef) {
+    pub(crate) fn build_package_shares(&mut self, package: ObjRef) -> Result<(), Failure> {
         use crate::environment::PackageTable;
         if let Some(program) = self.package_data(package).and_then(|data| data.program) {
-            self.program_routine_object(program);
+            self.program_routine_object(program)?;
         }
         for kind in [
             PackageTable::UnattachedMethods,
@@ -1139,6 +1176,7 @@ impl Interp {
         ] {
             self.package_string_table(package, kind);
         }
+        Ok(())
     }
 
     /// The file `name` resolves to from `package`'s own directory --
@@ -1177,10 +1215,15 @@ impl Interp {
     /// parent (`execution/BaseExecutable.cpp:121-125`): measured, it answers
     /// until a name is resolved through that parent, and segfaults there
     /// (`corpus/oracle-crashes.txt` entry 15).
-    pub(crate) fn executable_context_package(&mut self, object: ObjRef) -> Option<ObjRef> {
-        let source = self.executable_sources.get(&object)?.source;
-        let package = self.source_package(source).unwrap_or(Package::Rexx);
-        Some(self.package_object(package))
+    pub(crate) fn executable_context_package(
+        &mut self,
+        object: ObjRef,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(record) = self.executable_sources.get(&object) else {
+            return Ok(None);
+        };
+        let package = self.source_package(record.source).unwrap_or(Package::Rexx);
+        self.package_object(package).map(Some)
     }
 }
 

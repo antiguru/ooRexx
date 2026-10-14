@@ -207,7 +207,7 @@ pub(super) fn native_method(
                 routine: None,
             };
             Ok(Some(
-                interp.method_object(class, false, &name, scope, record),
+                interp.method_object(class, false, &name, scope, record)?,
             ))
         }
     }
@@ -376,7 +376,8 @@ pub(super) fn compile_method_source_in(
         Some(parent) => Some(parent),
         None => interp
             .running_program()
-            .map(|program| interp.package_object(crate::plan::Package::Program(program))),
+            .map(|program| interp.package_object(crate::plan::Package::Program(program)))
+            .transpose()?,
     };
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, false, parent, |interp, id| {
@@ -394,7 +395,7 @@ pub(super) fn compile_method_source_in(
     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
     interp.compiled_methods += 1;
     interp.attach_annotations(object, site);
-    interp.record_compiled_body(object, name, parsed, parent);
+    interp.record_compiled_body(object, name, parsed, parent)?;
     Ok(object)
 }
 
@@ -418,7 +419,8 @@ pub(super) fn compile_routine_source(
         Some(parent) => Some(parent),
         None => interp
             .running_program()
-            .map(|program| interp.package_object(crate::plan::Package::Program(program))),
+            .map(|program| interp.package_object(crate::plan::Package::Program(program)))
+            .transpose()?,
     };
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, true, parent, |interp, id| {
@@ -430,7 +432,7 @@ pub(super) fn compile_routine_source(
     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
     interp.compiled_methods += 1;
     interp.attach_annotations(object, site);
-    interp.record_compiled_routine(object, name, parsed, parent);
+    interp.record_compiled_routine(object, name, parsed, parent)?;
     Ok(object)
 }
 
@@ -1152,7 +1154,7 @@ pub(super) fn native_package(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let class = class_receiver(interp, receiver)?;
-    Ok(Some(interp.package_object_for(class)))
+    Ok(Some(interp.package_object_for(class)?))
 }
 
 /// `Class~copy`: the refusal `memory/Setup.cpp:483` puts over [`super::native_copy`]

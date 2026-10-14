@@ -666,7 +666,7 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     interp.roots.activity_mut().push_temp(receiver);
     let package = interp.package_data(receiver).is_some();
     if package {
-        interp.build_package_shares(receiver);
+        interp.build_package_shares(receiver)?;
     }
     let Some(source) = interp.heap.get(receiver) else {
         return Err(Loud::unknown_receiver("a value whose object is no longer live").into());

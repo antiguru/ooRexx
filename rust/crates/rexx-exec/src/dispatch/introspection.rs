@@ -160,7 +160,7 @@ fn instance_method(
     };
     Ok(Some(method_object_for(
         interp, selection, owner, &name, scope, method,
-    )))
+    )?))
 }
 
 /// `Object~instanceMethods(scope)`: `RexxObject::instanceMethodsRexx`
@@ -270,7 +270,7 @@ fn supplier_of(
         // Rooted as each is built rather than at the end: every allocation
         // below can collect, and a handle held only by these `Vec`s is one
         // the collector cannot see.
-        let object = method_object_for(interp, selection, owner, &name, scope, method);
+        let object = method_object_for(interp, selection, owner, &name, scope, method)?;
         interp.roots.activity_mut().push_temp(object);
         items.push(object);
         let index = interp.text_built(name);
@@ -295,13 +295,13 @@ fn method_object_for(
     name: &[u8],
     scope: ObjRef,
     method: MethodId,
-) -> ObjRef {
+) -> Result<ObjRef, Failure> {
     // A `.nil`-scoped entry is one `setMethod` or `Class~enhanced` installed
     // from an object of its own, which is what the oracle's behaviour holds.
     if scope == ObjRef::NIL
         && let Some(object) = interp.executable_objects.get(&method).copied()
     {
-        return object;
+        return Ok(object);
     }
     let record = crate::ExecutableRecord {
         source: interp.installed_executable_source(method),

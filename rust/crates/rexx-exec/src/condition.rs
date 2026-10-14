@@ -174,7 +174,7 @@ impl Interp {
         };
         let program = self.text_built(program);
         self.condition_put(object, key::PROGRAM, program)?;
-        let package = self.package_object(package);
+        let package = self.package_object(package)?;
         self.condition_put(object, key::PACKAGE, package)?;
         let propagated = self.text(b"1");
         self.condition_put(object, key::PROPAGATED, propagated)?;
@@ -393,7 +393,7 @@ impl Interp {
             unwound.origin.is_none() && unwound.sites.iter().all(|site| site.line().is_none())
         }) && self.running_program().is_none();
         if !frameless {
-            let package = self.package_object(origin);
+            let package = self.package_object(origin)?;
             self.roots.activity_mut().push_temp(package);
             entries.push((key::PACKAGE, package));
         }

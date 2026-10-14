@@ -2337,17 +2337,26 @@ impl Interp {
                 receiver: None,
             },
         );
+        // Both packages are built before the call, the callee's rooted as a
+        // temp of this frame: once the callee returns, nothing else reaches
+        // its package before the merge below reads it.
+        let merge = match caller {
+            Some(caller) => {
+                let into = self.package_object(Package::Program(caller))?;
+                self.roots.activity_mut().push_temp(into);
+                Some((into, self.package_object(Package::Program(program_id))?))
+            }
+            None => None,
+        };
         let outcome = self.run_loaded(parsed, program_id, call_type, Some(address), Some(settings));
         self.activity.call_context = saved;
         let value = outcome?;
         // What the callee made public becomes the caller's, and transitively
         // what the callee itself required.
-        if let Some(caller) = caller {
+        if let Some((into, from)) = merge {
             if let Some(value) = value {
                 self.roots.activity_mut().push_temp(value);
             }
-            let into = self.package_object(Package::Program(caller));
-            let from = self.package_object(Package::Program(program_id));
             self.merge_package(into, from);
         }
         Ok(value)
@@ -2377,7 +2386,7 @@ impl Interp {
         self.invalidate_rexx_class_cache();
         self.library_programs.push(program_id);
         let arguments = arguments.unwrap_or_else(|| {
-            let package = self.package_object(Package::Program(program_id));
+            let package = self.held_package_object(Package::Program(program_id));
             // Rooted for the whole of the bootstrap: `call_context` is not
             // walked by the collector, and the prologue allocates before it
             // reads `rexxPackage`.

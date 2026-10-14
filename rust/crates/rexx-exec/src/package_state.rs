@@ -179,15 +179,22 @@ impl Interp {
 
     /// The fields of `package`'s object, built first where it does not exist
     /// yet. May allocate, and so collect.
-    pub(crate) fn package_fields_mut(&mut self, package: Package) -> &mut PackageData {
-        let object = self.package_object(package);
-        self.package_data_mut(object)
-            .expect("package_object builds a package body")
+    pub(crate) fn package_fields_mut(
+        &mut self,
+        package: Package,
+    ) -> Result<&mut PackageData, crate::error::Failure> {
+        let object = self.package_object(package)?;
+        Ok(self
+            .package_data_mut(object)
+            .expect("package_object builds a package body"))
     }
 
     /// The fields of `program`'s package, built first where it does not
     /// exist yet. May allocate, and so collect.
-    pub(crate) fn program_fields_mut(&mut self, program: ProgramId) -> &mut PackageData {
+    pub(crate) fn program_fields_mut(
+        &mut self,
+        program: ProgramId,
+    ) -> Result<&mut PackageData, crate::error::Failure> {
         self.package_fields_mut(Package::Program(program))
     }
 

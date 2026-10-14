@@ -352,7 +352,7 @@ fn set_security_manager(
             | ExecutableSource::External { .. }
             | ExecutableSource::Loaded { .. } => unreachable!("native code is not Rexx code"),
         };
-        let package = interp.package_object(crate::plan::Package::Program(program));
+        let package = interp.package_object(crate::plan::Package::Program(program))?;
         interp.install_security_manager(package, args.first().copied().flatten());
     }
     Ok(Some(interp.counted(usize::from(rexx_code))))
@@ -396,7 +396,7 @@ fn package(
 ) -> Result<Option<ObjRef>, Failure> {
     let source = source_of(interp, receiver)?;
     Ok(Some(match interp.source_package(source) {
-        Some(package) => interp.package_object(package),
+        Some(package) => interp.package_object(package)?,
         None => ObjRef::NIL,
     }))
 }

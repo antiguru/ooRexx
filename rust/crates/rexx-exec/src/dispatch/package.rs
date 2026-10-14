@@ -500,7 +500,7 @@ fn prolog(
     if interp.untranslated.contains(&program) {
         return Ok(Some(ObjRef::NIL));
     }
-    Ok(Some(interp.program_routine_object(program)))
+    Ok(Some(interp.program_routine_object(program)?))
 }
 
 /// `PackageClass::setSecurityManagerRexx`.
@@ -820,7 +820,7 @@ fn find_namespace(
     fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
     if name == b"REXX" {
-        return Ok(Some(interp.package_object(Package::Rexx)));
+        return Ok(Some(interp.rexx_package_object()));
     }
     let found = fields_of(interp, receiver)?
         .namespaces
@@ -998,7 +998,7 @@ fn load_package(
         }
         None => interp.load_package(program, &name)?,
     };
-    let loaded = interp.package_object(Package::Program(loaded));
+    let loaded = interp.package_object(Package::Program(loaded))?;
     if interp.add_imported_package(receiver, loaded) {
         interp.merge_package(receiver, loaded);
     }
@@ -1052,7 +1052,7 @@ fn package_new(
             interp.package_from_source(&name, &lines, context)?
         }
     };
-    let object = interp.package_object(Package::Program(program));
+    let object = interp.package_object(Package::Program(program))?;
     let package_class = interp.package_class();
     if class != package_class {
         super::construct::native_as_instance(interp, object, class, package_class)?;
@@ -1077,7 +1077,7 @@ fn package_context(interp: &mut Interp, context: ObjRef) -> Result<ObjRef, Failu
     let resolved = if class == Some(interp.package_class()) {
         interp.package_data(context).map(|_| context)
     } else if class == Some(interp.routine_class()) || class == Some(interp.method_class()) {
-        interp.executable_context_package(context)
+        interp.executable_context_package(context)?
     } else {
         None
     };
