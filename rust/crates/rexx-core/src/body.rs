@@ -929,7 +929,7 @@ enum Bound {
     Nothing,
     /// A method object's scope.
     Scope(ObjRef),
-    /// The routine table row a routine object runs.
+    /// The `INTERNAL_ROUTINES` row a routine object runs.
     RoutineRow(usize),
 }
 
@@ -1030,8 +1030,8 @@ impl NativeObject {
         self.bound = Bound::Scope(scope);
     }
 
-    /// The row of the embedding's own routine table this `Routine` object
-    /// runs, which a copy carries too, or `None` for one that runs none.
+    /// The `INTERNAL_ROUTINES` row this `Routine` object runs, which a copy
+    /// carries too, or `None` for one that runs none.
     pub fn routine_row(&self) -> Option<usize> {
         match self.bound {
             Bound::RoutineRow(row) => Some(row),

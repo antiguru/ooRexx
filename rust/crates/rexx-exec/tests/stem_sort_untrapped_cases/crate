@@ -75,3 +75,19 @@ say result s.1 s.2
 ----
 rc> 0
 out> 0 p q
+
+# an error an element's STRING method raises while the sort compares it
+program
+s.0 = 2; s.1 = .k~new; s.2 = 'a'
+call SysStemSort 's.'
+say 'not reached'
+::class k
+::method string
+  raise syntax 93.900 array('boom')
+----
+rc> 163
+err>      6 *-* raise syntax 93.900 array('boom')
+err>        *-* Compiled routine "SYSSTEMSORT".
+err>      2 *-* call SysStemSort 's.'
+err> Error 93 running /t.rex line 2:  Incorrect call to method.
+err> Error 93.900:  boom.

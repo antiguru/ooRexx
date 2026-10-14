@@ -1337,6 +1337,22 @@ on stderr:
     a.0 = 2; a.1 = 'q'; a.2 = 'p'
     call SysStemSort 'a.', , , 3
 
+An error raised by a method the sort sends crashes too: an element's `STRING` method raising
+93.900, left untrapped, gave SIGSEGV, rc 139, 1 run of 1 under the standard wrapper, 2026-10-14
+(Phase 9b1 Task 3, `docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/q2.rex`):
+
+    s.0 = 2; s.1 = .k~new; s.2 = 'a'
+    call SysStemSort 's.'
+    say 'not reached'
+    ::class k
+    ::method string
+      raise syntax 93.900 array('boom')
+
+It is filed here rather than as an entry of its own because it leaves the sort by an error as the
+three above do. The C++ path was not read. This crate reports it at rc 163 with
+`Compiled routine "SYSSTEMSORT".` between the method's line and the call's, pinned in the case file
+named below.
+
 The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTest's `SysStemSort`
 group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
 it sorts is reported untrapped as usual: 40.919 (`call SysStemSort '*'`) and 40.921 (`first` 3,
