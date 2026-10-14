@@ -919,9 +919,23 @@ pub struct NativeObject {
     string_value: Option<Box<[u8]>>,
     entries: FxHashMap<Box<[u8]>, ObjRef>,
     annotations: Option<ObjRef>,
-    scope: Option<ObjRef>,
-    routine_row: Option<usize>,
+    bound: Bound,
 }
+
+/// What a `Method` or `Routine` object is bound to, sharing one slot so that
+/// every other native object stays its size.
+#[derive(Clone, Copy, Debug)]
+enum Bound {
+    Nothing,
+    /// A method object's scope.
+    Scope(ObjRef),
+    /// The routine table row a routine object runs.
+    RoutineRow(usize),
+}
+
+/// Measured: a field beside `Bound` moves every native object's box to the
+/// next allocator size class, +0.19% of instructions on `hashnew.rex`.
+const _: () = assert!(size_of::<NativeObject>() <= 104);
 
 impl NativeObject {
     pub fn new(class: ObjRef, rendered: &[u8]) -> NativeObject {
@@ -931,8 +945,7 @@ impl NativeObject {
             string_value: None,
             entries: FxHashMap::default(),
             annotations: None,
-            scope: None,
-            routine_row: None,
+            bound: Bound::Nothing,
         }
     }
 
@@ -1006,22 +1019,29 @@ impl NativeObject {
     /// `MethodClass::getScope`: the class this method object is installed on,
     /// or `None` for one nothing has installed yet.
     pub fn scope(&self) -> Option<ObjRef> {
-        self.scope
+        match self.bound {
+            Bound::Scope(scope) => Some(scope),
+            _ => None,
+        }
     }
 
     /// `MethodClass::setScope` (`classes/MethodClass.cpp:219`).
     pub fn set_scope(&mut self, scope: ObjRef) {
-        self.scope = Some(scope);
+        self.bound = Bound::Scope(scope);
     }
 
     /// The row of the embedding's own routine table this `Routine` object
     /// runs, which a copy carries too, or `None` for one that runs none.
     pub fn routine_row(&self) -> Option<usize> {
-        self.routine_row
+        match self.bound {
+            Bound::RoutineRow(row) => Some(row),
+            _ => None,
+        }
     }
 
+    /// Records the row this `Routine` object runs, in place of any scope.
     pub fn set_routine_row(&mut self, row: usize) {
-        self.routine_row = Some(row);
+        self.bound = Bound::RoutineRow(row);
     }
 }
 
@@ -1129,7 +1149,7 @@ impl Body {
                 out.extend(native.entries.values().copied());
                 // A method object's scope, in the position the class handle
                 // above is in and traced for the same reason.
-                out.extend(native.scope);
+                out.extend(native.scope());
                 // Reachable from the object alone once a program holds the
                 // table and drops every other handle on it.
                 out.extend(native.annotations);
