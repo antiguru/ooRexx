@@ -146,3 +146,67 @@ arithmetic operator method or a class-side `STRING` (scout-leaks L2, L3).
 `rust/corpus/lang/*.rex` and their `rust/crates/rexx-parse/tests/sourceline_oracle/*.txt`, and
 `docs/superpowers/records/2026-10-14-phase-9b1/task-2/`. `value.rs` is outside the brief's file
 list; the operand conversion lives there.
+
+## Fix round 1
+
+Code commit `1566bcbe2`. The report and records are in the commit that follows it.
+
+**I1.** `controlled_step_wide` (`run/loops.rs`) now converts with `operand_number`, so a step on
+a control variable holding a String subclass instance sends `+` to it, as `DoBlock.cpp:194` does.
+`corpus/lang/string_subclass_operators.rex` gains the review's two loops, using the witness's
+`counter` class: `do i = 1 to 3` and `do i = 1.5 to 3`, each assigning a subclass instance to `i`
+on the first pass. Oracle rc 0, stdout adds `m 1`, `sent + 1`, `m 2`, `m 3`, `w 1.5`, `sent + 1`,
+`w 2.5`. **Red before the fix**: the release binary at `2fbfe9cba` gave crate rc 0 with the two
+`sent + 1` lines missing (diff `14d13`, `18d16`). After the fix the crate gives rc 0, stderr 0
+bytes, and stdout `cmp`-identical to the oracle's.
+
+**M1.** The same witness gains `call vref >s` with `vref: use arg r; say (r + 1) (-r) (r * 2)`.
+Oracle `plus pfx- times`. **Mutant C** (`value.rs` VarRef redirect
+`self.number_of(referenced, receiver)` to `self.to_number(referenced)`, release build): crate rc 0,
+diff `20c20` `< plus pfx- times` / `> 4 -3 6`. Reversed by an exact edit, `cmp` against a saved copy
+of `value.rs` identical.
+
+The witness comment names both new shapes. `sourceline_oracle/string_subclass_operators.txt`
+regenerated with the module's driver on a scratch copy: count 37, which equals `wc -l`.
+
+**M2.** I reran the global constraint's full set plus `arith`, `emptyloop` and `decloop` (the loop
+path), against the pin with `-B 0.5`. Head is `rexx-run-9b1-t2c`, sha `291ff72d...`, built from
+`1566bcbe2`. There were two runs so that each stays under 10 minutes, and both exited 0:
+
+| program | head d% | head -libc d% |
+|---|---|---|
+| fibcall | -3.4488 | -2.4130 |
+| fibfunc | -3.6133 | -2.4623 |
+| extcall | -13.3316 | -2.0270 |
+| dispatch | -0.2472 | -0.0715 |
+| dispatchclass | -3.9384 | -2.6560 |
+| sendloop | -0.1004 | -0.1069 |
+| arith | +0.1194 | +0.1088 |
+| varlookup | +0.0028 | +0.0017 |
+| pkglocal | -2.6188 | -3.7206 |
+| startup | +0.2885 | +0.3922 |
+| alloc | +0.2535 | +0.2868 |
+| hashnew | +0.3093 | +0.4716 |
+| emptyloop | +0.0048 | +0.0029 |
+| decloop | +0.1627 | +0.1621 |
+
+The spreads are at most 0.0002%. Commands (from `rust/`):
+`timeout 600 bench-programs/callgrind.sh -B 0.5 -j 7 -p "fibcall fibfunc extcall dispatch dispatchclass sendloop arith" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-2-fix1a pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t2c`
+and the same with `-p "varlookup pkglocal startup alloc hashnew emptyloop decloop"` and
+`-o .../task-2-fix1b`. Records are in `docs/superpowers/records/2026-10-14-phase-9b1/task-2/callgrind-fix1a/`
+and `callgrind-fix1b/`. Against 9b close2's `table.txt`, decloop's -libc count is 2408543749
+against 2407743582 (+0.033%). For alloc, hashnew, startup and emptyloop, close2's -libc counts
+equal these to within 0.0001%.
+
+Checks (from `rust/`, `...` = `CARGO_INCREMENTAL=0 timeout 600 memcap 8G`, exits read unpiped):
+
+| command | tree | exit | result |
+|---|---|---|---|
+| `cargo fmt --all --check` | 1566bcbe2 | 0 | |
+| `... cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | 1566bcbe2 | 0 | `Checking rexx-exec` printed |
+| `REXX_CORPUS_GATE=1 ... cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus --test collect_stress` | 1566bcbe2 | 0 | collect_stress 37 passed, corpus 29 passed 1 ignored |
+| `... cargo test -j 4 -p rexx-parse --test sourceline_oracle` | 1566bcbe2 | 0 | 1 passed |
+| `... cargo test -j 4 -p rexx-exec --no-fail-fast --test refusal_sites --test representation_refusals` | 1566bcbe2 | 0 | 5 and 3 passed |
+
+The modifications to `progress.md` and the queued class-side STRING file came from the controller.
+They are not in my commits.
