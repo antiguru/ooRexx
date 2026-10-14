@@ -1,3 +1,5 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-10-14-phase-9b1.md
+
 # Phase 9b1 ledger: uniform object model (pre-spec)
 
 Source: .superpowers/sdd/queued/2026-10-13-phase-9b1-uniform-object-model.md (approach steps 1-4),
@@ -11,3 +13,31 @@ Then: design spec (brainstorm with Moritz; open decision: string identity rule),
 scout-deviations done (scout-deviations.md): A = Dev 31 + Dev 4's "we merge" half; B (oracle bug, not copied) = 0,2,3,9,24-30,32,34,35; C = 1,6,7,10-23,33. New defect: WeakReference to an inline value (short string/SmallInt) cleared at every GC while held (heap.rs weak pass, resolve() None for inline) -> 9b1. Oracle identity: literals interned per compiled unit/INTERPRET; -10..100 process-wide cache; every other production fresh. Recommendation: license "separately produced equal values are one object?" as unspecified; require per-held-value consistency; own rule. Open for Moritz: under "identity is the value until materialized", OBJECTNAME= on 'abc' would name every unmaterialized 'abc' unless naming materializes the held value.
 scout-leaks done (scout-leaks.md): L1 weakref to inline value -> .nil after GC (heap.rs:282); L2 arithmetic/prefix/DO-setup + on String subclass never sent (eval.rs:843/:646, loops.rs:1062); L3 class-side STRING not sent (reqstr.rs:198; queued item exists); L5 Package subclass ~copy rc 120; L8 ProgramIds never freed (Method~new 80k -> 1.66 GB vs 20 MB); L9 Message/Method/Routine side maps never pruned; L11 native routine frame missing from live stackFrames. Activation-scope state already closed by 6.1 (66b0f6854); queued clock/setlocal files likely stale.
 Spec written, Moritz Lgtm; fable spec review (spec-review.md): not approved, H1 + 8 M + 11 L; all applied in spec revision (criterion 2 -> source grep with allow-list; program lifetime ruled: ids never reused, sweep frees unheld programs and prunes id-keyed rows; weakref-to-dropped-value licensed; section-1 witness criterion; perf headroom named; L12 Deviation approved with spec).
+Plan written: docs/superpowers/plans/2026-10-14-phase-9b1.md (3e73e84b7), 9 tasks; awaiting Moritz review.
+
+Moritz 2026-10-14: plan "lgtm". SDD execution starts.
+
+## Pre-flight scan
+
+| pair / task | shared file or interface | finding |
+|---|---|---|
+| T1 / T2-T8 | representation_refusals.rs ALLOWED list | each task shrinks it; T1 tags owners. OK |
+| T2 / T3 | none (heap.rs, eval.rs, loops.rs, reqstr.rs vs environment.rs, native.rs) | OK |
+| T3 / T4 | environment.rs routine-object table (T3 copy field; T4 moves the table into Package body) | T3 must keep the copy's row as a field of the Routine object, not of the package table. OK as written |
+| T4 / T5 | Package body (T4 produces, T5 traces/frees) | OK |
+| T4 / T6 | program handle choice (T4 Step 1) consumed by T6 | T6 brief carries T4's recorded choice |
+| T5 / T6 | sweep hook; package roots | T6 relies on T5's collected packages. Ordering ruled in plan |
+| T6 / T7 | ProgramId-keyed maps (T6) vs ObjRef-keyed exec/message maps (T7) | disjoint sets; T7's trigger charge for programs needs T6's program table. OK by order |
+| T7 / T8 | side maps | T8 enumerates what remains after T4-T7 |
+| T1 self | Deviation numbers 36, 37 next free after 35 | verify at dispatch |
+| T5 self | TESTRECLAIM01 criterion "within its own wait" vs harness timeout | consistent |
+| T9 self | memory criteria from T5/T6/T7 | consistent |
+No conflicts requiring a ruling.
+Task 1: dispatched (implementer opus, BASE 3e73e84b7).
+Task 1: implementer DONE_WITH_CONCERNS (5292aad56). objectName= message drops 'is not implemented' suffix (grouping in corpus.rs/gate_tables); 4th phrase 'is value-based' added.
+Task 1 review: spec OK; quality I1 gate misses 4 differently worded refusals (context.rs:513, class_protocol.rs:995, identities.rs:1006, lib.rs:689); I2 no task removes Task-8-tagged rows, so Task 9's "only Dev 32 and 36" criterion is unmeetable. Q1: keep new objectName= wording, no gate loses coverage. Minors: witness temporaries' lifetimes; Dev 36 note L1/Task 2; Dev 4 provenance dropped.
+Ruling: add phrases "this crate did not", "this crate does not", "this crate built"; owners: context.rs:513 Task 6, class_protocol.rs:995 Task 7, identities.rs:1006 Deviation 28, lib.rs:689 Phase 10 -- each site's own subject -- if wrong, retag.
+Ruling: plan amended (controller edit, no agent live on the plan): Task 8 Step 4 removes or proves-unreachable each Task-8 row; Task 9 criterion = ALLOWED holds only permanent rows (Deviation-licensed, Phase 10, proven-unreachable internal guards) -- the spec criterion names Dev 32 and objectName= as the allow-list's core, and "the plan derives the rest" -- if wrong, Task 8 grows.
+Task 1: fix round 1 dispatched (resume c1-impl).
+Task 1: fix round 1 at e680ef13c; controller verified diff (phrases, owner tags, witness, Deviation notes) instead of a re-review -- mechanical list and doc edits, gate test self-checks every row -- if wrong, close review.
+Task 1: complete (5292aad56, e680ef13c).
