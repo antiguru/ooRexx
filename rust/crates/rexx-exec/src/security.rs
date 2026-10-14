@@ -64,6 +64,7 @@ impl Interp {
     /// (`execution/RexxActivation.cpp:4977`): the running code's own package's
     /// manager. There is no instance-level manager here, so that arm's
     /// fallback is `None`.
+    #[inline]
     pub(crate) fn effective_security_manager(&self) -> Option<ObjRef> {
         if !self.security_armed {
             return None;

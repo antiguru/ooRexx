@@ -505,6 +505,7 @@ impl Interp {
     /// `package`'s settings for a change, whose first change enters what
     /// `~options('I')` answers from then on.
     pub(crate) fn package_settings_mut(&mut self, package: ObjRef) -> &mut PackageOptions {
+        self.options_armed = true;
         let data = self
             .package_data_mut(package)
             .expect("a package object holds package fields");

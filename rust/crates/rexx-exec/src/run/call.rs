@@ -1062,6 +1062,13 @@ impl Interp {
                     &routine_program.symbols,
                     &routine_program.source,
                 );
+                // The routine's own package, which is not always the caller's
+                // -- `installed.program` is where the `::ROUTINE` was
+                // declared. The caller's settings go with it for
+                // `::OPTIONS NUMERIC INHERIT`, the one option that reads
+                // them.
+                let start =
+                    self.package_start(installed.program, Some(&self.activation().settings));
                 let frame = self.roots.push_slots(plan.len());
                 let mut callee = Activation::routine(
                     callee_id,
@@ -1072,12 +1079,9 @@ impl Interp {
                     frame,
                     call_type,
                 );
-                // The routine's own package, which is not always the caller's
-                // -- `installed.program` is where the `::ROUTINE` was
-                // declared. The caller's settings go with it for
-                // `::OPTIONS NUMERIC INHERIT`, the one option that reads
-                // them.
-                self.start_from_package(&mut callee, Some(&self.activation().settings));
+                if let Some(start) = start {
+                    start.apply(&mut callee);
+                }
                 self.push_activation(callee);
                 self.trace_package_invocation_entry();
             }

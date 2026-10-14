@@ -832,6 +832,7 @@ impl Interp {
     /// environment-symbol search order (`rexxpg` `classes.xml:838`) and the
     /// step `PackageClass::findClass` takes between a package's imports and
     /// its own local (`classes/PackageClass.cpp:1105`).
+    #[inline]
     pub(crate) fn rexx_package_class(&mut self, upper: &[u8]) -> Option<ObjRef> {
         if let Some(&hit) = self.rexx_class_cache.get(upper) {
             debug_assert_eq!(
@@ -855,14 +856,14 @@ impl Interp {
     /// [`Interp::rexx_package_class`]'s own search, with no cache in front of
     /// it. Kept separate so the cache's debug assertion has something to
     /// compare against.
+    #[inline(never)]
     fn rexx_package_class_uncached(&mut self, upper: &[u8]) -> Option<ObjRef> {
-        for program in &self.library_programs {
-            if let Some(found) = self
-                .program_data(*program)
-                .and_then(|data| data.public_classes.get(upper))
-            {
-                return Some(*found);
-            }
+        if let Some(found) = self
+            .rexx_package
+            .and_then(|rexx| self.package_data(rexx))
+            .and_then(|data| data.public_classes.get(upper))
+        {
+            return Some(*found);
         }
         self.classes().lookup_upper(upper)
     }

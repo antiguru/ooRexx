@@ -248,6 +248,7 @@ impl Interp {
                 // the second walk. `::OPTIONS` itself never resolves a name
                 // and never runs code, so this is the whole of installing it.
                 DirectiveKind::Options(options) => {
+                    self.options_armed = true;
                     let outcome = {
                         let package = self
                             .package_fields_mut(Package::Program(id))

@@ -3243,6 +3243,14 @@ impl Interp {
             .call_context
             .receiver
             .expect("the calling convention replaced directly above carries the receiver");
+        // The package the `::METHOD` was declared in, exactly as a
+        // `::ROUTINE` starts from its own. `running_activation` rather than
+        // `activation` because a send made outside any activation has no
+        // caller for `::OPTIONS NUMERIC INHERIT` to read.
+        let start = self.package_start(
+            installed.program,
+            self.running_activation().map(|caller| &caller.settings),
+        );
         let mut callee = Activation::method(
             callee_id,
             program,
@@ -3256,14 +3264,9 @@ impl Interp {
                 receiver,
             },
         );
-        // The package the `::METHOD` was declared in, exactly as a
-        // `::ROUTINE` starts from its own. `running_activation` rather than
-        // `activation` because a send made outside any activation has no
-        // caller for `::OPTIONS NUMERIC INHERIT` to read.
-        self.start_from_package(
-            &mut callee,
-            self.running_activation().map(|caller| &caller.settings),
-        );
+        if let Some(start) = start {
+            start.apply(&mut callee);
+        }
         // With one activity the lock is the activation's flag alone, taken
         // here unless a package-traced `>I>` has to come first.
         let reserve_at_once = reserve_at_once && !callee.trace_mode.labels;

@@ -40,9 +40,25 @@ impl Interp {
         // Leaving it out of this table is what `Interp::package_object_for`
         // reads as `Package::Rexx`, which is the oracle's answer: measured
         // on both engines and the oracle, `.Alarm~package~name` is `REXX`.
+        // The REXX package's own tables hold it too, the first library
+        // program's declaration of a name standing.
         if !self.library_programs.contains(&program) {
             self.class_packages
                 .insert(class, ClassPackage::Program(program));
+            return;
+        }
+        self.roots.activity_mut().push_temp(class);
+        let rexx = self.package_object(Package::Rexx);
+        let Some(data) = self.package_data_mut(rexx) else {
+            return;
+        };
+        data.classes
+            .entry(name.to_ascii_uppercase().into())
+            .or_insert(class);
+        if public {
+            data.public_classes
+                .entry(name.to_ascii_uppercase().into())
+                .or_insert(class);
         }
     }
 
@@ -700,8 +716,8 @@ impl Interp {
     }
 
     /// The classes `Package~classes`, or `~publicClasses` where
-    /// `public_only`, answers for `package`: its own table, after the REXX
-    /// package's for the REXX package and a copy of it.
+    /// `public_only`, answers for `package`: its own table, after the native
+    /// class registry for the REXX package and a copy of it.
     pub(crate) fn package_class_table(
         &mut self,
         package: ObjRef,
@@ -721,36 +737,20 @@ impl Interp {
         if data.program.is_some() {
             return own;
         }
-        let mut entries = self.rexx_package_class_table(public_only);
+        let mut entries = self.registered_classes();
         entries.extend(own);
         entries
     }
 
-    /// The REXX package's own class table: this crate's native class registry
-    /// -- `completeSystemClass` (`memory/Setup.cpp:199`-`:206`) files every
-    /// `Setup.cpp` class there -- plus what the shipped `.orx` files' own
-    /// `::CLASS` directives installed.
-    pub(crate) fn rexx_package_class_table(
-        &mut self,
-        public_only: bool,
-    ) -> Vec<(Box<[u8]>, ObjRef)> {
-        let mut entries: Vec<(Box<[u8]>, ObjRef)> = self
-            .classes()
+    /// This crate's native class registry, which `completeSystemClass`
+    /// (`memory/Setup.cpp:199`-`:206`) files every `Setup.cpp` class of the
+    /// REXX package's table in. The shipped `.orx` files' own `::CLASS`
+    /// directives are in the package's own fields.
+    fn registered_classes(&mut self) -> Vec<(Box<[u8]>, ObjRef)> {
+        self.classes()
             .registered()
             .map(|(name, class)| (name.as_bytes().into(), class))
-            .collect();
-        for program in self.library_programs.clone() {
-            let Some(data) = self.program_data(program) else {
-                continue;
-            };
-            let held = if public_only {
-                &data.public_classes
-            } else {
-                &data.classes
-            };
-            entries.extend(held.iter().map(|(name, class)| (name.clone(), *class)));
-        }
-        entries
+            .collect()
     }
 
     /// `PackageClass::findClass` (`classes/PackageClass.cpp:1085`): the whole
@@ -813,14 +813,6 @@ impl Interp {
                 .and_then(|data| data.classes.get(upper))
             {
                 return Some(*found);
-            }
-            for program in self.library_programs.clone() {
-                if let Some(found) = self
-                    .program_data(program)
-                    .and_then(|data| data.classes.get(upper))
-                {
-                    return Some(*found);
-                }
             }
             return self.classes().lookup_upper(upper);
         }

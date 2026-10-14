@@ -1311,6 +1311,9 @@ struct Interp {
     /// Whether any package has ever carried a security manager, which is
     /// the one test a checkpoint makes while none has.
     security_armed: bool,
+    /// Whether any package has ever carried settings, which is the one test
+    /// an activation's start makes while none has.
+    options_armed: bool,
     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
     /// pair of small integers this interpreter mints itself, so the
@@ -1694,6 +1697,24 @@ struct Interp {
 struct InstalledRoutine {
     program: ProgramId,
     directive: usize,
+}
+
+/// What a freshly built activation takes from its own package's `::OPTIONS`.
+struct PackageStart {
+    settings: Settings,
+    syntax: options::ConditionSyntax,
+    trace: Option<crate::trace::TraceMode>,
+}
+
+impl PackageStart {
+    #[inline]
+    fn apply(self, activation: &mut Activation) {
+        activation.settings = self.settings;
+        activation.condition_syntax = self.syntax;
+        if let Some(trace) = self.trace {
+            activation.trace_mode = trace;
+        }
+    }
 }
 
 /// One entry of [`Interp::merged_public_routines`].
@@ -2096,6 +2117,7 @@ impl Interp {
             programs: Vec::new(),
             option_writes: crate::options::OptionWrites::default(),
             security_armed: false,
+            options_armed: false,
             plans: NameMap::default(),
             last_plan: None,
             deadline: None,
@@ -2378,6 +2400,9 @@ impl Interp {
     /// `None` for a program carrying none.
     #[inline]
     fn options_of(&self, program: ProgramId) -> Option<&PackageOptions> {
+        if !self.options_armed {
+            return None;
+        }
         self.program_data(program)?.options.as_ref()
     }
 
@@ -2389,19 +2414,20 @@ impl Interp {
             .map_or_else(Settings::default, |options| options.numeric.clone())
     }
 
-    /// Starts a freshly built activation from its own package's `::OPTIONS`.
-    fn start_from_package(&self, activation: &mut Activation, caller: Option<&Settings>) {
-        let Some(options) = self.options_of(activation.program_id) else {
-            return;
-        };
-        activation.settings = match caller {
-            Some(caller) if options.numeric_inherit => caller.clone(),
-            _ => options.numeric.clone(),
-        };
-        activation.condition_syntax = options.syntax;
-        if let Some(trace) = options.trace {
-            activation.trace_mode = trace;
-        }
+    /// What an activation of `program`'s code starts from, or `None` where
+    /// its package carries no settings. Taken before the activation is built,
+    /// so that nothing the lookup calls can see the activation.
+    #[inline]
+    fn package_start(&self, program: ProgramId, caller: Option<&Settings>) -> Option<PackageStart> {
+        let options = self.options_of(program)?;
+        Some(PackageStart {
+            settings: match caller {
+                Some(caller) if options.numeric_inherit => caller.clone(),
+                _ => options.numeric.clone(),
+            },
+            syntax: options.syntax,
+            trace: options.trace,
+        })
     }
 
     /// Whether the running activation turns an untrapped raise of `condition`
@@ -2543,6 +2569,11 @@ impl Interp {
             &program.source,
         );
 
+        // With no call site above a main body, `::OPTIONS NUMERIC INHERIT` has
+        // nothing to inherit and the package's own settings stand -- measured,
+        // `::options digits 12 numeric inherit` alone in a file reports 12.
+        // A file reached by a call has one, and passes it.
+        let start = self.package_start(program_id, caller_settings.as_ref());
         let frame = self.roots.push_slots(plan.len());
         let id = self.next_activation_id();
         let mut main = Activation::new(id, Rc::clone(&program), program_id, plan, frame);
@@ -2550,11 +2581,9 @@ impl Interp {
         if let Some(address) = address {
             main.address = address;
         }
-        // With no call site above a main body, `::OPTIONS NUMERIC INHERIT` has
-        // nothing to inherit and the package's own settings stand -- measured,
-        // `::options digits 12 numeric inherit` alone in a file reports 12.
-        // A file reached by a call has one, and passes it.
-        self.start_from_package(&mut main, caller_settings.as_ref());
+        if let Some(start) = start {
+            start.apply(&mut main);
+        }
         // `SysInterpreterInstance::setupProgram`
         // (`platform/unix/SysInterpreterInstance.cpp:105`-`:112`), which runs
         // for every top-level program activation and not only the first --
@@ -2884,6 +2913,7 @@ impl Interp {
             programs: _,
             option_writes: _,
             security_armed: _,
+            options_armed: _,
             plans: _,
             last_plan: _,
             deadline: _,
