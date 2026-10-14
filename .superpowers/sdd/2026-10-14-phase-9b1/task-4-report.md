@@ -264,9 +264,7 @@ exit 0). TESTRECLAIM01 is still red, Task 5's.
    read. The hot reads are behind latches or take one body; a future reader on a per-clause path
    should take the body once.
 3. **startup** is at +0.3219% against the pin.
-4. A `Package~addPublicClass` of a REXX-package class name on a copy of the REXX package: the copy's
-   `~classes` answers the added class, but a merge from that copy keeps the REXX one (first entry
-   wins). Not measured on the oracle.
+4. Fixed in fix round 1 (I3), measured on the oracle.
 
 ## L7's copy half (ruling (a), copies unrooted)
 
@@ -288,3 +286,83 @@ The commands, from `rust/`, all exit 0: `cargo fmt --all --check`;
 `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`;
 `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress`,
 41 passed.
+
+## Fix round 1
+
+Commit `5194b8428`. The review is `task-4-review.md`.
+
+**I1. A REXX package copy's added `Routine` object.** I followed the oracle's model, in which a
+package's routines table holds whatever `~addRoutine` filed. `build_package_string_table` now
+builds a table for a package with no program when a write asks for one, so the copy's `.ROUTINES`
+table holds the object and the body's `tables` trace reaches it. `routines` stays untraced, and its
+comment now states the invariant this rests on. I did not take the alternative, tracing `routines`:
+that would also hold an entry a written `.ROUTINES` table has replaced, which is the shape
+`an_added_public_routine_object_survives_its_table_entry` exists to keep untraced.
+
+**I2. Lookups on a REXX package copy.** `package_public_class_of` for a package with no program now
+reads its own public classes, then the registry, then what it merged. That matches the oracle,
+where the copy's installed public classes (the REXX package's, copied) come before
+`mergedPublicClasses`. `installed_class_of` keeps its own classes and then the registry.
+
+**I3. A merge from a REXX package copy.** I read the oracle's rule in `PackageClass::mergeRequired`
+(`classes/PackageClass.cpp:693-745`). The source's `installedPublicClasses` merges first, then its
+`mergedPublicClasses`, and each `merge` adds only names the target lacks. `addInstalledClass` uses
+`setEntry` (`:1401-1419`), so a redefined name replaces the old one within the source's own table.
+`package_class_table` now builds that one table: the registry's entries minus every name the
+package's own fields hold, then the package's own. `merge_package`'s first-wins order then takes
+the copy's class.
+
+The oracle was measured first, from fresh empty directories. The reviewer's three probes give
+`weak 1` / `found Routine 1 0`, `importedClasses 1 1` / `findClass 1 1`, and `List` / `1 1`; the
+crate agrees on all three. Witness `rust/corpus/lang/package_rexx_copy_lookups.rex` (listed in
+`corpus/phase-9.txt`, with its sourceline expectation from the module driver). On the oracle it
+gives rc 0, empty stderr, and:
+
+```
+imported 1 1
+find 1 1
+own first 1 1
+redefined 1 1 1 1
+importer List 1 1
+original 1 0
+```
+
+The crate at `5194b8428` matches it byte for byte. The binary before the fix round
+(`rexx-run-9b1-t4f`) answers `find 0 0` and `importer Array 1 0`.
+
+**I4 and I1 witnesses** (`tests/collect_stress.rs`, under collect-on-every-allocation; each program
+was measured on the oracle with a 3000-pass `copies('y', 100000)` loop in place of the filler, rc 0,
+same lines):
+
+| test | expects | goes red when |
+|---|---|---|
+| `a_rexx_package_copys_added_routine_survives` | `weak 1` / `found Routine 1 0` | a package with no program builds no table (I1 reverted) |
+| `a_package_copy_held_as_an_import_survives` | `weak 1 1` / `import 1 1` / `ns 1` | `imports` untraced |
+| `a_package_copy_held_as_a_parent_survives` | `weak 1` / `parent jmark` | `parent` untraced |
+
+Each mutant was applied by an exact edit and restored from a saved copy, and `cmp` shows the file
+identical afterwards. The parent test's copy is a copy of a source package that declares the
+routine. My first version followed the reviewer's probe and filed the routine with `~addRoutine` on
+the copy, and it stayed green with the parent trace deleted: after `j~addRoutine(name,
+.routine~new(...))` the copy survives being dropped, on the crate and also on the oracle (`weak 1`
+after 3000 passes). So that shape cannot isolate the parent trace.
+
+**Minor.** `is_rexx_package` returns `Result`. A value that is not a package is refused as `a
+message send to a value that is not a package`, not read as the REXX package.
+`package_find_public_class` propagates the refusal.
+
+**Checks at `5194b8428`**, from `rust/`, statuses read unpiped: `cargo fmt --all --check` 0;
+`CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 -p rexx-core -p rexx-exec --all-targets -- -D warnings`
+0; `... cargo test -j 4 --release -p rexx-exec --lib` 0 (1121 passed); the refusal, owners, phase
+and package test binaries 0; `... -p rexx-parse --test sourceline_oracle` 0;
+`REXX_CORPUS_GATE=1 ... cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus --test collect_stress`
+0 (collect_stress 44 passed; corpus `1056 of 1056 matching`, 29 passed, 1 ignored).
+
+**Budget**: `timeout 590 bench-programs/callgrind.sh -B 0.5 -j 12 -p "startup pkglocal" -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-4-fix1 pin=.../rexx-run head=.../rexx-run-9b1-t4g`
+(built at `5194b8428`), exit 0, three rounds. Records are in `task-4/fix1-callgrind/`.
+
+| program | whole d% | -libc d% |
+|---|---|---|
+| startup | +0.3229 | +0.4476 |
+| pkglocal | -6.8709 | -9.0802 |

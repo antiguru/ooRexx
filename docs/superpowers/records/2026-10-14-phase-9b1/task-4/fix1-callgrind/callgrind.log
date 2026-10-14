@@ -1,0 +1,4 @@
+program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
+startup	119095647	119480170	+0.3229	57372966	57629749	+0.4476	0.0000	0.0000
+pkglocal	4185406087	3897829917	-6.8709	3917669094	3561937363	-9.0802	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-4-fix1
