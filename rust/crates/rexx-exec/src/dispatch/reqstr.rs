@@ -189,13 +189,17 @@ impl Interp {
                 return Err(failure);
             }
         }
-        // `sendMessage(STRING)`. An instance's `STRING` can be a Rexx
-        // method, so it is sent; the shortcut below is what the send answers
-        // wherever `STRING` resolves to `native_string`. Measured, oracle
-        // rc 0: with `::METHOD string` returning `from-string`, `say o`,
-        // `'x' o` and `length(o)` all follow it.
+        // `sendMessage(STRING)`. An instance's or a class's `STRING` can be a
+        // Rexx method, so it is sent; the shortcut below is what the send
+        // answers wherever `STRING` resolves to `native_string`. Measured,
+        // oracle rc 0: with `::METHOD string` returning `from-string`, `say
+        // o`, `'x' o` and `length(o)` all follow it, and with `::METHOD string
+        // CLASS` returning `KS`, `say .k` prints `KS`.
         let mut no_string = false;
-        let readable = if matches!(self.receiver_kind(value), Ok(Primitive::Instance { .. })) {
+        let readable = if matches!(
+            self.receiver_kind(value),
+            Ok(Primitive::Instance { .. } | Primitive::Class(_))
+        ) {
             let caller = self.caller();
             match pinned!(
                 self,

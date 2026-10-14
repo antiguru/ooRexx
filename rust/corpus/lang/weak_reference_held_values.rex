@@ -1,0 +1,29 @@
+/* A WeakReference to a held value does not clear: a short computed string,
+   a small integer, a longer string, a decimal, a String subclass instance and
+   an Object, each computed or made here. Each value is also stored in an
+   IdentityTable and a Set, and its identityHash is read before and after the
+   allocations below, which run the collector. Whether a WeakReference to a
+   dropped String or number clears is unspecified, and one this crate carries
+   in the handle never does (Deviation 36), so nothing here drops one. */
+v.1 = 'ab' || 'c'
+v.2 = 12345 + 1
+v.3 = copies('x', 30)
+v.4 = 1.5 + 0
+v.5 = .mystr~new('sub')
+v.6 = .Object~new
+v.0 = 6
+it = .identityTable~new
+st = .set~new
+do i = 1 to v.0
+  w.i = .WeakReference~new(v.i)
+  h.i = v.i~identityHash
+  it[v.i] = i
+  st~put(v.i)
+end
+do i = 1 to 3000; z = copies('y', 100000); q = .array~new(100); end
+do i = 1 to v.0
+  say i (w.i~value == v.i) (v.i~identityHash == h.i) (w.i~value~identityHash == h.i),
+    it~hasIndex(v.i) (it[v.i] == i) st~hasIndex(v.i) w.i~value~string
+end
+exit
+::class mystr subclass string

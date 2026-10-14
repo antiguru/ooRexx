@@ -1,0 +1,15 @@
+/* A class object's string value is what its STRING method answers when a
+   class-side ::METHOD STRING replaces it, inherited by a subclass, or when a
+   metaclass declares it. A class with neither still renders as itself. */
+say .k; say length(.k); say 'x' || .k; say .k~string
+say .j length(.j)
+say .m1 length(.m1)
+say .plain length(.plain) .array
+exit
+::class k
+::method string class; return 'KS'
+::class j subclass k
+::class meta subclass class
+::method string; return 'META' self~id
+::class m1 metaclass meta
+::class plain

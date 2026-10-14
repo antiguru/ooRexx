@@ -63,6 +63,24 @@ fn a_cleared_weak_reference_reads_as_nil() {
 }
 
 #[test]
+fn a_weak_reference_to_a_handle_carried_value_is_not_cleared() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    for target in [
+        ObjRef::inline_byte(b'x'),
+        ObjRef::small_int(12346).expect("a small integer"),
+    ] {
+        let weak = heap.alloc(Body::WeakRef(target));
+        roots.add_global(".WEAK", weak);
+        heap.collect(&roots);
+        assert!(
+            matches!(heap.get(weak).map(|o| &o.body), Some(Body::WeakRef(r)) if *r == target),
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
 fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
     // The oracle clears weak references BEFORE the uninit list is marked, so
     // resurrection for UNINIT must not retroactively rescue a weak reference.

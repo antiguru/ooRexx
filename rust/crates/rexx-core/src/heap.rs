@@ -278,8 +278,13 @@ impl Heap {
             };
             // "Dead" includes unresolvable: a target whose slot was already
             // freed, or whose generation has moved on, died in an earlier
-            // cycle and its reference must still clear.
-            let target_alive = self.resolve(target).is_some_and(|t| self.marks[t]);
+            // cycle and its reference must still clear. A target carried in
+            // the handle (an inline string or a small integer) is never
+            // cleared, so a held one never clears.
+            let target_alive = match target.decode() {
+                Decoded::Heap { .. } => self.resolve(target).is_some_and(|t| self.marks[t]),
+                _ => true,
+            };
             if !target_alive {
                 let Slot::Live { object, .. } = &mut self.slots[slot] else {
                     unreachable!()

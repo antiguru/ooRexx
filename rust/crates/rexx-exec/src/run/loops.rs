@@ -1057,13 +1057,11 @@ impl Interp {
         value: ObjRef,
         entry_digits: u64,
     ) -> Result<Option<Number>, Failure> {
-        // An operator receiver never converts, so it is asked for only once
-        // the conversion has failed.
-        let operand = match self.to_number(value) {
-            Ok(operand) => operand,
-            Err(_) if self.operator_message_receiver(value).is_some() => return Ok(None),
-            Err(_) => self.arith_operand(value)?,
-        };
+        // An operator receiver is sent `+` even when it would convert.
+        if self.operator_message_receiver(value).is_some() {
+            return Ok(None);
+        }
+        let operand = self.arith_operand(value)?;
         // The header rounds through a unary `+`, so its three numeric
         // positions carry an operand exactly as an operator's do -- measured,
         // `do k = 1 to 123456789` and `... by 123456789` are both 98.972 at

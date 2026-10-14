@@ -110,3 +110,8 @@ lang/stream_handle_names.rex
 
 # 9b1 Task 1: what stays specified for a value-based value.
 lang/value_based_identity.rex
+
+# 9b1 Task 2: L1, L2 and L3.
+lang/weak_reference_held_values.rex
+lang/string_subclass_operators.rex
+lang/class_side_string.rex
