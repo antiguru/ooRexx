@@ -1778,18 +1778,15 @@ impl Interp {
     /// The identity one `.METHODS` entry runs under, minted with its body
     /// recorded as [`Interp::install_method`], [`Interp::install_attribute`]
     /// and [`Interp::install_constant`] record a class's: `name` is the
-    /// entry's key, which picks the half of an accessor pair.
+    /// entry's key, which picks the half of an accessor pair. `source` is
+    /// `program`'s own.
     pub(crate) fn unattached_method_id(
         &mut self,
         program: ProgramId,
+        source: &Rc<Program>,
         directive: usize,
         name: &[u8],
     ) -> MethodId {
-        let source = Rc::clone(
-            self.programs
-                .get(program)
-                .expect("the package whose table names it holds the program"),
-        );
         let (body, access, protection) = match &source.directives[directive].kind {
             DirectiveKind::Method(method) => {
                 let external = dispatch::native::method_external(method);
@@ -1815,7 +1812,7 @@ impl Interp {
                     .program_data(program)
                     .is_some_and(|data| data.constants.contains_key(&directive))
                 {
-                    self.record_literal_constants(program, &source, &[directive]);
+                    self.record_literal_constants(program, source, &[directive]);
                 }
                 (
                     InstallBody::Generated(GeneratedKind::Constant),

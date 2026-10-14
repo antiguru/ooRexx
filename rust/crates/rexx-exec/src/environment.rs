@@ -1129,11 +1129,14 @@ impl Interp {
         }
         // A copy of the REXX package has no directives, and gets a table only
         // for a write, which is where `~addRoutine` files its routines.
-        let entries = match data.program {
+        let source = match data.program {
             Some(program) if !self.untranslated.contains(&program) => {
-                let source = std::rc::Rc::clone(self.programs.get(program)?);
-                package_table_entries(program, &source, kind)
+                Some(std::rc::Rc::clone(self.programs.get(program)?))
             }
+            _ => None,
+        };
+        let entries = match (data.program, &source) {
+            (Some(program), Some(source)) => package_table_entries(program, source, kind),
             _ => Vec::new(),
         };
         if entries.is_empty() && !force {
@@ -1181,8 +1184,10 @@ impl Interp {
                             .expect("every TableValue::Instance names a native class");
                         let object = self.native_instance(class);
                         self.attach_annotations(object, site);
-                        let method = (!routine).then(|| {
-                            let method = self.unattached_method_id(program, directive, &name);
+                        // `entries` is empty unless `source` is this program's.
+                        let method = source.as_ref().filter(|_| !routine).map(|source| {
+                            let method =
+                                self.unattached_method_id(program, source, directive, &name);
                             self.executable_objects.insert(method, object);
                             method
                         });
