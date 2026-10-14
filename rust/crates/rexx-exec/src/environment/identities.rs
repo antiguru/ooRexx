@@ -45,6 +45,8 @@ impl Interp {
         if !self.library_programs.contains(&program) {
             self.class_packages
                 .insert(class, ClassPackage::Program(program));
+            let package = self.package_object(Package::Program(program));
+            self.class_holds_package(class, package);
             return;
         }
         self.roots.activity_mut().push_temp(class);
@@ -74,6 +76,22 @@ impl Interp {
     pub(crate) fn copy_class_package(&mut self, class: ObjRef, copy: ObjRef) {
         if let Some(package) = self.class_packages.get(&class).copied() {
             self.class_packages.insert(copy, package);
+            if let ClassPackage::Program(program) = package {
+                let package = self.package_object(Package::Program(program));
+                self.class_holds_package(copy, package);
+            }
+        }
+    }
+
+    /// Records that `class` keeps the package it was defined in alive, as
+    /// `RexxClass::package` does. A class outside the arena is never
+    /// collected and holds nothing.
+    fn class_holds_package(&mut self, class: ObjRef, package: ObjRef) {
+        if matches!(
+            self.heap.get(class).map(|held| &held.body),
+            Some(Body::Class { .. })
+        ) {
+            self.class_owns(class, package);
         }
     }
 
@@ -126,14 +144,22 @@ impl Interp {
         self.package_object(package)
     }
 
-    /// The one object standing for `package`, built on first use.
+    /// The one object standing for `package`, built on first use. A freshly
+    /// built program package is rooted as a temp of the caller's frame.
     pub(crate) fn package_object(&mut self, package: Package) -> ObjRef {
         let built = match package {
             Package::Rexx => self.rexx_package,
             Package::Program(program) => self.program_package(program),
         };
         if let Some(found) = built {
-            return found;
+            let live = self.heap.get(found).is_some();
+            debug_assert!(
+                live,
+                "{package:?}'s package was asked for after it was collected"
+            );
+            if live {
+                return found;
+            }
         }
         let package_class = self.package_class();
         // The `REXX` package was given its name by the interpreter's own
@@ -153,13 +179,17 @@ impl Interp {
             Package::Program(program) => Some(program),
         }));
         let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(Box::new(native)));
-        // A package object outlives every send that can reach it and is
-        // reachable from no other object, so the root is a global rather than
-        // a temp -- the position `.environment` and `.local` are in.
-        self.roots.add_global(&package_root_key(package), object);
+        // The REXX package lives for the whole run. A program's package lives
+        // while something reaches it: an activation of its code
+        // (`Interp::package_roots`), a class, `Routine` or `Method` object of
+        // its code, or a holder of the object.
         match package {
-            Package::Rexx => self.rexx_package = Some(object),
+            Package::Rexx => {
+                self.roots.add_global(&package_root_key(package), object);
+                self.rexx_package = Some(object);
+            }
             Package::Program(ProgramId(program)) => {
+                self.roots.activity_mut().push_temp(object);
                 if self.program_packages.len() <= program {
                     self.program_packages.resize(program + 1, None);
                 }
@@ -187,7 +217,7 @@ impl Interp {
         }
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
-        self.executable_sources.insert(object, record);
+        self.record_executable(object, record);
         if let Some(method) = record.installed {
             self.executable_objects.entry(method).or_insert(object);
         }
@@ -308,7 +338,7 @@ impl Interp {
                 directive: body.directive,
             },
         };
-        self.executable_sources.insert(
+        self.record_executable(
             object,
             crate::ExecutableRecord {
                 source,
@@ -366,7 +396,7 @@ impl Interp {
         if let Some(data) = self.package_data_mut(package) {
             data.main_routine = Some(object);
         }
-        self.executable_sources.insert(
+        self.record_executable(
             object,
             crate::ExecutableRecord {
                 source: crate::ExecutableSource::Main { program },
@@ -375,6 +405,28 @@ impl Interp {
             },
         );
         object
+    }
+
+    /// Files `record` as what the `Method` or `Routine` object `object`
+    /// reports on and runs, and makes `object` keep the package its code
+    /// belongs to alive, as `BaseExecutable::package` does. May allocate, so
+    /// `object` must be rooted.
+    pub(crate) fn record_executable(&mut self, object: ObjRef, record: crate::ExecutableRecord) {
+        self.executable_sources.insert(object, record);
+        let program = match record.source {
+            crate::ExecutableSource::Directive { program, .. }
+            | crate::ExecutableSource::Main { program }
+            | crate::ExecutableSource::External { program } => program,
+            crate::ExecutableSource::Native | crate::ExecutableSource::Loaded { .. } => return,
+        };
+        let package = self.package_object(Package::Program(program));
+        match self.heap.get_mut(object).map(|held| &mut held.body) {
+            Some(Body::Native(native)) => native.set_executable_package(package),
+            Some(Body::Instance { native, .. }) => {
+                *native = Some(Box::new(rexx_core::NativeState::Executable(package)));
+            }
+            _ => {}
+        }
     }
 
     /// `MethodClass::newScope` (`classes/MethodClass.cpp:183`): the same
@@ -621,13 +673,15 @@ impl Interp {
         }
         let table = crate::dispatch::hash::new_string_table(self)
             .expect("StringTable is not an abstract class");
-        // A class-owned site is held by its class, so the table dies with it.
-        // Every other site belongs to a package or a program, which outlive
-        // the run, and those keep the global root.
+        // A class-owned site is held by its class and a program package's by
+        // the package object, which `attach_annotations` hands it to before
+        // anything allocates, so the table dies with its holder. Every other
+        // site keeps the global root.
         match site {
             Annotated::Class(owner) | Annotated::Member(owner, _, _) => {
                 self.class_owns(owner, table);
             }
+            Annotated::Package(Package::Program(_)) => {}
             _ => self.roots.add_global(&annotation_root_key(&site), table),
         }
         self.annotations.insert(site, table);

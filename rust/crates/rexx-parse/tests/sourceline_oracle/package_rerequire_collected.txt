@@ -1,0 +1,28 @@
+count 27
+/* A package a ::REQUIRES loaded is held weakly by the requires cache: once
+   nothing else reaches it, it is collected, and the next ::REQUIRES of the
+   same file loads it again and runs its prologue again. */
+f = .stream~new('rereq.cls')
+f~open('write replace')
+f~lineout('.local~rereq.prologs = .local~rereq.prologs + 1')
+f~lineout('::routine rereq public')
+f~lineout('  return "answered"')
+f~close
+.local~rereq.prologs = 0
+r = .Routine~new('r', ("return rereq()", "::requires 'rereq.cls'"))
+w = .WeakReference~new(r~package~importedPackages[1])
+fr = w~value~findRoutine('REREQ')~identityHash
+say 'first' r~call
+drop r
+i = 0
+loop until w~value == .nil | i > 5000
+  z = copies('y', 100000)
+  i += 1
+end
+say 'collected' (w~value == .nil)
+r2 = .Routine~new('r2', ("return rereq()", "::requires 'rereq.cls'"))
+p2 = r2~package~importedPackages[1]
+say 'again' r2~call (p2~findRoutine('REREQ')~identityHash \== fr)
+say 'prologs' .local~rereq.prologs
+r3 = .Routine~new('r3', ("return rereq()", "::requires 'rereq.cls'"))
+say 'cached' (r3~package~importedPackages[1] == p2) 'prologs' .local~rereq.prologs

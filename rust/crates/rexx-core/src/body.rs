@@ -162,8 +162,8 @@ pub enum VarRefHome {
 }
 
 /// The native state an instance carries in its own body, for the classes whose
-/// C++ counterparts keep a `CSELF` block. Only [`NativeState::Package`] holds
-/// an [`ObjRef`].
+/// C++ counterparts keep a `CSELF` block. [`NativeState::Package`] and
+/// [`NativeState::Executable`] hold [`ObjRef`]s.
 #[derive(Clone, Debug)]
 pub enum NativeState {
     /// A `MutableBuffer`'s contents.
@@ -188,6 +188,9 @@ pub enum NativeState {
     Text(Box<[u8]>),
     /// A `Package` subclass instance's package state.
     Package(PackageState),
+    /// The package a `Method` or `Routine` subclass instance's code belongs
+    /// to, which the instance keeps alive.
+    Executable(ObjRef),
 }
 
 /// The state a `Package` object holds. Its fields are the interpreter's own
@@ -312,7 +315,8 @@ impl NativeState {
             | NativeState::Pointer(_)
             | NativeState::Data(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -324,7 +328,8 @@ impl NativeState {
             | NativeState::Pointer(_)
             | NativeState::Data(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -336,7 +341,8 @@ impl NativeState {
             | NativeState::Pointer(_)
             | NativeState::Data(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -349,7 +355,8 @@ impl NativeState {
             | NativeState::Pointer(_)
             | NativeState::Data(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -364,7 +371,8 @@ impl NativeState {
             | NativeState::Stream(_)
             | NativeState::Data(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -376,7 +384,8 @@ impl NativeState {
             | NativeState::Stream(_)
             | NativeState::Pointer(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -389,7 +398,8 @@ impl NativeState {
             | NativeState::Stream(_)
             | NativeState::Pointer(_)
             | NativeState::Text(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -402,7 +412,8 @@ impl NativeState {
             | NativeState::Stream(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
-            | NativeState::Package(_) => None,
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => None,
         }
     }
 
@@ -423,6 +434,19 @@ impl NativeState {
         }
     }
 
+    /// Appends every object this state holds.
+    pub fn trace(&self, out: &mut Vec<ObjRef>) {
+        match self {
+            NativeState::Package(state) => state.trace(out),
+            NativeState::Executable(package) => out.push(*package),
+            NativeState::Buffer(_)
+            | NativeState::Stream(_)
+            | NativeState::Pointer(_)
+            | NativeState::Data(_)
+            | NativeState::Text(_) => {}
+        }
+    }
+
     /// Whether the object holding this state renders its string value from the
     /// state itself, as `MutableBuffer::stringValue`
     /// (`interpreter/classes/MutableBufferClass.cpp:740`) and
@@ -434,7 +458,10 @@ impl NativeState {
     pub fn renders_its_own_string_value(&self) -> bool {
         match self {
             NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Text(_) => true,
-            NativeState::Stream(_) | NativeState::Data(_) | NativeState::Package(_) => false,
+            NativeState::Stream(_)
+            | NativeState::Data(_)
+            | NativeState::Package(_)
+            | NativeState::Executable(_) => false,
         }
     }
 }
@@ -989,7 +1016,8 @@ pub struct NativeObject {
     rendered: Box<[u8]>,
     string_value: Option<Box<[u8]>>,
     entries: FxHashMap<Box<[u8]>, ObjRef>,
-    annotations: Option<ObjRef>,
+    /// `ObjRef::NIL` for an object whose builder gave it no table.
+    annotations: ObjRef,
     bound: Bound,
 }
 
@@ -1000,6 +1028,13 @@ enum Bound {
     Nothing,
     /// A method object's scope.
     Scope(ObjRef),
+    /// The package a `Method` or `Routine` object's code belongs to.
+    Code(ObjRef),
+    /// A method object's scope and the package its code belongs to.
+    ScopedCode {
+        scope: ObjRef,
+        package: ObjRef,
+    },
     /// The `INTERNAL_ROUTINES` row a routine object runs.
     RoutineRow(usize),
     /// A package object's state, boxed so that every other native object
@@ -1018,7 +1053,7 @@ impl NativeObject {
             rendered: rendered.into(),
             string_value: None,
             entries: FxHashMap::default(),
-            annotations: None,
+            annotations: ObjRef::NIL,
             bound: Bound::Nothing,
         }
     }
@@ -1083,25 +1118,50 @@ impl NativeObject {
     /// The `StringTable` this object's `~annotations` answers, or `None` for
     /// an object whose builder gave it none.
     pub fn annotations(&self) -> Option<ObjRef> {
-        self.annotations
+        (self.annotations != ObjRef::NIL).then_some(self.annotations)
     }
 
     pub fn set_annotations(&mut self, annotations: ObjRef) {
-        self.annotations = Some(annotations);
+        self.annotations = annotations;
     }
 
     /// `MethodClass::getScope`: the class this method object is installed on,
     /// or `None` for one nothing has installed yet.
     pub fn scope(&self) -> Option<ObjRef> {
         match self.bound {
-            Bound::Scope(scope) => Some(scope),
+            Bound::Scope(scope) | Bound::ScopedCode { scope, .. } => Some(scope),
             _ => None,
         }
     }
 
     /// `MethodClass::setScope` (`classes/MethodClass.cpp:219`).
     pub fn set_scope(&mut self, scope: ObjRef) {
-        self.bound = Bound::Scope(scope);
+        self.bound = match self.bound {
+            Bound::Code(package) | Bound::ScopedCode { package, .. } => {
+                Bound::ScopedCode { scope, package }
+            }
+            _ => Bound::Scope(scope),
+        };
+    }
+
+    /// The package a `Method` or `Routine` object's code belongs to, which
+    /// the object keeps alive, or `None` for one that names none.
+    pub fn executable_package(&self) -> Option<ObjRef> {
+        match self.bound {
+            Bound::Code(package) | Bound::ScopedCode { package, .. } => Some(package),
+            _ => None,
+        }
+    }
+
+    /// Records the package this `Method` or `Routine` object's code belongs
+    /// to, keeping any scope.
+    pub fn set_executable_package(&mut self, package: ObjRef) {
+        self.bound = match self.bound {
+            Bound::Scope(scope) | Bound::ScopedCode { scope, .. } => {
+                Bound::ScopedCode { scope, package }
+            }
+            _ => Bound::Code(package),
+        };
     }
 
     /// The `INTERNAL_ROUTINES` row this `Routine` object runs, which a copy
@@ -1272,8 +1332,8 @@ impl Body {
             } => {
                 out.push(*class);
                 pools.trace(out);
-                if let Some(state) = native.as_deref().and_then(NativeState::package) {
-                    state.trace(out);
+                if let Some(native) = native {
+                    native.trace(out);
                 }
                 // A one-off method's scope, in the position the class handle
                 // above is in and traced for the same reason.
@@ -1292,9 +1352,10 @@ impl Body {
                 // A method object's scope, in the position the class handle
                 // above is in and traced for the same reason.
                 out.extend(native.scope());
+                out.extend(native.executable_package());
                 // Reachable from the object alone once a program holds the
                 // table and drops every other handle on it.
-                out.extend(native.annotations);
+                out.extend(native.annotations());
                 if let Some(state) = native.package() {
                     state.trace(out);
                 }

@@ -125,3 +125,7 @@ lang/package_copy_mutated.rex
 
 # 9b1 Task 4 fix round 1: a REXX package copy's lookups and merge (I2, I3).
 lang/package_rexx_copy_lookups.rex
+
+# 9b1 Task 5: packages are collected, and the requires cache holds them weakly.
+lang/package_rerequire_collected.rex
+lang/package_library_binder_kept.rex

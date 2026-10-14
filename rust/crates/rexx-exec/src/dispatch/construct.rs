@@ -211,16 +211,19 @@ pub(super) fn native_as_instance(
             if let Some(table) = native.annotations() {
                 pools.set(base, SUBCLASS_ANNOTATIONS, table);
             }
-            let package = native
-                .take_package()
-                .map(|state| Box::new(rexx_core::NativeState::Package(state)));
+            let state = match native.take_package() {
+                Some(state) => Some(rexx_core::NativeState::Package(state)),
+                None => native
+                    .executable_package()
+                    .map(rexx_core::NativeState::Executable),
+            };
             held.body = Body::Instance {
                 class,
                 behaviour,
                 name: None,
                 pools,
                 own: None,
-                native: package,
+                native: state.map(Box::new),
             };
         }
         Body::Instance {

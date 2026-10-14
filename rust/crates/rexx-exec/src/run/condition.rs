@@ -362,6 +362,7 @@ impl Interp {
         }
         self.activity.failure_frame = None;
         let origin = self.activity.failure_origin.take();
+        self.hold_origin_package(origin);
         let propagated = std::mem::take(&mut self.activity.failure_propagated);
         let reraised = std::mem::take(&mut self.activity.failure_reraised);
         self.set_sigl(self.activity.clause_state.line());

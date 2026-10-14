@@ -269,7 +269,19 @@ impl Interp {
         {
             temps.push_temp(object);
         }
+        self.hold_origin_package(unwinding.origin);
         unwinding
+    }
+
+    /// Roots, as a temp, the package of the level a failure came from, which
+    /// its condition object names once built: that level may be the last
+    /// thing that reached it, and it has unwound.
+    pub(crate) fn hold_origin_package(&mut self, origin: Option<(Package, Option<usize>)>) {
+        if let Some((Package::Program(program), _)) = origin
+            && let Some(package) = self.program_package(program)
+        {
+            self.roots.activity_mut().push_temp(package);
+        }
     }
 
     /// Puts what [`Interp::set_aside_unwinding`] took below the record of

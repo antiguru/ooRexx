@@ -1679,7 +1679,8 @@ struct Interp {
     /// report in place of [`Interp::program_path`].
     required_paths: FxHashMap<ProgramId, Box<str>>,
     /// The package each `::REQUIRES` name has already loaded, keyed both by
-    /// the name as written and by the file it resolved to.
+    /// the name as written and by the file it resolved to. An entry goes when
+    /// its package object is collected.
     required_packages: FxHashMap<Box<[u8]>, ProgramId>,
     /// The programs whose first walk of [`Interp::install_directives`], which is
     /// this crate's translation, started and did not finish. The oracle gives
@@ -2958,8 +2959,10 @@ impl Interp {
             class_packages: _,
             // Zero length.
             empty_arguments: _,
-            // `RootSet::add_global`, under `package_root_key`. A package's
-            // body traces every object its fields hold.
+            // The REXX package is a `RootSet::add_global` under
+            // `package_root_key`. A program's package is held by whatever
+            // reaches it and by `Interp::package_roots`. A package's body
+            // traces every object its fields hold.
             rexx_package: _,
             program_packages: _,
             // Rooted by the `.ROUTINES` table each entry is also in.
@@ -3060,6 +3063,7 @@ impl Interp {
             lostdigits_armed: _,
             program_path: _,
             required_paths: _,
+            // Weak: pruned in `Interp::collect_now`.
             required_packages: _,
             untranslated: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
@@ -3083,6 +3087,24 @@ impl Interp {
         out.extend(global_references.roots());
     }
 
+    /// The package of each program an activation on any activity runs, of
+    /// each program of the interpreter's own library, and of each program a
+    /// library code row names, which the oracle keeps for the run: measured,
+    /// the package whose `::ROUTINE` first bound `rxmath`'s `RxCalcSqrt` is
+    /// never collected.
+    fn package_roots(&self, out: &mut Vec<ObjRef>) {
+        let mut programs = Vec::new();
+        self.activity.running_programs(&mut programs);
+        self.activities.running_programs(&mut programs);
+        programs.extend(self.library_programs.iter().copied());
+        programs.extend(self.library_codes.iter().flatten().copied());
+        out.extend(
+            programs
+                .into_iter()
+                .filter_map(|program| self.program_package(program)),
+        );
+    }
+
     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so
     /// that what an allocation pays when nothing is due is the test alone.
     #[inline(never)]
@@ -3095,6 +3117,7 @@ impl Interp {
         // collector as temporaries for the length of the sweep.
         let mut anchor: Vec<ObjRef> = Vec::new();
         self.object_roots(&mut anchor);
+        self.package_roots(&mut anchor);
         let frame = self.roots.activity_mut().push_frame();
         for object in anchor {
             self.roots.activity_mut().push_temp(object);
@@ -3118,6 +3141,14 @@ impl Interp {
         });
         self.activities
             .prune_senders(|message| heap.peek(message).is_some());
+        let packages = &self.program_packages;
+        self.required_packages.retain(|_, program| {
+            packages
+                .get(program.0)
+                .copied()
+                .flatten()
+                .is_some_and(|package| heap.peek(package).is_some())
+        });
         // A sweep can free a class the registry named, which unlinks its row
         // and leaves any `.NAME` answer derived from it naming nothing.
         self.invalidate_rexx_class_cache();

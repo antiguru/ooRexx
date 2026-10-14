@@ -843,3 +843,23 @@ fn time_e_after_any_sleep_is_never_zero() {
         );
     }
 }
+
+/// A package that only a waiting activation's frame reaches survives the
+/// collections another activity's allocations make, under random collection.
+/// Measured, oracle rc 0, `idle 1 1 1` in 3 of 3 runs, with each pass of
+/// the loop also allocating `copies('y', 100000)`.
+#[test]
+fn a_package_only_a_waiting_frame_reaches_survives() {
+    let source = "w = .WeakReference~new(.context~package)\n\
+        h = .context~package~identityHash\n\
+        k = .Package~new('w', ('::class worker public', '::method churn', \
+        '  do i = 1 to 100', '    q = .array~new(100)', '  end', '  return 1'))~findClass('WORKER')\n\
+        m = k~new~start('CHURN')\n\
+        say 'idle' m~result (w~value \\== .nil) (.context~package~identityHash == h)\n";
+    for seed in 1..=4 {
+        let run = run_in(source, Some(sim(&format!("sim:{seed},gc=0.5"))));
+        assert_eq!(run.exit_code, 0, "seed {seed}: {}", stderr(&run));
+        assert_eq!(stdout(&run), "idle 1 1 1\n", "seed {seed}");
+        assert!(run.collections > 0, "seed {seed} did not collect");
+    }
+}

@@ -1190,7 +1190,7 @@ impl Interp {
                             self.executable_objects.insert(method, object);
                             method
                         });
-                        self.executable_sources.insert(
+                        self.record_executable(
                             object,
                             crate::ExecutableRecord {
                                 source: crate::ExecutableSource::Directive { program, directive },

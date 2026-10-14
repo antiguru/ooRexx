@@ -700,10 +700,14 @@ impl Interp {
         self.programs.push(Rc::clone(&parsed));
         self.required_paths
             .insert(required, resolved.as_str().into());
+        // Built before it is cached: the cache holds the package object
+        // weakly (`PackageManager::addToRequiresCache`,
+        // `package/PackageManager.cpp:921`), so an entry lives exactly as long
+        // as its object.
+        let package = self.package_object(Package::Program(required));
         // Installed before the prologue runs, which is where
         // `getRequiresFile` puts it (`package/PackageManager.cpp:830`-`:833`).
         if let Some(manager) = inherited {
-            let package = self.package_object(Package::Program(required));
             self.install_security_manager(package, Some(manager));
         }
         // **Cached before the prologue runs, not after**, which is
@@ -1728,7 +1732,7 @@ impl Interp {
                 directive: 0,
             },
         );
-        self.executable_sources.insert(
+        self.record_executable(
             object,
             ExecutableRecord {
                 source: ExecutableSource::Main {
@@ -1859,7 +1863,7 @@ impl Interp {
         if let Some(parent) = parent {
             self.set_package_parent(program_id, parent);
         }
-        self.executable_sources.insert(
+        self.record_executable(
             object,
             ExecutableRecord {
                 source: ExecutableSource::Main {
@@ -1988,7 +1992,7 @@ impl Interp {
                 },
             )
         });
-        self.executable_sources.insert(
+        self.record_executable(
             object,
             ExecutableRecord {
                 source: ExecutableSource::Main { program: id },

@@ -122,6 +122,20 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "num/comparison.rex",
 ];
 
+/// The programs whose stdout depends on when a collection happens, which is
+/// not an observable the oracle defines (ruled 2026-09-01): each loads a
+/// package nothing holds, which the requires cache holds weakly, and loads it
+/// again. Measured on the oracle with a loop of `copies('y', 100000)` between
+/// the two loads: `library_package_retried.rex` prints `its class The K3
+/// class` where it stands at `its class .K3`, and
+/// `requires_manager_rename.rex` prints `second load 1 4 events` where it
+/// stands at `2 events`. Each still exits and writes stderr as its plain run
+/// does.
+const COLLECTION_TIMED_PROGRAMS: &[&str] = &[
+    "lang/library_package_retried.rex",
+    "lang/requires_manager_rename.rex",
+];
+
 /// The phase subset files that exist in the corpus directory, sorted.
 fn phase_subset_files_on_disk() -> Vec<String> {
     let dir = corpus_dir();
@@ -163,6 +177,13 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
          not an empty pass"
     );
 
+    for timed in COLLECTION_TIMED_PROGRAMS {
+        assert!(
+            subset.iter().any(|path| path == timed),
+            "{timed} is not in the subset"
+        );
+    }
+
     let mut total_collections: u64 = 0;
     let mut mismatches = Vec::new();
     let mut zero_collection_programs = Vec::new();
@@ -203,8 +224,9 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
         }
         total_collections += stress.collections;
 
+        let timed = COLLECTION_TIMED_PROGRAMS.contains(&rel_path.as_str());
         if plain.exit_code != stress.exit_code
-            || plain.stdout != stress.stdout
+            || (plain.stdout != stress.stdout && !timed)
             || plain.stderr != stress.stderr
         {
             mismatches.push(format!(
@@ -1204,4 +1226,165 @@ fn a_trapped_conditions_object_survives_collect_on_every_allocation() {
             "{label}: the stress mode did not collect, so this proves nothing"
         );
     }
+}
+
+/// A package is never collected while something reaches it: an activation
+/// of its code, running or waiting on another activity, a variable holding
+/// it, a class it defines, a `Routine` or `Method` object compiled into it, a
+/// subclass instance of either, or a `Method` whose parent it is. Its
+/// annotation table lives as long as it does. Measured, oracle rc 0, the same
+/// lines for each program with a 100-pass loop of `copies('y', 100000)` in
+/// place of the filler.
+#[test]
+fn a_package_in_use_is_never_collected() {
+    for (label, program, expected) in [
+        (
+            "<package-of-a-running-activation>",
+            concat!(
+                "w = .WeakReference~new(.context~package)\n",
+                "h = .context~package~identityHash\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "say 'running' (w~value \\== .nil) (.context~package~identityHash == h)\n",
+            ),
+            "running 1 1\n",
+        ),
+        (
+            "<package-of-a-waiting-activation>",
+            concat!(
+                "w = .WeakReference~new(.context~package)\n",
+                "h = .context~package~identityHash\n",
+                "k = .Package~new('w', ('::class worker public', '::method churn', ",
+                "'  do i = 1 to 20', '    zj = \"filler\" i', '  end', '  return 1'))",
+                "~findClass('WORKER')\n",
+                "m = k~new~start('CHURN')\n",
+                "say 'idle' m~result (w~value \\== .nil) (.context~package~identityHash == h)\n",
+            ),
+            "idle 1 1 1\n",
+        ),
+        (
+            "<package-in-a-variable>",
+            concat!(
+                "p = .Routine~new('r', 'return .context~package')~call\n",
+                "p~addRoutine('X7', .routine~new('x', 'return 7'))\n",
+                "w = .WeakReference~new(p)\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "say 'variable' (w~value == p) p~findRoutine('X7')~call\n",
+            ),
+            "variable 1 7\n",
+        ),
+        (
+            "<package-of-a-class>",
+            concat!(
+                "k = .Package~new('p', ('::class k public', '::method m', ",
+                "'  return .context~package~identityHash'))~findClass('K')\n",
+                "h = k~package~identityHash\n",
+                "w = .WeakReference~new(k~package)\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "say 'class' (w~value \\== .nil) (k~new~m == h) (k~package~identityHash == h)\n",
+            ),
+            "class 1 1 1\n",
+        ),
+        (
+            "<package-of-a-routine>",
+            concat!(
+                "r = .Package~new('p', ('::routine r public', ",
+                "'  return .context~package~identityHash'))~findRoutine('R')\n",
+                "h = r~package~identityHash\n",
+                "w = .WeakReference~new(r~package)\n",
+                "s = .Routine~new('s', 'return .context~package~identityHash')\n",
+                "g = s~package~identityHash\n",
+                "v = .WeakReference~new(s~package)\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "say 'directive routine' (w~value \\== .nil) (r~call == h) (r~package~identityHash == h)\n",
+                "say 'source routine' (v~value \\== .nil) (s~call == g) (s~package~identityHash == g)\n",
+            ),
+            "directive routine 1 1 1\nsource routine 1 1 1\n",
+        ),
+        (
+            "<package-of-a-method>",
+            concat!(
+                "m = .Method~new('m', 'return .context~package~identityHash')\n",
+                "h = m~package~identityHash\n",
+                "w = .WeakReference~new(m~package)\n",
+                "c = .context~package~copy\n",
+                "c~addRoutine('Q9', .routine~new('q', 'return 9'))\n",
+                "n = .Method~new('n', 'return q9()', c)\n",
+                "drop c\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "o = .runner~new\n",
+                "say 'method' (w~value \\== .nil) (o~go(m) == h) (m~package~identityHash == h) o~go(n)\n",
+                "::class runner\n",
+                "::method go\n",
+                "  use arg m\n",
+                "  return self~run(m)\n",
+            ),
+            "method 1 1 1 9\n",
+        ),
+        (
+            "<package-of-an-executable-subclass-instance>",
+            concat!(
+                "s = .mm~new('m', 'return .context~package~identityHash')\n",
+                "h = s~package~identityHash\n",
+                "w = .WeakReference~new(s~package)\n",
+                "t = .rr~new('r', 'return .context~package~identityHash')\n",
+                "g = t~package~identityHash\n",
+                "v = .WeakReference~new(t~package)\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "say 'subclass' (w~value \\== .nil) (s~package~identityHash == h) ",
+                "(v~value \\== .nil) (t~call == g) (t~package~identityHash == g)\n",
+                "::class mm subclass method\n",
+                "::class rr subclass routine\n",
+            ),
+            "subclass 1 1 1 1 1\n",
+        ),
+        (
+            "<annotations-of-a-package>",
+            concat!(
+                "p = .Package~new('p', ('::annotate package colour \"blue\"', ",
+                "'::routine r public', '  return 1'))\n",
+                "w = .WeakReference~new(p~annotations)\n",
+                "do i = 1 to 20\n",
+                "  zj = 'filler' i\n",
+                "end\n",
+                "say 'annotation' p~annotation('colour') (w~value == p~annotations)\n",
+            ),
+            "annotation blue 1\n",
+        ),
+    ] {
+        assert_stress_prints(label, program, expected);
+    }
+}
+
+/// A package nothing reaches is collected and its weak reference clears,
+/// whether `Package~new` built it or a `Routine` or `Method` compiled from
+/// source text did (L7). Measured, oracle rc 0, `dropped 1 1 1 1` for the same
+/// lines with a 100-pass loop of `copies('y', 100000)` in place of the filler.
+#[test]
+fn a_dropped_package_is_collected() {
+    assert_stress_prints(
+        "<package-collected>",
+        concat!(
+            "w = .WeakReference~new(.Package~new('src', 'nop'))\n",
+            "v = .WeakReference~new(.Package~new('q', ('::routine r public', '  return 1')))\n",
+            "u = .WeakReference~new(.Routine~new('r', 'return 1')~package)\n",
+            "t = .WeakReference~new(.Method~new('m', 'return 1')~package)\n",
+            "do i = 1 to 20\n",
+            "  zj = 'filler' i\n",
+            "end\n",
+            "say 'dropped' (w~value == .nil) (v~value == .nil) (u~value == .nil) (t~value == .nil)\n",
+        ),
+        "dropped 1 1 1 1\n",
+    );
 }
