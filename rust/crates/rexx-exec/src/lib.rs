@@ -559,13 +559,14 @@ impl Loud {
         }
     }
 
-    /// `OBJECTNAME=` on a string or a small integer, whose name the oracle
-    /// shares across every value its object identity makes the same object
-    /// (Deviation 31).
+    /// `OBJECTNAME=` on a value-based value, which carries no per-object
+    /// state (Deviation 36).
     #[cold]
     fn object_name_of_a_value() -> Loud {
         Loud {
-            message: owned_message("OBJECTNAME= on a string or a number", None),
+            message: "OBJECTNAME= on a String is refused because a String is value-based \
+                      (Deviation 36)"
+                .to_string(),
         }
     }
 

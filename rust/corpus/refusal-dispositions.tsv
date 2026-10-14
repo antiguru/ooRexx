@@ -48,7 +48,7 @@ metaclass_new_reused_class	DEVIATION	-	Deviation 32: a metaclass NEW answering a
 missing_body	GUARD	-	every body selector names a directive index the parser fills (refusal-sites.tsv: an instance reading a generated accessor agrees)
 numeric_form_without_expression	GUARD	-	parser guarantee: NUMERIC FORM VALUE with no expression is 35.917 at parse time
 object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .string~inherit (98.985), SETMETHOD to an Array or String (97.2), setMethod, unsetMethod and setMethod OBJECT from methods of Directory, .local, .environment and a Directory subclass; all answer or raise, oracle-identical
-object_name_of_a_value	DEVIATION	-	Deviation 31: OBJECTNAME= on a string or a small integer, whose name the oracle shares across its literal and integer-cache identities; Phase 9a Task 8b probes objname2, objname4
+object_name_of_a_value	DEVIATION	-	Deviation 36: OBJECTNAME= on a value-based String, which carries no per-object state (spec 2026-10-14-phase-9b1 section 1)
 op_not_driven	GUARD	-	driver invariant: every op the compiler emits has a driver arm (census d-guard)
 operator_operand	GUARD	-	scout A b12: spec-op.txt, every dyadic and prefix operator on nine left operands, refused none
 parse_trigger_operand	GUARD	-	parser guarantee: a PARSE trigger that needs an operand carries one (census d-guard)

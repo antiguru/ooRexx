@@ -107,3 +107,6 @@ lang/rexxutil_library_identity.rex
 
 # 9b Task 9: HANDLE: streams, the shapes Deviation 35 leaves agreeing.
 lang/stream_handle_names.rex
+
+# 9b1 Task 1: what stays specified for a value-based value.
+lang/value_based_identity.rex

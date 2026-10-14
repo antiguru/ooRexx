@@ -926,14 +926,26 @@ DEVIATIONS -- permanent, chosen
      this chain where "what the oracle does" and "a byte this crate can
      produce without inventing one" are still the same question.
 
-  4. OBJECT IDENTITY IS NOT MODELLED. In this crate identity is handle
-     equality, a function of the value alone. In the oracle it follows the
-     C++ construction path, and no value-level rule reproduces that.
+  4. SEPARATELY PRODUCED EQUAL STRINGS OR NUMBERS MAY OR MAY NOT BE ONE
+     OBJECT (Phase 9b1, rescoped by Deviation 36). OWNER: none.
 
-     Licensed by Moritz, 2026-08-15, after an independent confirmation pass
-     of 95 probes widened the subject twice. An earlier draft of this row
-     stated a boundary ("seven bytes or fewer") and a two-way split; both were
-     too narrow and are withdrawn. What follows is the measured picture.
+     SCOPE: value-based values only (Deviation 36), every value whose class
+     is `.String` with no subclass and no enhancement, the numbers, `.true`
+     and `.false` included. A subclass instance or an enhanced string is an
+     ordinary object and is not covered.
+
+     Two equal value-based values produced separately may or may not be one
+     object, in both directions. So may a value and the answer of an
+     operation that leaves it unchanged: `strip` with nothing to strip,
+     `s || ''`, `changestr` with no match, `right(s, length(s))`,
+     `left(s, length(s))`, `substr(s, 1)`, `translate(s, '', '')`,
+     `s~string`, `s~copy`, and a whole-template PARSE. Seen through
+     `identityHash`, an IdentityTable or IdentitySet key, or `==` of two
+     identity hashes, the answers to these are not specified. One held value
+     keeps one identity (Deviation 36).
+
+     Licensed by Moritz 2026-08-15, and rescoped to value-based values by
+     the 9b1 spec, section 1 (Moritz 2026-10-14).
 
      MEASURED, oracle, standard wrapper, fresh empty directory, three
      descriptors, `numeric digits 18`. `.IdentityTable` item counts:
@@ -956,77 +968,20 @@ DEVIATIONS -- permanent, chosen
        translate(s, "", "")                            2
        two identical literals in two PACKAGES          2
 
-     `left` and `right` land on opposite sides. Two equal fives are one object
-     or two depending on how they were produced. The integer cache is exactly
-     -10..100 (`classes/IntegerClass.hpp:185-186`, and the 5/101 rows above).
-
-     THE CONSEQUENCE, and it is the reason this row licenses a MODEL rather
-     than a range: identity in ooRexx is a property of how an object was
-     constructed, not of what it holds. This crate cannot express that,
-     because a handle IS the value for anything inline and is a slot index
-     otherwise. So the divergence runs BOTH WAYS.
-
-     WE MERGE WHERE THE ORACLE SEPARATES.
-       - a computed string of seven bytes or fewer equal to an existing one
-         (entry 59's inline text);
-       - any two equal integers inside +/-2^61 but outside -10..100
-         (`SmallInt`, which PREDATES entry 59 -- an earlier draft of this row
-         said the integer behaviour "matches by luck", which is true only for
-         the arguments in -10..100 that its probe happened to use).
-
-     WE SEPARATE WHERE THE ORACLE MERGES.
-       - a literal of eight bytes or more that is not a canonical decimal
-         integer, re-evaluated. A literal of seven bytes or fewer is already
-         one handle at every evaluation, and so is one whose text is a
-         canonical integer at any length, so this is narrower than it sounds
-         and a probe that does not control for both shapes cannot see a fix;
-       - every identity-preserving no-op in the table above, because every
-         string path here ends at `Interp::text` or `text_built`:
-         `strip` ends `Ok(interp.text(kept))`, `changestr`'s no-match path
-         ends `Ok(interp.text_built(unchanged))`, `concat_values` has no
-         null-operand short circuit, and `parse_template.rs` builds every
-         piece with `self.text`.
-
-     THE IDENTITY-PRESERVING NO-OPS ARE NOT REPRODUCED, and that is a
-     deliberate narrowing added 2026-08-15 after Moritz observed that ooRexx's
-     OO extensions may simply have bugs. Three things say this one is upstream
-     accident rather than design, and none of them alone would be enough:
-
-       - the behaviour is INCONSISTENT in a way no rule explains. `left` and
-         `right` disagree at the same argument, and so do
-         `substr(s,1,length(s))` and `delstr(s,length(s)+1)`. A designed
-         property does not split a symmetric pair.
-       - the conformance suite DOES NOT PIN IT. `assertIdentical` appears in
-         the whole of ootest only in METHOD, ROUTINE, StackFrame,
-         IdentityTable, MutableBuffer/setText and String/iif -- none of the
-         BIF groups, and none over a no-op transformation. So reproducing it
-         buys no conformance.
-       - the neighbouring identity machinery is upstream-flagged already:
-         CoreClasses.orx:1305's `compareTo` fallback carries the comment
-         "see discussion in [bugs:1406]".
-
-     So this family is covered by the same licence as the first: identity is
-     not modelled. The alternative -- copying the identity-preserving set from
-     the C++ per builtin, since it cannot be derived -- would encode an
-     upstream inconsistency into this crate at a cost measured in per-builtin
-     special cases, to pass no test that exists.
-
-     WHAT IS STILL WORTH CLOSING is the literal-pooling half, because that one
-     IS consistent, IS what the oracle does deliberately at every length, and
-     removes allocations while it aligns us.
-
-     CONSTRAINTS ON THE LITERAL-POOLING FIX, each measured rather than
-     assumed. Pool per COMPILED UNIT, not globally: two identical literals in
-     two packages are two objects on the oracle, so a global pool would turn
-     today's agreement into a new divergence. A fresh pool per `INTERPRET`
-     execution, for the same reason. And `.true`/`.false` and the environment
-     symbols go through the value path rather than the literal path, because
-     the oracle keeps them distinct from every spelling of `1` and `0`.
+     The oracle's answers follow its construction path: one literal pool
+     per package and per INTERPRET execution, a process-wide cache of the
+     integers -10..100 (`classes/IntegerClass.hpp:185-186`), and a fresh
+     object for every other result. `left` and `right` land on opposite
+     sides at the same argument. The 9b1 identity probes
+     (.superpowers/sdd/2026-10-14-phase-9b1/scout-deviations.md, "Task 2")
+     re-measured the merge side on both interpreters. This crate merges an
+     inline string of seven bytes or fewer and any integer inside +/-2^61
+     with every equal one.
 
      `~identityHash` IS ADDRESS-DERIVED AND VARIES BETWEEN RUNS. Measured:
      `"abc"~identityHash` printed -140497609849889 and -139929843694625 on
      two runs of one program. So its VALUE is never a differential test on any
-     interpreter; what is testable is whether two things are the same object.
+     interpreter. What is testable is whether two things are the same object.
 
      A TRAP THIS PROJECT FELL INTO TWICE. Comparing two identity hashes with
      `=` under the default NUMERIC DIGITS 9 answers 1 for two DIFFERENT
@@ -1034,32 +989,18 @@ DEVIATIONS -- permanent, chosen
      `CoreClasses.orx:1305` sets `numeric digits 18` before differencing two
      of them for exactly this reason.
 
-     THE L2 COST, measured at the checked-out suite rather than guessed.
-     `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest`,
-     last changed r13169, working copy r13178, checked out 2026-08-15 at the worktree root, which is where
-     rust/CLAUDE.md's read-only list already says `ootest/` lives. Not tracked
-     by git; it is a working copy of a different repository.
+     THE L2 COST, measured at the checked-out suite.
      `ooRexx/base/class/IdentityTable.testGroup` builds its whole fixture on
      this property:
 
        indexes = .array~of("22", "2"||"2", .object~new, .array~new)
 
      Both strings are two bytes, and the file asserts the distinction directly
-     at two places -- `assertNull(coll~at("2"||"2"))` and
+     at two places, `assertNull(coll~at("2"||"2"))` and
      `assertNull(coll["2"||"2"])`, each commented "different index object".
-     That file has 42 test methods and 26 reference `indexes` or `buildTable`;
-     26 is an UPPER bound on the affected set, not a failure count, and
-     separating them needs a run, which needs Phase 5 and Phase 7 both. That
-     fixture shape appears in no other `.testGroup`, and `assertNotIdentical`
-     is used nowhere in the suite, so the framework's own identity assertions
-     are not a second vector.
-
-     WHY THIS IS ACCEPTED. Reverting entry 59 is not on the table -- it
-     improved every benchmark axis, by 6.448% on `strings` and 6.154% on
-     `rexxcps` -- and `SmallInt` predates the whole question. Whatever L2
-     exemption file exists when L2 runs must carry that group with a pointer
-     to this row, because a group excluded without a reason is
-     indistinguishable from a group nobody ran.
+     That file has 42 test methods and 26 reference `indexes` or `buildTable`.
+     26 is an UPPER bound on the affected set, not a failure count.
+     `assertNotIdentical` is used nowhere in the suite.
 
   5. WITHDRAWN 2026-09-09 BY PHASE 5j. A CLASS OBJECT'S UNINIT RAN IN THE
      TERMINATION SWEEP RATHER THAN AT THE DRIVEN COLLECTION.
@@ -1942,36 +1883,15 @@ DEVIATIONS -- permanent, chosen
      `.nil` through the string layout, not specified observables. Not
      witnessed in the corpus.
 
- 31. `OBJECTNAME=` ON A STRING OR A SMALL INTEGER IS REFUSED (Phase 9a Task 8b).
-     OWNER: none.
+ 31. WITHDRAWN 2026-10-14 BY PHASE 9b1 TASK 1. `OBJECTNAME=` ON A STRING OR A
+     SMALL INTEGER WAS REFUSED AS AN IDENTITY THIS CRATE DID NOT KEEP.
 
-     The oracle keeps a name in the object's own variables, so which values
-     answer it is the oracle's object identity: a package's literals are one
-     object each (a literal named at one site is named at every site of the
-     package, a `::ROUTINE` and a symbol spelling the same text included), the
-     integer cache shares -10..100 (`x = 100` named, then `(99+1)~objectName`
-     answers the name), and `||''` and `~string` answer their receiver; a
-     computed string or number is a fresh object. Measured, probes `objname2`
-     and `objname4` (Task 8b report, section 1), oracle rc 0, kept with the
-     table's own probe `objname-table.rex` in
-     docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/:
+     The refusal stays under a language rule instead: a String is
+     value-based and carries no per-object state. That is Deviation 36.
 
-       `longs = 'a longer string than seven'; longs~objectName = 'long'`
-       `'a longer string than seven'~objectName`        long
-       `('a longer string' || ' than seven')~objectName`  a String
-       `('a longer string than seven' || '')~objectName`  long
-       the same literal in a `::ROUTINE`                  long
-       `x = 100` named, `(99+1)~objectName`               hundred
-       `y = 101` named, `(100+1)~objectName`              a String
-
-     This crate keeps a string of 7 bytes or less and a small integer as a
-     value with no object, and keeps none of the identities above for its
-     heap strings, so it refuses, rc 120, "OBJECTNAME= on a string or a
-     number is not implemented". Arrays, stems and variable references take
-     a name (corpus/lang/object_name_set_values.rex). The oracle's answer is
-     its object identity, not a specified observable. Moritz 2026-10-12. Not
-     witnessed in the corpus; pinned by
-     `a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer`.
+     The number is kept and the body removed rather than the row being deleted
+     outright, so that every later row keeps the identity other documents cite
+     it by.
 
  32. A USER `NEW` REACHED THROUGH `ENHANCED` THAT ANSWERS ANOTHER OBJECT GETS
      THAT OBJECT BACK UNTOUCHED (Phase 9a Task 8b). OWNER: none.
@@ -2129,6 +2049,83 @@ DEVIATIONS -- permanent, chosen
      standing rule not to copy oracle bugs. The shapes both sides answer
      alike are witnessed in corpus/lang/stream_handle_names.rex, and the
      rows above are pinned by crates/rexx-exec/tests/stream_handle.rs.
+
+ 36. STRING AND THE NUMBERS ARE VALUE-BASED (Phase 9b1). OWNER: none.
+
+     The rule is section 1 of
+     docs/superpowers/specs/2026-10-14-phase-9b1-uniform-object-model.md,
+     approved by Moritz 2026-10-14. A value-based value is one whose class is
+     `.String`, with no subclass and no enhancement: every string, every
+     number, `.true` and `.false`.
+
+     NOT SPECIFIED for a value-based value:
+       - whether two equal values are one object, in both directions
+         (Deviation 4), seen through `identityHash`, an IdentityTable or
+         IdentitySet key, or an operation that answers its receiver
+         unchanged;
+       - whether `~copy` answers the same object or another;
+       - whether a WeakReference to one clears after the program drops its
+         last reference to it.
+     The oracle's per-package literal pool and its -10..100 integer cache
+     are its implementation, not semantics.
+
+     STILL SPECIFIED:
+       - a held value's `identityHash` is stable through reads, an alias,
+         an argument, a return, and storage in and retrieval from a
+         collection;
+       - a WeakReference to a value never clears while the value is
+         reachable;
+       - a subclass instance (`.MyString~new`) and an enhanced string are
+         ordinary objects with full identity, and accept `objectName=` and
+         every other per-object operation.
+     The first and third are witnessed on both interpreters by
+     corpus/lang/value_based_identity.rex.
+
+     A value-based value carries no per-object state, so `objectName=` on
+     one is refused, rc 120, "OBJECTNAME= on a String is refused because a
+     String is value-based (Deviation 36)". Moritz: "I don't think object
+     name is an important API." The oracle keeps the name in the object its
+     construction path chose, so the values that answer it are the ones its
+     identities merge. Measured, probes `objname2` and `objname4` (Phase 9a
+     Task 8b report, section 1), oracle rc 0, kept with `objname-table.rex`
+     in docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/:
+
+       `longs = 'a longer string than seven'; longs~objectName = 'long'`
+       `'a longer string than seven'~objectName`        long
+       `('a longer string' || ' than seven')~objectName`  a String
+       `('a longer string than seven' || '')~objectName`  long
+       the same literal in a `::ROUTINE`                  long
+       `x = 100` named, `(99+1)~objectName`               hundred
+       `y = 101` named, `(100+1)~objectName`              a String
+
+     Arrays, stems and variable references take a name
+     (corpus/lang/object_name_set_values.rex). The refusal is pinned by
+     `a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer`.
+
+ 37. SYSSTEMSORT WRITES ITS SORTED VALUES BACK BY TAIL, WHERE THE ORACLE
+     WRITES INTO THE STEM ELEMENTS IT CAPTURED (Phase 9b1). OWNER: none.
+
+     Licensed with the 9b1 spec, section 2 ("L12 is not fixed"), approved by
+     Moritz 2026-10-14. `StemClass::sort` finds each element's compound
+     variable and asks for its string value, in tail order, and after the
+     sort assigns the sorted values to those variables
+     (/home/moritz/dev/repos/ooRexx/interpreter/classes/StemClass.cpp:1659-1680
+     and :1730-1736). A `STRING` method run by the last element can empty the
+     stem after every variable is found. The oracle then writes into
+     variables the stem no longer holds, and the stem stays empty. This crate
+     assigns the sorted values to the stem by tail.
+     Measured, probe `stem_sort_emptied.rex` in
+     docs/superpowers/records/2026-10-14-phase-9b1/task-1/probes/, 3 runs a
+     side, fresh empty directory, rc 0 on both, oracle then this crate:
+
+       `say s.0 '['s.1'] ['s.2']'` after the sort   S.0 [S.1] [S.2]   S.0 [b] [c]
+
+     This is mutation of a collection during an operation over it. Matching
+     the oracle needs compound variables with an identity of their own, which
+     is representation (.superpowers/sdd/2026-10-14-phase-9b1/scout-leaks.md,
+     L12). With the `STRING` element first, the next element is gone when
+     the sort looks for it, and both raise 40.924 under `SIGNAL ON SYNTAX`.
+     Not witnessed in the corpus.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

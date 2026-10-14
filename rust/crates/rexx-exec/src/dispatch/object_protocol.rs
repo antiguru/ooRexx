@@ -477,8 +477,7 @@ pub(super) fn native_object_name_set(
         Primitive::Array | Primitive::VariableReference | Primitive::Stem => {
             interp.heap.set_object_name(receiver, &name);
         }
-        // A string's name is shared by every value the oracle's identities
-        // make the same object (Deviation 31).
+        // A String is value-based (Deviation 36).
         Primitive::String | Primitive::SmallInt => {
             return Err(Loud::object_name_of_a_value().into());
         }

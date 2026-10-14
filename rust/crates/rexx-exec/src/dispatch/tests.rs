@@ -2096,24 +2096,22 @@ fn a_copy_or_frame_executable_this_crate_does_not_keep_is_loud() {
 /// it cannot, and the refusals are only visible here.**
 #[test]
 fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answer() {
-    for (source, message) in [
-        // A string's name is the oracle's object identity (Deviation 31).
-        (
-            "'abc'~objectName = 'x'\n",
-            "rexx-exec: OBJECTNAME= on a string or a number is not implemented\n",
-        ),
-        (
-            "5~objectName = 'x'\n",
-            "rexx-exec: OBJECTNAME= on a string or a number is not implemented\n",
-        ),
-        (
-            "s = 'a string longer than a handle holds'\ns~objectName = 'x'\n",
-            "rexx-exec: OBJECTNAME= on a string or a number is not implemented\n",
-        ),
+    // A String is value-based (Deviation 36).
+    for source in [
+        "'abc'~objectName = 'x'\n",
+        "5~objectName = 'x'\n",
+        "s = 'a string longer than a handle holds'\ns~objectName = 'x'\n",
+        "(1 = 1)~objectName = 'x'\n",
     ] {
         assert_eq!(
             run_source(source),
-            (120, String::new(), message.to_string()),
+            (
+                120,
+                String::new(),
+                "rexx-exec: OBJECTNAME= on a String is refused because a String is \
+                 value-based (Deviation 36)\n"
+                    .to_string()
+            ),
             "{source:?}"
         );
     }
@@ -2131,6 +2129,10 @@ fn a_conversion_this_phase_does_not_model_is_loud_where_the_ones_it_models_answe
             "14\n",
         ),
         (".K~objectName = 'named'\nsay .K\n::class K\n", "named\n"),
+        (
+            "s = .K~new('abc')\ns~objectName = 'named'\nsay s~objectName\n::class K subclass string\n",
+            "named\n",
+        ),
         (
             "a = .array~new\na~objectName = 'named'\nsay a~string a~copy~objectName\n",
             "named named\n",
