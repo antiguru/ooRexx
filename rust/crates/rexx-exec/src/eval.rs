@@ -839,16 +839,13 @@ impl Interp {
     }
 
     /// [`Interp::arith_operand`] for the operand the operator is *sent to*.
-    /// An operator receiver is sent the operator before any conversion, so a
-    /// numeric String subclass instance answers it with its own method, as on
-    /// the oracle.
     fn arith_left_operand(&mut self, op: &str, value: ObjRef) -> Result<ArithOperand, Failure> {
-        if let Some(target) = self.operator_message_receiver(value) {
-            return Ok(ArithOperand::Send(target));
-        }
-        match self.to_number(value) {
+        match self.operand_number(value) {
             Ok(number) => Ok(ArithOperand::Number(number)),
             Err(NotNumeric) => {
+                if let Some(target) = self.operator_message_receiver(value) {
+                    return Ok(ArithOperand::Send(target));
+                }
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }

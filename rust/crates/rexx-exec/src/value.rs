@@ -776,11 +776,24 @@ impl Interp {
     )]
     #[inline]
     pub(crate) fn to_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
+        self.number_of(value, false)
+    }
+
+    /// [`Interp::to_number`] for the receiver of an operator: a `String`
+    /// subclass instance is `NotNumeric` here, because the oracle sends the
+    /// operator to it rather than computing.
+    #[inline]
+    pub(crate) fn operand_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
+        self.number_of(value, true)
+    }
+
+    #[inline]
+    fn number_of(&mut self, value: ObjRef, receiver: bool) -> Result<Number, NotNumeric> {
         match value.decode() {
             Decoded::Nil => Err(NotNumeric),
             Decoded::SmallInt(n) => Ok(Number::from_i64(n)),
             Decoded::Text(inline) => self.inline_text_to_number(value, &inline),
-            Decoded::Heap { .. } => self.heap_to_number(value),
+            Decoded::Heap { .. } => self.heap_to_number(value, receiver),
         }
     }
 
@@ -806,7 +819,7 @@ impl Interp {
 
     /// [`to_number`]'s arm for a value that lives in the arena.
     #[inline(never)]
-    fn heap_to_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
+    fn heap_to_number(&mut self, value: ObjRef, receiver: bool) -> Result<Number, NotNumeric> {
         // **One lookup, and the stem redirect leaves through it rather than
         // behind it.** The redirect needs its `&mut self` back before it can
         // recurse; copying the default handle out of the arm is what ends the
@@ -832,7 +845,7 @@ impl Interp {
                 ..
             } => {
                 let default = *default;
-                self.to_number(default)
+                self.number_of(default, receiver)
             }
             Body::Text { bytes, num } => {
                 let bytes = bytes.as_slice();
@@ -854,7 +867,7 @@ impl Interp {
                     None => None,
                 };
                 match referenced {
-                    Some(referenced) => self.to_number(referenced),
+                    Some(referenced) => self.number_of(referenced, receiver),
                     // An unset variable reads as its own name, which parses
                     // as a number only if the name spells one -- it cannot,
                     // since a symbol beginning with a digit is a literal.
@@ -892,7 +905,9 @@ impl Interp {
             Body::Instance {
                 native: Some(state),
                 ..
-            } if let Some(text) = state.text() => Number::parse_bytes(text).ok_or(NotNumeric),
+            } if !receiver && let Some(text) = state.text() => {
+                Number::parse_bytes(text).ok_or(NotNumeric)
+            }
             Body::Array { .. } | Body::Instance { .. } => Err(NotNumeric),
             other => {
                 unreachable!(
