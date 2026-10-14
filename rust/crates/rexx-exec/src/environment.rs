@@ -315,8 +315,6 @@ pub(crate) enum Annotated {
     InternalRoutine(usize),
     /// A method compiled from source text, by a count of its own.
     Compiled(usize),
-    /// A native routine of the REXX package, by its upcased name.
-    RexxRoutine(Box<[u8]>),
 }
 
 /// Which directive list a reflection name reports on.

@@ -370,7 +370,7 @@ impl Interp {
         let executable = self.method_executable(scope, &name).ok();
         let frame = context::build_native_level_frame(
             self,
-            true,
+            None,
             &name,
             receiver,
             &args,
@@ -3801,6 +3801,7 @@ impl Interp {
             name,
             target,
             arguments,
+            executable: None,
             activation: None,
         };
         self.blame_native_level(Raised::compiled_method_line(name, scope), None, level);
@@ -3826,6 +3827,7 @@ impl Interp {
             name,
             target,
             arguments,
+            executable: None,
             activation: Some(NativeActivationLevel {
                 package: self.external_package_program(method).map(Package::Program),
                 reraised,
@@ -3839,15 +3841,21 @@ impl Interp {
     /// reported for `Filespec` as `"FILESPEC"`.
     pub(crate) fn blame_internal_routine(
         &mut self,
+        row: &'static crate::internal_routines::InternalRoutine,
         name: &[u8],
         arguments: &[Option<ObjRef>],
         failure: &Failure,
     ) {
+        if self.activity.failure_site.is_some() {
+            return;
+        }
+        let executable = self.internal_routine_object(crate::internal_routines::index_of(row));
         let level = NativeLevel {
             method: false,
             name,
             target: ObjRef::NIL,
             arguments,
+            executable: Some(executable),
             activation: Some(NativeActivationLevel {
                 package: Some(Package::Rexx),
                 reraised: failure.reraised_by_native_call(),
@@ -3870,6 +3878,7 @@ impl Interp {
             name,
             target: ObjRef::NIL,
             arguments,
+            executable: None,
             activation: Some(NativeActivationLevel {
                 package: program.map(Package::Program),
                 reraised: std::mem::take(&mut self.activity.native_reraise),
@@ -3889,17 +3898,14 @@ impl Interp {
         if self.activity.failure_site.is_some() {
             return;
         }
-        let executable = match &level.activation {
-            _ if level.method => context::native_method_executable(self, level.target, level.name),
-            Some(NativeActivationLevel {
-                package: Some(Package::Rexx),
-                ..
-            }) => Some(self.rexx_routine_executable(level.name)),
-            _ => None,
+        let executable = if level.method {
+            context::native_method_executable(self, level.target, level.name)
+        } else {
+            level.executable
         };
         let frame = crate::dispatch::context::build_native_level_frame(
             self,
-            level.method,
+            (!level.method).then_some(0),
             level.name,
             level.target,
             level.arguments,
@@ -3936,6 +3942,8 @@ struct NativeLevel<'a> {
     name: &'a [u8],
     target: ObjRef,
     arguments: &'a [Option<ObjRef>],
+    /// A routine's `Routine` object, where this crate has one.
+    executable: Option<ObjRef>,
     /// `None` for an `InternalActivationFrame`, which neither has a package nor
     /// re-raises.
     activation: Option<NativeActivationLevel>,

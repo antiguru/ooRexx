@@ -922,6 +922,44 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
     );
 }
 
+/// A `Routine` object `~addPublicRoutine` filed as itself stays live in an
+/// importer's merged table once its own package replaces it, with a
+/// collection at every allocation in between.
+#[test]
+fn an_added_routine_object_survives_in_its_importer() {
+    let program = concat!(
+        "p = .context~package\n",
+        "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
+        "r = .Package~new('r', 'nop')\n",
+        "p~addPublicRoutine('C2', u~copy)\n",
+        "r~addPackage(p)\n",
+        "p~addPublicRoutine('C2', u)\n",
+        "do i = 1 to 20\n",
+        "  zj = 'filler' i\n",
+        "end\n",
+        "f = r~findRoutine('C2')\n",
+        "say (f == u) f~class~id f~call(0)\n",
+    );
+    let stress = run_program_collect_every_alloc(
+        "<added-routine-importer>",
+        program.as_bytes().to_vec(),
+        rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+    );
+    assert_eq!(
+        (
+            stress.exit_code,
+            String::from_utf8_lossy(&stress.stdout).as_ref()
+        ),
+        (0, "0 Routine 0\n"),
+        "stderr: {}",
+        String::from_utf8_lossy(&stress.stderr)
+    );
+    assert!(
+        stress.collections > 0,
+        "the stress mode did not collect, so this proves nothing"
+    );
+}
+
 /// A trapped condition's own object survives collect-on-every-allocation.
 ///
 /// **Two root paths the exhaustive destructures do not reach**: the object

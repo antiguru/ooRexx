@@ -70,6 +70,15 @@ pub(crate) struct Activity {
         reason = "the box is the allocation being kept for the next native call"
     )]
     pub(crate) native_spares: Vec<Box<NativeFrame>>,
+    /// The routines of an internal package running on this activity,
+    /// innermost last.
+    pub(crate) internal_levels: Vec<InternalLevel>,
+    /// The names of [`Activity::internal_levels`], each one's from its `name`
+    /// offset to the next one's.
+    pub(crate) internal_names: Vec<u8>,
+    /// The arguments of [`Activity::internal_levels`], each one's from its
+    /// `arguments` offset to the next one's.
+    pub(crate) internal_arguments: Vec<Option<ObjRef>>,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs;
     /// made by the first ([`crate::Interp::thread_context`]).
@@ -316,6 +325,18 @@ pub(crate) struct Activity {
     pub(crate) sharing_tag: u32,
 }
 
+/// A routine of an internal package that is running, which the oracle runs
+/// as a `NativeActivation`.
+pub(crate) struct InternalLevel {
+    /// The activation the call was made from.
+    pub(crate) caller: Option<crate::activation::ActivationId>,
+    pub(crate) row: &'static crate::internal_routines::InternalRoutine,
+    /// Where its name starts in [`Activity::internal_names`].
+    pub(crate) name: usize,
+    /// Where its arguments start in [`Activity::internal_arguments`].
+    pub(crate) arguments: usize,
+}
+
 impl Activity {
     /// `Package~copy`'s decision about this activity's state, which holds
     /// nothing per program: every field is named so that one added later
@@ -330,6 +351,9 @@ impl Activity {
             spare_exposed: _,
             native_handles: _,
             native_spares: _,
+            internal_levels: _,
+            internal_names: _,
+            internal_arguments: _,
             thread: _,
             clause_state: _,
             flat_loops: _,
@@ -452,6 +476,9 @@ impl Activity {
             thread: None,
             native_handles: Vec::new(),
             native_spares: Vec::new(),
+            internal_levels: Vec::new(),
+            internal_names: Vec::new(),
+            internal_arguments: Vec::new(),
             clause_state: ClauseState::new(),
             flat_loops: Vec::new(),
             flat_top: None,
@@ -552,6 +579,10 @@ impl Activity {
             // overwrites the handle fields before anything reads them, so a
             // spare names nothing to root.
             native_spares: _,
+            // A running call's arguments are its caller's temps.
+            internal_levels: _,
+            internal_names: _,
+            internal_arguments: _,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
             // lifetime, and `RootSet` reaches a register as a temp.

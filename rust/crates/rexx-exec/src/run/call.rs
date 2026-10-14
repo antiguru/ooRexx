@@ -588,16 +588,18 @@ impl Interp {
                 .expect("a row with no body names the phase that owes it");
             return Err(Loud::internal_routine(row.name.as_bytes(), owner).into());
         };
+        let level = self.push_internal_level(row, name, values);
         let outcome = body(self, row.name.as_bytes(), values);
+        self.pop_internal_level(level);
         if let Err(failure) = &outcome {
             // The oracle reports one of these under its own routine line,
             // whether the argument marshalling or the body raised -- measured,
             // `filespec('D')` and `SysSleep('abc')` both carry it.
             match name {
-                Some(name) => self.blame_internal_routine(name, values, failure),
+                Some(name) => self.blame_internal_routine(row, name, values, failure),
                 None => {
                     let upper = row.name.to_ascii_uppercase();
-                    self.blame_internal_routine(upper.as_bytes(), values, failure);
+                    self.blame_internal_routine(row, upper.as_bytes(), values, failure);
                 }
             }
         }
@@ -606,6 +608,43 @@ impl Interp {
             Some(_) => Started::Entered,
             None => Started::Ran(value),
         })
+    }
+
+    /// Records `row`, called by `name` (its upcased row name where `None`)
+    /// with `values`, as a running internal level, answering its index.
+    fn push_internal_level(
+        &mut self,
+        row: &'static crate::internal_routines::InternalRoutine,
+        name: Option<&[u8]>,
+        values: &[Option<ObjRef>],
+    ) -> usize {
+        let caller = self.running_activation().map(|activation| activation.id);
+        let activity = &mut self.activity;
+        let level = crate::activity::InternalLevel {
+            caller,
+            row,
+            name: activity.internal_names.len(),
+            arguments: activity.internal_arguments.len(),
+        };
+        match name {
+            Some(name) => activity.internal_names.extend_from_slice(name),
+            None => activity
+                .internal_names
+                .extend(row.name.bytes().map(|byte| byte.to_ascii_uppercase())),
+        }
+        activity.internal_arguments.extend_from_slice(values);
+        activity.internal_levels.push(level);
+        activity.internal_levels.len() - 1
+    }
+
+    /// Ends the internal level at `index` and every level above it.
+    fn pop_internal_level(&mut self, index: usize) {
+        let activity = &mut self.activity;
+        if let Some(level) = activity.internal_levels.get(index) {
+            activity.internal_names.truncate(level.name);
+            activity.internal_arguments.truncate(level.arguments);
+            activity.internal_levels.truncate(index);
+        }
     }
 
     /// [`Interp::begin_call_over_pushed_args`] with the run in hand.

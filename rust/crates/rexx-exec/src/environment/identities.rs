@@ -1009,6 +1009,31 @@ impl Interp {
         }
     }
 
+    /// The entry `~addRoutine` files `object` under: the `::ROUTINE` it
+    /// reports on, the library or internal row it runs where it is the object
+    /// that row answers for, and itself over that row otherwise.
+    pub(crate) fn added_routine(&self, object: ObjRef) -> Option<crate::MergedRoutine> {
+        Some(match self.routine_object_resolution(object).ok()? {
+            crate::run::Resolved::Routine(installed) => crate::MergedRoutine::Installed(installed),
+            crate::run::Resolved::MergedLibraryRoutine(code) => {
+                if self.library_routine_objects.get(&code) == Some(&object) {
+                    crate::MergedRoutine::Library(code)
+                } else {
+                    crate::MergedRoutine::LibraryObject(code, object)
+                }
+            }
+            crate::run::Resolved::MergedInternal(row) => {
+                let index = crate::internal_routines::index_of(row);
+                if self.internal_routine_objects[index] == Some(object) {
+                    crate::MergedRoutine::Internal(index)
+                } else {
+                    crate::MergedRoutine::InternalObject(index, object)
+                }
+            }
+            _ => return None,
+        })
+    }
+
     /// The `Routine` object one imported routine is: the `::ROUTINE`'s own,
     /// or for a library routine, the one kept for its library code row,
     /// reporting that code's package.
@@ -1017,6 +1042,8 @@ impl Interp {
             crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
             crate::MergedRoutine::Library(code) => Some(self.library_routine_object(code)),
             crate::MergedRoutine::Internal(index) => Some(self.internal_routine_object(index)),
+            crate::MergedRoutine::LibraryObject(_, object)
+            | crate::MergedRoutine::InternalObject(_, object) => Some(object),
         }
     }
 
@@ -1031,10 +1058,7 @@ impl Interp {
             .add_global(&internal_routine_root_key(index), object);
         self.internal_routine_objects[index] = Some(object);
         self.attach_annotations(object, Annotated::InternalRoutine(index));
-        self.record_rexx_routine_object(
-            object,
-            &crate::internal_routines::INTERNAL_ROUTINES[index],
-        );
+        self.record_rexx_routine_object(object, index);
         object
     }
 
@@ -1124,7 +1148,6 @@ impl Interp {
             routine_objects: _,
             library_routine_objects: _,
             internal_routine_objects: _,
-            rexx_routine_executables: _,
             package_imports,
             package_parents,
             parented,
@@ -1175,7 +1198,6 @@ impl Interp {
             library_code_routines: _,
             library_routine_codes: _,
             rexx_routine_rows: _,
-            rexx_routine_objects: _,
             defined_library_codes: _,
             package_routines: _,
             package_routine_codes: _,
@@ -1329,30 +1351,6 @@ impl Interp {
         Ok(fresh)
     }
 
-    /// The one `Routine` a native routine level of the REXX package answers
-    /// for `StackFrame~executable`, built on the first ask: measured, oracle
-    /// rc 0, two `SysSleep` failures answer one object, a `SysFileDelete`
-    /// failure another, each with no source and the REXX package.
-    pub(crate) fn rexx_routine_executable(&mut self, name: &[u8]) -> ObjRef {
-        let upper: Box<[u8]> = name.to_ascii_uppercase().into();
-        if let Some(found) = self.rexx_routine_executables.get(&upper).copied() {
-            return found;
-        }
-        let class = self.routine_class();
-        let object = self.native_instance(class);
-        self.roots.add_global(
-            &format!(
-                "the REXX package routine executable {}",
-                String::from_utf8_lossy(&upper)
-            ),
-            object,
-        );
-        self.rexx_routine_executables.insert(upper.clone(), object);
-        self.record_native_executable(object);
-        self.attach_annotations(object, Annotated::RexxRoutine(upper));
-        object
-    }
-
     /// The file `name` resolves to from `package`'s own directory --
     /// `PackageClass::resolveProgramName`, which `~findProgram` and
     /// `~loadPackage` each reach with their own resolve type.
@@ -1449,9 +1447,5 @@ fn annotation_root_key(site: &Annotated) -> String {
             format!("annotations of the internal package routine of index {index}")
         }
         Annotated::Compiled(count) => format!("annotations of compiled method {count}"),
-        Annotated::RexxRoutine(name) => format!(
-            "annotations of the REXX package routine {}",
-            String::from_utf8_lossy(name)
-        ),
     }
 }

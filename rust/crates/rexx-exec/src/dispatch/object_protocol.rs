@@ -653,9 +653,6 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
                     "a method object this crate did not build",
                 ))
             })?;
-            if let Some(row) = interp.rexx_routine_object(receiver) {
-                interp.record_rexx_routine_object(copy, row);
-            }
             return Ok(copy);
         }
         Ok(Primitive::Package) => match interp.which_package(receiver) {

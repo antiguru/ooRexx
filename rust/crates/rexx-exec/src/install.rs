@@ -2374,17 +2374,23 @@ impl Interp {
         &self,
         object: ObjRef,
     ) -> Option<&'static internal_routines::InternalRoutine> {
-        self.rexx_routine_objects.get(&object).copied()
+        match &self.heap.get(object)?.body {
+            rexx_core::Body::Native(native) => native
+                .routine_row()
+                .map(|index| &internal_routines::INTERNAL_ROUTINES[index]),
+            _ => None,
+        }
     }
 
-    /// Records `object` as a `Routine` that runs `row`.
-    pub(crate) fn record_rexx_routine_object(
-        &mut self,
-        object: ObjRef,
-        row: &'static internal_routines::InternalRoutine,
-    ) {
+    /// Records `object`, a `Body::Native` `Routine`, as one that runs the
+    /// internal package routine at `index`.
+    pub(crate) fn record_rexx_routine_object(&mut self, object: ObjRef, index: usize) {
         self.record_native_executable(object);
-        self.rexx_routine_objects.insert(object, row);
+        if let Some(rexx_core::Body::Native(native)) =
+            self.heap.get_mut(object).map(|held| &mut held.body)
+        {
+            native.set_routine_row(index);
+        }
     }
 
     /// The library and the routine row [`Interp::library_codes`] row `code`

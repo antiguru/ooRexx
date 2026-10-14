@@ -17,12 +17,12 @@ use rustc_hash::FxHashMap;
 use rexx_core::ObjRef;
 
 use super::{Arity, Cleared, Failure, Interp, Loud, NativeMethod, required_string_named_argument};
+use crate::ProgramId;
 use crate::environment::PackageTable;
 use crate::error::Raised;
 use crate::options::{OptionName, PackageOptions};
 use crate::plan::Package;
 use crate::trace::TraceMode;
-use crate::{InstalledRoutine, ProgramId};
 
 /// `Package`'s instance methods. Chained into `ObjectModel::build` beside
 /// [`super::NATIVE_METHODS`].
@@ -942,20 +942,8 @@ fn install_routine(
     let admitted = interp
         .class_of_value(routine)
         .is_some_and(|class| interp.classes().is_a(class, routine_class));
-    let installed = interp
-        .executable_sources
-        .get(&routine)
-        .and_then(|record| record.routine)
-        .map(|(program, directive)| InstalledRoutine { program, directive });
-    // An internal package row's own object is filed as its row.
-    let row = interp
-        .rexx_routine_object(routine)
-        .map(crate::internal_routines::index_of)
-        .filter(|index| interp.internal_routine_objects[*index] == Some(routine));
-    let merged = match (installed, row) {
-        (Some(installed), _) if admitted => crate::MergedRoutine::Installed(installed),
-        (None, Some(index)) if admitted => crate::MergedRoutine::Internal(index),
-        _ => return Err(Raised::argument_not_an_instance("routine", "Routine").into()),
+    let Some(merged) = admitted.then(|| interp.added_routine(routine)).flatten() else {
+        return Err(Raised::argument_not_an_instance("routine", "Routine").into());
     };
     let program = writable_package_of(interp, receiver)?;
     interp.routines_changed();

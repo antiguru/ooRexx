@@ -129,7 +129,6 @@ const OWNERS: &[&str] = &[
     "Deviation 28",
     "Deviation 32",
     "Deviation 36",
-    "Task 3",
     "Task 4",
     "Task 5",
     "Task 6",

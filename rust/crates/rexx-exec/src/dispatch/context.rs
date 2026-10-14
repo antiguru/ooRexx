@@ -556,6 +556,8 @@ pub(crate) enum LiveLevel {
     Activation(usize),
     /// This row of [`Activity::native_handles`].
     Native(usize),
+    /// This row of [`Activity::internal_levels`].
+    Internal(usize),
     /// This row of [`Activity::fragments`].
     Fragment(usize),
 }
@@ -567,6 +569,11 @@ pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
     let mut levels = Vec::new();
     for (depth, activation) in interp.frames().enumerate() {
         let id = activation.id;
+        for (row, level) in interp.activity.internal_levels.iter().enumerate().rev() {
+            if level.caller == Some(id) {
+                levels.push(LiveLevel::Internal(row));
+            }
+        }
         for (row, native) in interp.activity.native_handles.iter().enumerate().rev() {
             if native.caller == Some(id) {
                 levels.push(LiveLevel::Native(row));
@@ -587,6 +594,7 @@ pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<
     match level {
         LiveLevel::Activation(depth) => build_frame(interp, depth),
         LiveLevel::Native(row) => build_native_frame_at(interp, row),
+        LiveLevel::Internal(row) => Ok(build_internal_frame_at(interp, row)),
         LiveLevel::Fragment(row) => build_fragment_frame(interp, row),
     }
 }
@@ -803,23 +811,27 @@ pub(crate) fn build_ended_frame(
 /// createStackFrame`, `execution/NativeActivation.cpp:3620`). A routine's
 /// context is the calling activation's and a method's is `.nil`: measured,
 /// oracle rc 0, `SysSleep`, `FILESPEC` and an `EXTERNAL` routine answer one,
-/// `SUBSTR` and an `EXTERNAL` method none.
+/// `SUBSTR` and an `EXTERNAL` method none. `caller` is `None` for a method,
+/// and for a routine the depth of the activation that called it.
 pub(crate) fn build_native_level_frame(
     interp: &mut Interp,
-    method: bool,
+    caller: Option<usize>,
     name: &[u8],
     target: ObjRef,
     arguments: &[Option<ObjRef>],
     trace_text: &[u8],
     executable: Option<ObjRef>,
 ) -> ObjRef {
-    let context = if !method {
-        interp.context_object_at(0).unwrap_or(ObjRef::NIL)
-    } else {
-        ObjRef::NIL
+    let context = match caller {
+        Some(depth) => interp.context_object_at(depth).unwrap_or(ObjRef::NIL),
+        None => ObjRef::NIL,
     };
     let frame = interp.roots.activity_mut().push_frame();
-    let kind = interp.text(if method { b"METHOD" } else { b"ROUTINE" });
+    let kind = interp.text(if caller.is_none() {
+        b"METHOD"
+    } else {
+        b"ROUTINE"
+    });
     interp.roots.activity_mut().push_temp(kind);
     let name = interp.text(name);
     interp.roots.activity_mut().push_temp(name);
@@ -918,6 +930,37 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
     ];
     entries.extend(executable.map(|executable| (key::EXECUTABLE, executable)));
     Ok(frame_object(interp, frame, &entries, &trace_text))
+}
+
+/// The `StackFrame` of the internal package routine in row `row` of
+/// [`Activity::internal_levels`], built as a failing one's is.
+///
+/// # Panics
+/// If no internal level is in that row.
+fn build_internal_frame_at(interp: &mut Interp, row: usize) -> ObjRef {
+    let activity = &interp.activity;
+    let level = &activity.internal_levels[row];
+    let next = activity.internal_levels.get(row + 1);
+    let names = level.name..next.map_or(activity.internal_names.len(), |next| next.name);
+    let name = activity.internal_names[names].to_vec();
+    let arguments =
+        level.arguments..next.map_or(activity.internal_arguments.len(), |next| next.arguments);
+    let arguments = activity.internal_arguments[arguments].to_vec();
+    let (caller, row) = (level.caller, level.row);
+    let depth = interp
+        .frames()
+        .position(|activation| Some(activation.id) == caller)
+        .unwrap_or(0);
+    let executable = interp.internal_routine_object(crate::internal_routines::index_of(row));
+    build_native_level_frame(
+        interp,
+        Some(depth),
+        &name,
+        ObjRef::NIL,
+        &arguments,
+        &Raised::compiled_routine_line(&name),
+        Some(executable),
+    )
 }
 
 /// The activation at `depth` read out in one pass, before anything allocates.

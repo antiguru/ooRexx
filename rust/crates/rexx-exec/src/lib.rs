@@ -1449,9 +1449,6 @@ struct Interp {
     /// the routine table of `LibraryPackage` (`package/LibraryPackage.cpp`),
     /// which every path naming the row answers from.
     internal_routine_objects: Vec<Option<ObjRef>>,
-    /// The source-less `Routine` a REXX package native routine level answers
-    /// for `StackFrame~executable`, by upcased name, each rooted globally.
-    rexx_routine_executables: FxHashMap<Box<[u8]>, ObjRef>,
     /// The packages each program has imported, in the order they were added
     /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
     /// answers a copy of.
@@ -1624,9 +1621,6 @@ struct Interp {
     /// The internal package routine each `::ROUTINE ... EXTERNAL "LIBRARY
     /// REXX"` or `"LIBRARY rexxutil"` directive bound.
     rexx_routine_rows: FxHashMap<InstalledRoutine, &'static internal_routines::InternalRoutine>,
-    /// The internal package routine each row's `Routine` object, and each
-    /// copy of one, runs.
-    rexx_routine_objects: FxHashMap<ObjRef, &'static internal_routines::InternalRoutine>,
     /// The [`Interp::library_codes`] row of each method a `~define` installed
     /// from a `loadExternalMethod` answer, which is the package it reports.
     defined_library_codes: FxHashMap<MethodId, usize>,
@@ -1770,6 +1764,12 @@ enum MergedRoutine {
     /// An internal package's routine, as its
     /// [`internal_routines::INTERNAL_ROUTINES`] index.
     Internal(usize),
+    /// A [`MergedRoutine::Library`] row, as a `Routine` object other than the
+    /// one that row answers for: a copy a program added.
+    LibraryObject(usize, ObjRef),
+    /// A [`MergedRoutine::Internal`] row, as a `Routine` object other than
+    /// the one that row answers for: a copy a program added.
+    InternalObject(usize, ObjRef),
 }
 
 /// What a routine lookup through a package whose `.ROUTINES` table a
@@ -1786,8 +1786,10 @@ impl MergedRoutine {
     pub(crate) fn resolved(self) -> run::Resolved {
         match self {
             MergedRoutine::Installed(installed) => run::Resolved::Routine(installed),
-            MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code),
-            MergedRoutine::Internal(index) => {
+            MergedRoutine::Library(code) | MergedRoutine::LibraryObject(code, _) => {
+                run::Resolved::MergedLibraryRoutine(code)
+            }
+            MergedRoutine::Internal(index) | MergedRoutine::InternalObject(index, _) => {
                 run::Resolved::MergedInternal(&internal_routines::INTERNAL_ROUTINES[index])
             }
         }
@@ -2190,7 +2192,6 @@ impl Interp {
             routine_objects: FxHashMap::default(),
             library_routine_objects: FxHashMap::default(),
             internal_routine_objects: vec![None; internal_routines::INTERNAL_ROUTINES.len()],
-            rexx_routine_executables: FxHashMap::default(),
             package_imports: FxHashMap::default(),
             package_parents: FxHashMap::default(),
             parented: Vec::new(),
@@ -2235,7 +2236,6 @@ impl Interp {
             library_routine_codes: FxHashMap::default(),
             defined_library_codes: FxHashMap::default(),
             rexx_routine_rows: FxHashMap::default(),
-            rexx_routine_objects: FxHashMap::default(),
             package_routines: FxHashMap::default(),
             package_routine_codes: Vec::new(),
             routine_generation: 0,
@@ -2965,10 +2965,10 @@ impl Interp {
             // A chunk's interned literals are allocated immortal.
             chunks: _,
             chunks_refused: _,
-            routines: _,
+            routines,
             routines_written: _,
-            package_public_routines: _,
-            merged_public_routines: _,
+            package_public_routines,
+            merged_public_routines,
             merged_public_classes,
             // **Not a root, deliberately.** Its values are class handles, and
             // rooting them would pin every class a `.NAME` ever resolved --
@@ -3014,7 +3014,6 @@ impl Interp {
             library_routine_objects: _,
             // `RootSet::add_global`, under `internal_routine_root_key`.
             internal_routine_objects: _,
-            rexx_routine_executables: _,
             package_imports: _,
             // Program identities and nothing else.
             package_parents: _,
@@ -3073,8 +3072,6 @@ impl Interp {
             library_routine_codes: _,
             defined_library_codes: _,
             rexx_routine_rows: _,
-            // Keyed by objects a generation bump makes unequal once swept.
-            rexx_routine_objects: _,
             // Routine names and row indices.
             package_routines: _,
             package_routine_codes: _,
@@ -3150,6 +3147,21 @@ impl Interp {
             package_public_classes,
         ] {
             out.extend(table.values().flat_map(|names| names.values().copied()));
+        }
+        // The `Routine` objects `~addRoutine` filed as themselves: a merge
+        // copies an entry into an importer, where nothing else holds it once
+        // its own package replaces it.
+        for table in [routines, package_public_routines, merged_public_routines] {
+            out.extend(
+                table
+                    .values()
+                    .flat_map(|names| names.values())
+                    .filter_map(|merged| match merged {
+                        MergedRoutine::LibraryObject(_, object)
+                        | MergedRoutine::InternalObject(_, object) => Some(*object),
+                        _ => None,
+                    }),
+            );
         }
     }
 

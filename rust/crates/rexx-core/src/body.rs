@@ -920,6 +920,7 @@ pub struct NativeObject {
     entries: FxHashMap<Box<[u8]>, ObjRef>,
     annotations: Option<ObjRef>,
     scope: Option<ObjRef>,
+    routine_row: Option<usize>,
 }
 
 impl NativeObject {
@@ -931,6 +932,7 @@ impl NativeObject {
             entries: FxHashMap::default(),
             annotations: None,
             scope: None,
+            routine_row: None,
         }
     }
 
@@ -1010,6 +1012,16 @@ impl NativeObject {
     /// `MethodClass::setScope` (`classes/MethodClass.cpp:219`).
     pub fn set_scope(&mut self, scope: ObjRef) {
         self.scope = Some(scope);
+    }
+
+    /// The row of the embedding's own routine table this `Routine` object
+    /// runs, which a copy carries too, or `None` for one that runs none.
+    pub fn routine_row(&self) -> Option<usize> {
+        self.routine_row
+    }
+
+    pub fn set_routine_row(&mut self, row: usize) {
+        self.routine_row = Some(row);
     }
 }
 

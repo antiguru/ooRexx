@@ -5973,21 +5973,6 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
     r = .Routine~new('x', 'return mainr()'); say 'new' r~call
   answers `new mainr`, rc 0, on the oracle and here.
 
-  Package~addRoutine REFUSES A LIBRARY Routine OBJECT.
-    p~addRoutine('SQ2', p~findRoutine('RXCALCSQRT')); say 'added' sq2(16)
-    (under signal on syntax, ::requires 'rxmath' LIBRARY)
-    oracle: added 4, rc 0
-    this:   raised SYNTAX 88 88.914, rc 0
-  install_routine (dispatch/package.rs) accepts any Routine whose record
-  names a ::ROUTINE directive, a ::ROUTINE ... EXTERNAL "LIBRARY ..."
-  directive's object included (added 4 on the oracle, cb13f0033 and
-  9ff11e465, measured by fix round 3's re-review), and an internal package
-  row's own object (rexxutil_library_identity.rex). It refuses one with no
-  directive, which the library's shared Routine is, and a copy of a row's
-  object, which the oracle adds (probe add2.rex in
-  docs/superpowers/records/2026-10-13-phase-9b/task-9/probes/).
-  NO OWNER: no surface task names ~addRoutine.
-
   A ::ROUTINE ... EXTERNAL "LIBRARY ..." DIRECTIVE'S Routine OBJECT IS NOT
   THE LIBRARY'S SHARED ONE. The oracle stores the library package's routine
   object for the directive (DirectiveParser.cpp:2691-2693), the object

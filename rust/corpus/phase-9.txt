@@ -115,3 +115,7 @@ lang/value_based_identity.rex
 lang/weak_reference_held_values.rex
 lang/string_subclass_operators.rex
 lang/class_side_string.rex
+
+# 9b1 Task 3: L10 and L11.
+lang/routine_object_add_copy.rex
+lang/stackframes_native_routine.rex
