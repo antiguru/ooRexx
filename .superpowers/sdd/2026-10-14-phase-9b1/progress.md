@@ -48,3 +48,14 @@ Ruling: class-side DEFAULTNAME not consulted when a class renders (pre-existing)
 Task 2 review: spec fails I1 (DO step + in controlled_step_wide converts first; oracle DoBlock.cpp:194 sends each step); M1 VarRef receiver arm unwitnessed; M2 full-set callgrind not recorded (reviewer: all under, hashnew +0.31%). Fix round 1 dispatched (resume c2-impl).
 Task 2: fix round 1 at 1566bcbe2, 59c3ec337 (one-word loops.rs fix, witness lines, full-set callgrind exit 0, worst hashnew +0.31%). Controller read the diff instead of a re-review -- the fix is the reviewer's own verified one-word change -- if wrong, close review.
 Task 2: complete (0a055271c, 2fbfe9cba, 7c756e734, 1566bcbe2, 59c3ec337).
+Task 3: dispatched (implementer opus, BASE 485c13720).
+Task 3: implementer DONE_WITH_CONCERNS (0bce0e10c, 25d47538e, 3536722be). Callgrind 11 programs under budget (hashnew +0.299%).
+Ruling: native METHOD frames missing from live stackFrames (TESTNATIVECODEFRAME) -> queued (send-hot-path sibling of L11; needs its own perf budget work).
+Ruling: filespec not sending STRING to an object arg (oracle 88.909) -> queued.
+Task 3 review: spec PASS; I1 two of three new root tables (routines, package_public_routines) have no red test; I2 internal-routine calls (filespec loop) +4.51% whole-process vs Task 2 close, ~121 Ir/call in run_internal_as copying name+args, no bench program reaches it; q2 not covered by entry 37 (93.900 from element STRING inside sort, untrapped -> SIGSEGV). Shared scope slot sound. Minor body.rs:1088 doc.
+Ruling: I2 is a regression on a common path even though no bench program covers it: remove the per-call copy, and add a bench program (intcall: an internal-routine call loop, e.g. filespec) to rust/bench-programs so the budget guards it; it must be within +0.5% of the pin -- the budget's intent is every hot path, the program set is its instrument -- if wrong, one extra bench program.
+Ruling: I1: delete the root entries no test can witness and say what holds them, or witness them; q2 -> extend entry 37 if same defect else entry 49; fix the doc.
+Task 3: fix round 1 dispatched (resume c3-impl).
+Task 3: fix round 1 at 8f4ff5096, c0ffb9391, 386a4797f, a094cad6b, 1cd3928eb. intcall -10.73% vs pin (+2.78% vs Task 3 base, 67 Ir/call); extcall +0.23% vs Task 3 head. Package~routines now reads a written .ROUTINES table (oracle). Re-review dispatched (sonnet).
+Task 3 re-review: PASS, no open findings (lent buffer swapped back on every exit; re-entry via next slot; intcall -10.73% vs pin reproduced).
+Task 3: complete (0bce0e10c, 25d47538e, 3536722be, 8f4ff5096, c0ffb9391, 386a4797f, a094cad6b, 1cd3928eb).

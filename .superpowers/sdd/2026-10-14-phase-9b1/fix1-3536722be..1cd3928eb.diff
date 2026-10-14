@@ -1,0 +1,1457 @@
+diff --git a/.superpowers/sdd/2026-10-14-phase-9b1/task-3-report.md b/.superpowers/sdd/2026-10-14-phase-9b1/task-3-report.md
+index 5e0059265..a135dfbb9 100644
+--- a/.superpowers/sdd/2026-10-14-phase-9b1/task-3-report.md
++++ b/.superpowers/sdd/2026-10-14-phase-9b1/task-3-report.md
+@@ -172,3 +172,110 @@ it in malloc". That is true of hashnew only. alloc's growth was memcmp.
+ 5. `Interp::frame_record` (TraceObject caller frames, the spawner frame) still answers `.nil` as
+    the executable for every non-activation level, the new internal level included. Not measured
+    against the oracle.
++
++## Fix round 1
++
++Commits: `8f4ff5096` (I2 and intcall), `c0ffb9391` (I1), `386a4797f` (q2 and M1). The records
++commit follows this section.
++
++### I2: no copy on the internal call path
++
++`run_internal_as` (`run/call.rs`) now takes the caller's argument buffer and an offset
++(`&mut Vec<Option<ObjRef>>, from`) in place of a slice. `begin_call`, `begin_call_over_values`,
++`begin_installed_routine` and the callers in `executable.rs` changed with it. The level is a reused
++slot in `Activity::internal_levels`, with `internal_depth` counting the slots in use. The caller's
++buffer is swapped into the slot's `Rc<Vec<..>>` for the call and swapped back after, and the body
++reads `&shared[from..]` from a clone of that `Rc`. The swap is three words each way. No argument
++is copied, and nothing is allocated once the slot exists.
++The frame's name comes from the row (`LevelName::Upper` or `Row`). The one remaining byte copy is
++the called name for a call through a `::ROUTINE ... EXTERNAL` directive or a merged table
++(`InternalName::Called`), into the slot's own reused buffer, because that name is the caller's
++spelling and not the row's. It is not on the `intcall` path.
++`Rc::make_mut` was not inlined (22 Ir per call twice). `Rc::get_mut` with a cold fallback replaced
++it.
++
++`bench-programs/intcall.rex`: `FILESPEC` and `SysFileExists` 150,000 times each, registered in
++`callgrind.sh`, `rexx-bench`'s `PROGRAMS` and suite axes, and the README. `SysUtilVersion` was the
++first choice, but the pin refuses it ("not implemented (Phase 10)"). The pin runs
++`SysFileExists`, and its output is identical (`1050000`). Oracle 1.63-1.71s over 3 runs, crate
++0.22s.
++
++Budget at `386a4797f` (head `rexx-run-9b1-t3f`, sha `019c2841...`), `-B 0.5`, exit 0:
++
++| program | head d% | head -libc d% | against the Task 3 head (`t3b`), whole process |
++|---|---|---|---|
++| intcall | -10.7270 | -9.8616 | |
++| fibcall | -3.3903 | -2.3521 | +0.0586 |
++| fibfunc | -3.5556 | -2.4002 | +0.0609 |
++| extcall | -13.1310 | -1.7882 | +0.2314 |
++| dispatch | -0.2472 | -0.0715 | |
++| dispatchclass | -3.7968 | -2.6560 | +0.1474 |
++| sendloop | -0.1004 | -0.1069 | |
++| varlookup | +0.0028 | +0.0017 | |
++| pkglocal | -2.6189 | -3.7206 | |
++| startup | +0.2876 | +0.3925 | +0.0004 |
++| alloc | +0.2534 | +0.2868 | +0.0127 |
++| hashnew | +0.3080 | +0.4716 | +0.0090 |
++
++Command: `timeout 600 bench-programs/callgrind.sh -B 0.5 -j 12 -p "intcall fibcall fibfunc extcall
++dispatch dispatchclass sendloop varlookup pkglocal startup alloc hashnew" -o
++/home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-3-fix1 pin=.../rexx-run head=.../rexx-run-9b1-t3f`.
++The records are in `docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/`.
++
++intcall against the Task 3 base (`rexx-run-9b1-t2c`, the code of `485c13720`), from
++`fix1/intcall-base/` and the final run:
++- base 729440297, Task 3 head (`t3b`) 774290111, which is 149.5 Ir per call.
++- fix round head 749689909, which is **+2.776%** and 67.5 Ir per call.
++
++The level still costs that much. The two swaps, the `Rc` clone and drop, three bounds checks, and
++the slot writes are what is left (callgrind_annotate on `run_internal_as`). extcall's +0.24% -libc
++against `t3b` is the library-routine arm slicing `&values[mark..]` from the lent buffer, 6 Ir per
++call. The first try (`Rc::make_mut`) and the second (`get_mut` without the cold paths) were +5.2%
++and +3.4% against the base. Their raw files are `cg-9b1/task-3-fix1-try`, `-try2` and `-try3`.
++
++### I1: roots
++
++The `routines` map is out of the root loop (`lib.rs`). Each entry is also in the package's
++`.ROUTINES` table, which is rooted. Once a program writes that table, every reader reads the
++table instead. That includes `Package~routines`, which read the map until this round
++(`dispatch/package.rs`). The oracle answers what the write stored: `p~routines['C4'] == u` is 1 on
++the oracle and was 0 here, probe `rC.rex`. The witness `routine_object_add_copy.rex` gains that
++line (`written 1 0 1`, identical, rc 0/0) and its sourceline file was regenerated.
++`package_public_routines` and `merged_public_routines` stay rooted. Each has a collect_stress test
++that goes red without it:
++- `an_added_public_routine_object_survives_its_table_entry` holds the copy only through a weak
++  reference, replaces its `.ROUTINES` entry, collects, then merges it into an importer. Without
++  the public root it prints `collected` and fails.
++- `an_added_routine_object_survives_in_its_importer` fails without the merged root.
++
++Each mutation was the root loop's table list edited and restored by copying the saved file back,
++with `Compiling rexx-exec` in each log. The review's `root2`/`root3` shapes and my first form of
++the public test (no weak reference) stayed green without the roots. The stale handle happened to
++answer, so they are not witnesses, and the package-copy test I tried is dropped (the copy's own
++table holds the object).
++
++### q2 and M1
++
++`oracle-crashes.txt` entry 37 gains the shape: an untrapped 93.900 raised by an element's `STRING`
++method inside the sort, SIGSEGV rc 139, from my 1-of-1 run of 2026-10-14. It is not re-run. It is
++filed under 37 because it leaves the sort by an error, as 37's do. The C++ path was not read.
++The crate's answer (rc 163, the method line, `Compiled routine "SYSSTEMSORT".`, the call line,
++93.900) is a new case in `crates/rexx-exec/tests/stem_sort_untrapped_cases/crate`.
++M1: both routine-row docs in `body.rs` name `INTERNAL_ROUTINES`.
++
++### Checks (from `rust/`, `...` = `CARGO_INCREMENTAL=0 timeout 600 memcap 8G`)
++
++| command | tree | exit | result |
++|---|---|---|---|
++| `cargo fmt --all --check` | 386a4797f | 0 | |
++| `... cargo clippy -j 4 -p rexx-core -p rexx-exec -p rexx-bench --all-targets -- -D warnings` | 386a4797f | 0 | `Checking` rexx-core, rexx-bench, rexx-exec printed |
++| `... cargo check -j 4 -p rexx-exec --all-features` | 386a4797f | 0 | |
++| `... cargo test -j 4 -p rexx-bench --no-fail-fast` | 386a4797f | 0 | 6 binaries, no failures |
++| `... cargo test -j 4 -p rexx-core --no-fail-fast` | 386a4797f | 0 | no failures |
++| `... cargo test -j 4 -p rexx-exec --no-fail-fast --lib --test refusal_sites --test refusal_dispositions --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test licensed_divergences` | 386a4797f | 0 | lib 1121, 8, 22, 6, 5, 3, 5, 3 passed |
++| `... cargo test -j 4 -p rexx-parse --test sourceline_oracle` | 386a4797f | 0 | 1 passed |
++| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 900 memcap 8G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus --test collect_stress` | 386a4797f | 0 | collect_stress 39 passed, `1054 of 1054 matching`, corpus 29 passed 1 ignored |
++| suite groups Package, StackFrame, Routine, SysStemSort (command as above, table under `fix1/suite/`) | 386a4797f | 101 | the same red tests as before, SysStemSort green |
++
++The witnesses and the probes `q1 q3 r2 p5 l11b add2 rC rD` were re-run against the oracle at the
++final binary: identical, except q1's queued `CALL` method frame.
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/binaries.txt
+new file mode 100644
+index 000000000..567ae995e
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-14T12:09:10Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# head /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t3f 019c2841d223779db718f6dc88fb6548ec66432e3222c137ea142a934f26f27b
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/callgrind.log b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/callgrind.log
+new file mode 100644
+index 000000000..efa17a99b
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/callgrind.log
+@@ -0,0 +1,14 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++intcall	839772701	749689909	-10.7270	660893160	595718496	-9.8616	0.0000	0.0000
++fibcall	9109404880	8800572768	-3.3903	8469931688	8270707557	-2.3521	0.0000	0.0000
++fibfunc	8938581960	8620758002	-3.5556	8300416595	8101192470	-2.4002	0.0000	0.0000
++extcall	8975966505	7797328707	-13.1310	7536919758	7402144680	-1.7882	0.0000	0.0001
++dispatch	22105710210	22051063029	-0.2472	20673777230	20659003564	-0.0715	0.0000	0.0000
++dispatchclass	16952029826	16308388125	-3.7968	15654209901	15238436469	-2.6560	0.0000	0.0000
++sendloop	14584920953	14570275851	-0.1004	13818085980	13803312456	-0.1069	0.0000	0.0000
++varlookup	13194527917	13194892874	+0.0028	13132805929	13133030980	+0.0017	0.0000	0.0000
++pkglocal	4185406352	4075795543	-2.6189	3917669094	3771909439	-3.7206	0.0000	0.0000
++startup	119095647	119438159	+0.2876	57372966	57598155	+0.3925	0.0000	0.0002
++alloc	22825677966	22883526517	+0.2534	20362612047	20421017216	+0.2868	0.0000	0.0000
++hashnew	2355780705	2363036584	+0.3080	1588972591	1596466243	+0.4716	0.0000	0.0000
++# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-3-fix1
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/summary.tsv
+new file mode 100644
+index 000000000..1aa3fed5c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/summary.tsv
+@@ -0,0 +1,72 @@
++pin	intcall	r1	839772904	178533438	346186	660893280	rc=0
++head	intcall	r1	749689909	153624671	346742	595718496	rc=0
++pin	intcall	r2	839772701	178533355	346186	660893160	rc=0
++head	intcall	r2	749689725	153624607	346742	595718376	rc=0
++pin	intcall	r3	839772701	178533355	346186	660893160	rc=0
++head	intcall	r3	749689909	153624671	346742	595718496	rc=0
++pin	fibcall	r1	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r1	8800572385	529518231	346597	8270707557	rc=0
++pin	fibcall	r2	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r2	8800572768	529518469	346742	8270707557	rc=0
++pin	fibcall	r3	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r3	8800574051	529519890	346742	8270707419	rc=0
++pin	fibfunc	r1	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r1	8620758002	519218790	346742	8101192470	rc=0
++pin	fibfunc	r2	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r2	8620757800	519218708	346742	8101192350	rc=0
++pin	fibfunc	r3	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r3	8620758002	519218790	346742	8101192470	rc=0
++pin	extcall	r1	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r1	7797324566	394758419	421719	7402144428	rc=0
++pin	extcall	r2	8975966453	1438625491	421204	7536919758	rc=0
++head	extcall	r2	7797329517	394762973	421864	7402144680	rc=0
++pin	extcall	r3	8975966505	1438625518	421349	7536919638	rc=0
++head	extcall	r3	7797328707	394762025	421864	7402144818	rc=0
++pin	dispatch	r1	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r1	22051063029	1391712882	346583	20659003564	rc=0
++pin	dispatch	r2	22105710527	1431587408	346027	20673777092	rc=0
++head	dispatch	r2	22051062290	1391712005	346583	20659003702	rc=0
++pin	dispatch	r3	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r3	22051063294	1391713002	346728	20659003564	rc=0
++pin	dispatchclass	r1	16952029826	1297473713	346212	15654209901	rc=0
++head	dispatchclass	r1	16308388833	1069605640	346742	15238436451	rc=0
++pin	dispatchclass	r2	16952030720	1297474625	346212	15654209883	rc=0
++head	dispatchclass	r2	16308387916	1069604705	346742	15238436469	rc=0
++pin	dispatchclass	r3	16952029826	1297473713	346212	15654209901	rc=0
++head	dispatchclass	r3	16308388125	1069604794	346742	15238436589	rc=0
++pin	sendloop	r1	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r1	14570275851	766616667	346728	13803312456	rc=0
++pin	sendloop	r2	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r2	14570275635	766616571	346728	13803312336	rc=0
++pin	sendloop	r3	14584920737	766488705	346172	13818085860	rc=0
++head	sendloop	r3	14570275851	766616667	346728	13803312456	rc=0
++pin	varlookup	r1	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r1	13194892609	61515032	346597	13133030980	rc=0
++pin	varlookup	r2	13194527714	61375693	346212	13132805809	rc=0
++head	varlookup	r2	13194892874	61515152	346742	13133030980	rc=0
++pin	varlookup	r3	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r3	13194892874	61515152	346742	13133030980	rc=0
++pin	pkglocal	r1	4185405136	267389877	346027	3917669232	rc=0
++head	pkglocal	r1	4075795543	303539376	346728	3771909439	rc=0
++pin	pkglocal	r2	4185406352	267391086	346172	3917669094	rc=0
++head	pkglocal	r2	4075796834	303540685	346728	3771909421	rc=0
++pin	pkglocal	r3	4185406352	267391086	346172	3917669094	rc=0
++head	pkglocal	r3	4075795543	303539376	346728	3771909439	rc=0
++pin	startup	r1	119095643	61376353	346186	57373104	rc=0
++head	startup	r1	119438159	61493262	346742	57598155	rc=0
++pin	startup	r2	119095647	61376495	346186	57372966	rc=0
++head	startup	r2	119438163	61493404	346742	57598017	rc=0
++pin	startup	r3	119095647	61376495	346186	57372966	rc=0
++head	startup	r3	119437894	61493142	346597	57598155	rc=0
++pin	alloc	r1	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r1	22883526307	2462162469	346742	20421017096	rc=0
++pin	alloc	r2	22825679138	2462721017	346212	20362611909	rc=0
++head	alloc	r2	22883526517	2462162559	346742	20421017216	rc=0
++pin	alloc	r3	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r3	22883526517	2462162559	346742	20421017216	rc=0
++pin	hashnew	r1	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r1	2363036584	766223599	346742	1596466243	rc=0
++pin	hashnew	r2	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r2	2363036584	766223599	346742	1596466243	rc=0
++pin	hashnew	r3	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r3	2363036336	766223514	346597	1596466225	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/table.txt
+new file mode 100644
+index 000000000..069cdece6
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/callgrind/table.txt
+@@ -0,0 +1,13 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++intcall	839772701	749689909	-10.7270	660893160	595718496	-9.8616	0.0000	0.0000
++fibcall	9109404880	8800572768	-3.3903	8469931688	8270707557	-2.3521	0.0000	0.0000
++fibfunc	8938581960	8620758002	-3.5556	8300416595	8101192470	-2.4002	0.0000	0.0000
++extcall	8975966505	7797328707	-13.1310	7536919758	7402144680	-1.7882	0.0000	0.0001
++dispatch	22105710210	22051063029	-0.2472	20673777230	20659003564	-0.0715	0.0000	0.0000
++dispatchclass	16952029826	16308388125	-3.7968	15654209901	15238436469	-2.6560	0.0000	0.0000
++sendloop	14584920953	14570275851	-0.1004	13818085980	13803312456	-0.1069	0.0000	0.0000
++varlookup	13194527917	13194892874	+0.0028	13132805929	13133030980	+0.0017	0.0000	0.0000
++pkglocal	4185406352	4075795543	-2.6189	3917669094	3771909439	-3.7206	0.0000	0.0000
++startup	119095647	119438159	+0.2876	57372966	57598155	+0.3925	0.0000	0.0002
++alloc	22825677966	22883526517	+0.2534	20362612047	20421017216	+0.2868	0.0000	0.0000
++hashnew	2355780705	2363036584	+0.3080	1588972591	1596466243	+0.4716	0.0000	0.0000
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/binaries.txt
+new file mode 100644
+index 000000000..86be50d7e
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/binaries.txt
+@@ -0,0 +1,5 @@
++# 2026-10-14T11:32:24Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# base /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t2c 291ff72d31eb11610025f5eeb0e79e6b5d61f2a195b1f7ca180f2e51e5ebd181
++# t3b /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t3b a9a76e9014ed3e43062c99c09b9bdbd48982ed14001bc300fa3e21fdb6eb3d69
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/summary.tsv
+new file mode 100644
+index 000000000..6cc4349b5
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/summary.tsv
+@@ -0,0 +1,9 @@
++pin	intcall	r1	839773236	178533908	346186	660893142	rc=0
++base	intcall	r1	729440032	153625239	346495	575468298	rc=0
++t3b	intcall	r1	774290111	156774827	346658	617168626	rc=0
++pin	intcall	r2	839772904	178533438	346186	660893280	rc=0
++base	intcall	r2	729440733	153625933	346640	575468160	rc=0
++t3b	intcall	r2	774290111	156774827	346658	617168626	rc=0
++pin	intcall	r3	839772701	178533355	346186	660893160	rc=0
++base	intcall	r3	729440297	153625359	346640	575468298	rc=0
++t3b	intcall	r3	774289927	156774763	346658	617168506	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/table.txt
+new file mode 100644
+index 000000000..c5687d91d
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/intcall-base/table.txt
+@@ -0,0 +1,2 @@
++program	pin	base	t3b	base d%	t3b d%	pin -libc	base -libc	t3b -libc	base -libc d%	t3b -libc d%	pin spread%	base spread%	t3b spread%
++intcall	839772904	729440297	774290111	-13.1384	-7.7977	660893160	575468298	617168626	-12.9257	-6.6160	0.0001	0.0001	0.0000
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/oracle-differences.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/oracle-differences.tsv
+new file mode 100644
+index 000000000..0044eb015
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/oracle-differences.tsv
+@@ -0,0 +1,8 @@
++# ootest revision 13178
++group	test	oracle	crate
++base/class/Package	TESTRECLAIM01	passed	blocked: timeout after 60 s
++base/class/Package	TEST_NEW01	passed	failed
++base/class/Package	TEST_PROLOG	passed	failed
++base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	passed	failed
++base/class/Routine	TEST_NEW_FILE_COMPILED	passed	failed
++base/class/StackFrame	TESTNATIVECODEFRAME	passed	failed
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/table.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/table.tsv
+new file mode 100644
+index 000000000..daca90fdf
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/table.tsv
+@@ -0,0 +1,10 @@
++# ootest revision 13178
++group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
++base/class/Package	oracle	80	80	80			-	-	1	yes	ulimit -v 1048576	80
++base/class/Package	crate	80	80	77	TEST_NEW01 TEST_PROLOG	TESTRECLAIM01=timeout after 60 s	-	-	2	yes	memcap 2G	79
++base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
++base/class/Routine	crate	60	60	58	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	60
++base/class/StackFrame	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
++base/class/StackFrame	crate	11	11	10	TESTNATIVECODEFRAME		-	-	1	yes	memcap 2G	11
++base/rexxutil/SysStemSort	oracle	18	18	18			-	-	1	yes	ulimit -v 1048576	18
++base/rexxutil/SysStemSort	crate	18	18	18			-	-	1	yes	memcap 2G	18
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/tests.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/tests.tsv
+new file mode 100644
+index 000000000..2048c1af8
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/tests.tsv
+@@ -0,0 +1,172 @@
++# ootest revision 13178
++# groups base/class/Package,base/class/StackFrame,base/class/Routine,base/rexxutil/SysStemSort
++group	test	row	oracle	crate
++base/class/Package	TESTADDCLASS01	-	passed	passed
++base/class/Package	TESTADDCLASS02	-	passed	passed
++base/class/Package	TESTADDCLASS03	-	passed	passed
++base/class/Package	TESTADDCLASS04	-	passed	passed
++base/class/Package	TESTADDNAMESPACEPACKAGE	-	passed	passed
++base/class/Package	TESTADDPACKAGEBADNAMESPACENAME	-	passed	passed
++base/class/Package	TESTADDPACKAGENOARGS	-	passed	passed
++base/class/Package	TESTADDPACKAGENONEPACKAGE	-	passed	passed
++base/class/Package	TESTADDPACKAGETOOMANYARGS	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS01	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS02	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS03	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS04	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE01	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE02	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE03	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE04	-	passed	passed
++base/class/Package	TESTADDROUTINE01	-	passed	passed
++base/class/Package	TESTADDROUTINE02	-	passed	passed
++base/class/Package	TESTADDROUTINE03	-	passed	passed
++base/class/Package	TESTADDROUTINE04	-	passed	passed
++base/class/Package	TESTANNOTATIONNOARGS	-	passed	passed
++base/class/Package	TESTANNOTATIONNOSTRING	-	passed	passed
++base/class/Package	TESTANNOTATIONTWOARGS	-	passed	passed
++base/class/Package	TESTCLASSES01	-	passed	passed
++base/class/Package	TESTFINDCLASSNOARGS	-	passed	passed
++base/class/Package	TESTFINDCLASSNOSTRING	-	passed	passed
++base/class/Package	TESTFINDCLASSTWOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSNOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSNOSTRING	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSTWOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINENOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINENOSTRING	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINETWOARGS	-	passed	passed
++base/class/Package	TESTFINDROUTINENOARGS	-	passed	passed
++base/class/Package	TESTFINDROUTINENOSTRING	-	passed	passed
++base/class/Package	TESTFINDROUTINETWOARGS	-	passed	passed
++base/class/Package	TESTIMPORTEDCLASSES01	-	passed	passed
++base/class/Package	TESTIMPORTEDROUTINES01	-	passed	passed
++base/class/Package	TESTLOADLIBRARY01	-	passed	passed
++base/class/Package	TESTLOADLIBRARY02	-	passed	passed
++base/class/Package	TESTLOADLIBRARY03	-	passed	passed
++base/class/Package	TESTMETHODS01	-	passed	passed
++base/class/Package	TESTRECLAIM01	-	passed	blocked: timeout after 60 s
++base/class/Package	TESTROUTINES01	-	passed	passed
++base/class/Package	TESTSOURCE01	-	passed	passed
++base/class/Package	TESTSOURCELINEBADLINENUMBER	-	passed	passed
++base/class/Package	TESTSOURCELINENOARGS	-	passed	passed
++base/class/Package	TESTSOURCELINEOUTOFRANGE	-	passed	passed
++base/class/Package	TESTSOURCELINEZEROLINENUMBER	-	passed	passed
++base/class/Package	TEST_NEW01	-	passed	failed
++base/class/Package	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_NIL	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_NULL	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_HASHBANG	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_NO_ENDOFLINE	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_NO_ENDOFLINE_ARRAY	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_SEMICOLON	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_SEMICOLON_ARRAY	-	passed	passed
++base/class/Package	TEST_NON_STRING_ARRAY_VALUE	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_ARG_NOSTRING	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_NO_ARG	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_NULLSTRING	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_REXXTRY	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_TWO_ARGS	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_GET_EMPTY	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_ONE_ARG	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_SET	-	passed	passed
++base/class/Package	TEST_PROLOG	-	passed	failed
++base/class/Package	TEST_SPARSE_ARRAY_SOURCE	-	passed	passed
++base/class/Routine	TESTCALL	-	passed	passed
++base/class/Routine	TESTCALLWITH	-	passed	passed
++base/class/Routine	TESTDIRECTIVES	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE01	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE02	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE03	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE04	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE05	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE06	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE07	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE08	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE09	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHOD	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_OMITTED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_ROUTINE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_HASHBANG	-	passed	passed
++base/class/Routine	TEST_NEWFILE_NO_ARGS	-	passed	passed
++base/class/Routine	TEST_NEWFILE_ONE_ARG_NIL	-	passed	passed
++base/class/Routine	TEST_NEWFILE_THREE_ARGS	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_STRING_BUFFER	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_STRING_NULL	-	passed	passed
++base/class/Routine	TEST_NEW_AND_SOURCE	-	passed	passed
++base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	-	passed	failed
++base/class/Routine	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_OMITTED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_FILE_COMPILED	-	passed	failed
++base/class/Routine	TEST_NEW_FOUR_ARGS	-	passed	passed
++base/class/Routine	TEST_NEW_HASHBANG	-	passed	passed
++base/class/Routine	TEST_NEW_NO_ARGS	-	passed	passed
++base/class/Routine	TEST_NEW_ONE_ARG	-	passed	passed
++base/class/Routine	TEST_NEW_ONE_ARG_NIL	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_OMITTED_STRING_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_STRING_NULL	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_ARRAY_NON_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_NIL	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_SPARSE_ARRAY	-	passed	passed
++base/class/Routine	TEST_NON_STRING_ARRAY_VALUE	-	passed	passed
++base/class/Routine	TEST_ROUTINE_SOURCE	-	passed	passed
++base/class/Routine	TEST_SPARSE_ARRAY_SOURCE	-	passed	passed
++base/class/StackFrame	TESTCOMPILEFRAME	-	passed	passed
++base/class/StackFrame	TESTCONTEXTENTRY	-	passed	passed
++base/class/StackFrame	TESTEXTERNALNATIVECODEFRAME	-	passed	passed
++base/class/StackFrame	TESTINTERNALCALLFRAME	-	passed	passed
++base/class/StackFrame	TESTINTERPRETFRAME	-	passed	passed
++base/class/StackFrame	TESTMETHODFRAME	-	passed	passed
++base/class/StackFrame	TESTNATIVECODEFRAME	-	passed	failed
++base/class/StackFrame	TESTPROGRAMFRAME	-	passed	passed
++base/class/StackFrame	TESTROUTINEFRAME	-	passed	passed
++base/class/StackFrame	TEST_BUG_STACKFRAME_NAME	-	passed	passed
++base/class/StackFrame	TEST_INVOCATION_ENTRY	-	passed	passed
++base/rexxutil/SysStemSort	TESTSORTRANGE	-	passed	passed
++base/rexxutil/SysStemSort	TEST_ALREADY_SORTED	-	passed	passed
++base/rexxutil/SysStemSort	TEST_BAD_COUNT	-	passed	passed
++base/rexxutil/SysStemSort	TEST_BAD_DIRECTION_ARG	-	passed	passed
++base/rexxutil/SysStemSort	TEST_CASE_SENSITIVITY	-	passed	passed
++base/rexxutil/SysStemSort	TEST_COMPOUND_NAME	-	passed	passed
++base/rexxutil/SysStemSort	TEST_DESCENDING_SIMPLE	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_FIRSTCOL_LASTCOL	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_FIRST_LAST	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_ORDER	-	passed	passed
++base/rexxutil/SysStemSort	TEST_INVALID_STEM	-	passed	passed
++base/rexxutil/SysStemSort	TEST_OUT_OF_RANGE	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SIMPLE_LETTERS	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SORT	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SORT_COLS	-	passed	passed
++base/rexxutil/SysStemSort	TEST_SPARSE_ARRAY	-	passed	passed
++base/rexxutil/SysStemSort	TEST_TOO_MANY	-	passed	passed
++base/rexxutil/SysStemSort	TEST_UNSET_COUNT	-	passed	passed
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/verdicts.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/verdicts.tsv
+new file mode 100644
+index 000000000..03e634526
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/fix1/suite/verdicts.tsv
+@@ -0,0 +1,6 @@
++# ootest revision 13178
++group	verdict	crate	oracle denominator
++base/class/Package	red	not passed: TESTRECLAIM01 TEST_NEW01 TEST_PROLOG	equal
++base/class/Routine	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
++base/class/StackFrame	red	not passed: TESTNATIVECODEFRAME	equal
++base/rexxutil/SysStemSort	green		equal
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/r2.rex b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/r2.rex
+new file mode 100644
+index 000000000..6f2d2f64c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/r2.rex
+@@ -0,0 +1,14 @@
++p = .context~package
++p~addRoutine('C1', .Routine~loadExternalRoutine('xyz', 'LIBRARY rexxutil SysStemSort')~copy)
++s.0 = 2; s.1 = .k~new; s.2 = 'a'
++call c1 's.'
++.local~seen = .false; s.0 = 2; s.1 = .k~new; s.2 = 'a'
++x = C1('s.')
++.local~seen = .false; s.0 = 2; s.1 = .k~new; s.2 = 'a'
++call vv 's.'
++::routine vv external 'LIBRARY rexxutil SysStemSort'
++::class k
++::method string
++  if .local~seen \= .true then do; .local~seen = .true
++    say .context~stackFrames[2]~name; end
++  return 'b'
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/rC.rex b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/rC.rex
+new file mode 100644
+index 000000000..306d1a4f5
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/rC.rex
+@@ -0,0 +1,13 @@
++p = .context~package
++u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')
++c = u~copy
++p~addRoutine('C4', c)
++.routines['C4'] = u
++say 'routines' (p~routines['C4'] == u) (p~routines['C4'] == c) (p~findRoutine('C4') == u)
++d = u~copy
++p~addPublicRoutine('C3', d)
++.routines['C3'] = u
++say 'public' (p~publicRoutines['C3'] == d) (p~routines['C3'] == u) (p~findRoutine('C3') == u)
++r = .Package~new('r', 'nop')
++r~addPackage(p)
++say 'importer' (r~findRoutine('C3') == d)
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/rD.rex b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/rD.rex
+new file mode 100644
+index 000000000..f61aae50c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/rD.rex
+@@ -0,0 +1,15 @@
++p = .context~package
++u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')
++d = u~copy
++w = .WeakReference~new(d)
++p~addPublicRoutine('C3', d)
++drop d
++.routines['C3'] = u
++r = .Package~new('r', 'nop')
++do i = 1 to 20
++  zj = 'filler' i
++end
++if w~value == .nil then say 'collected'
++r~addPackage(p)
++f = r~findRoutine('C3')
++say (f == u) f~class~id f~call(0)
+diff --git a/rust/bench-programs/README.md b/rust/bench-programs/README.md
+index 03b749d19..0333414e5 100644
+--- a/rust/bench-programs/README.md
++++ b/rust/bench-programs/README.md
+@@ -27,6 +27,7 @@ Global Constraints and D9), each sized to run roughly 0.5-2s under `build/bin/re
+ | `dirread.rex` | Directory entry reads by message and by `[]`, and a `.local` entry read as an environment symbol: the store-backed read path, 200,000 passes. Added in Phase 6.1 from Task 7's measurement of that path; sized against this crate (0.3s), not the oracle (0.05s) |
+ | `hashnew.rex` | Hash-collection construction: a `.directory~new`, `.stringtable~new` and `.table~new` per pass, 50,000 passes, none kept. Added in Phase 9a Task 8's fix round, when moving the store's sizing into `INIT` cost this path 20% and no program here constructed a collection |
+ | `pkglocal.rex` | An environment symbol read once the running package has a local entry: one `~local` write, then 2,000,000 reads of `.stdout`, which the search reaches after the package local misses. Added in Phase 9a's final review fix, when every such read allocated a string once any package local existed (+84% instructions) and no program here wrote a package local |
++| `intcall.rex` | Internal package routines, which run no activation: `FILESPEC` of the REXX package and `SysFileExists` of rexxutil, 150,000 passes each. Added in Phase 9b1 Task 3's fix round, when a stack-frame level around each such call cost +4.5% on a `FILESPEC` loop and no program here called one. Sized against this crate (0.2s). The oracle takes 1.7s |
+ | `startup.rex` | `say 1` — cold-start timing (D2's gate), timed separately with `rexx-time`, not through criterion's statistical sampling |
+ | `pingpong/pingmsg.rex` | Message round trip: `~start` on a new activity and its `~result` awaited, 80,000 times. Criterion 7 of Phase 6, recorded against the oracle; in a subdirectory, so the criterion harness does not run it; `callgrind.sh` runs it as `pingmsg` |
+ | `pingpong/pingsem.rex` | Semaphore post/wait: two activities hand a turn back and forth through two `EventSemaphore`s, 100,000 times each way. Criterion 7, as `pingmsg.rex`; `callgrind.sh` runs it by its name |
+diff --git a/rust/bench-programs/callgrind.sh b/rust/bench-programs/callgrind.sh
+index 8a8d6449d..4a161e49f 100755
+--- a/rust/bench-programs/callgrind.sh
++++ b/rust/bench-programs/callgrind.sh
+@@ -45,7 +45,7 @@ out=$(cd "$out" && pwd)
+ # Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
+ PINGPONG="pingguard pingmsg pingsem"
+ PROGRAMS="alloc alloc4c arith assign compound decloop decrender dirread dispatch
+-dispatchclass emptyloop extcall fibcall fibfunc hashnew heapshape nop parse pkglocal sayloop
++dispatchclass emptyloop extcall fibcall fibfunc hashnew heapshape intcall nop parse pkglocal sayloop
+ sendloop startup strings textnum varlookup rexxcps $PINGPONG"
+ on_disk=$(cd "$here" && ls ./*.rex pingpong/*.rex | sed 's|^\./||; s|^pingpong/||; s|\.rex$||' | sort)
+ listed=$(echo $PROGRAMS | tr ' ' '\n' | grep -vx rexxcps | sort)
+diff --git a/rust/bench-programs/intcall.rex b/rust/bench-programs/intcall.rex
+new file mode 100644
+index 000000000..3f9ebb5e8
+--- /dev/null
++++ b/rust/bench-programs/intcall.rex
+@@ -0,0 +1,8 @@
++/* Internal package routines called n times each: FILESPEC of the REXX package and
++   SysFileExists of rexxutil, which run no activation. */
++n = 150000
++t = 0
++do i = 1 to n
++    t = t + length(filespec('N', '/usr/lib/liba.so')) + SysFileExists('/nonexistent/liba.so')
++end
++say t
+diff --git a/rust/corpus/lang/routine_object_add_copy.rex b/rust/corpus/lang/routine_object_add_copy.rex
+index ebdfcaee5..faddfb1fb 100644
+--- a/rust/corpus/lang/routine_object_add_copy.rex
++++ b/rust/corpus/lang/routine_object_add_copy.rex
+@@ -18,6 +18,10 @@ p~addPublicRoutine('C2', u)
+ do i = 1 to 20; zj = 'filler' i; end
+ f = r~findRoutine('C2')
+ say 'importer' (f == u) (f == p~findRoutine('C2')) f~class~id f~call(0)
++c = u~copy
++p~addRoutine('C4', c)
++.routines['C4'] = u
++say 'written' (p~routines['C4'] == u) (p~routines['C4'] == c) (p~findRoutine('C4') == u)
+ signal on syntax
+ p~addRoutine('M1', .Method~new('m', 'nop'))
+ say 'method added'
+diff --git a/rust/corpus/oracle-crashes.txt b/rust/corpus/oracle-crashes.txt
+index 64d1ea181..e0cd884c1 100644
+--- a/rust/corpus/oracle-crashes.txt
++++ b/rust/corpus/oracle-crashes.txt
+@@ -1337,6 +1337,22 @@ on stderr:
+     a.0 = 2; a.1 = 'q'; a.2 = 'p'
+     call SysStemSort 'a.', , , 3
+ 
++An error raised by a method the sort sends crashes too: an element's `STRING` method raising
++93.900, left untrapped, gave SIGSEGV, rc 139, 1 run of 1 under the standard wrapper, 2026-10-14
++(Phase 9b1 Task 3, `docs/superpowers/records/2026-10-14-phase-9b1/task-3/probes/q2.rex`):
++
++    s.0 = 2; s.1 = .k~new; s.2 = 'a'
++    call SysStemSort 's.'
++    say 'not reached'
++    ::class k
++    ::method string
++      raise syntax 93.900 array('boom')
++
++It is filed here rather than as an entry of its own because it leaves the sort by an error as the
++three above do. The C++ path was not read. This crate reports it at rc 163 with
++`Compiled routine "SYSSTEMSORT".` between the method's line and the call's, pinned in the case file
++named below.
++
+ The same errors under `SIGNAL ON SYNTAX` answer on the oracle, which is how ooTest's `SysStemSort`
+ group and `corpus/lang/rexxutil_stem_sort.rex` reach them. An error `SysStemSort` raises before
+ it sorts is reported untrapped as usual: 40.919 (`call SysStemSort '*'`) and 40.921 (`first` 3,
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+index 71604b344..ba95ec195 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+@@ -143,6 +143,10 @@ const AXES: &[Axis] = &[
+         name: "heapshape",
+         role: Role::SelfTimed,
+     },
++    Axis {
++        name: "intcall",
++        role: Role::Loop,
++    },
+     Axis {
+         name: "nop",
+         role: Role::Loop,
+diff --git a/rust/crates/rexx-bench/src/lib.rs b/rust/crates/rexx-bench/src/lib.rs
+index 5102a3f16..29f8890c6 100644
+--- a/rust/crates/rexx-bench/src/lib.rs
++++ b/rust/crates/rexx-bench/src/lib.rs
+@@ -73,6 +73,9 @@ pub static PROGRAMS: &[&str] = &[
+     // Added in the Phase 9a final review's fix: an environment symbol read
+     // once the running package has a local, which searches that local first.
+     "pkglocal",
++    // Added in Phase 9b1 Task 3's fix round: internal package routine calls,
++    // which push a stack-frame level around the routine's body.
++    "intcall",
+ ];
+ 
+ /// Programs in `bench-programs/` that the criterion harness deliberately does
+diff --git a/rust/crates/rexx-core/src/body.rs b/rust/crates/rexx-core/src/body.rs
+index f6a0d59e8..3bfe3ff40 100644
+--- a/rust/crates/rexx-core/src/body.rs
++++ b/rust/crates/rexx-core/src/body.rs
+@@ -929,7 +929,7 @@ enum Bound {
+     Nothing,
+     /// A method object's scope.
+     Scope(ObjRef),
+-    /// The routine table row a routine object runs.
++    /// The `INTERNAL_ROUTINES` row a routine object runs.
+     RoutineRow(usize),
+ }
+ 
+@@ -1030,8 +1030,8 @@ impl NativeObject {
+         self.bound = Bound::Scope(scope);
+     }
+ 
+-    /// The row of the embedding's own routine table this `Routine` object
+-    /// runs, which a copy carries too, or `None` for one that runs none.
++    /// The `INTERNAL_ROUTINES` row this `Routine` object runs, which a copy
++    /// carries too, or `None` for one that runs none.
+     pub fn routine_row(&self) -> Option<usize> {
+         match self.bound {
+             Bound::RoutineRow(row) => Some(row),
+diff --git a/rust/crates/rexx-exec/src/activity.rs b/rust/crates/rexx-exec/src/activity.rs
+index ed2cbb605..15f48ae26 100644
+--- a/rust/crates/rexx-exec/src/activity.rs
++++ b/rust/crates/rexx-exec/src/activity.rs
+@@ -71,14 +71,11 @@ pub(crate) struct Activity {
+     )]
+     pub(crate) native_spares: Vec<Box<NativeFrame>>,
+     /// The routines of an internal package running on this activity,
+-    /// innermost last.
++    /// innermost last, below [`Activity::internal_depth`]; the slots above it
++    /// are kept for the next call to fill.
+     pub(crate) internal_levels: Vec<InternalLevel>,
+-    /// The names of [`Activity::internal_levels`], each one's from its `name`
+-    /// offset to the next one's.
+-    pub(crate) internal_names: Vec<u8>,
+-    /// The arguments of [`Activity::internal_levels`], each one's from its
+-    /// `arguments` offset to the next one's.
+-    pub(crate) internal_arguments: Vec<Option<ObjRef>>,
++    /// How many of [`Activity::internal_levels`] are running.
++    pub(crate) internal_depth: usize,
+     /// The thread context every native call and package hook is handed,
+     /// which an extension may keep for as long as this interpreter runs;
+     /// made by the first ([`crate::Interp::thread_context`]).
+@@ -331,10 +328,39 @@ pub(crate) struct InternalLevel {
+     /// The activation the call was made from.
+     pub(crate) caller: Option<crate::activation::ActivationId>,
+     pub(crate) row: &'static crate::internal_routines::InternalRoutine,
+-    /// Where its name starts in [`Activity::internal_names`].
+-    pub(crate) name: usize,
+-    /// Where its arguments start in [`Activity::internal_arguments`].
+-    pub(crate) arguments: usize,
++    pub(crate) name: LevelName,
++    /// The name a [`LevelName::Called`] level was called by.
++    pub(crate) called: Vec<u8>,
++    /// The caller's argument buffer, lent for the call and shared with the
++    /// routine's body, so neither copies it.
++    pub(crate) arguments: Rc<Vec<Option<ObjRef>>>,
++    /// Where the call's arguments start in [`InternalLevel::arguments`].
++    pub(crate) from: usize,
++}
++
++/// The name an [`InternalLevel`]'s frame reports.
++#[derive(Clone, Copy)]
++pub(crate) enum LevelName {
++    /// The row's name, upcased.
++    Upper,
++    /// The row's name as the row spells it.
++    Row,
++    /// [`InternalLevel::called`].
++    Called,
++}
++
++impl InternalLevel {
++    /// A slot no call has filled yet.
++    pub(crate) fn spare() -> InternalLevel {
++        InternalLevel {
++            caller: None,
++            row: &crate::internal_routines::INTERNAL_ROUTINES[0],
++            name: LevelName::Upper,
++            called: Vec::new(),
++            arguments: Rc::new(Vec::new()),
++            from: 0,
++        }
++    }
+ }
+ 
+ impl Activity {
+@@ -352,8 +378,7 @@ impl Activity {
+             native_handles: _,
+             native_spares: _,
+             internal_levels: _,
+-            internal_names: _,
+-            internal_arguments: _,
++            internal_depth: _,
+             thread: _,
+             clause_state: _,
+             flat_loops: _,
+@@ -477,8 +502,7 @@ impl Activity {
+             native_handles: Vec::new(),
+             native_spares: Vec::new(),
+             internal_levels: Vec::new(),
+-            internal_names: Vec::new(),
+-            internal_arguments: Vec::new(),
++            internal_depth: 0,
+             clause_state: ClauseState::new(),
+             flat_loops: Vec::new(),
+             flat_top: None,
+@@ -579,10 +603,10 @@ impl Activity {
+             // overwrites the handle fields before anything reads them, so a
+             // spare names nothing to root.
+             native_spares: _,
+-            // A running call's arguments are its caller's temps.
++            // A running call's arguments are its caller's temps, and a slot
++            // above the depth holds an emptied buffer.
+             internal_levels: _,
+-            internal_names: _,
+-            internal_arguments: _,
++            internal_depth: _,
+             clause_state: _,
+             // The `DO OVER` snapshot sits in a register held for the loop's
+             // lifetime, and `RootSet` reaches a register as a temp.
+diff --git a/rust/crates/rexx-exec/src/dispatch/context.rs b/rust/crates/rexx-exec/src/dispatch/context.rs
+index 8568bd3b8..37fb4a67f 100644
+--- a/rust/crates/rexx-exec/src/dispatch/context.rs
++++ b/rust/crates/rexx-exec/src/dispatch/context.rs
+@@ -569,7 +569,8 @@ pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
+     let mut levels = Vec::new();
+     for (depth, activation) in interp.frames().enumerate() {
+         let id = activation.id;
+-        for (row, level) in interp.activity.internal_levels.iter().enumerate().rev() {
++        let running = &interp.activity.internal_levels[..interp.activity.internal_depth];
++        for (row, level) in running.iter().enumerate().rev() {
+             if level.caller == Some(id) {
+                 levels.push(LiveLevel::Internal(row));
+             }
+@@ -938,14 +939,13 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
+ /// # Panics
+ /// If no internal level is in that row.
+ fn build_internal_frame_at(interp: &mut Interp, row: usize) -> ObjRef {
+-    let activity = &interp.activity;
+-    let level = &activity.internal_levels[row];
+-    let next = activity.internal_levels.get(row + 1);
+-    let names = level.name..next.map_or(activity.internal_names.len(), |next| next.name);
+-    let name = activity.internal_names[names].to_vec();
+-    let arguments =
+-        level.arguments..next.map_or(activity.internal_arguments.len(), |next| next.arguments);
+-    let arguments = activity.internal_arguments[arguments].to_vec();
++    let level = &interp.activity.internal_levels[row];
++    let name = match level.name {
++        crate::activity::LevelName::Upper => level.row.name.to_ascii_uppercase().into_bytes(),
++        crate::activity::LevelName::Row => level.row.name.as_bytes().to_vec(),
++        crate::activity::LevelName::Called => level.called.clone(),
++    };
++    let arguments = level.arguments[level.from..].to_vec();
+     let (caller, row) = (level.caller, level.row);
+     let depth = interp
+         .frames()
+diff --git a/rust/crates/rexx-exec/src/dispatch/executable.rs b/rust/crates/rexx-exec/src/dispatch/executable.rs
+index 45513318c..6ac89ea20 100644
+--- a/rust/crates/rexx-exec/src/dispatch/executable.rs
++++ b/rust/crates/rexx-exec/src/dispatch/executable.rs
+@@ -573,7 +573,7 @@ pub(crate) fn call_routine_directly(
+ fn begin_routine(
+     interp: &mut Interp,
+     receiver: ObjRef,
+-    values: Vec<Option<ObjRef>>,
++    mut values: Vec<Option<ObjRef>>,
+     name: &[u8],
+ ) -> Result<NativeStarted, Failure> {
+     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
+@@ -609,7 +609,7 @@ fn begin_routine(
+     };
+     if let Some(row) = row {
+         return interp
+-            .run_internal_as(row, Some(row.name.as_bytes()), &values)
++            .run_internal_as(row, crate::run::InternalName::Row, &mut values, 0)
+             .map(|started| match started {
+                 Started::Ran(value) => NativeStarted::Ran(Some(value)),
+                 Started::Entered => NativeStarted::Entered(Then::Pass),
+@@ -623,7 +623,7 @@ fn begin_routine(
+             .call_program_main(program, values, name)
+             .map(NativeStarted::Ran);
+     };
+-    let started = interp.begin_installed_routine(program, directive, &values, name)?;
++    let started = interp.begin_installed_routine(program, directive, &mut values, name)?;
+     // `.context~executable` inside answers the object the call came through:
+     // measured, oracle rc 0, `r~call == r` and `r~copy~call == r~copy`.
+     if let NativeStarted::Entered(_) = started {
+diff --git a/rust/crates/rexx-exec/src/dispatch/package.rs b/rust/crates/rexx-exec/src/dispatch/package.rs
+index 717b1114a..a27459716 100644
+--- a/rust/crates/rexx-exec/src/dispatch/package.rs
++++ b/rust/crates/rexx-exec/src/dispatch/package.rs
+@@ -600,6 +600,13 @@ fn routines(
+     _args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     let program = package_of(interp, receiver)?;
++    // A written `.ROUTINES` table is the package's routines from then on, as
++    // `findRoutine` reads them: measured, oracle rc 0, `p~routines['C']` is
++    // what `.routines['C'] = u` stored.
++    if program.is_some_and(|program| interp.routines_written.contains(&program)) {
++        let entries = package_table_entries(interp, receiver, PackageTable::Routines)?;
++        return interp.string_table_of(entries).map(Some);
++    }
+     let entries = routine_entries(interp, program, |interp| &interp.routines);
+     interp.string_table_of(entries).map(Some)
+ }
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index 379741b62..439ebde36 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -2512,7 +2512,7 @@ impl Interp {
+         &mut self,
+         program: ProgramId,
+         directive: usize,
+-        arguments: &[Option<ObjRef>],
++        arguments: &mut Vec<Option<ObjRef>>,
+         name: &[u8],
+     ) -> Result<crate::dispatch::NativeStarted, Failure> {
+         let installed = InstalledRoutine { program, directive };
+@@ -2521,6 +2521,7 @@ impl Interp {
+                 crate::run::Resolved::Routine(installed),
+                 name,
+                 arguments,
++                0,
+                 crate::activation::CallType::Subroutine,
+                 crate::run::CallEntry::Written,
+             )? {
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 874b19c7a..a6ab9dec6 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -2965,7 +2965,8 @@ impl Interp {
+             // A chunk's interned literals are allocated immortal.
+             chunks: _,
+             chunks_refused: _,
+-            routines,
++            // Held by each package's `.ROUTINES` table; see below.
++            routines: _,
+             routines_written: _,
+             package_public_routines,
+             merged_public_routines,
+@@ -3148,10 +3149,12 @@ impl Interp {
+         ] {
+             out.extend(table.values().flat_map(|names| names.values().copied()));
+         }
+-        // The `Routine` objects `~addRoutine` filed as themselves: a merge
+-        // copies an entry into an importer, where nothing else holds it once
+-        // its own package replaces it.
+-        for table in [routines, package_public_routines, merged_public_routines] {
++        // The `Routine` objects `~addRoutine` filed as themselves. A
++        // package's own `routines` entries need no root: each is in its
++        // `.ROUTINES` table too, and once a program writes that table it is
++        // what every reader reads instead. Its public routines and an
++        // importer's merged ones are copies the table does not follow.
++        for table in [package_public_routines, merged_public_routines] {
+             out.extend(
+                 table
+                     .values()
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index eac398946..a6a719d29 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -78,8 +78,8 @@ mod condition;
+ // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
+ mod call;
+ pub(crate) use call::{
+-    Begun, CallEntry, CallResolution, CallTail, MAX_ACTIVATION_DEPTH, Started, function_started,
+-    subroutine_started,
++    Begun, CallEntry, CallResolution, CallTail, InternalName, MAX_ACTIVATION_DEPTH, Started,
++    function_started, subroutine_started,
+ };
+ #[cfg(test)]
+ use call::{Entered, entered_receiver};
+diff --git a/rust/crates/rexx-exec/src/run/call.rs b/rust/crates/rexx-exec/src/run/call.rs
+index 9e7206704..d304bd6bf 100644
+--- a/rust/crates/rexx-exec/src/run/call.rs
++++ b/rust/crates/rexx-exec/src/run/call.rs
+@@ -11,12 +11,55 @@
+ 
+ //! `CALL` and function calls: resolving the name, running the arguments, entering the callee.
+ 
++use crate::activity::LevelName;
++
+ use super::{
+     Activation, BehaviourId, Body, BodyKey, CallContext, CallType, Code, Ended, Expr, ExprKind,
+     Failure, Flow, Inherited, InstalledRoutine, Interp, Loud, ObjRef, Raised, Rc, Resolved,
+     VarRefHome, body_of, builtin,
+ };
+ 
++/// The name an internal routine's call passes it, which its frame and
++/// traceback line report.
++#[derive(Clone, Copy)]
++pub(crate) enum InternalName<'a> {
++    /// The row's name, upcased: a call that found the row by its own name.
++    Upper,
++    /// The row's name as the row spells it: `Routine~call`.
++    Row,
++    /// The name it was called by.
++    Called(&'a [u8]),
++}
++
++/// Swaps `args` with the buffer `slot` holds, which nothing else shares
++/// between calls.
++#[inline(always)]
++fn lend_arguments(slot: &mut Rc<Vec<Option<ObjRef>>>, args: &mut Vec<Option<ObjRef>>) {
++    match Rc::get_mut(slot) {
++        Some(buffer) => std::mem::swap(buffer, args),
++        None => lend_shared_arguments(slot, args),
++    }
++}
++
++/// [`lend_arguments`] where something else holds `slot` too.
++#[cold]
++#[inline(never)]
++fn lend_shared_arguments(slot: &mut Rc<Vec<Option<ObjRef>>>, args: &mut Vec<Option<ObjRef>>) {
++    let mut owned = Vec::clone(slot);
++    std::mem::swap(&mut owned, args);
++    *slot = Rc::new(owned);
++}
++
++/// A new slot on `levels`, for a call deeper than any before it.
++#[cold]
++#[inline(never)]
++fn add_internal_level(
++    levels: &mut Vec<crate::activity::InternalLevel>,
++) -> &mut crate::activity::InternalLevel {
++    levels.push(crate::activity::InternalLevel::spare());
++    levels.last_mut().expect("just pushed")
++}
++
+ /// A call's target as it stands when its arguments are about to run.
+ #[derive(Clone, Copy)]
+ pub(crate) enum CallResolution<'a> {
+@@ -415,14 +458,16 @@ impl Interp {
+                 return Ok(Begun::Done(Ended::Returned(handled)));
+             }
+             return match resolved {
+-                Resolved::Internal(row) => Ok(internal_begun(self.run_internal(row, &arguments)?)),
++                Resolved::Internal(row) => {
++                    Ok(internal_begun(self.run_internal(row, &mut arguments, 0)?))
++                }
+                 Resolved::LibraryRoutine(slot) => self
+                     .run_package_routine(slot, name, &arguments)
+                     .map(library_begun),
+                 _ => unreachable!("only the two arms above reach here"),
+             };
+         }
+-        let begun = self.begin_call(resolved, name, &arguments, call_type, entry)?;
++        let begun = self.begin_call(resolved, name, &mut arguments, 0, call_type, entry)?;
+         // An enclosing builtin's run stands on the stack while this call's
+         // callee clears it at its first clause.
+         if let Begun::Entered = begun {
+@@ -487,7 +532,7 @@ impl Interp {
+                 .map(Started::Ran);
+         }
+         let mut values = std::mem::take(&mut self.activity.value_buffer);
+-        let started = self.begin_call_over_values(resolved, name, &values[mark..]);
++        let started = self.begin_call_over_values(resolved, name, &mut values, mark);
+         values.truncate(mark);
+         self.lend_stack(self.entered_body(&started), values);
+         started
+@@ -561,26 +606,30 @@ impl Interp {
+         Ok(Some(result))
+     }
+ 
+-    /// One internal-package routine over its evaluated arguments. No
+-    /// activation, no `SIGL`, no depth guard -- the builtin discipline, since
+-    /// the oracle runs these as native code too. `Entered` where it parked
+-    /// the activity, with the park on its record.
++    /// One internal-package routine over the evaluated arguments in `args`
++    /// from `from`. No activation, no `SIGL`, no depth guard -- the builtin
++    /// discipline, since the oracle runs these as native code too. `Entered`
++    /// where it parked the activity, with the park on its record.
+     fn run_internal(
+         &mut self,
+         row: &'static crate::internal_routines::InternalRoutine,
+-        values: &[Option<ObjRef>],
++        args: &mut Vec<Option<ObjRef>>,
++        from: usize,
+     ) -> Result<Started<ObjRef>, Failure> {
+-        self.run_internal_as(row, None, values)
++        self.run_internal_as(row, InternalName::Upper, args, from)
+     }
+ 
+-    /// [`Interp::run_internal`] for a call that passes the routine `name`
+-    /// rather than its upcased row name, which is what a `::ROUTINE` bound to
+-    /// the row and `Routine~call` pass.
++    /// [`Interp::run_internal`] for a call that passes the routine a `name`
++    /// other than its upcased row name, which is what a `::ROUTINE` bound to
++    /// the row and `Routine~call` pass. `args` is lent to the routine's
++    /// level while it runs, so a live `.context~stackFrames` reads the
++    /// arguments without a copy, and is handed back unchanged.
+     pub(crate) fn run_internal_as(
+         &mut self,
+         row: &'static crate::internal_routines::InternalRoutine,
+-        name: Option<&[u8]>,
+-        values: &[Option<ObjRef>],
++        name: InternalName<'_>,
++        args: &mut Vec<Option<ObjRef>>,
++        from: usize,
+     ) -> Result<Started<ObjRef>, Failure> {
+         let Some(body) = row.body else {
+             let owner = row
+@@ -588,19 +637,49 @@ impl Interp {
+                 .expect("a row with no body names the phase that owes it");
+             return Err(Loud::internal_routine(row.name.as_bytes(), owner).into());
+         };
+-        let level = self.push_internal_level(row, name, values);
+-        let outcome = body(self, row.name.as_bytes(), values);
+-        self.pop_internal_level(level);
++        let caller = self.running_activation().map(|activation| activation.id);
++        let depth = self.activity.internal_depth;
++        let level = match self.activity.internal_levels.get_mut(depth) {
++            Some(level) => level,
++            None => add_internal_level(&mut self.activity.internal_levels),
++        };
++        level.caller = caller;
++        level.row = row;
++        level.from = from;
++        level.name = match name {
++            InternalName::Upper => LevelName::Upper,
++            InternalName::Row => LevelName::Row,
++            InternalName::Called(name) => {
++                level.called.clear();
++                level.called.extend_from_slice(name);
++                LevelName::Called
++            }
++        };
++        lend_arguments(&mut level.arguments, args);
++        let shared = Rc::clone(&level.arguments);
++        self.activity.internal_depth = depth + 1;
++        let outcome = body(self, row.name.as_bytes(), &shared[from..]);
++        self.activity.internal_depth = depth;
++        drop(shared);
++        if let Some(level) = self.activity.internal_levels.get_mut(depth) {
++            lend_arguments(&mut level.arguments, args);
++        }
+         if let Err(failure) = &outcome {
+             // The oracle reports one of these under its own routine line,
+             // whether the argument marshalling or the body raised -- measured,
+             // `filespec('D')` and `SysSleep('abc')` both carry it.
++            let values = &args[from..];
+             match name {
+-                Some(name) => self.blame_internal_routine(row, name, values, failure),
+-                None => {
++                InternalName::Upper => {
+                     let upper = row.name.to_ascii_uppercase();
+                     self.blame_internal_routine(row, upper.as_bytes(), values, failure);
+                 }
++                InternalName::Row => {
++                    self.blame_internal_routine(row, row.name.as_bytes(), values, failure);
++                }
++                InternalName::Called(name) => {
++                    self.blame_internal_routine(row, name, values, failure);
++                }
+             }
+         }
+         let value = outcome?;
+@@ -610,62 +689,26 @@ impl Interp {
+         })
+     }
+ 
+-    /// Records `row`, called by `name` (its upcased row name where `None`)
+-    /// with `values`, as a running internal level, answering its index.
+-    fn push_internal_level(
+-        &mut self,
+-        row: &'static crate::internal_routines::InternalRoutine,
+-        name: Option<&[u8]>,
+-        values: &[Option<ObjRef>],
+-    ) -> usize {
+-        let caller = self.running_activation().map(|activation| activation.id);
+-        let activity = &mut self.activity;
+-        let level = crate::activity::InternalLevel {
+-            caller,
+-            row,
+-            name: activity.internal_names.len(),
+-            arguments: activity.internal_arguments.len(),
+-        };
+-        match name {
+-            Some(name) => activity.internal_names.extend_from_slice(name),
+-            None => activity
+-                .internal_names
+-                .extend(row.name.bytes().map(|byte| byte.to_ascii_uppercase())),
+-        }
+-        activity.internal_arguments.extend_from_slice(values);
+-        activity.internal_levels.push(level);
+-        activity.internal_levels.len() - 1
+-    }
+-
+-    /// Ends the internal level at `index` and every level above it.
+-    fn pop_internal_level(&mut self, index: usize) {
+-        let activity = &mut self.activity;
+-        if let Some(level) = activity.internal_levels.get(index) {
+-            activity.internal_names.truncate(level.name);
+-            activity.internal_arguments.truncate(level.arguments);
+-            activity.internal_levels.truncate(index);
+-        }
+-    }
+-
+     /// [`Interp::begin_call_over_pushed_args`] with the run in hand.
+     fn begin_call_over_values(
+         &mut self,
+         resolved: Resolved,
+         name: &[u8],
+-        values: &[Option<ObjRef>],
++        values: &mut Vec<Option<ObjRef>>,
++        mark: usize,
+     ) -> Result<Started<ObjRef>, Failure> {
+         if let Resolved::Internal(row) = resolved {
+-            if let Some(handled) = self.call_checkpoint(name, values)? {
++            if let Some(handled) = self.call_checkpoint(name, &values[mark..])? {
+                 return handled
+                     .map(Started::Ran)
+                     .ok_or_else(|| Raised::no_data_returned(name).into());
+             }
+-            return self.run_internal(row, values);
++            return self.run_internal(row, values, mark);
+         }
+         if let Resolved::LibraryRoutine(slot) = resolved {
+-            let answered = match self.call_checkpoint(name, values)? {
++            let answered = match self.call_checkpoint(name, &values[mark..])? {
+                 Some(handled) => Started::Ran(handled),
+-                None => self.run_package_routine(slot, name, values)?,
++                None => self.run_package_routine(slot, name, &values[mark..])?,
+             };
+             return match answered {
+                 Started::Ran(value) => value
+@@ -678,6 +721,7 @@ impl Interp {
+             resolved,
+             name,
+             values,
++            mark,
+             CallType::Function,
+             CallEntry::Written,
+         )?;
+@@ -749,11 +793,11 @@ impl Interp {
+         &mut self,
+         resolved: Resolved,
+         name: &[u8],
+-        arguments: Vec<Option<ObjRef>>,
++        mut arguments: Vec<Option<ObjRef>>,
+         call_type: CallType,
+         entry: CallEntry,
+     ) -> Result<Ended, Failure> {
+-        let begun = self.begin_call(resolved, name, &arguments, call_type, entry)?;
++        let begun = self.begin_call(resolved, name, &mut arguments, 0, call_type, entry)?;
+         self.complete_call(begun)
+     }
+ 
+@@ -770,12 +814,14 @@ impl Interp {
+ 
+     /// [`Interp::invoke_call_over`] up to the point its callee's body would
+     /// run: the whole call for a callee that runs no activation, or the
+-    /// activation pushed and the caller's level state saved.
++    /// activation pushed and the caller's level state saved. The arguments
++    /// are `arguments` from `from`.
+     pub(crate) fn begin_call(
+         &mut self,
+         resolved: Resolved,
+         name: &[u8],
+-        arguments: &[Option<ObjRef>],
++        arguments: &mut Vec<Option<ObjRef>>,
++        from: usize,
+         call_type: CallType,
+         entry: CallEntry,
+     ) -> Result<Begun, Failure> {
+@@ -800,7 +846,7 @@ impl Interp {
+         if matches!(
+             resolved,
+             Resolved::Library(_) | Resolved::External | Resolved::Unresolved
+-        ) && let Some(handled) = self.call_checkpoint(name, arguments)?
++        ) && let Some(handled) = self.call_checkpoint(name, &arguments[from..])?
+         {
+             return Ok(Begun::Done(Ended::Returned(handled)));
+         }
+@@ -809,7 +855,7 @@ impl Interp {
+         }
+         if let Resolved::Library(program) = resolved {
+             return self
+-                .enter_library_program(program, Some(arguments.to_vec()))
++                .enter_library_program(program, Some(arguments[from..].to_vec()))
+                 .map(|value| Begun::Done(Ended::Returned(value)));
+         }
+         // **And the external file ends here for the same reason**, which is
+@@ -817,7 +863,7 @@ impl Interp {
+         // a program, entered the way the command line's is.
+         if let Resolved::External = resolved {
+             return self
+-                .enter_external_program(name, arguments.to_vec(), call_type)
++                .enter_external_program(name, arguments[from..].to_vec(), call_type)
+                 .map(|value| Begun::Done(Ended::Returned(value)));
+         }
+ 
+@@ -826,23 +872,23 @@ impl Interp {
+         // manager is asked.
+         if let Resolved::MergedLibraryRoutine(code) = resolved {
+             return self
+-                .run_library_routine(code, name, arguments)
++                .run_library_routine(code, name, &arguments[from..])
+                 .map(library_begun);
+         }
+         if let Resolved::MergedInternal(row) = resolved {
+             return self
+-                .run_internal_as(row, Some(name), arguments)
++                .run_internal_as(row, InternalName::Called(name), arguments, from)
+                 .map(internal_begun);
+         }
+         if let Resolved::Routine(installed) = resolved {
+             if let Some(code) = self.library_routine_code(installed) {
+                 return self
+-                    .run_library_routine(code, name, arguments)
++                    .run_library_routine(code, name, &arguments[from..])
+                     .map(library_begun);
+             }
+             if let Some(row) = self.rexx_routine_row(installed) {
+                 return self
+-                    .run_internal_as(row, Some(name), arguments)
++                    .run_internal_as(row, InternalName::Called(name), arguments, from)
+                     .map(internal_begun);
+             }
+         }
+@@ -1050,7 +1096,7 @@ impl Interp {
+         let saved_offset = std::mem::take(&mut self.activity.indent_offset);
+         let saved_line = std::mem::take(&mut self.activity.clause_line_override);
+         let inherited = entered_receiver(entered, entry, self.activity.call_context.receiver);
+-        let arguments = self.shared_arguments(arguments);
++        let arguments = self.shared_arguments(&arguments[from..]);
+         let name = self.activity.invocation_name(name);
+         let saved_context = std::mem::replace(
+             &mut self.activity.call_context,
+@@ -1487,7 +1533,7 @@ impl Interp {
+             Resolved::Internal(row) => match self.call_checkpoint(name, &values[mark..]) {
+                 Ok(Some(handled)) => Ok(Started::Ran(Ended::Returned(handled))),
+                 Ok(None) => self
+-                    .run_internal(row, &values[mark..])
++                    .run_internal(row, &mut values, mark)
+                     .map(|started| subroutine_started(internal_begun(started))),
+                 Err(failure) => Err(failure),
+             },
+@@ -1502,7 +1548,8 @@ impl Interp {
+                 .begin_call(
+                     resolved,
+                     name,
+-                    &values[mark..],
++                    &mut values,
++                    mark,
+                     CallType::Subroutine,
+                     CallEntry::Written,
+                 )
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index 349cff23a..770c46288 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -922,26 +922,12 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
+     );
+ }
+ 
+-/// A `Routine` object `~addPublicRoutine` filed as itself stays live in an
+-/// importer's merged table once its own package replaces it, with a
+-/// collection at every allocation in between.
+-#[test]
+-fn an_added_routine_object_survives_in_its_importer() {
+-    let program = concat!(
+-        "p = .context~package\n",
+-        "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
+-        "r = .Package~new('r', 'nop')\n",
+-        "p~addPublicRoutine('C2', u~copy)\n",
+-        "r~addPackage(p)\n",
+-        "p~addPublicRoutine('C2', u)\n",
+-        "do i = 1 to 20\n",
+-        "  zj = 'filler' i\n",
+-        "end\n",
+-        "f = r~findRoutine('C2')\n",
+-        "say (f == u) f~class~id f~call(0)\n",
+-    );
++/// Runs `program` collecting at every allocation and asserts it printed
++/// `0 Routine 0`: a copy of a row's `Routine` object, held only by a routine
++/// table once the package's `.ROUTINES` entry stops naming it, still answers.
++fn assert_added_routine_survives(label: &str, program: &str) {
+     let stress = run_program_collect_every_alloc(
+-        "<added-routine-importer>",
++        label,
+         program.as_bytes().to_vec(),
+         rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
+     );
+@@ -960,6 +946,56 @@ fn an_added_routine_object_survives_in_its_importer() {
+     );
+ }
+ 
++/// The copy is in an importer's merged table, and its own package replaced
++/// it.
++#[test]
++fn an_added_routine_object_survives_in_its_importer() {
++    assert_added_routine_survives(
++        "<added-routine-importer>",
++        concat!(
++            "p = .context~package\n",
++            "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
++            "r = .Package~new('r', 'nop')\n",
++            "p~addPublicRoutine('C2', u~copy)\n",
++            "r~addPackage(p)\n",
++            "p~addPublicRoutine('C2', u)\n",
++            "do i = 1 to 20\n",
++            "  zj = 'filler' i\n",
++            "end\n",
++            "f = r~findRoutine('C2')\n",
++            "say (f == u) f~class~id f~call(0)\n",
++        ),
++    );
++}
++
++/// The copy is in its package's public routines alone once a program
++/// replaced its `.ROUTINES` entry, and an importer merges it after a
++/// collection. Measured, oracle rc 0, `0 Routine 0` for the same program
++/// without the weak reference's line.
++#[test]
++fn an_added_public_routine_object_survives_its_table_entry() {
++    assert_added_routine_survives(
++        "<added-routine-public>",
++        concat!(
++            "p = .context~package\n",
++            "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
++            "d = u~copy\n",
++            "w = .WeakReference~new(d)\n",
++            "p~addPublicRoutine('C3', d)\n",
++            "drop d\n",
++            ".routines['C3'] = u\n",
++            "r = .Package~new('r', 'nop')\n",
++            "do i = 1 to 20\n",
++            "  zj = 'filler' i\n",
++            "end\n",
++            "if w~value == .nil then say 'collected'\n",
++            "r~addPackage(p)\n",
++            "f = r~findRoutine('C3')\n",
++            "say (f == u) f~class~id f~call(0)\n",
++        ),
++    );
++}
++
+ /// A trapped condition's own object survives collect-on-every-allocation.
+ ///
+ /// **Two root paths the exhaustive destructures do not reach**: the object
+diff --git a/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate b/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate
+index a55cea610..7fb3a4bbc 100644
+--- a/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate
++++ b/rust/crates/rexx-exec/tests/stem_sort_untrapped_cases/crate
+@@ -75,3 +75,19 @@ say result s.1 s.2
+ ----
+ rc> 0
+ out> 0 p q
++
++# an error an element's STRING method raises while the sort compares it
++program
++s.0 = 2; s.1 = .k~new; s.2 = 'a'
++call SysStemSort 's.'
++say 'not reached'
++::class k
++::method string
++  raise syntax 93.900 array('boom')
++----
++rc> 163
++err>      6 *-* raise syntax 93.900 array('boom')
++err>        *-* Compiled routine "SYSSTEMSORT".
++err>      2 *-* call SysStemSort 's.'
++err> Error 93 running /t.rex line 2:  Incorrect call to method.
++err> Error 93.900:  boom.
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/routine_object_add_copy.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/routine_object_add_copy.txt
+index f404df63e..c5d3392c8 100644
+--- a/rust/crates/rexx-parse/tests/sourceline_oracle/routine_object_add_copy.txt
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/routine_object_add_copy.txt
+@@ -1,4 +1,4 @@
+-count 26
++count 30
+ /* ~addRoutine of a library or internal row's Routine object, and of a copy
+    of one: findRoutine answers the object added, and a call runs the row. */
+ p = .context~package
+@@ -19,6 +19,10 @@ p~addPublicRoutine('C2', u)
+ do i = 1 to 20; zj = 'filler' i; end
+ f = r~findRoutine('C2')
+ say 'importer' (f == u) (f == p~findRoutine('C2')) f~class~id f~call(0)
++c = u~copy
++p~addRoutine('C4', c)
++.routines['C4'] = u
++say 'written' (p~routines['C4'] == u) (p~routines['C4'] == c) (p~findRoutine('C4') == u)
+ signal on syntax
+ p~addRoutine('M1', .Method~new('m', 'nop'))
+ say 'method added'
