@@ -124,8 +124,11 @@ Class maps are already in state 2, the registry's `by_name` included (`ClassRegi
   has no test regression against the 9b close
   (`docs/superpowers/records/2026-10-13-phase-9b/close2/suite/tests.tsv`), and the corpus
   differential stays green.
-* Memory: 80000 `Method~new` in a loop peaks within 2x of the oracle's RSS under the same memcap, and
-  so do 80000 `Package~new`. Each is measured, and recorded with its command.
+* Memory: nothing grows with the iteration count. For `Method~new`, `Routine~new`, source-string
+  `setMethod`, `Package~new` and the message loop, the 80000-iteration peak RSS is within 10% of the
+  20000-iteration peak. The oracle's figures are recorded beside ours, with the command. The absolute
+  gap to the oracle is collector tuning (the 32 MB collection floor), which the GC-timing licence
+  covers (controller ruling 2026-10-15, after Task 6 measured it; flagged to Moritz).
 * Performance: every bench program stays within +0.5% of the Phase 9 pin
   (`/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run`, sha256 `c4b4e8c4…`), measured as callgrind
   whole-process instructions with libc included (`rust/bench-programs/callgrind.sh -B 0.5`), at
