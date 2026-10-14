@@ -1,0 +1,2927 @@
+# Review package: 62a1a9de6..8294a7908
+
+## Commits
+8294a7908 Phase 9b1 Task 5: report and records
+dd5017a8e Phase 9b1 Task 5: packages are collected
+
+## Files changed
+ .../sdd/2026-10-14-phase-9b1/task-5-report.md      | 238 +++++++
+ .../task-5/callgrind/binaries.txt                  |   4 +
+ .../task-5/callgrind/callgrind.log                 |  14 +
+ .../task-5/callgrind/summary.tsv                   |  72 ++
+ .../task-5/callgrind/table.txt                     |  13 +
+ .../records/2026-10-14-phase-9b1/task-5/memory.txt |  47 ++
+ .../task-5/suite/oracle-differences.tsv            |  31 +
+ .../task-5/suite/run-output.txt                    |  21 +
+ .../2026-10-14-phase-9b1/task-5/suite/table.tsv    |  20 +
+ .../2026-10-14-phase-9b1/task-5/suite/tests.tsv    | 724 +++++++++++++++++++++
+ .../2026-10-14-phase-9b1/task-5/suite/verdicts.tsv |  11 +
+ rust/corpus/lang/package_library_binder_kept.env   |   2 +
+ rust/corpus/lang/package_library_binder_kept.rex   |  18 +
+ rust/corpus/lang/package_rerequire_collected.rex   |  27 +
+ rust/corpus/phase-9.txt                            |   4 +
+ rust/crates/rexx-core/src/body.rs                  | 101 ++-
+ rust/crates/rexx-exec/src/activity.rs              |  24 +
+ rust/crates/rexx-exec/src/condition.rs             |  12 +
+ rust/crates/rexx-exec/src/dispatch/construct.rs    |  11 +-
+ rust/crates/rexx-exec/src/environment.rs           |   2 +-
+ .../crates/rexx-exec/src/environment/identities.rs |  80 ++-
+ rust/crates/rexx-exec/src/install.rs               |  12 +-
+ rust/crates/rexx-exec/src/lib.rs                   |  37 +-
+ rust/crates/rexx-exec/src/run/condition.rs         |   1 +
+ rust/crates/rexx-exec/src/scheduler.rs             |   8 +
+ rust/crates/rexx-exec/src/sim/tests.rs             |  20 +
+ rust/crates/rexx-exec/tests/collect_stress.rs      | 185 +++++-
+ .../rexx-exec/tests/representation_refusals.rs     |   1 -
+ .../package_library_binder_kept.txt                |  19 +
+ .../package_rerequire_collected.txt                |  28 +
+ 30 files changed, 1740 insertions(+), 47 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-14-phase-9b1/task-5-report.md b/.superpowers/sdd/2026-10-14-phase-9b1/task-5-report.md
+new file mode 100644
+index 000000000..ca6634fa5
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-14-phase-9b1/task-5-report.md
+@@ -0,0 +1,238 @@
++# Phase 9b1 Task 5 report: packages are collected
++
++Status: DONE_WITH_CONCERNS. Code commit `dd5017a8e`. Records commit: see the reply.
++
++## What changed
++
++**The global root is gone for program packages.** `Interp::package_object` roots a freshly built
++program package as a temp of the caller's frame and keeps only the REXX package under
++`RootSet::add_global`. In debug builds it asserts that a program package it built is never asked for
++after it was collected (`environment/identities.rs`, `package_object`). In release it rebuilds.
++
++What keeps a program's package alive:
++
++| holder | mechanism | where |
++|---|---|---|
++| an activation of its code, on the running activity | `Interp::package_roots` at each collection, through `Activity::running_programs` | `lib.rs`, `activity.rs` |
++| an activation on an activity that is not running | the same, through `Activities::running_programs` | `scheduler.rs` |
++| the level a failure being unwound came from | `Activity::running_programs` reads `failure_origin`; `hold_origin_package` roots it as a temp where the origin is taken off the activity | `activity.rs`, `condition.rs`, `run/condition.rs` |
++| a class defined in it | `class_holds_package` (`class_owns`) in `record_package_class` and `copy_class_package` | `environment/identities.rs` |
++| a `Method` or `Routine` object of its code | `record_executable` stores the package in the object (`Bound::Code`/`ScopedCode`); every program-sourced `executable_sources.insert` goes through it | `rexx-core/src/body.rs`, `identities.rs`, `install.rs`, `environment.rs` |
++| a `Method`/`Routine` subclass instance | `native_as_instance` moves the package into `NativeState::Executable` | `dispatch/construct.rs`, `body.rs` |
++| the interpreter's own library programs | `package_roots` | `lib.rs` |
++| the package whose `::ROUTINE` first bound an external library procedure | `package_roots` over `library_codes` rows. Measured, the oracle never collects it (`rxmath`, below) | `lib.rs` |
++
++**`rexx-core`.** `NativeObject::annotations` is an `ObjRef` with `ObjRef::NIL` for none, which frees
++8 bytes for `Bound`'s `Code(ObjRef)` and `ScopedCode { scope, package }` beside `Scope(ObjRef)`.
++`NativeObject` stays 104 bytes (the `const` assert). A first version used `ObjRef::NIL` as "no scope"
++inside one variant and broke `context_executable_run_copy.rex` and
++`context_executable_setmethod_copy.rex` (a `.nil` scope is a scope). Separate variants fixed both.
++
++**Requires cache (Step 2).** `required_packages` stays `name -> ProgramId`, and `collect_now` drops
++every entry whose package object did not survive the sweep. `load_requires` builds the package before
++caching it, so an entry and its object always exist together.
++
++**Package annotation tables** are held by the package object's own annotation slot, not by a global
++root (`annotation_table`). `attach_annotations` stores the table before anything allocates.
++
++**`representation_refusals.rs`**: no `ALLOWED` row named Task 5. The `"Task 5"` owner is removed.
++
++## Review Focus 2: re-requiring after collection
++
++Oracle first, from fresh empty directories. With a routine-only file (`y.cls`, a prologue counting
++runs, `::routine yr public`), 4 of 4 runs:
++
++```
++collected 1
++same package 0 same routine 0
++prologs 2
++same again 1 prologs 2
++```
++
++The witness is `rust/corpus/lang/package_rerequire_collected.rex` (in `corpus/phase-9.txt`, with its
++sourceline expectation generated by the `sourceline_oracle.rs` driver on a copy in a scratch
++directory). Oracle stdout, rc 0, empty stderr:
++
++```
++first answered
++collected 1
++again answered 1
++prologs 2
++cached 1 prologs 2
++```
++
++Head: identical. Task 4's binary (`rexx-run-9b1-t4f`): `collected 0`, `again answered 0`,
++`prologs 1`, `cached 1 prologs 1`.
++
++**With a class in the file the crate cannot match, by D59.** The oracle, for `x.cls` defining
++`::class xk public`: `collected 1`, `same class 0`, `prologs 2`. Head: `collected 0`, `same class 1`,
++`prologs 1`. A class keeps its package (`RexxClass::package`), and the crate never collects a class
++(`.object~subclass('t')` in a WeakReference never clears, measured at head and before). See Concerns.
++
++## Review Focus 1 and Step 3: tests
++
++All in `rust/crates/rexx-exec/tests/collect_stress.rs`, oracle-measured first with a 100-pass loop
++of `copies('y', 100000)` (and `.array~new(100)`) in place of the filler, each rc 0 with the stdout
++the test expects:
++
++- `a_package_in_use_is_never_collected`, rows: a running activation (`running 1 1`), an activation
++  waiting on `m~result` while a started activity runs (`idle 1 1 1`), a variable (`variable 1 7`),
++  a class (`class 1 1 1`), a directive routine and a source-text routine (`... 1 1 1`), a source
++  `Method` and a `Method` whose parent is a dropped package copy (`method 1 1 1 9`), `Method` and
++  `Routine` subclass instances (`subclass 1 1 1 1 1`), a package's annotation table
++  (`annotation blue 1`).
++- `a_dropped_package_is_collected`: `Package~new` source with and without directives, and the
++  packages of a dropped `Routine~new` and `Method~new` (`dropped 1 1 1 1`).
++- Simulation mode: `sim::tests::a_package_only_a_waiting_frame_reaches_survives`
++  (`src/sim/tests.rs`), the waiting shape under `sim:{1..4},gc=0.5`, asserting each seed collected.
++  Oracle: `idle 1 1 1` in 3 of 3 runs.
++- Corpus witness `package_library_binder_kept.rex` (+ `.env` putting the oracle's library directory
++  on `LD_LIBRARY_PATH`): oracle `bound 1 1`, `sentinel collected 1`, `binder kept 1 1`, `later lp`.
++
++### TDD evidence
++
++RED, before any code change, `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p
++rexx-exec --test collect_stress -- a_dropped_package_is_collected`: `left: (0, "dropped 0 0 0 0\n")`,
++expected because every package was a global root. The in-use test was green at base (the global root
++held everything), as it should be. GREEN after the change, the same command: `ok`.
++
++### Mutations
++
++Each applied by an exact edit from a saved copy, restored by copy, `git diff --stat` empty after
++each (only the controller's `progress.md`). Script: scratch `t5/mut/mutate.py`.
++
++| id | mutation | command | result |
++|---|---|---|---|
++| M1 | `Activities::running_programs` walks nothing | collect_stress `a_package_in_use`, release; sim test | **both green** (see Concerns) |
++| M2 | `Activity::running_programs` drops `activation.program_id` | collect_stress `a_package_in_use` | red, `running 0 0`; sim test red, `idle 1 0 0` |
++| M3 | `class_holds_package` holds nothing | same | red, `class 0 0 0` |
++| M4 | `record_executable` stores no package | same | red, `directive routine 0 0 0` |
++| M5 | `native_as_instance` carries no package | same | red, `subclass 0 0 0 0 0` |
++| M6 | no `library_codes` anchor | `REXX_CORPUS_GATE=1 ... --test corpus -- corpus_differential`, release | red, `package_library_binder_kept.rex: stdout differ` |
++| M7 | no `library_programs` anchor | collect_stress, release | red, l0 subset: `file_queries.rex` and others, `Constant "SEPARATOR" of object "a File" has not been initialized` |
++| M8 | requires cache keeps dead entries | corpus, release | red, `package_rerequire_collected.rex: stdout, stderr, exit code differ` |
++| M9 | `load_requires` builds the package only for a manager | collect_stress + package_requires, debug | red, l0 subset: `package_requires.rex`, `package_namespace.rex`, `library_callback_packages.rex`, `package_rerequire_collected.rex` |
++| M10a | `running_programs` ignores `failure_origin` | collect_stress l0, debug | red: `Program(ProgramId(8))'s package was asked for after it was collected` |
++| M10b | `hold_origin_package` roots nothing | same | red: `Program(ProgramId(4))'s package ...` (`parse_error_nested_requires.rex`) |
++| M11 | a fresh program package is not pushed as a temp | collect_stress, release | red, 8 tests |
++
++M10a and M10b go red only through the debug assertion in `package_object`, so only a debug run sees
++their removal. The release run of the same program rebuilds the package and prints the same lines.
++
++## Step 4: TESTRECLAIM01
++
++From `rust/`, at `dd5017a8e`:
++
++```
++REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package,base/class/Package_Options,base/directives/REQUIRES,API/oo/METHOD,base/directives/METHOD,base/directives/ROUTINE,base/class/Method,base/class/MethodArgs,base/class/Routine REXX_SUITE_TABLE=<records>/task-5/suite/table.tsv CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite -- --nocapture
++```
++
++Exit 101, `9 groups, 5 red`, the same red groups as Task 4. `tests.tsv`:
++`base/class/Package	TESTRECLAIM01	-	passed	passed`. The sorted rows of these groups differ from
++Task 4's `task-4/suite/tests.tsv` in that one line only (`diff`, one hunk: `blocked: timeout after 60
++s` became `passed`). `base/class/Package` crate: 80 expected, 80 started, 78 passed, failed
++`TEST_NEW01 TEST_PROLOG` (9d set). Records: `docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/`.
++
++## Step 5: memory (NOT met)
++
++`docs/superpowers/records/2026-10-14-phase-9b1/task-5/memory.txt` holds the commands, programs and
++output. `/usr/bin/time -f %M` runs on each interpreter binary directly, under `ulimit -v` and
++`ulimit -t`, with no wrapper.
++
++| program | oracle | head (`t5a`) | Task 4 (`t4f`) |
++|---|---|---|---|
++| 20000 × `p = .Package~new('p', 'return 1')` | 20436 kB | 593424 kB | 639184 kB |
++| 80000 × the same | 20312 kB | 2229888 kB | 2494268 kB |
++| 20000 × the same, each kept in an array | 52028 kB | 635000 kB | 638300 kB |
++| 20000 × `m = .Method~new('m', 'return 1')` | 20436 kB | 449424 kB | 502908 kB |
++
++The package object is collected now: dropped against held is (635000 − 593424) / 20000 = 2.1 kB a
++package, about what the oracle spends holding one ((52028 − 20436) / 20000 = 1.6 kB). What remains
++is (2229888 − 593424) / 60000 = 27.3 kB a `Package~new` that stays after its package is gone: the
++program and its `ProgramId` rows, which the context for this task leaves to Task 6. 80000 is 110x the
++oracle, not 2x.
++
++## Step 6: budget
++
++Head binary `rexx-run-9b1-t5a`, built at `dd5017a8e` (sha256 `9bedbfaa07af3e57c931...`), from `rust/`:
++
++```
++timeout 590 bench-programs/callgrind.sh -B 0.5 -j 12 -p "startup alloc hashnew pkglocal intcall fibcall fibfunc extcall dispatch dispatchclass sendloop varlookup" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-5-a pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t5a
++```
++
++Exit 0, 3 rounds, no OVER, no SPREAD. Records in `task-5/callgrind/`.
++
++| program | whole d% | -libc d% |
++|---|---|---|
++| startup | +0.3156 | +0.4492 |
++| alloc | -1.4278 | -1.9659 |
++| hashnew | -0.0544 | -0.2093 |
++| pkglocal | -7.6359 | -9.0802 |
++| intcall | -10.7959 | -9.9475 |
++| fibcall | -3.4464 | -2.2908 |
++| fibfunc | -3.4985 | -2.3376 |
++| extcall | -13.2641 | -1.7877 |
++| dispatch | -0.4731 | -0.3131 |
++| dispatchclass | -3.7021 | -2.5535 |
++| sendloop | -0.4428 | -0.4685 |
++| varlookup | +0.0030 | +0.0020 |
++
++startup moved from Task 4's +0.3229% to +0.3156%.
++
++## Checks (outputs in the session scratchpad, statuses read unpiped)
++
++| command (from `rust/`) | exit | result |
++|---|---|---|
++| `cargo fmt --all --check` | 0 | at `dd5017a8e` |
++| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings` | 0 | at `dd5017a8e`, after touching `lib.rs` and `body.rs`; it re-checked rexx-core, rexx-api, rexx-classes and rexx-exec |
++| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress` | 0 | at `dd5017a8e`, 46 passed |
++| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 -p rexx-exec --test collect_stress` (debug) | 0 | at `dd5017a8e`, 46 passed, 180 s |
++| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | 0 | at `dd5017a8e`, 29 passed, 1 ignored |
++| the same, debug | 0 | 29 passed, 1 ignored |
++| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 -p rexx-exec --lib` (debug) | 0 | 1122 passed |
++| `CARGO_INCREMENTAL=0 timeout 590 memcap 8G cargo test -j 4 --release -p rexx-exec --lib -- sim::tests` | 0 | at `dd5017a8e`, 24 passed |
++| `... --release -p rexx-exec --test representation_refusals --test refusal_sites --test refusal_dispositions --test owners --test closed_phases --test phase_ten_reasons --test package_requires --test class_lifetime --test class_weak_reference` | 0 | all passed |
++| `... --release -p rexx-core -p rexx-parse` | 0 | all passed, incl. `unsafe_sites` and `sourceline_oracle` |
++| the suite command above | 101 | at `dd5017a8e`, 5 of 9 groups red, as at Task 4; TESTRECLAIM01 passed |
++
++The debug corpus, the debug lib tests, the refusal-table row and the rexx-core/rexx-parse row ran
++at the final source, before the commit. Only `tests/collect_stress.rs` changed after them, and only its
++in-use test's rows.
++
++**collect_stress's l0 subset gained `COLLECTION_TIMED_PROGRAMS`** (stdout not compared, exit and stderr still are):
++`library_package_retried.rex` and `requires_manager_rename.rex`. Each loads a package nothing holds,
++which the weak requires cache drops at a collection, and loads it again. Measured on the oracle with
++a 300-pass `copies('y', 100000)` loop between the two loads: `its class The K3 class` (stands at
++`its class .K3`) and `second load 1 4 events` (stands at `2 events`), the answers the stress run
++gives. Both programs' plain runs still match the oracle in the corpus gate.
++
++## Concerns
++
++1. **Step 5 is not met** and cannot be inside this task's scope: 27.3 kB a `Package~new` is program
++   state (Task 6). The package object itself is now freed (2.1 kB). Suggest that Task 6's Step 4 bar
++   cover `Package~new` too.
++2. **`Activities::running_programs` (the walk of activities that are not running) has no red test.**
++   In every shape I built, something else also reached the waiting activation's package. In the
++   direct `~start` shape, that was the started activity's `Spawner::Frame`: with M1 and the spawner's
++   `frame`/`executable` root both removed, the shape goes red (`idle 1 0 0`). In a two-hop shape
++   (main waits on a message that a worker it started started in turn) the package survived M1 for a
++   reason I did not find. `.Package~new`'s parent field holds the main package too. I kept the walk:
++   it is the same code as the witnessed running-activity walk, applied to the other activities.
++3. **D59 blocks Review Focus 2's class half.** A package that defines a class is never collected,
++   because the class holds it and classes are never collected. The oracle collects both. The
++   routine-only half is witnessed and matches.
++4. **New list in collect_stress** (`COLLECTION_TIMED_PROGRAMS`) under the 2026-09-01 GC-ordering
++   ruling, for the two programs above. Please ratify it or say which way the programs should change.
++5. **Pre-existing defects found, not fixed:**
++   - `.Routine~new('r', 'return 5')~start('CALL')~result` panics, `a live activation` at
++     `activation.rs:1251` (`Interp::activation` from `begin_call`), rc 101. The pin and Task 4's
++     binary do the same. The oracle prints `5`.
++   - A call's return value is kept alive until the next call: `u =
++     .WeakReference~new(.Routine~new('r', 'return .array~new')~call)`, then a churn loop, leaves `u`
++     uncleared, and so does `u = .WeakReference~new(sub())` for an internal routine. A second call
++     releases it. The oracle clears all three, and Task 4's binary behaves like head. It made the
++     first draft of the re-require witness read `collected 0`, so the witness avoids returning the
++     package.
++6. `rexxutil_file_tests.rex` leaves `filetests.d/closed` at mode 000 when its stress run dies early,
++   and the next collect_stress run then fails to empty the run directory (`Permission denied`). This
++   happened twice while the File constant was broken. `chmod u+rwx` on the directory fixed it.
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/binaries.txt
+new file mode 100644
+index 000000000..c59ea6efa
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-14T18:10:10Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# head /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t5a 9bedbfaa07af3e57c9317fa3b0bb2855c036e2cc8f66e1c65e2cd9c162f38c08
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/callgrind.log b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/callgrind.log
+new file mode 100644
+index 000000000..4072cdb3c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/callgrind.log
+@@ -0,0 +1,14 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++startup	119095643	119471560	+0.3156	57373104	57630804	+0.4492	0.0003	0.0000
++alloc	22825677966	22499771747	-1.4278	20362612047	19962294157	-1.9659	0.0000	0.0000
++hashnew	2355780705	2354498012	-0.0544	1588972591	1585646734	-0.2093	0.0000	0.0000
++pkglocal	4185405401	3865811439	-7.6359	3917669232	3561936838	-9.0802	0.0000	0.0000
++intcall	839772904	749111446	-10.7959	660893280	595151043	-9.9475	0.0000	0.0000
++fibcall	9109404880	8795458302	-3.4464	8469931688	8275898378	-2.2908	0.0000	0.0000
++fibfunc	8938581960	8625866457	-3.4985	8300416595	8106383291	-2.3376	0.0000	0.0000
++extcall	8975966670	7785386221	-13.2641	7536919758	7402181809	-1.7877	0.0000	0.0000
++dispatch	22105710210	22001120584	-0.4731	20673777230	20609041087	-0.3131	0.0000	0.0000
++dispatchclass	16952030028	16324448086	-3.7021	15654210021	15254473991	-2.5535	0.0000	0.0000
++sendloop	14584920953	14520335254	-0.4428	13818085980	13753349865	-0.4685	0.0000	0.0000
++varlookup	13194527917	13194925094	+0.0030	13132805929	13133063629	+0.0020	0.0000	0.0000
++# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-5-a
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/summary.tsv
+new file mode 100644
+index 000000000..57c56134d
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/summary.tsv
+@@ -0,0 +1,72 @@
++pin	startup	r1	119095643	61376353	346186	57373104	rc=0
++head	startup	r1	119471560	61493428	347328	57630804	rc=0
++pin	startup	r2	119095643	61376353	346186	57373104	rc=0
++head	startup	r2	119471560	61493428	347328	57630804	rc=0
++pin	startup	r3	119095260	61376115	346041	57373104	rc=0
++head	startup	r3	119471560	61493428	347328	57630804	rc=0
++pin	alloc	r1	22825677701	2462719587	346067	20362612047	rc=0
++head	alloc	r1	22499771747	2537130262	347328	19962294157	rc=0
++pin	alloc	r2	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r2	22499771747	2537130262	347328	19962294157	rc=0
++pin	alloc	r3	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r3	22499771747	2537130262	347328	19962294157	rc=0
++pin	hashnew	r1	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r1	2354497747	768503830	347183	1585646734	rc=0
++pin	hashnew	r2	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r2	2354498012	768503950	347328	1585646734	rc=0
++pin	hashnew	r3	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r3	2354498012	768503950	347328	1585646734	rc=0
++pin	pkglocal	r1	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r1	3865811439	303527287	347314	3561936838	rc=0
++pin	pkglocal	r2	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r2	3865811439	303527287	347314	3561936838	rc=0
++pin	pkglocal	r3	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r3	3865811439	303527287	347314	3561936838	rc=0
++pin	intcall	r1	839772639	178533318	346041	660893280	rc=0
++head	intcall	r1	749111446	153613075	347328	595151043	rc=0
++pin	intcall	r2	839772904	178533438	346186	660893280	rc=0
++head	intcall	r2	749111446	153613075	347328	595151043	rc=0
++pin	intcall	r3	839772904	178533438	346186	660893280	rc=0
++head	intcall	r3	749111446	153613075	347328	595151043	rc=0
++pin	fibcall	r1	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r1	8795458302	519212596	347328	8275898378	rc=0
++pin	fibcall	r2	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r2	8795458302	519212596	347328	8275898378	rc=0
++pin	fibcall	r3	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r3	8795458302	519212596	347328	8275898378	rc=0
++pin	fibfunc	r1	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r1	8625866457	519135838	347328	8106383291	rc=0
++pin	fibfunc	r2	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r2	8625866457	519135838	347328	8106383291	rc=0
++pin	fibfunc	r3	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r3	8625866457	519135838	347328	8106383291	rc=0
++pin	extcall	r1	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r1	7785386221	382781962	422450	7402181809	rc=0
++pin	extcall	r2	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r2	7785386221	382781962	422450	7402181809	rc=0
++pin	extcall	r3	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r3	7785386221	382781962	422450	7402181809	rc=0
++pin	dispatch	r1	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r1	22001120584	1391732183	347314	20609041087	rc=0
++pin	dispatch	r2	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r2	22001120584	1391732183	347314	20609041087	rc=0
++pin	dispatch	r3	22105709945	1431586688	346027	20673777230	rc=0
++head	dispatch	r3	22001120584	1391732183	347314	20609041087	rc=0
++pin	dispatchclass	r1	16952030028	1297473795	346212	15654210021	rc=0
++head	dispatchclass	r1	16324448086	1069626912	347183	15254473991	rc=0
++pin	dispatchclass	r2	16952030028	1297473795	346212	15654210021	rc=0
++head	dispatchclass	r2	16324444210	1069623426	347183	15254473601	rc=0
++pin	dispatchclass	r3	16952030028	1297473795	346212	15654210021	rc=0
++head	dispatchclass	r3	16324448351	1069627032	347328	15254473991	rc=0
++pin	sendloop	r1	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r1	14520334989	766637955	347169	13753349865	rc=0
++pin	sendloop	r2	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r2	14520335254	766638075	347314	13753349865	rc=0
++pin	sendloop	r3	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r3	14520335254	766638075	347314	13753349865	rc=0
++pin	varlookup	r1	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r1	13194925359	61514402	347328	13133063629	rc=0
++pin	varlookup	r2	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r2	13194924976	61514164	347183	13133063629	rc=0
++pin	varlookup	r3	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r3	13194925094	61514282	347183	13133063629	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/table.txt
+new file mode 100644
+index 000000000..ce11fa7bf
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/callgrind/table.txt
+@@ -0,0 +1,13 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++startup	119095643	119471560	+0.3156	57373104	57630804	+0.4492	0.0003	0.0000
++alloc	22825677966	22499771747	-1.4278	20362612047	19962294157	-1.9659	0.0000	0.0000
++hashnew	2355780705	2354498012	-0.0544	1588972591	1585646734	-0.2093	0.0000	0.0000
++pkglocal	4185405401	3865811439	-7.6359	3917669232	3561936838	-9.0802	0.0000	0.0000
++intcall	839772904	749111446	-10.7959	660893280	595151043	-9.9475	0.0000	0.0000
++fibcall	9109404880	8795458302	-3.4464	8469931688	8275898378	-2.2908	0.0000	0.0000
++fibfunc	8938581960	8625866457	-3.4985	8300416595	8106383291	-2.3376	0.0000	0.0000
++extcall	8975966670	7785386221	-13.2641	7536919758	7402181809	-1.7877	0.0000	0.0000
++dispatch	22105710210	22001120584	-0.4731	20673777230	20609041087	-0.3131	0.0000	0.0000
++dispatchclass	16952030028	16324448086	-3.7021	15654210021	15254473991	-2.5535	0.0000	0.0000
++sendloop	14584920953	14520335254	-0.4428	13818085980	13753349865	-0.4685	0.0000	0.0000
++varlookup	13194527917	13194925094	+0.0030	13132805929	13133063629	+0.0020	0.0000	0.0000
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/memory.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/memory.txt
+new file mode 100644
+index 000000000..d0591bc29
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/memory.txt
+@@ -0,0 +1,47 @@
++# Peak RSS, /usr/bin/time -f %M on each interpreter binary itself, from a fresh empty directory.
++# oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f 'oracle NAME %M kB' /home/moritz/dev/repos/ooRexx/build/bin/rexx NAME.rex )
++# crate:  ( ulimit -v 4194304 -t 120; /usr/bin/time -f 'BIN NAME %M kB' BIN NAME.rex )
++# rexx-run-9b1-t5a is built at dd5017a8e; rexx-run-9b1-t4f is Task 4's final binary.
++
++oracle pkgloop20k 20436 kB
++oracle pkgloop80k 20312 kB
++oracle pkghold20k 52028 kB
++oracle methloop20k 20436 kB
++rexx-run-9b1-t5a pkgloop20k 593424 kB
++rexx-run-9b1-t5a pkgloop40k 1146484 kB
++rexx-run-9b1-t5a pkgloop80k 2229888 kB
++rexx-run-9b1-t5a pkghold20k 635000 kB
++rexx-run-9b1-t5a methloop20k 449424 kB
++rexx-run-9b1-t4f pkgloop20k 639184 kB
++rexx-run-9b1-t4f pkgloop40k 1256980 kB
++rexx-run-9b1-t4f pkgloop80k 2494268 kB
++rexx-run-9b1-t4f pkghold20k 638300 kB
++rexx-run-9b1-t4f methloop20k 502908 kB
++
++# programs
++== pkgloop20k.rex
++do i = 1 to 20000
++  p = .Package~new('p', 'return 1')
++end
++say 'done'
++== pkgloop40k.rex
++do i = 1 to 40000
++  p = .Package~new('p', 'return 1')
++end
++say 'done'
++== pkgloop80k.rex
++do i = 1 to 80000
++  p = .Package~new('p', 'return 1')
++end
++say 'done'
++== pkghold20k.rex
++a = .array~new
++do i = 1 to 20000
++  a~append(.Package~new('p', 'return 1'))
++end
++say 'done'
++== methloop20k.rex
++do i = 1 to 20000
++  m = .Method~new('m', 'return 1')
++end
++say 'done'
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/oracle-differences.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/oracle-differences.tsv
+new file mode 100644
+index 000000000..6efa867d9
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/oracle-differences.tsv
+@@ -0,0 +1,31 @@
++# ootest revision 13178
++group	test	oracle	crate
++API/oo/METHOD	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	passed	failed
++base/class/Method	TEST_NEW_ARRAY_FROM_FILE	passed	failed
++base/class/Method	TEST_NEW_FILE_COMPILED	passed	failed
++base/class/Package	TEST_NEW01	passed	failed
++base/class/Package	TEST_PROLOG	passed	failed
++base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	passed	failed
++base/class/Routine	TEST_NEW_FILE_COMPILED	passed	failed
++base/directives/REQUIRES	TEST_ACTIVATE	passed	failed
++base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	passed	failed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	passed	failed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	passed	failed
++base/directives/REQUIRES	TEST_PROLOG	passed	failed
++base/directives/REQUIRES	TEST_PROLOG2	passed	failed
++base/directives/REQUIRES	TEST_PROLOG3	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	passed	failed
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/run-output.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/run-output.txt
+new file mode 100644
+index 000000000..0e0447eb7
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/run-output.txt
+@@ -0,0 +1,21 @@
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 1m 19s
++     Running tests/suite.rs (target/release/deps/suite-ce2523362fb74026)
++
++running 1 test
++suite: 9 groups, 5 red, table /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/table.tsv, verdicts /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/verdicts.tsv
++
++thread 'l3_core_suite' (542641) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
++5 of 9 groups are not green; each reason is in /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/verdicts.tsv
++note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
++test l3_core_suite ... FAILED
++
++failures:
++
++failures:
++    l3_core_suite
++
++test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 5.28s
++
++error: test failed, to rerun pass `-p rexx-exec --test suite`
++exit 101
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/table.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/table.tsv
+new file mode 100644
+index 000000000..6a8258bf2
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/table.tsv
+@@ -0,0 +1,20 @@
++# ootest revision 13178
++group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
++API/oo/METHOD	oracle	320	320	320			-	-	1	yes	ulimit -v 1048576	320
++API/oo/METHOD	crate	320	320	319	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA		-	-	1	yes	memcap 2G	320
++base/class/Method	oracle	56	56	56			-	-	1	yes	ulimit -v 1048576	56
++base/class/Method	crate	56	56	54	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	56
++base/class/MethodArgs	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
++base/class/MethodArgs	crate	10	10	10			-	-	1	yes	memcap 2G	10
++base/class/Package	oracle	80	80	80			-	-	1	yes	ulimit -v 1048576	80
++base/class/Package	crate	80	80	78	TEST_NEW01 TEST_PROLOG		-	-	1	yes	memcap 2G	80
++base/class/Package_Options	oracle	54	54	54			-	-	1	yes	ulimit -v 1048576	54
++base/class/Package_Options	crate	54	54	54			-	-	1	yes	memcap 2G	54
++base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
++base/class/Routine	crate	60	60	58	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	60
++base/directives/METHOD	oracle	78	78	78			-	-	1	yes	ulimit -v 1048576	78
++base/directives/METHOD	crate	78	78	78			-	-	1	yes	memcap 2G	78
++base/directives/REQUIRES	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
++base/directives/REQUIRES	crate	33	33	13	TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP		-	-	1	yes	memcap 2G	33
++base/directives/ROUTINE	oracle	28	30	30			-	-	1	yes	ulimit -v 1048576	30
++base/directives/ROUTINE	crate	28	30	28		TESTEXTERNALREGISTEREDBADLIBRARYNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi) | TESTEXTERNALREGISTEREDBADNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)	-	-	3	yes	memcap 2G	28
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/tests.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/tests.tsv
+new file mode 100644
+index 000000000..1eb4ed03f
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/tests.tsv
+@@ -0,0 +1,724 @@
++# ootest revision 13178
++# groups base/class/Package,base/class/Package_Options,base/directives/REQUIRES,API/oo/METHOD,base/directives/METHOD,base/directives/ROUTINE,base/class/Method,base/class/MethodArgs,base/class/Routine
++group	test	row	oracle	crate
++API/oo/METHOD	TEST000	-	passed	passed
++API/oo/METHOD	TEST001	-	passed	passed
++API/oo/METHOD	TEST002	-	passed	passed
++API/oo/METHOD	TEST003	-	passed	passed
++API/oo/METHOD	TEST004	-	passed	passed
++API/oo/METHOD	TEST005	-	passed	passed
++API/oo/METHOD	TEST006	-	passed	passed
++API/oo/METHOD	TEST007	-	passed	passed
++API/oo/METHOD	TEST008	-	passed	passed
++API/oo/METHOD	TEST009	-	passed	passed
++API/oo/METHOD	TEST010	-	passed	passed
++API/oo/METHOD	TEST011	-	passed	passed
++API/oo/METHOD	TEST012	-	passed	passed
++API/oo/METHOD	TEST013	-	passed	passed
++API/oo/METHOD	TEST014	-	passed	passed
++API/oo/METHOD	TEST015	-	passed	passed
++API/oo/METHOD	TEST016	-	passed	passed
++API/oo/METHOD	TEST017	-	passed	passed
++API/oo/METHOD	TEST018	-	passed	passed
++API/oo/METHOD	TEST019	-	passed	passed
++API/oo/METHOD	TEST020	-	passed	passed
++API/oo/METHOD	TEST021	-	passed	passed
++API/oo/METHOD	TEST022	-	passed	passed
++API/oo/METHOD	TEST023	-	passed	passed
++API/oo/METHOD	TEST023A	-	passed	passed
++API/oo/METHOD	TEST024	-	passed	passed
++API/oo/METHOD	TEST024A	-	passed	passed
++API/oo/METHOD	TEST025	-	passed	passed
++API/oo/METHOD	TEST026	-	passed	passed
++API/oo/METHOD	TEST027	-	passed	passed
++API/oo/METHOD	TEST028	-	passed	passed
++API/oo/METHOD	TEST029	-	passed	passed
++API/oo/METHOD	TEST030	-	passed	passed
++API/oo/METHOD	TEST031	-	passed	passed
++API/oo/METHOD	TEST046	-	passed	passed
++API/oo/METHOD	TESTARGLIST01	-	passed	passed
++API/oo/METHOD	TESTARRAY01	-	passed	passed
++API/oo/METHOD	TESTARRAY02	-	passed	passed
++API/oo/METHOD	TESTARRAY03	-	passed	passed
++API/oo/METHOD	TESTARRAY04	-	passed	passed
++API/oo/METHOD	TESTARRAY05	-	passed	passed
++API/oo/METHOD	TESTARRAYAPPEND01	-	passed	passed
++API/oo/METHOD	TESTARRAYAPPENDSTRING01	-	passed	passed
++API/oo/METHOD	TESTARRAYAT01	-	passed	passed
++API/oo/METHOD	TESTARRAYAT02	-	passed	passed
++API/oo/METHOD	TESTARRAYAT03	-	passed	passed
++API/oo/METHOD	TESTARRAYAT04	-	passed	passed
++API/oo/METHOD	TESTARRAYDIMENSION01	-	passed	passed
++API/oo/METHOD	TESTARRAYITEMS01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFFOUR01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFONE01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFTHREE01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFTWO01	-	passed	passed
++API/oo/METHOD	TESTARRAYPUT01	-	passed	passed
++API/oo/METHOD	TESTARRAYSIZE01	-	passed	passed
++API/oo/METHOD	TESTBUFFER01	-	passed	passed
++API/oo/METHOD	TESTBUFFERNEW01	-	passed	passed
++API/oo/METHOD	TESTCLASS01	-	passed	passed
++API/oo/METHOD	TESTCLASS02	-	passed	passed
++API/oo/METHOD	TESTCLASS03	-	passed	passed
++API/oo/METHOD	TESTCLASS04	-	passed	passed
++API/oo/METHOD	TESTCSTRING01	-	passed	passed
++API/oo/METHOD	TESTCSTRING02	-	passed	passed
++API/oo/METHOD	TESTCSTRINGTOOBJECT	-	passed	passed
++API/oo/METHOD	TESTDIRECTORY01	-	passed	passed
++API/oo/METHOD	TESTDIRECTORY02	-	passed	passed
++API/oo/METHOD	TESTDIRECTORY03	-	passed	passed
++API/oo/METHOD	TESTDOUBLE01	-	passed	passed
++API/oo/METHOD	TESTDOUBLE02	-	passed	passed
++API/oo/METHOD	TESTDOUBLETOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTDROPOBJECTVARIABLE01	-	passed	passed
++API/oo/METHOD	TESTDROPSTEMARRAYELEMENT01	-	passed	passed
++API/oo/METHOD	TESTDROPSTEMELEMENT01	-	passed	passed
++API/oo/METHOD	TESTFINDCONTEXTCLASS01	-	passed	passed
++API/oo/METHOD	TESTFINDCONTEXTCLASS02	-	passed	passed
++API/oo/METHOD	TESTFLOAT01	-	passed	passed
++API/oo/METHOD	TESTFLOAT02	-	passed	passed
++API/oo/METHOD	TESTGETALLSTEMELEMENTS01	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT01	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT02	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT03	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT04	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENTS01	-	passed	passed
++API/oo/METHOD	TESTGETMETHOD01	-	passed	passed
++API/oo/METHOD	TESTGETMETHODPACKAGE01	-	passed	passed
++API/oo/METHOD	TESTGETOBJECTVARIABLE01	-	passed	passed
++API/oo/METHOD	TESTGETOBJECTVARIABLE02	-	passed	passed
++API/oo/METHOD	TESTGETOBJECTVARIABLE03	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGECLASSES01	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGEPUBLICCLASSES01	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGEPUBLICROUTINES01	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGEROUTINES01	-	passed	passed
++API/oo/METHOD	TESTGETROUTINEPACKAGE01	-	passed	passed
++API/oo/METHOD	TESTGETSTEMARRAYELEMENT01	-	passed	passed
++API/oo/METHOD	TESTGETSTEMARRAYELEMENT02	-	passed	passed
++API/oo/METHOD	TESTGETSTEMELEMENT01	-	passed	passed
++API/oo/METHOD	TESTGETSTEMELEMENT02	-	passed	passed
++API/oo/METHOD	TESTGETSTEMELEMENT03	-	passed	passed
++API/oo/METHOD	TESTGETSTEMVALUE01	-	passed	passed
++API/oo/METHOD	TESTHASMETHOD01	-	passed	passed
++API/oo/METHOD	TESTINT01	-	passed	passed
++API/oo/METHOD	TESTINT02	-	passed	passed
++API/oo/METHOD	TESTINT03	-	passed	passed
++API/oo/METHOD	TESTINT1601	-	passed	passed
++API/oo/METHOD	TESTINT1602	-	passed	passed
++API/oo/METHOD	TESTINT1603	-	passed	passed
++API/oo/METHOD	TESTINT3201	-	passed	passed
++API/oo/METHOD	TESTINT3202	-	passed	passed
++API/oo/METHOD	TESTINT3203	-	passed	passed
++API/oo/METHOD	TESTINT32TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTINT6401	-	passed	passed
++API/oo/METHOD	TESTINT6402	-	passed	passed
++API/oo/METHOD	TESTINT6403	-	passed	passed
++API/oo/METHOD	TESTINT64TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTINT801	-	passed	passed
++API/oo/METHOD	TESTINT802	-	passed	passed
++API/oo/METHOD	TESTINT803	-	passed	passed
++API/oo/METHOD	TESTINTPTR01	-	passed	passed
++API/oo/METHOD	TESTINTPTR02	-	passed	passed
++API/oo/METHOD	TESTINTPTR03	-	passed	passed
++API/oo/METHOD	TESTINTPTRTOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTISARRAY01	-	passed	passed
++API/oo/METHOD	TESTISINSTANCEOF01	-	passed	passed
++API/oo/METHOD	TESTISMETHOD01	-	passed	passed
++API/oo/METHOD	TESTISMUTABLEBUFFER	-	passed	passed
++API/oo/METHOD	TESTISROUTINE01	-	passed	passed
++API/oo/METHOD	TESTISSTEM01	-	passed	passed
++API/oo/METHOD	TESTISSTRING01	-	passed	passed
++API/oo/METHOD	TESTLOGICAL01	-	passed	passed
++API/oo/METHOD	TESTLOGICAL02	-	passed	passed
++API/oo/METHOD	TESTLOGICAL03	-	passed	passed
++API/oo/METHOD	TESTLOGICALTOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTMUTABLEBUFFERCAPACITY	-	passed	passed
++API/oo/METHOD	TESTMUTABLEBUFFERLENGTH	-	passed	passed
++API/oo/METHOD	TESTNAME01	-	passed	passed
++API/oo/METHOD	TESTNAME02	-	passed	passed
++API/oo/METHOD	TESTNEWARRAY01	-	passed	passed
++API/oo/METHOD	TESTNEWMETHOD01	-	passed	passed
++API/oo/METHOD	TESTNEWMETHOD02	-	passed	passed
++API/oo/METHOD	TESTNEWMUTABLEBUFFER	-	passed	passed
++API/oo/METHOD	TESTNEWROUTINE01	-	passed	passed
++API/oo/METHOD	TESTNEWROUTINE02	-	passed	passed
++API/oo/METHOD	TESTNEWSTEM01	-	passed	passed
++API/oo/METHOD	TESTNEWSTRING	-	passed	passed
++API/oo/METHOD	TESTNEWSTRINGFROMASCIIZ	-	passed	passed
++API/oo/METHOD	TESTNONNEGATIVEWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTNONNEGATIVEWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTNONNEGATIVEWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTOBJECT01	-	passed	passed
++API/oo/METHOD	TESTOBJECT02	-	passed	passed
++API/oo/METHOD	TESTOBJECT03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOCSTRING	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE01A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3201	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3202	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3202A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3203	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3203A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6401	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6402	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6402A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6403	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6403A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRING01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6401	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6402	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6402A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6403	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6403A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER03A	-	passed	passed
++API/oo/METHOD	TESTOSELF01	-	passed	passed
++API/oo/METHOD	TESTOSELF02	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER04	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION001	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION01	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION101	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION201	-	passed	passed
++API/oo/METHOD	TESTSCOPE01	-	passed	passed
++API/oo/METHOD	TESTSCOPE02	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE001	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE002	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE003	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE01	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE02	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE03	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE04	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE101	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE102	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE103	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE201	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE202	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE203	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE204	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGESCOPED	-	passed	passed
++API/oo/METHOD	TESTSETGETMUTABLEBUFFER	-	passed	passed
++API/oo/METHOD	TESTSETMUTABLEBUFFERCAPACITY	-	passed	passed
++API/oo/METHOD	TESTSETMUTABLEBUFFERLENGTH	-	passed	passed
++API/oo/METHOD	TESTSETOBJECTVARIABLE01	-	passed	passed
++API/oo/METHOD	TESTSETSTEMARRAYELEMENT01	-	passed	passed
++API/oo/METHOD	TESTSETSTEMELEMENT01	-	passed	passed
++API/oo/METHOD	TESTSIZE01	-	passed	passed
++API/oo/METHOD	TESTSIZE02	-	passed	passed
++API/oo/METHOD	TESTSIZE03	-	passed	passed
++API/oo/METHOD	TESTSSIZE01	-	passed	passed
++API/oo/METHOD	TESTSSIZE02	-	passed	passed
++API/oo/METHOD	TESTSSIZE03	-	passed	passed
++API/oo/METHOD	TESTSTEM01	-	passed	passed
++API/oo/METHOD	TESTSTEM02	-	passed	passed
++API/oo/METHOD	TESTSTEM03	-	passed	passed
++API/oo/METHOD	TESTSTEM04	-	passed	passed
++API/oo/METHOD	TESTSTEM05	-	passed	passed
++API/oo/METHOD	TESTSTRING01	-	passed	passed
++API/oo/METHOD	TESTSTRING02	-	passed	passed
++API/oo/METHOD	TESTSTRING03	-	passed	passed
++API/oo/METHOD	TESTSTRING04	-	passed	passed
++API/oo/METHOD	TESTSTRINGDATA01	-	passed	passed
++API/oo/METHOD	TESTSTRINGGET01	-	passed	passed
++API/oo/METHOD	TESTSTRINGLENGTH01	-	passed	passed
++API/oo/METHOD	TESTSTRINGLOWER01	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZE01	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZE02	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZE03	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZETOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTSTRINGTABLE01	-	passed	passed
++API/oo/METHOD	TESTSTRINGTABLE02	-	passed	passed
++API/oo/METHOD	TESTSTRINGTABLE03	-	passed	passed
++API/oo/METHOD	TESTSTRINGUPPER01	-	passed	passed
++API/oo/METHOD	TESTSUPER01	-	passed	passed
++API/oo/METHOD	TESTSUPER02	-	passed	passed
++API/oo/METHOD	TESTSUPPLIER01	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT02	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT02A	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT03	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT03A	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION001	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION01	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION101	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION201	-	passed	passed
++API/oo/METHOD	TESTUINT1601	-	passed	passed
++API/oo/METHOD	TESTUINT1602	-	passed	passed
++API/oo/METHOD	TESTUINT1603	-	passed	passed
++API/oo/METHOD	TESTUINT3201	-	passed	passed
++API/oo/METHOD	TESTUINT3202	-	passed	passed
++API/oo/METHOD	TESTUINT3203	-	passed	passed
++API/oo/METHOD	TESTUINT6401	-	passed	passed
++API/oo/METHOD	TESTUINT6402	-	passed	passed
++API/oo/METHOD	TESTUINT6403	-	passed	passed
++API/oo/METHOD	TESTUINT801	-	passed	passed
++API/oo/METHOD	TESTUINT802	-	passed	passed
++API/oo/METHOD	TESTUINT803	-	passed	passed
++API/oo/METHOD	TESTUINTPTR01	-	passed	passed
++API/oo/METHOD	TESTUINTPTR02	-	passed	passed
++API/oo/METHOD	TESTUINTPTR03	-	passed	passed
++API/oo/METHOD	TESTUINTPTRTOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTUNSIGNEDINT32TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTUNSIGNEDINT64TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTVERSION01	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBERTOOBJECT01	-	passed	passed
++API/oo/METHOD	TEST_BUG_1838	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_NIL	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_NO_HEX00	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_NO_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_GETOBJECTVARIABLEREFERENCE	-	passed	passed
++API/oo/METHOD	TEST_ISVARIABLEREFERENCE	-	passed	passed
++API/oo/METHOD	TEST_OBJECTMEMORY	-	passed	passed
++API/oo/METHOD	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	-	passed	failed
++API/oo/METHOD	TEST_REXXSTRING_HEX00	-	passed	passed
++API/oo/METHOD	TEST_REXXSTRING_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_REXXSTRING_NO_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_REXXSTRING_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_SETVARIABLEREFERENCEVALUE	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E20	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E21	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E22	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E23	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E24	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E25	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E26	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E27	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E28	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E29	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_PASS	-	passed	passed
++API/oo/METHOD	TEST_VARIABLEREFERENCENAME	-	passed	passed
++API/oo/METHOD	TEST_VARIABLEREFERENCEVALUE	-	passed	passed
++base/class/Method	TESTDIRECTIVES	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD01	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD02	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD03	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD04	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD05	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD06	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD07	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD08	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHOD	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_OMITTED	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_ROUTINE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Method	TEST_NEWFILE_NO_ARGS	-	passed	passed
++base/class/Method	TEST_NEWFILE_ONE_ARG_NIL	-	passed	passed
++base/class/Method	TEST_NEWFILE_THREE_ARGS	-	passed	passed
++base/class/Method	TEST_NEWFILE_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Method	TEST_NEWFILE_TWO_ARGS_STRING_BUFFER	-	passed	passed
++base/class/Method	TEST_NEWFILE_TWO_ARGS_STRING_NULL	-	passed	passed
++base/class/Method	TEST_NEW_AND_SOURCE	-	passed	passed
++base/class/Method	TEST_NEW_ARRAY_FROM_FILE	-	passed	failed
++base/class/Method	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_OMITTED	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Method	TEST_NEW_FILE_COMPILED	-	passed	failed
++base/class/Method	TEST_NEW_FOUR_ARGS	-	passed	passed
++base/class/Method	TEST_NEW_NO_ARGS	-	passed	passed
++base/class/Method	TEST_NEW_ONE_ARG	-	passed	passed
++base/class/Method	TEST_NEW_ONE_ARG_NIL	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_OMITTED_STRING_STRING	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_STRING_OMITTED_STRING	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_STRING_STRING_NULL	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_STRING_ARRAY_NON_STRING	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_STRING_NIL	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_STRING_SPARSE_ARRAY	-	passed	passed
++base/class/Method	TEST_ROUTINE_SOURCE_COMMENT	-	passed	passed
++base/class/Method	TEST_ROUTINE_SOURCE_NOP	-	passed	passed
++base/class/Method	TEST_ROUTINE_SOURCE_WHITESPACE	-	passed	passed
++base/class/Method	TEST_SOURCE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_CLASS	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_FILE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_MESSAGE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_METHOD	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_MUTABLEBUFFER	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_OBJECT	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_PACKAGE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_ROUTINE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_STREAM	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_STRING	-	passed	passed
++base/class/Package	TESTADDCLASS01	-	passed	passed
++base/class/Package	TESTADDCLASS02	-	passed	passed
++base/class/Package	TESTADDCLASS03	-	passed	passed
++base/class/Package	TESTADDCLASS04	-	passed	passed
++base/class/Package	TESTADDNAMESPACEPACKAGE	-	passed	passed
++base/class/Package	TESTADDPACKAGEBADNAMESPACENAME	-	passed	passed
++base/class/Package	TESTADDPACKAGENOARGS	-	passed	passed
++base/class/Package	TESTADDPACKAGENONEPACKAGE	-	passed	passed
++base/class/Package	TESTADDPACKAGETOOMANYARGS	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS01	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS02	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS03	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS04	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE01	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE02	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE03	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE04	-	passed	passed
++base/class/Package	TESTADDROUTINE01	-	passed	passed
++base/class/Package	TESTADDROUTINE02	-	passed	passed
++base/class/Package	TESTADDROUTINE03	-	passed	passed
++base/class/Package	TESTADDROUTINE04	-	passed	passed
++base/class/Package	TESTANNOTATIONNOARGS	-	passed	passed
++base/class/Package	TESTANNOTATIONNOSTRING	-	passed	passed
++base/class/Package	TESTANNOTATIONTWOARGS	-	passed	passed
++base/class/Package	TESTCLASSES01	-	passed	passed
++base/class/Package	TESTFINDCLASSNOARGS	-	passed	passed
++base/class/Package	TESTFINDCLASSNOSTRING	-	passed	passed
++base/class/Package	TESTFINDCLASSTWOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSNOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSNOSTRING	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSTWOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINENOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINENOSTRING	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINETWOARGS	-	passed	passed
++base/class/Package	TESTFINDROUTINENOARGS	-	passed	passed
++base/class/Package	TESTFINDROUTINENOSTRING	-	passed	passed
++base/class/Package	TESTFINDROUTINETWOARGS	-	passed	passed
++base/class/Package	TESTIMPORTEDCLASSES01	-	passed	passed
++base/class/Package	TESTIMPORTEDROUTINES01	-	passed	passed
++base/class/Package	TESTLOADLIBRARY01	-	passed	passed
++base/class/Package	TESTLOADLIBRARY02	-	passed	passed
++base/class/Package	TESTLOADLIBRARY03	-	passed	passed
++base/class/Package	TESTMETHODS01	-	passed	passed
++base/class/Package	TESTRECLAIM01	-	passed	passed
++base/class/Package	TESTROUTINES01	-	passed	passed
++base/class/Package	TESTSOURCE01	-	passed	passed
++base/class/Package	TESTSOURCELINEBADLINENUMBER	-	passed	passed
++base/class/Package	TESTSOURCELINENOARGS	-	passed	passed
++base/class/Package	TESTSOURCELINEOUTOFRANGE	-	passed	passed
++base/class/Package	TESTSOURCELINEZEROLINENUMBER	-	passed	passed
++base/class/Package	TEST_NEW01	-	passed	failed
++base/class/Package	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_NIL	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_NULL	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_HASHBANG	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_NO_ENDOFLINE	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_NO_ENDOFLINE_ARRAY	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_SEMICOLON	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_SEMICOLON_ARRAY	-	passed	passed
++base/class/Package	TEST_NON_STRING_ARRAY_VALUE	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_ARG_NOSTRING	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_NO_ARG	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_NULLSTRING	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_REXXTRY	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_TWO_ARGS	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_GET_EMPTY	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_ONE_ARG	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_SET	-	passed	passed
++base/class/Package	TEST_PROLOG	-	passed	failed
++base/class/Package	TEST_SPARSE_ARRAY_SOURCE	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_DEFAULTS	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_1	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_10	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_11	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_2	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_3	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_4	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_5	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_6	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_7	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_8	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_9	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OVERRIDE_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OVERRIDE_OPTION_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_DEFAULT_OPTIONS_OVERRIDES	-	passed	passed
++base/class/Package_Options	TEST_INSTANCE_OPTIONS_OVERRIDE_ERROR_2	-	passed	passed
++base/class/Package_Options	TEST_INSTANCE_OPTIONS_OVERRIDE_OPTION_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_ALL_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_3	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_4	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_5	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_6	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_3	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_4	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FORM_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_3	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_4	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_INITIALPACKAGESETTINGS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_INITIALPACKAGESETTINGS_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_NUMERIC_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_NUMERIC_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_NUMERIC_ARG_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_MINUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_CALL_2_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_MINUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_2_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_PROLOG_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_SETPACKAGEOPTIONS_RESET	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_TRACE_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTION_X	-	passed	passed
++base/class/Package_Options	TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_2	-	passed	passed
++base/class/Routine	TESTCALL	-	passed	passed
++base/class/Routine	TESTCALLWITH	-	passed	passed
++base/class/Routine	TESTDIRECTIVES	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE01	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE02	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE03	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE04	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE05	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE06	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE07	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE08	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE09	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHOD	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_OMITTED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_ROUTINE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_HASHBANG	-	passed	passed
++base/class/Routine	TEST_NEWFILE_NO_ARGS	-	passed	passed
++base/class/Routine	TEST_NEWFILE_ONE_ARG_NIL	-	passed	passed
++base/class/Routine	TEST_NEWFILE_THREE_ARGS	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_STRING_BUFFER	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_STRING_NULL	-	passed	passed
++base/class/Routine	TEST_NEW_AND_SOURCE	-	passed	passed
++base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	-	passed	failed
++base/class/Routine	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_OMITTED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_FILE_COMPILED	-	passed	failed
++base/class/Routine	TEST_NEW_FOUR_ARGS	-	passed	passed
++base/class/Routine	TEST_NEW_HASHBANG	-	passed	passed
++base/class/Routine	TEST_NEW_NO_ARGS	-	passed	passed
++base/class/Routine	TEST_NEW_ONE_ARG	-	passed	passed
++base/class/Routine	TEST_NEW_ONE_ARG_NIL	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_OMITTED_STRING_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_STRING_NULL	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_ARRAY_NON_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_NIL	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_SPARSE_ARRAY	-	passed	passed
++base/class/Routine	TEST_NON_STRING_ARRAY_VALUE	-	passed	passed
++base/class/Routine	TEST_ROUTINE_SOURCE	-	passed	passed
++base/class/Routine	TEST_SPARSE_ARRAY_SOURCE	-	passed	passed
++base/directives/METHOD	TESTABSTRACTEXTERNAL	-	passed	passed
++base/directives/METHOD	TESTABSTRACTMETHOD	-	passed	passed
++base/directives/METHOD	TESTABSTRACTTWICE	-	passed	passed
++base/directives/METHOD	TESTARGCOUNT	-	passed	passed
++base/directives/METHOD	TESTARGUMENTPASSING	-	passed	passed
++base/directives/METHOD	TESTATTRIBUTECODEBODY	-	passed	passed
++base/directives/METHOD	TESTATTRIBUTEMETHODS	-	passed	passed
++base/directives/METHOD	TESTATTRIBUTETWICE	-	passed	passed
++base/directives/METHOD	TESTBADNAME	-	passed	passed
++base/directives/METHOD	TESTBADOPTION	-	passed	passed
++base/directives/METHOD	TESTCALLTYPE	-	passed	passed
++base/directives/METHOD	TESTCLASSANDINSTANCE	-	passed	passed
++base/directives/METHOD	TESTCLASSTWICE	-	passed	passed
++base/directives/METHOD	TESTCONTEXTNAME	-	passed	passed
++base/directives/METHOD	TESTCONTEXTPACKAGE	-	passed	passed
++base/directives/METHOD	TESTDELEGATE	-	passed	passed
++base/directives/METHOD	TESTDUPLICATE	-	passed	passed
++base/directives/METHOD	TESTDUPLICATE2	-	passed	passed
++base/directives/METHOD	TESTEMPTYMETHOD	-	passed	passed
++base/directives/METHOD	TESTEXECUTABLE	-	passed	passed
++base/directives/METHOD	TESTEXTERNALABSTRACT	-	passed	passed
++base/directives/METHOD	TESTEXTERNALCODEBODY	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADLIBRARYNAME	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADNAME	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADROUTINETYPE	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADSPECTYPE	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYEXTRATOKEN	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYMISSINGLIBRARYNAME	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYMISSINGSPEC	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYNOTMETHOD	-	passed	passed
++base/directives/METHOD	TESTEXTERNALMETHOD	-	passed	passed
++base/directives/METHOD	TESTEXTERNALNULLSTRING	-	passed	passed
++base/directives/METHOD	TESTEXTERNALTWICE	-	passed	passed
++base/directives/METHOD	TESTGETATTRIBUTEARGUMENTS	-	passed	passed
++base/directives/METHOD	TESTGUARDEDACCESS	-	passed	passed
++base/directives/METHOD	TESTGUARDEDTWICE	-	passed	passed
++base/directives/METHOD	TESTGUARDEDUNGUARDED	-	passed	passed
++base/directives/METHOD	TESTMISPLACEDCLASSMETHOD	-	passed	passed
++base/directives/METHOD	TESTNONAME	-	passed	passed
++base/directives/METHOD	TESTPACKAGE	-	passed	passed
++base/directives/METHOD	TESTPACKAGECLASSMETHOD	-	passed	passed
++base/directives/METHOD	TESTPACKAGECLASSMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEEXTERNALMETHOD	-	passed	passed
++base/directives/METHOD	TESTPACKAGEGETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEINSTANCEMETHOD	-	passed	passed
++base/directives/METHOD	TESTPACKAGEINSTANCEMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEPRIVATE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEPUBLIC	-	passed	passed
++base/directives/METHOD	TESTPACKAGESETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPACKAGETWICE	-	passed	passed
++base/directives/METHOD	TESTPRIVATECLASSMETHOD	-	passed	passed
++base/directives/METHOD	TESTPRIVATECLASSMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEEXTERNALMETHOD	-	passed	passed
++base/directives/METHOD	TESTPRIVATEGETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEINSTANCEMETHOD	-	passed	passed
++base/directives/METHOD	TESTPRIVATEINSTANCEMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEPACKAGE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEPUBLIC	-	passed	passed
++base/directives/METHOD	TESTPRIVATESETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPRIVATETWICE	-	passed	passed
++base/directives/METHOD	TESTPROTECTEDTWICE	-	passed	passed
++base/directives/METHOD	TESTPROTECTEDUNPROTECTED	-	passed	passed
++base/directives/METHOD	TESTPUBLICPACKAGE	-	passed	passed
++base/directives/METHOD	TESTPUBLICPRIVATE	-	passed	passed
++base/directives/METHOD	TESTPUBLICTWICE	-	passed	passed
++base/directives/METHOD	TESTSETATTRIBUTENOARGUMENT	-	passed	passed
++base/directives/METHOD	TESTSETATTRIBUTETWOARGUMENTS	-	passed	passed
++base/directives/METHOD	TESTSTRINGNAME	-	passed	passed
++base/directives/METHOD	TESTSTRINGOPTION	-	passed	passed
++base/directives/METHOD	TESTUNGUARDEDTWICE	-	passed	passed
++base/directives/METHOD	TESTUNPROTECTEDTWICE	-	passed	passed
++base/directives/METHOD	TEST_ABSTRACT_DELEGATE	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_ABSTRACT	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_BAD_NAME	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_EXTERNAL	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_NO_BODY	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_NO_NAME	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_TWICE	-	passed	passed
++base/directives/REQUIRES	TEST_ACTIVATE	-	passed	failed
++base/directives/REQUIRES	TEST_BAD_NAMESPACE_NAME	-	passed	passed
++base/directives/REQUIRES	TEST_BAD_REQUIRES_OPTION	-	passed	passed
++base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	-	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES	-	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	-	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	-	passed	failed
++base/directives/REQUIRES	TEST_MISSING_LIBRARY_REQUIRES	-	passed	passed
++base/directives/REQUIRES	TEST_MISSING_NAMESPACE_NAME	-	passed	passed
++base/directives/REQUIRES	TEST_MISSING_REQUIRES_FILE	-	passed	passed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	-	passed	failed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	-	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	-	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	-	passed	failed
++base/directives/REQUIRES	TEST_NO_REQUIRES_NAME	-	passed	passed
++base/directives/REQUIRES	TEST_NO_REQUIRES_NAME_NOTGOOD	-	passed	passed
++base/directives/REQUIRES	TEST_PROLOG	-	passed	failed
++base/directives/REQUIRES	TEST_PROLOG2	-	passed	failed
++base/directives/REQUIRES	TEST_PROLOG3	-	passed	failed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_CASE_LOWER	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_CASE_MIXED	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_STD	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_SYNTAX1	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_SYNTAX2	-	passed	passed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	-	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	-	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	-	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	-	passed	failed
++base/directives/REQUIRES	TEST_STRING_NAMESPACE_NAME	-	passed	passed
++base/directives/ROUTINE	TESTARGCOUNT	-	passed	passed
++base/directives/ROUTINE	TESTARGUMENTPASSING	-	passed	passed
++base/directives/ROUTINE	TESTBADNAME	-	passed	passed
++base/directives/ROUTINE	TESTCALLTYPE	-	passed	passed
++base/directives/ROUTINE	TESTCONTEXTNAME	-	passed	passed
++base/directives/ROUTINE	TESTDOTROUTINES	-	passed	passed
++base/directives/ROUTINE	TESTDUPLICATE	-	passed	passed
++base/directives/ROUTINE	TESTDUPLICATE2	-	passed	passed
++base/directives/ROUTINE	TESTEXECUTABLE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALCODEBODY	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARY	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADLIBRARYNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADROUTINETYPE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADSPECTYPE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYEXTRATOKEN	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYMISSINGLIBRARYNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYMISSINGREGISTEREDNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYMISSINGSPEC	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYNOTROUTINE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALNULLSTRING	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	Phase10(Rxapi)	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	Phase10(Rxapi)	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDEXTRATOKEN	-	passed	passed
++base/directives/ROUTINE	TESTNONAME	-	passed	passed
++base/directives/ROUTINE	TESTPACKAGE	-	passed	passed
++base/directives/ROUTINE	TESTPRIVATETWICE	-	passed	passed
++base/directives/ROUTINE	TESTPUBLICPRIVATE	-	passed	passed
++base/directives/ROUTINE	TESTPUBLICTWICE	-	passed	passed
++base/directives/ROUTINE	TESTSTRINGOPTION	-	passed	passed
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/verdicts.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/verdicts.tsv
+new file mode 100644
+index 000000000..0c8ad7236
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-5/suite/verdicts.tsv
+@@ -0,0 +1,11 @@
++# ootest revision 13178
++group	verdict	crate	oracle denominator
++API/oo/METHOD	red	not passed: TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	equal
++base/class/Method	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
++base/class/MethodArgs	green		equal
++base/class/Package	red	not passed: TEST_NEW01 TEST_PROLOG	equal
++base/class/Package_Options	green		equal
++base/class/Routine	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
++base/directives/METHOD	green		equal
++base/directives/REQUIRES	red	not passed: TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP	equal
++base/directives/ROUTINE	green		equal
+diff --git a/rust/corpus/lang/package_library_binder_kept.env b/rust/corpus/lang/package_library_binder_kept.env
+new file mode 100644
+index 000000000..84b489791
+--- /dev/null
++++ b/rust/corpus/lang/package_library_binder_kept.env
+@@ -0,0 +1,2 @@
++# The oracle's own build of rxmath, which this program loads.
++LD_LIBRARY_PATH={oraclelib}
+diff --git a/rust/corpus/lang/package_library_binder_kept.rex b/rust/corpus/lang/package_library_binder_kept.rex
+new file mode 100644
+index 000000000..8b1ab9905
+--- /dev/null
++++ b/rust/corpus/lang/package_library_binder_kept.rex
+@@ -0,0 +1,18 @@
++/* The package whose ::ROUTINE first bound an external library procedure is
++   that procedure's package for the run, so it outlives every reference a
++   program holds, while a package nothing reaches is collected. */
++p = .Package~new('lp', ('::routine sq public external "LIBRARY rxmath RxCalcSqrt"',))
++u = .Routine~loadExternalRoutine('lx', 'LIBRARY rxmath RxCalcSqrt')
++say 'bound' (u~package == p) (p~findRoutine('SQ')~package == p)
++h = p~identityHash
++w = .WeakReference~new(p)
++s = .WeakReference~new(.Package~new('sentinel', 'nop'))
++drop p
++i = 0
++loop until s~value == .nil | i > 5000
++  z = copies('y', 100000)
++  i += 1
++end
++say 'sentinel collected' (s~value == .nil)
++say 'binder kept' (w~value \== .nil) (u~package~identityHash == h)
++say 'later' .Routine~loadExternalRoutine('lx', 'LIBRARY rxmath RxCalcSqrt')~package~name
+diff --git a/rust/corpus/lang/package_rerequire_collected.rex b/rust/corpus/lang/package_rerequire_collected.rex
+new file mode 100644
+index 000000000..33d4e0b23
+--- /dev/null
++++ b/rust/corpus/lang/package_rerequire_collected.rex
+@@ -0,0 +1,27 @@
++/* A package a ::REQUIRES loaded is held weakly by the requires cache: once
++   nothing else reaches it, it is collected, and the next ::REQUIRES of the
++   same file loads it again and runs its prologue again. */
++f = .stream~new('rereq.cls')
++f~open('write replace')
++f~lineout('.local~rereq.prologs = .local~rereq.prologs + 1')
++f~lineout('::routine rereq public')
++f~lineout('  return "answered"')
++f~close
++.local~rereq.prologs = 0
++r = .Routine~new('r', ("return rereq()", "::requires 'rereq.cls'"))
++w = .WeakReference~new(r~package~importedPackages[1])
++fr = w~value~findRoutine('REREQ')~identityHash
++say 'first' r~call
++drop r
++i = 0
++loop until w~value == .nil | i > 5000
++  z = copies('y', 100000)
++  i += 1
++end
++say 'collected' (w~value == .nil)
++r2 = .Routine~new('r2', ("return rereq()", "::requires 'rereq.cls'"))
++p2 = r2~package~importedPackages[1]
++say 'again' r2~call (p2~findRoutine('REREQ')~identityHash \== fr)
++say 'prologs' .local~rereq.prologs
++r3 = .Routine~new('r3', ("return rereq()", "::requires 'rereq.cls'"))
++say 'cached' (r3~package~importedPackages[1] == p2) 'prologs' .local~rereq.prologs
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index 537ecb18c..849881a14 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -118,10 +118,14 @@ lang/class_side_string.rex
+ 
+ # 9b1 Task 3: L10 and L11.
+ lang/routine_object_add_copy.rex
+ lang/stackframes_native_routine.rex
+ 
+ # 9b1 Task 4: a copied package mutated, L5 and L6.
+ lang/package_copy_mutated.rex
+ 
+ # 9b1 Task 4 fix round 1: a REXX package copy's lookups and merge (I2, I3).
+ lang/package_rexx_copy_lookups.rex
++
++# 9b1 Task 5: packages are collected, and the requires cache holds them weakly.
++lang/package_rerequire_collected.rex
++lang/package_library_binder_kept.rex
+diff --git a/rust/crates/rexx-core/src/body.rs b/rust/crates/rexx-core/src/body.rs
+index b66072740..a707125f6 100644
+--- a/rust/crates/rexx-core/src/body.rs
++++ b/rust/crates/rexx-core/src/body.rs
+@@ -155,22 +155,22 @@ pub enum VarRefHome {
+     /// Storage outside every frame, which the variable itself also reads and
+     /// writes through for as long as it exists.
+     Cell(SlotRef),
+     /// A name in one of `owner`'s scope pools -- what an `EXPOSE`d variable
+     /// has instead of storage of its own. The object keeps it alive, so
+     /// there is nothing to promote.
+     Instance { owner: ObjRef, scope: ObjRef },
+ }
+ 
+ /// The native state an instance carries in its own body, for the classes whose
+-/// C++ counterparts keep a `CSELF` block. Only [`NativeState::Package`] holds
+-/// an [`ObjRef`].
++/// C++ counterparts keep a `CSELF` block. [`NativeState::Package`] and
++/// [`NativeState::Executable`] hold [`ObjRef`]s.
+ #[derive(Clone, Debug)]
+ pub enum NativeState {
+     /// A `MutableBuffer`'s contents.
+     Buffer(BufferState),
+     /// A `Stream`'s open file, positions and state. **Not the object's string
+     /// value**: `Stream~string` answers the name a Rexx `expose`d variable
+     /// holds, so the readers that render a buffer as its contents must answer
+     /// for [`NativeState::Buffer`] alone.
+     Stream(StreamState),
+     /// A `.Pointer`'s address, the `pointerData` of `PointerClass`
+@@ -181,20 +181,23 @@ pub enum NativeState {
+     /// A `Buffer`'s bytes (`interpreter/classes/BufferClass.hpp`), which an
+     /// extension writes through the address `BufferData` handed it for as long
+     /// as the object lives, so the storage is never resized.
+     Data(AlignedBytes),
+     /// A `String` subclass instance's bytes, the `RexxString` body that
+     /// `RexxString::newRexx` (`interpreter/classes/StringClass.cpp:2352`)
+     /// gives the subclass's behaviour.
+     Text(Box<[u8]>),
+     /// A `Package` subclass instance's package state.
+     Package(PackageState),
++    /// The package a `Method` or `Routine` subclass instance's code belongs
++    /// to, which the instance keeps alive.
++    Executable(ObjRef),
+ }
+ 
+ /// The state a `Package` object holds. Its fields are the interpreter's own
+ /// types, so the heap reaches them through this trait alone.
+ pub trait PackageFields: std::any::Any + std::fmt::Debug {
+     /// Appends every object these fields hold.
+     fn trace(&self, out: &mut Vec<ObjRef>);
+     /// A copy of these fields, holding the same objects.
+     fn clone_fields(&self) -> Box<dyn PackageFields>;
+ }
+@@ -305,143 +308,167 @@ impl NativeState {
+     }
+ 
+     /// The buffer this state holds, or `None` for state of another kind.
+     pub fn buffer(&self) -> Option<&BufferState> {
+         match self {
+             NativeState::Buffer(state) => Some(state),
+             NativeState::Stream(_)
+             | NativeState::Pointer(_)
+             | NativeState::Data(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// [`NativeState::buffer`] for a caller that changes the contents.
+     pub fn buffer_mut(&mut self) -> Option<&mut BufferState> {
+         match self {
+             NativeState::Buffer(state) => Some(state),
+             NativeState::Stream(_)
+             | NativeState::Pointer(_)
+             | NativeState::Data(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// The stream this state holds, or `None` for state of another kind.
+     pub fn stream(&self) -> Option<&StreamState> {
+         match self {
+             NativeState::Stream(state) => Some(state),
+             NativeState::Buffer(_)
+             | NativeState::Pointer(_)
+             | NativeState::Data(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// [`NativeState::stream`] for a caller that opens, reads, writes or
+     /// positions it.
+     pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
+         match self {
+             NativeState::Stream(state) => Some(state),
+             NativeState::Buffer(_)
+             | NativeState::Pointer(_)
+             | NativeState::Data(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// The address this state holds, or `None` for state of another kind.
+     ///
+     /// A null address is a `.Pointer` that answers `1` to `~isNull`, not the
+     /// absence of one, so the two `None`s never mean the same thing.
+     pub fn pointer(&self) -> Option<*mut std::ffi::c_void> {
+         match self {
+             NativeState::Pointer(address) => Some(*address),
+             NativeState::Buffer(_)
+             | NativeState::Stream(_)
+             | NativeState::Data(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// A `Buffer`'s bytes, or `None` for state of another kind.
+     pub fn data(&self) -> Option<&AlignedBytes> {
+         match self {
+             NativeState::Data(bytes) => Some(bytes),
+             NativeState::Buffer(_)
+             | NativeState::Stream(_)
+             | NativeState::Pointer(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// The address of a `Buffer`'s first byte, which stays valid while the
+     /// object does, or `None` for state of another kind.
+     pub fn data_address(&mut self) -> Option<*mut std::ffi::c_void> {
+         match self {
+             NativeState::Data(bytes) => Some(bytes.as_mut_ptr().cast()),
+             NativeState::Buffer(_)
+             | NativeState::Stream(_)
+             | NativeState::Pointer(_)
+             | NativeState::Text(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// A `String` subclass instance's bytes, or `None` for state of another
+     /// kind.
+     pub fn text(&self) -> Option<&[u8]> {
+         match self {
+             NativeState::Text(bytes) => Some(bytes),
+             NativeState::Buffer(_)
+             | NativeState::Stream(_)
+             | NativeState::Pointer(_)
+             | NativeState::Data(_)
+-            | NativeState::Package(_) => None,
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => None,
+         }
+     }
+ 
+     /// A `Package` subclass instance's package state, or `None` for state of
+     /// another kind.
+     pub fn package(&self) -> Option<&PackageState> {
+         match self {
+             NativeState::Package(state) => Some(state),
+             _ => None,
+         }
+     }
+ 
+     /// [`NativeState::package`] for a caller that changes it.
+     pub fn package_mut(&mut self) -> Option<&mut PackageState> {
+         match self {
+             NativeState::Package(state) => Some(state),
+             _ => None,
+         }
+     }
+ 
++    /// Appends every object this state holds.
++    pub fn trace(&self, out: &mut Vec<ObjRef>) {
++        match self {
++            NativeState::Package(state) => state.trace(out),
++            NativeState::Executable(package) => out.push(*package),
++            NativeState::Buffer(_)
++            | NativeState::Stream(_)
++            | NativeState::Pointer(_)
++            | NativeState::Data(_)
++            | NativeState::Text(_) => {}
++        }
++    }
++
+     /// Whether the object holding this state renders its string value from the
+     /// state itself, as `MutableBuffer::stringValue`
+     /// (`interpreter/classes/MutableBufferClass.cpp:740`) and
+     /// `PointerClass::stringValue` (`interpreter/classes/PointerClass.cpp:152`)
+     /// do, rather than from the name every other instance answers with.
+     ///
+     /// Matched over the variants rather than asked of one of them, so that a
+     /// state added here has to decide.
+     pub fn renders_its_own_string_value(&self) -> bool {
+         match self {
+             NativeState::Buffer(_) | NativeState::Pointer(_) | NativeState::Text(_) => true,
+-            NativeState::Stream(_) | NativeState::Data(_) | NativeState::Package(_) => false,
++            NativeState::Stream(_)
++            | NativeState::Data(_)
++            | NativeState::Package(_)
++            | NativeState::Executable(_) => false,
+         }
+     }
+ }
+ 
+ /// `Numerics::pointerToString` (`interpreter/runtime/Numerics.cpp:882`): the
+ /// string value of a `.Pointer`, which is `0x0` for a null address and the
+ /// platform's `%p` rendering otherwise.
+ pub fn pointer_to_string(address: *mut std::ffi::c_void) -> Vec<u8> {
+     if address.is_null() {
+         return b"0x0".to_vec();
+@@ -982,50 +1009,58 @@ impl ObjectMethods {
+ }
+ 
+ /// The payload of a [`Body::Native`]: what class the object answers to, the
+ /// text it renders as, and the name-to-value table it holds.
+ #[derive(Clone, Debug)]
+ pub struct NativeObject {
+     class: ObjRef,
+     rendered: Box<[u8]>,
+     string_value: Option<Box<[u8]>>,
+     entries: FxHashMap<Box<[u8]>, ObjRef>,
+-    annotations: Option<ObjRef>,
++    /// `ObjRef::NIL` for an object whose builder gave it no table.
++    annotations: ObjRef,
+     bound: Bound,
+ }
+ 
+ /// What a `Method`, `Routine` or `Package` object is bound to, sharing one
+ /// slot so that every other native object stays its size.
+ #[derive(Clone, Debug)]
+ enum Bound {
+     Nothing,
+     /// A method object's scope.
+     Scope(ObjRef),
++    /// The package a `Method` or `Routine` object's code belongs to.
++    Code(ObjRef),
++    /// A method object's scope and the package its code belongs to.
++    ScopedCode {
++        scope: ObjRef,
++        package: ObjRef,
++    },
+     /// The `INTERNAL_ROUTINES` row a routine object runs.
+     RoutineRow(usize),
+     /// A package object's state, boxed so that every other native object
+     /// stays its size.
+     Package(Box<PackageState>),
+ }
+ 
+ /// Measured: a field beside `Bound` moves every native object's box to the
+ /// next allocator size class, +0.19% of instructions on `hashnew.rex`.
+ const _: () = assert!(size_of::<NativeObject>() <= 104);
+ 
+ impl NativeObject {
+     pub fn new(class: ObjRef, rendered: &[u8]) -> NativeObject {
+         NativeObject {
+             class,
+             rendered: rendered.into(),
+             string_value: None,
+             entries: FxHashMap::default(),
+-            annotations: None,
++            annotations: ObjRef::NIL,
+             bound: Bound::Nothing,
+         }
+     }
+ 
+     /// The class this object answers to.
+     pub fn class(&self) -> ObjRef {
+         self.class
+     }
+ 
+     /// The bytes `SAY` prints for this object.
+@@ -1076,39 +1111,64 @@ impl NativeObject {
+     }
+ 
+     /// Every key this object holds, as owned copies.
+     pub fn keys(&self) -> Vec<Box<[u8]>> {
+         self.entries.keys().cloned().collect()
+     }
+ 
+     /// The `StringTable` this object's `~annotations` answers, or `None` for
+     /// an object whose builder gave it none.
+     pub fn annotations(&self) -> Option<ObjRef> {
+-        self.annotations
++        (self.annotations != ObjRef::NIL).then_some(self.annotations)
+     }
+ 
+     pub fn set_annotations(&mut self, annotations: ObjRef) {
+-        self.annotations = Some(annotations);
++        self.annotations = annotations;
+     }
+ 
+     /// `MethodClass::getScope`: the class this method object is installed on,
+     /// or `None` for one nothing has installed yet.
+     pub fn scope(&self) -> Option<ObjRef> {
+         match self.bound {
+-            Bound::Scope(scope) => Some(scope),
++            Bound::Scope(scope) | Bound::ScopedCode { scope, .. } => Some(scope),
+             _ => None,
+         }
+     }
+ 
+     /// `MethodClass::setScope` (`classes/MethodClass.cpp:219`).
+     pub fn set_scope(&mut self, scope: ObjRef) {
+-        self.bound = Bound::Scope(scope);
++        self.bound = match self.bound {
++            Bound::Code(package) | Bound::ScopedCode { package, .. } => {
++                Bound::ScopedCode { scope, package }
++            }
++            _ => Bound::Scope(scope),
++        };
++    }
++
++    /// The package a `Method` or `Routine` object's code belongs to, which
++    /// the object keeps alive, or `None` for one that names none.
++    pub fn executable_package(&self) -> Option<ObjRef> {
++        match self.bound {
++            Bound::Code(package) | Bound::ScopedCode { package, .. } => Some(package),
++            _ => None,
++        }
++    }
++
++    /// Records the package this `Method` or `Routine` object's code belongs
++    /// to, keeping any scope.
++    pub fn set_executable_package(&mut self, package: ObjRef) {
++        self.bound = match self.bound {
++            Bound::Scope(scope) | Bound::ScopedCode { scope, .. } => {
++                Bound::ScopedCode { scope, package }
++            }
++            _ => Bound::Code(package),
++        };
+     }
+ 
+     /// The `INTERNAL_ROUTINES` row this `Routine` object runs, which a copy
+     /// carries too, or `None` for one that runs none.
+     pub fn routine_row(&self) -> Option<usize> {
+         match self.bound {
+             Bound::RoutineRow(row) => Some(row),
+             _ => None,
+         }
+     }
+@@ -1265,43 +1325,44 @@ impl Body {
+             // day a class object is allocated like anything else.
+             Body::Instance {
+                 class,
+                 pools,
+                 own,
+                 native,
+                 ..
+             } => {
+                 out.push(*class);
+                 pools.trace(out);
+-                if let Some(state) = native.as_deref().and_then(NativeState::package) {
+-                    state.trace(out);
++                if let Some(native) = native {
++                    native.trace(out);
+                 }
+                 // A one-off method's scope, in the position the class handle
+                 // above is in and traced for the same reason.
+                 if let Some(own) = own {
+                     own.trace(out);
+                 }
+             }
+             Body::Native(native) => {
+                 // The class handle travels with the values. It names no arena
+                 // slot today ([`crate::CLASS_SLOT_BASE`]), so the collector
+                 // drops it on the floor; tracing it anyway is what keeps this
+                 // arm correct on the day a class object is allocated like
+                 // anything else.
+                 out.push(native.class);
+                 out.extend(native.entries.values().copied());
+                 // A method object's scope, in the position the class handle
+                 // above is in and traced for the same reason.
+                 out.extend(native.scope());
++                out.extend(native.executable_package());
+                 // Reachable from the object alone once a program holds the
+                 // table and drops every other handle on it.
+-                out.extend(native.annotations);
++                out.extend(native.annotations());
+                 if let Some(state) = native.package() {
+                     state.trace(out);
+                 }
+             }
+             // Deliberately reaches nothing: a weak reference must not keep
+             // its target alive.
+             Body::WeakRef(_) => {}
+             Body::Class { owned } => out.extend(owned.iter().copied()),
+             // A cell is rooted by `RootSet::iter`, which is what keeps the
+             // referenced value alive; the owning object of an instance
+diff --git a/rust/crates/rexx-exec/src/activity.rs b/rust/crates/rexx-exec/src/activity.rs
+index ceb7fb324..7cecc3716 100644
+--- a/rust/crates/rexx-exec/src/activity.rs
++++ b/rust/crates/rexx-exec/src/activity.rs
+@@ -481,20 +481,44 @@ impl Activity {
+             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
+             #[cfg(feature = "pinning")]
+             pins: crate::pinning::PinStack::default(),
+             #[cfg(feature = "sharing")]
+             sharing_tag: 0,
+         }
+     }
+ 
+     /// Appends every `ObjRef` the activity must hand the collector to `out`,
+     /// and names every field that does not need to be handed over.
++    /// Appends the program of each activation on this activity's stack and
++    /// on each replied continuation's, and of the level the failure being
++    /// unwound came from.
++    pub(crate) fn running_programs(&self, out: &mut Vec<crate::plan::ProgramId>) {
++        if let Some((crate::plan::Package::Program(program), _)) = self.failure_origin {
++            out.push(program);
++        }
++        for activation in self
++            .running
++            .iter()
++            .map(std::ops::Deref::deref)
++            .chain(self.suspended.iter().map(Box::as_ref))
++        {
++            out.push(activation.program_id);
++            if let Some(continuation) = activation
++                .replied
++                .as_ref()
++                .and_then(|replied| replied.continuation.as_ref())
++            {
++                continuation.activity.running_programs(out);
++            }
++        }
++    }
++
+     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+         let Activity {
+             // Every push site roots the value as a temp before it lands here.
+             value_buffer: _,
+             running,
+             trace_cache: _,
+             suspended,
+             // A finished activation's leftovers, overwritten at reuse and read
+             // by nothing in between.
+             spare_activations: _,
+diff --git a/rust/crates/rexx-exec/src/condition.rs b/rust/crates/rexx-exec/src/condition.rs
+index 9f1793899..6abff2a1d 100644
+--- a/rust/crates/rexx-exec/src/condition.rs
++++ b/rust/crates/rexx-exec/src/condition.rs
+@@ -262,23 +262,35 @@ impl Interp {
+         };
+         let temps = self.roots.activity_mut();
+         for &object in unwinding
+             .frame
+             .iter()
+             .chain(&unwinding.frames)
+             .chain(&unwinding.reraised_object)
+         {
+             temps.push_temp(object);
+         }
++        self.hold_origin_package(unwinding.origin);
+         unwinding
+     }
+ 
++    /// Roots, as a temp, the package of the level a failure came from, which
++    /// its condition object names once built: that level may be the last
++    /// thing that reached it, and it has unwound.
++    pub(crate) fn hold_origin_package(&mut self, origin: Option<(Package, Option<usize>)>) {
++        if let Some((Package::Program(program), _)) = origin
++            && let Some(package) = self.program_package(program)
++        {
++            self.roots.activity_mut().push_temp(package);
++        }
++    }
++
+     /// Puts what [`Interp::set_aside_unwinding`] took below the record of
+     /// the failure unwinding now: its levels outside this one's.
+     fn restore_unwinding_below(&mut self, unwinding: Unwinding) {
+         let activity = &mut self.activity;
+         let site = activity.failure_site.take();
+         activity.failure_sites.extend(site);
+         activity.failure_sites.extend(unwinding.sites);
+         activity.failure_site = unwinding.site;
+         let frame = activity.failure_frame.take();
+         activity.failure_frames.extend(frame);
+diff --git a/rust/crates/rexx-exec/src/dispatch/construct.rs b/rust/crates/rexx-exec/src/dispatch/construct.rs
+index 45d5fd80e..82bd2f968 100644
+--- a/rust/crates/rexx-exec/src/dispatch/construct.rs
++++ b/rust/crates/rexx-exec/src/dispatch/construct.rs
+@@ -204,30 +204,33 @@ pub(super) fn native_as_instance(
+     let behaviour = interp.classes().instance_behaviour_handle(class);
+     let Some(held) = interp.heap.get_mut(object) else {
+         return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
+     };
+     match &mut held.body {
+         Body::Native(native) => {
+             let mut pools = rexx_core::ScopePools::new();
+             if let Some(table) = native.annotations() {
+                 pools.set(base, SUBCLASS_ANNOTATIONS, table);
+             }
+-            let package = native
+-                .take_package()
+-                .map(|state| Box::new(rexx_core::NativeState::Package(state)));
++            let state = match native.take_package() {
++                Some(state) => Some(rexx_core::NativeState::Package(state)),
++                None => native
++                    .executable_package()
++                    .map(rexx_core::NativeState::Executable),
++            };
+             held.body = Body::Instance {
+                 class,
+                 behaviour,
+                 name: None,
+                 pools,
+                 own: None,
+-                native: package,
++                native: state.map(Box::new),
+             };
+         }
+         Body::Instance {
+             class: held_class,
+             behaviour: held_behaviour,
+             ..
+         } => {
+             *held_class = class;
+             *held_behaviour = behaviour;
+         }
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 2157aed2a..14f34f997 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -1183,21 +1183,21 @@ impl Interp {
+                             .classes()
+                             .lookup(id)
+                             .expect("every TableValue::Instance names a native class");
+                         let object = self.native_instance(class);
+                         self.attach_annotations(object, site);
+                         let method = (!routine).then(|| {
+                             let method = self.unattached_method_id(program, directive, &name);
+                             self.executable_objects.insert(method, object);
+                             method
+                         });
+-                        self.executable_sources.insert(
++                        self.record_executable(
+                             object,
+                             crate::ExecutableRecord {
+                                 source: crate::ExecutableSource::Directive { program, directive },
+                                 installed: method,
+                                 routine: routine.then_some((program, directive)),
+                             },
+                         );
+                         if routine {
+                             self.routine_objects.insert(installed, object);
+                         }
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index a78a024f4..ccf91b3e5 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -38,20 +38,22 @@ impl Interp {
+         // **A class the interpreter's own library installed belongs to the
+         // `REXX` package, not to the program whose directives installed it.**
+         // Leaving it out of this table is what `Interp::package_object_for`
+         // reads as `Package::Rexx`, which is the oracle's answer: measured
+         // on both engines and the oracle, `.Alarm~package~name` is `REXX`.
+         // The REXX package's own tables hold it too, the first library
+         // program's declaration of a name standing.
+         if !self.library_programs.contains(&program) {
+             self.class_packages
+                 .insert(class, ClassPackage::Program(program));
++            let package = self.package_object(Package::Program(program));
++            self.class_holds_package(class, package);
+             return;
+         }
+         self.roots.activity_mut().push_temp(class);
+         let rexx = self.package_object(Package::Rexx);
+         let Some(data) = self.package_data_mut(rexx) else {
+             return;
+         };
+         data.classes
+             .entry(name.to_ascii_uppercase().into())
+             .or_insert(class);
+@@ -67,20 +69,36 @@ impl Interp {
+     /// (`classes/ClassClass.cpp:1546`, `:1496`, then `:1582`).
+     pub(crate) fn record_packageless_class(&mut self, class: ObjRef) {
+         self.class_packages.insert(class, ClassPackage::Null);
+     }
+ 
+     /// Gives `copy` the package `class` answers, which is what a clone of the
+     /// class object carries.
+     pub(crate) fn copy_class_package(&mut self, class: ObjRef, copy: ObjRef) {
+         if let Some(package) = self.class_packages.get(&class).copied() {
+             self.class_packages.insert(copy, package);
++            if let ClassPackage::Program(program) = package {
++                let package = self.package_object(Package::Program(program));
++                self.class_holds_package(copy, package);
++            }
++        }
++    }
++
++    /// Records that `class` keeps the package it was defined in alive, as
++    /// `RexxClass::package` does. A class outside the arena is never
++    /// collected and holds nothing.
++    fn class_holds_package(&mut self, class: ObjRef, package: ObjRef) {
++        if matches!(
++            self.heap.get(class).map(|held| &held.body),
++            Some(Body::Class { .. })
++        ) {
++            self.class_owns(class, package);
+         }
+     }
+ 
+     /// Whether `class` is one the interpreter's own bootstrap built, which
+     /// no program's install recorded -- the oracle's `isPrimitiveClass`.
+     pub(crate) fn is_primitive_class(&self, class: ObjRef) -> bool {
+         !self.class_packages.contains_key(&class)
+     }
+ 
+     /// `Package~addClass` and `Package~addPublicClass`, which differ only in
+@@ -119,54 +137,66 @@ impl Interp {
+         // table, and that absence is what `Package::Rexx` names -- the
+         // distinction the enum exists to keep out of an `Option`.
+         let package = match self.class_packages.get(&class).copied() {
+             None => Package::Rexx,
+             Some(ClassPackage::Null) => return ObjRef::NIL,
+             Some(ClassPackage::Program(program)) => Package::Program(program),
+         };
+         self.package_object(package)
+     }
+ 
+-    /// The one object standing for `package`, built on first use.
++    /// The one object standing for `package`, built on first use. A freshly
++    /// built program package is rooted as a temp of the caller's frame.
+     pub(crate) fn package_object(&mut self, package: Package) -> ObjRef {
+         let built = match package {
+             Package::Rexx => self.rexx_package,
+             Package::Program(program) => self.program_package(program),
+         };
+         if let Some(found) = built {
+-            return found;
++            let live = self.heap.get(found).is_some();
++            debug_assert!(
++                live,
++                "{package:?}'s package was asked for after it was collected"
++            );
++            if live {
++                return found;
++            }
+         }
+         let package_class = self.package_class();
+         // The `REXX` package was given its name by the interpreter's own
+         // startup rather than derived from a class id, exactly as `.environment`
+         // and `.local` were, and a package a program installed into
+         // carries no name of its own -- measured, `.Array~package` renders
+         // `The REXX Package` and a `::CLASS`'s renders `a Package`.
+         let rendered = match package {
+             Package::Rexx => b"The REXX Package".to_vec(),
+             Package::Program(_) => default_object_name(self.class_id_text(package_class))
+                 .as_bytes()
+                 .to_vec(),
+         };
+         let mut native = NativeObject::new(package_class, &rendered);
+         native.set_package(crate::package_state::PackageData::state(match package {
+             Package::Rexx => None,
+             Package::Program(program) => Some(program),
+         }));
+         let object = self.alloc_with(BehaviourId::OBJECT, Body::Native(Box::new(native)));
+-        // A package object outlives every send that can reach it and is
+-        // reachable from no other object, so the root is a global rather than
+-        // a temp -- the position `.environment` and `.local` are in.
+-        self.roots.add_global(&package_root_key(package), object);
++        // The REXX package lives for the whole run. A program's package lives
++        // while something reaches it: an activation of its code
++        // (`Interp::package_roots`), a class, `Routine` or `Method` object of
++        // its code, or a holder of the object.
+         match package {
+-            Package::Rexx => self.rexx_package = Some(object),
++            Package::Rexx => {
++                self.roots.add_global(&package_root_key(package), object);
++                self.rexx_package = Some(object);
++            }
+             Package::Program(ProgramId(program)) => {
++                self.roots.activity_mut().push_temp(object);
+                 if self.program_packages.len() <= program {
+                     self.program_packages.resize(program + 1, None);
+                 }
+                 self.program_packages[program] = Some(object);
+             }
+         }
+         self.attach_annotations(object, Annotated::Package(package));
+         object
+     }
+ 
+@@ -180,21 +210,21 @@ impl Interp {
+         name: &[u8],
+         scope: ObjRef,
+         record: crate::ExecutableRecord,
+     ) -> ObjRef {
+         let key = (class, class_side, Box::<[u8]>::from(name));
+         if let Some(found) = self.method_objects.get(&key).copied() {
+             return found;
+         }
+         let method_class = self.method_class();
+         let object = self.native_instance(method_class);
+-        self.executable_sources.insert(object, record);
++        self.record_executable(object, record);
+         if let Some(method) = record.installed {
+             self.executable_objects.entry(method).or_insert(object);
+         }
+         let held = self.heap.get_mut(object).expect("just allocated");
+         let Body::Native(native) = &mut held.body else {
+             unreachable!("allocated as Body::Native by native_instance")
+         };
+         native.set_scope(scope);
+         self.class_owns(class, object);
+         self.method_objects.insert(key, object);
+@@ -301,21 +331,21 @@ impl Interp {
+         let source = match method {
+             _ if synthetic => crate::ExecutableSource::Main {
+                 program: body.program,
+             },
+             Some(method) => self.installed_executable_source(method),
+             None => crate::ExecutableSource::Directive {
+                 program: body.program,
+                 directive: body.directive,
+             },
+         };
+-        self.executable_sources.insert(
++        self.record_executable(
+             object,
+             crate::ExecutableRecord {
+                 source,
+                 installed: method,
+                 routine: None,
+             },
+         );
+         if let Some(method) = method {
+             self.executable_objects.insert(method, object);
+         }
+@@ -359,31 +389,53 @@ impl Interp {
+             .and_then(|data| data.main_routine)
+         {
+             return found;
+         }
+         let package = self.package_object(Package::Program(program));
+         let class = self.routine_class();
+         let object = self.native_instance(class);
+         if let Some(data) = self.package_data_mut(package) {
+             data.main_routine = Some(object);
+         }
+-        self.executable_sources.insert(
++        self.record_executable(
+             object,
+             crate::ExecutableRecord {
+                 source: crate::ExecutableSource::Main { program },
+                 installed: None,
+                 routine: None,
+             },
+         );
+         object
+     }
+ 
++    /// Files `record` as what the `Method` or `Routine` object `object`
++    /// reports on and runs, and makes `object` keep the package its code
++    /// belongs to alive, as `BaseExecutable::package` does. May allocate, so
++    /// `object` must be rooted.
++    pub(crate) fn record_executable(&mut self, object: ObjRef, record: crate::ExecutableRecord) {
++        self.executable_sources.insert(object, record);
++        let program = match record.source {
++            crate::ExecutableSource::Directive { program, .. }
++            | crate::ExecutableSource::Main { program }
++            | crate::ExecutableSource::External { program } => program,
++            crate::ExecutableSource::Native | crate::ExecutableSource::Loaded { .. } => return,
++        };
++        let package = self.package_object(Package::Program(program));
++        match self.heap.get_mut(object).map(|held| &mut held.body) {
++            Some(Body::Native(native)) => native.set_executable_package(package),
++            Some(Body::Instance { native, .. }) => {
++                *native = Some(Box::new(rexx_core::NativeState::Executable(package)));
++            }
++            _ => {}
++        }
++    }
++
+     /// `MethodClass::newScope` (`classes/MethodClass.cpp:183`): the same
+     /// method object with `scope` filled in when it had none, and a copy
+     /// carrying `scope` when it already had one.
+     fn method_new_scope(&mut self, method: ObjRef, scope: ObjRef) -> Option<ObjRef> {
+         match self.heap.get(method).map(|held| &held.body) {
+             Some(Body::Native(native)) if native.scope().is_none() => {
+                 let object = self.heap.get_mut(method).expect("read just above");
+                 let Body::Native(native) = &mut object.body else {
+                     unreachable!("matched as Body::Native just above")
+                 };
+@@ -614,27 +666,29 @@ impl Interp {
+     }
+ 
+     /// The `StringTable` `~annotations` answers for `site`, built empty on
+     /// first ask and kept.
+     pub(crate) fn annotation_table(&mut self, site: Annotated) -> ObjRef {
+         if let Some(found) = self.annotations.get(&site).copied() {
+             return found;
+         }
+         let table = crate::dispatch::hash::new_string_table(self)
+             .expect("StringTable is not an abstract class");
+-        // A class-owned site is held by its class, so the table dies with it.
+-        // Every other site belongs to a package or a program, which outlive
+-        // the run, and those keep the global root.
++        // A class-owned site is held by its class and a program package's by
++        // the package object, which `attach_annotations` hands it to before
++        // anything allocates, so the table dies with its holder. Every other
++        // site keeps the global root.
+         match site {
+             Annotated::Class(owner) | Annotated::Member(owner, _, _) => {
+                 self.class_owns(owner, table);
+             }
++            Annotated::Package(Package::Program(_)) => {}
+             _ => self.roots.add_global(&annotation_root_key(&site), table),
+         }
+         self.annotations.insert(site, table);
+         table
+     }
+ 
+     /// Records what one `::ANNOTATE` directive named, under every key that
+     /// reaches it.
+     pub(crate) fn record_annotations(
+         &mut self,
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index fab0f53f7..269f1dced 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -693,24 +693,28 @@ impl Interp {
+         // and the oracle reports the same 43.901 for it, since
+         // `PackageManager::loadRequires` answers `OREF_NULL` either way.
+         let Ok(text) = std::fs::read(&resolved) else {
+             return Err(Raised::requires_file_not_found(original).into());
+         };
+         let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
+         let required = ProgramId(self.programs.len());
+         self.programs.push(Rc::clone(&parsed));
+         self.required_paths
+             .insert(required, resolved.as_str().into());
++        // Built before it is cached: the cache holds the package object
++        // weakly (`PackageManager::addToRequiresCache`,
++        // `package/PackageManager.cpp:921`), so an entry lives exactly as long
++        // as its object.
++        let package = self.package_object(Package::Program(required));
+         // Installed before the prologue runs, which is where
+         // `getRequiresFile` puts it (`package/PackageManager.cpp:830`-`:833`).
+         if let Some(manager) = inherited {
+-            let package = self.package_object(Package::Program(required));
+             self.install_security_manager(package, Some(manager));
+         }
+         // **Cached before the prologue runs, not after**, which is
+         // `addRequiresFile` standing ahead of `runProlog` at
+         // `InterpreterInstance.cpp:1060`: a name reached again from inside
+         // that prologue must find this entry, or the circularity check has
+         // nothing to fire on.
+         self.required_packages.insert(original.into(), required);
+         self.required_packages
+             .insert(resolved.as_bytes().into(), required);
+@@ -1721,21 +1725,21 @@ impl Interp {
+         if let Some(parent) = parent {
+             self.set_package_parent(program_id, parent);
+         }
+         let method = self.mint_unattached_body(
+             object,
+             InstalledMethodBody {
+                 program: program_id,
+                 directive: 0,
+             },
+         );
+-        self.executable_sources.insert(
++        self.record_executable(
+             object,
+             ExecutableRecord {
+                 source: ExecutableSource::Main {
+                     program: program_id,
+                 },
+                 installed: Some(method),
+                 routine: None,
+             },
+         );
+     }
+@@ -1852,21 +1856,21 @@ impl Interp {
+         let program_id = ProgramId(self.programs.len());
+         self.programs.push(program);
+         self.compiled_method_names.insert(program_id, name.into());
+         self.override_package_settings(program_id);
+         // `generateMethod` and `generateRoutine` give the executable's own
+         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+         // which its routine and class lookups walk.
+         if let Some(parent) = parent {
+             self.set_package_parent(program_id, parent);
+         }
+-        self.executable_sources.insert(
++        self.record_executable(
+             object,
+             ExecutableRecord {
+                 source: ExecutableSource::Main {
+                     program: program_id,
+                 },
+                 installed: None,
+                 routine: Some((program_id, 0)),
+             },
+         );
+     }
+@@ -1981,21 +1985,21 @@ impl Interp {
+         self.attach_annotations(object, site);
+         let installed = (!routine).then(|| {
+             self.mint_unattached_body(
+                 object,
+                 InstalledMethodBody {
+                     program: id,
+                     directive: body,
+                 },
+             )
+         });
+-        self.executable_sources.insert(
++        self.record_executable(
+             object,
+             ExecutableRecord {
+                 source: ExecutableSource::Main { program: id },
+                 installed,
+                 routine: routine.then_some((id, body)),
+             },
+         );
+         Ok(object)
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 401237d28..71f624a7e 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1672,21 +1672,22 @@ struct Interp {
+     /// installed `::OPTIONS ... LOSTDIGITS SYNTAX` or a `Package~options`
+     /// write; the gate on [`Interp::lostdigits_check`].
+     lostdigits_armed: bool,
+     /// The running program's own location, as `PARSE SOURCE`'s third word.
+     program_path: String,
+     /// The resolved location of each program a `::REQUIRES` loaded, which is
+     /// what that program's own `PARSE SOURCE`, `~package~name` and traceback
+     /// report in place of [`Interp::program_path`].
+     required_paths: FxHashMap<ProgramId, Box<str>>,
+     /// The package each `::REQUIRES` name has already loaded, keyed both by
+-    /// the name as written and by the file it resolved to.
++    /// the name as written and by the file it resolved to. An entry goes when
++    /// its package object is collected.
+     required_packages: FxHashMap<Box<[u8]>, ProgramId>,
+     /// The programs whose first walk of [`Interp::install_directives`], which is
+     /// this crate's translation, started and did not finish. The oracle gives
+     /// the package of a translation that raised no routine, method or resource
+     /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
+     untranslated: rustc_hash::FxHashSet<ProgramId>,
+     /// The threads native calls and blocking operations run on; last, so
+     /// that every island value is dropped before its threads end.
+     pool: crate::scheduler::Pool,
+ }
+@@ -2951,22 +2952,24 @@ impl Interp {
+             // its directory's own pool while its generation is current, and a
+             // view whose generation is not current is not read.
+             environment: _,
+             // A lookup index. Both halves are held by the class itself --
+             // the key is the class, the value is in its `owned` list.
+             class_variables: _,
+             // Keyed by class identity, and `ClassPackage` holds no `ObjRef`.
+             class_packages: _,
+             // Zero length.
+             empty_arguments: _,
+-            // `RootSet::add_global`, under `package_root_key`. A package's
+-            // body traces every object its fields hold.
++            // The REXX package is a `RootSet::add_global` under
++            // `package_root_key`. A program's package is held by whatever
++            // reaches it and by `Interp::package_roots`. A package's body
++            // traces every object its fields hold.
+             rexx_package: _,
+             program_packages: _,
+             // Rooted by the `.ROUTINES` table each entry is also in.
+             routine_objects: _,
+             // `RootSet::add_global`, under `library_routine_root_key`.
+             library_routine_objects: _,
+             // `RootSet::add_global`, under `internal_routine_root_key`.
+             internal_routine_objects: _,
+             // A lookup index. A class-owned site's table is held by that
+             // class; every other site's is a global under
+@@ -3053,20 +3056,21 @@ impl Interp {
+             // root holds; this caches the decision, not the object.
+             output_route: _,
+             collect_at: _,
+             bytes_due: _,
+             queue: _,
+             input: _,
+             reqstr_armed: _,
+             lostdigits_armed: _,
+             program_path: _,
+             required_paths: _,
++            // Weak: pruned in `Interp::collect_now`.
+             required_packages: _,
+             untranslated: _,
+             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
+             // own environment, current directory and `SETLOCAL` snapshots are
+             // not the collector's.
+             env: _,
+             library_search: _,
+             cwd: _,
+             // The embedding's own writers, which take bytes and hold nothing
+             // of this interpreter's.
+@@ -3076,32 +3080,51 @@ impl Interp {
+             // here is reachable from the collector.
+             standard_transient: _,
+             command_words: _,
+         } = self;
+         activity.object_roots(out);
+         activities.object_roots(out);
+         out.extend(stem_exposers.values().flatten().copied());
+         out.extend(global_references.roots());
+     }
+ 
++    /// The package of each program an activation on any activity runs, of
++    /// each program of the interpreter's own library, and of each program a
++    /// library code row names, which the oracle keeps for the run: measured,
++    /// the package whose `::ROUTINE` first bound `rxmath`'s `RxCalcSqrt` is
++    /// never collected.
++    fn package_roots(&self, out: &mut Vec<ObjRef>) {
++        let mut programs = Vec::new();
++        self.activity.running_programs(&mut programs);
++        self.activities.running_programs(&mut programs);
++        programs.extend(self.library_programs.iter().copied());
++        programs.extend(self.library_codes.iter().flatten().copied());
++        out.extend(
++            programs
++                .into_iter()
++                .filter_map(|program| self.program_package(program)),
++        );
++    }
++
+     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so
+     /// that what an allocation pays when nothing is due is the test alone.
+     #[inline(never)]
+     fn collect_now(&mut self) {
+         // Nothing a collection reads is the running activity's resolution.
+         #[cfg(feature = "sharing")]
+         self.heap.sharing_pause(true);
+         crate::scheduler::Scheduler::stop_the_world(self);
+         // Everything the interpreter holds outside `RootSet`, handed to the
+         // collector as temporaries for the length of the sweep.
+         let mut anchor: Vec<ObjRef> = Vec::new();
+         self.object_roots(&mut anchor);
++        self.package_roots(&mut anchor);
+         let frame = self.roots.activity_mut().push_frame();
+         for object in anchor {
+             self.roots.activity_mut().push_temp(object);
+         }
+         let stats = self.heap.collect(&self.roots);
+         self.roots.activity_mut().pop_frame(frame);
+         let heap = &self.heap;
+         self.kept_strings.retain(|object, _| {
+             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                 || heap.peek(*object).is_some()
+@@ -3111,20 +3134,28 @@ impl Interp {
+         self.activities.guards.prune_pools(|object| {
+             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                 || heap.peek(object).is_some()
+         });
+         self.activities.semaphores.prune(|object| {
+             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                 || heap.peek(object).is_some()
+         });
+         self.activities
+             .prune_senders(|message| heap.peek(message).is_some());
++        let packages = &self.program_packages;
++        self.required_packages.retain(|_, program| {
++            packages
++                .get(program.0)
++                .copied()
++                .flatten()
++                .is_some_and(|package| heap.peek(package).is_some())
++        });
+         // A sweep can free a class the registry named, which unlinks its row
+         // and leaves any `.NAME` answer derived from it naming nothing.
+         self.invalidate_rexx_class_cache();
+         // `pending_uninit` is what the collector resurrected so a finalizer
+         // could run against a whole graph. The finalizer is not sent from
+         // here: the oracle's collector only marks
+         // (`MemoryObject::checkUninit`), and `runUninits` is reached from
+         // `GC('force')`, an activation's return (`RexxActivation.cpp:705`,
+         // `NativeActivation.cpp:1361`), an activity's dispatch loop
+         // (`Activity.cpp:249`) and the termination sweep.
+diff --git a/rust/crates/rexx-exec/src/run/condition.rs b/rust/crates/rexx-exec/src/run/condition.rs
+index ed6a9b149..fd7781e32 100644
+--- a/rust/crates/rexx-exec/src/run/condition.rs
++++ b/rust/crates/rexx-exec/src/run/condition.rs
+@@ -355,20 +355,21 @@ impl Interp {
+         // handler reports line 8, alone, and a version that kept the first
+         // site reports line 3.
+         let site = self.activity.failure_site.take();
+         let sites = std::mem::take(&mut self.activity.failure_sites);
+         let frames = std::mem::take(&mut self.activity.failure_frames);
+         for &frame in &frames {
+             self.roots.activity_mut().push_temp(frame);
+         }
+         self.activity.failure_frame = None;
+         let origin = self.activity.failure_origin.take();
++        self.hold_origin_package(origin);
+         let propagated = std::mem::take(&mut self.activity.failure_propagated);
+         let reraised = std::mem::take(&mut self.activity.failure_reraised);
+         self.set_sigl(self.activity.clause_state.line());
+         if let Some(rc) = &raised.rc {
+             let value = self.text(rc);
+             self.assign_by_name(b"RC", value);
+         }
+         // What `CONDITION()` reports for the rest of this activation, kept
+         // apart from `active_condition` below, which carries the echo sites
+         // `RAISE PROPAGATE` puts back.
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index c38168f4b..7d2c76cbf 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -399,20 +399,28 @@ impl Activities {
+     /// Puts `activity` at the back of the ready queue unless it is ready
+     /// already: a second entry would end the next park it makes.
+     fn make_ready(&mut self, activity: ActivityId) {
+         if !self.ready.contains(&activity)
+             && !self.set_aside.iter().any(|(set, _)| *set == activity)
+         {
+             self.ready.push_back(activity);
+         }
+     }
+ 
++    /// [`crate::activity::Activity::running_programs`] of every activity
++    /// that is not running.
++    pub(crate) fn running_programs(&self, out: &mut Vec<crate::plan::ProgramId>) {
++        for idle in self.idle.iter().flatten() {
++            idle.activity.running_programs(out);
++        }
++    }
++
+     /// Appends every `ObjRef` an activity that is not running holds.
+     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+         for failure in &self.late_failures {
+             if let Failure::Exited(value) = failure {
+                 out.extend(*value);
+             }
+         }
+         for idle in self.idle.iter().flatten() {
+             idle.object_roots(out);
+         }
+diff --git a/rust/crates/rexx-exec/src/sim/tests.rs b/rust/crates/rexx-exec/src/sim/tests.rs
+index 25339ecef..7e1f96cf9 100644
+--- a/rust/crates/rexx-exec/src/sim/tests.rs
++++ b/rust/crates/rexx-exec/src/sim/tests.rs
+@@ -836,10 +836,30 @@ fn time_e_after_any_sleep_is_never_zero() {
+     for seed in 1..=20 {
+         let outcome = run_in(program, Some(sim(&format!("sim:{seed},fifo"))));
+         assert_eq!(outcome.exit_code, 0, "seed {seed}: {}", stderr(&outcome));
+         assert_eq!(
+             stdout(&outcome),
+             "0 1\n0.0 1\n0.00000001 1\n0.000001 1\n",
+             "seed {seed}"
+         );
+     }
+ }
++
++/// A package that only a waiting activation's frame reaches survives the
++/// collections another activity's allocations make, under random collection.
++/// Measured, oracle rc 0, `idle 1 1 1` in 3 of 3 runs, with each pass of
++/// the loop also allocating `copies('y', 100000)`.
++#[test]
++fn a_package_only_a_waiting_frame_reaches_survives() {
++    let source = "w = .WeakReference~new(.context~package)\n\
++        h = .context~package~identityHash\n\
++        k = .Package~new('w', ('::class worker public', '::method churn', \
++        '  do i = 1 to 100', '    q = .array~new(100)', '  end', '  return 1'))~findClass('WORKER')\n\
++        m = k~new~start('CHURN')\n\
++        say 'idle' m~result (w~value \\== .nil) (.context~package~identityHash == h)\n";
++    for seed in 1..=4 {
++        let run = run_in(source, Some(sim(&format!("sim:{seed},gc=0.5"))));
++        assert_eq!(run.exit_code, 0, "seed {seed}: {}", stderr(&run));
++        assert_eq!(stdout(&run), "idle 1 1 1\n", "seed {seed}");
++        assert!(run.collections > 0, "seed {seed} did not collect");
++    }
++}
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index 7797c2125..5051c7836 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -115,20 +115,34 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+     "lang/select_when_absorption.rex",
+     "lang/select_when_bodies.rex",
+     "lang/string_caseless.rex",
+     "lang/string_compare.rex",
+     "lang/trace_numeric_request.rex",
+     "lang/trace_output.rex",
+     "lang/trace_results.rex",
+     "num/comparison.rex",
+ ];
+ 
++/// The programs whose stdout depends on when a collection happens, which is
++/// not an observable the oracle defines (ruled 2026-09-01): each loads a
++/// package nothing holds, which the requires cache holds weakly, and loads it
++/// again. Measured on the oracle with a loop of `copies('y', 100000)` between
++/// the two loads: `library_package_retried.rex` prints `its class The K3
++/// class` where it stands at `its class .K3`, and
++/// `requires_manager_rename.rex` prints `second load 1 4 events` where it
++/// stands at `2 events`. Each still exits and writes stderr as its plain run
++/// does.
++const COLLECTION_TIMED_PROGRAMS: &[&str] = &[
++    "lang/library_package_retried.rex",
++    "lang/requires_manager_rename.rex",
++];
++
+ /// The phase subset files that exist in the corpus directory, sorted.
+ fn phase_subset_files_on_disk() -> Vec<String> {
+     let dir = corpus_dir();
+     let entries =
+         fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+     let mut names: Vec<String> = entries
+         .flatten()
+         .filter_map(|entry| entry.file_name().into_string().ok())
+         .filter(|name| name.starts_with("phase-") && name.ends_with(".txt"))
+         .collect();
+@@ -156,20 +170,27 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
+         .iter()
+         .map(|name| corpus_dir.join(name))
+         .collect();
+     let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+     assert!(
+         !subset.is_empty(),
+         "the phase subset files named no programs -- that is a corpus defect, \
+          not an empty pass"
+     );
+ 
++    for timed in COLLECTION_TIMED_PROGRAMS {
++        assert!(
++            subset.iter().any(|path| path == timed),
++            "{timed} is not in the subset"
++        );
++    }
++
+     let mut total_collections: u64 = 0;
+     let mut mismatches = Vec::new();
+     let mut zero_collection_programs = Vec::new();
+ 
+     for rel_path in &subset {
+         let abs = corpus_dir.join(rel_path);
+         let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
+         let path_str = abs
+             .to_str()
+             .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", abs.display()));
+@@ -196,22 +217,23 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
+             text,
+             support::sidecar::invocation(&cwd, &overrides, stdin)
+                 .with_deadline(support::oracle::RUN_DEADLINE * 10),
+         );
+ 
+         if stress.collections == 0 {
+             zero_collection_programs.push(rel_path.clone());
+         }
+         total_collections += stress.collections;
+ 
++        let timed = COLLECTION_TIMED_PROGRAMS.contains(&rel_path.as_str());
+         if plain.exit_code != stress.exit_code
+-            || plain.stdout != stress.stdout
++            || (plain.stdout != stress.stdout && !timed)
+             || plain.stderr != stress.stderr
+         {
+             mismatches.push(format!(
+                 "{rel_path}: plain exit={} stdout={:?} stderr={:?}; \
+                  stress exit={} stdout={:?} stderr={:?}",
+                 plain.exit_code,
+                 String::from_utf8_lossy(&plain.stdout),
+                 String::from_utf8_lossy(&plain.stderr),
+                 stress.exit_code,
+                 String::from_utf8_lossy(&stress.stdout),
+@@ -1198,10 +1220,171 @@ fn a_trapped_conditions_object_survives_collect_on_every_allocation() {
+             String::from_utf8_lossy(&stress.stdout),
+             "ERROR 3 1\n",
+             "{label}: the condition object did not survive the collector"
+         );
+         assert!(
+             stress.collections > 0,
+             "{label}: the stress mode did not collect, so this proves nothing"
+         );
+     }
+ }
++
++/// A package is never collected while something reaches it: an activation
++/// of its code, running or waiting on another activity, a variable holding
++/// it, a class it defines, a `Routine` or `Method` object compiled into it, a
++/// subclass instance of either, or a `Method` whose parent it is. Its
++/// annotation table lives as long as it does. Measured, oracle rc 0, the same
++/// lines for each program with a 100-pass loop of `copies('y', 100000)` in
++/// place of the filler.
++#[test]
++fn a_package_in_use_is_never_collected() {
++    for (label, program, expected) in [
++        (
++            "<package-of-a-running-activation>",
++            concat!(
++                "w = .WeakReference~new(.context~package)\n",
++                "h = .context~package~identityHash\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "say 'running' (w~value \\== .nil) (.context~package~identityHash == h)\n",
++            ),
++            "running 1 1\n",
++        ),
++        (
++            "<package-of-a-waiting-activation>",
++            concat!(
++                "w = .WeakReference~new(.context~package)\n",
++                "h = .context~package~identityHash\n",
++                "k = .Package~new('w', ('::class worker public', '::method churn', ",
++                "'  do i = 1 to 20', '    zj = \"filler\" i', '  end', '  return 1'))",
++                "~findClass('WORKER')\n",
++                "m = k~new~start('CHURN')\n",
++                "say 'idle' m~result (w~value \\== .nil) (.context~package~identityHash == h)\n",
++            ),
++            "idle 1 1 1\n",
++        ),
++        (
++            "<package-in-a-variable>",
++            concat!(
++                "p = .Routine~new('r', 'return .context~package')~call\n",
++                "p~addRoutine('X7', .routine~new('x', 'return 7'))\n",
++                "w = .WeakReference~new(p)\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "say 'variable' (w~value == p) p~findRoutine('X7')~call\n",
++            ),
++            "variable 1 7\n",
++        ),
++        (
++            "<package-of-a-class>",
++            concat!(
++                "k = .Package~new('p', ('::class k public', '::method m', ",
++                "'  return .context~package~identityHash'))~findClass('K')\n",
++                "h = k~package~identityHash\n",
++                "w = .WeakReference~new(k~package)\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "say 'class' (w~value \\== .nil) (k~new~m == h) (k~package~identityHash == h)\n",
++            ),
++            "class 1 1 1\n",
++        ),
++        (
++            "<package-of-a-routine>",
++            concat!(
++                "r = .Package~new('p', ('::routine r public', ",
++                "'  return .context~package~identityHash'))~findRoutine('R')\n",
++                "h = r~package~identityHash\n",
++                "w = .WeakReference~new(r~package)\n",
++                "s = .Routine~new('s', 'return .context~package~identityHash')\n",
++                "g = s~package~identityHash\n",
++                "v = .WeakReference~new(s~package)\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "say 'directive routine' (w~value \\== .nil) (r~call == h) (r~package~identityHash == h)\n",
++                "say 'source routine' (v~value \\== .nil) (s~call == g) (s~package~identityHash == g)\n",
++            ),
++            "directive routine 1 1 1\nsource routine 1 1 1\n",
++        ),
++        (
++            "<package-of-a-method>",
++            concat!(
++                "m = .Method~new('m', 'return .context~package~identityHash')\n",
++                "h = m~package~identityHash\n",
++                "w = .WeakReference~new(m~package)\n",
++                "c = .context~package~copy\n",
++                "c~addRoutine('Q9', .routine~new('q', 'return 9'))\n",
++                "n = .Method~new('n', 'return q9()', c)\n",
++                "drop c\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "o = .runner~new\n",
++                "say 'method' (w~value \\== .nil) (o~go(m) == h) (m~package~identityHash == h) o~go(n)\n",
++                "::class runner\n",
++                "::method go\n",
++                "  use arg m\n",
++                "  return self~run(m)\n",
++            ),
++            "method 1 1 1 9\n",
++        ),
++        (
++            "<package-of-an-executable-subclass-instance>",
++            concat!(
++                "s = .mm~new('m', 'return .context~package~identityHash')\n",
++                "h = s~package~identityHash\n",
++                "w = .WeakReference~new(s~package)\n",
++                "t = .rr~new('r', 'return .context~package~identityHash')\n",
++                "g = t~package~identityHash\n",
++                "v = .WeakReference~new(t~package)\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "say 'subclass' (w~value \\== .nil) (s~package~identityHash == h) ",
++                "(v~value \\== .nil) (t~call == g) (t~package~identityHash == g)\n",
++                "::class mm subclass method\n",
++                "::class rr subclass routine\n",
++            ),
++            "subclass 1 1 1 1 1\n",
++        ),
++        (
++            "<annotations-of-a-package>",
++            concat!(
++                "p = .Package~new('p', ('::annotate package colour \"blue\"', ",
++                "'::routine r public', '  return 1'))\n",
++                "w = .WeakReference~new(p~annotations)\n",
++                "do i = 1 to 20\n",
++                "  zj = 'filler' i\n",
++                "end\n",
++                "say 'annotation' p~annotation('colour') (w~value == p~annotations)\n",
++            ),
++            "annotation blue 1\n",
++        ),
++    ] {
++        assert_stress_prints(label, program, expected);
++    }
++}
++
++/// A package nothing reaches is collected and its weak reference clears,
++/// whether `Package~new` built it or a `Routine` or `Method` compiled from
++/// source text did (L7). Measured, oracle rc 0, `dropped 1 1 1 1` for the same
++/// lines with a 100-pass loop of `copies('y', 100000)` in place of the filler.
++#[test]
++fn a_dropped_package_is_collected() {
++    assert_stress_prints(
++        "<package-collected>",
++        concat!(
++            "w = .WeakReference~new(.Package~new('src', 'nop'))\n",
++            "v = .WeakReference~new(.Package~new('q', ('::routine r public', '  return 1')))\n",
++            "u = .WeakReference~new(.Routine~new('r', 'return 1')~package)\n",
++            "t = .WeakReference~new(.Method~new('m', 'return 1')~package)\n",
++            "do i = 1 to 20\n",
++            "  zj = 'filler' i\n",
++            "end\n",
++            "say 'dropped' (w~value == .nil) (v~value == .nil) (u~value == .nil) (t~value == .nil)\n",
++        ),
++        "dropped 1 1 1 1\n",
++    );
++}
+diff --git a/rust/crates/rexx-exec/tests/representation_refusals.rs b/rust/crates/rexx-exec/tests/representation_refusals.rs
+index d819006a5..7f518f4f2 100644
+--- a/rust/crates/rexx-exec/tests/representation_refusals.rs
++++ b/rust/crates/rexx-exec/tests/representation_refusals.rs
+@@ -114,21 +114,20 @@ const ALLOWED: &[(&str, &str)] = &[
+         "rexx-exec/src/environment.rs:a value whose object is no longer live",
+         "Task 8",
+     ),
+ ];
+ 
+ /// The owners a row may name.
+ const OWNERS: &[&str] = &[
+     "Deviation 28",
+     "Deviation 32",
+     "Deviation 36",
+-    "Task 5",
+     "Task 6",
+     "Task 7",
+     "Task 8",
+     "Phase 10",
+ ];
+ 
+ fn crates_dir() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR"))
+         .parent()
+         .expect("the crate sits in `crates/`")
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_library_binder_kept.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_library_binder_kept.txt
+new file mode 100644
+index 000000000..8ef95dd52
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_library_binder_kept.txt
+@@ -0,0 +1,19 @@
++count 18
++/* The package whose ::ROUTINE first bound an external library procedure is
++   that procedure's package for the run, so it outlives every reference a
++   program holds, while a package nothing reaches is collected. */
++p = .Package~new('lp', ('::routine sq public external "LIBRARY rxmath RxCalcSqrt"',))
++u = .Routine~loadExternalRoutine('lx', 'LIBRARY rxmath RxCalcSqrt')
++say 'bound' (u~package == p) (p~findRoutine('SQ')~package == p)
++h = p~identityHash
++w = .WeakReference~new(p)
++s = .WeakReference~new(.Package~new('sentinel', 'nop'))
++drop p
++i = 0
++loop until s~value == .nil | i > 5000
++  z = copies('y', 100000)
++  i += 1
++end
++say 'sentinel collected' (s~value == .nil)
++say 'binder kept' (w~value \== .nil) (u~package~identityHash == h)
++say 'later' .Routine~loadExternalRoutine('lx', 'LIBRARY rxmath RxCalcSqrt')~package~name
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_rerequire_collected.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_rerequire_collected.txt
+new file mode 100644
+index 000000000..a41c9a914
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_rerequire_collected.txt
+@@ -0,0 +1,28 @@
++count 27
++/* A package a ::REQUIRES loaded is held weakly by the requires cache: once
++   nothing else reaches it, it is collected, and the next ::REQUIRES of the
++   same file loads it again and runs its prologue again. */
++f = .stream~new('rereq.cls')
++f~open('write replace')
++f~lineout('.local~rereq.prologs = .local~rereq.prologs + 1')
++f~lineout('::routine rereq public')
++f~lineout('  return "answered"')
++f~close
++.local~rereq.prologs = 0
++r = .Routine~new('r', ("return rereq()", "::requires 'rereq.cls'"))
++w = .WeakReference~new(r~package~importedPackages[1])
++fr = w~value~findRoutine('REREQ')~identityHash
++say 'first' r~call
++drop r
++i = 0
++loop until w~value == .nil | i > 5000
++  z = copies('y', 100000)
++  i += 1
++end
++say 'collected' (w~value == .nil)
++r2 = .Routine~new('r2', ("return rereq()", "::requires 'rereq.cls'"))
++p2 = r2~package~importedPackages[1]
++say 'again' r2~call (p2~findRoutine('REREQ')~identityHash \== fr)
++say 'prologs' .local~rereq.prologs
++r3 = .Routine~new('r3', ("return rereq()", "::requires 'rereq.cls'"))
++say 'cached' (r3~package~importedPackages[1] == p2) 'prologs' .local~rereq.prologs
