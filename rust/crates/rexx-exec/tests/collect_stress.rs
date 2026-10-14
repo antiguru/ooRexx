@@ -1520,3 +1520,49 @@ fn a_dropped_package_is_collected() {
         "dropped 1 1 1 1\n",
     );
 }
+
+/// Runs `read` after an external routine's public routines were merged into
+/// the main program's package by a call from a procedure, and a loop that
+/// allocates, and asserts it printed `expected`.
+fn assert_external_merge_prints(label: &str, read: &str, expected: &str) {
+    let ext5 = "return 1\n::routine pubr public\n  return .context~package~name~right(8)\n";
+    let program = format!(
+        "call sub\ndo zi = 1 to 3\n  zz = copies('x', 100000)\nend\n{read}exit\n\
+         sub: procedure\n  x = ext5()\n  return\n"
+    );
+    assert_stress_prints_beside(label, &[("ext5.rex", ext5)], &program, expected);
+}
+
+/// An external routine's public routines, merged into its caller's package,
+/// keep the routine's package alive after the call returns. Measured, oracle
+/// rc 0, `e5 ext5.rex` with a 3000-pass loop of `copies('x', 100000)`.
+#[test]
+fn an_external_routines_merged_routine_runs_in_its_package() {
+    assert_external_merge_prints(
+        "<external-merged-call>",
+        "say 'e5' pubr()\n",
+        "e5 ext5.rex\n",
+    );
+}
+
+/// The same after the caller's own package was built. Measured, oracle rc
+/// 0, `e6 main.rex ext5.rex` with the oracle's filler.
+#[test]
+fn an_external_routines_merged_routine_runs_beside_its_callers_package() {
+    assert_external_merge_prints(
+        "<external-merged-after-own-package>",
+        "say 'e6' .context~package~name~right(8) pubr()\n",
+        "e6 main.rex ext5.rex\n",
+    );
+}
+
+/// The same routine found through `~findRoutine`. Measured, oracle rc 0,
+/// `e7 0 ext5.rex` with the oracle's filler.
+#[test]
+fn an_external_routines_merged_routine_is_found() {
+    assert_external_merge_prints(
+        "<external-merged-found>",
+        "r = .context~package~findRoutine('PUBR')\nsay 'e7' (r == .nil) r~call\n",
+        "e7 0 ext5.rex\n",
+    );
+}

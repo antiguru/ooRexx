@@ -845,6 +845,9 @@ impl Interp {
         for (name, class) in classes {
             data.merged_public_classes.entry(name).or_insert(class);
         }
+        if from != into && !data.merged_from.contains(&from) {
+            data.merged_from.push(from);
+        }
     }
 
     /// The package a namespace qualifier written in `package` names, or `None`

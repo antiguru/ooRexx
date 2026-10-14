@@ -129,3 +129,6 @@ lang/package_rexx_copy_lookups.rex
 # 9b1 Task 5: packages are collected, and the requires cache holds them weakly.
 lang/package_rerequire_collected.rex
 lang/package_library_binder_kept.rex
+
+# 9b1 Task 5 fix round 2: an external routine's merged routines keep its package.
+lang/package_external_merge_held.rex

@@ -68,6 +68,12 @@ pub(crate) struct PackageData {
     pub(crate) local: Option<ObjRef>,
     /// `loadedPackages`, in the order they were added.
     pub(crate) imports: Vec<ObjRef>,
+    /// Every package whose public routines and classes were merged into this
+    /// one. A merged `::ROUTINE` names its program, not an object, so this is
+    /// what keeps the program's package alive for it, as the oracle's merged
+    /// `Routine` object does. Not `~importedPackages`: an external call
+    /// merges without importing.
+    pub(crate) merged_from: Vec<ObjRef>,
     /// `parentPackage`: the package a routine or class lookup that misses
     /// this one's own tables walks next.
     pub(crate) parent: Option<ObjRef>,
@@ -99,6 +105,7 @@ impl PackageFields for PackageData {
             namespaces,
             local,
             imports,
+            merged_from,
             parent,
             main_routine,
             tables,
@@ -122,6 +129,7 @@ impl PackageFields for PackageData {
         out.extend(namespaces.values().copied());
         out.extend(*local);
         out.extend(imports.iter().copied());
+        out.extend(merged_from.iter().copied());
         out.extend(*parent);
         out.extend(*main_routine);
         out.extend(tables.iter().flatten().copied());
