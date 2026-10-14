@@ -1721,8 +1721,9 @@ impl PackageStart {
 /// One entry of [`Interp::merged_public_routines`].
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum MergedRoutine {
-    /// A `::ROUTINE` a required package declared or imported.
-    Installed(InstalledRoutine),
+    /// A `::ROUTINE` a required package declared or imported, and the
+    /// package object of its program, which the entry holds.
+    Installed(InstalledRoutine, ObjRef),
     /// A library routine, as its [`Interp::library_codes`] row.
     Library(usize),
     /// An internal package's routine, as its
@@ -1749,7 +1750,7 @@ impl MergedRoutine {
     /// What a call that finds this entry runs.
     pub(crate) fn resolved(self) -> run::Resolved {
         match self {
-            MergedRoutine::Installed(installed) => run::Resolved::Routine(installed),
+            MergedRoutine::Installed(installed, _) => run::Resolved::Routine(installed),
             MergedRoutine::Library(code) | MergedRoutine::LibraryObject(code, _) => {
                 run::Resolved::MergedLibraryRoutine(code)
             }

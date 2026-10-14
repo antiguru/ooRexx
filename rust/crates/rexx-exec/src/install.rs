@@ -354,16 +354,17 @@ impl Interp {
             }
         }
         if !routines.is_empty() || !public_routines.is_empty() {
+            let package = self.package_object(Package::Program(id))?;
             let data = self.program_fields_mut(id)?;
             data.routines.extend(
                 routines
                     .into_iter()
-                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
+                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed, package))),
             );
             data.public_routines.extend(
                 public_routines
                     .into_iter()
-                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
+                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed, package))),
             );
         }
         self.library_routine_codes.extend(routine_codes);
@@ -843,9 +844,6 @@ impl Interp {
         };
         for (name, class) in classes {
             data.merged_public_classes.entry(name).or_insert(class);
-        }
-        if from != into && !data.merged_from.contains(&from) {
-            data.merged_from.push(from);
         }
     }
 

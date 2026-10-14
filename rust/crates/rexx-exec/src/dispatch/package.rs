@@ -913,7 +913,7 @@ fn install_routine(
     };
     writable_package_of(interp, receiver)?;
     interp.routines_changed();
-    if let crate::MergedRoutine::Installed(installed) = merged {
+    if let crate::MergedRoutine::Installed(installed, _) = merged {
         interp.routine_objects.insert(installed, routine);
     }
     if let Some(data) = interp.package_data_mut(receiver) {

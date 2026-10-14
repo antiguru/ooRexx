@@ -71,12 +71,6 @@ pub(crate) struct PackageData {
     pub(crate) local: Option<ObjRef>,
     /// `loadedPackages`, in the order they were added.
     pub(crate) imports: Vec<ObjRef>,
-    /// Every package whose public routines and classes were merged into this
-    /// one. A merged `::ROUTINE` names its program, not an object, so this is
-    /// what keeps the program's package alive for it, as the oracle's merged
-    /// `Routine` object does. Not `~importedPackages`: an external call
-    /// merges without importing.
-    pub(crate) merged_from: Vec<ObjRef>,
     /// `parentPackage`: the package a routine or class lookup that misses
     /// this one's own tables walks next.
     pub(crate) parent: Option<ObjRef>,
@@ -109,7 +103,6 @@ impl PackageFields for PackageData {
             namespaces,
             local,
             imports,
-            merged_from,
             parent,
             main_routine,
             tables,
@@ -117,10 +110,12 @@ impl PackageFields for PackageData {
         } = self;
         out.extend(*security_manager);
         // The `Routine` objects `~addRoutine` filed as themselves, which the
-        // table does not follow into these copies.
+        // table does not follow into these copies, and the package of each
+        // `::ROUTINE`, as the oracle's merged `Routine` object holds it.
         for table in [public_routines, merged_public_routines] {
             out.extend(table.values().filter_map(|merged| match merged {
-                MergedRoutine::LibraryObject(_, object)
+                MergedRoutine::Installed(_, object)
+                | MergedRoutine::LibraryObject(_, object)
                 | MergedRoutine::InternalObject(_, object) => Some(*object),
                 _ => None,
             }));
@@ -133,7 +128,6 @@ impl PackageFields for PackageData {
         out.extend(namespaces.values().copied());
         out.extend(*local);
         out.extend(imports.iter().copied());
-        out.extend(merged_from.iter().copied());
         out.extend(*parent);
         out.extend(*main_routine);
         out.extend(tables.iter().flatten().copied());

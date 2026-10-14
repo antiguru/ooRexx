@@ -1115,7 +1115,9 @@ impl Interp {
     /// that row answers for, and itself over that row otherwise.
     pub(crate) fn added_routine(&self, object: ObjRef) -> Option<crate::MergedRoutine> {
         Some(match self.routine_object_resolution(object).ok()? {
-            crate::run::Resolved::Routine(installed) => crate::MergedRoutine::Installed(installed),
+            crate::run::Resolved::Routine(installed) => {
+                crate::MergedRoutine::Installed(installed, self.program_package(installed.program)?)
+            }
             crate::run::Resolved::MergedLibraryRoutine(code) => {
                 if self.library_routine_objects.get(&code) == Some(&object) {
                     crate::MergedRoutine::Library(code)
@@ -1140,7 +1142,7 @@ impl Interp {
     /// reporting that code's package.
     pub(crate) fn merged_routine_object(&mut self, merged: crate::MergedRoutine) -> Option<ObjRef> {
         match merged {
-            crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
+            crate::MergedRoutine::Installed(installed, _) => self.routine_object(installed),
             crate::MergedRoutine::Library(code) => Some(self.library_routine_object(code)),
             crate::MergedRoutine::Internal(index) => Some(self.internal_routine_object(index)),
             crate::MergedRoutine::LibraryObject(_, object)
