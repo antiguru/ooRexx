@@ -805,6 +805,8 @@ impl Loud {
 
     /// An activation's body selector named something that is not a routine
     /// body -- an internal inconsistency, never a program error.
+    #[cold]
+    #[inline(never)]
     fn missing_body() -> Loud {
         Loud {
             message: "an activation's body selector names no routine body".to_string(),

@@ -26,41 +26,45 @@ use rexx_parse::{
 };
 use std::rc::Rc;
 
-/// A loaded program's identity: a slot of [`Programs`] and the generation it
-/// was issued under. Never reused, so an id whose program was freed misses.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) struct ProgramId {
-    slot: u32,
-    generation: u32,
-}
-
-impl std::hash::Hash for ProgramId {
-    #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(u64::from(self.generation) << 32 | u64::from(self.slot));
-    }
-}
+/// A loaded program's identity: a slot of [`Programs`] in the low half and
+/// the generation it was issued under in the high half. Never reused, so an
+/// id whose program was freed misses.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) struct ProgramId(u64);
 
 impl std::fmt::Display for ProgramId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.slot, self.generation)
+        write!(f, "{}.{}", self.slot(), self.generation())
     }
 }
 
 impl ProgramId {
+    #[inline]
+    fn new(slot: u32, generation: u32) -> ProgramId {
+        ProgramId(u64::from(generation) << 32 | u64::from(slot))
+    }
+
+    /// The slot this id names.
+    #[inline]
+    fn slot(self) -> u32 {
+        self.0 as u32
+    }
+
+    #[inline]
+    fn generation(self) -> u32 {
+        (self.0 >> 32) as u32
+    }
+
     /// The id the `slot`th program loaded into a fresh interpreter gets.
     #[cfg(test)]
-    pub(crate) const fn nth(slot: u32) -> ProgramId {
-        ProgramId {
-            slot,
-            generation: 0,
-        }
+    pub(crate) fn nth(slot: u32) -> ProgramId {
+        ProgramId::new(slot, 0)
     }
 
     /// The slot this id names.
     #[cfg(test)]
     pub(crate) fn slot_index(self) -> u32 {
-        self.slot
+        self.slot()
     }
 }
 
@@ -69,10 +73,16 @@ impl ProgramId {
 #[derive(Clone, Debug)]
 pub(crate) struct ProgramHold(#[allow(dead_code)] Rc<ProgramId>);
 
-/// One slot of [`Programs`].
+/// One slot of [`Programs`]: the id it answers to and that id's program.
+/// A freed slot holds an id not yet issued.
 struct ProgramSlot {
-    generation: u32,
+    id: ProgramId,
     program: Option<Rc<Program>>,
+}
+
+/// What stands for one slot's package.
+#[derive(Default)]
+struct PackageSlot {
     /// The object standing for the program's package, once built.
     package: Option<ObjRef>,
     /// The holds of every package object over this program, once one is
@@ -85,6 +95,7 @@ struct ProgramSlot {
 #[derive(Default)]
 pub(crate) struct Programs {
     slots: Vec<ProgramSlot>,
+    packages: Vec<PackageSlot>,
     free: Vec<u32>,
     live: usize,
     /// Every id [`Programs::insert`] issued, in order.
@@ -99,39 +110,30 @@ impl Programs {
         let id = if let Some(slot) = self.free.pop() {
             let held = &mut self.slots[slot as usize];
             held.program = Some(program);
-            ProgramId {
-                slot,
-                generation: held.generation,
-            }
+            held.id
         } else {
             let slot = u32::try_from(self.slots.len()).expect("fewer than 2^32 program slots");
+            let id = ProgramId::new(slot, 0);
             self.slots.push(ProgramSlot {
-                generation: 0,
+                id,
                 program: Some(program),
-                package: None,
-                holds: None,
             });
-            ProgramId {
-                slot,
-                generation: 0,
-            }
+            self.packages.push(PackageSlot::default());
+            id
         };
         #[cfg(test)]
         self.issued.push(id);
         id
     }
 
-    #[inline]
-    fn slot(&self, id: ProgramId) -> Option<&ProgramSlot> {
-        self.slots
-            .get(id.slot as usize)
-            .filter(|held| held.generation == id.generation)
-    }
-
     /// The program `id` names, or `None` once it has been freed.
     #[inline]
     pub(crate) fn get(&self, id: ProgramId) -> Option<&Rc<Program>> {
-        self.slot(id)?.program.as_ref()
+        let held = self.slots.get(id.slot() as usize)?;
+        if held.id != id {
+            return None;
+        }
+        held.program.as_ref()
     }
 
     /// How many programs are loaded.
@@ -139,25 +141,30 @@ impl Programs {
         self.live
     }
 
+    /// `id`'s package slot, or `None` once the program is freed.
+    #[inline]
+    fn package_slot(&self, id: ProgramId) -> Option<&PackageSlot> {
+        self.get(id)?;
+        self.packages.get(id.slot() as usize)
+    }
+
     /// The object standing for `id`'s package, or `None` before one is built
     /// and once the program is freed.
     #[inline]
     pub(crate) fn package(&self, id: ProgramId) -> Option<ObjRef> {
-        self.slot(id)?.package
+        self.package_slot(id)?.package
     }
 
     /// Every built package object standing for a loaded program.
     pub(crate) fn packages(&self) -> impl Iterator<Item = ObjRef> + '_ {
-        self.slots.iter().filter_map(|held| held.package)
+        self.packages.iter().filter_map(|held| held.package)
     }
 
     /// Records `package` as the object standing for `id`'s package, and
     /// answers the hold it keeps on the program. `None` for a freed `id`.
     pub(crate) fn set_package(&mut self, id: ProgramId, package: ObjRef) -> Option<ProgramHold> {
-        let held = self
-            .slots
-            .get_mut(id.slot as usize)
-            .filter(|held| held.generation == id.generation && held.program.is_some())?;
+        self.get(id)?;
+        let held = &mut self.packages[id.slot() as usize];
         let hold = Rc::new(id);
         held.package = Some(package);
         held.holds = Some(Rc::downgrade(&hold));
@@ -168,26 +175,24 @@ impl Programs {
     /// answers their ids.
     pub(crate) fn free_unheld(&mut self) -> Vec<ProgramId> {
         let mut freed = Vec::new();
-        for (slot, held) in self.slots.iter_mut().enumerate() {
+        for (slot, (held, package)) in self.slots.iter_mut().zip(&mut self.packages).enumerate() {
             if held.program.is_none()
-                || held
+                || package
                     .holds
                     .as_ref()
                     .is_none_or(|holds| holds.strong_count() > 0)
             {
                 continue;
             }
-            freed.push(ProgramId {
-                slot: slot as u32,
-                generation: held.generation,
-            });
+            freed.push(held.id);
             held.program = None;
-            held.package = None;
-            held.holds = None;
+            *package = PackageSlot::default();
             self.live -= 1;
-            // A slot whose generation would overflow is retired, not reused.
-            if let Some(next) = held.generation.checked_add(1) {
-                held.generation = next;
+            // A slot whose generation would reach the last one is retired, so
+            // that the id it holds is never issued.
+            let next = held.id.generation() + 1;
+            held.id = ProgramId::new(slot as u32, next);
+            if next < u32::MAX {
                 self.free.push(slot as u32);
             }
         }
