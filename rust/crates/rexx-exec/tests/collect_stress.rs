@@ -922,26 +922,12 @@ fn a_weak_reference_clears_only_when_its_referent_becomes_unreachable() {
     );
 }
 
-/// A `Routine` object `~addPublicRoutine` filed as itself stays live in an
-/// importer's merged table once its own package replaces it, with a
-/// collection at every allocation in between.
-#[test]
-fn an_added_routine_object_survives_in_its_importer() {
-    let program = concat!(
-        "p = .context~package\n",
-        "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
-        "r = .Package~new('r', 'nop')\n",
-        "p~addPublicRoutine('C2', u~copy)\n",
-        "r~addPackage(p)\n",
-        "p~addPublicRoutine('C2', u)\n",
-        "do i = 1 to 20\n",
-        "  zj = 'filler' i\n",
-        "end\n",
-        "f = r~findRoutine('C2')\n",
-        "say (f == u) f~class~id f~call(0)\n",
-    );
+/// Runs `program` collecting at every allocation and asserts it printed
+/// `0 Routine 0`: a copy of a row's `Routine` object, held only by a routine
+/// table once the package's `.ROUTINES` entry stops naming it, still answers.
+fn assert_added_routine_survives(label: &str, program: &str) {
     let stress = run_program_collect_every_alloc(
-        "<added-routine-importer>",
+        label,
         program.as_bytes().to_vec(),
         rexx_exec::Invocation::none().with_deadline(support::oracle::RUN_DEADLINE * 10),
     );
@@ -957,6 +943,56 @@ fn an_added_routine_object_survives_in_its_importer() {
     assert!(
         stress.collections > 0,
         "the stress mode did not collect, so this proves nothing"
+    );
+}
+
+/// The copy is in an importer's merged table, and its own package replaced
+/// it.
+#[test]
+fn an_added_routine_object_survives_in_its_importer() {
+    assert_added_routine_survives(
+        "<added-routine-importer>",
+        concat!(
+            "p = .context~package\n",
+            "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
+            "r = .Package~new('r', 'nop')\n",
+            "p~addPublicRoutine('C2', u~copy)\n",
+            "r~addPackage(p)\n",
+            "p~addPublicRoutine('C2', u)\n",
+            "do i = 1 to 20\n",
+            "  zj = 'filler' i\n",
+            "end\n",
+            "f = r~findRoutine('C2')\n",
+            "say (f == u) f~class~id f~call(0)\n",
+        ),
+    );
+}
+
+/// The copy is in its package's public routines alone once a program
+/// replaced its `.ROUTINES` entry, and an importer merges it after a
+/// collection. Measured, oracle rc 0, `0 Routine 0` for the same program
+/// without the weak reference's line.
+#[test]
+fn an_added_public_routine_object_survives_its_table_entry() {
+    assert_added_routine_survives(
+        "<added-routine-public>",
+        concat!(
+            "p = .context~package\n",
+            "u = .Routine~loadExternalRoutine('x', 'LIBRARY rexxutil SysSleep')\n",
+            "d = u~copy\n",
+            "w = .WeakReference~new(d)\n",
+            "p~addPublicRoutine('C3', d)\n",
+            "drop d\n",
+            ".routines['C3'] = u\n",
+            "r = .Package~new('r', 'nop')\n",
+            "do i = 1 to 20\n",
+            "  zj = 'filler' i\n",
+            "end\n",
+            "if w~value == .nil then say 'collected'\n",
+            "r~addPackage(p)\n",
+            "f = r~findRoutine('C3')\n",
+            "say (f == u) f~class~id f~call(0)\n",
+        ),
     );
 }
 

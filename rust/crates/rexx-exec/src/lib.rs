@@ -2965,7 +2965,8 @@ impl Interp {
             // A chunk's interned literals are allocated immortal.
             chunks: _,
             chunks_refused: _,
-            routines,
+            // Held by each package's `.ROUTINES` table; see below.
+            routines: _,
             routines_written: _,
             package_public_routines,
             merged_public_routines,
@@ -3148,10 +3149,12 @@ impl Interp {
         ] {
             out.extend(table.values().flat_map(|names| names.values().copied()));
         }
-        // The `Routine` objects `~addRoutine` filed as themselves: a merge
-        // copies an entry into an importer, where nothing else holds it once
-        // its own package replaces it.
-        for table in [routines, package_public_routines, merged_public_routines] {
+        // The `Routine` objects `~addRoutine` filed as themselves. A
+        // package's own `routines` entries need no root: each is in its
+        // `.ROUTINES` table too, and once a program writes that table it is
+        // what every reader reads instead. Its public routines and an
+        // importer's merged ones are copies the table does not follow.
+        for table in [package_public_routines, merged_public_routines] {
             out.extend(
                 table
                     .values()

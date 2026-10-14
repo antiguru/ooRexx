@@ -600,6 +600,13 @@ fn routines(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let program = package_of(interp, receiver)?;
+    // A written `.ROUTINES` table is the package's routines from then on, as
+    // `findRoutine` reads them: measured, oracle rc 0, `p~routines['C']` is
+    // what `.routines['C'] = u` stored.
+    if program.is_some_and(|program| interp.routines_written.contains(&program)) {
+        let entries = package_table_entries(interp, receiver, PackageTable::Routines)?;
+        return interp.string_table_of(entries).map(Some);
+    }
     let entries = routine_entries(interp, program, |interp| &interp.routines);
     interp.string_table_of(entries).map(Some)
 }

@@ -18,6 +18,10 @@ p~addPublicRoutine('C2', u)
 do i = 1 to 20; zj = 'filler' i; end
 f = r~findRoutine('C2')
 say 'importer' (f == u) (f == p~findRoutine('C2')) f~class~id f~call(0)
+c = u~copy
+p~addRoutine('C4', c)
+.routines['C4'] = u
+say 'written' (p~routines['C4'] == u) (p~routines['C4'] == c) (p~findRoutine('C4') == u)
 signal on syntax
 p~addRoutine('M1', .Method~new('m', 'nop'))
 say 'method added'
