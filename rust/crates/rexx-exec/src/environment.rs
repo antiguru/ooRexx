@@ -265,20 +265,6 @@ pub(crate) struct EnvironmentModel {
     context: ObjRef,
 }
 
-impl EnvironmentModel {
-    /// `Package~copy`'s decision about `.environment` and `.local`, which hold
-    /// nothing per program: every field is named so that one added later
-    /// does not compile until it is decided.
-    pub(crate) fn copy_package(&self) {
-        let EnvironmentModel {
-            directories: _,
-            owed: _,
-            views: _,
-            context: _,
-        } = self;
-    }
-}
-
 /// A name `.NAME` found absent from `program`'s package local, and the
 /// store counters it was found at.
 #[derive(Default, Debug)]
@@ -332,6 +318,17 @@ pub(crate) enum PackageTable {
     Routines,
     /// `.RESOURCES`.
     Resources,
+}
+
+impl PackageTable {
+    /// Where [`crate::package_state::PackageData::tables`] keeps this table.
+    pub(crate) fn index(self) -> usize {
+        match self {
+            PackageTable::UnattachedMethods => 0,
+            PackageTable::Routines => 1,
+            PackageTable::Resources => 2,
+        }
+    }
 }
 
 /// What one entry of a package table holds.
@@ -528,11 +525,7 @@ impl Interp {
     pub(crate) fn dot_variable(&mut self, dotted: &[u8]) -> Result<ObjRef, Failure> {
         let bare = dotted.strip_prefix(b".").unwrap_or(dotted);
 
-        if let Some(found) = self.installed_class(bare) {
-            return Ok(found);
-        }
-
-        if let Some(found) = self.imported_class(bare) {
+        if let Some(found) = self.running_package_class(bare) {
             return Ok(found);
         }
 
@@ -540,7 +533,7 @@ impl Interp {
             return Ok(found);
         }
 
-        if !self.package_locals.is_empty()
+        if self.package_locals
             && let Some(program) = self.running_program()
         {
             match self.package_local_symbol(program, bare)? {
@@ -587,20 +580,20 @@ impl Interp {
         program: ProgramId,
         bare: &[u8],
     ) -> Result<Option<ObjRef>, Failure> {
-        let own = |table: &rexx_core::NameMap<ProgramId, rexx_core::NameMap<Box<[u8]>, ObjRef>>| {
-            table
-                .get(&program)
-                .and_then(|classes| classes.get(bare))
+        let data = self.program_data(program);
+        if let Some(found) = data.and_then(|data| {
+            data.classes
+                .get(bare)
+                .or_else(|| data.merged_public_classes.get(bare))
                 .copied()
-        };
-        if let Some(found) = own(&self.package_classes).or_else(|| own(&self.merged_public_classes))
-        {
+        }) {
             return Ok(Some(found));
         }
+        let local = data.and_then(|data| data.local);
         if let Some(found) = self.rexx_package_class(bare) {
             return Ok(Some(found));
         }
-        if let Some(&local) = self.package_locals.get(&Package::Program(program)) {
+        if let Some(local) = local {
             match self.package_local_entry(local, bare)? {
                 hash::DirectoryEntry::Found(found) => return Ok(Some(found)),
                 hash::DirectoryEntry::Owed(owner) => {
@@ -655,28 +648,16 @@ impl Interp {
         // `ClassDirective.cpp:185`): its installed classes and then its
         // parents', then its merged public classes and then its parents'
         // public ones (`classes/PackageClass.cpp:982-1049`).
-        if let Some(found) = self
-            .package_classes
-            .get(&installing)
-            .and_then(|table| table.get(upper))
-        {
-            return Ok(Some(*found));
-        }
-        if self.has_package_parent(installing)
-            && let Some(found) = self.parent_installed_class(installing, upper)
-        {
+        let package = self.program_package(installing);
+        if let Some(found) = self.chain_installed_class(package, upper) {
             return Ok(Some(found));
         }
-        if let Some(found) = self
-            .merged_public_classes
-            .get(&installing)
-            .and_then(|table| table.get(upper))
-        {
+        let data = package.and_then(|package| self.package_data(package));
+        if let Some(found) = data.and_then(|data| data.merged_public_classes.get(upper)) {
             return Ok(Some(*found));
         }
-        if self.has_package_parent(installing)
-            && let Some(found) = self.parent_public_class(installing, upper)
-        {
+        let parent = data.and_then(|data| data.parent);
+        if let Some(found) = self.chain_public_class(parent, upper) {
             return Ok(Some(found));
         }
         // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
@@ -744,43 +725,37 @@ impl Interp {
         Ok(hash::DirectoryEntry::Absent)
     }
 
-    /// A class the running package's own directives installed, under its
-    /// uppercased name, or one installed up its parent chain --
-    /// `PackageClass::findInstalledClass`, the first step of the order.
+    /// A class the running package's own directives installed, or one
+    /// installed up its parent chain, then a public class its `::REQUIRES`
+    /// directives imported, or one public up its parent chain --
+    /// `PackageClass::findInstalledClass` and `findPublicClass`, the first
+    /// two steps of the order.
     #[inline]
-    fn installed_class(&self, upper: &[u8]) -> Option<ObjRef> {
-        let program = self.running_program()?;
-        if let Some(found) = self
-            .package_classes
-            .get(&program)
-            .and_then(|held| held.get(upper))
-        {
+    fn running_package_class(&self, upper: &[u8]) -> Option<ObjRef> {
+        let data = self.program_data(self.running_program()?)?;
+        if let Some(found) = data.classes.get(upper) {
             return Some(*found);
         }
-        if self.has_package_parent(program) {
-            return self.parent_installed_class(program, upper);
+        if let Some(parent) = data.parent {
+            return self.parent_class(parent, upper);
         }
-        None
+        data.merged_public_classes.get(upper).copied()
     }
 
-    /// A public class the running package's own `::REQUIRES` directives
-    /// imported, or one public up its parent chain --
-    /// `PackageClass::findPublicClass`, the step between the package's own
-    /// installed classes and the directories.
-    #[inline]
-    fn imported_class(&self, upper: &[u8]) -> Option<ObjRef> {
-        let program = self.running_program()?;
-        if let Some(found) = self
-            .merged_public_classes
-            .get(&program)
-            .and_then(|held| held.get(upper))
-        {
+    /// [`Interp::running_package_class`] past a package with a parent: its
+    /// installed classes up the chain, then its merged ones, then the public
+    /// ones up the chain.
+    #[cold]
+    #[inline(never)]
+    fn parent_class(&self, parent: ObjRef, upper: &[u8]) -> Option<ObjRef> {
+        if let Some(found) = self.chain_installed_class(Some(parent), upper) {
+            return Some(found);
+        }
+        let data = self.program_data(self.running_program()?)?;
+        if let Some(found) = data.merged_public_classes.get(upper) {
             return Some(*found);
         }
-        if self.has_package_parent(program) {
-            return self.parent_public_class(program, upper);
-        }
-        None
+        self.chain_public_class(Some(parent), upper)
     }
 
     /// A package's own local environment directory entry for `bare`, by the
@@ -846,8 +821,8 @@ impl Interp {
         program: ProgramId,
         bare: &[u8],
     ) -> Result<hash::DirectoryEntry, Failure> {
-        match self.package_locals.get(&Package::Program(program)) {
-            Some(&local) => self.package_local_entry(local, bare),
+        match self.program_data(program).and_then(|data| data.local) {
+            Some(local) => self.package_local_entry(local, bare),
             None => Ok(hash::DirectoryEntry::Absent),
         }
     }
@@ -883,9 +858,8 @@ impl Interp {
     fn rexx_package_class_uncached(&mut self, upper: &[u8]) -> Option<ObjRef> {
         for program in &self.library_programs {
             if let Some(found) = self
-                .package_public_classes
-                .get(program)
-                .and_then(|table| table.get(upper))
+                .program_data(*program)
+                .and_then(|data| data.public_classes.get(upper))
             {
                 return Some(*found);
             }
@@ -900,14 +874,16 @@ impl Interp {
 
     /// `Package~local`: the package's own environment directory, allocated on
     /// the first ask.
-    pub(crate) fn package_local(&mut self, package: Package) -> ObjRef {
-        if let Some(found) = self.package_locals.get(&package).copied() {
+    pub(crate) fn package_local(&mut self, package: ObjRef) -> ObjRef {
+        if let Some(found) = self.package_data(package).and_then(|data| data.local) {
             return found;
         }
+        self.roots.activity_mut().push_temp(package);
         let directory = hash::new_directory(self, 0).expect("Directory is not an abstract class");
-        self.roots
-            .add_global(&package_local_root_key(package), directory);
-        self.package_locals.insert(package, directory);
+        if let Some(data) = self.package_data_mut(package) {
+            data.local = Some(directory);
+        }
+        self.package_locals = true;
         directory
     }
 
@@ -1066,15 +1042,15 @@ impl Interp {
         match bare {
             b"METHODS" => {
                 let program = self.running_program()?;
-                self.package_string_table(program, PackageTable::UnattachedMethods)
+                self.program_string_table(program, PackageTable::UnattachedMethods)
             }
             b"ROUTINES" => {
                 let program = self.running_program()?;
-                self.package_string_table(program, PackageTable::Routines)
+                self.program_string_table(program, PackageTable::Routines)
             }
             b"RESOURCES" => {
                 let program = self.running_program()?;
-                self.package_string_table(program, PackageTable::Resources)
+                self.program_string_table(program, PackageTable::Resources)
             }
             // `new_integer(current->getLineNumber())`. `clause_state.line()`
             // is the same quantity `SIGL` reads and carries the same
@@ -1101,18 +1077,36 @@ impl Interp {
     /// all when it declares none.
     pub(crate) fn package_string_table(
         &mut self,
+        package: ObjRef,
+        kind: PackageTable,
+    ) -> Option<ObjRef> {
+        self.build_package_string_table(package, kind, false)
+    }
+
+    /// [`Interp::package_string_table`] of `program`'s own package.
+    pub(crate) fn program_string_table(
+        &mut self,
         program: ProgramId,
         kind: PackageTable,
     ) -> Option<ObjRef> {
-        self.build_package_string_table(program, kind, false)
+        let package = self.package_object(Package::Program(program));
+        self.package_string_table(package, kind)
     }
 
-    /// The program whose `.ROUTINES` table `table` is.
-    pub(crate) fn package_routines_program(&self, table: ObjRef) -> Option<ProgramId> {
-        self.package_tables
+    /// The program package whose `.ROUTINES` table `table` is. A copy's table
+    /// is not here: no code runs in a copy, so no `.ROUTINES` names it.
+    pub(crate) fn routines_table_package(&self, table: ObjRef) -> Option<ObjRef> {
+        if !self.routines_tables {
+            return None;
+        }
+        self.program_packages
             .iter()
-            .find(|((_, kind), held)| **held == table && *kind == PackageTable::Routines)
-            .map(|((program, _), _)| *program)
+            .flatten()
+            .copied()
+            .find(|package| {
+                self.package_data(*package)
+                    .is_some_and(|data| data.tables[PackageTable::Routines.index()] == Some(table))
+            })
     }
 
     /// [`Interp::package_string_table`] for a caller that is about to write an
@@ -1120,21 +1114,23 @@ impl Interp {
     /// directives declare none of that kind.
     pub(crate) fn package_string_table_for_write(
         &mut self,
-        program: ProgramId,
+        package: ObjRef,
         kind: PackageTable,
     ) -> Option<ObjRef> {
-        self.build_package_string_table(program, kind, true)
+        self.build_package_string_table(package, kind, true)
     }
 
     fn build_package_string_table(
         &mut self,
-        program: ProgramId,
+        package: ObjRef,
         kind: PackageTable,
         force: bool,
     ) -> Option<ObjRef> {
-        if let Some(found) = self.package_tables.get(&(program, kind)).copied() {
+        let data = self.package_data(package)?;
+        if let Some(found) = data.tables[kind.index()] {
             return Some(found);
         }
+        let program = data.program?;
         let source = std::rc::Rc::clone(self.programs.get(program.0)?);
         let entries = if self.untranslated.contains(&program) {
             Vec::new()
@@ -1147,10 +1143,10 @@ impl Interp {
         // The table is rooted before anything it will hold is allocated, and
         // each value goes into it as soon as it exists: `alloc_with` collects
         // before it allocates.
+        self.roots.activity_mut().push_temp(package);
         let table = crate::dispatch::hash::new_string_table(self).ok()?;
-        self.roots
-            .add_global(&package_table_root_key(program, kind), table);
-        self.package_tables.insert((program, kind), table);
+        self.package_data_mut(package)?.tables[kind.index()] = Some(table);
+        self.routines_tables |= kind == PackageTable::Routines;
         let frame = self.roots.activity_mut().push_frame();
         for (name, value) in entries {
             let value = match value {
@@ -1259,7 +1255,7 @@ impl Interp {
         if let Some(found) = self.routine_objects.get(&installed).copied() {
             return Some(found);
         }
-        self.package_string_table(installed.program, PackageTable::Routines);
+        self.program_string_table(installed.program, PackageTable::Routines);
         self.routine_objects.get(&installed).copied()
     }
 
@@ -1459,22 +1455,6 @@ fn package_root_key(package: Package) -> String {
         Package::Rexx => "the REXX package".to_string(),
         Package::Program(ProgramId(id)) => format!("the package of program {id}"),
     }
-}
-
-/// The [`rexx_core::RootSet::add_global`] key one package's own local
-/// environment directory is held under.
-fn package_local_root_key(package: Package) -> String {
-    format!("the package local of {}", package_root_key(package))
-}
-
-/// The [`rexx_core::RootSet::add_global`] key one package table is held under.
-pub(super) fn package_table_root_key(ProgramId(program): ProgramId, kind: PackageTable) -> String {
-    let which = match kind {
-        PackageTable::UnattachedMethods => "methods",
-        PackageTable::Routines => "routines",
-        PackageTable::Resources => "resources",
-    };
-    format!("the {which} of program {program}")
 }
 
 /// What `kind`'s table holds for `program`, keyed the way the oracle keys it.

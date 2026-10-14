@@ -579,7 +579,10 @@ fn installed(text: &[u8]) -> (Interp, Rc<Program>) {
 /// The class `::CLASS name` installed, read out of the package's own
 /// table.
 fn installed_class(interp: &Interp, name: &str) -> rexx_core::ObjRef {
-    interp.package_classes[&ProgramId(0)][name.as_bytes()]
+    interp
+        .program_data(ProgramId(0))
+        .expect("the program has a package")
+        .classes[name.as_bytes()]
 }
 
 /// Had `::CLASS` not created anything, the package's own table would hold
@@ -949,20 +952,15 @@ fn every_class_the_library_declares_carries_the_rexx_defined_flag() {
     let mut checked = 0;
     let mut non_public = 0;
     for program in programs {
-        // `get`, not an index: an embedded file declaring no `::CLASS`
-        // has no table at all, which `PlatformObjects.orx` is.
-        let Some(table) = interp.package_classes.get(&program) else {
+        let Some(data) = interp.program_data(program) else {
             continue;
         };
-        let classes: Vec<(Vec<u8>, rexx_core::ObjRef)> = table
+        let classes: Vec<(Vec<u8>, rexx_core::ObjRef)> = data
+            .classes
             .iter()
             .map(|(name, id)| (name.to_vec(), *id))
             .collect();
-        let public = interp
-            .package_public_classes
-            .get(&program)
-            .cloned()
-            .unwrap_or_default();
+        let public = data.public_classes.clone();
         for (name, id) in classes {
             checked += 1;
             if !public.contains_key(name.as_slice()) {

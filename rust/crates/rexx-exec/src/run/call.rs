@@ -325,12 +325,13 @@ impl Interp {
             return Ok(None);
         };
         let upper = name.to_ascii_uppercase();
-        if self.routines_written.is_empty() {
+        let package = self.program_package(program);
+        if !self.routines_written {
             return Ok(self
-                .find_routine(program, &upper)
+                .find_routine(package, &upper)
                 .map(crate::MergedRoutine::resolved));
         }
-        match self.find_written_routine(program, &upper) {
+        match self.find_written_routine(package, &upper) {
             Some(crate::FoundRoutine::Merged(merged)) => Ok(Some(merged.resolved())),
             Some(crate::FoundRoutine::Object(object)) => {
                 self.routine_object_resolution(object).map(Some)

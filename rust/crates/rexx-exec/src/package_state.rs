@@ -14,9 +14,12 @@
 
 use rexx_core::{ObjRef, PackageFields, PackageState};
 
-use crate::Interp;
+use rexx_core::NameMap;
+use rustc_hash::FxHashMap;
+
 use crate::options::PackageOptions;
 use crate::plan::{Package, ProgramId};
+use crate::{Interp, MergedRoutine};
 
 /// One package's fields. A copy is a field copy holding the same program.
 #[derive(Clone, Debug, Default)]
@@ -29,15 +32,100 @@ pub(crate) struct PackageData {
     pub(crate) options: Option<PackageOptions>,
     /// `PackageClass::initialPackageSettings`, entered at the first change.
     pub(crate) initial_options: Option<PackageOptions>,
+    /// The security manager the package carries, which all three
+    /// `setSecurityManager` setters write.
+    pub(crate) security_manager: Option<ObjRef>,
+    /// Every `::ROUTINE` the program installs and every routine `~addRoutine`
+    /// files, by upcased name.
+    pub(crate) routines: FxHashMap<Box<[u8]>, MergedRoutine>,
+    /// Whether a program has written the package's `.ROUTINES` table, whose
+    /// entries routine lookups read in place of [`PackageData::routines`]
+    /// from then on (`PackageClass::findLocalRoutine`,
+    /// `classes/PackageClass.cpp:822`).
+    pub(crate) routines_written: bool,
+    /// `publicRoutines`: the subset of [`PackageData::routines`] a
+    /// `::ROUTINE ... PUBLIC` filed.
+    pub(crate) public_routines: FxHashMap<Box<[u8]>, MergedRoutine>,
+    /// `mergedPublicRoutines`: every `::REQUIRES ... LIBRARY`'s library
+    /// routines, then each `::REQUIRES`'s public and imported routines, a name
+    /// keeping its first entry (`PackageClass::mergeLibrary` and
+    /// `::mergeRequired`, `classes/PackageClass.cpp:693-772`).
+    pub(crate) merged_public_routines: FxHashMap<Box<[u8]>, MergedRoutine>,
+    /// `installedClasses`: the classes the package's `::CLASS` directives and
+    /// `~addClass` installed, by uppercased name.
+    pub(crate) classes: NameMap<Box<[u8]>, ObjRef>,
+    /// `installedPublicClasses`, a second table beside
+    /// [`PackageData::classes`] and not a flag on its entries
+    /// (`classes/PackageClass.cpp:1406`-`:1419`).
+    pub(crate) public_classes: NameMap<Box<[u8]>, ObjRef>,
+    /// `mergedPublicClasses`, merged alongside the routines above.
+    pub(crate) merged_public_classes: NameMap<Box<[u8]>, ObjRef>,
+    /// The packages `::REQUIRES ... NAMESPACE` directives registered, under
+    /// the upcased qualifier (`PackageClass::addNamespace`,
+    /// `classes/PackageClass.cpp:2152`).
+    pub(crate) namespaces: FxHashMap<Box<[u8]>, ObjRef>,
+    /// The `Directory` `Package~local` answers, built on first ask.
+    pub(crate) local: Option<ObjRef>,
+    /// `loadedPackages`, in the order they were added.
+    pub(crate) imports: Vec<ObjRef>,
+    /// `parentPackage`: the package a routine or class lookup that misses
+    /// this one's own tables walks next.
+    pub(crate) parent: Option<ObjRef>,
+    /// The `Routine` object standing for the program's main section.
+    pub(crate) main_routine: Option<ObjRef>,
+    /// The `.METHODS`, `.ROUTINES` and `.RESOURCES` tables, by
+    /// [`PackageTable::index`], each built on first ask.
+    pub(crate) tables: [Option<ObjRef>; 3],
+    /// The value each `::CONSTANT` accessor answers, by declaring directive.
+    pub(crate) constants: FxHashMap<usize, ObjRef>,
 }
 
 impl PackageFields for PackageData {
-    fn trace(&self, _out: &mut Vec<ObjRef>) {
+    fn trace(&self, out: &mut Vec<ObjRef>) {
         let PackageData {
             program: _,
             options: _,
             initial_options: _,
+            security_manager,
+            // Held by the `.ROUTINES` table, which every reader reads once a
+            // program writes it.
+            routines: _,
+            routines_written: _,
+            public_routines,
+            merged_public_routines,
+            classes,
+            public_classes,
+            merged_public_classes,
+            namespaces,
+            local,
+            imports,
+            parent,
+            main_routine,
+            tables,
+            constants,
         } = self;
+        out.extend(*security_manager);
+        // The `Routine` objects `~addRoutine` filed as themselves, which the
+        // table does not follow into these copies.
+        for table in [public_routines, merged_public_routines] {
+            out.extend(table.values().filter_map(|merged| match merged {
+                MergedRoutine::LibraryObject(_, object)
+                | MergedRoutine::InternalObject(_, object) => Some(*object),
+                _ => None,
+            }));
+        }
+        // A package pins the classes it declares: measured, a `::CLASS`
+        // class survives a forced collection on the oracle.
+        for table in [classes, public_classes, merged_public_classes] {
+            out.extend(table.values().copied());
+        }
+        out.extend(namespaces.values().copied());
+        out.extend(*local);
+        out.extend(imports.iter().copied());
+        out.extend(*parent);
+        out.extend(*main_routine);
+        out.extend(tables.iter().flatten().copied());
+        out.extend(constants.values().copied());
     }
 
     fn clone_fields(&self) -> Box<dyn PackageFields> {
@@ -95,6 +183,29 @@ impl Interp {
         let object = self.package_object(package);
         self.package_data_mut(object)
             .expect("package_object builds a package body")
+    }
+
+    /// The fields of `program`'s package, built first where it does not
+    /// exist yet. May allocate, and so collect.
+    pub(crate) fn program_fields_mut(&mut self, program: ProgramId) -> &mut PackageData {
+        self.package_fields_mut(Package::Program(program))
+    }
+
+    /// `package` and its fields, then each package up its parent chain
+    /// (`PackageClass::parentPackage`).
+    pub(crate) fn package_chain(
+        &self,
+        package: Option<ObjRef>,
+    ) -> impl Iterator<Item = (ObjRef, &PackageData)> + '_ {
+        let first = package.and_then(|package| Some((package, self.package_data(package)?)));
+        // A parent is a package that existed before its child's program was
+        // compiled, so the programs along a chain strictly decrease and the
+        // chain cannot close; the bound costs less than that argument.
+        std::iter::successors(first, |(_, data)| {
+            let parent = data.parent?;
+            Some((parent, self.package_data(parent)?))
+        })
+        .take(self.programs.len() + 1)
     }
 
     /// Which package a package object's code belongs to, or `None` for an

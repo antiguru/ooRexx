@@ -1147,11 +1147,10 @@ fn a_pool_entry_belongs_to_one_scope_and_not_to_another() {
     // `class_variables`, whose key is the receiver: taking the scope from the
     // map under test would make the positive half true by construction.
     let scope = *interp
-        .package_classes
-        .values()
-        .next()
-        .expect("the program installed a package class")
-        .get(b"K".as_slice())
+        .program_packages
+        .iter()
+        .flatten()
+        .find_map(|package| interp.package_data(*package)?.classes.get(b"K".as_slice()))
         .expect("the program declared class K");
     let owner = *interp
         .class_variables

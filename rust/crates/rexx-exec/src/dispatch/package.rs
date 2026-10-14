@@ -121,14 +121,10 @@ pub(super) static RESUMABLE_CLASS_METHODS: &[(&str, &str, Arity, super::NativeBe
     ("Package", "NEW", Arity::Counted, package_new),
 ];
 
-/// Which package `receiver` stands for: `Some(program)` for a file's package,
-/// `None` for the interpreter's own.
+/// The program `receiver`'s package was compiled from, `None` for the REXX
+/// package.
 fn package_of(interp: &Interp, receiver: ObjRef) -> Result<Option<ProgramId>, Failure> {
-    match interp.which_package(receiver) {
-        Some(Package::Program(program)) => Ok(Some(program)),
-        Some(Package::Rexx) => Ok(None),
-        None => Err(Loud::receiver_class("a package object this crate did not build").into()),
-    }
+    Ok(fields_of(interp, receiver)?.program)
 }
 
 /// `package_of` for the writes, which refuse the REXX package rather than
@@ -513,8 +509,8 @@ fn set_security_manager(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = writable_package_of(interp, receiver)?;
-    interp.install_security_manager(program, args.first().copied().flatten());
+    writable_package_of(interp, receiver)?;
+    interp.install_security_manager(receiver, args.first().copied().flatten());
     Ok(Some(interp.counted(1)))
 }
 
@@ -563,7 +559,7 @@ fn classes(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let entries = match package_of(interp, receiver)? {
-        Some(program) => cloned(interp.package_classes.get(&program)),
+        Some(_) => cloned(&fields_of(interp, receiver)?.classes),
         None => interp.rexx_package_class_table(false),
     };
     interp.string_table_of(entries).map(Some)
@@ -577,7 +573,7 @@ fn public_classes(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let entries = match package_of(interp, receiver)? {
-        Some(program) => cloned(interp.package_public_classes.get(&program)),
+        Some(_) => cloned(&fields_of(interp, receiver)?.public_classes),
         None => interp.rexx_package_class_table(true),
     };
     interp.string_table_of(entries).map(Some)
@@ -594,10 +590,7 @@ fn imported_classes(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let entries = match package_of(interp, receiver)? {
-        Some(program) => cloned(interp.merged_public_classes.get(&program)),
-        None => Vec::new(),
-    };
+    let entries = cloned(&fields_of(interp, receiver)?.merged_public_classes);
     interp.string_table_of(entries).map(Some)
 }
 
@@ -609,15 +602,14 @@ fn routines(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
     // A written `.ROUTINES` table is the package's routines from then on, as
     // `findRoutine` reads them: measured, oracle rc 0, `p~routines['C']` is
     // what `.routines['C'] = u` stored.
-    if program.is_some_and(|program| interp.routines_written.contains(&program)) {
+    if fields_of(interp, receiver)?.routines_written {
         let entries = package_table_entries(interp, receiver, PackageTable::Routines)?;
         return interp.string_table_of(entries).map(Some);
     }
-    let entries = routine_entries(interp, program, |interp| &interp.routines);
+    let entries = routine_entries(interp, receiver, |data| &data.routines)?;
     interp.string_table_of(entries).map(Some)
 }
 
@@ -628,8 +620,7 @@ fn public_routines(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
-    let entries = routine_entries(interp, program, |interp| &interp.package_public_routines);
+    let entries = routine_entries(interp, receiver, |data| &data.public_routines)?;
     interp.string_table_of(entries).map(Some)
 }
 
@@ -640,34 +631,22 @@ fn imported_routines(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
-    let named: Vec<(Box<[u8]>, crate::MergedRoutine)> = program
-        .and_then(|program| interp.merged_public_routines.get(&program))
-        .into_iter()
-        .flatten()
-        .map(|(name, merged)| (name.clone(), *merged))
-        .collect();
-    let entries = rooted_routine_objects(interp, named);
+    let entries = routine_entries(interp, receiver, |data| &data.merged_public_routines)?;
     interp.string_table_of(entries).map(Some)
 }
 
 /// The (name, `Routine` object) pairs the table `which` answers holds for
-/// `program`.
+/// `receiver`.
 fn routine_entries(
     interp: &mut Interp,
-    program: Option<ProgramId>,
-    which: fn(&Interp) -> &FxHashMap<ProgramId, FxHashMap<Box<[u8]>, crate::MergedRoutine>>,
-) -> Vec<(Box<[u8]>, ObjRef)> {
-    let Some(program) = program else {
-        return Vec::new();
-    };
-    let named: Vec<(Box<[u8]>, crate::MergedRoutine)> = which(interp)
-        .get(&program)
-        .into_iter()
-        .flatten()
+    receiver: ObjRef,
+    which: fn(&PackageData) -> &FxHashMap<Box<[u8]>, crate::MergedRoutine>,
+) -> Result<Vec<(Box<[u8]>, ObjRef)>, Failure> {
+    let named: Vec<(Box<[u8]>, crate::MergedRoutine)> = which(fields_of(interp, receiver)?)
+        .iter()
         .map(|(name, merged)| (name.clone(), *merged))
         .collect();
-    rooted_routine_objects(interp, named)
+    Ok(rooted_routine_objects(interp, named))
 }
 
 /// The `Routine` object for each of `named`, skipping one that has none.
@@ -745,10 +724,7 @@ fn package_table_entries(
     receiver: ObjRef,
     kind: PackageTable,
 ) -> Result<Vec<(Box<[u8]>, ObjRef)>, Failure> {
-    let Some(program) = package_of(interp, receiver)? else {
-        return Ok(Vec::new());
-    };
-    let Some(table) = interp.package_string_table(program, kind) else {
+    let Some(table) = interp.package_string_table(receiver, kind) else {
         return Ok(Vec::new());
     };
     let mut pairs = Vec::new();
@@ -771,17 +747,7 @@ fn namespaces(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let named: Vec<(Box<[u8]>, Package)> = match package_of(interp, receiver)? {
-        Some(program) => cloned(interp.package_namespaces.get(&program)),
-        None => Vec::new(),
-    };
-    let entries = named
-        .into_iter()
-        .map(|(name, package)| {
-            let object = interp.package_object(package);
-            (name, object)
-        })
-        .collect();
+    let entries = cloned(&fields_of(interp, receiver)?.namespaces);
     interp.string_table_of(entries).map(Some)
 }
 
@@ -793,18 +759,7 @@ fn imported_packages(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let imported: Vec<Package> = match package_of(interp, receiver)? {
-        Some(program) => interp
-            .package_imports
-            .get(&program)
-            .cloned()
-            .unwrap_or_default(),
-        None => Vec::new(),
-    };
-    let items = imported
-        .into_iter()
-        .map(|package| interp.package_object(package))
-        .collect();
+    let items = fields_of(interp, receiver)?.imports.clone();
     Ok(Some(interp.object_array(items)))
 }
 
@@ -816,9 +771,9 @@ fn find_class(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
+    fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
-    Ok(Some(interp.package_find_class(program, &name)?))
+    Ok(Some(interp.package_find_class(receiver, &name)?))
 }
 
 /// `PackageClass::findPublicClassRexx`: this package's own public classes,
@@ -829,9 +784,9 @@ fn find_public_class(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
+    fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
-    Ok(Some(interp.package_find_public_class(program, &name)))
+    Ok(Some(interp.package_find_public_class(receiver, &name)))
 }
 
 /// `PackageClass::findRoutineRexx`: the package's own routines, then the
@@ -842,9 +797,9 @@ fn find_routine(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
+    fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
-    Ok(Some(interp.package_find_routine(program, &name)))
+    Ok(Some(interp.package_find_routine(receiver, &name)))
 }
 
 /// `PackageClass::findPublicRoutineRexx`.
@@ -865,19 +820,16 @@ fn find_namespace(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let program = package_of(interp, receiver)?;
+    fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
     if name == b"REXX" {
         return Ok(Some(interp.package_object(Package::Rexx)));
     }
-    let found = program
-        .and_then(|program| interp.package_namespaces.get(&program))
-        .and_then(|held| held.get(name.as_slice()))
+    let found = fields_of(interp, receiver)?
+        .namespaces
+        .get(name.as_slice())
         .copied();
-    Ok(Some(match found {
-        Some(package) => interp.package_object(package),
-        None => ObjRef::NIL,
-    }))
+    Ok(Some(found.unwrap_or(ObjRef::NIL)))
 }
 
 /// `PackageClass::findProgramRexx`: the file `name` resolves to from this
@@ -962,27 +914,21 @@ fn install_routine(
     let Some(merged) = admitted.then(|| interp.added_routine(routine)).flatten() else {
         return Err(Raised::argument_not_an_instance("routine", "Routine").into());
     };
-    let program = writable_package_of(interp, receiver)?;
+    writable_package_of(interp, receiver)?;
     interp.routines_changed();
     if let crate::MergedRoutine::Installed(installed) = merged {
         interp.routine_objects.insert(installed, routine);
     }
-    interp
-        .routines
-        .entry(program)
-        .or_default()
-        .insert(name.clone(), merged);
-    if public {
-        interp
-            .package_public_routines
-            .entry(program)
-            .or_default()
-            .insert(name.clone(), merged);
+    if let Some(data) = interp.package_data_mut(receiver) {
+        data.routines.insert(name.clone(), merged);
+        if public {
+            data.public_routines.insert(name.clone(), merged);
+        }
     }
     // `.ROUTINES` answers this same table, so the write has to reach it --
     // measured, oracle rc 0, `.routines~allIndexes` carries a name added by
     // `~addRoutine`.
-    if let Some(table) = interp.package_string_table_for_write(program, PackageTable::Routines) {
+    if let Some(table) = interp.package_string_table_for_write(receiver, PackageTable::Routines) {
         super::hash::directory_put(interp, table, &name, routine)?;
     }
     Ok(Some(receiver))
@@ -999,9 +945,9 @@ fn add_package(
     let Some(added) = args.first().copied().flatten() else {
         return Err(Raised::missing_named_argument("package").into());
     };
-    let Some(added) = interp.which_package(added) else {
+    if interp.package_data(added).is_none() {
         return Err(Raised::argument_not_an_instance("package", "Package").into());
-    };
+    }
     let namespace = match args.get(1).copied().flatten() {
         None => None,
         Some(namespace) => {
@@ -1009,16 +955,14 @@ fn add_package(
             Some(interp.to_text(namespace).to_ascii_uppercase())
         }
     };
-    let program = writable_package_of(interp, receiver)?;
-    if interp.add_imported_package(program, added) {
-        interp.merge_package(program, added);
+    writable_package_of(interp, receiver)?;
+    if interp.add_imported_package(receiver, added) {
+        interp.merge_package(receiver, added);
     }
-    if let Some(namespace) = namespace {
-        interp
-            .package_namespaces
-            .entry(program)
-            .or_default()
-            .insert(namespace.into(), added);
+    if let Some(namespace) = namespace
+        && let Some(data) = interp.package_data_mut(receiver)
+    {
+        data.namespaces.insert(namespace.into(), added);
     }
     Ok(Some(receiver))
 }
@@ -1057,10 +1001,11 @@ fn load_package(
         }
         None => interp.load_package(program, &name)?,
     };
-    if interp.add_imported_package(program, Package::Program(loaded)) {
-        interp.merge_required(program, loaded);
+    let loaded = interp.package_object(Package::Program(loaded));
+    if interp.add_imported_package(receiver, loaded) {
+        interp.merge_package(receiver, loaded);
     }
-    Ok(Some(interp.package_object(Package::Program(loaded))))
+    Ok(Some(loaded))
 }
 
 /// `PackageClass::newRexx`: a package built from a file, or from an `Array`
@@ -1130,10 +1075,10 @@ fn package_new(
 /// accepted classes is 93.953 before anything is compiled -- measured at
 /// rc 163, `.Package~new('X', 'Y', 'Z')`, and `"PROGRAMSCOPE"`, which
 /// `newFile` takes, is refused here alike.
-fn package_context(interp: &mut Interp, context: ObjRef) -> Result<Package, Failure> {
+fn package_context(interp: &mut Interp, context: ObjRef) -> Result<ObjRef, Failure> {
     let class = interp.class_of_value(context);
     let resolved = if class == Some(interp.package_class()) {
-        interp.which_package(context)
+        interp.package_data(context).map(|_| context)
     } else if class == Some(interp.routine_class()) || class == Some(interp.method_class()) {
         interp.executable_context_package(context)
     } else {
@@ -1147,10 +1092,9 @@ fn package_context(interp: &mut Interp, context: ObjRef) -> Result<Package, Fail
     })
 }
 
-/// Every (key, value) of one of `Interp`'s per-program tables, owned.
-fn cloned<K: Clone, V: Copy, S>(held: Option<&std::collections::HashMap<K, V, S>>) -> Vec<(K, V)> {
-    held.into_iter()
-        .flatten()
+/// Every (key, value) of one of a package's tables, owned.
+fn cloned<K: Clone, V: Copy, S>(held: &std::collections::HashMap<K, V, S>) -> Vec<(K, V)> {
+    held.iter()
         .map(|(key, value)| (key.clone(), *value))
         .collect()
 }
@@ -1164,10 +1108,8 @@ pub(super) fn native_package_local(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let Some(package) = interp.which_package(receiver) else {
-        return Err(Loud::receiver_class("a package object this crate did not build").into());
-    };
-    Ok(Some(interp.package_local(package)))
+    fields_of(interp, receiver)?;
+    Ok(Some(interp.package_local(receiver)))
 }
 
 /// `Package~name`: the package's own name -- `PackageClass::getProgramName`

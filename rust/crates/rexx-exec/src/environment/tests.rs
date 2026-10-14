@@ -273,7 +273,8 @@ fn every_directory_method_answers_on_both_directories_as_on_a_copy() {
 fn a_class_search_from_a_program_refuses_an_owed_entry() {
     let mut interp = Interp::new();
     let program = ProgramId(0);
-    let local = interp.package_local(Package::Program(program));
+    let package = interp.package_object(Package::Program(program));
+    let local = interp.package_local(package);
     let owed = interp.environment_model().owed[1].0;
     let array = interp.classes().lookup("Array").expect("Array is native");
     hash::directory_put(&mut interp, local, b"OWEDCLASS", owed).expect("puts");

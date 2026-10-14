@@ -655,13 +655,8 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
             })?;
             return Ok(copy);
         }
-        Ok(Primitive::Package) => match interp.which_package(receiver) {
-            Some(crate::plan::Package::Program(program)) => {
-                interp.roots.activity_mut().push_temp(receiver);
-                return interp.copy_package(program);
-            }
-            _ => return Err(Loud::native_method(b"COPY", "Object").into()),
-        },
+        // `PackageClass::copy`: a field copy, then `deepCopy`'s tables.
+        Ok(Primitive::Package) => rexx_core::BehaviourId::OBJECT,
         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
         Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
     };
@@ -669,6 +664,10 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     // local the collector does not walk, every value in it is reachable from
     // the receiver and from nowhere else.
     interp.roots.activity_mut().push_temp(receiver);
+    let package = interp.package_data(receiver).is_some();
+    if package {
+        interp.build_package_shares(receiver);
+    }
     let Some(source) = interp.heap.get(receiver) else {
         return Err(Loud::unknown_receiver("a value whose object is no longer live").into());
     };
@@ -693,6 +692,9 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
     duplicate_collection_stores(interp, copy);
     duplicate_stem_store(interp, copy);
     duplicate_executable(interp, receiver, copy);
+    if package {
+        duplicate_package_tables(interp, copy)?;
+    }
     if let Some(name) = interp.heap.object_name(receiver).map(<[u8]>::to_vec) {
         interp.heap.set_object_name(copy, &name);
     }
@@ -801,6 +803,47 @@ fn duplicate_executable(interp: &mut Interp, original: ObjRef, copy: ObjRef) {
         duplicate_collection_stores(interp, fresh);
         interp.set_pool_variable(copy, scope, super::construct::SUBCLASS_ANNOTATIONS, fresh);
     }
+}
+
+/// `PackageClass::deepCopy` (`classes/PackageClass.cpp:381`): `copy`'s
+/// `.ROUTINES` table and annotation table become copies of their own. Every
+/// other table the copy holds it shares, and its routine, class and import
+/// fields are copies already, being the body's own.
+fn duplicate_package_tables(interp: &mut Interp, copy: ObjRef) -> Result<(), Failure> {
+    let routines = crate::environment::PackageTable::Routines.index();
+    if let Some(table) = interp
+        .package_data(copy)
+        .and_then(|data| data.tables[routines])
+    {
+        let fresh = copy_object(interp, table)?;
+        if let Some(data) = interp.package_data_mut(copy) {
+            data.tables[routines] = Some(fresh);
+        }
+    }
+    let scope = interp.object_model().package;
+    let annotations = match interp.heap.get(copy).map(|held| &held.body) {
+        Some(Body::Native(native)) => native.annotations(),
+        Some(Body::Instance { pools, .. }) => {
+            pools.get(scope, super::construct::SUBCLASS_ANNOTATIONS)
+        }
+        _ => None,
+    };
+    if let Some(table) = annotations {
+        let fresh = copy_object(interp, table)?;
+        match interp.heap.get_mut(copy).map(|held| &mut held.body) {
+            Some(Body::Native(native)) => native.set_annotations(fresh),
+            Some(Body::Instance { .. }) => {
+                interp.set_pool_variable(
+                    copy,
+                    scope,
+                    super::construct::SUBCLASS_ANNOTATIONS,
+                    fresh,
+                );
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// `Object~run(method [, option [, argument ...]])`: run a method on this

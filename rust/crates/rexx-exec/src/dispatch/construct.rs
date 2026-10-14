@@ -14,10 +14,10 @@
 
 use super::{
     Arity, ArrayArgument, Body, Cleared, Failure, Interp, Loud, MESSAGE_ARGUMENTS, MESSAGE_NAME,
-    MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Package, Raised, SourceTaker,
-    array_argument, class_receiver, compile_method_source_in, compile_routine_source,
-    decode_message_name, hash, native, native_new, new_instance, option_method_argument,
-    optional_length_argument, required_string_argument, required_string_named_argument,
+    MESSAGE_SCOPE, MESSAGE_TARGET, NativeMethod, ObjRef, Raised, SourceTaker, array_argument,
+    class_receiver, compile_method_source_in, compile_routine_source, decode_message_name, hash,
+    native, native_new, new_instance, option_method_argument, optional_length_argument,
+    required_string_argument, required_string_named_argument,
 };
 
 /// `Pointer`'s and `WeakReference`'s instance methods. Chained into
@@ -211,13 +211,16 @@ pub(super) fn native_as_instance(
             if let Some(table) = native.annotations() {
                 pools.set(base, SUBCLASS_ANNOTATIONS, table);
             }
+            let package = native
+                .take_package()
+                .map(|state| Box::new(rexx_core::NativeState::Package(state)));
             held.body = Body::Instance {
                 class,
                 behaviour,
                 name: None,
                 pools,
                 own: None,
-                native: None,
+                native: package,
             };
         }
         Body::Instance {
@@ -285,10 +288,10 @@ fn executable_context(
     context: ObjRef,
     method: &[u8],
     position: usize,
-) -> Result<Option<Package>, Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let class = interp.class_of_value(context);
     let resolved = if class == Some(interp.package_class()) {
-        interp.which_package(context)
+        interp.package_data(context).map(|_| context)
     } else if class == Some(interp.routine_class()) || class == Some(interp.method_class()) {
         interp.executable_context_package(context)
     } else if class == Some(interp.string_class())

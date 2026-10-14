@@ -14,7 +14,7 @@
 
 use super::{
     BehaviourId, Body, ClassKind, Cleared, Failure, INIT, InheritRefusal, Interp, Loud, MethodSlot,
-    NativeStarted, ObjRef, Object, ObjectMethods, Package, Primitive, Raised, Started, Then, hash,
+    NativeStarted, ObjRef, Object, ObjectMethods, Primitive, Raised, Started, Then, hash,
     required_string_named_argument,
 };
 
@@ -365,14 +365,19 @@ pub(super) fn compile_method_source_in(
     source: ObjRef,
     position: &'static str,
     taker: SourceTaker,
-    parent: Option<crate::plan::Package>,
+    parent: Option<ObjRef>,
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position, taker)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed = parse_source_lines(interp, name, &borrowed)?;
     // `generateMethod` installs them as `generateRoutine` does; see
     // [`compile_routine_source`].
-    let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
+    let parent = match parent {
+        Some(parent) => Some(parent),
+        None => interp
+            .running_program()
+            .map(|program| interp.package_object(crate::plan::Package::Program(program))),
+    };
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, false, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
@@ -400,7 +405,7 @@ pub(super) fn compile_routine_source(
     name: &[u8],
     source: ObjRef,
     position: &'static str,
-    parent: Option<crate::plan::Package>,
+    parent: Option<ObjRef>,
 ) -> Result<ObjRef, Failure> {
     let lines = method_source_lines(interp, source, position, SourceTaker::Executable)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
@@ -409,7 +414,12 @@ pub(super) fn compile_routine_source(
     // parent is the caller's: measured, oracle rc 0,
     // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`
     // is `1`.
-    let parent = parent.or_else(|| interp.running_program().map(crate::plan::Package::Program));
+    let parent = match parent {
+        Some(parent) => Some(parent),
+        None => interp
+            .running_program()
+            .map(|program| interp.package_object(crate::plan::Package::Program(program))),
+    };
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, true, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
@@ -1123,12 +1133,12 @@ fn add_installed_class(
     if !interp.heap.is_class(class) {
         return Err(Raised::argument_not_a_class("class").into());
     }
-    match interp.which_package(receiver) {
-        Some(Package::Program(program)) => {
-            interp.add_installed_class(program, &name, class, public);
+    match interp.package_data(receiver).map(|data| data.program) {
+        Some(Some(_)) => {
+            interp.add_installed_class(receiver, &name, class, public);
             Ok(Some(receiver))
         }
-        Some(Package::Rexx) => Err(Raised::rexx_package_addition().into()),
+        Some(None) => Err(Raised::rexx_package_addition().into()),
         None => Err(Loud::receiver_class("a package object this crate did not build").into()),
     }
 }

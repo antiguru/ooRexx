@@ -11,7 +11,6 @@
 
 //! What a program's directives say before any of them is installed.
 
-use crate::plan::ProgramId;
 use crate::{GeneratedKind, Loud, dispatch, owned_message};
 use rexx_core::{Deferral, ObjRef, Owner};
 use rexx_parse::{
@@ -313,12 +312,6 @@ pub(super) fn class_members(program: &Program) -> FxHashMap<usize, Vec<usize>> {
         }
     }
     members
-}
-
-/// The [`rexx_core::RootSet::add_global`] key one `::CONSTANT`'s value is
-/// held under.
-pub(super) fn constant_root_key(ProgramId(program): ProgramId, directive: usize) -> String {
-    format!("constant:{program}:{directive}")
 }
 
 /// What an `::ANNOTATE` names, as the first install walk can express it.

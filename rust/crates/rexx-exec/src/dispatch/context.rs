@@ -477,7 +477,7 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             }
             let name = routine_entry_name(interp, program, directive)?;
             let table = interp
-                .package_string_table(program, crate::environment::PackageTable::Routines)
+                .program_string_table(program, crate::environment::PackageTable::Routines)
                 .ok_or_else(|| Loud::unknown_receiver("a routine whose package has no table"))?;
             interp
                 .native_entry(table, &name)

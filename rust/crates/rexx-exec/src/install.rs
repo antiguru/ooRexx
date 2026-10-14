@@ -15,8 +15,8 @@
 use crate::activation::{Activation, CallType};
 use crate::directives::{
     AnnotatedSite, FileClasses, annotation_target, attribute_dictionary_keys, class_install_order,
-    class_members, constant_root_key, directive_clause, directive_gap, member_dictionary_keys,
-    method_dictionary_keys, unresolved_external,
+    class_members, directive_clause, directive_gap, member_dictionary_keys, method_dictionary_keys,
+    unresolved_external,
 };
 use crate::error::{Failure, FailureSite, Raised};
 use crate::options::PackageOptions;
@@ -122,8 +122,11 @@ impl Interp {
         )> = Vec::new();
         self.untranslated.insert(id);
         // Built before anything is installed, so that no write below
-        // allocates the object its fields live in.
-        self.package_object(Package::Program(id));
+        // allocates the object its fields live in. A program with no
+        // directives writes none, and builds no package until asked.
+        if !program.directives.is_empty() {
+            self.package_object(Package::Program(id));
+        }
         for (index, directive) in program.directives.iter().enumerate() {
             // **A synthetic directive installs nothing**, which is what lets
             // `Interp::new_file_executable` file a loaded file's main section
@@ -348,15 +351,14 @@ impl Interp {
                 rexx_routines.push((installed, row));
             }
         }
-        if !routines.is_empty() {
-            self.routines.entry(id).or_default().extend(
+        if !routines.is_empty() || !public_routines.is_empty() {
+            let data = self.program_fields_mut(id);
+            data.routines.extend(
                 routines
                     .into_iter()
                     .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
             );
-        }
-        if !public_routines.is_empty() {
-            self.package_public_routines.entry(id).or_default().extend(
+            data.public_routines.extend(
                 public_routines
                     .into_iter()
                     .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
@@ -586,8 +588,10 @@ impl Interp {
                 }
                 match self.load_requires(Some(id), &requires.name) {
                     Ok(required) => {
-                        self.add_imported_package(id, Package::Program(required));
-                        self.merge_required(id, required);
+                        let into = self.package_object(Package::Program(id));
+                        let from = self.package_object(Package::Program(required));
+                        self.add_imported_package(into, from);
+                        self.merge_package(into, from);
                         // `RequiresDirective::install`
                         // (`instructions/RequiresDirective.cpp:137`): the
                         // registration is what the directive does *after* the
@@ -595,10 +599,7 @@ impl Interp {
                         // the merge nor replaces it.
                         if let Some(namespace) = requires.namespace {
                             let name = program.symbols.name(namespace).as_bytes().into();
-                            self.package_namespaces
-                                .entry(id)
-                                .or_default()
-                                .insert(name, Package::Program(required));
+                            self.program_fields_mut(id).namespaces.insert(name, from);
                         }
                     }
                     Err(failure) => {
@@ -700,7 +701,8 @@ impl Interp {
         // Installed before the prologue runs, which is where
         // `getRequiresFile` puts it (`package/PackageManager.cpp:830`-`:833`).
         if let Some(manager) = inherited {
-            self.install_security_manager(required, Some(manager));
+            let package = self.package_object(Package::Program(required));
+            self.install_security_manager(package, Some(manager));
         }
         // **Cached before the prologue runs, not after**, which is
         // `addRequiresFile` standing ahead of `runProlog` at
@@ -782,58 +784,44 @@ impl Interp {
 
     /// `PackageClass::addPackage` (`classes/PackageClass.cpp:1367`): records
     /// `from` as one of `into`'s imports, once.
-    pub(super) fn add_imported_package(&mut self, into: ProgramId, from: Package) -> bool {
-        let held = self.package_imports.entry(into).or_default();
-        if held.contains(&from) {
+    pub(super) fn add_imported_package(&mut self, into: ObjRef, from: ObjRef) -> bool {
+        let Some(data) = self.package_data_mut(into) else {
+            return false;
+        };
+        if data.imports.contains(&from) {
             return false;
         }
-        held.push(from);
+        data.imports.push(from);
         true
     }
 
-    /// [`Interp::merge_required`] for either kind of package.
-    pub(super) fn merge_package(&mut self, into: ProgramId, from: Package) {
-        let from = match from {
-            Package::Program(program) => return self.merge_required(into, program),
-            Package::Rexx => self.rexx_package_class_table(true),
-        };
-        self.invalidate_rexx_class_cache();
-        let target = self.merged_public_classes.entry(into).or_default();
-        for (name, class) in from {
-            target.entry(name).or_insert(class);
-        }
-    }
-
     /// The public routines and classes `from` contributes to `into`: its own
-    /// first, then the ones it imported.
-    pub(super) fn merge_required(&mut self, into: ProgramId, from: ProgramId) {
-        let routines: Vec<(Box<[u8]>, MergedRoutine)> = self
-            .package_public_routines
-            .get(&from)
-            .into_iter()
-            .flatten()
-            .map(|(name, merged)| (name.clone(), *merged))
-            .chain(
-                self.merged_public_routines
-                    .get(&from)
-                    .into_iter()
-                    .flatten()
-                    .map(|(name, merged)| (name.clone(), *merged)),
-            )
-            .collect();
+    /// first, then the ones it imported. The REXX package contributes its
+    /// public classes.
+    pub(super) fn merge_package(&mut self, into: ObjRef, from: ObjRef) {
+        let (routines, classes): (Vec<(Box<[u8]>, MergedRoutine)>, Vec<(Box<[u8]>, ObjRef)>) =
+            match self.package_data(from) {
+                Some(data) if data.program.is_some() => (
+                    data.public_routines
+                        .iter()
+                        .chain(&data.merged_public_routines)
+                        .map(|(name, merged)| (name.clone(), *merged))
+                        .collect(),
+                    data.public_classes
+                        .iter()
+                        .chain(&data.merged_public_classes)
+                        .map(|(name, class)| (name.clone(), *class))
+                        .collect(),
+                ),
+                _ => (Vec::new(), self.rexx_package_class_table(true)),
+            };
         self.merge_routines(into, routines);
-        let classes: Vec<(Box<[u8]>, ObjRef)> = self
-            .package_public_classes
-            .get(&from)
-            .into_iter()
-            .chain(self.merged_public_classes.get(&from))
-            .flatten()
-            .map(|(name, class)| (name.clone(), *class))
-            .collect();
         self.invalidate_rexx_class_cache();
-        let target = self.merged_public_classes.entry(into).or_default();
+        let Some(data) = self.package_data_mut(into) else {
+            return;
+        };
         for (name, class) in classes {
-            target.entry(name).or_insert(class);
+            data.merged_public_classes.entry(name).or_insert(class);
         }
     }
 
@@ -843,14 +831,11 @@ impl Interp {
         if upper == LIBRARY_PACKAGE_NAME {
             return Some(Namespace::Rexx);
         }
-        self.package_namespaces
-            .get(&package)?
-            .get(upper)
-            .copied()
-            .map(|package| match package {
-                Package::Rexx => Namespace::Rexx,
-                Package::Program(program) => Namespace::Package(program),
-            })
+        let found = *self.program_data(package)?.namespaces.get(upper)?;
+        Some(match self.package_data(found)?.program {
+            None => Namespace::Rexx,
+            Some(_) => Namespace::Package(found),
+        })
     }
 
     /// The class `namespace:name` names from `package`, or the oracle's own
@@ -867,7 +852,7 @@ impl Interp {
         };
         let found = match target {
             Namespace::Rexx => self.rexx_package_class(name),
-            Namespace::Package(program) => self.public_class_of(program, name),
+            Namespace::Package(found) => self.public_class_of(found, name),
         };
         found.ok_or_else(|| Raised::namespace_class_not_found(name, namespace).into())
     }
@@ -876,17 +861,11 @@ impl Interp {
     /// declarations, then the ones it imported (`classes/PackageClass.cpp:760`
     /// region). Measured, oracle rc 0: a class a *required* file of the
     /// namespace package declares public is reachable through the qualifier.
-    fn public_class_of(&self, program: ProgramId, upper: &[u8]) -> Option<ObjRef> {
-        if let Some(found) = self
-            .package_public_classes
-            .get(&program)
-            .and_then(|table| table.get(upper))
-        {
-            return Some(*found);
-        }
-        self.merged_public_classes
-            .get(&program)
-            .and_then(|table| table.get(upper))
+    fn public_class_of(&self, package: ObjRef, upper: &[u8]) -> Option<ObjRef> {
+        let data = self.package_data(package)?;
+        data.public_classes
+            .get(upper)
+            .or_else(|| data.merged_public_classes.get(upper))
             .copied()
     }
 
@@ -904,17 +883,12 @@ impl Interp {
         };
         let found = match target {
             Namespace::Rexx => None,
-            Namespace::Package(program) => self
-                .package_public_routines
-                .get(&program)
-                .and_then(|table| table.get(name))
-                .map(|merged| merged.resolved())
-                .or_else(|| {
-                    self.merged_public_routines
-                        .get(&program)
-                        .and_then(|table| table.get(name))
-                        .map(|merged| merged.resolved())
-                }),
+            Namespace::Package(found) => self.package_data(found).and_then(|data| {
+                data.public_routines
+                    .get(name)
+                    .or_else(|| data.merged_public_routines.get(name))
+                    .map(|merged| merged.resolved())
+            }),
         };
         found.ok_or_else(|| Raised::namespace_routine_not_found(name, namespace).into())
     }
@@ -989,7 +963,7 @@ impl Interp {
         &mut self,
         name: &[u8],
         lines: &[Vec<u8>],
-        parent: Option<Package>,
+        parent: Option<ObjRef>,
     ) -> Result<ProgramId, Failure> {
         let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
         let parsed =
@@ -1157,17 +1131,18 @@ impl Interp {
 
     /// Records what a `::CONSTANT` accessor answers, and roots it.
     fn record_constant_value(&mut self, program: ProgramId, directive: usize, value: ObjRef) {
-        self.constant_values.insert((program, directive), value);
-        self.roots
-            .add_global(&constant_root_key(program, directive), value);
+        self.roots.activity_mut().push_temp(value);
+        self.program_fields_mut(program)
+            .constants
+            .insert(directive, value);
     }
 
     /// The value a `::CONSTANT` accessor answers, or `None` for an expression
-    /// form whose pass has not run yet -- [`Interp::constant_values`] has
-    /// which of those is reachable.
+    /// form whose pass has not run yet.
     pub(crate) fn constant_value(&self, generated: GeneratedMethod) -> Option<ObjRef> {
-        self.constant_values
-            .get(&(generated.program, generated.directive))
+        self.program_data(generated.program)?
+            .constants
+            .get(&generated.directive)
             .copied()
     }
 
@@ -1704,7 +1679,7 @@ impl Interp {
         object: ObjRef,
         name: &[u8],
         parsed: Program,
-        parent: Option<Package>,
+        parent: Option<ObjRef>,
     ) {
         let Program {
             source,
@@ -1803,7 +1778,10 @@ impl Interp {
             }
             // Only a literal `::CONSTANT` can precede the first `::CLASS`.
             _ => {
-                if !self.constant_values.contains_key(&(program, directive)) {
+                if !self
+                    .program_data(program)
+                    .is_some_and(|data| data.constants.contains_key(&directive))
+                {
                     self.record_literal_constants(program, &source, &[directive]);
                 }
                 (
@@ -1845,7 +1823,7 @@ impl Interp {
         object: ObjRef,
         name: &[u8],
         parsed: Program,
-        parent: Option<Package>,
+        parent: Option<ObjRef>,
     ) {
         let Program {
             source,
@@ -1899,7 +1877,7 @@ impl Interp {
         &mut self,
         name: &[u8],
         routine: bool,
-        parent: Option<Package>,
+        parent: Option<ObjRef>,
     ) -> Result<ObjRef, Failure> {
         let path = String::from_utf8_lossy(name).into_owned();
         // **Read through the interpreter's own directory, recorded under the
@@ -1913,10 +1891,12 @@ impl Interp {
             return Err(Raised::executable_file_unreadable(name).into());
         };
         let parsed = self.parse_file(text, name)?;
-        let parent = parent.or_else(|| {
-            self.running_activation()
-                .map(|activation| Package::Program(activation.program_id))
-        });
+        let parent = match parent {
+            Some(parent) => Some(parent),
+            None => self
+                .running_program()
+                .map(|program| self.package_object(Package::Program(program))),
+        };
         self.install_executable(parsed, name, routine, parent, |interp, id| {
             interp.required_paths.insert(id, path.into());
         })
@@ -1931,7 +1911,7 @@ impl Interp {
         parsed: Program,
         name: &[u8],
         routine: bool,
-        parent: Option<Package>,
+        parent: Option<ObjRef>,
         record: impl FnOnce(&mut Self, ProgramId),
     ) -> Result<ObjRef, Failure> {
         let Program {
@@ -2228,7 +2208,8 @@ impl Interp {
                 (upper.into_boxed_slice(), MergedRoutine::Library(code))
             })
             .collect();
-        self.merge_routines(id, routines);
+        let into = self.package_object(Package::Program(id));
+        self.merge_routines(into, routines);
     }
 
     /// `PackageClass::mergeLibrary` over an internal package: its routines
@@ -2241,14 +2222,18 @@ impl Interp {
                 (upper.into_boxed_slice(), MergedRoutine::Internal(index))
             })
             .collect();
-        self.merge_routines(id, routines);
+        let into = self.package_object(Package::Program(id));
+        self.merge_routines(into, routines);
     }
 
     /// Adds each of `routines` to `into`'s imported routines where the name
     /// is not there yet (`HashContents::mergePut`), moving
     /// [`Interp::routine_generation`] when one is added.
-    fn merge_routines(&mut self, into: ProgramId, routines: Vec<(Box<[u8]>, MergedRoutine)>) {
-        let target = self.merged_public_routines.entry(into).or_default();
+    fn merge_routines(&mut self, into: ObjRef, routines: Vec<(Box<[u8]>, MergedRoutine)>) {
+        let Some(data) = self.package_data_mut(into) else {
+            return;
+        };
+        let target = &mut data.merged_public_routines;
         let mut added = false;
         for (name, merged) in routines {
             if let std::collections::hash_map::Entry::Vacant(vacant) = target.entry(name) {

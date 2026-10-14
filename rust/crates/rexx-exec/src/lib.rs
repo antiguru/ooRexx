@@ -1308,9 +1308,9 @@ struct Interp {
     programs: Vec<Rc<Program>>,
     /// What `.Package~defaultOptions` writes keep.
     option_writes: crate::options::OptionWrites,
-    /// The security manager each package carries, written by all three
-    /// `setSecurityManager` setters and read by every checkpoint.
-    security_managers: FxHashMap<ProgramId, ObjRef>,
+    /// Whether any package has ever carried a security manager, which is
+    /// the one test a checkpoint makes while none has.
+    security_armed: bool,
     /// **`NameHasher` and not `RandomState`**, for the reason that alias's own
     /// doc gives and with the same shape of key behind it: a `BodyKey` is a
     /// pair of small integers this interpreter mints itself, so the
@@ -1354,39 +1354,18 @@ struct Interp {
     /// never because a body contains a construct the compiler does not
     /// know, which does not exist (D21: every instruction compiles).
     chunks_refused: usize,
-    /// Every `::ROUTINE` a program installs and every routine `~addRoutine`
-    /// files, keyed by the program and then by the routine's **upcased** name.
-    routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, MergedRoutine>>,
-    /// The programs whose `.ROUTINES` table a program has written, whose
-    /// routine lookups read that table in place of [`routines`], as
-    /// `PackageClass::findLocalRoutine` does (`classes/PackageClass.cpp:822`).
-    routines_written: rustc_hash::FxHashSet<ProgramId>,
-    /// The subset of [`routines`] a `::ROUTINE ... PUBLIC` filed -- the
-    /// oracle's `publicRoutines`, a second table beside `routines` exactly as
-    /// [`package_public_classes`] is beside [`package_classes`].
-    package_public_routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, MergedRoutine>>,
-    /// The routines a program imported -- `mergedPublicRoutines`: every
-    /// `::REQUIRES ... LIBRARY`'s library routines, then each `::REQUIRES`'s
-    /// public and imported routines, a name keeping its first entry
-    /// (`PackageClass::mergeLibrary` and `::mergeRequired`,
-    /// `classes/PackageClass.cpp:693-772`).
-    merged_public_routines: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, MergedRoutine>>,
-    /// The public classes a program's `::REQUIRES` directives imported --
-    /// `mergedPublicClasses`, merged alongside the routines above and read by
-    /// `PackageClass::findClass` between the package's own installed classes
-    /// and `.local`.
-    merged_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
+    /// Whether a program has written any package's `.ROUTINES` table, which
+    /// is the one test a routine lookup makes while none has.
+    routines_written: bool,
+    /// Whether any program package's `.ROUTINES` table has been built, which
+    /// is the one test a hash write makes before asking whether it wrote one.
+    routines_tables: bool,
     /// `.NAME` answers [`Interp::rexx_package_class`] has already found,
     /// keyed by the bare uppercased name.
     rexx_class_cache: NameMap<Box<[u8]>, ObjRef>,
-    /// The packages a program's `::REQUIRES ... NAMESPACE` directives
-    /// registered, under the upcased qualifier -- `PackageClass::addNamespace`
-    /// (`classes/PackageClass.cpp:2152`), whose key is `name->upper()`.
-    package_namespaces: FxHashMap<ProgramId, FxHashMap<Box<[u8]>, Package>>,
-    /// The `Directory` `Package~local` answers, per package, built on first
-    /// ask -- `PackageClass::getPackageLocal` (`classes/PackageClass.cpp:2131`
-    /// region), which creates it lazily too.
-    package_locals: FxHashMap<Package, ObjRef>,
+    /// Whether any package's local directory has been built, which is the
+    /// one test a `.NAME` makes before probing the running package's.
+    package_locals: bool,
     /// The last package local [`Interp::package_local_entry`] read, with a
     /// reading of its pool; one that is not current is read again.
     package_local_view: Option<(ObjRef, dispatch::hash::StoreView)>,
@@ -1406,18 +1385,8 @@ struct Interp {
     /// The arena object holding each class object's own variable pools and
     /// its `setMethod` methods, by class identity.
     class_variables: FxHashMap<ObjRef, ObjRef>,
-    /// The classes each program's own `::CLASS` directives installed, keyed by
-    /// the uppercased name -- `PackageClass`'s installed-class table, which
-    /// `.NAME` resolution consults ahead of `.local` and `.environment`.
-    package_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
-    /// The subset of [`package_classes`] a `::CLASS ... PUBLIC` directive or
-    /// `~addPublicClass` filed -- the oracle's `installedPublicClasses`,
-    /// which is a second table beside `installedClasses` and not a flag on
-    /// the entries of one (`classes/PackageClass.cpp:1406`-`:1419`).
-    /// `~publicClasses` is what reads it.
-    package_public_classes: NameMap<ProgramId, NameMap<Box<[u8]>, ObjRef>>,
-    /// Which program's `::CLASS` directive created a class -- the other
-    /// direction of [`package_classes`], which `~package` reads.
+    /// Which program's `::CLASS` directive created a class, which `~package`
+    /// reads.
     class_packages: FxHashMap<ObjRef, ClassPackage>,
     /// The one empty argument list every call that has none shares.
     empty_arguments: Rc<[Option<ObjRef>]>,
@@ -1426,13 +1395,6 @@ struct Interp {
     /// The package object `~package` answers for each program's code, by
     /// [`ProgramId`], once built. A copy of a package is not here.
     program_packages: Vec<Option<ObjRef>>,
-    /// The one `Routine` object standing for a program's own main section --
-    /// what `RexxContext~executable` answers from a `PROGRAM` or
-    /// `INTERNALCALL` context.
-    program_routine_objects: FxHashMap<ProgramId, ObjRef>,
-    /// The `.METHODS`/`.ROUTINES`/`.RESOURCES` tables, keyed by the program
-    /// whose directives fill them and by which of those names it answers.
-    package_tables: FxHashMap<(ProgramId, environment::PackageTable), ObjRef>,
     /// The one `Routine` object standing for each installed routine.
     routine_objects: FxHashMap<InstalledRoutine, ObjRef>,
     /// The one `Routine` object standing for each library routine an
@@ -1445,22 +1407,6 @@ struct Interp {
     /// the routine table of `LibraryPackage` (`package/LibraryPackage.cpp`),
     /// which every path naming the row answers from.
     internal_routine_objects: Vec<Option<ObjRef>>,
-    /// The packages each program has imported, in the order they were added
-    /// -- `PackageClass`'s `loadedPackages`, which `~importedPackages`
-    /// answers a copy of.
-    package_imports: FxHashMap<ProgramId, Vec<Package>>,
-    /// The package that built each program, for one an executable created
-    /// rather than one loaded in its own right: `newFile`'s and
-    /// `Package~new`'s parent context. A routine lookup that misses a
-    /// program's own table and its imports walks this.
-    package_parents: FxHashMap<ProgramId, Package>,
-    /// Whether each program, by [`ProgramId`], has an entry in
-    /// [`Interp::package_parents`]: the one test a class lookup that missed
-    /// the program's own tables makes before walking parents.
-    parented: Vec<bool>,
-    /// The value each `::CONSTANT` accessor answers, keyed by the directive
-    /// that declared it.
-    constant_values: FxHashMap<(ProgramId, usize), ObjRef>,
     /// The `StringTable` each annotated thing's `~annotations` answers, keyed
     /// by the thing -- see [`environment::Annotated`] for the key space and
     /// [`Interp::annotation_table`] for why the table is kept rather than
@@ -1865,7 +1811,7 @@ pub(crate) struct LibraryCodeKey {
 #[derive(Copy, Clone)]
 enum Namespace {
     Rexx,
-    Package(ProgramId),
+    Package(ObjRef),
 }
 
 /// Where one installed `::METHOD`/`::ATTRIBUTE` accessor's own body lives --
@@ -2149,7 +2095,7 @@ impl Interp {
             cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
             programs: Vec::new(),
             option_writes: crate::options::OptionWrites::default(),
-            security_managers: FxHashMap::default(),
+            security_armed: false,
             plans: NameMap::default(),
             last_plan: None,
             deadline: None,
@@ -2163,34 +2109,22 @@ impl Interp {
             slice_deferred: false,
             chunks: NameMap::default(),
             chunks_refused: 0,
-            routines: FxHashMap::default(),
-            routines_written: rustc_hash::FxHashSet::default(),
-            package_public_routines: FxHashMap::default(),
-            merged_public_routines: FxHashMap::default(),
-            merged_public_classes: NameMap::default(),
+            routines_written: false,
+            routines_tables: false,
             rexx_class_cache: NameMap::default(),
-            package_namespaces: FxHashMap::default(),
-            package_locals: FxHashMap::default(),
+            package_locals: false,
             package_local_view: None,
             package_local_miss: environment::PackageLocalMiss::default(),
             object_model: None,
             class_variables: FxHashMap::default(),
             environment: None,
-            package_classes: NameMap::default(),
-            package_public_classes: NameMap::default(),
             class_packages: FxHashMap::default(),
             empty_arguments: Rc::from(&[][..]),
             rexx_package: None,
             program_packages: Vec::new(),
-            program_routine_objects: FxHashMap::default(),
-            package_tables: FxHashMap::default(),
             routine_objects: FxHashMap::default(),
             library_routine_objects: FxHashMap::default(),
             internal_routine_objects: vec![None; internal_routines::INTERNAL_ROUTINES.len()],
-            package_imports: FxHashMap::default(),
-            package_parents: FxHashMap::default(),
-            parented: Vec::new(),
-            constant_values: FxHashMap::default(),
             annotations: FxHashMap::default(),
             compiled_methods: 0,
             method_objects: FxHashMap::default(),
@@ -2386,7 +2320,12 @@ impl Interp {
         // What the callee made public becomes the caller's, and transitively
         // what the callee itself required.
         if let Some(caller) = caller {
-            self.merge_required(caller, program_id);
+            if let Some(value) = value {
+                self.roots.activity_mut().push_temp(value);
+            }
+            let into = self.package_object(Package::Program(caller));
+            let from = self.package_object(Package::Program(program_id));
+            self.merge_package(into, from);
         }
         Ok(value)
     }
@@ -2944,7 +2883,7 @@ impl Interp {
             next_invocation: _,
             programs: _,
             option_writes: _,
-            security_managers,
+            security_armed: _,
             plans: _,
             last_plan: _,
             deadline: _,
@@ -2960,12 +2899,8 @@ impl Interp {
             // A chunk's interned literals are allocated immortal.
             chunks: _,
             chunks_refused: _,
-            // Held by each package's `.ROUTINES` table; see below.
-            routines: _,
             routines_written: _,
-            package_public_routines,
-            merged_public_routines,
-            merged_public_classes,
+            routines_tables: _,
             // **Not a root, deliberately.** Its values are class handles, and
             // rooting them would pin every class a `.NAME` ever resolved --
             // which is exactly the pinning Phase 5j removed. A cached handle
@@ -2973,10 +2908,8 @@ impl Interp {
             // `Interp::collect_now` clears the cache on every collection, and
             // every write to a table it is derived from clears it too.
             rexx_class_cache: _,
-            package_namespaces: _,
-            // `RootSet::add_global`, under `package_local_root_key`.
             package_locals: _,
-            // The directory is one of `package_locals`, and its view's store
+            // The directory is a package's local, and its view's store
             // arrays are held as `environment`'s views' are.
             package_local_view: _,
             // A program, two counters and a name.
@@ -2991,31 +2924,20 @@ impl Interp {
             // A lookup index. Both halves are held by the class itself --
             // the key is the class, the value is in its `owned` list.
             class_variables: _,
-            package_classes,
-            package_public_classes,
             // Keyed by class identity, and `ClassPackage` holds no `ObjRef`.
             class_packages: _,
             // Zero length.
             empty_arguments: _,
-            // `RootSet::add_global`, under `package_root_key`.
+            // `RootSet::add_global`, under `package_root_key`. A package's
+            // body traces every object its fields hold.
             rexx_package: _,
             program_packages: _,
-            // `RootSet::add_global`, under `program_routine_root_key`.
-            program_routine_objects: _,
-            // `RootSet::add_global`, under `package_table_root_key`.
-            package_tables: _,
             // Rooted by the `.ROUTINES` table each entry is also in.
             routine_objects: _,
             // `RootSet::add_global`, under `library_routine_root_key`.
             library_routine_objects: _,
             // `RootSet::add_global`, under `internal_routine_root_key`.
             internal_routine_objects: _,
-            package_imports: _,
-            // Program identities and nothing else.
-            package_parents: _,
-            parented: _,
-            // `RootSet::add_global`, under `constant_root_key`.
-            constant_values: _,
             // A lookup index. A class-owned site's table is held by that
             // class; every other site's is a global under
             // `annotation_root_key`.
@@ -3129,38 +3051,6 @@ impl Interp {
         activities.object_roots(out);
         out.extend(stem_exposers.values().flatten().copied());
         out.extend(global_references.roots());
-        // A manager is an ordinary program object held by nothing else: the
-        // package that carries it is a plan, not an object with a slot.
-        out.extend(security_managers.values().copied());
-        // **A package pins the classes it declares**, which is the oracle's
-        // behaviour and not a convenience: measured, a `::CLASS` class
-        // survives a forced collection there, because nothing can drop the
-        // binding. Since Phase 5j a class is an ordinary object, so these
-        // tables hold arena handles and an unrooted one would dangle.
-        for table in [
-            merged_public_classes,
-            package_classes,
-            package_public_classes,
-        ] {
-            out.extend(table.values().flat_map(|names| names.values().copied()));
-        }
-        // The `Routine` objects `~addRoutine` filed as themselves. A
-        // package's own `routines` entries need no root: each is in its
-        // `.ROUTINES` table too, and once a program writes that table it is
-        // what every reader reads instead. Its public routines and an
-        // importer's merged ones are copies the table does not follow.
-        for table in [package_public_routines, merged_public_routines] {
-            out.extend(
-                table
-                    .values()
-                    .flat_map(|names| names.values())
-                    .filter_map(|merged| match merged {
-                        MergedRoutine::LibraryObject(_, object)
-                        | MergedRoutine::InternalObject(_, object) => Some(*object),
-                        _ => None,
-                    }),
-            );
-        }
     }
 
     /// The collection itself, kept out of [`Interp::collect_if_due`]'s body so

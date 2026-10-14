@@ -15,7 +15,6 @@
 use rexx_core::{BehaviourId, Body, ObjRef};
 
 use crate::error::Raised;
-use crate::plan::ProgramId;
 use crate::{Failure, Interp};
 
 /// The message one checkpoint sends, and the entries its info directory
@@ -47,21 +46,17 @@ pub(crate) mod key {
 }
 
 impl Interp {
-    /// Installs `manager` on `program`'s package, or clears it when the
-    /// setter was sent no argument.
+    /// Installs `manager` on `package`, or clears it when the setter was sent
+    /// no argument.
     ///
     /// `MethodClass::setSecurityManager` and `RoutineClass::setSecurityManager`
     /// both reach `RexxCode::setSecurityManager` (`execution/RexxCode.cpp:245`),
     /// which sets it on the package rather than on the executable, so all
     /// three setters write the same place.
-    pub(crate) fn install_security_manager(&mut self, program: ProgramId, manager: Option<ObjRef>) {
-        match manager {
-            Some(manager) => {
-                self.security_managers.insert(program, manager);
-            }
-            None => {
-                self.security_managers.remove(&program);
-            }
+    pub(crate) fn install_security_manager(&mut self, package: ObjRef, manager: Option<ObjRef>) {
+        self.security_armed |= manager.is_some();
+        if let Some(data) = self.package_data_mut(package) {
+            data.security_manager = manager;
         }
     }
 
@@ -70,12 +65,11 @@ impl Interp {
     /// manager. There is no instance-level manager here, so that arm's
     /// fallback is `None`.
     pub(crate) fn effective_security_manager(&self) -> Option<ObjRef> {
-        if self.security_managers.is_empty() {
+        if !self.security_armed {
             return None;
         }
-        self.security_managers
-            .get(&self.activation().program_id)
-            .copied()
+        self.program_data(self.activation().program_id)?
+            .security_manager
     }
 
     /// One checkpoint: `SecurityManager::callSecurityManager`

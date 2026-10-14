@@ -1250,35 +1250,6 @@ pub(crate) struct ObjectModel {
 }
 
 impl ObjectModel {
-    /// `Package~copy`'s decision about the object model, which holds nothing
-    /// per program: every field is named so that one added later does not
-    /// compile until it is decided.
-    pub(crate) fn copy_package(&self) {
-        let ObjectModel {
-            classes: _,
-            natives: _,
-            string: _,
-            object: _,
-            metaclass: _,
-            array: _,
-            package: _,
-            method: _,
-            routine: _,
-            directory: _,
-            string_table: _,
-            table: _,
-            context: _,
-            rexx_info: _,
-            message: _,
-            variable_reference: _,
-            stem: _,
-            weak_reference: _,
-            stack_frame: _,
-            store_holders: _,
-            nil_behaviour: _,
-        } = self;
-    }
-
     /// The hash-collection class a `DO OVER` target may be, for a caller
     /// asking whether an object is one.
     pub(crate) fn iterable_collection_class(&self) -> ObjRef {

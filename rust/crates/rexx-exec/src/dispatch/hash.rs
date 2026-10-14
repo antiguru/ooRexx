@@ -219,8 +219,11 @@ fn refusal_outside(
 /// Records a write to a package's `.ROUTINES` table, which is what the
 /// oracle resolves that package's routine names through from then on.
 fn note_routines_write(interp: &mut Interp, receiver: ObjRef) {
-    if let Some(program) = interp.package_routines_program(receiver) {
-        interp.routines_written.insert(program);
+    if let Some(package) = interp.routines_table_package(receiver)
+        && let Some(data) = interp.package_data_mut(package)
+    {
+        data.routines_written = true;
+        interp.routines_written = true;
     }
 }
 
