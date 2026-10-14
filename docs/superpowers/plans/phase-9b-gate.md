@@ -115,8 +115,10 @@ in `internal_routines.rs` are the seven macrospace routines, each `Deferral::Rxa
   Unix they are POSIX `sem_open` semaphores, shared across processes and never unlinked; the design is
   `.superpowers/sdd/queued/2026-10-13-named-semaphores-design.md`. No ooTest file mentions them.
 
-Both rows carry `Owner::Phase9`. Spec section 9 adds "Phase 9" to `closed_phases`' CLOSED at 9d's
-close, which these rows would block, so their owner is open for Moritz before 9d plans.
+Both rows carry `Owner::Phase9`. Their owner is undecided and they stay deferred (Moritz,
+2026-10-14: "unclear owner, leave deferred for now"). Spec section 9 adds "Phase 9" to
+`closed_phases`' CLOSED at 9d's close, which these rows would block; 9d's plan settles how they are
+carried.
 
 **Licensed this phase:** Deviation 34 (`QUALIFY` and every path the shared normaliser serves keep
 lexical POSIX `..`, where the oracle's `normalizePathName` mis-tracks a component that starts with `.`)
@@ -126,8 +128,8 @@ and Deviation 35 (`HANDLE:0/1/2` read and write the standard streams, where the 
 **Plan constraint overridden:** the plan's Global Constraints say "No new dependency". Task 4 added
 `tz-rs` 0.7.3 (`forbid(unsafe_code)`, no dependencies of its own) so `SysGetFileDateTime` and
 `SysSetFileDateTime` read the program's `TZ` and resolve a skipped local time as glibc's `mktime`
-does. The alternative was a hand-written TZif reader or a licensed divergence. Open for Moritz to
-ratify.
+does. The alternative was a hand-written TZif reader or a licensed divergence. Moritz ratified it
+(2026-10-14: "tz ok").
 
 **Perf budget: whole-process callgrind instructions, libc and ld included, within +0.5% of the pin.**
 Met. `rust/bench-programs/callgrind.sh -r 3 -B 0.5 pin=<pin> head=<07cf14bde build>` exited 0 with no
