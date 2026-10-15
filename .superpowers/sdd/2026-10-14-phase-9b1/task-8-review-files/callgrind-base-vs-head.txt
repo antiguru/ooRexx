@@ -1,0 +1,4 @@
+program	base	t8h	t8h d%	base -libc	t8h -libc	t8h -libc d%	base spread%	t8h spread%
+startup	119497991	119532123	+0.0286	57648989	57672881	+0.0414	0.0000	0.0000
+churn	634093783	633963960	-0.0205	380789319	380810774	+0.0056	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-8-review-base
