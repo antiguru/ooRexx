@@ -1,0 +1,2 @@
+program	pin	close2	t5c	t7b	t8base	close2 d%	t5c d%	t7b d%	t8base d%	pin -libc	close2 -libc	t5c -libc	t7b -libc	t8base -libc	close2 -libc d%	t5c -libc d%	t7b -libc d%	t8base -libc d%	pin spread%	close2 spread%	t5c spread%	t7b spread%	t8base spread%
+interpret	4207371545	4234332188	4237895224	4221539247	4221226196	+0.6408	+0.7255	+0.3367	+0.3293	1785211835	1784997248	1784997100	1785087864	1785088153	-0.0120	-0.0120	-0.0069	-0.0069	0.0000	0.0000	0.0000	0.0000	0.0000
