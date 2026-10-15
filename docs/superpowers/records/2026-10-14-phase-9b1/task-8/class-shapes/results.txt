@@ -1,0 +1,13 @@
+# shapes.rex, one run per binary, from a fresh directory holding shapes.rex and reqc.rex
+# columns: oracle | head rexx-run-9b1-t8h (882c826eb) | base rexx-run-9b1-t8base (d965c149a)
+subclass cleared: 1|subclass cleared: 1|subclass cleared: 1
+class new cleared: 1|class new cleared: 1|class new cleared: 0
+mixinclass cleared: 1|mixinclass cleared: 1|mixinclass cleared: 1
+metaclass cleared: 1|metaclass cleared: 1|metaclass cleared: 1
+subclass of subclass cleared: 1|subclass of subclass cleared: 1|subclass of subclass cleared: 1
+class uninit cleared: 1|class uninit cleared: 1|class uninit cleared: 1
+package new cleared: 1|package new cleared: 1|package new cleared: 1
+requires cleared: 1|requires cleared: 1|requires cleared: 1
+routine new cleared: 1|routine new cleared: 1|routine new cleared: 1
+with instance dropped cleared: 1|with instance dropped cleared: 1|with instance dropped cleared: 1
+class new subclass cleared: 1|class new subclass cleared: 1|class new subclass cleared: 1

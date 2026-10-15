@@ -1,0 +1,26 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/class/Class	oracle	103	103	103			-	-	1	yes	ulimit -v 1048576	103
+base/class/Class	crate	103	103	101	TEST_ACTIVATE TEST_METHODS		-	-	1	yes	memcap 2G	103
+base/class/Message	oracle	68	68	68			-	-	1	yes	ulimit -v 1048576	68
+base/class/Message	crate	68	68	68			-	-	1	yes	memcap 2G	68
+base/class/Method	oracle	56	56	56			-	-	1	yes	ulimit -v 1048576	56
+base/class/Method	crate	56	56	54	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	56
+base/class/Object	oracle	149	149	149			-	-	1	yes	ulimit -v 1048576	149
+base/class/Object	crate	149	149	146	TEST_INSTANCEMETHOD TEST_SETMETHOD TEST_UNINIT		-	-	1	yes	memcap 2G	149
+base/class/Package	oracle	80	80	80			-	-	1	yes	ulimit -v 1048576	80
+base/class/Package	crate	80	80	78	TEST_NEW01 TEST_PROLOG		-	-	1	yes	memcap 2G	80
+base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
+base/class/Routine	crate	60	60	58	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	60
+base/class/StackFrame	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/class/StackFrame	crate	11	11	10	TESTNATIVECODEFRAME		-	-	1	yes	memcap 2G	11
+base/class/WeakReference	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/WeakReference	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/directives/CLASS	oracle	54	54	54			-	-	1	yes	ulimit -v 1048576	54
+base/directives/CLASS	crate	54	54	49	TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_LOCAL		-	-	1	yes	memcap 2G	54
+base/directives/CONSTANT	oracle	29	29	29			-	-	1	yes	ulimit -v 1048576	29
+base/directives/CONSTANT	crate	29	29	28	TEST_EXPRESSION_NOVALUE_ERROR		-	-	1	yes	memcap 2G	29
+base/directives/METHOD	oracle	78	78	78			-	-	1	yes	ulimit -v 1048576	78
+base/directives/METHOD	crate	78	78	78			-	-	1	yes	memcap 2G	78
+base/keyword/INTERPRET	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/keyword/INTERPRET	crate	11	11	11			-	-	1	yes	memcap 2G	11

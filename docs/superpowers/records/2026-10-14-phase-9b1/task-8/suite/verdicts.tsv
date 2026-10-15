@@ -1,0 +1,14 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/class/Class	red	not passed: TEST_ACTIVATE TEST_METHODS	equal
+base/class/Message	green		equal
+base/class/Method	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
+base/class/Object	red	not passed: TEST_INSTANCEMETHOD TEST_SETMETHOD TEST_UNINIT	equal
+base/class/Package	red	not passed: TEST_NEW01 TEST_PROLOG	equal
+base/class/Routine	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
+base/class/StackFrame	red	not passed: TESTNATIVECODEFRAME	equal
+base/class/WeakReference	green		equal
+base/directives/CLASS	red	not passed: TEST_INHERIT TEST_METACLASS TEST_MIXINCLASS TEST_SUBCLASS TEST_SUBCLASS_NO_CLASS_LOCAL	equal
+base/directives/CONSTANT	red	not passed: TEST_EXPRESSION_NOVALUE_ERROR	equal
+base/directives/METHOD	green		equal
+base/keyword/INTERPRET	green		equal

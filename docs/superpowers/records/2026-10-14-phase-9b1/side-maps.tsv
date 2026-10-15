@@ -1,0 +1,137 @@
+site	struct	field	type	describes	key	state and pruning site
+crates/rexx-exec/src/lib.rs:1310	Interp	env	Vec<(Vec<u8>, Vec<u8>)>	-	-	not per-object: the interpreter's environment variables
+crates/rexx-exec/src/lib.rs:1319	Interp	library_search	Vec<std::path::PathBuf>	-	-	not per-object: directories LD_LIBRARY_PATH named at start
+crates/rexx-exec/src/lib.rs:1350	Interp	plans	NameMap<BodyKey, Rc<Plan>>	Program	BodyKey (ProgramId, directive)	3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1379	Interp	chunks	NameMap<(BodyKey, ChunkTrace), Rc<crate::ir::Chunk>>	Program	(BodyKey, ChunkTrace)	3: prune_program_rows, which releases the chunk's interned literals (Heap::release_immortal)
+crates/rexx-exec/src/lib.rs:1393	Interp	rexx_class_cache	NameMap<Box<[u8]>, ObjRef>	-	-	not per-object: a .NAME lookup cache, cleared at every collection (invalidate_rexx_class_cache in collect_now)
+crates/rexx-exec/src/lib.rs:1415	Interp	class_variables	FxHashMap<ObjRef, ObjRef>	Class	class ObjRef	2: prune_freed_classes
+crates/rexx-exec/src/lib.rs:1418	Interp	class_packages	FxHashMap<ObjRef, ClassPackage>	Class	class ObjRef	2: prune_freed_classes
+crates/rexx-exec/src/lib.rs:1424	Interp	routine_objects	FxHashMap<InstalledRoutine, ObjRef>	Routine of a ::ROUTINE	InstalledRoutine (ProgramId, directive)	3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1429	Interp	library_routine_objects	FxHashMap<usize, ObjRef>	-	-	not per-object: one Routine per library procedure row, a global root for the run as the oracle keeps a library's routine objects; bounded by the rows
+crates/rexx-exec/src/lib.rs:1434	Interp	internal_routine_objects	Vec<Option<ObjRef>>	-	-	not per-object: one slot per static INTERNAL_ROUTINES row
+crates/rexx-exec/src/lib.rs:1439	Interp	annotations	FxHashMap<environment::Annotated, ObjRef>	Class, member, package, routine	environment::Annotated	2 for Class/Member: prune_freed_classes; 3 for Package/Unattached/Routine: prune_program_rows; LibraryRoutine/InternalRoutine rows are one per static or library row; Compiled sites are never inserted (annotation_table)
+crates/rexx-exec/src/lib.rs:1449	Interp	method_objects	FxHashMap<(ObjRef, bool, Box<[u8]>), ObjRef>	Method a class entry answers	(class ObjRef, side, name)	2: prune_freed_classes
+crates/rexx-exec/src/lib.rs:1454	Interp	method_bodies	NameMap<MethodId, InstalledMethodBody>	Method identity	MethodId	3: prune_program_rows; 2 for an identity a Method object owns (ExecutableRecord::owns_installed): forget_method_identity from prune_dead_object_rows
+crates/rexx-exec/src/lib.rs:1467	Interp	library_programs	Vec<ProgramId>	-	-	not per-object: the library bootstrap's programs, held for the run
+crates/rexx-exec/src/lib.rs:1469	Interp	compiled_method_names	FxHashMap<ProgramId, Box<[u8]>>	Program	ProgramId	3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1477	Interp	executable_objects	FxHashMap<MethodId, ObjRef>	Method identity	MethodId, value a Method ObjRef	2: prune_dead_object_rows drops a row whose object died, forget_method_identity an owned identity's; 3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1480	Interp	executable_sources	FxHashMap<ObjRef, ExecutableRecord>	Method or Routine object	ObjRef	2: prune_dead_object_rows; 3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1483	Interp	stem_exposers	FxHashMap<ObjRef, Vec<ObjRef>>	Stem	stem ObjRef, values weak cells	2 by its cells: a row goes once every exposer it names is swept, checked when a list or the table doubles (Interp::record_exposer)
+crates/rexx-exec/src/lib.rs:1487	Interp	method_flag_writes	FxHashMap<ObjRef, dispatch::executable::MethodFlagWrites>	Method object	ObjRef	2: prune_dead_object_rows
+crates/rexx-exec/src/lib.rs:1491	Interp	message_outcomes	FxHashMap<ObjRef, Option<Box<Raised>>>	Message	ObjRef	2: prune_dead_object_rows
+crates/rexx-exec/src/lib.rs:1494	Interp	started_messages	rustc_hash::FxHashSet<ObjRef>	Message	ObjRef	2: prune_dead_object_rows
+crates/rexx-exec/src/lib.rs:1498	Interp	unnotified_messages	rustc_hash::FxHashSet<ObjRef>	Message	ObjRef	2: prune_dead_object_rows
+crates/rexx-exec/src/lib.rs:1502	Interp	generated_methods	FxHashMap<MethodId, GeneratedMethod>	Method identity	MethodId	3: prune_program_rows; 2 for an owned identity: forget_method_identity
+crates/rexx-exec/src/lib.rs:1506	Interp	native_externals	FxHashMap<MethodId, &'static dispatch::native::NativeExternal>	Method identity	MethodId	3: prune_program_rows; 2 for an owned identity: forget_method_identity
+crates/rexx-exec/src/lib.rs:1508	Interp	guarded_externals	rustc_hash::FxHashSet<MethodId>	Method identity	MethodId	3: prune_program_rows; 2 for an owned identity: forget_method_identity
+crates/rexx-exec/src/lib.rs:1518	Interp	kept_strings	rustc_hash::FxHashMap<ObjRef, Box<[u8]>>	any object a native call copied	ObjRef	2: collect_now's retain
+crates/rexx-exec/src/lib.rs:1520	Interp	kept_names	rustc_hash::FxHashMap<Box<[u8]>, Box<[u8]>>	-	-	not per-object: one terminated copy per distinct message or routine name a native call asked for
+crates/rexx-exec/src/lib.rs:1523	Interp	kept_holders	rustc_hash::FxHashMap<ObjRef, usize>	-	-	not per-object: counts of native calls in flight, dropped as each call ends
+crates/rexx-exec/src/lib.rs:1539	Interp	command_handlers	FxHashMap<Box<[u8]>, Rc<rexx_api::load::CommandHandler>>	-	-	not per-object: per ADDRESS environment name an extension registered
+crates/rexx-exec/src/lib.rs:1561	Interp	library_externals	FxHashMap<MethodId, LibraryBinding>	Method identity	MethodId	3: prune_program_rows; 2 for an owned identity: forget_method_identity
+crates/rexx-exec/src/lib.rs:1565	Interp	external_packages	FxHashMap<MethodId, ProgramId>	Method identity	MethodId	3: prune_program_rows; 2 for an owned identity: forget_method_identity
+crates/rexx-exec/src/lib.rs:1576	Interp	library_codes	Vec<Option<ProgramId>>	-	-	not per-object: one row per library procedure spelling, as the oracle caches a code object per spelling (LibraryPackage::resolveMethod); its package is rooted for the run
+crates/rexx-exec/src/lib.rs:1578	Interp	library_code_rows	FxHashMap<LibraryCodeKey, usize>	-	-	not per-object: the row of each library procedure spelling
+crates/rexx-exec/src/lib.rs:1580	Interp	library_code_keys	Vec<LibraryCodeKey>	-	-	not per-object: the procedure of each library code row
+crates/rexx-exec/src/lib.rs:1584	Interp	library_code_routines	Vec<Option<u32>>	-	-	not per-object: the routine row of each library code row
+crates/rexx-exec/src/lib.rs:1587	Interp	library_routine_codes	FxHashMap<InstalledRoutine, usize>	Routine of a ::ROUTINE	InstalledRoutine	3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1590	Interp	rexx_routine_rows	FxHashMap<InstalledRoutine, &'static internal_routines::InternalRoutine>	Routine of a ::ROUTINE	InstalledRoutine	3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1593	Interp	defined_library_codes	FxHashMap<MethodId, usize>	Method identity	MethodId	2: the identity a loadExternalMethod answer owns, forget_method_identity
+crates/rexx-exec/src/lib.rs:1600	Interp	package_routines	FxHashMap<Vec<u8>, usize>	-	-	not per-object: PackageManager::packageRoutines, by routine name
+crates/rexx-exec/src/lib.rs:1603	Interp	package_routine_codes	Vec<usize>	-	-	not per-object: the code row of each package_routines slot
+crates/rexx-exec/src/lib.rs:1613	Interp	special_methods	Vec<Option<dispatch::AccessScope>>	Method identity	MethodId index	3: prune_program_rows; 2 for an owned identity: forget_method_identity. The vector's length follows the highest identity with a row (reported)
+crates/rexx-exec/src/lib.rs:1632	Interp	uninit_ready	Vec<ObjRef>	-	-	not per-object: the queue of objects awaiting UNINIT, drained by run_ready_uninits
+crates/rexx-exec/src/lib.rs:1702	Interp	required_paths	FxHashMap<ProgramId, Box<str>>	Program	ProgramId	3: prune_program_rows
+crates/rexx-exec/src/lib.rs:1706	Interp	required_packages	FxHashMap<Box<[u8]>, ProgramId>	Program	::REQUIRES name, value ProgramId	3: prune_program_rows, and collect_now drops a row whose package was swept
+crates/rexx-exec/src/lib.rs:1711	Interp	untranslated	rustc_hash::FxHashSet<ProgramId>	Program	ProgramId	3: prune_program_rows
+crates/rexx-exec/src/plan.rs:97	Programs	slots	Vec<ProgramSlot>	Program	ProgramId slot	3: Programs::free_unheld frees a slot whose package was swept; the slot is reused under a new generation
+crates/rexx-exec/src/plan.rs:98	Programs	packages	Vec<PackageSlot>	Program	ProgramId slot	3: freed with the slot (Programs::free_unheld)
+crates/rexx-exec/src/plan.rs:99	Programs	free	Vec<u32>	-	-	not per-object: the free list of program slots
+crates/rexx-exec/src/plan.rs:103	Programs	issued	Vec<ProgramId>	-	-	not per-object: test-only record of issued ids
+crates/rexx-exec/src/plan.rs:106	Programs	freed	Vec<ProgramId>	-	-	not per-object: test-only record of freed ids
+crates/rexx-exec/src/dispatch.rs:1207	ObjectModel	natives	Vec<Option<NativeEntry>>	Method identity	MethodId index	bootstrap rows for the primitive classes; 2 for an owned copy's row: forget_method_identity. The vector's length follows the highest identity with a row (reported)
+crates/rexx-exec/src/dispatch.rs:1246	ObjectModel	store_holders	Vec<ObjRef>	-	-	not per-object: the bootstrap's store-holder classes
+crates/rexx-exec/src/libraries.rs:37	Libraries	held	FxHashMap<Vec<u8>, Rc<Library>>	-	-	not per-object: PackageManager::packages: every native library a name loaded
+crates/rexx-exec/src/libraries.rs:108	PackageTable	names	Vec<Option<Vec<u8>>>	-	-	not per-object: a loaded library's routine name table
+crates/rexx-exec/src/libraries.rs:109	PackageTable	next	Vec<Option<usize>>	-	-	not per-object: a loaded library's routine name table
+crates/rexx-exec/src/scheduler.rs:254	Activities	idle	Vec<Option<Box<Idle>>>	-	-	not per-object: one slot per activity, reused through free
+crates/rexx-exec/src/scheduler.rs:255	Activities	free	Vec<u32>	-	-	not per-object: the free list of activity slots
+crates/rexx-exec/src/scheduler.rs:266	Activities	owners	Vec<(ActivityId, bool)>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/scheduler.rs:270	Activities	set_aside	Vec<(ActivityId, usize)>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/scheduler.rs:271	Activities	timers	FxHashMap<TimerId, Timer>	-	-	not per-object: one per running Alarm or Ticker timer, removed when it ends
+crates/rexx-exec/src/scheduler.rs:273	Activities	message_ids	FxHashMap<ObjRef, MessageId>	Message	ObjRef	2: Activities::prune_messages, and removed at completion
+crates/rexx-exec/src/scheduler.rs:279	Activities	senders	FxHashMap<ObjRef, ActivityId>	Message	ObjRef	2: Activities::prune_messages
+crates/rexx-exec/src/scheduler.rs:282	Activities	waiters	FxHashMap<MessageId, Vec<ActivityId>>	Message	MessageId	removed when the message completes; a waiting activity holds the message
+crates/rexx-exec/src/scheduler.rs:286	Activities	retired	Vec<rexx_api::ffi::ThreadContext>	-	-	not per-object: the thread context of each ended activity that made a native call, kept until termination because an extension may hold it
+crates/rexx-exec/src/scheduler.rs:300	Activities	late_failures	Vec<Failure>	-	-	not per-object: failures of started activities awaiting report
+crates/rexx-exec/src/scheduler.rs:306	Activities	abandoned	Vec<(u64, Box<crate::NativeFrame>)>	-	-	not per-object: native frames of calls whose waiter left, freed as each call ends
+crates/rexx-exec/src/scheduler.rs:314	Activities	abandoned_blocks	Vec<u64>	-	-	not per-object: blocking calls whose waiter left, removed as each completes
+crates/rexx-exec/src/guards.rs:65	GuardTable	locks	FxHashMap<GuardKey, Lock>	object and scope	GuardKey (ObjRef, scope)	removed at the last release (GuardTable::release); a holder runs a method on the object
+crates/rexx-exec/src/guards.rs:66	GuardTable	waiting	FxHashMap<ActivityId, Waiting>	-	-	not per-object: per waiting activity
+crates/rexx-exec/src/guards.rs:67	GuardTable	pools	FxHashMap<GuardKey, u32>	object and scope	GuardKey (ObjRef, scope)	2: GuardTable::prune_pools
+crates/rexx-exec/src/guards.rs:71	GuardTable	watches	FxHashMap<ObjRef, Vec<Watch>>	object	ObjRef	2: GuardTable::prune_pools
+crates/rexx-exec/src/semaphores.rs:92	Semaphores	table	FxHashMap<SemaphoreKey, Semaphore>	MutexSemaphore or EventSemaphore	SemaphoreKey	2 for an object key: Semaphores::prune; a Sys*Sem handle is the program's until it closes it
+crates/rexx-exec/src/semaphores.rs:94	Semaphores	parked	FxHashMap<ActivityId, SemaphoreKey>	-	-	not per-object: per parked activity
+crates/rexx-exec/src/semaphores.rs:96	Semaphores	held	FxHashMap<ActivityId, Vec<SemaphoreKey>>	-	-	not per-object: per holding activity
+crates/rexx-exec/src/semaphores.rs:99	Semaphores	answers	FxHashMap<ActivityId, bool>	-	-	not per-object: per resumed activity
+crates/rexx-exec/src/activity.rs:28	Activity	value_buffer	Vec<Option<ObjRef>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:42	Activity	suspended	Vec<Box<Activation>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:52	Activity	spare_activations	Vec<Box<Activation>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:55	Activity	spare_exposed	Vec<(usize, crate::activation::InstanceVar)>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:65	Activity	native_handles	Vec<Box<NativeFrame>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:72	Activity	native_spares	Vec<Box<NativeFrame>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:76	Activity	internal_levels	Vec<InternalLevel>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:94	Activity	flat_loops	Vec<Box<crate::run::FlatLoop>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:100	Activity	loop_objects	Vec<(usize, ObjRef)>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:103	Activity	frames	Vec<crate::ir::drive::Frame>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:106	Activity	call_tails	Vec<crate::run::CallTail>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:109	Activity	parked_calls	Vec<crate::ir::drive::ParkedCall>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:111	Activity	parked_levels	Vec<crate::ir::drive::ParkedLevel>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:117	Activity	native_tails	Vec<crate::dispatch::NativeTail>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:127	Activity	flat_spares	Vec<Box<crate::run::FlatLoop>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:175	Activity	failure_sites	Vec<FailureSite>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:182	Activity	failure_frames	Vec<ObjRef>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:216	Activity	fragments	Vec<FragmentLevel>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:252	Activity	requires_installing	Vec<Box<str>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:294	Activity	failed_sends	Vec<ObjRef>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/activity.rs:297	Activity	guard_waits	Vec<crate::guards::GuardWait>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-exec/src/package_state.rs:43	PackageData	routines	FxHashMap<Box<[u8]>, MergedRoutine>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:51	PackageData	public_routines	FxHashMap<Box<[u8]>, MergedRoutine>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:56	PackageData	merged_public_routines	FxHashMap<Box<[u8]>, MergedRoutine>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:59	PackageData	classes	NameMap<Box<[u8]>, ObjRef>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:63	PackageData	public_classes	NameMap<Box<[u8]>, ObjRef>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:65	PackageData	merged_public_classes	NameMap<Box<[u8]>, ObjRef>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:69	PackageData	namespaces	FxHashMap<Box<[u8]>, ObjRef>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:73	PackageData	imports	Vec<ObjRef>	Package	-	1: a field of the package object's body
+crates/rexx-exec/src/package_state.rs:83	PackageData	constants	FxHashMap<usize, ObjRef>	Package	-	1: a field of the package object's body
+crates/rexx-core/src/heap.rs:55	Heap	slots	Vec<Slot>	-	-	not per-object: the arena itself
+crates/rexx-core/src/heap.rs:58	Heap	marks	Vec<bool>	-	-	not per-object: the collector's mark bits
+crates/rexx-core/src/heap.rs:60	Heap	immortal	Vec<ObjRef>	-	-	not per-object: roots: the bootstrap's classes and the literals live programs' chunks interned; a chunk's literals are released with it (Heap::release_immortal)
+crates/rexx-core/src/heap.rs:63	Heap	uninit	Vec<ObjRef>	object with UNINIT	ObjRef	2: dropped by the collection that finds the object gone or cleared
+crates/rexx-core/src/heap.rs:85	Heap	names	crate::NameMap<ObjRef, Box<[u8]>>	any object without a name field	ObjRef	2: pruned in Heap::collect's sweep
+crates/rexx-core/src/roots.rs:67	RootSet	globals	crate::NameMap<String, ObjRef>	-	-	not per-object: named global roots; an annotation table's root goes with its program (unroot_annotation_table from prune_program_rows)
+crates/rexx-core/src/roots.rs:70	RootSet	cells	Vec<Option<ObjRef>>	variable a >name reference was taken to	cell index	none: never freed, and each cell's value is a root (reported)
+crates/rexx-core/src/roots.rs:80	ActivityRoots	temps	Vec<ObjRef>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-core/src/roots.rs:89	ActivityRoots	slots	Vec<Option<ObjRef>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-core/src/roots.rs:94	ActivityRoots	aliases	Vec<Option<Target>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-core/src/roots.rs:97	ActivityRoots	segments	Vec<Segment>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
+crates/rexx-core/src/roots.rs:107	ActivityRoots	parked	Vec<Option<Vec<ObjRef>>>	-	-	not per-object: values an off-stack activation owns, released with it and reused through parked_free
+crates/rexx-core/src/roots.rs:110	ActivityRoots	parked_free	Vec<usize>	-	-	not per-object: the free list of parked
+crates/rexx-classes/src/registry.rs:28	ClassRegistry	names	NameMap<ObjRef, String>	Class	class ObjRef	2: ClassRegistry::expunge
+crates/rexx-classes/src/registry.rs:30	ClassRegistry	default_names	NameMap<ObjRef, String>	Class	class ObjRef	2: ClassRegistry::expunge
+crates/rexx-classes/src/registry.rs:33	ClassRegistry	object_names	NameMap<ObjRef, String>	Class	class ObjRef	2: ClassRegistry::expunge
+crates/rexx-classes/src/registry.rs:36	ClassRegistry	by_name	NameMap<String, ObjRef>	Class	name, value class ObjRef	2: ClassRegistry::expunge
+crates/rexx-classes/src/registry.rs:40	ClassRegistry	by_system_name	NameMap<String, ObjRef>	Class	name, value class ObjRef	2: ClassRegistry::expunge
+crates/rexx-classes/src/registry.rs:43	ClassRegistry	private_native_methods	Vec<MethodId>	-	-	not per-object: Setup.cpp's private native methods
+crates/rexx-classes/src/class_graph.rs:82	ClassDef	superclasses	Vec<ObjRef>	Class	-	1: a field of the class's graph entry
+crates/rexx-classes/src/class_graph.rs:88	ClassDef	subclasses	Vec<ObjRef>	Class	-	1: a field of the class's graph entry, scrubbed of swept classes in ClassGraph::expunge
+crates/rexx-classes/src/class_graph.rs:99	ClassDef	retired_behaviours	Vec<BehaviourHandle>	Class	-	1: a field of the class's graph entry; its behaviours are emptied and freed in ClassGraph::expunge. A live class keeps every behaviour define retired (reported)
+crates/rexx-classes/src/class_graph.rs:159	ClassGraph	classes	NameMap<ObjRef, ClassDef>	Class	class ObjRef	2: ClassGraph::expunge
+crates/rexx-classes/src/class_graph.rs:160	ClassGraph	behaviours	Vec<Behaviour>	Class	BehaviourHandle index	2: ClassGraph::expunge empties a swept class's behaviours, and free_behaviours hands their slots out again
+crates/rexx-classes/src/class_graph.rs:165	ClassGraph	free_behaviours	Vec<BehaviourHandle>	-	-	not per-object: the free list of behaviour slots
+crates/rexx-classes/src/class_graph.rs:169	ClassGraph	uninit_classes	Vec<ObjRef>	Class	class ObjRef	2: ClassGraph::expunge
+crates/rexx-classes/src/method_dict.rs:48	MethodDict	entries	NameMap<String, Vec<MethodSlot>>	Behaviour	-	1: a field of the behaviour or class dictionary
+crates/rexx-classes/src/method_dict.rs:49	MethodDict	scope_list	Vec<ObjRef>	Behaviour	-	1: a field of the behaviour
+crates/rexx-classes/src/method_dict.rs:50	MethodDict	scope_orders	NameMap<ObjRef, Vec<ObjRef>>	Behaviour	-	1: a field of the behaviour
+crates/rexx-api/src/handles.rs:32	Table	entries	FxHashMap<usize, ObjRef>	-	-	not per-object: the handles an extension holds: a native call's locals, gone with its frame, or global references until the extension releases them
+crates/rexx-api/src/handles.rs:41	Released	handles	FxHashMap<usize, ObjRef>	object a released handle named	handle	2 by limit: Table::release drops the handles whose object is gone when the table doubles

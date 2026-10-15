@@ -1,0 +1,10 @@
+# 3 runs per side, head binary rexx-run-9b1-t8h (882c826eb), oracle under the standard wrapper
+c1_routine.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: routine r zero: 1|
+c2_internal.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: caller kept: 1|
+c3_methods.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: method starts its own clock: 1|main clock untouched by a method reset: 1|another method starts its own clock: 1|
+c4_reply.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: m before fresh: 1|main got 7|m after continues own clock: 1 1|main after >= 0.5: 1|
+c5_reply_reset.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: main got 7|main done|cont untouched by main reset: 1|
+r1_random.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: 876|457 99|517|735|
+r2_random_reply.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: 876|457|517|cont 99|
+s1_setlocal.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: m setlocal 1|main endlocal 0|value main|
+s2_setlocal_reply.rex: 3 of 3 runs agree (stdout as a multiset, stderr, rc); oracle rc 0; stdout: m setlocal 1|got 1|cont endlocal 1|main endlocal 0|value main|
