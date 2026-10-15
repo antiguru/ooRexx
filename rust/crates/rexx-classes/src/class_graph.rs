@@ -709,7 +709,10 @@ impl ClassGraph {
             .classes
             .get_mut(&class)
             .expect("copy_instance_behaviour: unknown class");
-        def.retired_behaviours.push(def.instance_behaviour);
+        // A class in the image is never collected, so nothing reads its list.
+        if !def.rexx_defined {
+            def.retired_behaviours.push(def.instance_behaviour);
+        }
         def.instance_behaviour = fresh;
     }
 
