@@ -6,6 +6,8 @@
 (`docs/superpowers/plans/2026-07-27-rust-rewrite.md:661`) is the exit contract, read through this
 document; section 7 lists the roadmap edits this spec makes.
 
+Revised 2026-10-15 for drift found while planning 9c (plan's former Spec drift section).
+
 **Inputs.** Four scout reports in `.superpowers/sdd/2026-10-10-phase-9-scoping/`, each at
 `a98238be5`: `scout-a-report.md` (the whole ooTest suite on both sides, per group in
 `scout-a-groups.tsv`), `scout-b-report.md` (benchmarks), `scout-c-report.md` (the binaries, `.rxo`,
@@ -49,7 +51,7 @@ below comes from scout A section 3 or from the reviews:
   that also holds this crate's `rexxc`. Its `PATH` contains no directory holding
   an oracle binary. The harness asserts on each run that `rexx` resolves inside that `bin`, and that
   `rexxc` resolves nowhere on the crate side's `PATH` until 9c delivers it and inside that `bin` from
-  then on. Until 9c, `rexx` is a symlink to `rexx-run`.
+  then on. Until 9c, `rexx` is a hard link to `rexx-run` (a copy where a link cannot be made), because `.RexxInfo~executable` resolves links and the framework finds `samples` beside the executable (`tests/support/group_runner.rs:706-713`). From 9c on, `rexx` and `rexxc` stay hard links to the binaries of `rexx-exec`.
 * **Bounds.** Oracle runs get 300 s. Crate runs get four times the oracle's time, and at least 60 s.
   Every crate run is under `memcap 2G`. When `command -v memcap` fails, the crate run is under
   `ulimit -v 4194304` instead, and the table says so. Every oracle run is under the `ulimit -v`
@@ -94,7 +96,7 @@ iteration above carries the run past it.
   (Deviation 20, Deviation 28). A Deviation is added only by Moritz's ruling.
 * **Environment.** The row cites a committed oracle run record that shows the test failing or hanging
   on this host. Each row needs Moritz's ruling, recorded in the file. The two socket samples the oracle
-  hangs on (`samples/scclient`, `samples/sfclient`) are the first candidates. An environment row whose
+  hangs on were the first candidates (`samples/scclient`, `samples/sfclient`), but at the 9b1 close the oracle passes both and this crate fails both (9c's switch task runs the `samples/sc*` and `samples/sf*` groups). An environment row whose
   test hangs is renamed out on both sides, as `reaching_rxapi` tests are.
 * **Flaky.** The row cites `.github/known-test-failures/common.txt` by entry, and the test is allowed
   to pass or fail. This covers `CHAROUT/TEST_STDOUT_START`, `LINEOUT/TEST_LINE_TRANSIENT` and the
@@ -148,7 +150,11 @@ here and pass on the oracle. 9d's set is those 249 minus the 52 that sections 4 
 and 9c witnesses: 22 from `rexx_command`, 8 from `rexxc`, `METHOD`'s `rexxc` test, the 4
 compiled-file tests in `Method` and `Routine`, and 17 from `SysFileTree`. 9d also owns whichever of
 the other 9b and 9c witnesses (`SysFileXXX.TEST_FILEEXISTS_NIL_INVALID`, the `incorrectCharacters`
-tests) are still failing when 9b and 9c close. 9a commits the set as a file derived from the TSV. Its clusters:
+tests) are still failing when 9b and 9c close. 9a commits the set as a file derived from the TSV
+(`rust/corpus/suite-9d-set.txt`). A 9b or 9c task removes a line from it when the test passes under
+the harness: 9c removes `base/source.file/incorrectCharacters TEST_INCORRECT_CHARACTERS`, and
+`samples/scclient TEST_04_SCCLIENT.REX` and `samples/sfclient TEST_04_SFCLIENT.REX` leave it when the
+switch task shows them passing. Its clusters:
 
 * conditions not raised: `SIGNAL ON ANY`, `CONDITION`, `LABEL` 47.3, `OPTIONS` 98.974, `LOSTDIGITS`,
   and 97.1 from `environmentEntries`;
@@ -208,7 +214,7 @@ oracle source is `interpreter/platform/unix/SysRexxUtil.cpp` and
 * Usage text goes to stderr, rc 255. `-v` prints the version banner.
 * The program is found by the interpreter's resolver, the search in `require.rs` made reachable. A
   program that is not found raises 3.901, rc 253.
-* `ARG(1)` is the joined words, and `.SYSCARGS` the separate ones. Under `-e`, `.SYSCARGS` is `.nil`.
+* `ARG(1)` is the joined words, and `.SYSCARGS` the separate ones. `rexx -e` sets no `SYSCARGS` entry in `.local`: `.SYSCARGS` renders its own name and `.local~syscargs` is `.nil` (measured on the oracle).
 * The exit status is derived as the oracle derives it.
 * It keeps everything `rexx-run.rs`'s `main` does: signal handlers, standard input, the transient
   flags of the real descriptors, sinks, `REXX_SWITCH_MODE` with its `rexx-sim:` stderr line, and the
@@ -225,11 +231,11 @@ oracle source is `interpreter/platform/unix/SysRexxUtil.cpp` and
 
 **The `rexx-run` switch** is a task of its own. It covers:
 
-* the test files using `CARGO_BIN_EXE_rexx-run`;
-* `tests/support/arity.rs:374`, which runs `target/release/rexx-run` by path;
+* the test files using `CARGO_BIN_EXE_rexx-run`, enumerated by `git grep -l 'rexx-run' -- rust` when the task starts;
+* `tests/support/arity.rs:399`, which runs `target/release/rexx-run` by path;
 * the bench tools: `rexx-bench-suite.rs`, `report.rs`, `rexx-bench-band.rs`, `rexx-arms.rs`,
   `child.rs`, `wallclock.sh` and `PINNED.md`;
-* the prose sites `rust/CLAUDE.md:38`, `rust/corpus/README.md:295` and `rexx-exec/src/lib.rs:2718-2719`;
+* the prose sites `rust/CLAUDE.md:49`, `rust/corpus/README.md:295` and `rexx-exec/src/lib.rs:2859-2860`;
 * `group_runner.rs`'s sim-mode processes and its `interpreter_bin`;
 * an audit of the assertions that rely on rc 2 or on a literal path;
 * the perf A/B of `rexx` against `rexx-run` (section 8).
@@ -299,7 +305,7 @@ Moritz, 2026-10-10 and 2026-10-11, on the survey and the review (`decisions.md`)
 * 9a corrects `rust/CLAUDE.md:13` ("That separate `-O3` build is gone from this machine"). Scout B
   found a `Release` build at `ooRexx-rust-rewrite/build`: 5.3.0, built 27 Jul 2026, from a source
   three days older than `build/`'s.
-* 9c closes `phase-4-exclusions.txt:5542` (`rexxc`), and 9d closes `:6114` (INTERPRET).
+* 9c closes the `phase-4-exclusions.txt` row for `TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA` (`rexxc`), and 9d closes the INTERPRET traceback row (`OWNER: Phase 9`, "core conformance: condition objects, stack frames and traceback under INTERPRET"). Rows are found by their text, not by line.
 * 9a adds `"Phase 9"` to `tests/internal_routines.rs`'s `PHASES` and `src/dispatch/native/tests.rs`'s
   `OPEN` for the rows it relabels. 9d adds `"Phase 9"` to `closed_phases`' `CLOSED`, removes it from
   those two and from `refusal_dispositions.rs`'s `OPEN_PHASES`, adds `"Phase 9.1"` where a row may
@@ -357,10 +363,12 @@ closes the phase.
    open OWNER row names it.
 4. **Binaries.** Under criterion 1's harness, `rexx_command`, `rexxc`,
    `METHOD.TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA`, and `Method` and `Routine`'s
-   `TEST_NEW_ARRAY_FROM_FILE` and `TEST_NEW_FILE_COMPILED` pass. Their expected sets (section 2)
-   are 30 tests for `rexx_command` and 8 for `rexxc`. This
-   crate's `rexxc` agrees with the committed `parse-errors.tsv` on every row, and D6's coverage test
-   passes. `tests/compiled.rs` witnesses D5: it spawns `CARGO_BIN_EXE_rexxc` and the oracle's
+   `TEST_NEW_ARRAY_FROM_FILE` and `TEST_NEW_FILE_COMPILED` pass, every test of each group's expected
+   set (section 2) passing. This crate's `rexxc` agrees with the committed `parse-errors.tsv` on every
+   row except those whose program names `REGISTERED`: this crate refuses `EXTERNAL "REGISTERED"` with
+   the D3 reason `Rxapi` where the oracle's parser answers through rxapi, so those rows are exempt
+   until Phase 10, selected by a predicate that reads the program, and a test asserts the refusal
+   text carries the `Rxapi` reason. D6's coverage test passes. `tests/compiled.rs` witnesses D5: it spawns `CARGO_BIN_EXE_rexxc` and the oracle's
    `rexxc` explicitly, one per side, asserts each compile's rc 0 and the 29-byte prefix, and runs one
    program per restore route (`rexx FILE`, `.Routine~newFile`, `.Routine~new(name, data)` in three
    shapes, `.Method` file loading, `::REQUIRES`, an external `CALL`) and per observable
