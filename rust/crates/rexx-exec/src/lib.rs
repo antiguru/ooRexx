@@ -3230,19 +3230,7 @@ impl Interp {
         // which slots it freed, and a scan of the registry per collection
         // would cost the whole class population to find the few that died.
         if !stats.freed_classes.is_empty() {
-            let dead = stats.freed_classes;
-            self.classes().expunge(&dead);
-            for class in &dead {
-                self.class_variables.remove(class);
-                self.class_packages.remove(class);
-            }
-            self.method_objects
-                .retain(|(class, _, _), _| !dead.contains(class));
-            self.annotations.retain(|site, _| match site {
-                environment::Annotated::Class(class)
-                | environment::Annotated::Member(class, _, _) => !dead.contains(class),
-                _ => true,
-            });
+            self.prune_freed_classes(&stats.freed_classes);
         }
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved
@@ -3254,6 +3242,25 @@ impl Interp {
         self.collect_due = self.stress_collect || self.sim_collects_at_random();
         #[cfg(feature = "sharing")]
         self.heap.sharing_pause(false);
+    }
+
+    /// Drops every row keyed by one of the `dead` classes.
+    #[cold]
+    #[inline(never)]
+    fn prune_freed_classes(&mut self, dead: &[ObjRef]) {
+        self.classes().expunge(dead);
+        for class in dead {
+            self.class_variables.remove(class);
+            self.class_packages.remove(class);
+        }
+        self.method_objects
+            .retain(|(class, _, _), _| !dead.contains(class));
+        self.annotations.retain(|site, _| match site {
+            environment::Annotated::Class(class) | environment::Annotated::Member(class, _, _) => {
+                !dead.contains(class)
+            }
+            _ => true,
+        });
     }
 
     /// Drops every row keyed by, or naming, a `Method`, `Routine` or
