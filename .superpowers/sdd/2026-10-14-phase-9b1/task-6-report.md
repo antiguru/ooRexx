@@ -261,8 +261,11 @@ REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package,base/class/Package_Option
 
 Commits: `70f730abe` (merged routine holds its package), `0f1baee91` (parked-activity test),
 `23229c39d` (special_methods prune, ObjRef prune assertions), `740486ee9` (no expect in
-`unattached_method_id`), `23e7d1828` (method activation built in place). No commit moved a
-`Loud`/`Raised` constructor: `refusal_sites` passed before each commit.
+`unattached_method_id`), `23e7d1828` (method activation built in place). `refusal_sites` was run
+before `70f730abe`, before `23229c39d` and `740486ee9` (same tree), and before `23e7d1828`, and it
+passed each time. `0f1baee91` was not checked on its own: it changed only `scheduler.rs` and the
+test file, no later commit touches `scheduler.rs`, and the table passes at `23e7d1828`, so no
+re-derivation was owed.
 
 ### (1) The merged_from leak
 
