@@ -745,9 +745,13 @@ fn class_factory(
     Ok(Some(id))
 }
 
-/// The body bytes a class's two behaviours are charged toward the next
-/// collection, per method name they resolve.
-const CLASS_BYTES_PER_METHOD: usize = 128;
+/// The body bytes a class is charged toward the next collection, per name its
+/// two behaviours resolve, and again per method of its own. Measured with
+/// collection off, on `Package~new`s of twenty `::CLASS`es: a subclass of
+/// `Object` with no methods of its own weighs about 20 kB, one of `Array`
+/// about 31 kB, and each `::METHOD` of its own about 8 kB more.
+const CLASS_BYTES_PER_NAME: usize = 200;
+const CLASS_BYTES_PER_OWN_METHOD: usize = 8 << 10;
 
 /// `RexxClass::subclass` up to its enhancing methods (`:1579`-`:1626`): the
 /// class `metaclass`'s `NEW` answers for `name`, made a subclass of `class`,
@@ -800,8 +804,12 @@ pub(crate) fn new_subclass(
 /// Charges a class a program built toward the next collection, which its
 /// behaviours' weight would otherwise not reach.
 pub(crate) fn charge_class(interp: &mut Interp, class: ObjRef) {
-    let methods = interp.classes().behaviour_names(class);
-    interp.charge_unheld(methods * CLASS_BYTES_PER_METHOD);
+    let classes = interp.classes();
+    let (names, own) = (
+        classes.behaviour_names(class),
+        classes.own_method_names(class),
+    );
+    interp.charge_unheld(names * CLASS_BYTES_PER_NAME + own * CLASS_BYTES_PER_OWN_METHOD);
 }
 
 /// Whether `metaclass`'s `NEW` is `Class`'s own and its instances take

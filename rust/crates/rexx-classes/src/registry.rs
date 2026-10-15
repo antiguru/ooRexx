@@ -145,6 +145,11 @@ impl ClassRegistry {
         self.graph.behaviour_names(class)
     }
 
+    /// See [`ClassGraph::own_method_names`].
+    pub fn own_method_names(&self, class: ObjRef) -> usize {
+        self.graph.own_method_names(class)
+    }
+
     /// See [`ClassGraph::is_cloned`].
     pub fn is_cloned(&self, class: ObjRef) -> bool {
         self.graph.is_cloned(class)

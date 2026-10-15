@@ -517,7 +517,7 @@ fn a_class_directive_is_charged_with_its_methods() {
     let attached = charged(format!("nop\n::class c\n{methods}"));
     let unattached = charged(format!("nop\n{methods}::class c\n"));
     assert!(
-        attached >= unattached + 20 * 128,
+        attached >= unattached + 20 * (8 << 10),
         "the class's methods were not charged: {attached} against {unattached}"
     );
 }

@@ -294,6 +294,13 @@ impl ClassGraph {
             + self.behaviours[def.class_behaviour.index()].dict.len()
     }
 
+    /// How many names `class`'s own two method dictionaries hold entries
+    /// under, inherited names aside.
+    pub fn own_method_names(&self, class: ObjRef) -> usize {
+        let def = &self.classes[&class];
+        def.own_instance_methods.len() + def.own_class_methods.len()
+    }
+
     /// Whether `class` is one [`Self::define_cloned_class`] built that
     /// [`Self::reparent`] has not yet rewired.
     pub fn is_cloned(&self, class: ObjRef) -> bool {
