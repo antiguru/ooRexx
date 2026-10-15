@@ -76,6 +76,9 @@ pub static PROGRAMS: &[&str] = &[
     // Added in Phase 9b1 Task 3's fix round: internal package routine calls,
     // which push a stack-frame level around the routine's body.
     "intcall",
+    // Added in Phase 9b1 Task 7's fix round: body-byte churn over a live set,
+    // which measures the collector's byte trigger.
+    "churn",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does
