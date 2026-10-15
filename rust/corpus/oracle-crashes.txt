@@ -1592,3 +1592,26 @@ oracle's `cb9563364`, `:486` in this checkout's `interpreter/`) assigns `getenv(
 `DIRECTORY` and the RexxUtil file routines. This crate reads the missing `HOME` as empty: `~`
 qualifies to the null string and `~/x` to `/x`, pinned by
 `builtin::platform::tests::a_tilde_with_home_unset_qualifies_without_a_home`. No upstream ticket.
+
+## 49. A reference to a returned procedure's variable, assigned, then a collection
+
+    r = mk('a')
+    call filler
+    r~value = 'x'
+    call filler
+    say r~value
+    exit
+    mk: procedure
+      use arg v
+      y = v
+      return >y
+    ::routine filler
+      do i = 1 to 300
+        z = copies('x', 100000)
+      end
+      return
+
+Effect: SIGSEGV, rc 139, nothing on stdout. Measured 2026-10-15 by Phase 9b1 Task 8b, 3 runs under
+the standard wrapper from a fresh empty directory, 3 of 3. Without the second `call filler` it
+answers `x`, rc 0, measured once. Found while measuring the collect_stress shapes for variable-reference
+cells. This crate answers `x`, rc 0. No upstream ticket.
