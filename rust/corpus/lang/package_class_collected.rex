@@ -1,0 +1,23 @@
+/* A class and a package that only Package~new made are collected once
+   nothing holds them, while the loop does nothing but make more of them. */
+p = .Package~new('p', '::class c')
+w = .WeakReference~new(p~classes['C'])
+p = .nil
+do i = 1 to 5000 until w~value == .nil
+  q = .Package~new('q', '::class c')
+end
+say 'class cleared:' (w~value == .nil)
+w = .WeakReference~new(.Package~new('p', 'return 1'))
+do i = 1 to 5000 until w~value == .nil
+  q = .Package~new('q', 'return 1')
+end
+say 'package cleared:' (w~value == .nil)
+src = .array~new
+do j = 1 to 50
+  src~append('::class c'j)
+end
+w = .WeakReference~new(.Package~new('p', src)~classes['C1'])
+do i = 1 to 300 until w~value == .nil
+  q = .Package~new('q', src)
+end
+say 'one of many classes cleared:' (w~value == .nil)

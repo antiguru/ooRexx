@@ -54,3 +54,13 @@ fn an_instance_keeps_its_class_alive_and_nothing_else_does() {
 fn a_class_side_uninit_runs_at_the_collection_that_reaches_the_class() {
     agrees("class_uninit_gc.rex", "before\nclass uninit\nafter\n");
 }
+
+/// A loop that only makes packages through `Package~new`, with no class, one
+/// `::CLASS` or many, collects: a dropped one's class and package clear.
+#[test]
+fn a_loop_of_package_new_collects_its_classes_and_packages() {
+    agrees(
+        "package_class_collected.rex",
+        "class cleared: 1\npackage cleared: 1\none of many classes cleared: 1\n",
+    );
+}

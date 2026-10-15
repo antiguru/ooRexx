@@ -329,6 +329,17 @@ const COLLECT_FLOOR: usize = 65_536;
 /// (see `Interp::bytes_due`).
 const COLLECT_BYTES_FLOOR: usize = 32 << 20;
 
+/// The bytes a loaded program is charged toward the next collection, with
+/// [`PROGRAM_BYTES_PER_SOURCE_BYTE`] for each byte of its source. Measured on
+/// `Package~new` before any collection: about 30 kB for a one-line program,
+/// and 83 kB more for 2100 more bytes of source.
+const PROGRAM_BYTES: usize = 24 << 10;
+const PROGRAM_BYTES_PER_SOURCE_BYTE: usize = 40;
+
+/// The bytes a program's package object is charged toward the next
+/// collection. Measured on `Package~copy` before any collection: about 3 kB.
+pub(crate) const PACKAGE_BYTES: usize = 3 << 10;
+
 /// The globals entry [`Interp::root_exit_value`] writes. A name rather than an
 /// index because `RootSet::add_global` is keyed by name and replaces in place,
 /// which is the behaviour wanted here.
@@ -810,6 +821,17 @@ impl Loud {
     fn missing_body() -> Loud {
         Loud {
             message: "an activation's body selector names no routine body".to_string(),
+        }
+    }
+
+    /// A `Method` or `Routine` object with no executable record. Each one is
+    /// recorded where it is built and its record goes only with it, so this
+    /// is an internal inconsistency, never a program error.
+    #[cold]
+    #[inline(never)]
+    fn unrecorded_executable() -> Loud {
+        Loud {
+            message: "a Method or Routine object with no executable record".to_string(),
         }
     }
 
@@ -2256,7 +2278,7 @@ impl Interp {
     /// the activation down again.
     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::new(program);
-        let program_id = self.programs.insert(Rc::clone(&program));
+        let program_id = self.load_program(Rc::clone(&program));
         self.run_loaded(program, program_id, CallType::Command, None, None)
     }
 
@@ -2333,7 +2355,7 @@ impl Interp {
         let caller = self
             .running_activation()
             .map(|activation| activation.program_id);
-        let program_id = self.programs.insert(Rc::clone(&parsed));
+        let program_id = self.load_program(Rc::clone(&parsed));
         // Its own path, so the callee's `PARSE SOURCE`, `~package~name` and
         // traceback name the file rather than the program that called it.
         self.required_paths
@@ -2390,6 +2412,7 @@ impl Interp {
             }
         };
         let parsed = Rc::new(parsed);
+        // Not charged: a library program is never freed.
         let program_id = self.programs.insert(Rc::clone(&parsed));
         // `rexx_package_class` searches this list, so a new library package
         // can turn a miss into a hit and shadow an earlier answer.
@@ -2886,6 +2909,17 @@ impl Interp {
         self.collect_due |= since >= self.bytes_due;
     }
 
+    /// Files `program` under a fresh id, charging its weight toward the
+    /// next collection.
+    pub(crate) fn load_program(&mut self, program: Rc<Program>) -> ProgramId {
+        let source = &program.source;
+        let bytes = source
+            .line_span(source.line_count())
+            .map_or(0, |span| span.end);
+        self.charge_unheld(PROGRAM_BYTES + bytes * PROGRAM_BYTES_PER_SOURCE_BYTE);
+        self.programs.insert(program)
+    }
+
     /// Counts `bytes` a body holds outside its slot toward the next
     /// collection without holding them, for a body whose
     /// [`rexx_core::Body::held_bytes`] does not report them: a `String`
@@ -3162,7 +3196,8 @@ impl Interp {
                 || heap.peek(object).is_some()
         });
         self.activities
-            .prune_senders(|message| heap.peek(message).is_some());
+            .prune_messages(|message| heap.peek(message).is_some());
+        self.prune_dead_object_rows();
         let freed = self.programs.free_unheld();
         if !freed.is_empty() {
             self.prune_program_rows(&freed);
@@ -3197,6 +3232,11 @@ impl Interp {
             }
             self.method_objects
                 .retain(|(class, _, _), _| !dead.contains(class));
+            self.annotations.retain(|site, _| match site {
+                environment::Annotated::Class(class)
+                | environment::Annotated::Member(class, _, _) => !dead.contains(class),
+                _ => true,
+            });
         }
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved
@@ -3208,6 +3248,19 @@ impl Interp {
         self.collect_due = self.stress_collect || self.sim_collects_at_random();
         #[cfg(feature = "sharing")]
         self.heap.sharing_pause(false);
+    }
+
+    /// Drops every row keyed by, or naming, a `Method`, `Routine` or
+    /// `Message` object the sweep freed.
+    fn prune_dead_object_rows(&mut self) {
+        let heap = &self.heap;
+        let live = |object: &ObjRef| heap.peek(*object).is_some();
+        self.executable_sources.retain(|object, _| live(object));
+        self.method_flag_writes.retain(|object, _| live(object));
+        self.executable_objects.retain(|_, object| live(object));
+        self.message_outcomes.retain(|message, _| live(message));
+        self.started_messages.retain(live);
+        self.unnotified_messages.retain(live);
     }
 
     /// Drops every row that names one of the `freed` programs.

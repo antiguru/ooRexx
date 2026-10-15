@@ -309,3 +309,84 @@ fn a_freed_programs_id_never_resolves_again() {
         );
     }
 }
+
+/// A collection drops every row keyed by a `Method`, `Routine` or `Message`
+/// object it swept, and every annotation row of a class it swept, while the
+/// program they came from stays loaded.
+#[test]
+fn a_collection_drops_the_rows_of_swept_executables_and_messages() {
+    let mut interp = Interp::new();
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\no = .array~of(1, 2)\ndo i = 1 to 3\n  \
+          m = .Message~new(o, 'ITEMS'); m~send\n  s = .Message~new(o, 'ITEMS'); s~start\n  \
+          c = .k~method('FOO')~copy; c~setPrivate\n  \
+          t = .object~subclass('t'); a = t~annotations\nend\n\
+          say m~completed c~isPrivate a~items\n\
+          ::class k\n::method foo\n  return 1\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "1 1 0\n");
+    let late = interp.run_started_to_end();
+    assert!(late.is_empty(), "a started message failed");
+    assert!(
+        !interp.message_outcomes.is_empty(),
+        "no message outcome was recorded"
+    );
+    assert!(
+        !interp.started_messages.is_empty(),
+        "no started message was recorded"
+    );
+    assert!(
+        !interp.method_flag_writes.is_empty(),
+        "no flag write was recorded"
+    );
+    assert!(
+        interp
+            .annotations
+            .keys()
+            .any(|site| matches!(site, crate::environment::Annotated::Class(_))),
+        "no class annotation table was recorded"
+    );
+    interp.collect_now();
+    let heap = &interp.heap;
+    let live = |object: &ObjRef| heap.peek(*object).is_some();
+    assert!(
+        interp.executable_sources.keys().all(live),
+        "executable_sources keeps a swept object"
+    );
+    assert!(
+        interp.method_flag_writes.keys().all(live),
+        "method_flag_writes keeps a swept object"
+    );
+    assert!(
+        interp.executable_objects.values().all(live),
+        "executable_objects names a swept object"
+    );
+    assert!(
+        interp.message_outcomes.keys().all(live),
+        "message_outcomes keeps a swept message"
+    );
+    assert!(
+        interp.started_messages.iter().all(live),
+        "started_messages keeps a swept message"
+    );
+    assert!(
+        interp.unnotified_messages.iter().all(live),
+        "unnotified_messages keeps a swept message"
+    );
+    assert!(
+        interp
+            .activities
+            .message_rows()
+            .all(|message| live(&message)),
+        "the scheduler keeps a swept message"
+    );
+    assert!(
+        interp.annotations.keys().all(|site| match site {
+            crate::environment::Annotated::Class(class)
+            | crate::environment::Annotated::Member(class, _, _) => live(class),
+            _ => true,
+        }),
+        "annotations keeps a swept class's row"
+    );
+}

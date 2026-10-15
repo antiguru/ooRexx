@@ -713,7 +713,7 @@ impl Interp {
             return Err(Raised::requires_file_not_found(original).into());
         };
         let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
-        let required = self.programs.insert(Rc::clone(&parsed));
+        let required = self.load_program(Rc::clone(&parsed));
         self.required_paths
             .insert(required, resolved.as_str().into());
         // Built before it is cached: the cache holds the package object
@@ -993,7 +993,7 @@ impl Interp {
                 Ok(parsed) => Rc::new(parsed),
                 Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
             };
-        let id = self.programs.insert(Rc::clone(&parsed));
+        let id = self.load_program(Rc::clone(&parsed));
         self.compiled_method_names.insert(id, name.into());
         // Recorded ahead of the prologue for the reason
         // `new_file_executable` records its own parent early: the prologue
@@ -1262,6 +1262,8 @@ impl Interp {
         // with 98.985, the same refusal it gives `.Array~inherit()`.
         if self.library_bootstrap {
             self.classes().set_rexx_defined(id);
+        } else {
+            dispatch::charge_class(self, id);
         }
         // The package's own installed-class table, which is what `.NAME`
         // resolution reads first -- see `environment/identities.rs`'s
@@ -1737,7 +1739,7 @@ impl Interp {
             }],
             symbols,
         });
-        let program_id = self.programs.insert(program);
+        let program_id = self.load_program(program);
         self.compiled_method_names.insert(program_id, name.into());
         self.override_package_settings(program_id)?;
         // `generateMethod` and `generateRoutine` give the executable's own
@@ -1875,7 +1877,7 @@ impl Interp {
             }],
             symbols,
         });
-        let program_id = self.programs.insert(program);
+        let program_id = self.load_program(program);
         self.compiled_method_names.insert(program_id, name.into());
         self.override_package_settings(program_id)?;
         // `generateMethod` and `generateRoutine` give the executable's own
@@ -1981,7 +1983,7 @@ impl Interp {
             directives,
             symbols,
         });
-        let id = self.programs.insert(Rc::clone(&program));
+        let id = self.load_program(Rc::clone(&program));
         record(self, id);
         // **Recorded before the directives install, not after.** Installing
         // runs a `::REQUIRES` prologue, and code running there resolves

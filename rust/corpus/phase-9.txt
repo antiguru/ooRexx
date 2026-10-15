@@ -132,3 +132,6 @@ lang/package_library_binder_kept.rex
 
 # 9b1 Task 5 fix round 2: an external routine's merged routines keep its package.
 lang/package_external_merge_held.rex
+
+# 9b1 Task 7: the collector counts a program, its package and its ::CLASS classes.
+lang/package_class_collected.rex

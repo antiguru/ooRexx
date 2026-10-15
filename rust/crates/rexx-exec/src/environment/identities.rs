@@ -225,6 +225,7 @@ impl Interp {
             }
             Package::Program(program) => {
                 self.roots.activity_mut().push_temp(object);
+                self.charge_unheld(crate::PACKAGE_BYTES);
                 let hold = self.programs.set_package(program, object);
                 if let Some(data) = self.package_data_mut(object) {
                     data.hold = hold;

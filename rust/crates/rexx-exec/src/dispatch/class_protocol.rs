@@ -436,18 +436,15 @@ pub(super) fn compile_routine_source(
     Ok(object)
 }
 
-/// [`Interp::scoped_method`], or the refusal for a `Method` object this
-/// crate did not build.
+/// [`Interp::scoped_method`] as a `Result`.
 pub(super) fn scoped_method(
     interp: &mut Interp,
     method: ObjRef,
     scope: ObjRef,
 ) -> Result<(ObjRef, rexx_core::MethodId), Failure> {
-    interp.scoped_method(method, scope).ok_or_else(|| {
-        Failure::from(Loud::unknown_receiver(
-            "a method object this crate did not build",
-        ))
-    })
+    interp
+        .scoped_method(method, scope)
+        .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))
 }
 
 /// The `method name` argument `~define`, `~delete` and `~method` share:
@@ -508,11 +505,7 @@ pub(super) fn native_define(
             };
             interp
                 .define_method_object(class, &name, source)
-                .ok_or_else(|| {
-                    Failure::from(Loud::unknown_receiver(
-                        "a method object this crate did not build",
-                    ))
-                })?;
+                .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
         }
     }
     Ok(None)
@@ -550,11 +543,9 @@ pub(super) fn native_define_methods(
         };
         entries.push((name, Some(value)));
     }
-    interp.define_method_table(class, &entries).ok_or_else(|| {
-        Failure::from(Loud::unknown_receiver(
-            "a method object this crate did not build",
-        ))
-    })?;
+    interp
+        .define_method_table(class, &entries)
+        .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
     Ok(None)
 }
 
@@ -806,9 +797,9 @@ pub(crate) fn new_subclass(
     Ok(id)
 }
 
-/// Charges a class a program built at run time toward the next collection,
-/// which its behaviours' weight would otherwise not reach.
-fn charge_class(interp: &mut Interp, class: ObjRef) {
+/// Charges a class a program built toward the next collection, which its
+/// behaviours' weight would otherwise not reach.
+pub(crate) fn charge_class(interp: &mut Interp, class: ObjRef) {
     let methods = interp.classes().behaviour_names(class);
     interp.charge_unheld(methods * CLASS_BYTES_PER_METHOD);
 }
@@ -925,11 +916,7 @@ fn install_enhancing_class_methods(
         };
         interp
             .define_class_method_object(class, name, value)
-            .ok_or_else(|| {
-                Failure::from(Loud::unknown_receiver(
-                    "a method object this crate did not build",
-                ))
-            })?;
+            .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
     }
     Ok(())
 }
@@ -1002,11 +989,7 @@ pub(super) fn native_define_class_method(
     }
     interp
         .define_class_method_object(class, &name, source)
-        .ok_or_else(|| {
-            Failure::from(Loud::setup_method(
-                "defineClassMethod with a method object whose body this crate did not record",
-            ))
-        })?;
+        .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
     Ok(None)
 }
 

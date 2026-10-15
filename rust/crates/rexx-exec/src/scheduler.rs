@@ -340,9 +340,17 @@ const STACK_MARGIN: usize = 32 * 1024 * 1024;
 const MAX_POOLED: usize = 5;
 
 impl Activities {
-    /// Drops the sender records of messages `live` no longer answers for.
-    pub(crate) fn prune_senders(&mut self, live: impl Fn(ObjRef) -> bool) {
+    /// Drops the sender and waiter-identity records of messages `live` no
+    /// longer answers for.
+    pub(crate) fn prune_messages(&mut self, live: impl Fn(ObjRef) -> bool) {
         self.senders.retain(|message, _| live(*message));
+        self.message_ids.retain(|message, _| live(*message));
+    }
+
+    /// Every message a sender or waiter-identity record is keyed by.
+    #[cfg(test)]
+    pub(crate) fn message_rows(&self) -> impl Iterator<Item = ObjRef> + '_ {
+        self.senders.keys().chain(self.message_ids.keys()).copied()
     }
 
     /// The table of an interpreter whose activities' thread contexts link

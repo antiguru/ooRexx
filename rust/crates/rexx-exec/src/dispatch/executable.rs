@@ -100,14 +100,13 @@ impl Interp {
     }
 }
 
-/// The `ExecutableSource` this receiver reports on, or the refusal for a
-/// receiver this crate did not build.
+/// The `ExecutableSource` this receiver reports on.
 fn source_of(interp: &Interp, receiver: ObjRef) -> Result<ExecutableSource, Failure> {
     interp
         .executable_sources
         .get(&receiver)
         .map(|record| record.source)
-        .ok_or_else(|| Loud::receiver_class("an executable this crate did not build").into())
+        .ok_or_else(|| Loud::unrecorded_executable().into())
 }
 
 /// One flag's value for this receiver: what the directive declared, with any
@@ -578,7 +577,7 @@ fn begin_routine(
     name: &[u8],
 ) -> Result<NativeStarted, Failure> {
     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
-        return Err(Loud::receiver_class("a routine object this crate did not build").into());
+        return Err(Loud::unrecorded_executable().into());
     };
     // A library routine runs under its own table spelling, which is the
     // name `RoutineClass::callRexx` passes
@@ -618,7 +617,7 @@ fn begin_routine(
     }
     let Some((program, directive)) = record.routine else {
         let crate::ExecutableSource::Main { program } = record.source else {
-            return Err(Loud::receiver_class("a routine object this crate did not build").into());
+            return Err(Loud::unrecorded_executable().into());
         };
         return interp
             .call_program_main(program, values, name)

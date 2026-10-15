@@ -648,11 +648,9 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         Ok(Primitive::VariableReference) => rexx_core::BehaviourId::OBJECT,
         Ok(Primitive::Method | Primitive::Routine) => {
             interp.roots.activity_mut().push_temp(receiver);
-            let copy = interp.copy_method_object(receiver).ok_or_else(|| {
-                Failure::from(Loud::unknown_receiver(
-                    "a method object this crate did not build",
-                ))
-            })?;
+            let copy = interp
+                .copy_method_object(receiver)
+                .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
             return Ok(copy);
         }
         // `PackageClass::copy`: a field copy, then `deepCopy`'s tables.

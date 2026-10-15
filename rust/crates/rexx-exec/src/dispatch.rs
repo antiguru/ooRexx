@@ -176,7 +176,7 @@ use class_protocol::{
     native_package_add_class, native_package_add_public_class, native_scope, native_subclass,
     native_superclass, native_superclasses, native_uninherit, new_instance, scoped_method,
 };
-pub(crate) use class_protocol::{builds_in_place, new_subclass};
+pub(crate) use class_protocol::{builds_in_place, charge_class, new_subclass};
 
 // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
 // chained the same way.

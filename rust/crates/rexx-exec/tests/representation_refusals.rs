@@ -60,26 +60,6 @@ const ALLOWED: &[(&str, &str)] = &[
         "rexx-exec/src/environment/identities.rs:a .ROUTINES entry that is not a routine this crate built",
         "Deviation 28",
     ),
-    (
-        "rexx-exec/src/dispatch/class_protocol.rs:a method object whose body this crate did not record",
-        "Task 7",
-    ),
-    (
-        "rexx-exec/src/dispatch/class_protocol.rs:a method object this crate did not build",
-        "Task 7",
-    ),
-    (
-        "rexx-exec/src/dispatch/object_protocol.rs:a method object this crate did not build",
-        "Task 7",
-    ),
-    (
-        "rexx-exec/src/dispatch/executable.rs:an executable this crate did not build",
-        "Task 7",
-    ),
-    (
-        "rexx-exec/src/dispatch/executable.rs:a routine object this crate did not build",
-        "Task 7",
-    ),
     // No leak in `.superpowers/sdd/2026-10-14-phase-9b1/scout-leaks.md` names
     // these guards on a freed handle or an unexpected body, so the sweep owns them.
     (
@@ -123,7 +103,6 @@ const OWNERS: &[&str] = &[
     "Deviation 28",
     "Deviation 32",
     "Deviation 36",
-    "Task 7",
     "Task 8",
     "Phase 10",
 ];
