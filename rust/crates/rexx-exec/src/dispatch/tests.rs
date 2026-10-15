@@ -544,6 +544,8 @@ fn a_native_row_on_a_receiver_of_another_class_refuses_its_type() {
         ("message", "SEND", "a message"),
         ("message", "START", "a message"),
         ("message", "REPLY", "a message"),
+        ("stackframe", "NAME", "a stack frame"),
+        ("stackframe", "EXECUTABLE", "a stack frame"),
     ] {
         assert_eq!(
             run(class, method),

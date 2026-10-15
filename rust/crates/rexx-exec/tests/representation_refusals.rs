@@ -41,8 +41,8 @@ const PHRASES: &[&str] = &[
 
 /// `(file:substring, owner)`: a literal in `file` (relative to `crates/`)
 /// containing `substring` is allowed. The owner is a permanent Deviation, the
-/// phase that owes the construct, or the task of
-/// `docs/superpowers/plans/2026-10-14-phase-9b1.md` that removes it.
+/// phase that owes the construct, or "internal guard" for a refusal no Rexx
+/// program reaches, with the reason beside the row.
 const ALLOWED: &[(&str, &str)] = &[
     (
         "rexx-exec/src/lib.rs:a metaclass NEW answering a class Class~new did not build",
@@ -60,41 +60,44 @@ const ALLOWED: &[(&str, &str)] = &[
         "rexx-exec/src/environment/identities.rs:a .ROUTINES entry that is not a routine this crate built",
         "Deviation 28",
     ),
-    // No leak in `.superpowers/sdd/2026-10-14-phase-9b1/scout-leaks.md` names
-    // these guards on a freed handle or an unexpected body, so the sweep owns them.
-    (
-        "rexx-exec/src/dispatch/context.rs:a stack frame this crate did not build",
-        "Task 8",
-    ),
-    (
-        "rexx-exec/src/dispatch/object_protocol.rs:a stack frame this crate did not build",
-        "Task 8",
-    ),
-    (
-        "rexx-exec/src/dispatch/construct.rs:an object this crate did not build",
-        "Task 8",
-    ),
+    // Internal guards, which no Rexx program reaches. A handle whose slot the
+    // sweep freed is held only where the collector's roots do not reach, which
+    // is a rooting defect: a program names only values reachable from a root,
+    // and a WeakReference answers `.nil` once its referent is swept.
     (
         "rexx-exec/src/dispatch/construct.rs:a value whose object is no longer live",
-        "Task 8",
+        "internal guard",
     ),
     (
         "rexx-exec/src/dispatch/object_protocol.rs:a value whose object is no longer live",
-        "Task 8",
+        "internal guard",
     ),
     (
         "rexx-exec/src/dispatch.rs:a value whose object is no longer live",
-        "Task 8",
+        "internal guard",
     ),
     (
         "rexx-exec/src/environment.rs:a value whose object is no longer live",
-        "Task 8",
+        "internal guard",
     ),
-    // An internal guard: a package asked for after it was collected is a
-    // rooting defect, refused rather than rebuilt.
+    // A package asked for after it was collected is a rooting defect,
+    // refused rather than rebuilt.
     (
         "rexx-exec/src/environment/identities.rs:a package whose object is no longer live",
-        "Task 8",
+        "internal guard",
+    ),
+    // `native_as_instance` is handed only what a `Method`, `Routine` or
+    // `Package` constructor answered: a native body, or one an earlier call
+    // made an instance.
+    (
+        "rexx-exec/src/dispatch/construct.rs:an object this crate did not build",
+        "internal guard",
+    ),
+    // `receiver_kind` answers `StackFrame` only for a native body of that
+    // class, so the arm for any other body is never taken.
+    (
+        "rexx-exec/src/dispatch/object_protocol.rs:a stack frame this crate did not build",
+        "internal guard",
     ),
 ];
 
@@ -103,8 +106,8 @@ const OWNERS: &[&str] = &[
     "Deviation 28",
     "Deviation 32",
     "Deviation 36",
-    "Task 8",
     "Phase 10",
+    "internal guard",
 ];
 
 fn crates_dir() -> PathBuf {

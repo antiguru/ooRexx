@@ -1061,13 +1061,17 @@ fn array_of_slots(interp: &mut Interp, slots: Vec<Option<ObjRef>>) -> ObjRef {
     array
 }
 
+/// What a `StackFrame` method refuses a receiver of another class with
+/// (Deviation 28).
+const NOT_A_FRAME: &str = "a value that is not a stack frame";
+
 /// The value one `StackFrame` snapshot entry holds.
 fn frame_entry(interp: &Interp, receiver: ObjRef, name: &[u8]) -> Result<ObjRef, Failure> {
     match interp.heap.get(receiver).map(|held| &held.body) {
         Some(Body::Native(native)) => native
             .entry(name)
-            .ok_or_else(|| Loud::receiver_class("a stack frame this crate did not build").into()),
-        _ => Err(Loud::receiver_class("a stack frame this crate did not build").into()),
+            .ok_or_else(|| Loud::receiver_class(NOT_A_FRAME).into()),
+        _ => Err(Loud::receiver_class(NOT_A_FRAME).into()),
     }
 }
 
@@ -1152,7 +1156,7 @@ fn frame_executable(
             .entry(key::EXECUTABLE)
             .map(Some)
             .ok_or_else(|| Loud::native_method(b"EXECUTABLE", "StackFrame").into()),
-        _ => Err(Loud::receiver_class("a stack frame this crate did not build").into()),
+        _ => Err(Loud::receiver_class(NOT_A_FRAME).into()),
     }
 }
 
